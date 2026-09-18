@@ -144,8 +144,13 @@ it does not depend on the "model hash" half of the fingerprint being identical a
 the same underlying divergence.
 
 `level` is only meaningful on a result when `kind` is `fail` (SARIF 2.1.0 s3.27.9); for the
-other four rows a result's own `level` serializes as `none` regardless of this table, and the
-table's per-row severity instead lives on each rule's `defaultConfiguration.level`.
+other four rows a result's own `level` is written as `none`. This table's `warning`/`note`
+values for EQ003-EQ005 are the writer's stated intent, but they are not currently guaranteed
+to reach a consumer as a visible severity: EQ003/EQ004/EQ005's rule `defaultConfiguration`
+is written when it differs from the SARIF baseline default (`note` for EQ004/EQ005), but
+EQ003's `warning` equals that baseline and is omitted by the SDK on write, and whether any
+given consumer (GitHub Code Scanning, SonarQube) falls back to a rule's default configuration
+for a result whose own `level` is `none` is not settled here. ADR 0011 (proposed) covers this.
 
 ## 7. Test obligations derived from this document
 
