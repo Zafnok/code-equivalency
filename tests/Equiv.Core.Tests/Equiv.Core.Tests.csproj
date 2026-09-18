@@ -11,6 +11,7 @@
     <PackageReference Include="coverlet.MTP" />
     <PackageReference Include="CsCheck" />
     <PackageReference Include="Verify.XunitV3" />
+    <PackageReference Include="Sarif.Sdk" />
   </ItemGroup>
 
   <ItemGroup>

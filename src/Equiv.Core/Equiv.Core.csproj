@@ -4,4 +4,8 @@
     <InternalsVisibleTo Include="Equiv.Core.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Sarif.Sdk" />
+  </ItemGroup>
+
 </Project>
