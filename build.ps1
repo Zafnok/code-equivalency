@@ -5,9 +5,17 @@ Fails fast: the first non-zero exit code stops the script.
 
 -Integration also runs tests/Equiv.Tests.Integration (needs VS Build Tools + the .NET
 Framework 4.8 targeting pack; Windows only, see README).
+
+-SonarBuild is for sonar.yml only. dotnet-sonarscanner begin injects SonarAnalyzer.CSharp
+into the compile for its duration; that analyzer's diagnostics on pre-existing code would
+otherwise hard-fail -warnaserror, and dotnet format would try to apply its fixes and trip
+--verify-no-changes, both before Sonar's own (new-code-only) quality gate ever runs. This
+switch drops -warnaserror from the build step and skips the format step, which ci.yml's
+`gates` job already enforces unconditionally.
 #>
 param(
-    [switch]$Integration
+    [switch]$Integration,
+    [switch]$SonarBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,8 +36,17 @@ function Invoke-Step {
 }
 
 Invoke-Step "restore" { dotnet restore --locked-mode }
-Invoke-Step "build" { dotnet build --no-restore -warnaserror }
-Invoke-Step "format" { dotnet format --no-restore --verify-no-changes }
+Invoke-Step "build" {
+    if ($SonarBuild) {
+        dotnet build --no-restore
+    } else {
+        dotnet build --no-restore -warnaserror
+    }
+}
+
+if (-not $SonarBuild) {
+    Invoke-Step "format" { dotnet format --no-restore --verify-no-changes }
+}
 
 Invoke-Step "test" {
     $testResultsDir = Join-Path $repoRoot "TestResults"
@@ -52,7 +69,7 @@ Invoke-Step "test" {
         }
 
         Write-Host "  -- $($project.BaseName)" -ForegroundColor DarkCyan
-        dotnet test $project.FullName --no-restore --no-build -- --coverlet --coverlet-output-format cobertura
+        dotnet test $project.FullName --no-restore --no-build -- --coverlet --coverlet-output-format cobertura --coverlet-output-format opencover
         if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
         }

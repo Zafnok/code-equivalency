@@ -20,6 +20,7 @@ latest stable on nuget.org on 2026-09-17; re-checked 2026-09-18 by M0-002 (only
 | Meziantou.Analyzer | 3.0.259 | all | high-signal analyzer with few false positives |
 | MinVer | 8.0.0 | all | versions from git tags, zero config |
 | dotnet-stryker (tool) | 5.0.0 | CI | mutation testing; MTP runner via `--test-runner mtp` |
+| dotnet-sonarscanner (tool) | 11.3.0 | CI | SonarQube Cloud changegate (ADR 0009); wraps build+test, reads the opencover report `build.ps1` emits |
 
 ## Rejected
 - FluentAssertions 8+ (commercial licence since Jan 2025). Use xUnit asserts; add
