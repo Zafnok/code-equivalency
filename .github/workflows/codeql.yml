@@ -22,18 +22,14 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
-        with:
-          global-json-file: global.json
-
+      # build-mode: none does source-based extraction with no compile step, so it isn't
+      # tripped up by dotnet build's persistent MSBuild/VBCSCompiler server running outside
+      # CodeQL's traced process tree (manual mode + `dotnet build` reproducibly failed with
+      # "didn't build any of it, or CodeQL could not process any of it" on this repo).
       - uses: github/codeql-action/init@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
         with:
           languages: csharp
-          build-mode: manual
-
-      # Shared compilation (VBCSCompiler) and MSBuild node reuse run compiles in a
-      # persistent background process that CodeQL's build tracer can't see into.
-      - run: dotnet build --no-incremental -p:UseSharedCompilation=false /nodeReuse:false
+          build-mode: none
 
       - uses: github/codeql-action/analyze@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
         with:
