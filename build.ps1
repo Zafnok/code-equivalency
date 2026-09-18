@@ -2,7 +2,14 @@
 <#
 The one entry point for every gate in docs/QUALITY-GATES.md that runs locally.
 Fails fast: the first non-zero exit code stops the script.
+
+-Integration also runs tests/Equiv.Tests.Integration (needs VS Build Tools + the .NET
+Framework 4.8 targeting pack; Windows only, see README).
 #>
+param(
+    [switch]$Integration
+)
+
 $ErrorActionPreference = "Stop"
 $repoRoot = $PSScriptRoot
 
@@ -23,11 +30,34 @@ function Invoke-Step {
 Invoke-Step "restore" { dotnet restore --locked-mode }
 Invoke-Step "build" { dotnet build --no-restore -warnaserror }
 Invoke-Step "format" { dotnet format --no-restore --verify-no-changes }
-Invoke-Step "test" { dotnet test --no-restore --no-build -- --coverlet --coverlet-output-format cobertura }
+
+Invoke-Step "test" {
+    $testProjects = Get-ChildItem -Path $repoRoot -Filter "*.csproj" -Recurse |
+        Where-Object {
+            $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and
+            $_.FullName -notmatch '[\\/]src[\\/]' -and
+            ($_.FullName -match '[\\/]tests[\\/]' -or $_.Name -like '*.Tests.csproj')
+        }
+
+    foreach ($project in $testProjects) {
+        if (-not $Integration -and $project.BaseName -eq "Equiv.Tests.Integration") {
+            Write-Host "  (skipping $($project.BaseName); pass -Integration to run)" -ForegroundColor DarkGray
+            continue
+        }
+
+        Write-Host "  -- $($project.BaseName)" -ForegroundColor DarkCyan
+        dotnet test $project.FullName --no-restore --no-build -- --coverlet --coverlet-output-format cobertura
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+    }
+}
+
 Invoke-Step "check-coverage" {
+    $summaryPath = Join-Path $repoRoot "TestResults/coverage-summary.txt"
     dotnet run --no-restore --no-build --project (Join-Path $repoRoot "tools/check-coverage") -- `
         --test-results (Join-Path $repoRoot "TestResults") `
-        --src (Join-Path $repoRoot "src")
+        --src (Join-Path $repoRoot "src") | Tee-Object -FilePath $summaryPath
 }
 
 Write-Host "All gates green." -ForegroundColor Green
