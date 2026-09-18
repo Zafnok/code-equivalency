@@ -1,5 +1,5 @@
 # M0-001 Toolchain install and repo hygiene
-Status: in-progress
+Status: done (PR #1)
 Effort: S
 Depends on: nothing
 
