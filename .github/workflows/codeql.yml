@@ -26,7 +26,7 @@ jobs:
       # tripped up by dotnet build's persistent MSBuild/VBCSCompiler server running outside
       # CodeQL's traced process tree (manual mode + `dotnet build` reproducibly failed with
       # "didn't build any of it, or CodeQL could not process any of it" on this repo).
-      - uses: github/codeql-action/init@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
+      - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           languages: csharp
           build-mode: none
