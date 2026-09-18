@@ -28,7 +28,8 @@ docs/adr/0007-testing-and-gates.md
       computed twice
 - [x] `sonar-project.properties` (or scanner CLI args, implementer's call): project key,
       organization, C# analyzer inputs, exclusions for `samples/**`, `**/bin/**`,
-      `**/obj/**`
+      `**/obj/**` (**scanner CLI args** — see Decision below; a properties file turned out
+      not to be an option)
 - [x] Runs on `ubuntu-latest` only (one pass is enough; avoid double-reporting from the
       Windows matrix leg)
 - [x] `continue-on-error: true` initially, same pattern as `mutation.yml` in M0-004;
@@ -53,11 +54,13 @@ need its own ADR.
   (`actions/setup-java`) that the `gates` matrix doesn't otherwise need, and it must run once on
   `ubuntu-latest` only, not per matrix leg; a separate file mirrors how `mutation.yml` was split
   out in M0-004 for the same reason (different tool lifecycle, non-blocking rollout).
-- Decision: static Sonar config location -> `sonar-project.properties` for exclusions and the
-  opencover report path; project key/org/token/host stay as scanner CLI args in the workflow.
-  Alternatives: everything as `/d:` CLI args, everything in the properties file. Rule: 4 (smaller
-  change) — secrets and PR-specific values don't belong in a committed file; static repo-shape
-  config (exclusions, report path) doesn't belong duplicated across workflow runs.
+- Decision (superseded, see below): static Sonar config location -> originally
+  `sonar-project.properties` for exclusions and the opencover report path, with project
+  key/org/token/host as scanner CLI args. Reverted: SonarScanner for .NET refuses to run at all
+  if a `sonar-project.properties` file exists anywhere in the repo ("sonar-project.properties
+  files are not understood by the SonarScanner for .NET" — that file format is
+  SonarScanner-for-Java-only). Removed the file; everything (exclusions, opencover path, project
+  key/org/token/host) is now a `/d:`/`/k:`/`/o:` arg on `dotnet sonarscanner begin`.
 - Decision: coverage report format -> added `--coverlet-output-format opencover` alongside the
   existing `cobertura` in `build.ps1`'s `dotnet test` invocation (coverlet.MTP accepts the flag
   repeated for multiple formats). Alternatives: a separate coverage run just for Sonar. Rule: 4 —

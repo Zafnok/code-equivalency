@@ -36,6 +36,8 @@ jobs:
       - run: dotnet restore --locked-mode
       - run: dotnet tool restore
 
+      # SonarScanner for .NET does not read sonar-project.properties (it errors out if
+      # one exists in the repo root); every setting is a scanner CLI arg instead.
       - name: Sonar begin
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -45,6 +47,9 @@ jobs:
           /o:"zafnok"
           /d:sonar.host.url="https://sonarcloud.io"
           /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+          /d:sonar.exclusions="samples/**,**/bin/**,**/obj/**"
+          /d:sonar.coverage.exclusions="samples/**"
+          /d:sonar.cs.opencover.reportsPaths="TestResults/**/*.opencover.*.xml"
 
       # -SonarBuild: the analyzer injected by `begin` would otherwise turn its own
       # findings into compiler errors (-warnaserror) and formatting diffs
