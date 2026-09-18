@@ -1,5 +1,5 @@
 # M0-006 SonarQube Cloud changegate
-Status: in-progress
+Status: done (PR #17)
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M0-005, ADR 0009 (must be accepted before this ticket starts)
