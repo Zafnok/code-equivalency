@@ -42,7 +42,7 @@ Instructions:
 |---|---|
 | `IrConst(var, value)` | literal |
 | `IrBinary(var, op, a, b)` | arithmetic, bitwise, comparison; wrapping semantics; signedness is part of `op` |
-| `IrOverflows(var, op, a, b)` | Bool: would `op` overflow (signed or unsigned per `op`) |
+| `IrOverflows(var, overflowOp, a, b)` | Bool: would the checked operation overflow; `overflowOp` in SAdd, UAdd, SSub, USub, SMul, UMul, SDiv |
 | `IrUnary(var, op, a)` | negation, not, conversions with explicit target width and signedness |
 | `IrPhi(var, [(block, var)])` | SSA merge |
 | `IrCall(var?, threw?, callee identity, args)` | opaque call; appended to the observable call trace; `threw` is a Bool output |

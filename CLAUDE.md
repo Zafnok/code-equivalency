@@ -44,6 +44,13 @@ and stop; do not silently deviate.
 - The git default branch is `main`. The local branch was created as `master`; M0-001 fixes it.
 - Never commit `samples/**/bin`, `obj`, `TestResults`, `StrykerOutput`.
 
+## Decisions
+
+Do not ask the user about implementation details (representation, naming, API shape,
+encoding, test strategy). Decide with `.claude/skills/equiv-decide/SKILL.md`, log one
+`Decision:` line in the ticket's Notes, and continue. Ask only for the things that
+skill says are not details, and ask by proposing an ADR.
+
 ## When stuck
 
 Do not "try things" against the toolchain for more than ~15 minutes. Write what you

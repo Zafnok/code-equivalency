@@ -28,8 +28,12 @@ Types (all `sealed record`, immutable collections):
 - `IrBlock(IrBlockId Id, ImmutableArray<IrInstruction> Instructions, IrTerminator Terminator)`.
 - Instructions (operands are always `IrVar`; constants go through `IrConst`):
   `IrConst(IrVar Target, IrValue Value)`, `IrBinary(IrVar Target, IrBinaryOp Op, IrVar A, IrVar B)`,
-  `IrOverflows(IrVar Target, IrBinaryOp Op, IrVar A, IrVar B)` (Bool: would the op
-  overflow; signedness is part of the op), `IrUnary(IrVar Target, IrUnaryOp Op, IrVar A)`
+  `IrOverflows(IrVar Target, IrOverflowOp Op, IrVar A, IrVar B)` (Bool: would the op
+  overflow) with `IrOverflowOp { SAdd, UAdd, SSub, USub, SMul, UMul, SDiv }`; each maps
+  one-to-one onto a Z3 predicate in M3-001 (signed add and sub need both the NoOverflow
+  and NoUnderflow checks; `SDiv` is `a == MinValue && b == -1`, which C# throws on even
+  unchecked; checked negation lowers as `SSub(0, a)`),
+  `IrUnary(IrVar Target, IrUnaryOp Op, IrVar A)`
   (Neg, Not, BoolNot, ZExt/SExt/Trunc carry the target width),
   `IrPhi(IrVar Target, ImmutableArray<(IrBlockId From, IrVar Value)>)`,
   `IrCall(IrVar? Target, IrVar? Threw, CallIdentity Callee, ImmutableArray<IrVar> Args)`,
@@ -38,8 +42,10 @@ Types (all `sealed record`, immutable collections):
   Fields and arrays both use the map instructions: a field `f` is one map var per SSA
   version keyed by object ref; an array is a map keyed by index. The frontend chooses.
 - `IrBinaryOp`: Add, Sub, Mul, SDiv, SRem, UDiv, URem, And, Or, Xor, Shl, AShr, LShr,
-  Eq, Ne, Slt, Sle, Sgt, Sge, Ult, Ule, Ugt, Uge. Bool operands allowed only for
-  And, Or, Xor, Eq, Ne. Sort operands allowed only for Eq, Ne.
+  Eq, Ne, Slt, Sle, Sgt, Sge, Ult, Ule, Ugt, Uge. Add, Sub, Mul have no signed variant
+  because wrapping arithmetic is identical at the bit level; signedness only matters
+  for division, remainder, shifts right, comparisons, and overflow tests. Bool operands
+  allowed only for And, Or, Xor, Eq, Ne. Sort operands allowed only for Eq, Ne.
 - Terminators: `IrGoto(IrBlockId)`, `IrBranch(IrVar Cond, IrBlockId Then, IrBlockId Else)`,
   `IrSwitch(IrVar Scrutinee, ImmutableArray<(IrValue, IrBlockId)>, IrBlockId Default)`,
   `IrReturn(IrVar? Value)`, `IrThrow(string ExceptionType)`, `IrUnreachable` (assume

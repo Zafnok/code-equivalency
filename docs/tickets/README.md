@@ -36,6 +36,9 @@ before reading further and ask the user to switch; it must not "give it a try".
 Effort L tickets are the design-heavy ones and carry a Design section with the
 intended algorithm, types and pitfalls; S and M tickets are sized for Sonnet.
 
+Tickets leave implementation details open on purpose. An agent settles them with the
+`equiv-decide` skill and a `Decision:` line in Notes; it does not ask.
+
 M0 and every L ticket are written in full. The remaining S and M tickets are stubs
 (goal + generic deliverables) that the agent picking them up expands per the template,
 before writing code, in the same PR.
