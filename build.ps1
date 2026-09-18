@@ -51,7 +51,7 @@ Invoke-Step "test" {
         }
 
         Write-Host "  -- $($project.BaseName)" -ForegroundColor DarkCyan
-        dotnet test $project.FullName --no-restore --no-build -- --coverlet --coverlet-output-format cobertura
+        dotnet test $project.FullName --no-restore --no-build -- --coverlet --coverlet-output-format cobertura --coverlet-output-format opencover
         if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
         }
