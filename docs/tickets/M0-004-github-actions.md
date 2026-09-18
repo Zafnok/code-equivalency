@@ -1,5 +1,5 @@
 # M0-004 GitHub Actions
-Status: in-progress
+Status: done (PR #4)
 Effort: M
 Depends on: M0-003
 
