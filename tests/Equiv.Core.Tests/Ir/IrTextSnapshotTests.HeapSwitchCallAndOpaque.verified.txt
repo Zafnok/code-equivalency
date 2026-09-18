@@ -1,0 +1,18 @@
+﻿proc "Samples.Orders::Store(Samples.Order,int32)" (%o "o": sort "Samples.Order", %o.isnull "o": bool, %kind "kind": bv32, ref %Order.Count: map<sort "Samples.Order", bv32>) entry B0
+B0:
+  %t0: bv32 = const bv32 0
+  switch %kind [bv32 1 -> B1] default B3
+B1:
+  %t1: bv32 = call "Samples.Svc::Next(int32)"(%kind) threw %t2: bool
+  br %t2, B2, B3
+B2:
+  throw "System.Exception" outs(%Order.Count = %Order.Count)
+B3:
+  %t3: bv32 = phi [B0: %t0, B1: %t1]
+  br %o.isnull, B4, B5
+B4:
+  throw "System.NullReferenceException" outs(%Order.Count = %Order.Count)
+B5:
+  %Order.Count.1: map<sort "Samples.Order", bv32> = mapwrite %Order.Count, %o, %t3
+  opaque "lock statement" at "Samples/Orders.cs" 12:9-12:20
+  ret outs(%Order.Count = %Order.Count.1)

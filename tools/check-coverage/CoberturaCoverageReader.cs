@@ -51,6 +51,11 @@ internal static class CoberturaCoverageReader
 
     private static void MergeDocument(Dictionary<string, Dictionary<LineKey, LineAccumulator>> byAssembly, XDocument document)
     {
+        // coverlet writes filenames relative to the report's common source root(s), which differ
+        // per test project (".../src/" vs ".../src/Equiv.Core/Ir/"), so the same line appears under
+        // different relative names. Anchor each filename to its <source> before merging.
+        string[] sources = [.. document.Descendants("source").Select(static s => Normalize(s.Value).TrimEnd('/') + "/")];
+
         foreach (XElement package in document.Descendants("package"))
         {
             string assemblyName = (string?)package.Attribute("name") ?? string.Empty;
@@ -63,15 +68,15 @@ internal static class CoberturaCoverageReader
 
             foreach (XElement classElement in package.Descendants("class"))
             {
-                MergeClass(assemblyLines, classElement);
+                MergeClass(assemblyLines, classElement, sources);
             }
         }
     }
 
-    private static void MergeClass(Dictionary<LineKey, LineAccumulator> assemblyLines, XElement classElement)
+    private static void MergeClass(Dictionary<LineKey, LineAccumulator> assemblyLines, XElement classElement, string[] sources)
     {
         string className = (string?)classElement.Attribute("name") ?? string.Empty;
-        string filename = (string?)classElement.Attribute("filename") ?? string.Empty;
+        string filename = Anchor(Normalize((string?)classElement.Attribute("filename") ?? string.Empty), sources);
 
         XElement? linesElement = classElement.Element("lines");
         if (linesElement is null)
@@ -107,6 +112,19 @@ internal static class CoberturaCoverageReader
             }
         }
     }
+
+    /// <summary>
+    /// With one source the filename is relative to it. With several (e.g. third-party packages
+    /// whose embedded sources live under "/_/"), it is relative to the one where the file exists.
+    /// </summary>
+    private static string Anchor(string filename, string[] sources) => sources.Length switch
+    {
+        0 => filename,
+        1 => sources[0] + filename,
+        _ => sources.Select(source => source + filename).FirstOrDefault(File.Exists) ?? filename,
+    };
+
+    private static string Normalize(string path) => path.Replace('\\', '/');
 
     private static double ParseCoveragePercentage(string coverage)
     {

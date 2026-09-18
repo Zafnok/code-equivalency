@@ -75,3 +75,6 @@ Thumbs.db
 *.pfx
 *.pubxml.user
 secrets.json
+
+# Verify snapshot tool output
+*.received.*

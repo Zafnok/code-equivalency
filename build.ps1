@@ -41,6 +41,7 @@ Invoke-Step "test" {
         Where-Object {
             $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and
             $_.FullName -notmatch '[\\/]src[\\/]' -and
+            $_.BaseName -ne 'Equiv.TestSupport' -and
             ($_.FullName -match '[\\/]tests[\\/]' -or $_.Name -like '*.Tests.csproj')
         }
 

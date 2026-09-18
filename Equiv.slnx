@@ -11,6 +11,7 @@
     <Project Path="tests/Equiv.Frontend.CSharp.Tests/Equiv.Frontend.CSharp.Tests.csproj" />
     <Project Path="tests/Equiv.Tests.Architecture/Equiv.Tests.Architecture.csproj" />
     <Project Path="tests/Equiv.Tests.Integration/Equiv.Tests.Integration.csproj" />
+    <Project Path="tests/Equiv.TestSupport/Equiv.TestSupport.csproj" />
     <Project Path="tests/Equiv.Verify.Z3.Tests/Equiv.Verify.Z3.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
