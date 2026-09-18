@@ -99,3 +99,13 @@ need its own ADR.
 - Verified locally: `./build.ps1 -SonarBuild` builds, tests, and reports coverage cleanly (same
   as the default run, minus the format step and minus `-warnaserror`); `./build.ps1` (no switch)
   is unaffected and still runs format with `-warnaserror`.
+- Third failure, also discovered live: SonarScanner for .NET refuses to run at all if a
+  `sonar-project.properties` file exists anywhere in the repo ("sonar-project.properties files
+  are not understood by the SonarScanner for .NET" — that format is SonarScanner-for-Java-only,
+  not the .NET wrapper this ticket uses). Removed the file; exclusions and the opencover report
+  path moved onto `dotnet sonarscanner begin` as `/d:` args, same as project key/org/token/host.
+  This supersedes the earlier "static Sonar config location" Decision above.
+- End state, confirmed green on PR #17: `sonar` job passes, and SonarCloud's own PR check
+  ("SonarCloud Code Analysis") passes too, decorating the PR from a real quality-gate
+  evaluation scoped to this PR's new code — not a local build failure. Dashboard:
+  https://sonarcloud.io/dashboard?id=Zafnok_code-equivalency&pullRequest=17
