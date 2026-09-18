@@ -6,15 +6,16 @@ Fails fast: the first non-zero exit code stops the script.
 -Integration also runs tests/Equiv.Tests.Integration (needs VS Build Tools + the .NET
 Framework 4.8 targeting pack; Windows only, see README).
 
--NoWarnAsError drops -warnaserror from the build step. Only for sonar.yml: the Sonar
-scanner injects SonarAnalyzer.CSharp into the compile, and its diagnostics on
-pre-existing code would otherwise hard-fail the build before the scanner ever gets to
-report anything. The strict warnings-as-errors gate stays enforced by the normal
-ci.yml `gates` job, which never passes this switch.
+-SonarBuild is for sonar.yml only. dotnet-sonarscanner begin injects SonarAnalyzer.CSharp
+into the compile for its duration; that analyzer's diagnostics on pre-existing code would
+otherwise hard-fail -warnaserror, and dotnet format would try to apply its fixes and trip
+--verify-no-changes, both before Sonar's own (new-code-only) quality gate ever runs. This
+switch drops -warnaserror from the build step and skips the format step, which ci.yml's
+`gates` job already enforces unconditionally.
 #>
 param(
     [switch]$Integration,
-    [switch]$NoWarnAsError
+    [switch]$SonarBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,13 +37,16 @@ function Invoke-Step {
 
 Invoke-Step "restore" { dotnet restore --locked-mode }
 Invoke-Step "build" {
-    if ($NoWarnAsError) {
+    if ($SonarBuild) {
         dotnet build --no-restore
     } else {
         dotnet build --no-restore -warnaserror
     }
 }
-Invoke-Step "format" { dotnet format --no-restore --verify-no-changes }
+
+if (-not $SonarBuild) {
+    Invoke-Step "format" { dotnet format --no-restore --verify-no-changes }
+}
 
 Invoke-Step "test" {
     $testResultsDir = Join-Path $repoRoot "TestResults"

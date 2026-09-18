@@ -82,14 +82,17 @@ need its own ADR.
   the compile, and this repo's `-warnaserror` promoted its diagnostics on pre-existing code
   (`AssemblyMarker.cs`, `tools/check-coverage/*.cs` — none of it touched by this PR) into hard
   compiler errors, failing the build before Sonar's own quality gate (which already correctly
-  scopes to new code) ever ran. Fixed by adding a `-NoWarnAsError` switch to `build.ps1`, used
-  only by `sonar.yml`. Alternatives considered: (a) fix every flagged pre-existing file now — out
-  of scope for this ticket and reopens old, already-shipped tickets; (b) suppress specific Sonar
-  rules via `.editorconfig` — hides real findings from the Sonar dashboard too, which the user
-  wants kept visible; (c) don't reuse `build.ps1` for the Sonar job, hand-roll a separate
-  build+test — duplicates ~20 lines the ticket already asked to reuse. Rule: 4 (smaller change) —
-  a scoped, documented switch that only the non-blocking Sonar job passes; the strict gate in
-  `ci.yml` is untouched and still enforces `-warnaserror` everywhere.
-- Verified locally: `./build.ps1 -NoWarnAsError` builds, tests, and reports coverage cleanly
-  (same as the default run, minus the injected Sonar analyzer which only exists once
-  `sonarscanner begin` has run); `./build.ps1` (no switch) is unaffected.
+  scopes to new code) ever ran. The same analyzer also made `dotnet format --verify-no-changes`
+  fail (it wanted to apply the analyzer's suggested fixes). Fixed by adding a `-SonarBuild` switch
+  to `build.ps1` — used only by `sonar.yml` — that drops `-warnaserror` and skips the format step
+  entirely (format is already fully enforced, unconditionally, by `ci.yml`'s `gates` job).
+  Alternatives considered: (a) fix every flagged pre-existing file now — out of scope for this
+  ticket and reopens old, already-shipped tickets; (b) suppress specific Sonar rules via
+  `.editorconfig` — hides real findings from the Sonar dashboard too, which the user wants kept
+  visible; (c) don't reuse `build.ps1` for the Sonar job, hand-roll a separate build+test —
+  duplicates ~20 lines the ticket already asked to reuse. Rule: 4 (smaller change) — a scoped,
+  documented switch that only the non-blocking Sonar job passes; the strict gates in `ci.yml` are
+  untouched and still enforce `-warnaserror` and `dotnet format --verify-no-changes` everywhere.
+- Verified locally: `./build.ps1 -SonarBuild` builds, tests, and reports coverage cleanly (same
+  as the default run, minus the format step and minus `-warnaserror`); `./build.ps1` (no switch)
+  is unaffected and still runs format with `-warnaserror`.

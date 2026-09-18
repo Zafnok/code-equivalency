@@ -46,14 +46,14 @@ jobs:
           /d:sonar.host.url="https://sonarcloud.io"
           /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
 
-      # -NoWarnAsError: the Sonar analyzer injected by `begin` would otherwise turn its
-      # own findings into compiler errors via this repo's -warnaserror, failing the
-      # build before Sonar ever gets a report to grade. The strict gate still runs
-      # unmodified in ci.yml; this job only feeds Sonar Cloud, whose quality gate
-      # already scopes itself to new code (see ADR 0009).
+      # -SonarBuild: the analyzer injected by `begin` would otherwise turn its own
+      # findings into compiler errors (-warnaserror) and formatting diffs
+      # (--verify-no-changes), failing the build before Sonar ever gets a report to
+      # grade. Both gates still run unmodified in ci.yml; this job only feeds Sonar
+      # Cloud, whose quality gate already scopes itself to new code (see ADR 0009).
       - name: Build and test
         shell: pwsh
-        run: ./build.ps1 -NoWarnAsError
+        run: ./build.ps1 -SonarBuild
 
       - name: Sonar end
         env:
