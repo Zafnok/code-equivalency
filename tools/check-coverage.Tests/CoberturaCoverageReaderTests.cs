@@ -39,6 +39,96 @@ public sealed class CoberturaCoverageReaderTests
     }
 
     [Fact]
+    public void ReportsWithDifferentSourceRootsMergeTheSameFile()
+    {
+        const string FromRepoRoot = """
+            <coverage>
+              <sources><source>D:/repo/</source></sources>
+              <packages>
+                <package name="Equiv.Core">
+                  <classes>
+                    <class name="Equiv.Core.Foo" filename="src/Equiv.Core/Foo.cs">
+                      <lines>
+                        <line number="1" hits="1" branch="false" />
+                      </lines>
+                    </class>
+                  </classes>
+                </package>
+              </packages>
+            </coverage>
+            """;
+        const string FromProjectDir = """
+            <coverage>
+              <sources><source>D:\repo\src\Equiv.Core\</source></sources>
+              <packages>
+                <package name="Equiv.Core">
+                  <classes>
+                    <class name="Equiv.Core.Foo" filename="Foo.cs">
+                      <lines>
+                        <line number="1" hits="0" branch="false" />
+                      </lines>
+                    </class>
+                  </classes>
+                </package>
+              </packages>
+            </coverage>
+            """;
+
+        AssemblyCoverage coverage = CoberturaCoverageReader.Merge([FromRepoRoot, FromProjectDir])["Equiv.Core"];
+
+        Assert.Equal(1, coverage.LinesValid);
+        Assert.Equal(1, coverage.LinesCovered);
+    }
+
+    [Fact]
+    public void WithSeveralSourcesAFileIsAnchoredWhereItExists()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        Directory.CreateDirectory(Path.Combine(root, "src"));
+        File.WriteAllText(Path.Combine(root, "src", "Foo.cs"), string.Empty);
+        string several = $"""
+            <coverage>
+              <sources><source>/_/src/</source><source>{root}</source></sources>
+              <packages>
+                <package name="Equiv.Core">
+                  <classes>
+                    <class name="Equiv.Core.Foo" filename="src/Foo.cs">
+                      <lines><line number="1" hits="1" branch="false" /></lines>
+                    </class>
+                  </classes>
+                </package>
+                <package name="ThirdParty">
+                  <classes>
+                    <class name="ThirdParty.Bar" filename="Bar.cs">
+                      <lines><line number="1" hits="1" branch="false" /></lines>
+                    </class>
+                  </classes>
+                </package>
+              </packages>
+            </coverage>
+            """;
+        string single = $"""
+            <coverage>
+              <sources><source>{Path.Combine(root, "src")}</source></sources>
+              <packages>
+                <package name="Equiv.Core">
+                  <classes>
+                    <class name="Equiv.Core.Foo" filename="Foo.cs">
+                      <lines><line number="1" hits="0" branch="false" /></lines>
+                    </class>
+                  </classes>
+                </package>
+              </packages>
+            </coverage>
+            """;
+
+        IReadOnlyDictionary<string, AssemblyCoverage> result = CoberturaCoverageReader.Merge([several, single]);
+
+        Assert.Equal((1, 1), (result["Equiv.Core"].LinesValid, result["Equiv.Core"].LinesCovered));
+        Assert.Equal(1, result["ThirdParty"].LinesCovered);
+    }
+
+    [Fact]
     public void UncoveredLineLowersLineRate()
     {
         const string Xml = """
