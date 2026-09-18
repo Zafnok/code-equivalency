@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Equiv.Core\Equiv.Core.csproj" />
+    <ProjectReference Include="..\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
+    <ProjectReference Include="..\Equiv.Verify.Z3\Equiv.Verify.Z3.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equiv.Cli.Tests" />
+  </ItemGroup>
+
+</Project>

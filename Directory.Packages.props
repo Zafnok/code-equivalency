@@ -1,0 +1,29 @@
+<Project>
+
+  <ItemGroup>
+    <!-- Equiv.Frontend.CSharp -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
+
+    <!-- Equiv.Verify.Z3 -->
+    <PackageVersion Include="Microsoft.Z3" Version="4.12.2" />
+
+    <!-- Equiv.Core -->
+    <PackageVersion Include="Sarif.Sdk" Version="5.7.0" />
+
+    <!-- Equiv.Cli -->
+    <PackageVersion Include="System.CommandLine" Version="2.0.12" />
+
+    <!-- tests -->
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <PackageVersion Include="coverlet.MTP" Version="10.0.1" />
+    <PackageVersion Include="Verify.XunitV3" Version="33.0.2" />
+    <PackageVersion Include="CsCheck" Version="4.9.1" />
+    <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.4" />
+
+    <!-- all projects (see Directory.Build.props) -->
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.259" />
+    <PackageVersion Include="MinVer" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

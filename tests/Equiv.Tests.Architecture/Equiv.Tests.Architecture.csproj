@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <TestingPlatformCommandLineArguments>--coverlet-file-prefix $(MSBuildProjectName)</TestingPlatformCommandLineArguments>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="coverlet.MTP" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Equiv.Core\Equiv.Core.csproj" />
+    <ProjectReference Include="..\..\src\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
+    <ProjectReference Include="..\..\src\Equiv.Verify.Z3\Equiv.Verify.Z3.csproj" />
+    <ProjectReference Include="..\..\src\Equiv.Cli\Equiv.Cli.csproj" />
+  </ItemGroup>
+
+</Project>
