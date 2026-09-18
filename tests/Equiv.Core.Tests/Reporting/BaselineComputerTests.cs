@@ -65,11 +65,26 @@ public sealed class BaselineComputerTests
     }
 
     [Fact]
-    public void TheSameIdentityWithADifferentVerdictIsUpdated()
+    public void TheSameIdentityWithADifferentVerdictKindIsNew()
     {
+        // A rule-id (verdict-kind) change for the same identity is a regression such as
+        // Equivalent -> Divergent and must never be hidden from the exit code as "updated" —
+        // see BaselineComputer's remarks.
         ProcedureIdentity identity = new("A");
         SarifLog previous = SarifReportWriter.Write([new VerificationResult(identity, new Equivalent())]);
         SarifLog current = SarifReportWriter.Write([new VerificationResult(identity, new Added())], previous);
+
+        Assert.Equal(BaselineState.New, current.Runs[0].Results[0].BaselineState);
+    }
+
+    [Fact]
+    public void TheSameIdentityAndVerdictKindWithADifferentPayloadIsUpdated()
+    {
+        // Same rule id (both Divergent, EQ002) but a different counterexample: this is the case
+        // that stays "updated" rather than "new", and is deliberately not exit-code-significant.
+        ProcedureIdentity identity = new("A");
+        SarifLog previous = SarifReportWriter.Write([new VerificationResult(identity, new Divergent(Fixtures.Counterexample(1, 2)))]);
+        SarifLog current = SarifReportWriter.Write([new VerificationResult(identity, new Divergent(Fixtures.Counterexample(3, 4)))], previous);
 
         Assert.Equal(BaselineState.Updated, current.Runs[0].Results[0].BaselineState);
     }

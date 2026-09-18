@@ -135,6 +135,18 @@ a result fingerprint (procedure identity + verdict + model hash). The exit code 
 only `new` results unless `--no-baseline` is given. Accepting a divergence as the new
 behaviour is done by committing the SARIF file as the baseline, nothing more.
 
+`new` versus `updated` is decided by procedure identity *and* rule id (the verdict's kind,
+EQ001-EQ005): a rule-id change for an identity already in the baseline — e.g. Equivalent
+(EQ001) regressing to Divergent (EQ002) — is always `new`, so the exit code never misses it.
+`updated` is reserved for a same-rule-id fingerprint change (e.g. a different counterexample
+on a procedure that was already Divergent); that distinction is not exit-code-significant, so
+it does not depend on the "model hash" half of the fingerprint being identical across runs of
+the same underlying divergence.
+
+`level` is only meaningful on a result when `kind` is `fail` (SARIF 2.1.0 s3.27.9); for the
+other four rows a result's own `level` serializes as `none` regardless of this table, and the
+table's per-row severity instead lives on each rule's `defaultConfiguration.level`.
+
 ## 7. Test obligations derived from this document
 
 - Soundness harness (property test, `Equiv.Verify.Z3.Tests`): for any generated IR

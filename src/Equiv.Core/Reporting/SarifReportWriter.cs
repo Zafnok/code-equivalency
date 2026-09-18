@@ -66,7 +66,7 @@ public static class SarifReportWriter
             Level = kind == ResultKind.Fail ? level : FailureLevel.None,
             Kind = kind,
             Message = new Message { Text = MessageText(result) },
-            BaselineState = BaselineComputer.StateFor(result.Identity.Value, fingerprint, baseline),
+            BaselineState = BaselineComputer.StateFor(result.Identity.Value, ruleId, fingerprint, baseline),
             PartialFingerprints = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [ProcedureIdentityFingerprintId] = result.Identity.Value,
