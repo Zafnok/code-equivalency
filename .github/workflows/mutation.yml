@@ -28,6 +28,9 @@ jobs:
           - { src: Equiv.Verify.Z3, test: Equiv.Verify.Z3.Tests }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # --since diffs against the base branch, so it must be in the clone.
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -36,6 +39,7 @@ jobs:
       - run: dotnet restore --locked-mode
       - run: dotnet tool restore
 
+      # PRs mutate only files changed against the base branch; the nightly run is a full sweep.
       - name: Run Stryker (${{ matrix.project.src }})
         working-directory: tests/${{ matrix.project.test }}
         run: >
@@ -43,6 +47,8 @@ jobs:
           --test-runner mtp
           --project ${{ matrix.project.src }}.csproj
           --target-framework net10.0
+          --concurrency 4
+          ${{ github.event_name == 'pull_request' && format('--since:origin/{0}', github.base_ref) || '' }}
           --reporter html
           --reporter progress
           --output ${{ github.workspace }}/StrykerOutput/${{ matrix.project.src }}

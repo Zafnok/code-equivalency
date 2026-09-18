@@ -14,7 +14,7 @@ A PR cannot merge unless every gate is green. Versions are pinned in
 | Coverage | coverlet.MTP → cobertura → `tools/check-coverage` (M0-003) | 100% line and branch per `src/` project; coverlet.MTP has no threshold flag, so the check is a small script over the cobertura XML | yes |
 | Architecture | ArchUnitNET (xUnit v3 package) | dependency edges from ARCHITECTURE.md, naming rules from CLAUDE.md | yes |
 | Integration | `Equiv.Tests.Integration` runs the CLI on every `samples/*` and compares SARIF snapshot | Windows runner only (needs VS Build Tools) | yes |
-| Mutation | Stryker.NET 5 (`--test-runner mtp`) | threshold: break < 90 initially, raised per milestone; MTP runner is new, so this job is `continue-on-error` until M2, then blocking | later |
+| Mutation | Stryker.NET 5 (`--test-runner mtp`) | threshold: break < 90 initially, raised per milestone; MTP runner is new, so this job is `continue-on-error` until M2, then blocking. PRs run incrementally (`--since` the base branch, M0-007); the nightly schedule is a full sweep | later |
 | Code smells / duplication | SonarQube Cloud | Sonar "Sonar way" Quality Gate on new code (duplication, maintainability/reliability/security ratings); `continue-on-error` until calibrated against a few real PRs, then promoted (ADR 0009) | later |
 | Security | GitHub CodeQL (C#), `dotnet list package --vulnerable --include-transitive` fails on any | | yes |
 | Secrets | gitleaks action | | yes |
