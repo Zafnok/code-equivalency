@@ -13,4 +13,8 @@
     <Project Path="tests/Equiv.Tests.Integration/Equiv.Tests.Integration.csproj" />
     <Project Path="tests/Equiv.Verify.Z3.Tests/Equiv.Verify.Z3.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/check-coverage/check-coverage.csproj" />
+    <Project Path="tools/check-coverage.Tests/check-coverage.Tests.csproj" />
+  </Folder>
 </Solution>
