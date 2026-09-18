@@ -12,10 +12,11 @@ public sealed record EquivConfigResult(EquivConfig Config, ImmutableArray<EquivC
 {
     public bool IsValid => Diagnostics.IsEmpty;
 
+    // Deliberate non-short-circuit '&': see the comment on EquivConfig.Equals.
     public bool Equals(EquivConfigResult? other) =>
         other is not null
         && (Config == other.Config)
-            & IrEquality.SequenceEqual(Diagnostics, other.Diagnostics);
+            & IrEquality.SequenceEqual(Diagnostics, other.Diagnostics); // NOSONAR
 
     public override int GetHashCode() => HashCode.Combine(Config, IrEquality.Hash(Diagnostics));
 }

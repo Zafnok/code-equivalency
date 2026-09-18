@@ -11,10 +11,11 @@ public sealed record RenameMap(ImmutableDictionary<string, string> Namespaces, I
 {
     public static RenameMap Empty { get; } = new(ImmutableDictionary<string, string>.Empty, ImmutableDictionary<string, string>.Empty);
 
+    // Deliberate non-short-circuit '&': see the comment on EquivConfig.Equals.
     public bool Equals(RenameMap? other) =>
         other is not null
         && ConfigEquality.DictionaryEqual(Namespaces, other.Namespaces)
-            & ConfigEquality.DictionaryEqual(Types, other.Types);
+            & ConfigEquality.DictionaryEqual(Types, other.Types); // NOSONAR
 
     public override int GetHashCode() => HashCode.Combine(ConfigEquality.Hash(Namespaces), ConfigEquality.Hash(Types));
 }

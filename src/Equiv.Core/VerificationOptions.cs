@@ -7,11 +7,12 @@ namespace Equiv.Core;
 /// <summary>Per-run knobs for <see cref="IVerificationBackend"/> (ticket M3-001): the loop bound, the solver timeout, and the call-identity unifications from <c>equiv.config.json</c>.</summary>
 public sealed record VerificationOptions(int Bound, int TimeoutMs, ImmutableDictionary<string, string> CallIdentityMap)
 {
+    // Deliberate non-short-circuit '&': see the comment on Equiv.Core.Configuration.EquivConfig.Equals.
     public bool Equals(VerificationOptions? other) =>
         other is not null
         && (Bound == other.Bound)
-            & (TimeoutMs == other.TimeoutMs)
-            & ConfigEquality.DictionaryEqual(CallIdentityMap, other.CallIdentityMap);
+            & (TimeoutMs == other.TimeoutMs) // NOSONAR
+            & ConfigEquality.DictionaryEqual(CallIdentityMap, other.CallIdentityMap); // NOSONAR
 
     public override int GetHashCode() => HashCode.Combine(Bound, TimeoutMs, ConfigEquality.Hash(CallIdentityMap));
 }

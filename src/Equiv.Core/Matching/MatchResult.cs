@@ -14,12 +14,13 @@ public sealed record MatchResult(
     ImmutableArray<ProcedureIdentity> Removed,
     ImmutableArray<ProcedureIdentity> Ambiguous)
 {
+    // Deliberate non-short-circuit '&': see the comment on Equiv.Core.Configuration.EquivConfig.Equals.
     public bool Equals(MatchResult? other) =>
         other is not null
         && IrEquality.SequenceEqual(Pairs, other.Pairs)
-            & IrEquality.SequenceEqual(Added, other.Added)
-            & IrEquality.SequenceEqual(Removed, other.Removed)
-            & IrEquality.SequenceEqual(Ambiguous, other.Ambiguous);
+            & IrEquality.SequenceEqual(Added, other.Added) // NOSONAR
+            & IrEquality.SequenceEqual(Removed, other.Removed) // NOSONAR
+            & IrEquality.SequenceEqual(Ambiguous, other.Ambiguous); // NOSONAR
 
     public override int GetHashCode() =>
         HashCode.Combine(IrEquality.Hash(Pairs), IrEquality.Hash(Added), IrEquality.Hash(Removed), IrEquality.Hash(Ambiguous));

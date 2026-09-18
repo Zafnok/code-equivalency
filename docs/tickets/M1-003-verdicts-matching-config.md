@@ -127,3 +127,22 @@ Anything not in the goal. Stub the next ticket's interface; do not implement it.
 - Not changed: nothing maps `MatchResult.Ambiguous` to `Unknown(UnmatchedOverload)` yet. That wiring
   belongs to whichever ticket first produces SARIF results from a `MatchResult` (M1-004 or M1-005),
   not to the matcher itself.
+
+### SonarQube Cloud reports (`& should be &&`, e.g. EquivConfigResult.cs)
+
+- Decision: suppressed with `// NOSONAR` plus a one-line rationale comment on the `Equals` methods this
+  ticket added (`EquivConfig`, `RenameMap`, `EquivConfigResult`, `MatchResult`, `VerificationOptions`),
+  rather than applying Sonar's suggested fix (`&&`, extracting the right operand to a variable first).
+  Real finding, not a Sonar false positive — but Sonar's own suggested fix doesn't actually solve
+  anything for this repo: `&&` always compiles to a short-circuit branch in IL regardless of whether
+  the operand is a bare expression or a pre-extracted variable, so switching would reopen exactly the
+  branch-coverage-multiplication problem `Equiv.Core.Ir.IrEquality`'s file comment already documents
+  (M1-002) — every field comparison would need its own short-circuited/non-short-circuited test pair to
+  hold the blocking 100% branch-coverage gate. `other` is already proven non-null by the preceding
+  `is not null` `&&`, and every combined operand is a cheap, side-effect-free equality check, so there
+  is no null-deref or performance risk from evaluating all of them unconditionally. The same pattern
+  already exists, unflagged, in ~15 files merged in M1-002 (`IrBlock`, `IrCall`, `IrProcedure`, `IrRun`,
+  `IrValidator`, ...) — Sonar's "new code" window just doesn't reach them yet; this ticket does not
+  touch those files. Rule: 1 (mirrors the `IrEquality.cs` precedent); does not weaken a gate (the Sonar
+  changegate is still `continue-on-error` per ADR 0009, and the suppression trades one non-blocking
+  finding for keeping the blocking coverage gate cheap to satisfy).
