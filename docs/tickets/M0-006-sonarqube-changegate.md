@@ -18,9 +18,9 @@ docs/adr/0007-testing-and-gates.md
 ## Deliverables
 - [x] SonarQube Cloud project created at sonarcloud.io, org linked to this repo's GitHub
       account — this is the user's action, cannot be automated; say so in the PR
-      (**not done — user action required**, see Notes)
+      (done by the user after the initial PR; confirmed live in CI logs)
 - [x] `SONAR_TOKEN` added as a GitHub Actions secret — also the user's action; say so
-      (**not done — user action required**, see Notes)
+      (done by the user after the initial PR; confirmed live in CI logs)
 - [x] New `.github/workflows/sonar.yml` (or a step added to `ci.yml`, implementer's call
       per `equiv-decide`): installs `dotnet-sonarscanner`, wraps the existing build+test
       invocation (`dotnet-sonarscanner begin` / build / `dotnet-sonarscanner end`), and
@@ -74,6 +74,22 @@ need its own ADR.
 - Promotion to a required/blocking check is a follow-up decision once a few real PRs have run
   through it (per ADR 0009); not done in this ticket. No `docs/QUALITY-GATES.md` "Required
   checks" note is added until then.
-- Could not run the actual SonarQube Cloud scan end-to-end (no `SONAR_TOKEN` secret exists yet;
-  deliverable 1/2 are user actions). The workflow is untested against a live SonarCloud project —
-  flag this in PR review once the user adds the token and project.
+- Update: user created the SonarCloud project and added `SONAR_TOKEN` after the initial PR. The
+  live run confirmed `sonar begin` correctly detects incremental PR analysis against `main`
+  (new-code-only quality gate, as designed in ADR 0009) — but the wrapped `./build.ps1` call
+  itself failed to compile, unrelated to any Sonar quality gate verdict. See next Decision.
+- Decision: PR was failing because `dotnet sonarscanner begin` injects SonarAnalyzer.CSharp into
+  the compile, and this repo's `-warnaserror` promoted its diagnostics on pre-existing code
+  (`AssemblyMarker.cs`, `tools/check-coverage/*.cs` — none of it touched by this PR) into hard
+  compiler errors, failing the build before Sonar's own quality gate (which already correctly
+  scopes to new code) ever ran. Fixed by adding a `-NoWarnAsError` switch to `build.ps1`, used
+  only by `sonar.yml`. Alternatives considered: (a) fix every flagged pre-existing file now — out
+  of scope for this ticket and reopens old, already-shipped tickets; (b) suppress specific Sonar
+  rules via `.editorconfig` — hides real findings from the Sonar dashboard too, which the user
+  wants kept visible; (c) don't reuse `build.ps1` for the Sonar job, hand-roll a separate
+  build+test — duplicates ~20 lines the ticket already asked to reuse. Rule: 4 (smaller change) —
+  a scoped, documented switch that only the non-blocking Sonar job passes; the strict gate in
+  `ci.yml` is untouched and still enforces `-warnaserror` everywhere.
+- Verified locally: `./build.ps1 -NoWarnAsError` builds, tests, and reports coverage cleanly
+  (same as the default run, minus the injected Sonar analyzer which only exists once
+  `sonarscanner begin` has run); `./build.ps1` (no switch) is unaffected.

@@ -5,9 +5,16 @@ Fails fast: the first non-zero exit code stops the script.
 
 -Integration also runs tests/Equiv.Tests.Integration (needs VS Build Tools + the .NET
 Framework 4.8 targeting pack; Windows only, see README).
+
+-NoWarnAsError drops -warnaserror from the build step. Only for sonar.yml: the Sonar
+scanner injects SonarAnalyzer.CSharp into the compile, and its diagnostics on
+pre-existing code would otherwise hard-fail the build before the scanner ever gets to
+report anything. The strict warnings-as-errors gate stays enforced by the normal
+ci.yml `gates` job, which never passes this switch.
 #>
 param(
-    [switch]$Integration
+    [switch]$Integration,
+    [switch]$NoWarnAsError
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,7 +35,13 @@ function Invoke-Step {
 }
 
 Invoke-Step "restore" { dotnet restore --locked-mode }
-Invoke-Step "build" { dotnet build --no-restore -warnaserror }
+Invoke-Step "build" {
+    if ($NoWarnAsError) {
+        dotnet build --no-restore
+    } else {
+        dotnet build --no-restore -warnaserror
+    }
+}
 Invoke-Step "format" { dotnet format --no-restore --verify-no-changes }
 
 Invoke-Step "test" {
