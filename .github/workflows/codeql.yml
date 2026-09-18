@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
   security-events: write
 
@@ -30,7 +31,9 @@ jobs:
           languages: csharp
           build-mode: manual
 
-      - run: dotnet build --no-incremental
+      # Shared compilation (VBCSCompiler) and MSBuild node reuse run compiles in a
+      # persistent background process that CodeQL's build tracer can't see into.
+      - run: dotnet build --no-incremental -p:UseSharedCompilation=false /nodeReuse:false
 
       - uses: github/codeql-action/analyze@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
         with:
