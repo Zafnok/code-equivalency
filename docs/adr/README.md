@@ -1,0 +1,15 @@
+# Architecture Decision Records
+
+Short, numbered, immutable once accepted. To change a decision, write a new ADR that
+supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.md`.
+
+| ADR | Decision |
+|---|---|
+| 0001 | .NET 10 / C# 14 for the whole MVP |
+| 0002 | Dependency register (living) |
+| 0003 | Lower from Roslyn's IOperation control-flow graph |
+| 0004 | MSBuildWorkspace on Windows for the MVP loader; fact check on "Windows bindings" |
+| 0005 | Direct Z3 encoding; Lean and Boogie rejected for the MVP |
+| 0006 | SARIF only, headless only, no UI in the MVP |
+| 0007 | Test and gate stack |
+| 0008 | Loop ladder instead of bounded-only verdicts; runtime-changes table |
