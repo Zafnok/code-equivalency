@@ -5,6 +5,11 @@ description: The only way to implement a ticket in this repo. Use whenever asked
 
 # Ticket loop (definition of done)
 
+0. Model check, before anything else: read the ticket's `Model:` line. If you are a
+   weaker model family than it names, or the named family at a lower effort than it
+   names, stop immediately and reply with one sentence telling the user which model and
+   effort to switch to. Do not read further, do not start, do not "try". Fable may take
+   any ticket.
 1. Read, in order: `CLAUDE.md`, the ticket file in `docs/tickets/`, every spec section it
    references, `docs/QUALITY-GATES.md`. Do not read the whole repo; read what the ticket names.
 2. Check dependencies: every ticket in "Depends on" must be `Status: done`. If not, stop
@@ -34,7 +39,9 @@ description: The only way to implement a ticket in this repo. Use whenever asked
   fail; do not "fix" the test.
 - Unsupported constructs in the frontend become `IrOpaque`, never `throw NotSupported`.
 - Do not create helper projects, shared test-utility packages, or "Common" folders.
-  Test helpers live in the test project that uses them.
+  Test helpers live in the test project that uses them. The one exception is
+  `tests/Equiv.TestSupport` (created in M1-002): IR generators and fixture loaders that
+  three test projects need. Nothing else goes there without an ADR.
 - No `Console.WriteLine` outside `Equiv.Cli`. Use the abstraction the ticket names.
 - If the toolchain misbehaves for more than about 15 minutes, record what you saw in
   the ticket's Notes and stop.

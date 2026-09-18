@@ -21,6 +21,8 @@ Everything after this milestone runs under 100% coverage and full CI.
   script with 100% threshold, ArchUnitNET rules from ARCHITECTURE.md.
 - M0-004 (M) GitHub Actions: `ci.yml` (windows+ubuntu matrix, all blocking gates),
   `codeql.yml`, Dependabot, gitleaks, Stryker job (`continue-on-error`).
+- M0-005 (S) Gate hardening from the M0 review: stale-report cleanup, fail on missing
+  src assembly, visible line counts, explicit `Main`, final newlines.
 
 ## M1 — Core IR, samples, SARIF (days 2–3)
 

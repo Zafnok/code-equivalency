@@ -1,6 +1,7 @@
 # M2-004 lowering v2
 Status: todo
 Effort: M
+Model: Opus, medium effort (extends the M2-003 SSA builder to loops, try regions and heap maps). Sonnet only at high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-003
 
 ## Goal

@@ -26,25 +26,35 @@ Procedure = signature + ordered basic blocks + entry block. Block = instructions
 terminator. SSA: every `IrVar` is assigned once; blocks with several predecessors use
 `IrPhi`.
 
-Types: `Bool`; `BitVec(n)` for integral types (n in 8, 16, 32, 64, signed flag kept on
+Types: `Bool`; `BitVec(n)` for integral types (n in 8, 16, 32, 64, signedness kept on
 the operation, not the type); `Sort(name)` for everything else (strings, objects,
-decimals, floats), treated as uninterpreted with equality only. Floating point is a
-`Sort` in the MVP (not IEEE-modelled); a post-MVP ticket exists.
+decimals, floats), treated as uninterpreted with equality only; `Map(key, value)` for
+SSA heap slices (one map per field, one per array) encoded as SMT arrays. Floating
+point is a `Sort` in the MVP (not IEEE-modelled); a post-MVP ticket exists.
+
+IR instructions never throw. Every exception edge is explicit in the CFG: the frontend
+lowers `checked` arithmetic to an overflow test plus a branch to a throw block, and a
+call that may throw yields a Bool that the frontend branches on.
 
 Instructions:
 
 | Instruction | Meaning |
 |---|---|
 | `IrConst(var, value)` | literal |
-| `IrBinary(var, op, a, b)` | arithmetic, bitwise, comparison; ops carry C# semantics including the `checked`/`unchecked` flag |
-| `IrUnary(var, op, a)` | negation, not, conversions with explicit width and signedness |
+| `IrBinary(var, op, a, b)` | arithmetic, bitwise, comparison; wrapping semantics; signedness is part of `op` |
+| `IrOverflows(var, op, a, b)` | Bool: would `op` overflow (signed or unsigned per `op`) |
+| `IrUnary(var, op, a)` | negation, not, conversions with explicit target width and signedness |
 | `IrPhi(var, [(block, var)])` | SSA merge |
-| `IrCall(var?, callee identity, args, mayThrow)` | opaque call; appended to the observable call trace |
-| `IrFieldRead/Write`, `IrArrayRead/Write` | modelled with SMT arrays (`select`/`store`) over a heap variable |
+| `IrCall(var?, threw?, callee identity, args)` | opaque call; appended to the observable call trace; `threw` is a Bool output |
+| `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
 | `IrOpaque(var?, reason, sourceSpan)` | frontend could not lower; poisons every dependent value |
 
 Terminators: `IrGoto`, `IrBranch(cond, then, else)`, `IrSwitch`, `IrReturn(var?)`,
-`IrThrow(exceptionTypeIdentity)`.
+`IrThrow(exceptionTypeIdentity)`, `IrUnreachable` (assume false; produced by loop
+unrolling, never by the frontend).
+
+Exact record shapes, the text format and the validator rules are specified in ticket
+M1-002 and pinned by its snapshot tests.
 
 Null: reference-typed values are a `Sort` plus a separate `Bool` "is null" shadow
 variable. A dereference lowers to a conditional `IrThrow(NullReferenceException)`.
@@ -132,7 +142,8 @@ behaviour is done by committing the SARIF file as the baseline, nothing more.
 - Ladder monotonicity (property test): a pair proved on rung n is never refuted on
   rung m; a counterexample from rung 1 replays to Divergent in the IR interpreter.
 - Lowering oracle (property test, `Equiv.Frontend.CSharp.Tests`): for generated
-  straight-line integer methods, run the C# via Roslyn scripting and the IR via the
-  test-only interpreter; outputs agree.
+  straight-line integer methods, compile and run the C# in memory and run the IR via
+  `IrInterpreter` (production code in Core, also used to replay counterexamples);
+  outputs agree.
 - Snapshot tests (Verify): IR dump and SARIF for every sample in `samples/`.
 - Every row in the tables above has at least one unit test named after it.
