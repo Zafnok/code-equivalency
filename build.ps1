@@ -24,6 +24,10 @@ Invoke-Step "restore" { dotnet restore --locked-mode }
 Invoke-Step "build" { dotnet build --no-restore -warnaserror }
 Invoke-Step "format" { dotnet format --no-restore --verify-no-changes }
 Invoke-Step "test" { dotnet test --no-restore --no-build -- --coverlet --coverlet-output-format cobertura }
-Invoke-Step "check-coverage" { & (Join-Path $repoRoot "tools/check-coverage.ps1") }
+Invoke-Step "check-coverage" {
+    dotnet run --no-restore --no-build --project (Join-Path $repoRoot "tools/check-coverage") -- `
+        --test-results (Join-Path $repoRoot "TestResults") `
+        --src (Join-Path $repoRoot "src")
+}
 
 Write-Host "All gates green." -ForegroundColor Green
