@@ -169,6 +169,36 @@ Also fixed as small, low-risk doc corrections raised by the same review:
   schema/rule validator (that is `Sarif.Multitool`, not a dependency here) — corrected the row and
   noted why this ticket validates by SDK round-trip instead of a schema validator.
 
+## Second review pass
+
+- **EQ003-EQ005 severity visibility (open).** The first review-response paragraph added to
+  VERIFICATION-MODEL.md section 6 claimed severity "lives on each rule's
+  `defaultConfiguration.level`" — checked against `SarifReportWriterTests.Unknown.verified.txt`
+  (see below), that is not accurate for EQ003: its `warning` level equals SARIF's own baseline
+  default, so Sarif.Sdk omits `defaultConfiguration` entirely, and the result's own `level` is
+  explicitly `none`. Whether any real consumer falls back to a rule default for a `none`-level,
+  non-`fail`-kind result is unverified. This is a genuine open decision (VERIFICATION-MODEL.md
+  section 6 shape, not an implementation detail per `equiv-decide`'s own checklist), filed as
+  ADR 0011 (proposed, not yet accepted) with two options: accept EQ003-EQ005 as
+  possibly-invisible-severity informational entries (status quo), or make EQ003 `kind: fail` +
+  `level: warning` so it behaves like Divergent for consumers that only key off `kind == fail`.
+  Section 6's paragraph is corrected to state the actual mechanism and point at the ADR instead
+  of asserting a fix that the SDK's own default-value omission undoes for EQ003 specifically.
+- **Snapshot readability, corrected.** The claim that indented SARIF output needs a direct
+  `Newtonsoft.Json` dependency was wrong: `Verify` (already a test dependency) has its own
+  `VerifyJson(string)` that pretty-prints a JSON string for the snapshot with no new package.
+  `SarifReportWriterTests`'s five verdict-kind snapshots now use `VerifyJson` instead of `Verify`;
+  the `.verified.txt` files are indented and reviewable. (`FileReportSinkTests`'s round trip is
+  unaffected — production `FileReportSink`/`SarifLog.Save` output is unchanged, still minified;
+  this only touches how the snapshot test displays it for review.)
+- **Exit-code follow-up, expanded.** Beyond `Ambiguous` wiring, whichever ticket adds the CLI's
+  `--fail-on`/exit-code logic must not simply "count every `new` result": with `new` now decided
+  by identity+rule id (see above), a *fixed* regression (Divergent -> Equivalent) and a newly
+  `Added` procedure are also `new`. The exit-code logic needs to filter `new` results by rule id
+  / level (e.g. only EQ002/EQ006, or only `kind: fail`), not just by `baselineState == new`, or a
+  bug fix would fail CI. Noted here so the ticket that implements it does not have to rediscover
+  this.
+
 Not changed, left as follow-ups (out of scope for this ticket, would need their own ticket or
 ADR rather than a silent scope expansion here):
 - Adding a real SARIF schema validator (`Sarif.Multitool`/`.Library`) instead of the SDK
@@ -180,10 +210,6 @@ ADR rather than a silent scope expansion here):
   logic that consumes `baselineState` are both still unassigned to a ticket (M1-003 deferred the
   former to "M1-004 or M1-005"; M1-005's own goal does not mention it, and covers only exit codes
   3/4). Whichever ticket first wires a `MatchResult` + backend run into `SarifReportWriter`'s input
-  needs its goal amended to name both.
-- Pretty-printed (indented) SARIF output instead of `SarifLog.Save`'s minified single-line JSON:
-  would need `Newtonsoft.Json`'s `JsonConvert.SerializeObject(log, Formatting.Indented)` as a
-  *direct* dependency (today only transitive via Sarif.Sdk), which is an ADR-0002 change for a
-  cosmetic snapshot-readability improvement — not worth it on its own.
+  needs its goal amended to name both (see the exit-code follow-up note above for a second catch).
 - Driver `version`/`informationUri`, and a guard against duplicate identities in one result set:
   both minor, deferred without a named ticket.
