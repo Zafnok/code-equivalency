@@ -97,3 +97,33 @@ Anything not in the goal. Stub the next ticket's interface; do not implement it.
   `StringComparer.Ordinal` overloads and a `Null.Of<T>()` test helper (`tests/Equiv.Core.Tests/Null.cs`)
   that returns null through an opaque generic call so the strongly-typed `Equals(T?)` null branch stays
   reachable and testable without the analyzer folding it away.
+
+### Fable review (PR #19)
+
+- Fixed: `ProcedureIdentityNormalizer.Member` was joining `parameterTypes` verbatim, so a renamed
+  parameter type (`Old.Ns.Order` -> `New.Ns.Order`) never matched across sides even with the
+  namespace configured — VERIFICATION-MODEL.md section 3 applies rename maps to both sides before
+  matching, and section 4 makes parameter types part of the identity. `Rename` now takes a single
+  fully-qualified name (exact `Types` match first, else a last-`.`-split namespace lookup) and both
+  the declaring type and every parameter type go through it. A name with no `.` (a primitive like
+  `int32`) is returned unchanged, since it has no namespace part to rename. Nested generic parameter
+  syntax (`List<Old.Ns.Order>`) is explicitly out of scope: the frontend that builds `parameterTypes`
+  for M2-002 is responsible for renaming inside such a name before calling this normaliser, since
+  this ticket doesn't fix a parameter-type string grammar.
+- Fixed: a repeated key in a rename map (`{"Old.Ns": "First", "Old.Ns": "Second"}`) was silently
+  keeping JSON's last-value-wins behaviour with no diagnostic. Added `CFG006 DuplicateRenameEntry`;
+  the last value still wins (JSON's own semantics, not something the loader can second-guess), but
+  it's now reported.
+- Fixed: the stale "M1-003 replaces it" comment on `ProcedureIdentity` (left over from the M1-002
+  placeholder) now describes what M1-003 actually did, per the "ProcedureIdentity stays the M1-002
+  placeholder shape" decision above.
+- Not changed: JSON pointer paths in `EquivConfigDiagnostic.Path` don't escape `/`/`~` per RFC 6901.
+  Cosmetic (no diagnostic path in this schema can contain those characters — property names are a
+  fixed set, and rename-map keys appear in the message text, not the path); not worth the added code.
+- Not changed: `ProcedureIdentityNormalizer.Endpoint` only uppercases the verb; the review asked for
+  this to be stated explicitly rather than left implicit — route template normalisation (unifying
+  `System.Web` vs `Microsoft.AspNetCore` attribute routes into one identity) is ticket M2-005's job
+  per ARCHITECTURE.md's C# frontend bullets, not this ticket's.
+- Not changed: nothing maps `MatchResult.Ambiguous` to `Unknown(UnmatchedOverload)` yet. That wiring
+  belongs to whichever ticket first produces SARIF results from a `MatchResult` (M1-004 or M1-005),
+  not to the matcher itself.

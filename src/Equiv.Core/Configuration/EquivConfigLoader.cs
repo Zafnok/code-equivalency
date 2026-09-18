@@ -97,6 +97,11 @@ public static class EquivConfigLoader
                 continue;
             }
 
+            if (map.ContainsKey(entry.Name))
+            {
+                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.DuplicateRenameEntry, path, $"duplicate key \"{entry.Name}\" (JSON keeps only the last one)"));
+            }
+
             map[entry.Name] = value;
         }
 

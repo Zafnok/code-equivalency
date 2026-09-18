@@ -17,4 +17,7 @@ public static class EquivConfigDiagnosticIds
 
     /// <summary>A top-level property is not one this schema defines.</summary>
     public const string UnknownProperty = "CFG005";
+
+    /// <summary>A rename map repeats a key; the JSON parser keeps only the last occurrence.</summary>
+    public const string DuplicateRenameEntry = "CFG006";
 }

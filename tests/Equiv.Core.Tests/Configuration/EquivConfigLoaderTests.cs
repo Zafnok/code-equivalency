@@ -116,6 +116,14 @@ public sealed class EquivConfigLoaderTests
     }
 
     [Fact]
+    public void DuplicateRenameKeyIsReportedAndTheLastValueWins()
+    {
+        EquivConfigResult result = EquivConfigLoader.Load("""{ "namespaceRenames": { "Old.Ns": "First", "Old.Ns": "Second" } }""");
+        Assert.Equal([EquivConfigDiagnosticIds.DuplicateRenameEntry], result.Diagnostics.Select(static d => d.Id), StringComparer.Ordinal);
+        Assert.Equal("Second", result.Config.Renames.Namespaces["Old.Ns"]);
+    }
+
+    [Fact]
     public void NullJsonThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(static () => EquivConfigLoader.Load(null!));

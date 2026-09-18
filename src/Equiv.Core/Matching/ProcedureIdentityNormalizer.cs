@@ -21,9 +21,9 @@ public static class ProcedureIdentityNormalizer
         ArgumentNullException.ThrowIfNull(member);
         ArgumentNullException.ThrowIfNull(renames);
 
-        string qualifiedType = Rename(@namespace, type, renames);
+        string qualifiedType = Rename(Qualify(@namespace, type), renames);
         string arity = genericArity > 0 ? $"`{genericArity.ToString(CultureInfo.InvariantCulture)}" : string.Empty;
-        string parameters = string.Join(",", parameterTypes);
+        string parameters = string.Join(",", parameterTypes.Select(p => Rename(p, renames)));
         return new ProcedureIdentity($"{qualifiedType}::{member}{arity}({parameters})");
     }
 
@@ -34,15 +34,32 @@ public static class ProcedureIdentityNormalizer
         return new ProcedureIdentity($"{verb.ToUpperInvariant()} {route}");
     }
 
-    private static string Rename(string @namespace, string type, RenameMap renames)
+    private static string Qualify(string @namespace, string type) => @namespace.Length == 0 ? type : $"{@namespace}.{type}";
+
+    /// <summary>
+    /// Renames a fully-qualified name (the member's own declaring type, or a parameter type):
+    /// an exact match in <see cref="RenameMap.Types"/> wins outright; otherwise the namespace
+    /// part (everything before the last '.') is looked up in <see cref="RenameMap.Namespaces"/>.
+    /// A name with no '.' (a primitive like <c>int32</c>, or an unqualified name) has no
+    /// namespace part and is returned unchanged. Nested generic syntax (<c>List&lt;Old.Ns.Order&gt;</c>)
+    /// is not unwrapped; the frontend that builds <paramref name="parameterTypes"/> for <see cref="Member"/>
+    /// is responsible for renaming inside such a name before calling this normaliser.
+    /// </summary>
+    private static string Rename(string qualifiedName, RenameMap renames)
     {
-        string qualified = @namespace.Length == 0 ? type : $"{@namespace}.{type}";
-        if (renames.Types.TryGetValue(qualified, out string? renamedType))
+        if (renames.Types.TryGetValue(qualifiedName, out string? renamedType))
         {
             return renamedType;
         }
 
-        string renamedNamespace = renames.Namespaces.GetValueOrDefault(@namespace, @namespace);
-        return renamedNamespace.Length == 0 ? type : $"{renamedNamespace}.{type}";
+        int lastDot = qualifiedName.LastIndexOf('.');
+        if (lastDot < 0)
+        {
+            return qualifiedName;
+        }
+
+        string @namespace = qualifiedName[..lastDot];
+        string type = qualifiedName[(lastDot + 1)..];
+        return Qualify(renames.Namespaces.GetValueOrDefault(@namespace, @namespace), type);
     }
 }

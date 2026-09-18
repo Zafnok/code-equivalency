@@ -64,6 +64,33 @@ public sealed class ProcedureIdentityNormalizerTests
     }
 
     [Fact]
+    public void ParameterTypesAreRenamedTheSameWayAsTheDeclaringType()
+    {
+        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("Old.Ns", "New.Ns"), ImmutableDictionary<string, string>.Empty);
+        ProcedureIdentity identity = ProcedureIdentityNormalizer.Member("Old.Ns", "Svc", "Process", 0, ["Old.Ns.Order", "int32"], renames);
+        Assert.Equal("New.Ns.Svc::Process(New.Ns.Order,int32)", identity.Value);
+    }
+
+    [Fact]
+    public void ParameterTypeRenameTakesPrecedenceOverNamespaceRename()
+    {
+        RenameMap renames = new(
+            ImmutableDictionary<string, string>.Empty.Add("Old.Ns", "New.Ns"),
+            ImmutableDictionary<string, string>.Empty.Add("Old.Ns.Order", "New.Ns.PurchaseOrder"));
+        ProcedureIdentity identity = ProcedureIdentityNormalizer.Member("Old.Ns", "Svc", "Process", 0, ["Old.Ns.Order"], renames);
+        Assert.Equal("New.Ns.Svc::Process(New.Ns.PurchaseOrder)", identity.Value);
+    }
+
+    [Fact]
+    public void RenamedOldSideParametersMatchTheModernSideIdentity()
+    {
+        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("Old.Ns", "New.Ns"), ImmutableDictionary<string, string>.Empty);
+        ProcedureIdentity legacy = ProcedureIdentityNormalizer.Member("Old.Ns", "Svc", "Process", 0, ["Old.Ns.Order"], renames);
+        ProcedureIdentity modern = ProcedureIdentityNormalizer.Member("New.Ns", "Svc", "Process", 0, ["New.Ns.Order"], RenameMap.Empty);
+        Assert.Equal(modern, legacy);
+    }
+
+    [Fact]
     public void RenamedOldSideMatchesTheModernSideIdentity()
     {
         RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("System.Web.Http", "Microsoft.AspNetCore.Mvc"), ImmutableDictionary<string, string>.Empty);
