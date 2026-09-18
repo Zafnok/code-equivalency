@@ -28,6 +28,21 @@ A PR cannot merge unless every gate is green. Versions are pinned in
 - `ubuntu-latest`: build, unit/property/snapshot, architecture, coverage, CodeQL. Integration
   tests are skipped until the bare loader exists (post-MVP).
 
+## Required checks (M0-004)
+
+CI runs in `.github/workflows/`: `ci.yml` (gates on windows-latest + ubuntu-latest, plus
+`vulnerable-packages` and `gitleaks`), `codeql.yml`, `mutation.yml` (informational; see
+Mutation row above). Applying branch protection with these as required checks on GitHub
+is the user's action — this ticket only wires the workflows. Mark as required:
+
+- `gates (windows-latest)`
+- `gates (ubuntu-latest)`
+- `vulnerable-packages`
+- `gitleaks`
+- `analyze` (CodeQL)
+
+Do not mark `stryker` (mutation.yml) as required until M2, per the Mutation row above.
+
 ## Test taxonomy (what "a variety of tests" means here)
 
 1. **Unit** — one behaviour, no I/O. Required for everything.
