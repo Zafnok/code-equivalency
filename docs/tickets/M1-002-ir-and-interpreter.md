@@ -1,5 +1,5 @@
 # M1-002 IR types, validator, text format, interpreter, generators
-Status: in-progress
+Status: done (PR #15)
 Effort: L
 Model: Opus, medium effort. Sonnet only at high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M0-005
