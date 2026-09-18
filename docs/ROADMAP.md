@@ -25,6 +25,8 @@ Everything after this milestone runs under 100% coverage and full CI.
   src assembly, visible line counts, explicit `Main`, final newlines.
 - M0-006 (M) SonarQube Cloud changegate: code smells + duplication reporting and Sonar
   Quality Gate on PRs, non-blocking until calibrated. Depends on ADR 0009 being accepted.
+- M0-007 (S) Faster mutation job: PRs run Stryker incrementally (`--since` the base
+  branch) with full runner concurrency; the nightly schedule stays a full sweep.
 
 ## M1 — Core IR, samples, SARIF (days 2–3)
 
