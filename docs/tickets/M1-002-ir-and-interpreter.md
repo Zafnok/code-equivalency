@@ -1,5 +1,5 @@
 # M1-002 IR types, validator, text format, interpreter, generators
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, medium effort. Sonnet only at high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M0-005
@@ -108,17 +108,17 @@ swap operands of a non-commutative op, flip a branch, change a constant), and a
 `Violations` generator producing one invalid procedure per validator rule.
 
 ## Deliverables
-- [ ] Types above in `src/Equiv.Core/Ir/`, one file per record family.
-- [ ] `IrValidator` with a diagnostic id per rule; unit test per rule (valid and invalid).
-- [ ] `IrText` dump and parse; snapshot tests for three hand-written procedures; property
+- [x] Types above in `src/Equiv.Core/Ir/`, one file per record family.
+- [x] `IrValidator` with a diagnostic id per rule; unit test per rule (valid and invalid).
+- [x] `IrText` dump and parse; snapshot tests for three hand-written procedures; property
       test: `Parse(Dump(p)) == p` for generated `p`.
-- [ ] `IrInterpreter` and `ICallOracle`; unit tests per instruction and terminator kind,
+- [x] `IrInterpreter` and `ICallOracle`; unit tests per instruction and terminator kind,
       including wrap-around and overflow predicates at width boundaries.
-- [ ] `tests/Equiv.TestSupport` with `IrGen`; property test: every generated procedure
+- [x] `tests/Equiv.TestSupport` with `IrGen`; property test: every generated procedure
       validates clean; every `Violations` case fails with the expected id; every
       `Mutation` produces a different interpreter result for some generated input
       (or is discarded by the generator; document the discard rate).
-- [ ] Row added to `docs/adr/0002-dependencies.md` only if a package is added (none expected).
+- [x] Row added to `docs/adr/0002-dependencies.md` only if a package is added (none expected).
 
 ## Pitfalls
 - Do not model `Sort` equality as reference equality in the interpreter; tokens compare by id.
@@ -131,3 +131,21 @@ swap operands of a non-commutative op, flip a branch, change a constant), and a
 Any Roslyn or Z3 code. Procedure identity normalisation (M1-003).
 
 ## Notes
+- Decision: non-`Ir` helpers (`ProcedureIdentity`, `CallIdentity`, `SourceSpan`, `ICallOracle`) -> namespace `Equiv.Core`. Alternatives: `Ir`-prefix them, `Equiv.Core.Ir`. Rule: 5 (architecture test requires every `Equiv.Core.Ir` type to start with `Ir`).
+- Decision: IR types are `public` (Frontend, Verify and TestSupport consume them). Alternatives: internal + more InternalsVisibleTo. Rule: 1.
+- Decision: records holding `ImmutableArray` override `Equals`/`GetHashCode` with sequence equality. Alternatives: custom list wrapper type, test-only comparer. Rule: 3 (`Parse(Dump(p)) == p`).
+- Decision: instruction/terminator dispatch via internal abstract visitors. Alternatives: type switches with a default arm. Rule: 2.
+- Decision: validator ids IR001-IR010 (IR010 = `Outs` rule from the design). Alternatives: one id per message. Rule: 5.
+- Decision: text format writes every definition with its type (`%t1: bv32 = add %a, %t0`), literals are self-typed (`bv32 1`, `bool true`, `sort "S" 3`, `map<k, v> [k -> v] default d`), source names as `%x "x": bv32`, by-ref params as `ref %a: bv32`, exits as `ret %v outs(%a = %a2)`; newlines are whitespace. Alternatives: type inference in the parser. Rule: 4.
+- Decision: division by zero and over-wide shifts follow SMT-LIB bitvector semantics (`bvudiv x 0 = ~0`, `bvurem x 0 = x`, shifts >= width give 0 / sign fill). Alternatives: C# semantics. Rule: 1 (Z3 is the consumer; the frontend makes C# behaviour explicit).
+- Decision: map value equality is extensional (entries equal to the default are ignored), as in SMT arrays. Rule: 1.
+- Decision: `IrRun` (not the oracle) records the call trace; the oracle only answers. Alternatives: stateful oracle. Rule: 4.
+- Decision: interpreter validates the procedure and inputs first and throws `ArgumentException` if invalid; reaching `IrUnreachable` yields outcome `IrInfeasible`; the first executed `IrOpaque` stops the run; each executed instruction or terminator costs one step. Rule: 3.
+- Decision: phis are forbidden in the entry block (IR006); `ZExt`/`SExt` must widen and `Trunc` narrow (IR007). Rule: 4.
+- Decision: one file per type (Meziantou MA0048 is an error under the gates), so "one file per record family" became one flat `src/Equiv.Core/Ir/` folder with a file per type. Nested helper types are also `Ir`-prefixed because the architecture test counts nested types. Rule: 5.
+- Decision: `ICallOracle.Answer` (not `Call`: CA1716 reserves `Call` for VB). Rule: 5.
+- Decision: `IrGen.Mutation(p)` returns `Gen<IrMutant?>`; null is a discarded edit (no observable difference on 9^k edge inputs plus 16 random ones). The generated return value folds every slot in, which cut the discard rate from about 68% to about 27% (3 runs of 400: 25.5%, 27.3%, 29.2%); `MutationDiscardRateIsReported` prints it and fails above 40%.
+- Toolchain: `tools/check-coverage` merged cobertura lines by report-relative filename, but coverlet picks a different `<source>` root per test project (and adds `/_/src/` when it instruments Verify's packages), so Core counted each line two or three times and showed 33%. Fixed in this PR (filenames anchored to their source; user approved), with two new check-coverage tests.
+- Toolchain: Verify 33 fails the build with SponsorCheck SC021 until a licence property is set. `Directory.Build.props` claims `SmallRevenue` until 2027-09 (user decision: no revenue yet, monetisation planned). Re-evaluate on monetisation.
+- Toolchain: `build.ps1` skips `Equiv.TestSupport` when running tests (it is a library under `tests/`).
+

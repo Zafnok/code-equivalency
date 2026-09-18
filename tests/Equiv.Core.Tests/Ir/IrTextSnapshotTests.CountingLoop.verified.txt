@@ -1,0 +1,16 @@
+﻿proc "Samples.Math::Sum(uint32)" (%n "n": bv32) -> bv32 entry B0
+B0:
+  %t0: bv32 = const bv32 0
+  %t1: bv32 = const bv32 1
+  goto B1
+B1:
+  %s.1 "s": bv32 = phi [B0: %t0, B2: %s.2]
+  %i.1 "i": bv32 = phi [B0: %t0, B2: %i.2]
+  %t2: bool = ult %i.1, %n
+  br %t2, B2, B3
+B2:
+  %s.2 "s": bv32 = add %s.1, %i.1
+  %i.2 "i": bv32 = add %i.1, %t1
+  goto B1
+B3:
+  ret %s.1

@@ -1,0 +1,264 @@
+using System.Collections.Immutable;
+
+using CsCheck;
+
+using Equiv.Core.Ir;
+
+using static Equiv.TestSupport.IrGenAst;
+
+namespace Equiv.TestSupport;
+
+/// <summary>
+/// CsCheck generators for IR. Procedures come from a small structured language (sequence,
+/// if/else, switch, bounded counter loops, checked arithmetic, opaque calls, throws) lowered
+/// to SSA by <see cref="IrGenLowering"/>, so they are well formed by construction.
+/// </summary>
+public static class IrGen
+{
+    /// <summary>Enough steps for every generated procedure (loops run at most 3 x 3 x 3 times).</summary>
+    public const int StepBudget = 100_000;
+
+    private static readonly uint[] Edges = [0, 1, 2, 0x7F, 0x80, 0xFF, 0x7FFF_FFFF, 0x8000_0000, 0xFFFF_FFFF];
+
+    private static readonly IrBinaryOp[] Arithmetic =
+    [
+        IrBinaryOp.Add, IrBinaryOp.Sub, IrBinaryOp.Mul, IrBinaryOp.SDiv, IrBinaryOp.SRem, IrBinaryOp.UDiv, IrBinaryOp.URem,
+        IrBinaryOp.And, IrBinaryOp.Or, IrBinaryOp.Xor, IrBinaryOp.Shl, IrBinaryOp.AShr, IrBinaryOp.LShr,
+    ];
+
+    private static readonly IrBinaryOp[] ComparisonOps =
+    [
+        IrBinaryOp.Eq, IrBinaryOp.Ne, IrBinaryOp.Slt, IrBinaryOp.Sle, IrBinaryOp.Sgt, IrBinaryOp.Sge,
+        IrBinaryOp.Ult, IrBinaryOp.Ule, IrBinaryOp.Ugt, IrBinaryOp.Uge,
+    ];
+
+    private static readonly IrBinaryOp[] Commutative =
+    [
+        IrBinaryOp.Add, IrBinaryOp.Mul, IrBinaryOp.And, IrBinaryOp.Or, IrBinaryOp.Xor, IrBinaryOp.Eq, IrBinaryOp.Ne,
+    ];
+
+    private static readonly Gen<uint> Word = Gen.Frequency(
+        (2, Gen.OneOfConst(Edges)),
+        (3, Gen.UInt[0, 16]),
+        (1, Gen.UInt));
+
+    /// <summary>Well-formed procedures: two bv32 parameters, sometimes a bv32 <c>ref</c> parameter, bv32 result.</summary>
+    public static Gen<IrProcedure> Procedure { get; } =
+        Gen.Select(Gen.Bool, Word.Array[4], Statements(2), Expression(2), static (hasRef, inits, body, result) =>
+            IrGenLowering.Lower(new Program(hasRef, [.. inits], body, result)));
+
+    /// <summary>One procedure per validator rule, each breaking exactly that rule.</summary>
+    public static Gen<IrViolation> Violations { get; } =
+        Gen.Select(Procedure, Gen.Int[0, 9], static (procedure, rule) => Violate(procedure, rule));
+
+    /// <summary>Inputs matching <paramref name="procedure"/>'s parameters (bitvector and Bool only).</summary>
+    public static Gen<IrInputs> Inputs(IrProcedure procedure)
+    {
+        ArgumentNullException.ThrowIfNull(procedure);
+        Gen<IrValue>[] values = [.. procedure.Parameters.Select(static p => Value(p.Var.Type))];
+        return Sequence(values).Select(static v => new IrInputs(v));
+    }
+
+    /// <summary>
+    /// Semantics-changing edits of <paramref name="procedure"/>: swap the operands of a
+    /// non-commutative operation, flip a branch, or change a constant. An edit is kept only
+    /// when some input (edge values plus random ones) makes the interpreter observe a
+    /// difference; otherwise the generator discards it and yields null.
+    /// </summary>
+    public static Gen<IrMutant?> Mutation(IrProcedure procedure)
+    {
+        ArgumentNullException.ThrowIfNull(procedure);
+        List<(string Description, Func<IrProcedure> Apply)> edits = Edits(procedure);
+        if (edits.Count == 0)
+        {
+            return Gen.Const((IrMutant?)null);
+        }
+
+        ImmutableArray<IrInputs> edgeInputs = EdgeInputs(procedure);
+        return Gen.Select(Gen.Int[0, edits.Count - 1], Inputs(procedure).Array[16], (index, random) =>
+        {
+            IrProcedure mutant = edits[index].Apply();
+            IrInputs? witness = edgeInputs.Concat(random).FirstOrDefault(input => Run(procedure, input) != Run(mutant, input));
+            return witness is null ? null : new IrMutant(procedure, mutant, witness, edits[index].Description);
+        });
+    }
+
+    public static IrRun Run(IrProcedure procedure, IrInputs inputs) => IrInterpreter.Run(procedure, inputs, IrGenOracle.Instance, StepBudget);
+
+    private static Gen<ImmutableArray<IrValue>> Sequence(Gen<IrValue>[] values) =>
+        values.Aggregate(
+            Gen.Const(ImmutableArray<IrValue>.Empty),
+            static (acc, value) => Gen.Select(acc, value, static (a, v) => a.Add(v)));
+
+    private static Gen<IrValue> Value(IrType type) => type switch
+    {
+        IrBool => Gen.Bool.Select(static b => (IrValue)new IrBoolValue(b)),
+        IrBitVec { Width: 32 } => Word.Select(static w => (IrValue)new IrBitVecValue(32, w)),
+        IrBitVec bitVec => Gen.ULong.Select(u => (IrValue)new IrBitVecValue(bitVec.Width, u & (ulong.MaxValue >> (64 - bitVec.Width)))),
+        _ => throw new NotSupportedException($"No input generator for {type}."),
+    };
+
+    private static ImmutableArray<IrInputs> EdgeInputs(IrProcedure procedure)
+    {
+        IEnumerable<ImmutableArray<IrValue>> combinations = [[]];
+        foreach (IrParameter parameter in procedure.Parameters)
+        {
+            IrValue[] choices = parameter.Var.Type is IrBitVec { Width: 32 }
+                ? [.. Edges.Select(static e => (IrValue)new IrBitVecValue(32, e))]
+                : [new IrBoolValue(false), new IrBoolValue(true)];
+            combinations = [.. combinations.SelectMany(c => choices.Select(c.Add))];
+        }
+
+        return [.. combinations.Select(static c => new IrInputs(c))];
+    }
+
+    private static List<(string, Func<IrProcedure>)> Edits(IrProcedure procedure)
+    {
+        List<(string, Func<IrProcedure>)> edits = [];
+        for (int b = 0; b < procedure.Blocks.Length; b++)
+        {
+            IrBlock block = procedure.Blocks[b];
+            for (int i = 0; i < block.Instructions.Length; i++)
+            {
+                int blockIndex = b;
+                int index = i;
+                switch (block.Instructions[i])
+                {
+                    case IrBinary binary when !Commutative.Contains(binary.Op) && binary.A != binary.B:
+                        edits.Add(($"swap operands of {binary.Target.Name}", () =>
+                            ReplaceInstruction(procedure, blockIndex, index, binary with { A = binary.B, B = binary.A })));
+                        break;
+                    case IrConst { Value: IrBitVecValue bits } constant:
+                        edits.Add(($"change constant {constant.Target.Name}", () =>
+                            ReplaceInstruction(procedure, blockIndex, index, constant with { Value = new IrBitVecValue(bits.Width, (bits.Bits + 1) & (ulong.MaxValue >> (64 - bits.Width))) })));
+                        break;
+                }
+            }
+
+            if (block.Terminator is IrBranch branch && branch.Then != branch.Else)
+            {
+                int blockIndex = b;
+                edits.Add(($"flip branch in {block.Id}", () =>
+                    ReplaceBlock(procedure, blockIndex, block with { Terminator = branch with { Then = branch.Else, Else = branch.Then } })));
+            }
+        }
+
+        return edits;
+    }
+
+    private static IrProcedure ReplaceInstruction(IrProcedure procedure, int blockIndex, int index, IrInstruction instruction)
+    {
+        IrBlock block = procedure.Blocks[blockIndex];
+        return ReplaceBlock(procedure, blockIndex, block with { Instructions = block.Instructions.SetItem(index, instruction) });
+    }
+
+    private static IrProcedure ReplaceBlock(IrProcedure procedure, int blockIndex, IrBlock block) =>
+        procedure with { Blocks = procedure.Blocks.SetItem(blockIndex, block) };
+
+    private static IrViolation Violate(IrProcedure procedure, int rule)
+    {
+        IrVar a = procedure.Parameters[0].Var;
+        IrBitVec bv32 = new(32);
+        IrBlock entry = procedure.Blocks[0];
+        IrVar bad = new("bad", bv32);
+        IrBlock Extra(params IrInstruction[] instructions) =>
+            new(new IrBlockId(procedure.Blocks.Length), [.. instructions], new IrUnreachable());
+        IrProcedure WithExtra(IrBlock block) => procedure with { Blocks = procedure.Blocks.Add(block) };
+
+        return rule switch
+        {
+            0 => new(WithExtra(new IrBlock(procedure.Entry, [], new IrUnreachable())), IrDiagnosticIds.DuplicateBlockId),
+            1 => new(procedure with { Entry = new IrBlockId(9999) }, IrDiagnosticIds.MissingEntry),
+            2 => new(ReplaceBlock(procedure, 0, entry with { Instructions = entry.Instructions.Insert(1, entry.Instructions[0]) }), IrDiagnosticIds.MultipleAssignment),
+            3 => new(
+                ReplaceBlock(procedure, 0, entry with { Instructions = entry.Instructions.Insert(0, new IrUnary(bad, IrUnaryOp.Neg, ((IrConst)entry.Instructions[0]).Target)) }),
+                IrDiagnosticIds.UseNotDominated),
+            4 => new(WithExtra(Extra(new IrPhi(bad, [(procedure.Entry, a)]))), IrDiagnosticIds.PhiPredecessors),
+            5 => new(WithExtra(Extra(new IrConst(bad, new IrBitVecValue(32, 0)), new IrPhi(new IrVar("bad2", bv32), []))), IrDiagnosticIds.PhiPlacement),
+            6 => new(WithExtra(Extra(new IrBinary(new IrVar("bad", new IrBool()), IrBinaryOp.Add, a, a))), IrDiagnosticIds.OperandTypes),
+            7 => new(WithExtra(new IrBlock(new IrBlockId(procedure.Blocks.Length), [], new IrGoto(new IrBlockId(9999)))), IrDiagnosticIds.MissingTarget),
+            8 => new(WithExtra(Extra(new IrMapRead(bad, a, a))), IrDiagnosticIds.MapTypes),
+            _ => new(AddOut(procedure, new IrOut(a, a)), IrDiagnosticIds.ExitOuts),
+        };
+    }
+
+    private static IrProcedure AddOut(IrProcedure procedure, IrOut extra)
+    {
+        int index = procedure.Blocks.ToList().FindIndex(static b => b.Terminator is IrReturn or IrThrow);
+        IrBlock block = procedure.Blocks[index];
+        IrTerminator terminator = block.Terminator is IrReturn exit
+            ? exit with { Outs = exit.Outs.Add(extra) }
+            : (IrThrow)block.Terminator with { Outs = ((IrThrow)block.Terminator).Outs.Add(extra) };
+        return ReplaceBlock(procedure, index, block with { Terminator = terminator });
+    }
+
+    private static Gen<Expr> Expression(int depth)
+    {
+        Gen<Expr> leaf = Gen.Frequency(
+            (3, Gen.Int[0, SlotCount - 1].Select(static i => (Expr)new Slot(i))),
+            (1, Word.Select(static w => (Expr)new Literal(w))));
+        if (depth == 0)
+        {
+            return leaf;
+        }
+
+        Gen<Expr> smaller = Expression(depth - 1);
+        return Gen.Frequency(
+            (3, leaf),
+            (3, Gen.Select(Gen.OneOfConst(Arithmetic), smaller, smaller, static (op, l, r) => (Expr)new Binary(op, l, r))),
+            (1, Gen.Select(Gen.OneOfConst(IrUnaryOp.Neg, IrUnaryOp.Not), smaller, static (op, e) => (Expr)new Unary(op, e))),
+            (1, Gen.Select(Gen.Bool, smaller, static (signed, e) => (Expr)new Narrow(signed, e))));
+    }
+
+    private static Gen<Cond> Condition(int depth)
+    {
+        Gen<Cond> compare = Gen.Select(Gen.OneOfConst(ComparisonOps), Expression(1), Expression(1), static (op, l, r) => (Cond)new Compare(op, l, r));
+        if (depth == 0)
+        {
+            return compare;
+        }
+
+        Gen<Cond> smaller = Condition(depth - 1);
+        return Gen.Frequency(
+            (4, compare),
+            (1, Gen.Select(Gen.OneOfConst(IrBinaryOp.And, IrBinaryOp.Or, IrBinaryOp.Xor, IrBinaryOp.Eq, IrBinaryOp.Ne), smaller, smaller, static (op, l, r) => (Cond)new Logic(op, l, r))),
+            (1, smaller.Select(static c => (Cond)new Negate(c))));
+    }
+
+    private static Gen<ImmutableArray<Stmt>> Statements(int depth) =>
+        Statement(depth).Array[0, 3].Select(static s => s.ToImmutableArray());
+
+    private static Gen<Stmt> Statement(int depth)
+    {
+        Gen<int> slot = Gen.Int[0, SlotCount - 1];
+        Gen<Stmt> assign = Gen.Select(slot, Expression(2), static (s, e) => (Stmt)new Assign(s, e));
+        Gen<Stmt> check = Gen.Select(
+            slot,
+            Gen.OneOfConst(IrOverflowOp.SAdd, IrOverflowOp.UAdd, IrOverflowOp.SSub, IrOverflowOp.USub, IrOverflowOp.SMul, IrOverflowOp.UMul, IrOverflowOp.SDiv),
+            Expression(1),
+            Expression(1),
+            static (s, op, l, r) => (Stmt)new Checked(s, op, l, r));
+        Gen<Stmt> call = Gen.Select(
+            Gen.Frequency((3, slot.Select(static s => (int?)s)), (1, Gen.Const((int?)null))),
+            Gen.OneOfConst("Svc::F", "Svc::G"),
+            Expression(1).Array[0, 2],
+            Gen.Bool,
+            static (s, callee, args, mayThrow) => (Stmt)new Call(s, callee, [.. args], mayThrow));
+        if (depth == 0)
+        {
+            return Gen.Frequency((4, assign), (1, check), (1, call));
+        }
+
+        Gen<ImmutableArray<Stmt>> body = Statements(depth - 1);
+        Gen<ImmutableArray<Stmt>> maybeThrowing = Gen.Select(body, Gen.Int[0, 3], static (s, k) =>
+            k == 0 ? s.Add(new Throw("System.InvalidOperationException")) : s);
+        Gen<Stmt> branch = Gen.Select(Condition(1), maybeThrowing, body, static (c, t, e) => (Stmt)new If(c, t, e));
+        Gen<Stmt> choice = Gen.Select(
+            Expression(1),
+            Gen.Select(Word, body, static (v, b) => (v, b)).Array[0, 3],
+            body,
+            static (e, cases, fallback) => (Stmt)new Switch(e, [.. cases], fallback));
+        Gen<Stmt> loop = Gen.Select(Gen.Int[0, 3], body, static (n, b) => (Stmt)new Loop(n, b));
+        return Gen.Frequency((4, assign), (1, check), (1, call), (2, branch), (1, choice), (1, loop));
+    }
+}

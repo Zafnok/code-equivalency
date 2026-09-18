@@ -12,6 +12,9 @@
     <ContinuousIntegrationBuild Condition="'$(CI)' != ''">true</ContinuousIntegrationBuild>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Verify's SponsorCheck (SC021): the project has under US$10k annual revenue. Re-evaluate before 2027-09 or on monetisation. -->
+    <Verify_SponsorshipExemption>SmallRevenue</Verify_SponsorshipExemption>
+    <Verify_SponsorshipExemptionUntil>2027-09</Verify_SponsorshipExemptionUntil>
   </PropertyGroup>
 
   <ItemGroup>
