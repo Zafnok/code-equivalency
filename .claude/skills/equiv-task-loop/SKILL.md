@@ -21,6 +21,8 @@ description: The only way to implement a ticket in this repo. Use whenever asked
 5. Test first, per deliverable: write the failing test (unit, and property/snapshot if
    the ticket says so), then the smallest code that passes, then run `./build.ps1`.
    Never write more than one deliverable ahead of green.
+   When a choice comes up that the ticket does not settle, do not ask: apply
+   `equiv-decide`, log a `Decision:` line in the ticket's Notes, and keep going.
 6. Gates: `./build.ps1` must be fully green before every commit: build with warnings as
    errors, format, tests, 100% line+branch coverage on `src/`, architecture tests. Do not
    lower a gate, add an exclusion, or disable an analyzer to get green. If a gate is
