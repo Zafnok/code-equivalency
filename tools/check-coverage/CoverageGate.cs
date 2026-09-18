@@ -21,22 +21,35 @@ internal static class CoverageGate
             .OrderBy(a => a.AssemblyName, StringComparer.Ordinal)
             .ToList();
 
-        StringBuilder report = new();
-        bool success = srcAssemblies.Count > 0;
+        List<string> missingAssemblyNames = srcAssemblyNames
+            .Where(name => !assemblies.ContainsKey(name))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
 
-        if (!success)
+        StringBuilder report = new();
+        bool success = srcAssemblies.Count > 0 && missingAssemblyNames.Count == 0;
+
+        if (srcAssemblies.Count == 0)
         {
             report.AppendLine("No coverage data found for any src/ assembly under TestResults/.");
         }
 
-        report.AppendLine(CultureInfo.InvariantCulture, $"{"Assembly",-35} {"Line",8} {"Branch",8} {"Result",6}");
+        report.AppendLine(CultureInfo.InvariantCulture, $"{"Assembly",-35} {"Line",17} {"Branch",17} {"Result",6}");
 
         foreach (AssemblyCoverage assembly in srcAssemblies)
         {
             bool assemblyOk = assembly.LineRate >= 1.0 - Tolerance && assembly.BranchRate >= 1.0 - Tolerance;
             success &= assemblyOk;
 
-            report.AppendLine(CultureInfo.InvariantCulture, $"{assembly.AssemblyName,-35} {assembly.LineRate * 100,7:0.00}% {assembly.BranchRate * 100,7:0.00}% {(assemblyOk ? "PASS" : "FAIL"),6}");
+            string lineCell = string.Format(CultureInfo.InvariantCulture, "{0,3}/{1,-3} {2,6:0.00}%", assembly.LinesCovered, assembly.LinesValid, assembly.LineRate * 100);
+            string branchCell = string.Format(CultureInfo.InvariantCulture, "{0,3}/{1,-3} {2,6:0.00}%", assembly.BranchesCovered, assembly.BranchesValid, assembly.BranchRate * 100);
+
+            report.AppendLine(CultureInfo.InvariantCulture, $"{assembly.AssemblyName,-35} {lineCell,17} {branchCell,17} {(assemblyOk ? "PASS" : "FAIL"),6}");
+        }
+
+        foreach (string missingAssemblyName in missingAssemblyNames)
+        {
+            report.AppendLine(CultureInfo.InvariantCulture, $"{missingAssemblyName,-35} {"NO COVERAGE DATA",17} {string.Empty,17} {"FAIL",6}");
         }
 
         if (exclusionViolations.Count > 0)

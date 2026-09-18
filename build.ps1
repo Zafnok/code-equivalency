@@ -32,6 +32,11 @@ Invoke-Step "build" { dotnet build --no-restore -warnaserror }
 Invoke-Step "format" { dotnet format --no-restore --verify-no-changes }
 
 Invoke-Step "test" {
+    $testResultsDir = Join-Path $repoRoot "TestResults"
+    if (Test-Path $testResultsDir) {
+        Remove-Item -Path $testResultsDir -Recurse -Force
+    }
+
     $testProjects = Get-ChildItem -Path $repoRoot -Filter "*.csproj" -Recurse |
         Where-Object {
             $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and

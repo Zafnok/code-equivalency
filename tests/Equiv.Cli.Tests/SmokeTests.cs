@@ -5,8 +5,10 @@ namespace Equiv.Cli.Tests;
 public sealed class SmokeTests
 {
     [Fact]
-    public void ProjectBuildsAndRuns()
+    public void MainWithNoArgsReturnsZero()
     {
-        Assert.True(true);
+        int exitCode = Program.Main([]);
+
+        Assert.Equal(0, exitCode);
     }
 }

@@ -75,6 +75,26 @@ public sealed class CoverageGateTests
     }
 
     [Fact]
+    public void SrcAssemblyWithNoCoverageDataFailsAndNamesIt()
+    {
+        Dictionary<string, AssemblyCoverage> assemblies = new(StringComparer.Ordinal)
+        {
+            ["Equiv.Core"] = new AssemblyCoverage("Equiv.Core", LinesValid: 10, LinesCovered: 10, BranchesValid: 4, BranchesCovered: 4),
+            ["Equiv.Frontend.CSharp"] = new AssemblyCoverage("Equiv.Frontend.CSharp", LinesValid: 10, LinesCovered: 10, BranchesValid: 4, BranchesCovered: 4),
+            ["Equiv.Verify.Z3"] = new AssemblyCoverage("Equiv.Verify.Z3", LinesValid: 10, LinesCovered: 10, BranchesValid: 4, BranchesCovered: 4),
+        };
+        IReadOnlySet<string> fourSrcNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Equiv.Core", "Equiv.Frontend.CSharp", "Equiv.Verify.Z3", "Equiv.Cli",
+        };
+
+        CoverageGateResult result = CoverageGate.Evaluate(assemblies, fourSrcNames, []);
+
+        Assert.False(result.Success);
+        Assert.Contains("Equiv.Cli", result.Report, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExclusionViolationFailsEvenWhenFullyCovered()
     {
         Dictionary<string, AssemblyCoverage> assemblies = new(StringComparer.Ordinal)
