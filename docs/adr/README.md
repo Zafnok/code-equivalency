@@ -14,3 +14,4 @@ supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.
 | 0007 | Test and gate stack |
 | 0008 | Loop ladder instead of bounded-only verdicts; runtime-changes table |
 | 0009 | SonarQube Cloud as a PR-blocking changegate for code smells and duplication |
+| 0010 | Narrow the Equiv.Core Roslyn/Z3 architecture rule to exclude Sarif.Sdk's namespace |

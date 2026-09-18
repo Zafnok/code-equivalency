@@ -35,11 +35,8 @@ public sealed class DependencyRuleTests
     [Fact]
     public void CoreDoesNotDependOnRoslynOrZ3()
     {
-        // Excludes Microsoft.CodeAnalysis.Sarif: that is Sarif.Sdk (docs/adr/0002-dependencies.md),
-        // an intentional Equiv.Core dependency (ARCHITECTURE.md: "SARIF emission (Sarif.Sdk) ...
-        // are Equiv.Core responsibilities") that happens to share Roslyn's top-level namespace
-        // prefix. The rule still blocks the actual Roslyn namespaces (Microsoft.CodeAnalysis
-        // itself, Microsoft.CodeAnalysis.CSharp, Microsoft.CodeAnalysis.Workspaces, ...) and Z3.
+        // Excludes Microsoft.CodeAnalysis.Sarif (Sarif.Sdk, an approved Equiv.Core dependency)
+        // from the Roslyn namespace prefix it happens to share; see ADR 0010.
         IArchRule rule = Types(true).That().ResideInNamespaceMatching(@"^Equiv\.Core(\.|$)")
             .Should().NotDependOnAny(Types(true).That().ResideInNamespaceMatching(
                 @"^Microsoft\.CodeAnalysis$|^Microsoft\.CodeAnalysis\.(?!Sarif(\.|$))|^Microsoft\.Z3(\.|$)"))
