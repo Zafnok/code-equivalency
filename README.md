@@ -36,5 +36,3 @@ docs/       everything above
   component ".NET Framework 4.8 targeting pack". This is what lets Roslyn's out-of-process
   build host evaluate legacy (non-SDK) `.csproj` files. No Win32 API is used anywhere.
 - Git, Docker Desktop (for the container packaging milestone), GitHub CLI.
-
-None of these were installed on the box at planning time. Ticket M0-001 installs them.
