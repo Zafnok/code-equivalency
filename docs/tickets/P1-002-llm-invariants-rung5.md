@@ -1,6 +1,7 @@
 # P1-002 Loop ladder rung 5: LLM-proposed coupling invariants, Z3-checked
 Status: todo
 Effort: M
+Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-001
 
 ## Goal

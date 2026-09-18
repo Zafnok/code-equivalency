@@ -28,6 +28,9 @@ and stop; do not silently deviate.
   `internal` by default, `InternalsVisibleTo` for the matching test project only.
 - No reflection, no dynamic, no `#pragma warning disable` (use `.editorconfig` severity
   with a comment if a rule is genuinely wrong for this repo, and mention it in the PR).
+- No top-level statements in `src/`. They compile to a `[CompilerGenerated]` class that
+  coverage tooling skips, so code there is invisible to the 100% gate. Use an explicit
+  `Program.Main`.
 - Language-specific code (Roslyn, Java parsers) lives only in `src/Equiv.Frontend.*`.
   Solver-specific code lives only in `src/Equiv.Verify.*`. `Equiv.Core` references neither.
 - Names: `Equiv.<Component>`. IR types are prefixed `Ir` (`IrProcedure`, `IrBlock`).

@@ -1,6 +1,7 @@
 # M1-003 verdicts matching config
 Status: todo
 Effort: M
+Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M1-002
 
 ## Goal
