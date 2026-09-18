@@ -1,3 +1,5 @@
+[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=Zafnok_code-equivalency&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Zafnok_code-equivalency)
+
 # equiv — behavioural equivalence checker for migrated code
 
 `equiv` proves (or refutes, with a counterexample) that a program behaves the same
