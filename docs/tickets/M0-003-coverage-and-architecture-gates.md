@@ -1,5 +1,5 @@
 # M0-003 Coverage 100% gate and architecture tests
-Status: in-progress
+Status: done (PR #3)
 Effort: M
 Depends on: M0-002
 
