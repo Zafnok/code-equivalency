@@ -22,9 +22,12 @@ Types (all `sealed record`, immutable collections):
   `IrSort(string Name)`, `IrMap(IrType Key, IrType Value)` (SSA heap slices, see below).
 - `IrVar(string Name, IrType Type, string? SourceName)`. `SourceName` is the source
   local or parameter name when known; M3-002 uses it to align loop variables.
-- `IrProcedure(ProcedureIdentity Identity, ImmutableArray<IrVar> Parameters,
+- `IrParameter(IrVar Var, IrParameterKind Kind)` with `IrParameterKind { In, Ref, Out }`.
+- `IrProcedure(ProcedureIdentity Identity, ImmutableArray<IrParameter> Parameters,
   IrType? ReturnType, ImmutableArray<IrBlock> Blocks, IrBlockId Entry)`.
   `ProcedureIdentity` is a placeholder record `(string Value)` here; M1-003 replaces it.
+  A `Ref`/`Out` parameter is an ordinary SSA input whose later versions are ordinary
+  SSA vars; its final value is whatever version the exit terminator names (below).
 - `IrBlock(IrBlockId Id, ImmutableArray<IrInstruction> Instructions, IrTerminator Terminator)`.
 - Instructions (operands are always `IrVar`; constants go through `IrConst`):
   `IrConst(IrVar Target, IrValue Value)`, `IrBinary(IrVar Target, IrBinaryOp Op, IrVar A, IrVar B)`,
@@ -48,8 +51,14 @@ Types (all `sealed record`, immutable collections):
   allowed only for And, Or, Xor, Eq, Ne. Sort operands allowed only for Eq, Ne.
 - Terminators: `IrGoto(IrBlockId)`, `IrBranch(IrVar Cond, IrBlockId Then, IrBlockId Else)`,
   `IrSwitch(IrVar Scrutinee, ImmutableArray<(IrValue, IrBlockId)>, IrBlockId Default)`,
-  `IrReturn(IrVar? Value)`, `IrThrow(string ExceptionType)`, `IrUnreachable` (assume
-  false; used by loop unrolling in M3-002).
+  `IrReturn(IrVar? Value, ImmutableArray<IrOut> Outs)`,
+  `IrThrow(string ExceptionType, ImmutableArray<IrOut> Outs)`, `IrUnreachable` (assume
+  false; used by loop unrolling in M3-002). `IrOut(IrVar Param, IrVar Final)` names the
+  SSA version of a `Ref`/`Out` parameter that is live at that exit. Both exit kinds carry
+  `Outs` because a `ref` write before a throw is visible to the caller in C#. `Outs` lists
+  every by-ref parameter in declaration order, once each, and is empty when there are
+  none; the validator enforces this. The interpreter's `IrRun` reports the `Final` values
+  from whichever exit fired, and M3-001 builds its per-parameter ite chain from them.
 
 IR instructions never throw. Every exception edge is explicit: the frontend lowers
 `checked(a + b)` to `IrOverflows` + `IrBranch` to an `IrThrow` block + `IrBinary`; a

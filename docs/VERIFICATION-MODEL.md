@@ -49,9 +49,11 @@ Instructions:
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
 | `IrOpaque(var?, reason, sourceSpan)` | frontend could not lower; poisons every dependent value |
 
-Terminators: `IrGoto`, `IrBranch(cond, then, else)`, `IrSwitch`, `IrReturn(var?)`,
-`IrThrow(exceptionTypeIdentity)`, `IrUnreachable` (assume false; produced by loop
-unrolling, never by the frontend).
+Terminators: `IrGoto`, `IrBranch(cond, then, else)`, `IrSwitch`, `IrReturn(var?, outs)`,
+`IrThrow(exceptionTypeIdentity, outs)`, `IrUnreachable` (assume false; produced by loop
+unrolling, never by the frontend). `outs` names, for every `ref`/`out` parameter, the
+SSA version live at that exit; that is how final by-ref values become observables on
+both normal and exceptional exits.
 
 Exact record shapes, the text format and the validator rules are specified in ticket
 M1-002 and pinned by its snapshot tests.
