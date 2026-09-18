@@ -19,19 +19,19 @@ namespace Equiv.Core.Tests.Reporting;
 public sealed class SarifReportWriterTests
 {
     [Fact]
-    public Task Equivalent() => Verify(Serialize(Fixtures.Result(new Equivalent())));
+    public Task Equivalent() => VerifyJson(Serialize(Fixtures.Result(new Equivalent())));
 
     [Fact]
-    public Task Divergent() => Verify(Serialize(Fixtures.Result(new Divergent(Fixtures.Counterexample()))));
+    public Task Divergent() => VerifyJson(Serialize(Fixtures.Result(new Divergent(Fixtures.Counterexample()))));
 
     [Fact]
-    public Task Unknown() => Verify(Serialize(Fixtures.Result(new Unknown(UnknownReason.Timeout, "solver gave up after 5000ms"))));
+    public Task Unknown() => VerifyJson(Serialize(Fixtures.Result(new Unknown(UnknownReason.Timeout, "solver gave up after 5000ms"))));
 
     [Fact]
-    public Task Added() => Verify(Serialize(Fixtures.Result(new Added())));
+    public Task Added() => VerifyJson(Serialize(Fixtures.Result(new Added())));
 
     [Fact]
-    public Task Removed() => Verify(Serialize(Fixtures.Result(new Removed())));
+    public Task Removed() => VerifyJson(Serialize(Fixtures.Result(new Removed())));
 
     [Fact]
     public void NullResultsThrow()

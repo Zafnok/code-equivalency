@@ -1,1 +1,78 @@
-﻿{"$schema":"https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"Equiv","rules":[{"id":"EQ001","name":"Equivalent","shortDescription":{"text":"The two procedures are observably equivalent."},"defaultConfiguration":{"level":"none"}},{"id":"EQ002","name":"Divergent","shortDescription":{"text":"The two procedures disagree on some observable."},"defaultConfiguration":{"level":"error"}},{"id":"EQ003","name":"Unknown","shortDescription":{"text":"Equivalence could not be decided for this procedure pair."}},{"id":"EQ004","name":"Added","shortDescription":{"text":"The procedure is present on the modern side only."},"defaultConfiguration":{"level":"note"}},{"id":"EQ005","name":"Removed","shortDescription":{"text":"The procedure is present on the legacy side only."},"defaultConfiguration":{"level":"note"}}]}},"results":[{"ruleId":"EQ001","kind":"pass","level":"none","message":{"text":"Samples.Math::Add(int32,int32) is equivalent."},"partialFingerprints":{"procedureIdentity/v1":"Samples.Math::Add(int32,int32)","resultFingerprint/v1":"6360e17b8837b9da856b8705529df3df879b40ee6df0e4b2de3ff0735cfc0a66"},"baselineState":"new"}],"columnKind":"utf16CodeUnits"}]}
+﻿{
+  $schema: https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json,
+  version: 2.1.0,
+  runs: [
+    {
+      tool: {
+        driver: {
+          name: Equiv,
+          rules: [
+            {
+              id: EQ001,
+              name: Equivalent,
+              shortDescription: {
+                text: The two procedures are observably equivalent.
+              },
+              defaultConfiguration: {
+                level: none
+              }
+            },
+            {
+              id: EQ002,
+              name: Divergent,
+              shortDescription: {
+                text: The two procedures disagree on some observable.
+              },
+              defaultConfiguration: {
+                level: error
+              }
+            },
+            {
+              id: EQ003,
+              name: Unknown,
+              shortDescription: {
+                text: Equivalence could not be decided for this procedure pair.
+              }
+            },
+            {
+              id: EQ004,
+              name: Added,
+              shortDescription: {
+                text: The procedure is present on the modern side only.
+              },
+              defaultConfiguration: {
+                level: note
+              }
+            },
+            {
+              id: EQ005,
+              name: Removed,
+              shortDescription: {
+                text: The procedure is present on the legacy side only.
+              },
+              defaultConfiguration: {
+                level: note
+              }
+            }
+          ]
+        }
+      },
+      results: [
+        {
+          ruleId: EQ001,
+          kind: pass,
+          level: none,
+          message: {
+            text: Samples.Math::Add(int32,int32) is equivalent.
+          },
+          partialFingerprints: {
+            procedureIdentity/v1: Samples.Math::Add(int32,int32),
+            resultFingerprint/v1: 6360e17b8837b9da856b8705529df3df879b40ee6df0e4b2de3ff0735cfc0a66
+          },
+          baselineState: new
+        }
+      ],
+      columnKind: utf16CodeUnits
+    }
+  ]
+}
