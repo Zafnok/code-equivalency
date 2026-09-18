@@ -1,5 +1,5 @@
 # M0-002 Solution skeleton with gates on
-Status: in-progress
+Status: done (PR #2)
 Effort: M
 Depends on: M0-001
 
