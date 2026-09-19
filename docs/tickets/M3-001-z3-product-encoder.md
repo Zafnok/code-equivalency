@@ -54,10 +54,16 @@ Encoding (`ProductEncoder`), one `Z3.Context` and `Solver` per pair, both dispos
   `ite(reach.B, <events of B in order>, empty)`. Trace equality is one `Seq` equality.
 - Query: assert `NOT (returned_old == returned_new AND ret_old == ret_new AND
   threw_old == threw_new AND exceptionType_old == exceptionType_new AND
-  outs equal AND trace_old == trace_new)`. `UNSATISFIABLE` -> Equivalent;
-  `SATISFIABLE` -> Divergent; `UNKNOWN` -> Unknown(timeout) with the solver reason string.
-- `IrOpaque` reaching an observable (compute reachability on the def-use graph) short
-  circuits to `Unknown(opaque, reasons)` before encoding.
+  outs equal AND trace_old == trace_new)`, restricted to inputs that reach no opaque
+  (next bullet). `SATISFIABLE` -> Divergent; `UNSATISFIABLE` -> Equivalent unless an
+  opaque is reachable; `UNKNOWN` -> Unknown(timeout) with the solver reason string.
+- Opaque (ADR 0014): `opaque.<side> = OR reach.B` over blocks containing an `IrOpaque`.
+  The query above is asserted together with `NOT opaque.old AND NOT opaque.new`;
+  `SATISFIABLE` -> Divergent (the counterexample reaches no opaque, so replay is exact).
+  If it is `UNSATISFIABLE`, check `opaque.old OR opaque.new`: `SATISFIABLE` ->
+  `Unknown(opaque, reasons of the reachable opaques)`; `UNSATISFIABLE` -> Equivalent.
+  There is no def-use short circuit: an opaque stands for effects the frontend dropped,
+  not only for a value.
 
 Counterexample (`ModelDecoder`): read parameter values from `solver.Model` with
 `Eval(c, completion: true)`; render bitvectors as signed and unsigned decimals; sorts as
@@ -75,6 +81,7 @@ message; do not report Divergent.
       two-block fixture. Use IR text fixtures parsed with `IrText.Parse`.
 - [ ] Fixtures for each observable: return, out param, throw vs no-throw, different
       exception type, same calls different order, extra call, runtime-changed callee.
+- [ ] Opaque fixtures (ADR 0014): `opaque-void-effect`, `opaque-other-path`.
 - [ ] Property (soundness, `Equiv.TestSupport` generators): `Verify(P, P)` is Equivalent
       for 200 generated acyclic P; `Verify(P, Mutate(P))` is never Equivalent; every
       Divergent replays to divergence in the interpreter.
@@ -102,6 +109,11 @@ message; do not report Divergent.
    non-nullable `IVerificationBackend` again, and the `null` skip branch in
    `BuildResults`, along with `Compare_WithoutBackend_SkipsMatchedPairs`, is removed
    (ADR 0012).
+8. Opaque semantics (ADR 0014): fixtures `opaque-void-effect.ir` (a void pair that differs
+   only by an `IrOpaque` statement) gives `Unknown(opaque)`, and `opaque-other-path.ir` (a
+   divergence on a path that reaches no opaque, next to a branch that does) gives
+   Divergent whose replay reaches no `IrOpaque`. The soundness property's `Mutate` may
+   insert an `IrOpaque`, and such a pair is never Equivalent.
 
 ## Size guard
 Six source files in `src/Equiv.Verify.Z3/`. No abstraction over Z3 (no `ISolver`
