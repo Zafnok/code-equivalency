@@ -213,3 +213,12 @@ ADR rather than a silent scope expansion here):
   needs its goal amended to name both (see the exit-code follow-up note above for a second catch).
 - Driver `version`/`informationUri`, and a guard against duplicate identities in one result set:
   both minor, deferred without a named ticket.
+
+## ADR decisions (2026-09-18)
+
+- Decision: ADR 0010 accepted by the user as written (narrowed Core Roslyn/Z3 regex excluding
+  only `Microsoft.CodeAnalysis.Sarif`). No change.
+- Decision: ADR 0011 accepted with Option A. EQ003-EQ005 keep their non-`fail` kinds and
+  `level: none`; Unknown's visibility is enforced by `--fail-on unknown`, not SARIF severity.
+  VERIFICATION-MODEL.md section 6's `level` column corrected to match. No code change. Reopen
+  at M3-003 if real Code Scanning/SonarQube output shows Unknown is invisible to users.
