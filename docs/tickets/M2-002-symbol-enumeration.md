@@ -1,5 +1,5 @@
 # M2-002 Symbol enumeration and Added/Removed end to end
-Status: blocked on ADR 0012 (proposed)
+Status: in progress
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-001
@@ -58,18 +58,14 @@ Lowering (M2-003). Endpoints (M2-005). Overload disambiguation beyond exact iden
 
 ## Notes
 
-- **Blocked on `docs/adr/0012-matched-pairs-before-m3.md` (proposed, not yet accepted).**
-  Everything except acceptance criterion 4's `Program.Main` wiring and its two
-  `Equiv.Tests.Integration` tests is implemented, tested, and green under `./build.ps1
-  -Integration` (100% coverage on `Equiv.Frontend.CSharp`, all other gates pass).
-  Wiring `CSharpFrontend` into `Program.cs` makes `NoBackend.Verify`'s throw reachable
-  for the first time (`samples/identical` has two matched pairs), which crashes instead
-  of the "exits 0 with a SARIF containing zero results" AC4 asks for — and neither
-  `NoBackend`'s throw nor `CompareCommand.BuildResults`' unconditional per-pair
-  `backend.Verify` call is a detail I can silently change: both are already-decided,
-  already-tested M1-005 contracts (`NoBackendTests.NoBackend_Throws`; ~15 cases in
-  `CompareCommandTests.cs`). See the ADR for the options. `Program.cs` is currently
-  left unwired (`frontends: []`), with a comment pointing at the ADR.
+- Decision (ADR 0012, accepted 2026-09-18): before M3-001 the CLI has no backend, and
+  that is modelled as `null`. `CompareCommand.Create`/`Run` take `IVerificationBackend?`,
+  `BuildResults` skips `matchResult.Pairs` when it is `null`, `Program.Main` passes
+  `frontends: [CSharpFrontend]` and `backend: null`, and `NoBackend.cs` and
+  `NoBackendTests.cs` are deleted. Add `Compare_WithoutBackend_SkipsMatchedPairs` to
+  `CompareCommandTests`. Acceptance criterion 4 is unchanged. These `Equiv.Cli` edits are in
+  scope for this ticket and do not count toward the size guard (no new `src/` files, and the
+  net test count is unchanged). Remove the ADR 0012 comment in `Program.cs` when wiring.
 - Decision: `ProcedureIdentity` gains an optional `SourceSpan? Location` (default
   `null`), excluded from `Equals`/`GetHashCode` (manual overrides, `Value` only), rather
   than changing `MatchResult.Added`/`Removed`'s element type or adding a `Location` to
@@ -116,3 +112,35 @@ Lowering (M2-003). Endpoints (M2-005). Overload disambiguation beyond exact iden
   `RoslynTestCompilations` helper in the test project itself, not a shared test-support
   project — CLAUDE.md reserves `Equiv.TestSupport` for IR generators/fixtures three
   projects need). Rule: 4.
+- ADR 0012 implemented per its Decision: `IVerificationBackend?` is now nullable on
+  `CompareCommand.Create`/`Run`; `BuildResults` adds no result for `matchResult.Pairs`
+  when `backend` is `null` (Added/Removed unaffected); `Program.Main` passes
+  `frontends: [new CSharpFrontend()]` and `backend: null`; `src/Equiv.Cli/NoBackend.cs`
+  and `tests/Equiv.Cli.Tests/NoBackendTests.cs` are deleted;
+  `CompareCommandTests.Compare_WithoutBackend_SkipsMatchedPairs` covers the `null`
+  branch. `ProgramTests`'s frontend-rejection test now exercises the `.tmp`-extension
+  path instead of an empty frontend list (renamed to
+  `Main_WithValidArgsButUnsupportedExtensionExits3`), since a frontend is registered now.
+- Decision: `Equiv.Tests.Integration` gets `InternalsVisibleTo` on `Equiv.Cli`
+  (`ComparePipelineTests` drives `CompareCommand.Run` directly, an internal contract),
+  mirroring the same precedent CLAUDE.md already names for M2-001's
+  `Equiv.Frontend.CSharp` -> `Equiv.Tests.Integration` grant. Also added `Verify.XunitV3`
+  and `Sarif.Sdk` package references to `Equiv.Tests.Integration.csproj` (both already
+  ADR-0002-approved dependencies used elsewhere) for the SARIF snapshot test. Rule: 1
+  (mirrors the existing M2-001 precedent).
+- Decision: `ComparePipelineTests.AddedAndRemovedHaveLocations`'s snapshot scrubs the
+  absolute `SamplesRoot` prefix out of the SARIF `artifactLocation.uri` values (replaced
+  with the literal placeholder `<samples>`) before calling `VerifyJson`, since that path
+  is rooted at whatever directory the repo is checked out to and would make the
+  `.verified.txt` machine/CI-specific otherwise. Rule: 3 (keeps the snapshot pinned and
+  portable) — the resulting `.verified.txt` shows the exact rule ids, messages, and
+  `region` line/column values (line 10, the `LegacyOnly`/`ModernOnly` declaration line in
+  each `added-removed/*/Calculator.cs`) acceptance criteria 4 and 5 ask for.
+- All acceptance criteria hold under `./build.ps1 -Integration` (100% line/branch
+  coverage on every `src/` project; format, architecture, and all test projects green):
+  AC1 `ProcedureEnumeratorTests` (3 tests); AC2
+  `RoslynIdentityTests.FormatsGenericsRefOutAndAccessors` (11-row table); AC3
+  `CSharpFrontendTests` (`AppliesRenameMapBeforeMatching`, `WrapsLoaderFailure`,
+  `SupportsOnlySlnAndSlnx`, `LanguageIsCsharp`); AC4/AC5
+  `Equiv.Tests.Integration.ComparePipelineTests` (`IdenticalYieldsNoResults`,
+  `AddedAndRemovedHaveLocations` + its SARIF snapshot).

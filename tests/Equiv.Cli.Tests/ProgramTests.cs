@@ -13,15 +13,15 @@ public sealed class ProgramTests
     }
 
     [Fact]
-    public void Main_WithValidArgsButNoConfiguredFrontendExits3()
+    public void Main_WithValidArgsButUnsupportedExtensionExits3()
     {
         using TempFile legacy = new();
         using TempFile modern = new();
 
-        // Program.Main wires an empty frontend list until ADR 0012 (proposed) settles what a
-        // matched pair reports before M3-001 wires a real backend, so a well-formed parse still
-        // ends in a router rejection. This also exercises the parseResult.Invoke() branch that
-        // Main_WithNoArgsExits3's parse-error branch does not reach.
+        // TempFile.GetTempFileName() has a .tmp extension, which CSharpFrontend.Supports rejects
+        // (it only supports .sln/.slnx), so a well-formed parse still ends in a router rejection.
+        // This also exercises the parseResult.Invoke() branch that Main_WithNoArgsExits3's
+        // parse-error branch does not reach.
         int exitCode = Program.Main(["compare", "--legacy", legacy.Path, "--modern", modern.Path]);
 
         Assert.Equal(ExitCodes.UsageError, exitCode);

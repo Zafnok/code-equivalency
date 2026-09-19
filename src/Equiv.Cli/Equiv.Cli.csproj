@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Equiv.Cli.Tests" />
+    <!-- M2-002: this ticket's Equiv.Tests.Integration tests drive CompareCommand.Run end to end. -->
+    <InternalsVisibleTo Include="Equiv.Tests.Integration" />
   </ItemGroup>
 
 </Project>

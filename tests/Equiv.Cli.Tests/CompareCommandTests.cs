@@ -195,6 +195,26 @@ public sealed class CompareCommandTests
     }
 
     [Fact]
+    public void Compare_WithoutBackend_SkipsMatchedPairs()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity added = new("T::Added()");
+        ProcedureIdentity removed = new("T::Removed()");
+        MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [added], [removed], []);
+        FakeFrontend frontend = new("csharp", _ => true, matchResult);
+        InMemoryReportSink sink = new();
+
+        int exitCode = CompareCommand.Run(
+            legacy.Path, modern.Path, "equiv.sarif", null, null, "divergent", dryRun: false,
+            [frontend], backend: null, sink);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Equal(2, sink.Log!.Runs[0].Results.Count);
+        Assert.DoesNotContain(sink.Log!.Runs[0].Results, r => string.Equals(r.RuleId, "EQ001", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Compare_Exits4OnFrontendLoadException()
     {
         using TempFile legacy = new();

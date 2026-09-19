@@ -20,10 +20,9 @@ namespace Equiv.Cli;
 /// </summary>
 internal static class CompareCommand
 {
-    public static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend)
+    public static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend? backend)
     {
         ArgumentNullException.ThrowIfNull(frontends);
-        ArgumentNullException.ThrowIfNull(backend);
 
         Option<string> legacyOption = new("--legacy") { Required = true };
         Option<string> modernOption = new("--modern") { Required = true };
@@ -63,11 +62,10 @@ internal static class CompareCommand
         string failOn,
         bool dryRun,
         IReadOnlyList<ILanguageFrontend> frontends,
-        IVerificationBackend backend,
+        IVerificationBackend? backend,
         IReportSink sink)
     {
         ArgumentNullException.ThrowIfNull(frontends);
-        ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(sink);
 
         if (!File.Exists(legacyPath) || !File.Exists(modernPath))
@@ -182,14 +180,22 @@ internal static class CompareCommand
         return result.Config;
     }
 
-    private static List<VerificationResult> BuildResults(MatchResult matchResult, IVerificationBackend backend, EquivConfig config)
+    /// <summary>
+    /// <paramref name="backend"/> is <c>null</c> before M3-001 wires a real
+    /// <see cref="IVerificationBackend"/> (ADR 0012): matched pairs get no result at all (not even
+    /// <c>Unknown</c>) until then; Added/Removed are unaffected.
+    /// </summary>
+    private static List<VerificationResult> BuildResults(MatchResult matchResult, IVerificationBackend? backend, EquivConfig config)
     {
         VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames);
 
         List<VerificationResult> results = new(matchResult.Pairs.Length + matchResult.Added.Length + matchResult.Removed.Length);
-        foreach (ProcedurePair pair in matchResult.Pairs)
+        if (backend is not null)
         {
-            results.Add(new VerificationResult(pair.New, backend.Verify(pair, options)));
+            foreach (ProcedurePair pair in matchResult.Pairs)
+            {
+                results.Add(new VerificationResult(pair.New, backend.Verify(pair, options)));
+            }
         }
 
         foreach (ProcedureIdentity identity in matchResult.Added)

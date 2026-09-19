@@ -1,87 +1,73 @@
-# ADR 0012: What matched pairs report before M3-001 wires a real verification backend
+# ADR 0012: Matched pairs are skipped, not verified, until M3-001 wires a real backend
 
-Status: proposed (2026-09-18)
+Status: accepted (2026-09-18). Partially supersedes M1-005 acceptance criterion 7
+(`NoBackend` whose `Verify` throws).
 
 ## Context
 
-M2-002 ("Symbol enumeration and Added/Removed end to end") requires: "Program.Main
-registers `CSharpFrontend`. Running `equiv compare` on `samples/identical` exits 0 with
-a SARIF containing zero results" (acceptance criterion 4).
+M2-002 acceptance criterion 4 requires: "Program.Main registers `CSharpFrontend`.
+Running `equiv compare` on `samples/identical` exits 0 with a SARIF containing zero
+results". The ticket goal says "matched pairs still get no verdict (the backend is not
+wired until M3)", and its integration test is named `Samples_IdenticalYieldsNoResults`.
 
-`samples/identical`'s legacy and modern `Calculator` both declare `Add` and `Max` with
-identical signatures. Once `CSharpFrontend` is registered, `StableIdentityMatcher` will
-put both in `MatchResult.Pairs` — this is new: with `frontends: []` (the state before
-this ticket), `Equiv.Cli.FrontendRouter.Route` always returned `null` and
-`CompareCommand.Run` never got as far as building a `MatchResult`, so `Pairs` was always
-empty in practice.
+`samples/identical` has two matched pairs (`Add`, `Max`). Before M2-002, `Program.Main`
+passed `frontends: []`, so `FrontendRouter.Route` always rejected and no `ProcedurePair`
+ever reached `CompareCommand.BuildResults`. M1-005 relied on that: its `NoBackend.Verify`
+throws and is documented as unreachable. Registering `CSharpFrontend` makes it reachable,
+so the shipped binary would crash on any input with a matched pair.
 
-`CompareCommand.BuildResults` (M1-005, tested by ~15 cases in
-`CompareCommandTests.cs`) unconditionally calls `backend.Verify(pair, options)` for
-every pair and adds one `VerificationResult` per pair — this is how
-`Compare_WritesSarifAndExits0WhenAllEquivalent` etc. already work, and
-`SarifReportWriter.Write` (M1-004) turns every `VerificationResult` into exactly one
-SARIF `Result` — there is no "verified with no result" path.
-
-`Equiv.Cli.NoBackend.Verify` unconditionally throws `InvalidOperationException`,
-pinned by `NoBackendTests.NoBackend_Throws`. Its own doc comment says this is
-"Unreachable in practice: with no frontend configured, `FrontendRouter.Route` always
-rejects before any `ProcedurePair` could reach `Verify`" — a precondition this ticket
-removes.
-
-Given all three of these (AC4's "zero results", `BuildResults`' unconditional per-pair
-`Verify` call, and `NoBackend`'s unconditional throw), running the real `equiv compare`
-binary on `samples/identical` after this ticket either crashes (current `NoBackend`) or
-produces two `EQ003 Unknown` results (any non-throwing placeholder), never "zero
-results" — I cannot satisfy the acceptance criterion without reversing one of the other
-two already-decided, already-tested contracts, which CLAUDE.md and `equiv-decide` both
-say is not mine to do silently.
+`BuildResults` calls `backend.Verify(pair, options)` once per pair, and
+`SarifReportWriter.Write` (M1-004) turns every `VerificationResult` into exactly one SARIF
+result. There is no path for "matched, not verified".
 
 ## Decision
 
-Not decided yet — this ADR lays out the options for the user to pick from before M2-002
-continues.
+Before M3-001, the CLI has no verification backend. That absence is modelled as `null`,
+not as a placeholder object:
+
+- `CompareCommand.Create` and `CompareCommand.Run` take `IVerificationBackend? backend`.
+- `CompareCommand.BuildResults` adds no results for `matchResult.Pairs` when `backend` is
+  `null`. When a backend is present, pair handling is unchanged.
+- `Program.Main` passes `frontends: [CSharpFrontend]` and `backend: null`.
+- `src/Equiv.Cli/NoBackend.cs` and `tests/Equiv.Cli.Tests/NoBackendTests.cs` are deleted.
+- One new test, `Compare_WithoutBackend_SkipsMatchedPairs` in `CompareCommandTests`, covers
+  the `null` branch: pairs yield no results, while Added/Removed are still reported.
+- M2-002 acceptance criterion 4 keeps its wording.
+- M3-001 passes `Z3Backend` from `Program.Main`, makes the parameter non-nullable again,
+  and removes the skip branch (added to M3-001's acceptance criteria).
 
 ## Why
 
-- `BuildResults`' pairs loop is real M1-005 behavior with direct test coverage; changing
-  its shape now would be a regression, not a detail.
-- `NoBackend`'s throw is likewise pinned by its own test and doc comment; it was correct
-  under the "no frontend yet" assumption that held from M1-005 until this ticket.
-- M2-002's own goal statement says "matched pairs still get no verdict (the backend is
-  not wired until M3)" — consistent with the spirit of AC4, but the concrete mechanism
-  for "no verdict" (skip vs. report `Unknown`) was never decided anywhere.
+- It matches the plan's stated intent: M2-002's goal ("no verdict"), acceptance
+  criterion 4 ("zero results"), and test name (`...YieldsNoResults`) all say pairs produce
+  nothing before M3. Only the mechanism was undecided.
+- `null` means "no backend" directly. M1-005's `NoBackend` was an object that must never be
+  called, which only held while no frontend was registered.
+- The existing `CompareCommandTests` pass a fake backend and are unaffected. The pair loop
+  they cover does not change shape.
+- The change is temporary, and its removal belongs to M3-001, which already rewrites
+  `IVerificationBackend.Verify`'s signature and the M1-005 fakes.
 
-## Rejected (not rejected — offered as options)
+## Rejected
 
-1. **Change `NoBackend.Verify` to return `Unknown(reason, "not wired until M3-001")`
-   instead of throwing.** Needs a new `UnknownReason` member (VERIFICATION-MODEL.md
-   section 6 currently lists exactly `timeout`, `opaque`, `unmatched overload` for
-   EQ003), and rewrites `NoBackendTests.NoBackend_Throws`. `samples/identical`'s SARIF
-   then has two `EQ003` results, not zero — AC4's wording would need correcting too.
-2. **Change `CompareCommand.BuildResults` to skip the per-pair `Verify` call entirely
-   until a real backend exists**, e.g. gated on `backend is not NoBackend`, or by
-   removing the loop until M3-001 restores it (already flagged as an M3-001
-   carried-forward item in ROADMAP.md for an unrelated reason — the `Verify` signature
-   itself changes shape then). Satisfies AC4 literally (zero results for `identical`)
-   but touches ~15 existing `CompareCommandTests` cases that exercise this exact loop
-   and would need re-justifying, and needs a defensible way to tell "no backend yet"
-   from "a real backend that legitimately has nothing to report" without a type-check
-   hack.
-3. **Correct AC4 in the ticket** to say `samples/identical` produces two `EQ003 Unknown`
-   results (one per matched pair) rather than zero, keep both `NoBackend` and
-   `BuildResults` unchanged in shape, only change `NoBackend`'s throw to a return (folds
-   into option 1 without also touching `BuildResults`).
-4. **Defer wiring `CSharpFrontend` into `Program.Main` to a later ticket** (M3-001, once
-   a real backend exists) and keep this ticket's "one-line change in Program.cs" out of
-   scope, satisfying AC4 vacuously (the CLI still never reaches a real `MatchResult`
-   with pairs) but leaving `equiv compare` non-functional on real solutions for another
-   milestone, which conflicts with this ticket's own goal ("With this ticket `equiv
-   compare` on the samples produces real EQ004/EQ005 results").
+1. **`NoBackend.Verify` returns `Unknown(..., "not wired until M3-001")`.** This needs an
+   `UnknownReason` that VERIFICATION-MODEL.md section 6 does not define. It reports a
+   missing tool component as if it were a verification outcome, and it contradicts
+   acceptance criterion 4 and the ticket goal.
+2. **Gate the pair loop on `backend is not NoBackend`.** This produces the same results as
+   the decision, but it uses a type check to encode what a nullable parameter states
+   directly.
+3. **Change acceptance criterion 4 to expect two `EQ003` results.** Same objections as 1.
+   It changes the plan to fit the placeholder instead of the other way round.
+4. **Defer the `Program.Main` wiring to M3-001.** This breaks M2-002's goal that
+   `equiv compare` produce real EQ004/EQ005 results on the samples, and leaves the
+   shipped binary unable to accept any real input for another milestone.
 
 ## Consequences
 
-Whichever option is picked changes `docs/tickets/M2-002-symbol-enumeration.md`
-acceptance criterion 4's wording, and options 1/3 change VERIFICATION-MODEL.md section
-6's EQ003 reason list. Everything else in M2-002 (enumeration, identity, rename
-application, Added/Removed with locations) is unaffected and already implemented
-against this same branch.
+- From M2-002 until M3-001, `equiv compare` reports only Added/Removed. A matched pair gets
+  no result, not even Unknown. The SARIF from this period says nothing about matched
+  procedures, and consumers must not read "zero results" as "all equivalent". This is
+  acceptable because nothing ships before M3-004.
+- M1-005 acceptance criterion 7 and its `NoBackend_Throws` test are superseded by this ADR.
+- M3-001 gains an acceptance criterion that restores a non-nullable backend.

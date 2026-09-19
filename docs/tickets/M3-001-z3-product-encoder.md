@@ -98,6 +98,10 @@ message; do not report Divergent.
    rule, using side-specific functions.
 6. `Z3Backend` disposes its `Context` on every path (a test uses a wrapper counting
    disposals).
+7. `Program.Main` passes `Z3Backend`. `CompareCommand.Create`/`Run` take a
+   non-nullable `IVerificationBackend` again, and the `null` skip branch in
+   `BuildResults`, along with `Compare_WithoutBackend_SkipsMatchedPairs`, is removed
+   (ADR 0012).
 
 ## Size guard
 Six source files in `src/Equiv.Verify.Z3/`. No abstraction over Z3 (no `ISolver`

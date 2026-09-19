@@ -1,15 +1,17 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 
+using Equiv.Frontend.CSharp;
+
 namespace Equiv.Cli;
 
 internal static class Program
 {
     public static int Main(string[] args)
     {
-        // ADR 0012 (proposed): wiring CSharpFrontend here makes NoBackend's throw on a matched pair
-        // reachable for the first time (samples/identical has two). Left unwired pending the ADR.
-        Command compareCommand = CompareCommand.Create(frontends: [], backend: new NoBackend());
+        // ADR 0012: no verification backend exists before M3-001 wires Equiv.Verify.Z3; matched
+        // pairs get no result until then (CompareCommand.BuildResults skips them when null).
+        Command compareCommand = CompareCommand.Create(frontends: [new CSharpFrontend()], backend: null);
         RootCommand root = new("Compares two versions of a codebase for behavioural equivalence.") { compareCommand };
 
         ParseResult parseResult = root.Parse(args);
