@@ -56,7 +56,27 @@ public sealed class SolutionLoaderTests
         }
         finally
         {
-            Directory.Delete(copyDir, recursive: true);
+            DeleteBestEffort(copyDir);
+        }
+    }
+
+    /// <summary>
+    /// The build host can still hold files under the copy's <c>obj/</c>; a failed cleanup must not
+    /// replace the test's own result, and the OS temp folder is reclaimed anyway.
+    /// </summary>
+    private static void DeleteBestEffort(string directory)
+    {
+        try
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Locked file: leave the folder behind.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Locked file reported as access denied: leave the folder behind.
         }
     }
 

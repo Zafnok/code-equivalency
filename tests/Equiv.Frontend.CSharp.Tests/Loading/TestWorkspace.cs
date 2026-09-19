@@ -15,13 +15,17 @@ internal sealed class TestWorkspace() : Workspace(MefHostServices.DefaultHost, "
 
     public bool IsDisposed { get; private set; }
 
-    public void AddCSharpProject(string name, string source, bool referenceCoreLibrary = true)
+    /// <param name="raiseOnTextLoad">
+    /// Raised when the document text is first read, which happens during <c>GetCompilationAsync</c>, not when the solution opens.
+    /// </param>
+    public void AddCSharpProject(string name, string source, bool referenceCoreLibrary = true, WorkspaceDiagnostic? raiseOnTextLoad = null)
     {
+        TextAndVersion text = TextAndVersion.Create(SourceText.From(source), VersionStamp.Create());
         ProjectId projectId = ProjectId.CreateNewId(name);
         DocumentInfo document = DocumentInfo.Create(
             DocumentId.CreateNewId(projectId),
             $"{name}.cs",
-            loader: TextLoader.From(TextAndVersion.Create(SourceText.From(source), VersionStamp.Create())));
+            loader: raiseOnTextLoad is null ? TextLoader.From(text) : new RaisingTextLoader(this, text, raiseOnTextLoad));
 
         OnProjectAdded(ProjectInfo.Create(
             projectId,
@@ -43,5 +47,14 @@ internal sealed class TestWorkspace() : Workspace(MefHostServices.DefaultHost, "
     {
         IsDisposed = true;
         base.Dispose(finalize);
+    }
+
+    private sealed class RaisingTextLoader(TestWorkspace workspace, TextAndVersion text, WorkspaceDiagnostic diagnostic) : TextLoader
+    {
+        public override Task<TextAndVersion> LoadTextAndVersionAsync(LoadTextOptions options, CancellationToken cancellationToken)
+        {
+            workspace.OnWorkspaceFailed(diagnostic);
+            return Task.FromResult(text);
+        }
     }
 }

@@ -41,7 +41,7 @@ internal sealed class MsBuildSolutionLoader : ISolutionLoader
         Solution solution = await _openSolution(workspace, solutionPath, ct).ConfigureAwait(false);
 
         ImmutableArray<LoadDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<LoadDiagnostic>();
-        diagnostics.AddRange(workspaceEvents);
+        diagnostics.AddRange(Drain(workspaceEvents));
         diagnostics.AddRange(UnsupportedProjects([.. solution.Projects.Select(static p => (p.Name, p.Language))]));
         ThrowIfAborting(solutionPath, diagnostics);
 
@@ -56,6 +56,8 @@ internal sealed class MsBuildSolutionLoader : ISolutionLoader
                 .Select(d => new LoadDiagnostic(CompilationDiagnosticClassifier.Classify(d.Id), d.Id, project.Name, d.GetMessage(CultureInfo.InvariantCulture))));
         }
 
+        // Materialising compilations can raise more events (e.g. a document that fails to load).
+        diagnostics.AddRange(Drain(workspaceEvents));
         ThrowIfAborting(solutionPath, diagnostics);
         return new LoadedSolution(solution, compilations.ToImmutable(), diagnostics.ToImmutable());
     }
@@ -71,6 +73,14 @@ internal sealed class MsBuildSolutionLoader : ISolutionLoader
         foreach ((string name, string language) in projects.Where(static p => !string.Equals(p.Language, LanguageNames.CSharp, StringComparison.Ordinal)))
         {
             yield return new LoadDiagnostic(LoadDiagnosticKind.UnsupportedSolution, string.Empty, name, $"project language '{language}' is not supported; only C# is");
+        }
+    }
+
+    private static IEnumerable<LoadDiagnostic> Drain(ConcurrentQueue<LoadDiagnostic> events)
+    {
+        while (events.TryDequeue(out LoadDiagnostic? diagnostic))
+        {
+            yield return diagnostic;
         }
     }
 

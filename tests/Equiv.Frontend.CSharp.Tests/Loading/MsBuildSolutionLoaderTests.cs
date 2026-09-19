@@ -74,6 +74,15 @@ public sealed class MsBuildSolutionLoaderTests
     }
 
     [Fact]
+    public async Task Load_FailureEventDuringCompilationAborts()
+    {
+        SolutionLoadException ex = await Assert.ThrowsAsync<SolutionLoadException>(() => LoadAsync(static ws =>
+            ws.AddCSharpProject("A", ValidSource, raiseOnTextLoad: new WorkspaceDiagnostic(WorkspaceDiagnosticKind.Failure, "document could not be read"))));
+
+        Assert.Contains(ex.Diagnostics, static d => d is { Kind: LoadDiagnosticKind.WorkspaceFailure, Message: "document could not be read" });
+    }
+
+    [Fact]
     public async Task Load_WarningEventIsKept()
     {
         LoadedSolution loaded = await LoadAsync(ws =>
