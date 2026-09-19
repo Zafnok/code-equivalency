@@ -1,5 +1,5 @@
 # M1-005 CLI shell and router
-Status: todo
+Status: in-progress
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M1-004
@@ -73,3 +73,54 @@ Any Roslyn or Z3 code. Content sniffing of files. Stub frontends in `src/`. Logg
 frameworks. Progress output. `equiv.config.json` schema changes.
 
 ## Notes
+- Decision: `CompareCommand.Run` takes an `IReportSink sink` parameter instead of building a
+  `FileReportSink` internally from `--out`. `Create` (the System.CommandLine wiring) constructs the
+  production `FileReportSink(outPath)`; tests pass `InMemoryReportSink` so the pipeline is
+  verifiable without touching disk, per the ticket's own "fakes live here" test list. Rule: 3 (the
+  fake-based test list is unwritable otherwise).
+- Decision: the exit-code check (`--fail-on`/new-Divergent/new-Unknown) reads the just-written
+  `SarifLog`'s `BaselineState` and `RuleId` per result, rather than re-deriving new/updated/absent
+  itself. `Equiv.Core.Reporting.BaselineComputer` (the thing that actually knows this) is
+  `internal` to `Equiv.Core`, with `InternalsVisibleTo` only for `Equiv.Core.Tests`; duplicating its
+  identity+rule-id matching in `Equiv.Cli` would both violate CLAUDE.md's "Equiv.Core is the
+  contract" boundary and drift from M1-004's baseline notes on `new` vs `updated`. Reusing the
+  `SarifLog` `Equiv.Cli` already writes (matching `VerificationResult`s 1:1 by index, since
+  `SarifReportWriter.Write` appends absent carry-overs after them) needed no new public API. Rule: 1
+  (mirrors M1-004's own documented new/updated semantics without a second implementation of them).
+- Decision: `VerificationResult`'s `Identity` for a matched pair uses `ProcedurePair.New` (not
+  `Old`). `ProcedurePair`'s own doc comment guarantees `Old.Value == New.Value`, so this is
+  cosmetic; picked `New` since a report is read against the modern side. Rule: 1 is silent here, so
+  Rule 4 (arbitrary but documented, in case a later ticket cares which record instance survives).
+- Decision: `Program.Main` checks `parseResult.Errors.Count > 0` itself and writes each error
+  `Message` to stderr, instead of calling System.CommandLine's default `parseResult.Invoke()` path
+  for a parse failure. Measured: the default `ParseErrorAction` prints the error *and* a full
+  `Usage:`/`Options:` help block to **stdout**, which would violate acceptance criterion 8
+  ("nothing to stdout except the dry-run line"); its default exit code is also `1`, not this
+  ticket's `3`. Verified against the real `System.CommandLine` 2.0.12 package (a throwaway console
+  probe outside the repo) before writing this, not assumed. Rule: 1 (acceptance criterion 8 is
+  explicit) and 4 (the manual check is smaller than fighting the library's default help renderer).
+- Decision: `FrontendRouter.Route` returns a single `ILanguageFrontend?` and does not distinguish
+  "no frontend supports either path" from "two different frontends each support only one side" —
+  both are `null`, and `CompareCommand.Run` emits one generic stderr line for either. The ticket's
+  acceptance criteria ask for "exit 3 with one line on stderr naming the paths" for both cases, not
+  two different messages. Rule: 1.
+- Decision: `Matching.MatchResult.Ambiguous` is not read anywhere in `CompareCommand.Run`. The
+  ticket's acceptance criteria (point 5) name only `Pairs`, `Added`, and `Removed` becoming
+  `VerificationResult`s; M1-004's Notes left `Ambiguous -> Unknown(UnmatchedOverload)` wiring
+  unassigned to "whichever ticket first produces SARIF results from a MatchResult (M1-004 or
+  M1-005)" and M1-005's own Goal/Acceptance criteria never mention it. Still unassigned after this
+  ticket — flagging again per M1-004's own "Second review pass" follow-up note, for whichever
+  ticket next touches this pipeline. Rule: 1 (ticket text is explicit about which three fields).
+- Decision (`equiv-adr`-adjacent, resolved without one): CA1707 ("remove underscores from member
+  names") flagged the ticket's own literal test names (`Compare_Exits1OnDivergent`, etc.), an
+  idiomatic xUnit `Scenario_Outcome` convention this repo had not needed before. Lowered to `none`
+  for `tests/**.cs` only in `.editorconfig`, per CLAUDE.md's own escape hatch ("use `.editorconfig`
+  severity with a comment if a rule is genuinely wrong for this repo, and mention it in the PR").
+  Not an architecture change, so no ADR: it only affects test-identifier style, not build/runtime
+  behaviour.
+- Toolchain: verified `System.CommandLine` 2.0.12's actual API (not assumed from memory) via a
+  disposable console app outside the repo before writing `CompareCommand.Create`/`Program.Main`:
+  `Option<T>.Required`, `Option<T>.GetValue` returning `T?` even for a required option (hence the
+  `!` null-forgiving reads after confirming `parseResult.Errors.Count == 0`), and the stdout/exit-
+  code behaviour noted above. Took under 15 minutes; no gate or library behaviour needed reporting
+  as "wrong".
