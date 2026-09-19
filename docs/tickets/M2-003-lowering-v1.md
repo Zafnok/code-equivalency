@@ -60,18 +60,18 @@ Two passes:
    Run `IrValidator` on the result in debug builds and in every test.
 
 ## Deliverables
-- [ ] `IrLowerer`, `TypeMapper`, `OperatorMapper`, `SsaBuilder`, `CallIdentityFactory`,
+- [x] `IrLowerer`, `TypeMapper`, `OperatorMapper`, `SsaBuilder`, `CallIdentityFactory`,
       each independently unit-tested with `AdhocWorkspace` compilations of small snippets.
-- [ ] Snapshot tests (Verify): IR dump for at least 12 snippets covering each lowered
+- [x] Snapshot tests (Verify): IR dump for at least 12 snippets covering each lowered
       construct, including nested `if`, `checked` arithmetic, division, an opaque call,
       and a method whose body is entirely opaque.
-- [ ] Lowering oracle (property, CsCheck, 200 cases, seed printed on failure): generate a
+- [x] Lowering oracle (property, CsCheck, 200 cases, seed printed on failure): generate a
       straight-line-plus-if method over `int`/`long`/`bool` params from a mini-AST; render
       to C#; compile all cases of a run into one in-memory assembly with
       `CSharpCompilation.Emit` and invoke by reflection (reflection is fine in tests);
       lower each and run `IrInterpreter`; compare return value and thrown exception type
       across 20 random inputs each. Generator lives in `Equiv.TestSupport`.
-- [ ] `docs/tickets/IOPERATION-COVERAGE.md` rows for every `OperationKind` touched
+- [x] `docs/tickets/IOPERATION-COVERAGE.md` rows for every `OperationKind` touched
       (lowered or opaque with reason).
 
 ## Acceptance criteria (all must hold; nothing beyond them)
@@ -121,3 +121,10 @@ Loops, `switch`, `try`, null handling, fields, arrays, strings (M2-004). Any Z3.
 - Decision: shared throw blocks -> one per exception type; the builder may give them phis for `ref`/`out` outs (the "throw block has no phis" pitfall holds only when there are no by-ref parameters). Alternatives: one throw block per site. Rule: 1.
 - Decision: a read with no reaching definition (only possible in code with compile errors) -> an `IrOpaque` with reason `undefined` at the top of the entry block. A Regular fall-through into the exit of a non-void method (also only possible in erroneous code) -> reason `missing-return`. Alternatives: throw. Rule: 4 (frontend never throws on unsupported input).
 - Decision: oracle generator -> `Equiv.TestSupport/LoweringOracleGen.cs`, which emits C# text only (TestSupport does not reference Roslyn); compilation, reflection and lowering live in `Equiv.Frontend.CSharp.Tests`. Alternatives: extend `IrGenAst` (it is IR-level and not C#-shaped). Rule: 4.
+- Note: acceptance criterion 2 refers to "the 12 snapshot snippets listed under Tests", but this ticket has no Tests section. The 16 snippets in `IrLowererSnapshotTests` cover every construct the Deliverables list names.
+- Note: `RoslynTestCompilations.Compile` (M2-002) never applied its metadata references, because `Project.WithMetadataReferences` returns a copy the `AdhocWorkspace` never sees. So every snippet compiled without corlib, and `int` was an error type. It now builds the project from a `ProjectInfo`. With corlib present, `ProcedureEnumeratorTests` no longer reached the excluded-`MethodKind` branch, so its fixture gained a destructor.
+- Note: when an assignment's right-hand side branches (`x = c ? a : b` under `checked`, for example), the CFG captures the left-hand local first and assigns through an `IFlowCaptureReference`. The lowering oracle found this on its first run.
+- Note: the oracle confirmed on .NET 10 x64 that `long.MinValue / -1` throws `OverflowException` in unchecked code; the model relies on this.
+- Note: a constructor body's reason is `ConstructorBodyOperation`, the `OperationKind` enum name, not `ConstructorBody`.
+- Note: CsCheck seeds are 12-character strings; `000000000000` is valid.
+- Note: size guard. `SsaBuilder.cs` has 245 non-comment lines (320 physical). The Braun core (read/write/seal/trivial-phi) is about 90 of them; the rest is the draft-step plumbing and the final operand rewrite.

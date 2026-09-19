@@ -69,6 +69,20 @@ interpolation and `try`/`finally` into explicit blocks. That is why we lower fro
 CFG instead of walking syntax: syntactic sugar is gone before we see it. What we add is
 SSA renaming, type narrowing, opaque-call identity, and explicit exception edges.
 
+C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 0013):
+
+- Checked `+ - *` and unary `-` test `IrOverflows` and branch to one shared
+  `System.OverflowException` throw block. A checked explicit integral conversion throws
+  when the value does not round-trip, or when exactly one side is signed and the
+  signed-side value is negative.
+- `/` and `%` test for a zero divisor (`System.DivideByZeroException`). Signed `/` and
+  `%` also test `IrOverflows sdiv` (`System.OverflowException`) whether or not the code
+  is checked, because .NET throws on `MinValue / -1` and `MinValue % -1` in both contexts.
+- A shift count is masked to `width - 1` before the IR shift, as C# does.
+- An opaque call's `threw` flag branches to `IrThrow("System.Exception")`. A `throw`
+  statement is `IrOpaque` in v1, because the thrown object's dynamic type is not known
+  statically.
+
 Migration-specific normalisations (applied to both sides before matching):
 
 - `System.Web` vs `Microsoft.AspNetCore` attribute routes map to one route identity.
