@@ -79,8 +79,32 @@ public static class SarifReportWriter
             sarifResult.SetProperty("model", CounterexampleText.Dump(divergent.Counterexample));
         }
 
+        if (result.Identity.Location is { } location)
+        {
+            sarifResult.Locations = [ToSarifLocation(location)];
+        }
+
         return sarifResult;
     }
+
+    /// <summary>
+    /// A <see cref="SourceSpan"/> (1-based, ticket M2-002) as a SARIF <see cref="Location"/>: the
+    /// declaring file plus the identifier's line/column region.
+    /// </summary>
+    private static Location ToSarifLocation(SourceSpan span) => new()
+    {
+        PhysicalLocation = new PhysicalLocation
+        {
+            ArtifactLocation = new ArtifactLocation { Uri = new Uri(span.Path.Replace('\\', '/'), UriKind.RelativeOrAbsolute) },
+            Region = new Region
+            {
+                StartLine = span.StartLine,
+                StartColumn = span.StartColumn,
+                EndLine = span.EndLine,
+                EndColumn = span.EndColumn,
+            },
+        },
+    };
 
     /// <summary>
     /// <see cref="Verdict"/> is a closed hierarchy (private protected constructor) with five

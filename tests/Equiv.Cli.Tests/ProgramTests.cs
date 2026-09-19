@@ -18,8 +18,8 @@ public sealed class ProgramTests
         using TempFile legacy = new();
         using TempFile modern = new();
 
-        // Program.Main wires an empty frontend list until a real frontend ships (ticket goal:
-        // "the shipped binary rejects every real input with exit 3"), so a well-formed parse still
+        // Program.Main wires an empty frontend list until ADR 0012 (proposed) settles what a
+        // matched pair reports before M3-001 wires a real backend, so a well-formed parse still
         // ends in a router rejection. This also exercises the parseResult.Invoke() branch that
         // Main_WithNoArgsExits3's parse-error branch does not reach.
         int exitCode = Program.Main(["compare", "--legacy", legacy.Path, "--modern", modern.Path]);

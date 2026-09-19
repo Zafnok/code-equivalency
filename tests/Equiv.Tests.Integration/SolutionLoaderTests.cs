@@ -26,6 +26,8 @@ public sealed class SolutionLoaderTests
         { "removed-null-check", "modern" },
         { "loop-bound-change", "legacy" },
         { "loop-bound-change", "modern" },
+        { "added-removed", "legacy" },
+        { "added-removed", "modern" },
     };
 
     [Theory]

@@ -7,6 +7,8 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
+        // ADR 0012 (proposed): wiring CSharpFrontend here makes NoBackend's throw on a matched pair
+        // reachable for the first time (samples/identical has two). Left unwired pending the ADR.
         Command compareCommand = CompareCommand.Create(frontends: [], backend: new NoBackend());
         RootCommand root = new("Compares two versions of a codebase for behavioural equivalence.") { compareCommand };
 
