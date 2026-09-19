@@ -91,7 +91,18 @@ docs/       everything above
 - Visual Studio 2026 **Build Tools** with workload ".NET desktop build tools" and the
   component ".NET Framework 4.8 targeting pack". This is what lets Roslyn's out-of-process
   build host evaluate legacy (non-SDK) `.csproj` files. No Win32 API is used anywhere.
-  Build Tools install under `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`.
+  Build Tools install under `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`
+  (the x86 prefix, even on 64-bit Windows); net48 reference assemblies land under
+  `C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8`.
+  Unattended install with the exact component ids:
+
+  ```bash
+  winget install --source winget Microsoft.VisualStudio.BuildTools --override "--wait --quiet --norestart --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.Net.Component.4.8.TargetingPack --add Microsoft.Net.Component.4.8.SDK"
+  ```
+
+  Without the targeting pack, legacy projects fail to load with `CS0518` (predefined type
+  not defined), not with a workspace error. `./build.ps1 -Integration` loads every sample
+  and is the quickest check that the box is set up.
 - Git, Docker Desktop (for the container packaging milestone), GitHub CLI.
 
 The engine itself is cross-platform; only loading legacy `.csproj` files needs Windows

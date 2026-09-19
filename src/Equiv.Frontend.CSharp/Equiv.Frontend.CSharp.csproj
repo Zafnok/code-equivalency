@@ -1,11 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Equiv.Core\Equiv.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Equiv.Frontend.CSharp.Tests" />
+    <!-- M2-001: the loader contract is internal (Core cannot see Roslyn); the integration tests drive it against samples/. -->
+    <InternalsVisibleTo Include="Equiv.Tests.Integration" />
   </ItemGroup>
 
 </Project>

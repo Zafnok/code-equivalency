@@ -1,5 +1,5 @@
 # M2-001 Roslyn solution loader over MSBuildWorkspace
-Status: todo
+Status: done (PR #24)
 Effort: L
 Model: Opus, medium effort (this is toolchain debugging, not algorithm design). Sonnet at high effort is acceptable. If you are Sonnet at medium or lower, stop before doing anything else and tell the user to switch.
 Depends on: M1-005, M1-001
@@ -96,3 +96,14 @@ csproj XML yourself, stop: that is the post-MVP bare loader, not this ticket.
 Symbol enumeration (M2-002). Any Linux loader. Buildalyzer.
 
 ## Notes
+- Decision: where the loader types live -> `src/Equiv.Frontend.CSharp/Loading/`, namespace `Equiv.Frontend.CSharp.Loading`, one type per file (7 files, not 4; the extra three are `ISolutionLoader`, `LoadDiagnostic`, `LoadDiagnosticKind`, split out only because of one-type-per-file). Alternatives: project root, fewer multi-type files. Rule: 4.
+- Decision: `LoadedSolution` gains a third member, `ImmutableArray<LoadDiagnostic> Diagnostics`, because the Design says to surface warnings and non-aborting compiler errors on it. Alternatives: a separate result type, a side channel. Rule: 1.
+- Decision: `LoadDiagnostic(LoadDiagnosticKind Kind, string Id, string Project, string Message)`, with a closed kind enum (WorkspaceFailure, WorkspaceWarning, UnresolvedReference, CompilerError, UnsupportedSolution); the classifier maps an error id to `UnresolvedReference` or `CompilerError`. Alternatives: bool `IsFatal`, reusing Roslyn `Diagnostic`. Rule: 2.
+- Decision: the unit-test seam is an internal constructor taking `Func<Workspace>` plus `Func<Workspace, string, CancellationToken, Task<Solution>>`; the public constructor passes `MsBuildWorkspaceFactory` method groups. Tests use a `Workspace` subclass because `AdhocWorkspace` is sealed in Roslyn 5.9 and cannot raise `WorkspaceFailed` or report disposal. Alternatives: a factory interface. Rule: 4.
+- Decision: the non-C# rejection is unit-tested through `MsBuildSolutionLoader.UnsupportedProjects((name, language) pairs)`, which `LoadAsync` calls. A real VB project in an in-memory workspace needs `Microsoft.CodeAnalysis.VisualBasic.Workspaces`, a new package (ADR 0002). Alternatives: add that package. Rule: 4.
+- Decision: `InternalsVisibleTo Equiv.Tests.Integration` on `Equiv.Frontend.CSharp`, because the ticket puts the integration tests for this internal contract in that project. This goes beyond CLAUDE.md's "matching test project only" wording, so it's flagged in the PR. Alternatives: make the loader public. Rule: 4.
+- `.editorconfig`: CA1064 and CA1032 are off for `Loading/SolutionLoadException.cs` only. The ticket makes the exception internal; both rules exist for cross-assembly catch sites, and there are none (the frontend will map it to `Equiv.Core.FrontendLoadException`). Commented in the file.
+- Roslyn 5.9: `Workspace.WorkspaceFailed` is superseded by `RegisterWorkspaceFailedHandler(...)` (returns an `IDisposable`), which is what the loader uses.
+- BuildHost-net472/BuildHost-netcore reach the Cli and test outputs through the ProjectReference with no extra MSBuild. `BuildHost-*/Microsoft.Build.Locator.dll` is part of Roslyn's own build-host payload; this repo does not reference Locator (AC4).
+- AC2 mechanics: the sample only uses mscorlib, so removing `<Reference Include="System" />` on its own changes nothing. The test's temp copy also adds one file, `using System; ... Uri Address;`. A fully qualified `System.Uri` gives CS0234 instead of CS0246 (both classify as UnresolvedReference).
+- Loading the samples writes `obj/` into `samples/*/*/` (gitignored). Integration run for 10 sides plus the broken copy: ~15 s on this box.

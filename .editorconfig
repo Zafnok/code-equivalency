@@ -398,3 +398,10 @@ dotnet_naming_style.s_camelcase.required_suffix =
 dotnet_naming_style.s_camelcase.word_separator = 
 dotnet_naming_style.s_camelcase.capitalization = camel_case
 
+# M2-001: SolutionLoadException is internal by design. It carries Roslyn-side diagnostics, and
+# Equiv.Core cannot see Roslyn, so it never crosses the frontend assembly boundary (the frontend
+# maps it to Equiv.Core.FrontendLoadException). CA1064 ("exceptions should be public") and
+# CA1032 (the three standard constructors) protect cross-assembly catch sites, and there are none.
+[src/Equiv.Frontend.CSharp/Loading/SolutionLoadException.cs]
+dotnet_diagnostic.CA1064.severity = none
+dotnet_diagnostic.CA1032.severity = none
