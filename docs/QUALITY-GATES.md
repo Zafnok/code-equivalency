@@ -33,7 +33,8 @@ A PR cannot merge unless every gate is green. Versions are pinned in
 
 CI runs in `.github/workflows/`: `ci.yml` (gates on windows-latest + ubuntu-latest, plus
 `vulnerable-packages` and `gitleaks`), `codeql.yml`, `mutation.yml` (informational; see
-Mutation row above). Applying branch protection with these as required checks on GitHub
+Mutation row above), `sonar.yml` (M0-006, informational; see Code smells row above).
+Applying branch protection with these as required checks on GitHub
 is the user's action — this ticket only wires the workflows. Mark as required:
 
 - `gates (windows-latest)`
@@ -42,7 +43,8 @@ is the user's action — this ticket only wires the workflows. Mark as required:
 - `gitleaks`
 - `analyze` (CodeQL)
 
-Do not mark `stryker` (mutation.yml) as required until M2, per the Mutation row above.
+Do not mark `stryker` (mutation.yml) as required until M2, per the Mutation row above, nor
+`sonar` (sonar.yml) until it has been calibrated per ADR 0009.
 
 ## Test taxonomy (what "a variety of tests" means here)
 
