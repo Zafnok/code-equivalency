@@ -31,6 +31,8 @@ Owned by a later ticket (already written into that ticket's text):
   M1-003, M1-004 and M1-005 in turn).
 - `IVerificationBackend.Verify` taking two `IrProcedure`s instead of a `ProcedurePair`
   of identities: M3-001. `ProcedurePair` gaining `OldBody`/`NewBody`: M2-003.
+- Null backend in `Equiv.Cli` (matched pairs skipped, ADR 0012) replaced by `Z3Backend`
+  and made non-nullable: M3-001.
 - Stryker becomes a required check: M2 (see QUALITY-GATES.md, Mutation row).
 - ADR 0011 (EQ003 to EQ005 emitted with `level: none`): reopen at M3-003 if real Code
   Scanning or SonarQube output shows `Unknown` results are invisible to users.

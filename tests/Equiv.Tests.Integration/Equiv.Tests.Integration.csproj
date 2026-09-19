@@ -9,6 +9,8 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="coverlet.MTP" />
+    <PackageReference Include="Verify.XunitV3" />
+    <PackageReference Include="Sarif.Sdk" />
   </ItemGroup>
 
   <ItemGroup>

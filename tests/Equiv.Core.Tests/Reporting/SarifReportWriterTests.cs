@@ -34,6 +34,27 @@ public sealed class SarifReportWriterTests
     public Task Removed() => VerifyJson(Serialize(Fixtures.Result(new Removed())));
 
     [Fact]
+    public void ResultWithALocationCarriesAPhysicalLocation()
+    {
+        ProcedureIdentity identity = new("Samples.Math::Add(int32,int32)", new SourceSpan(@"C:\src\Math.cs", 10, 5, 10, 8));
+        SarifLog log = SarifReportWriter.Write([new VerificationResult(identity, new Added())]);
+        Location location = Assert.Single(log.Runs[0].Results[0].Locations);
+
+        Assert.Equal("C:/src/Math.cs", location.PhysicalLocation.ArtifactLocation.Uri.OriginalString);
+        Assert.Equal(10, location.PhysicalLocation.Region.StartLine);
+        Assert.Equal(5, location.PhysicalLocation.Region.StartColumn);
+        Assert.Equal(10, location.PhysicalLocation.Region.EndLine);
+        Assert.Equal(8, location.PhysicalLocation.Region.EndColumn);
+    }
+
+    [Fact]
+    public void ResultWithoutALocationHasNoLocations()
+    {
+        SarifLog log = SarifReportWriter.Write([Fixtures.Result(new Equivalent())]);
+        Assert.Null(log.Runs[0].Results[0].Locations);
+    }
+
+    [Fact]
     public void NullResultsThrow()
     {
         Assert.Throws<ArgumentNullException>(static () => SarifReportWriter.Write(null!));

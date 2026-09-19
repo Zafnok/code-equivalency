@@ -16,3 +16,4 @@ supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.
 | 0009 | SonarQube Cloud as a PR-blocking changegate for code smells and duplication |
 | 0010 | Narrow the Equiv.Core Roslyn/Z3 architecture rule to exclude Sarif.Sdk's namespace |
 | 0011 | EQ003-EQ005 stay non-`fail` SARIF results; visibility of Unknown is the exit code's job |
+| 0012 | Matched pairs are skipped (null backend) until M3-001 wires a real backend |
