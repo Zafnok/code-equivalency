@@ -1,5 +1,5 @@
 # M2-003 Lowering v1: Roslyn CFG to SSA IR for straight-line and branching code
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M2-002, M1-002
@@ -40,7 +40,7 @@ Two passes:
 1. **Block lowering** (no SSA yet): map each CFG block to an `IrBlock` with variables
    named after locals/captures (`local:x`, `capture:3`, `param:a`) and multiple
    assignments allowed. Expressions are lowered recursively into temporaries.
-   Type map: `sbyte/byte`=bv8, `short/ushort`=bv16, `int/uint/char`=bv32,
+   Type map (ADR 0013): `sbyte/byte`=bv8, `short/ushort/char`=bv16, `int/uint`=bv32,
    `long/ulong`=bv64, `bool`=Bool, everything else `IrSort(fullyQualifiedMetadataName)`.
    `IConversionOperation` between integral types: `ZExt`/`SExt`/`Trunc` chosen from source
    signedness and widths; between anything else: `IrOpaque`. `IBinaryOperation`: op table
@@ -107,3 +107,17 @@ about 250 lines, you are not following Braun et al.; re-read section 2 of the pa
 Loops, `switch`, `try`, null handling, fields, arrays, strings (M2-004). Any Z3.
 
 ## Notes
+- Decision: `char` width -> bv16, unsigned (ADR 0013, accepted). Alternatives: bv32 as first written, Sort. Rule: ADR.
+- Decision: lowerer entry point -> `IrLowerer.Lower(IMethodBodyOperation, SemanticModel, RenameMap)`; the frontend calls `IrLowerer.Lower(IMethodSymbol, Compilation, RenameMap)`, which lowers a constructor, an arrow-bodied property or an auto-accessor as one whole-body `IrOpaque` whose reason is the operation kind (or `no-body`). Alternatives: the two-argument signature (then call identities and the procedure identity cannot see the config's rename map), a lowerer instance. Rule: 1.
+- Decision: pass-1 variables -> keyed by the Roslyn symbol or `CaptureId`, not by `local:x` strings; SSA names are `<source>` for parameters, `<source>.<n>` for later versions, `$<n>` for temporaries and `$c<id>.<n>` for captures. Alternatives: `local:x` names (the IR text format does not allow `:` in a name). Rule: 3.
+- Decision: loops, `switch` and exception regions -> the whole body becomes one `IrOpaque` with reason `loop`, `switch` or `try-region`. Loops and switches are found as `ILoopOperation`/`ISwitchOperation`/`ISwitchExpressionOperation` in the operation tree, because the CFG has already turned them into plain branches. A `goto` loop has no loop operation, so it is lowered as ordinary blocks; the SSA builder handles back edges. Alternatives: opaque only at the construct. Rule: 4.
+- Decision: `throw` -> `IrOpaque` with reason `Throw` plus an opaque exit. The thrown object's dynamic type is not known statically, and building it is an `ObjectCreation`, which is opaque anyway. Alternatives: `IrThrow(static type)`. Rule: 4.
+- Decision: signed `/` and `%` -> zero test (`DivideByZeroException`), then `IrOverflows sdiv` (`OverflowException`) in every context, because .NET throws on `MinValue / -1` and `MinValue % -1` even when unchecked. The lowering oracle pins this. Alternatives: overflow test only when checked. Rule: 3.
+- Decision: shift counts -> masked with `width - 1` (the C# rule), then zero-extended to the left operand's width. Alternatives: raw SMT shift. Rule: 1.
+- Decision: checked integral conversion -> throws when the round trip back to the source type differs, or when exactly one side is signed and the signed-side value is negative. Alternatives: range constants per type pair. Rule: 4.
+- Decision: an operation whose Roslyn `ConstantValue` is integral or bool -> `IrConst` of that value. This is Roslyn's fold, not ours, and it covers `const` locals and fields. Alternatives: lower only `ILiteralOperation`. Rule: 1.
+- Decision: call identity -> the M2-002 `RoslynIdentity` string plus `<typeArgs>` for a constructed generic method or type, so `F<int>()` and `F<long>()` are different functions. Type arguments are not renamed; that is the same limit as the normaliser's nested-generic rule. Alternatives: the definition only (unsound for generic calls). Rule: 4.
+- Decision: instance calls on a receiver that is not a value type -> `IrOpaque` with reason `dereference` (null handling is M2-004). A `ref`/`out` argument -> reason `ref-argument`. Compound assignment and `++`/`--` are not listed in the ticket, so they are opaque by operation kind. Alternatives: `IrCall` with a Sort receiver. Rule: 4.
+- Decision: shared throw blocks -> one per exception type; the builder may give them phis for `ref`/`out` outs (the "throw block has no phis" pitfall holds only when there are no by-ref parameters). Alternatives: one throw block per site. Rule: 1.
+- Decision: a read with no reaching definition (only possible in code with compile errors) -> an `IrOpaque` with reason `undefined` at the top of the entry block. A Regular fall-through into the exit of a non-void method (also only possible in erroneous code) -> reason `missing-return`. Alternatives: throw. Rule: 4 (frontend never throws on unsupported input).
+- Decision: oracle generator -> `Equiv.TestSupport/LoweringOracleGen.cs`, which emits C# text only (TestSupport does not reference Roslyn); compilation, reflection and lowering live in `Equiv.Frontend.CSharp.Tests`. Alternatives: extend `IrGenAst` (it is IR-level and not C#-shaped). Rule: 4.
