@@ -1,7 +1,7 @@
 # samples/
 
 Paired fixtures. Each sample is a folder with `legacy/` (a .NET Framework 4.8 solution,
-old-style csproj) and `modern/` (a .NET 10 solution), plus `expected.sarif.json` (the
+old-style csproj) and `modern/` (a .NET 10 solution), plus, from M3-003, `expected.sarif.json` (the
 snapshot the integration tests assert against) and a `README.md` stating which verdicts
 the sample is designed to produce.
 

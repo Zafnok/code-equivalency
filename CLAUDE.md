@@ -41,7 +41,7 @@ and stop; do not silently deviate.
 
 - Windows dev box. Legacy `.csproj` loading needs VS 2026 Build Tools + .NET Framework 4.8
   targeting pack (see README). The engine itself is cross-platform.
-- The git default branch is `main`. The local branch was created as `master`; M0-001 fixes it.
+- The git default branch is `main` (renamed from `master` in M0-001). One branch per ticket, merged by PR.
 - Never commit `samples/**/bin`, `obj`, `TestResults`, `StrykerOutput`.
 
 ## Decisions
