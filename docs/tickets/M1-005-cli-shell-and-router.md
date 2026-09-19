@@ -73,6 +73,15 @@ Any Roslyn or Z3 code. Content sniffing of files. Stub frontends in `src/`. Logg
 frameworks. Progress output. `equiv.config.json` schema changes.
 
 ## Notes
+- Decision: `FrontendLoadException` gets the ticket's `(path, detail)` constructor plus the three
+  standard exception constructors (parameterless, `(message)`, `(message, innerException)`) and the
+  `Path`/`Detail` properties the `(path, detail)` overload needs to expose what it captured.
+  Acceptance criterion 1 names only `FrontendLoadException(string path, string detail)`; the extra
+  members are not a scope expansion but CA1032 ("implement standard exception constructors", on by
+  default under `AnalysisLevel=latest-all`) forcing the same shape this repo's other two custom
+  exceptions (`EquivConfigParseException`, `IrParseException`) already use — omitting them would
+  fail the build gate, not just the analyzer suggestion. Rule: 1 (mirrors the two existing
+  exceptions in this codebase) and 4 (the smallest change that keeps the build green).
 - Decision: `CompareCommand.Run` takes an `IReportSink sink` parameter instead of building a
   `FileReportSink` internally from `--out`. `Create` (the System.CommandLine wiring) constructs the
   production `FileReportSink(outPath)`; tests pass `InMemoryReportSink` so the pipeline is
@@ -124,3 +133,32 @@ frameworks. Progress output. `equiv.config.json` schema changes.
   `!` null-forgiving reads after confirming `parseResult.Errors.Count == 0`), and the stdout/exit-
   code behaviour noted above. Took under 15 minutes; no gate or library behaviour needed reporting
   as "wrong".
+
+## Review response (post-PR review, pre-merge fixes)
+
+A review of the initial PR found two correctness gaps and a documentation gap, fixed in this same
+PR before merge:
+
+- **A bad `--config`/`--baseline` path or an unparseable config could exit 1, "divergent".**
+  Criterion 3's "Missing file: exit 3" is not limited to `--legacy`/`--modern`; `CompareCommand.Run`
+  only checked those two. A missing `--config`/`--baseline` file, or a `--config` file that is not
+  valid JSON at all (`EquivConfigLoader.Load` throws `EquivConfigParseException` for that case, as
+  opposed to a wrong-shaped-but-valid JSON document, which it reports as diagnostics instead), would
+  reach System.CommandLine's default unhandled-exception path: a stack trace and exit `1` — the
+  divergent exit code, silently misreporting a usage error as a real regression to CI. Fixed:
+  `Run` now checks `File.Exists` for `--config`/`--baseline` before using them and catches
+  `EquivConfigParseException` around the load, both returning exit 3 with a stderr message, with a
+  test for each path (`Compare_MissingConfigFileExits3`, `Compare_MissingBaselineFileExits3`,
+  `Compare_InvalidConfigJsonExits3`).
+- **Config diagnostics were silently dropped.** `EquivConfigLoader.Load(...).Config` already
+  replaces every invalid or missing field with its default (by design, per its own doc comment: "a
+  caller can proceed after only warning"), but nothing wrote the accompanying `Diagnostics` anywhere,
+  so e.g. `"bound": 0` silently fell back to the default bound with no signal to the user. Fixed:
+  a new `CompareCommand.LoadConfig` writes each diagnostic (`Id`, `Path`, `Message`) to stderr before
+  returning the defaulted config; criterion 8 permits this ("diagnostics go to stderr"). Test:
+  `Compare_WarnsOnInvalidConfigValues`.
+- The review's third point (undocumented `FrontendLoadException` members) is answered by the
+  `Decision` entry at the top of this Notes section, added in this same fix pass.
+- **Project-level gap, not this ticket's to fix:** `Matching.MatchResult.Ambiguous` still has no
+  ticket wiring it to `Unknown(UnmatchedOverload)` (see the Decision above); the review asked that
+  M2-002 or M3-003's goal name it explicitly rather than leaving it to be rediscovered again.
