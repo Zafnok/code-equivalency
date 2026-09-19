@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 
 using Equiv.Core;
+using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Reporting;
@@ -19,7 +20,8 @@ namespace Equiv.Cli.Tests;
 /// dry-run, the pipeline that turns a <see cref="MatchResult"/> into a SARIF log, and the exit
 /// codes VERIFICATION-MODEL.md section 6 documents. Every test in this class either avoids the
 /// console entirely or redirects it and restores it in a `finally`; xUnit runs the [Fact]s in one
-/// class sequentially, so the two that do redirect it (dry-run) never race each other.
+/// class sequentially, so the ones that do redirect it (dry-run, config warnings) never race
+/// each other.
 /// </summary>
 public sealed class CompareCommandTests
 {
@@ -236,6 +238,36 @@ public sealed class CompareCommandTests
     }
 
     [Fact]
+    public void Compare_BaselineFixedDivergenceExits0()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        string baselinePath = Path.GetTempFileName();
+        try
+        {
+            SarifLog baseline = SarifReportWriter.Write([new VerificationResult(PairIdentity, new Divergent(Counterexample()))]);
+            baseline.Save(baselinePath);
+
+            // A rule-id change (Divergent -> Equivalent) for an identity already in the baseline is
+            // always `new` per M1-004's BaselineComputer, but it must not exit 1: only a *new*
+            // Divergent counts, and this one is now Equivalent.
+            MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [], [], []);
+            FakeFrontend frontend = new("csharp", _ => true, matchResult);
+            FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
+
+            int exitCode = CompareCommand.Run(
+                legacy.Path, modern.Path, "equiv.sarif", baselinePath, null, "divergent", dryRun: false,
+                [frontend], backend, new InMemoryReportSink());
+
+            Assert.Equal(ExitCodes.Success, exitCode);
+        }
+        finally
+        {
+            File.Delete(baselinePath);
+        }
+    }
+
+    [Fact]
     public void Compare_UsesConfigBoundAndTimeout()
     {
         using TempFile legacy = new();
@@ -243,7 +275,7 @@ public sealed class CompareCommandTests
         string configPath = Path.GetTempFileName();
         try
         {
-            File.WriteAllText(configPath, """{ "bound": 7, "timeoutMs": 12000 }""");
+            File.WriteAllText(configPath, """{ "bound": 7, "timeoutMs": 12000, "callIdentityRenames": { "Old::M": "New::M" } }""");
             MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [], [], []);
             FakeFrontend frontend = new("csharp", _ => true, matchResult);
             FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
@@ -256,6 +288,94 @@ public sealed class CompareCommandTests
             VerificationOptions options = Assert.Single(backend.Calls);
             Assert.Equal(7, options.Bound);
             Assert.Equal(12000, options.TimeoutMs);
+            Assert.Equal("New::M", options.CallIdentityMap["Old::M"]);
+        }
+        finally
+        {
+            File.Delete(configPath);
+        }
+    }
+
+    [Fact]
+    public void Compare_MissingConfigFileExits3()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        string configPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+        FakeFrontend frontend = new("csharp", _ => true);
+
+        int exitCode = CompareCommand.Run(
+            legacy.Path, modern.Path, "equiv.sarif", null, configPath, "divergent", dryRun: false,
+            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink());
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Equal(0, frontend.AnalyzeCallCount);
+    }
+
+    [Fact]
+    public void Compare_MissingBaselineFileExits3()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        string baselinePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".sarif");
+        FakeFrontend frontend = new("csharp", _ => true);
+
+        int exitCode = CompareCommand.Run(
+            legacy.Path, modern.Path, "equiv.sarif", baselinePath, null, "divergent", dryRun: false,
+            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink());
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Equal(0, frontend.AnalyzeCallCount);
+    }
+
+    [Fact]
+    public void Compare_InvalidConfigJsonExits3()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        string configPath = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(configPath, "{ not json");
+            FakeFrontend frontend = new("csharp", _ => true);
+
+            int exitCode = CompareCommand.Run(
+                legacy.Path, modern.Path, "equiv.sarif", null, configPath, "divergent", dryRun: false,
+                [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink());
+
+            Assert.Equal(ExitCodes.UsageError, exitCode);
+            Assert.Equal(0, frontend.AnalyzeCallCount);
+        }
+        finally
+        {
+            File.Delete(configPath);
+        }
+    }
+
+    [Fact]
+    public void Compare_WarnsOnInvalidConfigValues()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        string configPath = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(configPath, """{ "bound": 0 }""");
+            MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [], [], []);
+            FakeFrontend frontend = new("csharp", _ => true, matchResult);
+            FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
+            int exitCode = ExitCodes.Success;
+
+            string errorOutput = CaptureStdErr(() =>
+            {
+                exitCode = CompareCommand.Run(
+                    legacy.Path, modern.Path, "equiv.sarif", null, configPath, "divergent", dryRun: false,
+                    [frontend], backend, new InMemoryReportSink());
+            });
+
+            Assert.Equal(ExitCodes.Success, exitCode);
+            Assert.Contains("CFG002", errorOutput, StringComparison.Ordinal);
+            Assert.Equal(EquivConfig.Default.Bound, Assert.Single(backend.Calls).Bound);
         }
         finally
         {
@@ -280,6 +400,23 @@ public sealed class CompareCommandTests
         finally
         {
             Console.SetOut(original);
+        }
+
+        return writer.ToString();
+    }
+
+    private static string CaptureStdErr(Action action)
+    {
+        TextWriter original = Console.Error;
+        using StringWriter writer = new();
+        Console.SetError(writer);
+        try
+        {
+            action();
+        }
+        finally
+        {
+            Console.SetError(original);
         }
 
         return writer.ToString();

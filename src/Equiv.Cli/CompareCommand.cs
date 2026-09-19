@@ -87,7 +87,10 @@ internal static class CompareCommand
             return ExitCodes.Success;
         }
 
-        EquivConfig config = configPath is null ? EquivConfig.Default : EquivConfigLoader.Load(File.ReadAllText(configPath)).Config;
+        if (!TryLoadInputs(baselinePath, configPath, out EquivConfig config, out SarifLog? baseline, out int inputErrorExitCode))
+        {
+            return inputErrorExitCode;
+        }
 
         MatchResult matchResult;
         try
@@ -101,12 +104,66 @@ internal static class CompareCommand
         }
 
         List<VerificationResult> results = BuildResults(matchResult, backend, config);
-
-        SarifLog? baseline = baselinePath is null ? null : SarifLog.Load(baselinePath);
         SarifLog log = SarifReportWriter.Write(results, baseline);
         sink.Write(log);
 
         return DecideExitCode(results, log, failOn);
+    }
+
+    /// <summary>
+    /// Checks <paramref name="configPath"/>/<paramref name="baselinePath"/> exist (criterion 3's
+    /// "Missing file: exit 3" is not limited to <c>--legacy</c>/<c>--modern</c>) and loads both,
+    /// catching a malformed (not just wrong-shaped) <c>--config</c> file as a usage error too.
+    /// </summary>
+    private static bool TryLoadInputs(string? baselinePath, string? configPath, out EquivConfig config, out SarifLog? baseline, out int exitCode)
+    {
+        config = EquivConfig.Default;
+        baseline = null;
+        exitCode = ExitCodes.Success;
+
+        if (configPath is not null && !File.Exists(configPath))
+        {
+            Console.Error.WriteLine($"error: file not found (config={configPath})");
+            exitCode = ExitCodes.UsageError;
+            return false;
+        }
+
+        if (baselinePath is not null && !File.Exists(baselinePath))
+        {
+            Console.Error.WriteLine($"error: file not found (baseline={baselinePath})");
+            exitCode = ExitCodes.UsageError;
+            return false;
+        }
+
+        try
+        {
+            config = LoadConfig(configPath);
+        }
+        catch (EquivConfigParseException exception)
+        {
+            Console.Error.WriteLine(exception.Message);
+            exitCode = ExitCodes.UsageError;
+            return false;
+        }
+
+        baseline = baselinePath is null ? null : SarifLog.Load(baselinePath);
+        return true;
+    }
+
+    private static EquivConfig LoadConfig(string? configPath)
+    {
+        if (configPath is null)
+        {
+            return EquivConfig.Default;
+        }
+
+        EquivConfigResult result = EquivConfigLoader.Load(File.ReadAllText(configPath));
+        foreach (EquivConfigDiagnostic diagnostic in result.Diagnostics)
+        {
+            Console.Error.WriteLine($"warning: {diagnostic.Id} {diagnostic.Path}: {diagnostic.Message}");
+        }
+
+        return result.Config;
     }
 
     private static List<VerificationResult> BuildResults(MatchResult matchResult, IVerificationBackend backend, EquivConfig config)
