@@ -125,15 +125,28 @@ have a syntactic termination argument (bounded counters), otherwise not claimed.
 |---|---|---|---|
 | Equivalent | none | `pass` | EQ001 |
 | Divergent | `error` | `fail` | EQ002 (counterexample in `properties.model` and in `message`) |
-| Unknown | `warning` | `open` | EQ003 (reason: timeout, opaque, unmatched overload) |
-| Added | `note` | `informational` | EQ004 |
-| Removed | `note` | `informational` | EQ005 |
+| Unknown | none (rule default `warning`) | `open` | EQ003 (reason: timeout, opaque, unmatched overload) |
+| Added | none (rule default `note`) | `informational` | EQ004 |
+| Removed | none (rule default `note`) | `informational` | EQ005 |
 | Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link in `message`) |
 
 Baseline: SARIF `baselineState` (`new`, `unchanged`, `updated`, `absent`) computed from
 a result fingerprint (procedure identity + verdict + model hash). The exit code considers
 only `new` results unless `--no-baseline` is given. Accepting a divergence as the new
 behaviour is done by committing the SARIF file as the baseline, nothing more.
+
+`new` versus `updated` is decided by procedure identity *and* rule id (the verdict's kind,
+EQ001-EQ005): a rule-id change for an identity already in the baseline — e.g. Equivalent
+(EQ001) regressing to Divergent (EQ002) — is always `new`, so the exit code never misses it.
+`updated` is reserved for a same-rule-id fingerprint change (e.g. a different counterexample
+on a procedure that was already Divergent); that distinction is not exit-code-significant, so
+it does not depend on the "model hash" half of the fingerprint being identical across runs of
+the same underlying divergence.
+
+`level` is only meaningful on a result when `kind` is `fail` (SARIF 2.1.0 s3.27.9), so
+EQ003-EQ005 results carry `level: none`; the parenthesised value is the rule's
+`defaultConfiguration.level`, severity metadata only. Whether a consumer renders Unknown with
+a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 0011.
 
 ## 7. Test obligations derived from this document
 

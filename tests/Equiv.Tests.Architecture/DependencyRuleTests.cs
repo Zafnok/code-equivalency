@@ -35,8 +35,11 @@ public sealed class DependencyRuleTests
     [Fact]
     public void CoreDoesNotDependOnRoslynOrZ3()
     {
+        // Excludes Microsoft.CodeAnalysis.Sarif (Sarif.Sdk, an approved Equiv.Core dependency)
+        // from the Roslyn namespace prefix it happens to share; see ADR 0010.
         IArchRule rule = Types(true).That().ResideInNamespaceMatching(@"^Equiv\.Core(\.|$)")
-            .Should().NotDependOnAny(Types(true).That().ResideInNamespaceMatching(@"^(Microsoft\.CodeAnalysis|Microsoft\.Z3)(\.|$)"))
+            .Should().NotDependOnAny(Types(true).That().ResideInNamespaceMatching(
+                @"^Microsoft\.CodeAnalysis$|^Microsoft\.CodeAnalysis\.(?!Sarif(\.|$))|^Microsoft\.Z3(\.|$)"))
             .Because("Equiv.Core must have no Roslyn or Z3 dependency; those are frontend/backend concerns.");
 
         rule.Check(SystemArchitecture);
