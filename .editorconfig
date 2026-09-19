@@ -25,6 +25,13 @@ indent_size = 2
 # default under AnalysisLevel=latest-all; pinned to error here so it can't drift.
 dotnet_diagnostic.CA1852.severity = error
 
+# M1-005: test methods are named Scenario_ExpectedOutcome (e.g. Compare_Exits1OnDivergent),
+# an underscore-as-separator convention that is idiomatic xUnit test naming, not an identifier
+# hygiene problem. CA1707 ("remove underscores from member names") has no test-specific carve-out,
+# so it is turned off for test projects only.
+[tests/**.cs]
+dotnet_diagnostic.CA1707.severity = none
+
 #### Core EditorConfig Options ####
 
 # Indentation and spacing

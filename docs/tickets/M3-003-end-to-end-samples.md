@@ -7,7 +7,11 @@ Depends on: M2-004, M2-005, M2-006, M3-002
 ## Goal
 Wire the real backend into the CLI, run every sample through `equiv compare`, check in
 the SARIF snapshots, and assert exit codes. This ticket writes almost no logic; it
-connects what exists and pins the behaviour.
+connects what exists and pins the behaviour. It also owns `MatchResult.Ambiguous` ->
+`Unknown(UnmatchedOverload)`, deferred by M1-003 ("M1-004 or M1-005") and again by
+M1-004/M1-005 (neither's goal named it): this is the first ticket that assembles a real
+`MatchResult` from `StableIdentityMatcher` into `VerificationResult`s end to end, so it
+is the natural place to stop leaving ambiguous overloads out of the SARIF entirely.
 
 ## Spec references
 ARCHITECTURE.md (exit codes, data flow); VERIFICATION-MODEL.md section 6; each
@@ -35,9 +39,14 @@ sample's README (expected verdicts).
    as baseline, exits 0 and every result has `baselineState: unchanged`.
 6. README gains a "Usage" section with the exact command, the exit code table, and one
    real Divergent result excerpt copied from the `added-branch` output.
+7. `CompareCommand`'s `MatchResult` -> `VerificationResult` assembly (M1-005) also handles
+   `MatchResult.Ambiguous`: each identity becomes `Unknown(UnmatchedOverload, detail)`,
+   same as any other `Unknown` result (subject to `--fail-on unknown`, SARIF EQ003).
 
 ## Files
-`src/Equiv.Cli/Program.cs`, `src/Equiv.Core/Matching/ProcedurePair.cs` (if needed),
+`src/Equiv.Cli/Program.cs`, `src/Equiv.Cli/CompareCommand.cs` (criterion 7's `Ambiguous` wiring),
+`src/Equiv.Core/Matching/ProcedurePair.cs` (if needed),
+`tests/Equiv.Cli.Tests/CompareCommandTests.cs` (criterion 7's coverage),
 `tests/Equiv.Tests.Integration/SamplesEndToEndTests.cs`, `SarifNormalizer.cs`,
 `samples/*/expected.sarif.json` (Verify snapshots), `README.md`.
 

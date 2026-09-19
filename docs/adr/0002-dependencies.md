@@ -10,7 +10,7 @@ latest stable on nuget.org on 2026-09-17; re-checked 2026-09-18 by M0-002 (only
 | Microsoft.CodeAnalysis.CSharp.Workspaces | 5.9.0 | Frontend.CSharp | Roslyn; the only complete C# semantic model |
 | Microsoft.CodeAnalysis.Workspaces.MSBuild | 5.9.0 | Frontend.CSharp | out-of-process build host; loads legacy csproj via VS Build Tools MSBuild (VS2026 layout fix merged May 2026, Roslyn PR 83477) |
 | Microsoft.Z3 | 4.12.2 | Verify.Z3 | official bindings, ships win/linux/osx natives. Package lags upstream (last push 2023) but the API is stable. Escape hatch: drop-in newer libz3 from GitHub releases |
-| Sarif.Sdk | 5.7.0 | Core | Microsoft's SARIF 2.1.0 object model (`SarifLog`, `Save`/`Load`). No bundled schema/rule validator — that is `Sarif.Multitool`(`.Library`), not added; M1-004 validates by SDK round-trip instead (see its ticket Notes) |
+| Sarif.Sdk | 5.7.0 | Core, Cli | Microsoft's SARIF 2.1.0 object model (`SarifLog`, `Save`/`Load`). No bundled schema/rule validator — that is `Sarif.Multitool`(`.Library`), not added; M1-004 validates by SDK round-trip instead (see its ticket Notes). Cli does not `PackageReference` it directly, but M1-005 catches `Newtonsoft.Json.JsonException` (Sarif.Sdk's own JSON dependency, transitive through Core) around `SarifLog.Load` to turn a corrupt `--baseline` file into exit 3 instead of an unhandled crash |
 | System.CommandLine | 2.0.12 | Cli | standard .NET CLI parser; 3.0 is prerelease (rc.1) as of 2026-09-18, so pinned to the 2.0.x stable line |
 | xunit.v3 | 4.0.1 | tests | current xUnit line, native Microsoft.Testing.Platform |
 | coverlet.MTP | 10.0.1 | tests | coverage under MTP; no threshold flag, hence tools/check-coverage |

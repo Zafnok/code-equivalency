@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Equiv.Core\Equiv.Core.csproj" />
     <ProjectReference Include="..\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
     <ProjectReference Include="..\Equiv.Verify.Z3\Equiv.Verify.Z3.csproj" />

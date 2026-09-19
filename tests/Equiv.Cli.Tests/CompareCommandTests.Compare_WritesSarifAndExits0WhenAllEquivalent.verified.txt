@@ -1,0 +1,117 @@
+﻿{
+  $schema: https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json,
+  version: 2.1.0,
+  runs: [
+    {
+      tool: {
+        driver: {
+          name: Equiv,
+          rules: [
+            {
+              id: EQ001,
+              name: Equivalent,
+              shortDescription: {
+                text: The two procedures are observably equivalent.
+              },
+              defaultConfiguration: {
+                level: none
+              }
+            },
+            {
+              id: EQ002,
+              name: Divergent,
+              shortDescription: {
+                text: The two procedures disagree on some observable.
+              },
+              defaultConfiguration: {
+                level: error
+              }
+            },
+            {
+              id: EQ003,
+              name: Unknown,
+              shortDescription: {
+                text: Equivalence could not be decided for this procedure pair.
+              }
+            },
+            {
+              id: EQ004,
+              name: Added,
+              shortDescription: {
+                text: The procedure is present on the modern side only.
+              },
+              defaultConfiguration: {
+                level: note
+              }
+            },
+            {
+              id: EQ005,
+              name: Removed,
+              shortDescription: {
+                text: The procedure is present on the legacy side only.
+              },
+              defaultConfiguration: {
+                level: note
+              }
+            }
+          ]
+        }
+      },
+      results: [
+        {
+          ruleId: EQ001,
+          kind: pass,
+          level: none,
+          message: {
+            text: T::A() is equivalent.
+          },
+          partialFingerprints: {
+            procedureIdentity/v1: T::A(),
+            resultFingerprint/v1: a3eadbc917958316d0a6054d009da0913e993153302dfbaeb4b4d49f322aafef
+          },
+          baselineState: new
+        },
+        {
+          ruleId: EQ001,
+          kind: pass,
+          level: none,
+          message: {
+            text: T::B() is equivalent.
+          },
+          partialFingerprints: {
+            procedureIdentity/v1: T::B(),
+            resultFingerprint/v1: b68f19e583445d0a0fe006061da72ff054ec88a523fc97e2c99d61ef6901570d
+          },
+          baselineState: new
+        },
+        {
+          ruleId: EQ004,
+          kind: informational,
+          level: none,
+          message: {
+            text: T::Added() was added.
+          },
+          partialFingerprints: {
+            procedureIdentity/v1: T::Added(),
+            resultFingerprint/v1: 6ec68a8e53658f50aa8f9dc33bb4d16b726c9a1c90327c59f80fc5cc0a26f38c
+          },
+          baselineState: new
+        },
+        {
+          ruleId: EQ005,
+          kind: informational,
+          level: none,
+          message: {
+            text: T::Removed() was removed.
+          },
+          partialFingerprints: {
+            procedureIdentity/v1: T::Removed(),
+            resultFingerprint/v1: 8b86785fcf7449c53c766f4b53488bb4d2de0cdfbb7a02cccbb890f91e0fd5e3
+          },
+          baselineState: new
+        }
+      ],
+      columnKind: utf16CodeUnits
+    }
+  ]
+}
