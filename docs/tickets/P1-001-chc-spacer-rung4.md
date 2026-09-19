@@ -71,6 +71,21 @@ uninterpreted functions here as M3-002 does.
 - [ ] Property tests: soundness harness and ladder monotonicity extended to rung 4.
 - [ ] Benchmark note in `## Notes`: wall-clock per sample on this box.
 
+## Acceptance criteria (all must hold; nothing beyond them)
+1. The two new samples reach Equivalent with `proofMethod: chc` and a non-empty
+   `properties.invariant`, in under 30 seconds each on this box (time in Notes).
+2. `Unknown(UnalignedLoop)` is no longer a final verdict; it becomes `chc`
+   Equivalent, Divergent (replayed), or `Unknown(ChcTimeout)`.
+3. M3-001 snapshot tests are byte-identical after the `FragmentEncoder` extraction.
+4. Int-mode is used only when a rung-1 proof shows no reachable `IrOverflows`; a test
+   forces an overflowing loop and asserts bitvector mode was used (`properties.chcMode`).
+5. A spurious Spacer derivation (constructed via int-mode on a fixture) yields
+   `Unknown(ChcSpurious)` with both traces in the detail, never Divergent.
+
+## Size guard
+Four new files. If you are writing your own invariant inference or abstract domains,
+stop: Spacer does that.
+
 ## Pitfalls
 - Spacer needs every relation's arguments to be variables, not terms, in rule heads;
   introduce fresh variables and equalities in the body.

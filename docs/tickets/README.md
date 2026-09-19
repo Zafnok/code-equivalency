@@ -13,20 +13,29 @@ Model: Opus, high effort. If you are not Opus or Fable, stop before doing anythi
 Depends on: M0-003
 
 ## Goal
-One paragraph. What exists when this is done.
+One paragraph. What exists when this is done, and roughly how big it is.
 
 ## Spec references
 VERIFICATION-MODEL.md section 2, section 7
 
-## Deliverables
-- [ ] concrete file / type / behaviour
-- [ ] tests: which kinds (unit / property / snapshot / integration)
+## Acceptance criteria (all must hold; nothing beyond them)
+1. Numbered, testable statements. Each names a file, type, command or observable
+   output. "Works" and "handles" are not criteria.
+
+## Files
+The exact files to create or edit. A file not listed is a scope question.
+
+## Tests
+Test names. A behaviour without a named test is not required.
+
+## Size guard
+A number of files or tests that means "you have misread the ticket" when exceeded.
 
 ## Out of scope
 What a tempted agent must not do here.
 
 ## Notes
-Left empty by the author; the implementer records surprises.
+Left empty by the author; the implementer records surprises and Decision: lines.
 ```
 
 The `Model:` line is mandatory and is checked first by the task-loop skill. It names
@@ -39,6 +48,8 @@ intended algorithm, types and pitfalls; S and M tickets are sized for Sonnet.
 Tickets leave implementation details open on purpose. An agent settles them with the
 `equiv-decide` skill and a `Decision:` line in Notes; it does not ask.
 
-M0 and every L ticket are written in full. The remaining S and M tickets are stubs
-(goal + generic deliverables) that the agent picking them up expands per the template,
-before writing code, in the same PR.
+Every ticket is written in full: the Acceptance criteria are the definition of done,
+the Files and Tests lists are the expected shape, and the Size guard is the signal to
+stop and re-read. Effort labels are calibrated to those lists, not to how hard the
+topic sounds. An agent does not expand or re-plan a ticket; it implements the criteria
+in order and logs `Decision:` lines for anything the criteria leave open.

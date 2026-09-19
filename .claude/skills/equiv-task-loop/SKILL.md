@@ -14,9 +14,11 @@ description: The only way to implement a ticket in this repo. Use whenever asked
    references, `docs/QUALITY-GATES.md`. Do not read the whole repo; read what the ticket names.
 2. Check dependencies: every ticket in "Depends on" must be `Status: done`. If not, stop
    and say which one is missing.
-3. Expand the ticket if its Deliverables still say "expand into concrete items": rewrite
-   them as checkboxes naming files, types and test names. Commit that first
-   (`docs(tickets): expand M2-003`). This is the design step; keep it under 40 lines.
+3. Do not plan. The ticket's Acceptance criteria, Files and Tests sections are the
+   plan. Copy the criteria into a checklist in your first message and work them in
+   order. If the Size guard trips, stop and re-read Out of scope before writing more.
+   Effort labels are calibrated to the Files and Tests lists; a ticket labelled S is
+   small no matter how the topic sounds.
 4. Branch: `git switch -c <ticket-id>-<slug>` from `main`. Set `Status: in-progress`.
 5. Test first, per deliverable: write the failing test (unit, and property/snapshot if
    the ticket says so), then the smallest code that passes, then run `./build.ps1`.
@@ -29,7 +31,8 @@ description: The only way to implement a ticket in this repo. Use whenever asked
    wrong, stop and report; do not work around it.
 7. Commit small, Conventional Commits, footer `Ticket: <id>`. Snapshot files
    (`*.verified.*`) are committed and described in the PR.
-8. Finish: tick every checkbox, fill Notes with anything surprising (toolchain quirks,
+8. Finish: confirm every acceptance criterion holds (quote each with the test or
+   command that proves it in the PR body), fill Notes with anything surprising (toolchain quirks,
    spec ambiguities), open the PR with `gh pr create` using the ticket title; body = the
    Deliverables list with results, plus the attribution line from the session. Then set
    `Status: done (PR #n)` in a final commit.

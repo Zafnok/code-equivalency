@@ -74,6 +74,23 @@ Two passes:
 - [ ] `docs/tickets/IOPERATION-COVERAGE.md` rows for every `OperationKind` touched
       (lowered or opaque with reason).
 
+## Acceptance criteria (all must hold; nothing beyond them)
+1. `ProcedurePair` gains `IrProcedure? OldBody` and `IrProcedure? NewBody`, filled by
+   `CSharpFrontend.Analyze` for every matched pair; `IrValidator` reports zero
+   diagnostics on every lowered body from the samples (test).
+2. The 12 snapshot snippets listed under Tests exist and are verified.
+3. The lowering oracle passes 200 cases with a fixed seed and the seed is printed on
+   failure.
+4. Every `OperationKind` encountered in the samples appears in
+   `IOPERATION-COVERAGE.md` as `lowered` or `opaque` with a reason; none is missing.
+5. A method containing a loop, `switch`, `try`, field, array or reference-typed
+   dereference lowers with `IrOpaque` nodes (not an exception) and the reason names the
+   construct; those are M2-004's job.
+
+## Size guard
+Five source files in `src/Equiv.Frontend.CSharp/Lowering/`. If the SSA builder exceeds
+about 250 lines, you are not following Braun et al.; re-read section 2 of the paper.
+
 ## Pitfalls
 - `IFlowCaptureOperation` can capture a value used across blocks; it is a variable, not
   an expression. Missing this produces uses without definitions.

@@ -66,6 +66,19 @@ unit-tested against `AdhocWorkspace` through the same code path.
 - [ ] README prerequisites updated with the exact Build Tools path and component ids
       recorded in M0-001 Notes.
 
+## Acceptance criteria (all must hold; nothing beyond them)
+1. `build.ps1 -Integration` is green on this box and loads all five M1-001 samples,
+   both sides, with zero `WorkspaceDiagnosticKind.Failure` events.
+2. A copy of `samples/identical/legacy` with one `<Reference>` removed fails with
+   `SolutionLoadException` whose diagnostics list the `CS0246` classification.
+3. Only `MsBuildWorkspaceFactory` carries `ExcludeFromCodeCoverage`; `check-coverage`
+   still reports 100% for `Equiv.Frontend.CSharp`.
+4. No `Microsoft.Build.Locator` reference anywhere.
+
+## Size guard
+Four source files in `src/`. If you are writing MSBuild property logic or parsing
+csproj XML yourself, stop: that is the post-MVP bare loader, not this ticket.
+
 ## Pitfalls
 - `Microsoft.CodeAnalysis.Workspaces.MSBuild` ships the build hosts as content under
   `BuildHost-net472` and `BuildHost-netcore`; they must end up next to the test and CLI
