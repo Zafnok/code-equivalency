@@ -90,6 +90,25 @@ human-readable detail. SARIF properties: `proofMethod`, `boundedBy`, `unknownRea
 - [ ] Sample `loop-bound-change` end to end produces Divergent; sample `identical`
       loops produce unbounded Equivalent.
 
+## Acceptance criteria (all must hold; nothing beyond them)
+1. `Verify` on a pair with loops never returns `Unknown(Loop)` any more; it returns one
+   of: Divergent (rung 1, replayed), Equivalent with `proofMethod` in
+   {`bounded`, `lockstep-induction`, `k-induction`}, or Unknown with reason in
+   {`Timeout`, `Opaque`, `UnalignedLoop`, `Recursion`}.
+2. `properties.boundedBy` is present exactly when `proofMethod == bounded` and a loop
+   existed; `properties.ladderTrace` lists every rung attempted with its outcome.
+3. The five fixtures under Tests produce the named verdict path.
+4. `samples/identical` and `samples/renamed-locals` loops are `lockstep-induction`
+   Equivalent (unbounded); `samples/loop-bound-change` is Divergent on rung 1.
+5. Soundness and monotonicity properties pass 200 cases each with looping generators.
+6. `IrValidator` reports zero diagnostics on every unrolled and fragmented procedure
+   produced during the test runs (asserted inside the tests).
+
+## Size guard
+Three files in `Equiv.Core.Ir` (analysis, unroller, fragmenter) and three in
+`Equiv.Verify.Z3` (ladder, lockstep, k-induction). Nested loops beyond one level of
+alignment and mutual recursion are Unknown, not code.
+
 ## Pitfalls
 - Unrolling and fragmenting must produce valid SSA; run `IrValidator` on every
   intermediate procedure in tests and in debug builds.

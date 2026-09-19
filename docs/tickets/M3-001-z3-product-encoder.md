@@ -82,6 +82,27 @@ message; do not report Divergent.
       timeout produces Unknown(timeout).
 - [ ] `docs/adr/0002-dependencies.md` unchanged unless a package is needed (none expected).
 
+## Acceptance criteria (all must hold; nothing beyond them)
+1. `IVerificationBackend.Verify` signature is changed once, here, to
+   `Verdict Verify(IrProcedure old, IrProcedure @new, VerificationOptions options)`;
+   the M1-005 fakes and tests are updated in the same PR.
+2. Any procedure containing a back edge returns `Unknown(UnknownReason.Loop, ...)`
+   before any Z3 call; the M3-002 ladder replaces this branch.
+3. The eight observable fixtures under Tests exist as IR text files under
+   `tests/Equiv.Verify.Z3.Tests/Fixtures/` and produce the verdict named in each
+   file's first comment line.
+4. The soundness property passes 200 cases for `Verify(P, P)` and 200 for
+   `Verify(P, Mutate(P))`; every Divergent in those runs replays to divergence in
+   `IrInterpreter`.
+5. A flagged (`RuntimeChanged`) call on both sides yields `Divergent` with the EQ006
+   rule, using side-specific functions.
+6. `Z3Backend` disposes its `Context` on every path (a test uses a wrapper counting
+   disposals).
+
+## Size guard
+Six source files in `src/Equiv.Verify.Z3/`. No abstraction over Z3 (no `ISolver`
+interface): the backend is the abstraction.
+
 ## Pitfalls
 - Z3 `Context` is not thread-safe; never share one across verifications. xUnit v3 runs
   test classes in parallel; a `Context` per test is fine.
