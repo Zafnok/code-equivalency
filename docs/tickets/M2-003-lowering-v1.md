@@ -1,5 +1,5 @@
 # M2-003 Lowering v1: Roslyn CFG to SSA IR for straight-line and branching code
-Status: in-progress
+Status: done (PR #27)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M2-002, M1-002
