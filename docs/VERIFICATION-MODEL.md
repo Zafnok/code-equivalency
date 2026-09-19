@@ -15,8 +15,8 @@ Everything else (timing, allocation, log text, exception messages) is not observ
 No single algorithm decides equivalence for every program pair, but this sub-problem
 (regression verification: same language family, mostly identical code) is tractable in
 practice. Loops are handled by the ladder in section 5.1; a procedure gets **Unknown**
-only when every rung fails, the solver times out, or an `IrOpaque` node flows into an
-output. Every result carries `properties.proofMethod` (which rung proved it),
+only when every rung fails, the solver times out, or some input reaches an `IrOpaque`
+node on either side (ADR 0014). Every result carries `properties.proofMethod` (which rung proved it),
 `properties.boundedBy` when the claim is bounded, and `properties.opaqueNodes`, so a
 reader can see exactly how strong the claim is. Never report Equivalent without saying how.
 
@@ -47,7 +47,7 @@ Instructions:
 | `IrPhi(var, [(block, var)])` | SSA merge |
 | `IrCall(var?, threw?, callee identity, args)` | opaque call; appended to the observable call trace; `threw` is a Bool output |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
-| `IrOpaque(var?, reason, sourceSpan)` | frontend could not lower; poisons every dependent value |
+| `IrOpaque(var?, reason, sourceSpan)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014) |
 
 Terminators: `IrGoto`, `IrBranch(cond, then, else)`, `IrSwitch`, `IrReturn(var?, outs)`,
 `IrThrow(exceptionTypeIdentity, outs)`, `IrUnreachable` (assume false; produced by loop

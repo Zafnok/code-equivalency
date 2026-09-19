@@ -44,6 +44,12 @@ VERIFICATION-MODEL.md sections 2 and 3; `equiv-extend-ir` skill; M2-003 Design.
    null-checked parameters.
 8. All five M1-001 samples lower with zero `IrOpaque` nodes in methods the sample README
    marks as expected-Equivalent or expected-Divergent (a test asserts this).
+9. Compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`) and
+   `++`/`--` (prefix and postfix) on integral locals and parameters lower as read,
+   operate, write, with the same overflow, divide-by-zero and shift rules as the binary
+   operator and the implicit narrowing back to the target type. Other targets stay
+   `IrOpaque` by kind. Snapshot tests, IOPERATION-COVERAGE rows, and the oracle generator
+   gains `+=` and `++` (ADR 0014; AC8 already needs them for `loop-bound-change`).
 
 ## Files
 Additions inside `src/Equiv.Frontend.CSharp/Lowering/` only; no changes to `Equiv.Core`
