@@ -1,5 +1,5 @@
 # M1-005 CLI shell and router
-Status: in-progress
+Status: done (PR #22)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M1-004
