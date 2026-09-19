@@ -9,10 +9,13 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="coverlet.MTP" />
+    <PackageReference Include="CsCheck" />
+    <PackageReference Include="Verify.XunitV3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
+    <ProjectReference Include="..\Equiv.TestSupport\Equiv.TestSupport.csproj" />
   </ItemGroup>
 
 </Project>

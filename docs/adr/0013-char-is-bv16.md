@@ -1,6 +1,6 @@
 # ADR 0013: Lower C# `char` to `BitVec(16)`, not `BitVec(32)`
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-19)
 
 ## Context
 The M2-003 Design type map says `int/uint/char`=bv32. C# `char` is a 16-bit unsigned

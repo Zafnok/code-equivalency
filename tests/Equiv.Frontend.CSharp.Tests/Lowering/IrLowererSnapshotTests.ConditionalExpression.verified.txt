@@ -1,0 +1,13 @@
+﻿proc "C::M(bool,int)" (%b "b": bool, %x "x": bv32) -> bv32 entry B0
+B0:
+  goto B1
+B1:
+  br %b, B2, B3
+B2:
+  goto B4
+B3:
+  %$c0.6: bv32 = neg %x
+  goto B4
+B4:
+  %$c0.7: bv32 = phi [B3: %$c0.6, B2: %x]
+  ret %$c0.7
