@@ -1,5 +1,5 @@
 # M2-002 Symbol enumeration and Added/Removed end to end
-Status: in progress
+Status: done (PR #25)
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-001
