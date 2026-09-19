@@ -1,5 +1,5 @@
 # M2-001 Roslyn solution loader over MSBuildWorkspace
-Status: in-progress
+Status: done (PR #24)
 Effort: L
 Model: Opus, medium effort (this is toolchain debugging, not algorithm design). Sonnet at high effort is acceptable. If you are Sonnet at medium or lower, stop before doing anything else and tell the user to switch.
 Depends on: M1-005, M1-001
