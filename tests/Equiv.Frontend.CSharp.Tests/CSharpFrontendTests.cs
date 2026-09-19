@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 
 using Equiv.Core;
 using Equiv.Core.Configuration;
+using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Frontend.CSharp.Loading;
 
@@ -61,6 +62,28 @@ public sealed class CSharpFrontendTests
         Assert.Single(result.Pairs);
         Assert.Empty(result.Added);
         Assert.Empty(result.Removed);
+    }
+
+    [Fact]
+    public void LowersBothBodiesOfEveryMatchedPair()
+    {
+        Compilation legacyCompilation = RoslynTestCompilations.Compile("namespace Old.Ns { public class C { public int M(int a) => a + 1; public void F(int a) {} public void F(long a) {} } }");
+        Compilation modernCompilation = RoslynTestCompilations.Compile("namespace New.Ns { public class C { public int M(int a) => a + 2; } }");
+
+        RenameMap renames = RenameMap.Empty with { Namespaces = RenameMap.Empty.Namespaces.Add("Old.Ns", "New.Ns") };
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [])
+            : new LoadedSolution(null!, [modernCompilation], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, CancellationToken.None);
+
+        ProcedurePair pair = Assert.Single(result.Pairs);
+        Assert.Equal(pair.Old, pair.OldBody!.Identity);
+        Assert.Equal(pair.New, pair.NewBody!.Identity);
+        Assert.Empty(IrValidator.Validate(pair.OldBody));
+        Assert.Empty(IrValidator.Validate(pair.NewBody));
+        Assert.NotEqual(pair.OldBody, pair.NewBody);
     }
 
     [Fact]

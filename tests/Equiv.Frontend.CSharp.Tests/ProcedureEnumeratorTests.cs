@@ -58,6 +58,8 @@ public sealed class ProcedureEnumeratorTests
                     }
 
                     public extern void ExternMethod();
+
+                    ~C() { }
                 }
 
                 public record R(int X);
@@ -71,6 +73,7 @@ public sealed class ProcedureEnumeratorTests
         Assert.DoesNotContain(procedures, static p => p.Symbol.MethodKind == MethodKind.LambdaMethod);
         Assert.DoesNotContain(procedures, static p => p.Symbol.Name is "AbstractMethod");
         Assert.DoesNotContain(procedures, static p => p.Symbol.Name is "ExternMethod");
+        Assert.DoesNotContain(procedures, static p => p.Symbol.MethodKind == MethodKind.Destructor);
         Assert.DoesNotContain(procedures, static p => p.Symbol.IsImplicitlyDeclared);
     }
 
