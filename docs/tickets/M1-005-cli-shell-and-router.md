@@ -177,11 +177,20 @@ PR before merge:
   divergent-miscoded-as-usage-error bug as the first review's config/baseline point, just for a
   malformed baseline instead of a missing one. Fixed: `TryLoadInputs` now wraps `SarifLog.Load` in
   a `catch (JsonException)`, exit 3 with a message on stderr. Test: `Compare_InvalidBaselineJsonExits3`.
-  `Newtonsoft.Json` needed no new `PackageReference`/ADR-0002 row: it is already on `Equiv.Cli`'s
-  compile closure transitively through `Equiv.Core`'s `Sarif.Sdk` dependency.
+  `Newtonsoft.Json` needed no new `PackageReference` (it is already on `Equiv.Cli`'s compile closure
+  transitively through `Equiv.Core`'s `Sarif.Sdk` dependency) but did need an ADR 0002 update — see
+  below.
 - Test count for `Equiv.Cli.Tests` is now 21, one past the ticket's Size guard ("more than 8 files
   in `src/` or more than 20 tests" means "you have misread the ticket; re-read Out of scope"). All
   of the extra tests past the ticket's original 14 are review-mandated correctness fixes for
   exit-code miscoding (missing/invalid config, missing/invalid baseline, dropped warnings, a fixed
   baseline regression) — not a misreading of scope, so they were kept as separate, clearly-named
   tests rather than folded into existing ones to stay under the number.
+- Optional review follow-up, addressed: catching `Newtonsoft.Json.JsonException` in `Equiv.Cli` uses
+  a type from a package ADR 0002 listed as "Used by: Core" only. Not a new `PackageReference` (it
+  rides in transitively through `Sarif.Sdk`, already an approved `Equiv.Core` dependency) and no
+  architecture test checks it, but the ADR row was stale. Fixed by adding "Cli" to `Sarif.Sdk`'s
+  "Used by" column and a sentence on the transitive `Newtonsoft.Json` use, rather than the reviewer's
+  heavier alternative (`Equiv.Core` wrapping baseline loading behind its own exception type) — the
+  review offered both and called neither blocking. Rule: 4 (documents the real dependency edge
+  without introducing a new abstraction Core doesn't otherwise need).
