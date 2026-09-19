@@ -161,4 +161,27 @@ PR before merge:
   `Decision` entry at the top of this Notes section, added in this same fix pass.
 - **Project-level gap, not this ticket's to fix:** `Matching.MatchResult.Ambiguous` still has no
   ticket wiring it to `Unknown(UnmatchedOverload)` (see the Decision above); the review asked that
-  M2-002 or M3-003's goal name it explicitly rather than leaving it to be rediscovered again.
+  M2-002 or M3-003's goal name it explicitly rather than leaving it to be rediscovered again. Now
+  M3-003's goal and criterion 7, with `CompareCommand.cs`/`CompareCommandTests.cs` added to its
+  Files list so a future agent working that ticket doesn't read "nothing beyond them" as forbidding
+  the very files criterion 7 asks it to touch.
+
+## Second review pass
+
+- **A corrupt `--baseline` file still exited 1.** `TryLoadInputs` checked the baseline path
+  *exists* but not that `SarifLog.Load` could actually parse it; a `--baseline` file that exists but
+  isn't valid SARIF threw `Newtonsoft.Json.JsonReaderException`/`JsonSerializationException`
+  (confirmed both derive from `Newtonsoft.Json.JsonException` via a throwaway probe against
+  `Sarif.Sdk` 5.7.0, the same way the config-parse fix in the first review pass was verified)
+  straight out of `Run`, landing on System.CommandLine's default handler: exit 1, the same
+  divergent-miscoded-as-usage-error bug as the first review's config/baseline point, just for a
+  malformed baseline instead of a missing one. Fixed: `TryLoadInputs` now wraps `SarifLog.Load` in
+  a `catch (JsonException)`, exit 3 with a message on stderr. Test: `Compare_InvalidBaselineJsonExits3`.
+  `Newtonsoft.Json` needed no new `PackageReference`/ADR-0002 row: it is already on `Equiv.Cli`'s
+  compile closure transitively through `Equiv.Core`'s `Sarif.Sdk` dependency.
+- Test count for `Equiv.Cli.Tests` is now 21, one past the ticket's Size guard ("more than 8 files
+  in `src/` or more than 20 tests" means "you have misread the ticket; re-read Out of scope"). All
+  of the extra tests past the ticket's original 14 are review-mandated correctness fixes for
+  exit-code miscoding (missing/invalid config, missing/invalid baseline, dropped warnings, a fixed
+  baseline regression) — not a misreading of scope, so they were kept as separate, clearly-named
+  tests rather than folded into existing ones to stay under the number.

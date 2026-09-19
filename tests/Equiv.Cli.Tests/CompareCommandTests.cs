@@ -353,6 +353,30 @@ public sealed class CompareCommandTests
     }
 
     [Fact]
+    public void Compare_InvalidBaselineJsonExits3()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        string baselinePath = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(baselinePath, "{ not json");
+            FakeFrontend frontend = new("csharp", _ => true);
+
+            int exitCode = CompareCommand.Run(
+                legacy.Path, modern.Path, "equiv.sarif", baselinePath, null, "divergent", dryRun: false,
+                [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink());
+
+            Assert.Equal(ExitCodes.UsageError, exitCode);
+            Assert.Equal(0, frontend.AnalyzeCallCount);
+        }
+        finally
+        {
+            File.Delete(baselinePath);
+        }
+    }
+
+    [Fact]
     public void Compare_WarnsOnInvalidConfigValues()
     {
         using TempFile legacy = new();

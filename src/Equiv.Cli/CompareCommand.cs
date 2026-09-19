@@ -8,6 +8,8 @@ using Equiv.Core.Verdicts;
 
 using Microsoft.CodeAnalysis.Sarif;
 
+using Newtonsoft.Json;
+
 namespace Equiv.Cli;
 
 /// <summary>
@@ -146,8 +148,22 @@ internal static class CompareCommand
             return false;
         }
 
-        baseline = baselinePath is null ? null : SarifLog.Load(baselinePath);
-        return true;
+        if (baselinePath is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            baseline = SarifLog.Load(baselinePath);
+            return true;
+        }
+        catch (JsonException exception)
+        {
+            Console.Error.WriteLine($"error: '{baselinePath}' is not a valid SARIF log: {exception.Message}");
+            exitCode = ExitCodes.UsageError;
+            return false;
+        }
     }
 
     private static EquivConfig LoadConfig(string? configPath)

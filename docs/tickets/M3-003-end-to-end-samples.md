@@ -44,7 +44,9 @@ sample's README (expected verdicts).
    same as any other `Unknown` result (subject to `--fail-on unknown`, SARIF EQ003).
 
 ## Files
-`src/Equiv.Cli/Program.cs`, `src/Equiv.Core/Matching/ProcedurePair.cs` (if needed),
+`src/Equiv.Cli/Program.cs`, `src/Equiv.Cli/CompareCommand.cs` (criterion 7's `Ambiguous` wiring),
+`src/Equiv.Core/Matching/ProcedurePair.cs` (if needed),
+`tests/Equiv.Cli.Tests/CompareCommandTests.cs` (criterion 7's coverage),
 `tests/Equiv.Tests.Integration/SamplesEndToEndTests.cs`, `SarifNormalizer.cs`,
 `samples/*/expected.sarif.json` (Verify snapshots), `README.md`.
 
