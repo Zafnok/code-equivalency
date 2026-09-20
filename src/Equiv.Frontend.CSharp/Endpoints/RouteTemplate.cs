@@ -19,7 +19,7 @@ internal static partial class RouteTemplate
     {
         string joined = "/" + Join(prefix, route);
         string tokensReplaced = ReplaceTokens(joined, ControllerName(typeName), methodName);
-        string constraintsStripped = ConstraintPattern().Replace(tokensReplaced, "{${name}}");
+        string constraintsStripped = ConstraintPattern.Replace(tokensReplaced, "{${name}}");
 
         return constraintsStripped.ToLowerInvariant();
     }
@@ -28,7 +28,12 @@ internal static partial class RouteTemplate
     {
         string left = (prefix ?? string.Empty).Trim('/');
         string right = (route ?? string.Empty).Trim('/');
-        return left.Length == 0 ? right : right.Length == 0 ? left : $"{left}/{right}";
+        if (left.Length == 0)
+        {
+            return right;
+        }
+
+        return right.Length == 0 ? left : $"{left}/{right}";
     }
 
     private static string ControllerName(string typeName) =>
@@ -40,5 +45,5 @@ internal static partial class RouteTemplate
             .Replace("[action]", actionName, StringComparison.OrdinalIgnoreCase);
 
     [GeneratedRegex(@"\{(?<name>\w+):[^{}]+\}", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex ConstraintPattern();
+    private static partial Regex ConstraintPattern { get; }
 }
