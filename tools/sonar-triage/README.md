@@ -32,7 +32,10 @@ and on `pwsh` 7; CI uses the latter.
 | `-PolicyPath` | `policy.jsonc` beside the script | Useful for testing a policy change without editing the real file. |
 | `-ProjectKey`, `-Organization`, `-HostUrl`, `-Label` | this repo's values | |
 
-`.github/workflows/sonar-triage.yml` runs `-Apply` weekly and on demand.
+`.github/workflows/sonar-triage.yml` runs this weekly, and on demand from the Actions tab.
+A manual run defaults to **dry run** — untick `dry_run` to actually file issues. The scheduled
+run always applies. A `workflow_dispatch` trigger only appears in the Actions UI once the
+workflow file is on `main`, so the button is absent until this lands.
 
 ## How findings are batched
 

@@ -34,9 +34,10 @@ docs/QUALITY-GATES.md (SonarQube row)
    `file:line | message | permalink`, and numbered acceptance criteria.
 5. `-Apply` is idempotent: a second consecutive run creates 0 issues and edits 0 bodies.
    A batch whose findings have all disappeared is closed with an explanatory comment.
-6. `.github/workflows/sonar-triage.yml` runs the script with `-Apply` on a weekly schedule
-   and on `workflow_dispatch`, with `permissions: contents: read, issues: write`, and pins
-   every action by commit SHA.
+6. `.github/workflows/sonar-triage.yml` runs the script on a weekly schedule and on
+   `workflow_dispatch`, with `permissions: contents: read, issues: write`, and pins every
+   action by commit SHA. The scheduled run applies; a manual run defaults to a dry run and
+   applies only when `dry_run` is unticked.
 7. `./build.ps1 -Integration` is green and its output is unchanged by this ticket: no file
    added here is compiled, covered, or analysed.
 
