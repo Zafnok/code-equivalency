@@ -4,6 +4,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 
+using Xunit;
+
 namespace Equiv.Frontend.CSharp.Tests;
 
 /// <summary>Builds a one-document C# compilation over an <c>AdhocWorkspace</c> for a source snippet.</summary>
@@ -37,7 +39,7 @@ internal static class RoslynTestCompilations
             metadataReferences: [.. References, .. extraReferences]));
         Document document = workspace.AddDocument(project.Id, "Snippet.cs", SourceText.From(source));
 
-        return document.Project.GetCompilationAsync().GetAwaiter().GetResult()!;
+        return document.Project.GetCompilationAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult()!;
     }
 
     public static MetadataReference ToReference(this Compilation compilation) => compilation.ToMetadataReference();

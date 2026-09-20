@@ -15,7 +15,7 @@ public sealed class VerdictTests
     [Fact]
     public void EquivalentIsAVerdict()
     {
-        Assert.IsAssignableFrom<Verdict>(new Equivalent());
+        Assert.IsType<Verdict>(new Equivalent(), exactMatch: false);
     }
 
     [Fact]
@@ -24,7 +24,7 @@ public sealed class VerdictTests
         Counterexample counterexample = new(new IrInputs([]), SampleRun, SampleRun);
         Divergent verdict = new(counterexample);
         Assert.Same(counterexample, verdict.Counterexample);
-        Assert.IsAssignableFrom<Verdict>(verdict);
+        Assert.IsType<Verdict>(verdict, exactMatch: false);
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public sealed class VerdictTests
         Unknown verdict = new(UnknownReason.Timeout, "solver gave up after 5000ms");
         Assert.Equal(UnknownReason.Timeout, verdict.Reason);
         Assert.Equal("solver gave up after 5000ms", verdict.Detail);
-        Assert.IsAssignableFrom<Verdict>(verdict);
+        Assert.IsType<Verdict>(verdict, exactMatch: false);
     }
 
     [Theory]
@@ -56,12 +56,12 @@ public sealed class VerdictTests
     [Fact]
     public void AddedIsAVerdict()
     {
-        Assert.IsAssignableFrom<Verdict>(new Added());
+        Assert.IsType<Verdict>(new Added(), exactMatch: false);
     }
 
     [Fact]
     public void RemovedIsAVerdict()
     {
-        Assert.IsAssignableFrom<Verdict>(new Removed());
+        Assert.IsType<Verdict>(new Removed(), exactMatch: false);
     }
 }

@@ -74,7 +74,7 @@ public sealed partial class SampleLoweringTests
             foreach (string side in (string[])["legacy", "modern"])
             {
                 LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(Solution(sample, side), TestContext.Current.CancellationToken);
-                kinds.UnionWith(loaded.Compilations.SelectMany(Kinds));
+                kinds.UnionWith(loaded.Compilations.SelectMany(compilation => Kinds(compilation, TestContext.Current.CancellationToken)));
             }
         }
 
@@ -85,17 +85,17 @@ public sealed partial class SampleLoweringTests
     }
 
     /// <summary>Kinds in each procedure's operation tree plus the CFG-only kinds (flow captures) its CFG introduces.</summary>
-    private static IEnumerable<OperationKind> Kinds(Compilation compilation) =>
+    private static IEnumerable<OperationKind> Kinds(Compilation compilation, CancellationToken cancellationToken) =>
         ProcedureEnumerator.Enumerate(compilation)
-            .Select(p => p.Symbol.DeclaringSyntaxReferences[0].GetSyntax())
-            .Select(syntax => compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax))
+            .Select(p => p.Symbol.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken))
+            .Select(syntax => compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax, cancellationToken))
             .OfType<IOperation>()
-            .SelectMany(static body => body.DescendantsAndSelf().Concat(Cfg(body)))
+            .SelectMany(body => body.DescendantsAndSelf().Concat(Cfg(body, cancellationToken)))
             .Select(static o => o.Kind);
 
-    private static IEnumerable<IOperation> Cfg(IOperation body) =>
+    private static IEnumerable<IOperation> Cfg(IOperation body, CancellationToken cancellationToken) =>
         body is IMethodBodyOperation method
-            ? ControlFlowGraph.Create(method).Blocks
+            ? ControlFlowGraph.Create(method, cancellationToken).Blocks
                 .SelectMany(static b => b.Operations.Concat(b.BranchValue is null ? [] : [b.BranchValue]))
                 .SelectMany(static o => o.DescendantsAndSelf())
             : [];
