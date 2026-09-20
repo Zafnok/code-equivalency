@@ -35,15 +35,35 @@ internal static class TypeMapper
     };
 
     /// <summary>
-    /// The IR value of a C# compile-time constant. The caller must have checked that
-    /// <paramref name="type"/> maps to a bitvector or to Bool.
+    /// The IR value of a C# compile-time constant. A constant of an uninterpreted sort (a string, a
+    /// floating-point value, an enum member, <c>null</c>) is a designated element of that sort, chosen
+    /// by a stable hash of the constant so that equal constants are the same element on both sides;
+    /// <c>null</c> is always element 0.
     /// </summary>
-    public static IrValue Constant(ITypeSymbol type, object value) => Map(type) switch
+    public static IrValue Constant(ITypeSymbol type, object? value) => Map(type) switch
     {
         IrBitVec bits when IsSigned(type) => IrBitVecValue.FromSigned(bits.Width, System.Convert.ToInt64(value, CultureInfo.InvariantCulture)),
         IrBitVec bits => new IrBitVecValue(bits.Width, System.Convert.ToUInt64(value, CultureInfo.InvariantCulture)),
-        _ => new IrBoolValue((bool)value),
+        IrBool => new IrBoolValue((bool)value!),
+        var sort => new IrSortValue(((IrSort)sort).Name, Element(value)),
     };
+
+    /// <summary>FNV-1a over the constant's invariant text; 0 is reserved for <c>null</c>.</summary>
+    private static int Element(object? value)
+    {
+        if (value is null)
+        {
+            return 0;
+        }
+
+        uint hash = 2166136261;
+        foreach (char c in string.Create(CultureInfo.InvariantCulture, $"{value}"))
+        {
+            hash = (hash ^ c) * 16777619;
+        }
+
+        return (int)((hash & 0x7FFFFFFF) | 1);
+    }
 
     /// <summary>Whether an integral type is signed; signedness lives on IR operations, not IR types.</summary>
     public static bool IsSigned(ITypeSymbol type) =>

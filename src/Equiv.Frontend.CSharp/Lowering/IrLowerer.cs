@@ -34,6 +34,8 @@ internal sealed class IrLowerer
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captureTargets = [];
     private readonly Dictionary<string, IrBlockId> throwBlocks = new(StringComparer.Ordinal);
     private readonly Dictionary<int, IrBlockId> blockIds = [];
+    private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
+    private readonly HeapInputs heap = new();
     private SwitchChains chains = null!;
     private IrBlockId current = new(0);
 
@@ -79,11 +81,12 @@ internal sealed class IrLowerer
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method);
         IrLowerer lowerer = new(renames, returnType);
+        ImmutableArray<IrBlock> blocks = lowerer.LowerBlocks(cfg, method, parameters, span);
         IrProcedure procedure = new(
             RoslynIdentity.Of(method, renames),
-            parameters,
+            [.. parameters, .. lowerer.heap.Parameters],
             returnType,
-            lowerer.LowerBlocks(cfg, method, parameters, span),
+            blocks,
             new IrBlockId(0));
         Debug.Assert(IrValidator.Validate(procedure).IsEmpty, "lowered IR must validate");
         return procedure;
@@ -130,9 +133,13 @@ internal sealed class IrLowerer
         ImmutableArray<(SsaBuilder.Variable, IrVar)>.Builder outs = ImmutableArray.CreateBuilder<(SsaBuilder.Variable, IrVar)>();
         for (int i = 0; i < parameters.Length; i++)
         {
-            SsaBuilder.Variable variable = new(parameters[i].Var);
-            variables[method.Parameters[i]] = variable;
+            SsaBuilder.Variable variable = Declare(method.Parameters[i], parameters[i].Var, method.Parameters[i].Type);
             ssa.Store(current, variable, parameters[i].Var);
+            if (Shadow(variable) is { } shadow)
+            {
+                ssa.Store(current, shadow, MapRead(heap.Nulls((IrSort)parameters[i].Var.Type), parameters[i].Var));
+            }
+
             if (parameters[i].Kind != IrParameterKind.In)
             {
                 outs.Add((variable, parameters[i].Var));
@@ -276,7 +283,9 @@ internal sealed class IrLowerer
             }
 
             IrVar value = Value(capture.Value);
-            ssa.Store(current, Capture(capture.Id, value.Type), value);
+            SsaBuilder.Variable captured = Capture(capture.Id, capture.Value.Type!);
+            ssa.Store(current, captured, value);
+            StoreShadow(captured, capture.Value, value);
             return;
         }
 
@@ -288,9 +297,9 @@ internal sealed class IrLowerer
     /// <summary>The operation's value, or null for an operation without one (a statement, a void call).</summary>
     private IrVar? Lower(IOperation operation)
     {
-        if (operation.ConstantValue is { HasValue: true, Value: { } constant } && TypeMapper.Map(operation.Type!) is not IrSort)
+        if (operation is { ConstantValue.HasValue: true, Type: { } constantType })
         {
-            return Constant(operation.Type!, constant);
+            return Constant(constantType, operation.ConstantValue.Value);
         }
 
         switch (operation)
@@ -303,7 +312,7 @@ internal sealed class IrLowerer
             case IParameterReferenceOperation parameter when variables.TryGetValue(parameter.Parameter, out SsaBuilder.Variable? variable):
                 return ssa.Load(current, variable);
             case IFlowCaptureReferenceOperation reference:
-                return ssa.Load(current, Capture(reference.Id, TypeMapper.Map(reference.Type!)));
+                return ssa.Load(current, Capture(reference.Id, reference.Type!));
             case ISimpleAssignmentOperation { IsRef: false } assignment:
                 return Assign(assignment);
             case IConversionOperation conversion:
@@ -322,31 +331,109 @@ internal sealed class IrLowerer
                 return Create(creation);
             case IIsPatternOperation pattern:
                 return Match(pattern);
+            case IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance, Type: INamedTypeSymbol { IsValueType: false } type }:
+                return heap.This(type);
             default:
                 return Opaque(operation, operation.Kind.ToString());
         }
     }
 
-    private SsaBuilder.Variable Local(ILocalSymbol local)
+    private SsaBuilder.Variable Local(ILocalSymbol local) =>
+        variables.TryGetValue(local, out SsaBuilder.Variable? variable)
+            ? variable
+            : Declare(local, new IrVar(local.Name, TypeMapper.Map(local.Type), local.Name), local.Type);
+
+    private SsaBuilder.Variable Capture(CaptureId id, ITypeSymbol type)
     {
-        if (!variables.TryGetValue(local, out SsaBuilder.Variable? variable))
+        if (!captures.TryGetValue(id, out SsaBuilder.Variable? variable))
         {
-            variable = new SsaBuilder.Variable(new IrVar(local.Name, TypeMapper.Map(local.Type), local.Name));
-            variables[local] = variable;
+            variable = Shadowed(new IrVar($"$c{captures.Count.ToString(CultureInfo.InvariantCulture)}", TypeMapper.Map(type)), type);
+            captures[id] = variable;
         }
 
         return variable;
     }
 
-    private SsaBuilder.Variable Capture(CaptureId id, IrType type)
+    private SsaBuilder.Variable Declare(ISymbol symbol, IrVar template, ITypeSymbol type)
     {
-        if (!captures.TryGetValue(id, out SsaBuilder.Variable? variable))
+        SsaBuilder.Variable variable = Shadowed(template, type);
+        variables[symbol] = variable;
+        return variable;
+    }
+
+    /// <summary>A reference-typed variable is paired with a Bool <c>&lt;name&gt;.isNull</c> shadow (acceptance criterion 5).</summary>
+    private SsaBuilder.Variable Shadowed(IrVar template, ITypeSymbol type)
+    {
+        SsaBuilder.Variable variable = new(template);
+        if (type.IsReferenceType && template.Type is IrSort)
         {
-            variable = new SsaBuilder.Variable(new IrVar($"$c{captures.Count.ToString(CultureInfo.InvariantCulture)}", type));
-            captures[id] = variable;
+            shadows[variable] = new SsaBuilder.Variable(new IrVar($"{template.Name}.isNull", Bool, template.SourceName));
         }
 
         return variable;
+    }
+
+    private SsaBuilder.Variable? Shadow(SsaBuilder.Variable variable) => shadows.GetValueOrDefault(variable);
+
+    /// <summary>The shadow of the variable an lvalue names, or null when it names none or is not reference-typed.</summary>
+    private SsaBuilder.Variable? ShadowOf(IOperation lvalue) => Target(lvalue) is { } variable ? Shadow(variable) : null;
+
+    /// <summary>
+    /// Whether <paramref name="source"/> is null, or null when it provably is not. A <c>new</c> is never
+    /// null and neither is <c>this</c>; a variable carries its own shadow; anything else asks the
+    /// <c>null.&lt;Sort&gt;</c> map, so equal references are equally null.
+    /// </summary>
+    private IrVar? Nullness(IOperation source, IrVar value)
+    {
+        IOperation unwrapped = Unwrap(source);
+        if (unwrapped is IObjectCreationOperation or IInstanceReferenceOperation)
+        {
+            return null;
+        }
+
+        if (ShadowOf(unwrapped) is { } shadow)
+        {
+            return ssa.Load(current, shadow);
+        }
+
+        return unwrapped.ConstantValue is { HasValue: true, Value: null }
+            ? Const(new IrBoolValue(true))
+            : MapRead(heap.Nulls((IrSort)value.Type), value);
+    }
+
+    /// <summary>Records the nullness of a value stored into a reference-typed variable.</summary>
+    private void StoreShadow(SsaBuilder.Variable target, IOperation source, IrVar value)
+    {
+        if (Shadow(target) is { } shadow)
+        {
+            ssa.Store(current, shadow, Nullness(source, value) ?? Const(new IrBoolValue(false)));
+        }
+    }
+
+    /// <summary>A dereference of a value that is not provably non-null throws <c>NullReferenceException</c> when it is.</summary>
+    private void ThrowIfNull(IOperation source, IrVar value)
+    {
+        if (Nullness(source, value) is { } isNull)
+        {
+            ThrowIf(isNull, "System.NullReferenceException");
+        }
+    }
+
+    private static IOperation Unwrap(IOperation operation)
+    {
+        while (operation is IConversionOperation conversion)
+        {
+            operation = conversion.Operand;
+        }
+
+        return operation;
+    }
+
+    private IrVar MapRead(IrVar map, IrVar key)
+    {
+        IrVar target = ssa.Temp(((IrMap)map.Type).Value);
+        ssa.Emit(current, new IrMapRead(target, map, key));
+        return target;
     }
 
     private IrVar? Opaque(IOperation operation, string reason)
@@ -356,7 +443,7 @@ internal sealed class IrLowerer
         return target;
     }
 
-    private IrVar Constant(ITypeSymbol type, object value) => Const(TypeMapper.Constant(type, value));
+    private IrVar Constant(ITypeSymbol type, object? value) => Const(TypeMapper.Constant(type, value));
 
     private IrVar Const(IrValue value)
     {
@@ -405,6 +492,7 @@ internal sealed class IrLowerer
 
         IrVar value = Value(assignment.Value);
         ssa.Store(current, target, value);
+        StoreShadow(target, assignment.Value, value);
         return value;
     }
 
@@ -468,6 +556,11 @@ internal sealed class IrLowerer
 
     private IrVar? Binary(IBinaryOperation binary)
     {
+        if (binary.OperatorKind is BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals && NullTest(binary) is { } test)
+        {
+            return test;
+        }
+
         bool signed = TypeMapper.IsSigned(binary.LeftOperand.Type!);
         IrVar left = Value(binary.LeftOperand);
         IrVar right = Value(binary.RightOperand);
@@ -480,6 +573,26 @@ internal sealed class IrLowerer
             ? Shift(op, left, right, (IrBitVec)left.Type)
             : Arithmetic(op, left, right, signed, binary.IsChecked, TypeMapper.Map(binary.Type!));
     }
+
+    /// <summary><c>x == null</c> and <c>x != null</c> compare the shadow (acceptance criterion 5); null when neither side is <c>null</c>.</summary>
+    private IrVar? NullTest(IBinaryOperation binary)
+    {
+        IOperation? other = (IsNull(binary.LeftOperand), IsNull(binary.RightOperand)) switch
+        {
+            (false, true) => binary.LeftOperand,
+            (true, false) => binary.RightOperand,
+            _ => null,
+        };
+        if (other is not { Type.IsReferenceType: true })
+        {
+            return null;
+        }
+
+        IrVar isNull = Nullness(other, Value(other)) ?? Const(new IrBoolValue(false));
+        return binary.OperatorKind == BinaryOperatorKind.Equals ? isNull : EmitUnary(IrUnaryOp.BoolNot, isNull);
+    }
+
+    private static bool IsNull(IOperation operand) => Unwrap(operand).ConstantValue is { HasValue: true, Value: null };
 
     /// <summary>C# masks the shift count to the left operand's width (ECMA-334 shift operators); the IR shift does not.</summary>
     private IrVar Shift(IrBinaryOp op, IrVar left, IrVar count, IrBitVec type)
@@ -603,19 +716,25 @@ internal sealed class IrLowerer
     /// <summary>An opaque call (receiver first, then arguments in parameter order) that may throw System.Exception.</summary>
     private IrVar? Invoke(IInvocationOperation invocation)
     {
-        if (invocation.Instance is { } receiver && !receiver.Type!.IsValueType)
-        {
-            return Opaque(invocation, "dereference");
-        }
-
         if (invocation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out))
         {
             return Opaque(invocation, "ref-argument");
         }
 
+        List<IrVar> receiver = [];
+        if (invocation.Instance is { } instance)
+        {
+            IrVar value = Value(instance);
+            receiver.Add(value);
+            if (!instance.Type!.IsValueType)
+            {
+                ThrowIfNull(instance, value);
+            }
+        }
+
         return Call(
             CallIdentityFactory.Of(invocation.TargetMethod, renames),
-            [.. Arguments(invocation.Instance is { } instance ? [Value(instance)] : [], invocation.Arguments)],
+            [.. Arguments(receiver, invocation.Arguments)],
             invocation.TargetMethod.ReturnsVoid ? null : TypeMapper.Map(invocation.Type!));
     }
 

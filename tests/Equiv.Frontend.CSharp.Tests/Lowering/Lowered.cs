@@ -43,4 +43,13 @@ internal static class Lowered
         [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>()];
 
     public static IrBitVecValue Bits(int width, long value) => IrBitVecValue.FromSigned(width, value);
+
+    /// <summary>An element of an uninterpreted reference sort; only its identity matters.</summary>
+    public static IrSortValue Reference(int id, string sort = "System.String") => new(sort, id);
+
+    /// <summary>A <c>null.&lt;Sort&gt;</c> input that answers <paramref name="isNull"/> for <paramref name="id"/> and false elsewhere.</summary>
+    public static IrMapValue Nulls(string sort, int id, bool isNull) => new(
+        new IrMap(new IrSort(sort), new IrBool()),
+        new IrBoolValue(false),
+        ImmutableDictionary<IrValue, IrValue>.Empty.Add(new IrSortValue(sort, id), new IrBoolValue(isNull)));
 }

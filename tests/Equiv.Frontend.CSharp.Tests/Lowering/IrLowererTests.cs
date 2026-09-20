@@ -44,9 +44,6 @@ public sealed class IrLowererTests
     [InlineData("int f; void M(int a) { f = a; }", "FieldReference")]
     [InlineData("static int M(int[] a) => a[0];", "ArrayElementReference")]
     [InlineData("static int M(string s) => s.Length;", "PropertyReference")]
-    [InlineData("static string M(string s) => s.Trim();", "dereference")]
-    [InlineData("static void M(System.Collections.Generic.List<int> l) { l.Clear(); }", "dereference")]
-    [InlineData("int M() => GetHashCode();", "dereference")]
     [InlineData("static bool M(string s) => int.TryParse(s, out _);", "ref-argument")]
     [InlineData("static void M(ref int a) { System.Threading.Interlocked.Increment(ref a); }", "ref-argument")]
     [InlineData("static void M(int a, Exception e) { if (a < 0) throw e; }", "Throw")]
@@ -55,7 +52,7 @@ public sealed class IrLowererTests
     [InlineData("static void M(int a) { ref int r = ref a; r = 1; }", "SimpleAssignment")]
     [InlineData("static int M(double d) => (int)d;", "Conversion")]
     [InlineData("static double M(int i) => i;", "Conversion")]
-    [InlineData("static object M() => (string)null;", "Conversion")]
+    [InlineData("static object M(string s) => s;", "Conversion")]
     [InlineData("struct S { public static implicit operator int(S s) => 0; } static int M(S s) => s;", "Conversion")]
     [InlineData("static bool M(string a, string b) => a == b;", "Binary")]
     [InlineData("static double M(double a, double b) => a * b;", "Binary")]
@@ -231,6 +228,118 @@ public sealed class IrLowererTests
         Assert.Empty(Opaques(procedure));
         Assert.Equal(new IrReturned(Bits(32, 2)), Run(procedure, Bits(32, 1), new IrBoolValue(true)));
         Assert.Equal(new IrReturned(Bits(32, 0)), Run(procedure, Bits(32, 1), new IrBoolValue(false)));
+    }
+
+    /// <summary>Ticket M2-004 acceptance criterion 5: a reference parameter starts with an unconstrained shadow.</summary>
+    [Fact]
+    public void AReferenceParameterGetsAnUnconstrainedNullShadow()
+    {
+        IrProcedure procedure = Method("static bool M(string s) => s == null;");
+
+        IrParameter nulls = Assert.Single(procedure.Parameters, static p => p.Var.Name is "null.System.String");
+        Assert.Equal(new IrMap(new IrSort("System.String"), new IrBool()), nulls.Var.Type);
+        Assert.Equal(IrParameterKind.In, nulls.Kind);
+        Assert.Contains(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>(), r => r.Map == nulls.Var);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Theory]
+    [InlineData("static bool M(string s) => s == null;", true, true)]
+    [InlineData("static bool M(string s) => s != null;", true, false)]
+    [InlineData("static bool M(string s) => null == s;", false, false)]
+    public void AComparisonWithNullReadsTheShadow(string members, bool isNull, bool expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Equal(new IrReturned(new IrBoolValue(expected)), Run(procedure, Reference(0), Nulls("System.String", 0, isNull)));
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void DereferencingAPossiblyNullReceiverThrowsNullReferenceException(bool isNull, bool thrown)
+    {
+        IrProcedure procedure = Method("static int M(string s) => s.CompareTo(s);");
+
+        IrOutcome outcome = Run(procedure, Reference(0), Nulls("System.String", 0, isNull));
+
+        // A false shadow leaves only the call's own threw edge, which is a different exception type.
+        Assert.Equal(thrown, outcome is IrThrew { ExceptionType: "System.NullReferenceException" });
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A `new` is proven non-null, so neither the shadow nor the dereference branch is emitted.</summary>
+    [Fact]
+    public void ANewObjectNeedsNoNullCheck()
+    {
+        IrProcedure procedure = Method("void F() { } static void M() { new C().F(); }");
+
+        Assert.DoesNotContain(procedure.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.NullReferenceException" });
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A local takes the nullness of what was stored into it.</summary>
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(false, 7)]
+    public void ALocalCarriesTheShadowOfWhatWasAssignedToIt(bool isNull, int expected)
+    {
+        IrProcedure procedure = Method("static int M(string s) { string t = s; if (t == null) return 0; return 7; }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Reference(0), Nulls("System.String", 0, isNull)));
+    }
+
+    /// <summary>A value with no shadow of its own asks the `null.&lt;Sort&gt;` map, so equal references are equally null.</summary>
+    [Fact]
+    public void AValueWithoutAShadowTakesItsNullnessFromTheMap()
+    {
+        IrProcedure procedure = Method("static C F() => null; static void M() { F().G(); } void G() { }");
+
+        Assert.Contains(procedure.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.NullReferenceException" });
+        Assert.Single(procedure.Parameters, static p => p.Var.Name is "null.C");
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A constant of an uninterpreted sort is a designated element, so equal constants are equal values.</summary>
+    [Fact]
+    public void ConstantsOfAnUninterpretedSortAreDesignatedElements()
+    {
+        List<IrValue> constants =
+            [.. Method("static string M(bool b) { if (b) return null; return \"hello\"; }")
+                .Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>().Select(static c => c.Value)];
+
+        Assert.Contains(constants, static c => c is IrSortValue { Sort: "System.String", Id: 0 });
+        Assert.Contains(constants, static c => c is IrSortValue { Sort: "System.String", Id: not 0 });
+    }
+
+    [Fact]
+    public void ALocalAssignedTheNullLiteralIsNull()
+    {
+        IrProcedure procedure = Method("static bool M() { string s = null; return s == null; }");
+
+        Assert.Empty(procedure.Parameters);
+        Assert.Equal(new IrReturned(new IrBoolValue(true)), Run(procedure));
+    }
+
+    [Fact]
+    public void ALocalAssignedANewObjectIsNeverNull()
+    {
+        IrProcedure procedure = Method("void F() { } static void M() { C c = new C(); c.F(); }");
+
+        Assert.Empty(procedure.Parameters);
+        Assert.NotEqual(new IrThrew("System.NullReferenceException"), Run(procedure));
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Fact]
+    public void TheReceiverOfAnInstanceMethodIsTheThisInput()
+    {
+        IrProcedure procedure = Method("int F() => 1; int M() => F();");
+
+        IrParameter receiver = Assert.Single(procedure.Parameters, static p => p.Var.Name is "this");
+        Assert.Equal(new IrSort("C"), receiver.Var.Type);
+        Assert.Equal([receiver.Var], Assert.Single(Calls(procedure)).Args);
     }
 
     [Fact]

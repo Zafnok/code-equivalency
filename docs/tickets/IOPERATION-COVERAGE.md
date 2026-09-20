@@ -9,13 +9,13 @@ in a CFG body). Every kind found in `samples/` must have a row
 |---|---|---|---|
 | Argument | lowered: inside `Invocation`: its value, passed in parameter order | IrLowererTests.NamedArgumentsArePassedInParameterOrder | M2-003 |
 | ArrayElementReference | opaque: reason `ArrayElementReference` (arrays are M2-004) | IrLowererTests.UnsupportedConstructIsOpaqueWithItsName | M2-003 |
-| Binary | lowered: integral and bool operands; overflow, divide-by-zero and `MinValue / -1` edges; anything else opaque with reason `Binary` | IrLowererSnapshotTests.StraightLineArithmetic, .Division, .Shifts | M2-003 |
+| Binary | lowered: integral and bool operands; overflow, divide-by-zero and `MinValue / -1` edges; `x == null` and `x != null` read the shadow; anything else opaque with reason `Binary` | IrLowererSnapshotTests.StraightLineArithmetic, .Division, .Shifts; IrLowererTests.AComparisonWithNullReadsTheShadow | M2-004 |
 | Block | n/a: the CFG flattens blocks; an arrow-bodied accessor body is one whole-body opaque with reason `Block` | IrLowererTests.WholeBodyIsOneOpaque | M2-003 |
 | CompoundAssignment | lowered: integral local or parameter target: read, promote, operate (same exception edges as the binary operator), narrow back, write; any other target opaque with the target's kind, a non-integral one with reason `CompoundAssignment` | IrLowererSnapshotTests.CompoundAssignment; IrLowererTests.CompoundAssignmentReadsOperatesAndWrites, .CompoundAssignmentToAnUnsupportedTargetIsOpaque | M2-004 |
 | Conditional | n/a: `if` and `?:` become CFG branches, lowered as `br` and phis | IrLowererSnapshotTests.IfElse, .NestedIf | M2-003 |
 | ConstantPattern | lowered: inside `IsPattern` | IrLowererTests.AConstantPatternOutsideASwitchIsAnEquality | M2-004 |
 | ConstructorBodyOperation | opaque: whole body, reason `ConstructorBodyOperation` | IrLowererTests.WholeBodyIsOneOpaque | M2-003 |
-| Conversion | lowered: integral to integral (zext/sext/trunc, checked narrowing throws); anything else opaque with reason `Conversion` | IrLowererSnapshotTests.Conversions, .CheckedConversion | M2-003 |
+| Conversion | lowered: integral to integral (zext/sext/trunc, checked narrowing throws) and any conversion Roslyn folded to a constant; anything else opaque with reason `Conversion` | IrLowererSnapshotTests.Conversions, .CheckedConversion | M2-004 |
 | Decrement | lowered: as `Increment` | IrLowererSnapshotTests.IncrementAndDecrement | M2-004 |
 | DiscardPattern | lowered: inside `IsPattern`: `true` | IrLowererSnapshotTests.SwitchExpression | M2-004 |
 | ExpressionStatement | lowered: its operation, value discarded | IrLowererSnapshotTests.OpaqueCall | M2-003 |
@@ -24,10 +24,11 @@ in a CFG body). Every kind found in `samples/` must have a row
 | FlowCaptureReference | lowered: a read of the capture variable, or the captured lvalue as an assignment target | IrLowererSnapshotTests.ConditionalExpression | M2-003 |
 | ForEachLoop | opaque: whole body, reason `foreach-enumerator`: the CFG desugars every `foreach`, arrays included, into the enumerator pattern (ticket P1-003) | IrLowererSnapshotTests.EntirelyOpaque; IrLowererTests.WholeBodyIsOneOpaque | M2-004 |
 | Increment | lowered: as `CompoundAssignment` with a promoted `1`; postfix yields the value read | IrLowererSnapshotTests.IncrementAndDecrement; IrLowererTests.IncrementAndDecrementYieldTheOldValueOnlyWhenPostfix | M2-004 |
+| InstanceReference | lowered: the containing instance of a reference type is the `this` input; every other reference kind is opaque with reason `InstanceReference` | IrLowererTests.TheReceiverOfAnInstanceMethodIsTheThisInput | M2-004 |
 | Invalid | opaque: erroneous code only; reason `Invalid` | IrLowererTests.FallingOffANonVoidMethodIsMissingReturn | M2-003 |
-| Invocation | lowered: `IrCall` plus a threw edge to `System.Exception`; receiver not a value type: reason `dereference`; `ref`/`out` argument: reason `ref-argument` | IrLowererSnapshotTests.OpaqueCall; IrLowererTests.UnsupportedConstructIsOpaqueWithItsName | M2-003 |
+| Invocation | lowered: `IrCall` plus a threw edge to `System.Exception`; a reference receiver is null-checked first; `ref`/`out` argument: reason `ref-argument` | IrLowererSnapshotTests.OpaqueCall, .NullChecks; IrLowererTests.DereferencingAPossiblyNullReceiverThrowsNullReferenceException | M2-004 |
 | IsPattern | lowered: a constant pattern of the scrutinee's own bitvector or Bool type is an equality, a discard is `true`; every other pattern is opaque with reason `switch-pattern` | IrLowererTests.AConstantPatternOutsideASwitchIsAnEquality, .APatternBeyondAConstantIsOpaque | M2-004 |
-| Literal | lowered: integral and bool constants; other literals (string, floating point, null) opaque with reason `Literal` | IrLowererTests.UnsignedAndCharConstantsKeepTheirBits | M2-003 |
+| Literal | lowered: a bitvector or Bool constant by value; a constant of an uninterpreted sort (string, floating point, `null`) as a designated element of that sort, `null` being element 0 | IrLowererTests.UnsignedAndCharConstantsKeepTheirBits, .ConstantsOfAnUninterpretedSortAreDesignatedElements | M2-004 |
 | LocalReference | lowered: SSA variable | IrLowererSnapshotTests.StraightLineArithmetic | M2-003 |
 | Loop | lowered: the CFG has no loop constructs, only back edges, which the SSA builder handles; a `foreach` is the exception (see `ForEachLoop`) | IrLowererSnapshotTests.WhileLoop, .ForLoop, .DoWhileLoop; IrLowererTests.LoopsLowerWithoutOpaqueNodes | M2-004 |
 | MethodBodyOperation | lowered: the root: its CFG is lowered | IrLowererSnapshotTests.* | M2-003 |

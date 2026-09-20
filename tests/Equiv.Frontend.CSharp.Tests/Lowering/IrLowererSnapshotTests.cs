@@ -60,6 +60,9 @@ public sealed class IrLowererSnapshotTests
     public Task SwitchExpression() => Dump("static int M(char c) => c switch { 'a' => 1, 'b' => 2, _ => 0 };");
 
     [Fact]
+    public Task NullChecks() => Dump("static int M(string s, C c) { if (s == null) return 0; c.F(); return s.CompareTo(s); } void F() { }");
+
+    [Fact]
     public Task ConditionalExpression() => Dump("static int M(bool b, int x) => b ? x : -x;");
 
     [Fact]

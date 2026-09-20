@@ -269,6 +269,7 @@ internal sealed class SsaBuilder
         IrUnary u => u with { Target = Resolve(u.Target), A = Resolve(u.A) },
         IrOverflows o => o with { Target = Resolve(o.Target), A = Resolve(o.A), B = Resolve(o.B) },
         IrCall c => c with { Target = c.Target is null ? null : Resolve(c.Target), Threw = Resolve(c.Threw!), Args = [.. c.Args.Select(Resolve)] },
+        IrMapRead r => r with { Target = Resolve(r.Target), Map = Resolve(r.Map), Key = Resolve(r.Key) },
         _ => Rewrite((IrOpaque)instruction),
     };
 

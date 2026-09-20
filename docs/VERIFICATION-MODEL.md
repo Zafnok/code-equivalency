@@ -61,6 +61,16 @@ M1-002 and pinned by its snapshot tests.
 Null: reference-typed values are a `Sort` plus a separate `Bool` "is null" shadow
 variable. A dereference lowers to a conditional `IrThrow(NullReferenceException)`.
 
+Heap and nullness are inputs (M2-004). A procedure's parameter list is its C# parameters
+followed by the synthesised inputs its body needs, ordered by name: the receiver `this`,
+one `null.<Sort>` map from a reference sort to Bool, one `field.<Type>.<Field>` map per
+field touched, and `array.<v>` plus `length.<v>` per array variable indexed. They are `In`
+parameters of the same name on both sides, so the product encoding (M3-001) shares them
+exactly as it shares the C# parameters. A value's shadow is a `mapread` of `null.<Sort>`,
+so equal references are equally null; `new` sets the shadow to false instead. The final
+heap is not an observable (section 1), so no map appears in `outs`. IR variable names take
+only letters, digits, `_`, `.` and `$`, which is why these names are spelled with dots.
+
 ## 3. Lowering rules (C#)
 
 Source of truth is Roslyn `ControlFlowGraph.Create` over `IOperation`. The Roslyn CFG
