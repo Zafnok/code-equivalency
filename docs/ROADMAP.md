@@ -18,8 +18,8 @@ S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it 
 
 M0 and M1 landed in one calendar day, ahead of the three days planned. `./build.ps1` is
 green on `main`: about 400 tests, 100% line and branch coverage on `Equiv.Core` and
-`Equiv.Cli` (the other two `src/` projects are still empty shells). Three tickets were
-added during M0 that were not in the original plan (M0-005, M0-006, M0-007), and two
+`Equiv.Cli` (the other two `src/` projects are still empty shells). Four tickets were
+added during M0 that were not in the original plan (M0-005, M0-006, M0-007, M0-008), and two
 review-driven docs PRs (#10, #21) rewrote every open ticket into acceptance-criteria
 form after Sonnet over-scoped M1-005 from its one-paragraph goal.
 
@@ -129,6 +129,15 @@ Everything after this milestone runs under 100% coverage and full CI.
 - P1-003 (M) Split `IrLowerer` into heap and exception collaborators, with the swapped block-map
   state as an explicit `LoweringContext` parameter (PR #30 review; behaviour-preserving).
 - P1-004 (M) `foreach` over an array as an index loop (M2-004 size guard; Roslyn's CFG desugars every `foreach` into the enumerator pattern). Do P1-003 first: this ticket adds to both paths it extracts.
+- P1-005 (L) An `IrCall` havocs the field maps its callee could reach, as an uninterpreted
+  function of the callee and its arguments shared by both sides (ADR 0015).
+- P1-006 (L) Array element and length maps keyed by the array value instead of the array
+  variable, so two variables holding one array are one slice (ADR 0015).
+
+P1-005 and P1-006 are the two soundness limits ADR 0015 names. Until both land, an
+Equivalent verdict on a procedure that writes a field around a call, or that takes two
+array parameters, rests on an assumption no gate can see; M3-001's soundness harness runs
+over IR and does not cover them.
 
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
 
