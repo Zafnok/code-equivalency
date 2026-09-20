@@ -79,7 +79,7 @@ public sealed partial class SampleLoweringTests
         }
 
         string table = await File.ReadAllTextAsync(Path.Combine(RepoRoot, "docs", "tickets", "IOPERATION-COVERAGE.md"), TestContext.Current.CancellationToken);
-        ImmutableHashSet<string> rows = [.. CoverageRow().Matches(table).Select(static m => m.Groups["kind"].Value)];
+        ImmutableHashSet<string> rows = [.. CoverageRow.Matches(table).Select(static m => m.Groups["kind"].Value)];
         ImmutableArray<string> missing = [.. kinds.Select(static k => k.ToString()).Where(k => !rows.Contains(k)).Order(StringComparer.Ordinal)];
         Assert.True(missing.IsEmpty, $"No IOPERATION-COVERAGE.md row for: {string.Join(", ", missing)}");
     }
@@ -104,5 +104,5 @@ public sealed partial class SampleLoweringTests
         Directory.GetFiles(Path.Combine(RepoRoot, "samples", sample, side), string.Equals(side, "legacy", StringComparison.Ordinal) ? "*.sln" : "*.slnx").Single();
 
     [GeneratedRegex(@"^\| (?<kind>\w+) \| (lowered|opaque|n/a)", RegexOptions.Multiline | RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex CoverageRow();
+    private static partial Regex CoverageRow { get; }
 }
