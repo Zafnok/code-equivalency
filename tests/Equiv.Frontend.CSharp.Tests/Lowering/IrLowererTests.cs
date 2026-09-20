@@ -542,6 +542,29 @@ public sealed class IrLowererTests
             "rethrow",
             Assert.Single(Opaques(Method("static int M(int a, int b) { try { return a / b; } catch (DivideByZeroException) { throw; } }"))).Reason);
 
+    /// <summary>Strings stay uninterpreted, so `a + b` is the call the compiler makes (needed by the `removed-null-check` sample).</summary>
+    [Fact]
+    public void StringConcatenationIsACallToStringConcat()
+    {
+        IrProcedure procedure = Method("static string M(string a, string b) => a + b;");
+
+        Assert.Equal("System.String::Concat(string,string)", Assert.Single(Calls(procedure)).Callee.Value);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket M2-004 acceptance criterion 8: the shape of the `removed-null-check` sample lowers opaque-free.</summary>
+    [Fact]
+    public void TheRemovedNullCheckSampleShapeLowersWithoutOpaqueNodes()
+    {
+        IrProcedure guarded = Method("static string M(string name) { if (name == null) throw new ArgumentNullException(\"name\"); return \"Hello, \" + name.ToUpper(); }");
+        IrProcedure unguarded = Method("static string M(string name) { return \"Hello, \" + name.ToUpper(); }");
+
+        Assert.Empty(Opaques(guarded));
+        Assert.Empty(Opaques(unguarded));
+        Assert.Contains(guarded.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.ArgumentNullException" });
+        Assert.Contains(unguarded.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.NullReferenceException" });
+    }
+
     [Fact]
     public void ReadWithoutDefinitionIsUndefined()
     {

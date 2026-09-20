@@ -6,6 +6,7 @@ using System.Linq;
 using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
+using Equiv.Core.Matching;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -789,6 +790,15 @@ internal sealed class IrLowerer
         if (binary.OperatorKind is BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals && NullTest(binary) is { } test)
         {
             return test;
+        }
+
+        if (binary is { OperatorKind: BinaryOperatorKind.Add, LeftOperand.Type.SpecialType: SpecialType.System_String, RightOperand.Type.SpecialType: SpecialType.System_String })
+        {
+            // Strings stay uninterpreted, so `a + b` is the call the compiler makes.
+            return Call(
+                new CallIdentity(ProcedureIdentityNormalizer.Member("System", "String", "Concat", 0, ["string", "string"], renames).Value),
+                [Value(binary.LeftOperand), Value(binary.RightOperand)],
+                TypeMapper.Map(binary.Type!));
         }
 
         bool signed = TypeMapper.IsSigned(binary.LeftOperand.Type!);
