@@ -25,7 +25,8 @@ in a CFG body). Every kind found in `samples/` must have a row
 | Invocation | lowered: `IrCall` plus a threw edge to `System.Exception`; receiver not a value type: reason `dereference`; `ref`/`out` argument: reason `ref-argument` | IrLowererSnapshotTests.OpaqueCall; IrLowererTests.UnsupportedConstructIsOpaqueWithItsName | M2-003 |
 | Literal | lowered: integral and bool constants; other literals (string, floating point, null) opaque with reason `Literal` | IrLowererTests.UnsignedAndCharConstantsKeepTheirBits | M2-003 |
 | LocalReference | lowered: SSA variable | IrLowererSnapshotTests.StraightLineArithmetic | M2-003 |
-| Loop | opaque: whole body, reason `loop` (M2-004) | IrLowererSnapshotTests.EntirelyOpaque | M2-003 |
+| Loop | lowered: the CFG has no loop constructs, only back edges, which the SSA builder handles; a `foreach` is the exception (see `ForEachLoop`) | IrLowererSnapshotTests.WhileLoop, .ForLoop, .DoWhileLoop; IrLowererTests.LoopsLowerWithoutOpaqueNodes | M2-004 |
+| ForEachLoop | opaque: whole body, reason `foreach-enumerator`: the CFG desugars every `foreach`, arrays included, into the enumerator pattern (ticket P1-003) | IrLowererSnapshotTests.EntirelyOpaque; IrLowererTests.WholeBodyIsOneOpaque | M2-004 |
 | MethodBodyOperation | lowered: the root: its CFG is lowered | IrLowererSnapshotTests.* | M2-003 |
 | ObjectCreation | opaque: reason `ObjectCreation` | IrLowererSnapshotTests.FieldAndThrowAreOpaque | M2-003 |
 | ParameterReference | lowered: SSA variable; a primary-constructor parameter is opaque with reason `ParameterReference` | IrLowererSnapshotTests.RefAndOutParameters; IrLowererTests.PrimaryConstructorParameterIsOpaque | M2-003 |

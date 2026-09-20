@@ -15,8 +15,8 @@ public sealed class IrLowererTests
     [InlineData("C() { }", ".ctor", "ConstructorBodyOperation")]
     [InlineData("int M => 1;", "get_M", "Block")]
     [InlineData("int M { get; }", "get_M", "no-body")]
-    [InlineData("static int M(int n) { int s = 0; while (n > 0) { s = s + n; n = n - 1; } return s; }", "M", "loop")]
-    [InlineData("static void M(int[] xs) { foreach (int x in xs) { } }", "M", "loop")]
+    [InlineData("static void M(int[] xs) { foreach (int x in xs) { } }", "M", "foreach-enumerator")]
+    [InlineData("static void M(System.Collections.Generic.List<int> l) { foreach (int x in l) { } }", "M", "foreach-enumerator")]
     [InlineData("static int M(int n) { switch (n) { case 1: return 2; } return 0; }", "M", "switch")]
     [InlineData("static int M(int n) => n switch { 1 => 2, _ => 0 };", "M", "switch")]
     [InlineData("static int M(int n) { try { return n; } catch (Exception) { return 0; } }", "M", "try-region")]
@@ -34,7 +34,7 @@ public sealed class IrLowererTests
     [Fact]
     public void WholeBodyOpaqueKeepsByRefParametersAsOuts()
     {
-        IrProcedure procedure = Method("static void M(ref int a, out int b) { b = 0; while (a > 0) a = a - 1; }");
+        IrProcedure procedure = Method("static void M(ref int a, out int b) { b = 0; foreach (int x in new int[0]) a = a - 1; }");
 
         IrReturn exit = Assert.IsType<IrReturn>(Assert.Single(procedure.Blocks).Terminator);
         Assert.Null(exit.Value);
@@ -135,6 +135,27 @@ public sealed class IrLowererTests
     [InlineData("struct S { public static int operator +(int a, S b) => 0; } static void M(int a, S s) { a += s; }", "CompoundAssignment")]
     public void CompoundAssignmentToAnUnsupportedTargetIsOpaque(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
+
+    /// <summary>The CFG has no loop constructs, only back edges; the SSA builder puts phis at the header (M2-004 acceptance criterion 1).</summary>
+    [Theory]
+    [InlineData("static int M(int n) { int s = 0; while (n > 0) { s = s + n; n = n - 1; } return s; }")]
+    [InlineData("static int M(int n) { int s = 0; for (int i = 1; i <= n; i++) s += i; return s; }")]
+    [InlineData("static int M(int n) { int s = 0; int i = n; do { s += i; i--; } while (i > 0); return s; }")]
+    [InlineData("static int M(int n) { int s = 0; while (true) { if (n <= 0) break; s += n; n--; } return s; }")]
+    [InlineData("static int M(int n) { int s = 0; for (int i = 0; i < n; i++) { if (i == 0) continue; s += i; } return s + 3; }")]
+    public void LoopsLowerWithoutOpaqueNodes(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 6)), Run(procedure, Bits(32, 3)));
+    }
+
+    [Fact]
+    public void ANestedLoopKeepsBothHeadersPhis() =>
+        Assert.Equal(
+            new IrReturned(Bits(32, 12)),
+            Run(Method("static int M(int n) { int s = 0; for (int i = 0; i < n; i++) { int k = n; while (k > 0) { s += 1; k--; } } return s + 3; }"), Bits(32, 3)));
 
     [Fact]
     public void ReadWithoutDefinitionIsUndefined()

@@ -1,0 +1,25 @@
+﻿proc "C::M(int)" (%n "n": bv32) -> bv32 entry B0
+B0:
+  goto B1
+B1:
+  %s.16 "s": bv32 = const bv32 0
+  goto B2
+B2:
+  %i.17 "i": bv32 = const bv32 0
+  goto B3
+B3:
+  %i.18 "i": bv32 = phi [B2: %i.17, B5: %i.22]
+  %s.20 "s": bv32 = phi [B2: %s.16, B5: %s.21]
+  %$4: bool = slt %i.18, %n
+  br %$4, B4, B6
+B4:
+  %$6: bv32 = const bv32 3
+  %$7: bool = eq %i.18, %$6
+  br %$7, B6, B5
+B5:
+  %s.21 "s": bv32 = add %s.20, %i.18
+  %$11: bv32 = const bv32 1
+  %i.22 "i": bv32 = add %i.18, %$11
+  goto B3
+B6:
+  ret %s.20

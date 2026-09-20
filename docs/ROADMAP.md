@@ -121,6 +121,7 @@ Everything after this milestone runs under 100% coverage and full CI.
 
 - P1-001 (L) Constrained Horn clause encoding solved by Z3 Spacer for non-aligned loops.
 - P1-002 (M) LLM-proposed coupling invariants, Z3-checked; pluggable model, off by default.
+- P1-003 (M) `foreach` over an array as an index loop (M2-004 size guard; Roslyn's CFG desugars every `foreach` into the enumerator pattern).
 
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
 

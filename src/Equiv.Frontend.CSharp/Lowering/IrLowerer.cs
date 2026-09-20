@@ -65,7 +65,10 @@ internal sealed class IrLowerer
         IMethodSymbol method = (IMethodSymbol)model.GetDeclaredSymbol(body.Syntax)!;
         ControlFlowGraph cfg = ControlFlowGraph.Create(body);
         SourceSpan span = Span(body.Syntax);
-        string? wholeBody = body.Descendants().Any(static o => o is ILoopOperation) ? "loop"
+        // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles; only
+        // `foreach` is left, because the CFG desugars every one of them -- arrays included -- into the
+        // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-004).
+        string? wholeBody = body.Descendants().Any(static o => o is IForEachLoopOperation) ? "foreach-enumerator"
             : body.Descendants().Any(static o => o is ISwitchOperation or ISwitchExpressionOperation) ? "switch"
             : HasExceptionRegion(cfg.Root) ? "try-region"
             : null;

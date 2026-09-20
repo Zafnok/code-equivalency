@@ -71,5 +71,14 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task EntirelyOpaque() => Dump("static int M(int[] xs) { int s = 0; foreach (int x in xs) s += x; return s; }");
 
+    [Fact]
+    public Task WhileLoop() => Dump("static int M(int n) { int s = 0; while (n > 0) { s = s + n; n = n - 1; } return s; }");
+
+    [Fact]
+    public Task ForLoop() => Dump("static int M(int n) { int s = 0; for (int i = 0; i < n; i++) { if (i == 3) break; s += i; } return s; }");
+
+    [Fact]
+    public Task DoWhileLoop() => Dump("static int M(int n) { int s = 0; do { s += n; n--; } while (n > 0); return s; }");
+
     private static Task Dump(string members) => Verify(IrText.Dump(Lowered.Method(members)));
 }
