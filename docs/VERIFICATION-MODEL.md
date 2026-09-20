@@ -72,12 +72,14 @@ heap is not an observable (section 1), so no map appears in `outs`. IR variable 
 only letters, digits, `_`, `.` and `$`, which is why these names are spelled with dots.
 
 Two gaps the M2-004 heap model leaves open, stated here so a later ticket does not assume
-otherwise. An `IrCall` does not havoc any `field.*` map, so a call's effect on the heap is
-not modelled and a pair that differs only in where it reads a field around a call is not
-distinguished. And `array.<v>` is keyed per array *variable*, not per array value, so two
-variables holding the same array are two independent slices. Both follow the M2-004
-acceptance criteria and both are unsound in general; closing either needs its own ticket,
-and M3-001's soundness harness (section 7) should not be read as covering them.
+otherwise (ADR 0015). An `IrCall` does not havoc any `field.*` map, so a call's effect on the
+heap is not modelled and a pair that differs only in where it reads a field around a call is not
+distinguished; ticket P1-005 closes this. And `array.<v>` is keyed per array *variable*, not per
+array value, so two variables holding the same array are two independent slices; ticket P1-006
+closes this. Both follow the M2-004 acceptance criteria, both are unsound in general, and both can
+only produce a false Equivalent, silently: no `IrOpaque`, no `properties.opaqueNodes` entry, no
+Unknown. Until P1-005 and P1-006 land, M3-001's soundness harness (section 7) is not evidence that
+the C# frontend is sound.
 
 ## 3. Lowering rules (C#)
 
@@ -185,7 +187,11 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
 - Soundness harness (property test, `Equiv.Verify.Z3.Tests`): for any generated IR
   procedure P, `verify(P, P)` is Equivalent; for P and a random semantics-changing
   mutation P', the verdict is Divergent or Unknown, never Equivalent. Runs against
-  every ladder rung independently.
+  every ladder rung independently. It generates IR, so it covers the encoder and the
+  ladder only: a C#-to-IR lowering gap is invisible to it by construction, and the two
+  section 2 heap gaps are exactly that (ADR 0015). The obligation that covers C#-to-IR is
+  the lowering oracle below, which P1-005 and P1-006 each extend with the case that
+  catches its own gap.
 - Ladder monotonicity (property test): a pair proved on rung n is never refuted on
   rung m; a counterexample from rung 1 replays to Divergent in the IR interpreter.
 - Lowering oracle (property test, `Equiv.Frontend.CSharp.Tests`): for generated
