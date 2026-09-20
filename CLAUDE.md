@@ -10,6 +10,8 @@ and stop; do not silently deviate.
 - Follow `.claude/skills/equiv-task-loop/SKILL.md` for every ticket. It is the definition of done.
 - Milestones and ordering are in `docs/ROADMAP.md`. Do not start a ticket whose
   dependencies are not merged.
+- One exception: SonarQube debt is tracked as GitHub issues labelled `sonar`, not as ticket
+  files. The issue body is the ticket; fix one with `.claude/skills/equiv-sonar-fix` (ADR 0016).
 
 ## Non-negotiables (enforced by CI; see docs/QUALITY-GATES.md)
 

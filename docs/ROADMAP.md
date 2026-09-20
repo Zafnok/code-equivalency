@@ -18,8 +18,8 @@ S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it 
 
 M0 and M1 landed in one calendar day, ahead of the three days planned. `./build.ps1` is
 green on `main`: about 400 tests, 100% line and branch coverage on `Equiv.Core` and
-`Equiv.Cli` (the other two `src/` projects are still empty shells). Three tickets were
-added during M0 that were not in the original plan (M0-005, M0-006, M0-007), and two
+`Equiv.Cli` (the other two `src/` projects are still empty shells). Four tickets were
+added during M0 that were not in the original plan (M0-005, M0-006, M0-007, M0-008), and two
 review-driven docs PRs (#10, #21) rewrote every open ticket into acceptance-criteria
 form after Sonnet over-scoped M1-005 from its one-paragraph goal.
 
@@ -41,7 +41,8 @@ Owned by a later ticket (already written into that ticket's text):
 Not yet owned by any ticket (schedule when a milestone touches the area):
 
 - SonarQube Cloud promotion from `continue-on-error` to a required check (ADR 0009 says
-  "once calibrated against a few real PRs"; six PRs have now run through it green).
+  "once calibrated against a few real PRs"; six PRs have now run through it green). Blocked
+  on draining the overall backlog first, which M0-008 files as GitHub issues (ADR 0016).
 - SARIF driver `version`/`informationUri` and a guard against duplicate identities in one
   result set (M1-004 notes).
 - A real SARIF schema validator (`Sarif.Multitool`) instead of the SDK round-trip test;
@@ -67,6 +68,10 @@ Everything after this milestone runs under 100% coverage and full CI.
   on missing src assembly, visible line counts, explicit `Main`, final newlines.
 - M0-006 (M) done, PR #17. SonarQube Cloud changegate: code smells + duplication
   reporting and Sonar Quality Gate on PRs, non-blocking until calibrated (ADR 0009).
+- M0-008 (L) done, PR #32. SonarQube debt triage: `tools/sonar-triage` batches Sonar's
+  overall backlog into GitHub issues labelled `sonar`, filtered by a checked-in policy
+  register; weekly `sonar-triage.yml`; skills `equiv-sonar-triage` and `equiv-sonar-fix`
+  (ADR 0016).
 - M0-007 (S) done, PR #18. Faster mutation job: PRs run Stryker incrementally (`--since`
   the base branch) with full runner concurrency; the nightly schedule stays a full sweep.
 

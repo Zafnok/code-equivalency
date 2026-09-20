@@ -1,5 +1,9 @@
 # Tickets
 
+SonarQube debt is the one kind of work that does not live here: it is filed as GitHub issues
+labelled `sonar`, whose body carries the goal, findings and acceptance criteria. See
+`docs/adr/0016-sonar-issue-triage.md` and `.claude/skills/equiv-sonar-fix`.
+
 One file per ticket, named `M<n>-<nnn>-<slug>.md`. Status is the first line after the
 title: `Status: todo | in-progress | done (PR #n)`. Agents update it in the PR.
 

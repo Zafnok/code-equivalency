@@ -1,0 +1,50 @@
+name: Sonar triage
+
+# Files SonarQube Cloud's *overall* backlog as batched GitHub issues. The quality gate in
+# sonar.yml only grades new code, so nothing else looks at what was already there (ADR 0016).
+#
+# This job does not run the scanner: sonar.yml already did that on the push to main. It only
+# reads the API and syncs issues, so it needs neither .NET nor Java.
+on:
+  schedule:
+    # Mondays, after the weekend's pushes to main have been analysed.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would change without creating, editing or closing anything"
+        type: boolean
+        default: true
+
+concurrency:
+  group: sonar-triage
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Sync Sonar findings to GitHub issues
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Read through the environment rather than interpolating into the script body.
+          # Empty on a scheduled run, which is what makes the schedule apply by default.
+          DRY_RUN: ${{ inputs.dry_run }}
+        # SonarCloud reads are anonymous: the project is public, so no SONAR_TOKEN here.
+        # -PushResolutions is deliberately never passed in CI; it mutates shared Sonar state
+        # and is an interactive, opt-in action (see tools/sonar-triage/README.md).
+        run: |
+          if ($env:DRY_RUN -eq 'true') {
+            Write-Host '::notice::Dry run: re-run from the Actions tab with dry_run unchecked to file issues.'
+            ./tools/sonar-triage/sonar-triage.ps1
+          }
+          else {
+            ./tools/sonar-triage/sonar-triage.ps1 -Apply
+          }
