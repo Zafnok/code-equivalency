@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Equiv.Samples.WebApiBasic</RootNamespace>
+    <AssemblyName>Equiv.Samples.WebApiBasic</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- No web SDK (M2-001 pitfalls): a plain class library with the attributes is enough. -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Core" Version="2.3.13" />
+  </ItemGroup>
+
+</Project>

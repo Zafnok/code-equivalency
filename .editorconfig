@@ -31,6 +31,11 @@ dotnet_diagnostic.xUnit1044.severity = error
 dotnet_diagnostic.xUnit2032.severity = error
 dotnet_diagnostic.MA0040.severity = error
 
+# GH-54: GeneratedRegex members must be partial properties, not partial methods.
+# Sonar filed this as a silent suggestion; pinning it to error means the build now
+# catches a regression instead of relying on the next Sonar analysis of main.
+dotnet_diagnostic.MA0190.severity = error
+
 # GH-39: these two IDE suggestions sat below warning level, which is how they went
 # unfixed until Sonar filed them. Pinned to error so the build catches a regression.
 dotnet_diagnostic.IDE0066.severity = error
@@ -416,3 +421,10 @@ dotnet_naming_style.s_camelcase.capitalization = camel_case
 [src/Equiv.Frontend.CSharp/Loading/SolutionLoadException.cs]
 dotnet_diagnostic.CA1064.severity = none
 dotnet_diagnostic.CA1032.severity = none
+
+# M2-005: RouteTemplate.Normalize lower-cases a route it builds for output (HTTP route convention is
+# lower-case), not a value compared case-insensitively, so CA1308's ToUpperInvariant advice (aimed at
+# comparison/normalisation keys, where lower-casing can lose information for some cultures) does not
+# apply to this genuinely-lower-case-by-design string.
+[src/Equiv.Frontend.CSharp/Endpoints/RouteTemplate.cs]
+dotnet_diagnostic.CA1308.severity = none
