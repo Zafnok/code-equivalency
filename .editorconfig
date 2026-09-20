@@ -30,6 +30,11 @@ dotnet_diagnostic.CA1852.severity = error
 # catches a regression instead of relying on the next Sonar analysis of main.
 dotnet_diagnostic.MA0190.severity = error
 
+# GH-39: these two IDE suggestions sat below warning level, which is how they went
+# unfixed until Sonar filed them. Pinned to error so the build catches a regression.
+dotnet_diagnostic.IDE0066.severity = error
+dotnet_diagnostic.IDE0059.severity = error
+
 # M1-005: test methods are named Scenario_ExpectedOutcome (e.g. Compare_Exits1OnDivergent),
 # an underscore-as-separator convention that is idiomatic xUnit test naming, not an identifier
 # hygiene problem. CA1707 ("remove underscores from member names") has no test-specific carve-out,

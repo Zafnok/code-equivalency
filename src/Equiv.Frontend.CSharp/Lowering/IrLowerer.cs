@@ -376,19 +376,15 @@ internal sealed class IrLowerer
     /// A pattern test (acceptance criterion 2): a constant pattern is an equality, a discard is <c>true</c>,
     /// and every other pattern is opaque, which is how a pattern switch beyond constant cases stops here.
     /// </summary>
-    private IrVar? Match(IIsPatternOperation pattern)
+    private IrVar? Match(IIsPatternOperation pattern) => pattern.Pattern switch
     {
-        switch (pattern.Pattern)
-        {
-            case IDiscardPatternOperation:
-                return Const(new IrBoolValue(true));
-            case IConstantPatternOperation { Value: { Type: { } type, ConstantValue: { HasValue: true, Value: { } constant } } }
-                when TypeMapper.Map(type) is IrBitVec or IrBool && TypeMapper.Map(pattern.Value.Type!) == TypeMapper.Map(type):
-                return Emit(IrBinaryOp.Eq, Value(pattern.Value), Constant(type, constant), Bool);
-            default:
-                return Opaque(pattern, "switch-pattern");
-        }
-    }
+        IDiscardPatternOperation =>
+            Const(new IrBoolValue(true)),
+        IConstantPatternOperation { Value: { Type: { } type, ConstantValue: { HasValue: true, Value: { } constant } } }
+            when TypeMapper.Map(type) is IrBitVec or IrBool && TypeMapper.Map(pattern.Value.Type!) == TypeMapper.Map(type) =>
+            Emit(IrBinaryOp.Eq, Value(pattern.Value), Constant(type, constant), Bool),
+        _ => Opaque(pattern, "switch-pattern"),
+    };
 
     private void OpaqueExit(string reason, SourceSpan span)
     {
@@ -754,7 +750,7 @@ internal sealed class IrLowerer
     {
         if (conversion.OperatorMethod is not null
             || conversion.Operand.Type is not { } from
-            || TypeMapper.Map(from) is not IrBitVec source
+            || TypeMapper.Map(from) is not IrBitVec
             || TypeMapper.Map(conversion.Type!) is not IrBitVec target)
         {
             return Opaque(conversion, conversion.Kind.ToString());
@@ -995,7 +991,6 @@ internal sealed class IrLowerer
     private IEnumerable<IrVar> Arguments(IEnumerable<IrVar> receiver, ImmutableArray<IArgumentOperation> arguments) =>
         receiver.Concat(arguments
             .Select(a => (a.Parameter!.Ordinal, Value: Value(a.Value)))
-            .ToList()
             .OrderBy(static a => a.Ordinal)
             .Select(static a => a.Value));
 
