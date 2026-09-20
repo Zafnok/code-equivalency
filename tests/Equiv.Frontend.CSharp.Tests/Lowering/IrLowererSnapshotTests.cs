@@ -63,6 +63,26 @@ public sealed class IrLowererSnapshotTests
     public Task NullChecks() => Dump("static int M(string s, C c) { if (s == null) return 0; c.F(); return s.CompareTo(s); } void F() { }");
 
     [Fact]
+    public Task TryCatch() => Dump("""
+        static int M(int a)
+        {
+            try { if (a < 0) throw new ArgumentException(); return a; }
+            catch (ArgumentException) { return -1; }
+        }
+        """);
+
+    [Fact]
+    public Task TryFinally() => Dump("""
+        static int M(int a)
+        {
+            int s = 0;
+            try { if (a > 0) return 1; s = 2; }
+            finally { s = s + 1; }
+            return s;
+        }
+        """);
+
+    [Fact]
     public Task ConditionalExpression() => Dump("static int M(bool b, int x) => b ? x : -x;");
 
     [Fact]

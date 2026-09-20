@@ -8,6 +8,7 @@ using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.FlowAnalysis;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -33,11 +34,17 @@ internal sealed class IrLowerer
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captures = [];
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captureTargets = [];
     private readonly Dictionary<string, IrBlockId> throwBlocks = new(StringComparer.Ordinal);
-    private readonly Dictionary<int, IrBlockId> blockIds = [];
+    private readonly Dictionary<(int Region, IrBlockId Continuation), IrBlockId> copies = [];
+    private Dictionary<int, IrBlockId> blockIds = [];
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
     private readonly Dictionary<string, SsaBuilder.Variable> slices = new(StringComparer.Ordinal);
     private readonly HeapInputs heap = new();
     private SwitchChains chains = null!;
+    private CSharpCompilation compilation = null!;
+    private ControlFlowGraph cfg = null!;
+    private BasicBlock source = null!;
+    private SourceSpan bodySpan = null!;
+    private IrBlockId? handlerExit;
     private IrBlockId current = new(0);
 
     private IrLowerer(RenameMap renames, IrType? returnType)
@@ -67,13 +74,16 @@ internal sealed class IrLowerer
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(model);
         IMethodSymbol method = (IMethodSymbol)model.GetDeclaredSymbol(body.Syntax)!;
-        ControlFlowGraph cfg = ControlFlowGraph.Create(body);
+        ControlFlowGraph graph = ControlFlowGraph.Create(body);
         SourceSpan span = Span(body.Syntax);
         // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles; only
         // `foreach` is left, because the CFG desugars every one of them -- arrays included -- into the
-        // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-004).
+        // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-004). `using`
+        // and `lock` are out of this ticket's scope even though the CFG gives them ordinary regions.
         string? wholeBody = body.Descendants().Any(static o => o is IForEachLoopOperation) ? "foreach-enumerator"
-            : HasExceptionRegion(cfg.Root) ? "try-region"
+            : body.Descendants().Any(static o => o is IUsingOperation or IUsingDeclarationOperation) ? "using"
+            : body.Descendants().Any(static o => o is ILockOperation) ? "lock"
+            : ExceptionRegions.HasUnsupportedCatch(graph.Root) ? "catch-filter"
             : null;
         if (wholeBody is not null)
         {
@@ -81,8 +91,8 @@ internal sealed class IrLowerer
         }
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method);
-        IrLowerer lowerer = new(renames, returnType);
-        ImmutableArray<IrBlock> blocks = lowerer.LowerBlocks(cfg, method, parameters, span);
+        IrLowerer lowerer = new(renames, returnType) { compilation = (CSharpCompilation)model.Compilation, cfg = graph };
+        ImmutableArray<IrBlock> blocks = lowerer.LowerBlocks(graph, method, parameters, span);
         IrProcedure procedure = new(
             RoslynIdentity.Of(method, renames),
             [.. parameters, .. lowerer.heap.Parameters],
@@ -116,16 +126,15 @@ internal sealed class IrLowerer
         return new IrProcedure(RoslynIdentity.Of(method, renames), parameters, returnType, [block], block.Id);
     }
 
-    /// <summary>Every exception region nests a <c>TryAndCatch</c> or <c>TryAndFinally</c> region.</summary>
-    private static bool HasExceptionRegion(ControlFlowRegion region) =>
-        region.Kind is ControlFlowRegionKind.TryAndCatch or ControlFlowRegionKind.TryAndFinally || region.NestedRegions.Any(HasExceptionRegion);
-
     private static SourceSpan Span(SyntaxNode syntax) => CSharpFrontend.ToSourceSpan(syntax.GetLocation());
 
     private ImmutableArray<IrBlock> LowerBlocks(ControlFlowGraph cfg, IMethodSymbol method, ImmutableArray<IrParameter> parameters, SourceSpan span)
     {
+        bodySpan = span;
         chains = SwitchChains.Find(cfg);
-        ImmutableArray<BasicBlock> reachable = [.. cfg.Blocks.Where(b => b.IsReachable && !chains.IsAbsorbed(b.Ordinal))];
+        // A `finally` is never lowered in place: it is copied onto each path that leaves its `try`.
+        ImmutableArray<BasicBlock> reachable =
+            [.. cfg.Blocks.Where(b => b.IsReachable && !chains.IsAbsorbed(b.Ordinal) && ExceptionRegions.EnclosingFinally(b) is null)];
         foreach (BasicBlock block in reachable)
         {
             blockIds[block.Ordinal] = ssa.NewBlock();
@@ -149,16 +158,102 @@ internal sealed class IrLowerer
 
         foreach (BasicBlock block in reachable)
         {
-            current = blockIds[block.Ordinal];
-            foreach (IOperation operation in block.Operations)
-            {
-                Statement(operation);
-            }
-
-            Terminate(block, span);
+            Fill(block, span);
         }
 
         return ssa.Build(new IrBlockId(0), outs.ToImmutable(), span);
+    }
+
+    private void Fill(BasicBlock block, SourceSpan span)
+    {
+        source = block;
+        current = blockIds[block.Ordinal];
+        foreach (IOperation operation in block.Operations)
+        {
+            Statement(operation);
+        }
+
+        Terminate(block, span);
+    }
+
+    /// <summary>
+    /// A copy of a <c>finally</c> region that runs and then continues at <paramref name="continuation"/>
+    /// (acceptance criterion 4: the blocks are duplicated onto every exit path). One copy per
+    /// continuation; the copy's blocks live in their own block map, and its structured-exception-handling
+    /// exit becomes the jump to <paramref name="continuation"/>.
+    /// </summary>
+    private IrBlockId Copy(ControlFlowRegion region, IrBlockId continuation)
+    {
+        if (copies.TryGetValue((region.FirstBlockOrdinal, continuation), out IrBlockId? existing))
+        {
+            return existing;
+        }
+
+        ImmutableArray<BasicBlock> blocks =
+            [.. cfg.Blocks
+                .Where(b => b.Ordinal >= region.FirstBlockOrdinal && b.Ordinal <= region.LastBlockOrdinal)
+                .Where(b => b.IsReachable && !chains.IsAbsorbed(b.Ordinal) && ExceptionRegions.EnclosingFinally(b) == region)];
+        Dictionary<int, IrBlockId> map = blocks.ToDictionary(static b => b.Ordinal, _ => ssa.NewBlock());
+        IrBlockId entry = map[region.FirstBlockOrdinal];
+        copies[(region.FirstBlockOrdinal, continuation)] = entry;
+
+        (Dictionary<int, IrBlockId> outerBlocks, IrBlockId? outerExit, BasicBlock outerSource, IrBlockId outerCurrent) =
+            (blockIds, handlerExit, source, current);
+        (blockIds, handlerExit) = (map, continuation);
+        foreach (BasicBlock block in blocks)
+        {
+            Fill(block, bodySpan);
+        }
+
+        (blockIds, handlerExit, source, current) = (outerBlocks, outerExit, outerSource, outerCurrent);
+        return entry;
+    }
+
+    /// <summary>Runs <paramref name="finallys"/> in order and then continues at <paramref name="destination"/>.</summary>
+    private IrBlockId Unwind(ImmutableArray<ControlFlowRegion> finallys, IrBlockId destination)
+    {
+        for (int i = finallys.Length - 1; i >= 0; i--)
+        {
+            destination = Copy(finallys[i], destination);
+        }
+
+        return destination;
+    }
+
+    /// <summary>The block a CFG branch jumps to, with every <c>finally</c> it leaves copied in front of it.</summary>
+    private IrBlockId Destination(ControlFlowBranch branch) =>
+        Unwind(branch.FinallyRegions, blockIds[branch.Destination!.Ordinal]);
+
+    /// <summary>
+    /// Where an exception of <paramref name="type"/> raised in the block being lowered goes: a matching
+    /// <c>catch</c>, or the shared throw block for <paramref name="exceptionType"/>, behind the
+    /// <c>finally</c> regions it leaves on the way.
+    /// </summary>
+    private IrBlockId Raise(string exceptionType, ITypeSymbol? type)
+    {
+        (ImmutableArray<ControlFlowRegion> finallys, ControlFlowRegion? handler, bool ambiguous) =
+            ExceptionRegions.Route(compilation, source, type);
+        if (ambiguous)
+        {
+            IrBlockId unknown = ssa.NewBlock();
+            ssa.Emit(unknown, new IrOpaque(null, "call-throw-in-try", bodySpan));
+            ssa.Terminate(unknown, new IrThrow(exceptionType, []));
+            return unknown;
+        }
+
+        return Unwind(finallys, handler is null ? ThrowBlock(exceptionType) : blockIds[handler.FirstBlockOrdinal]);
+    }
+
+    private IrBlockId ThrowBlock(string exceptionType)
+    {
+        if (!throwBlocks.TryGetValue(exceptionType, out IrBlockId? thrown))
+        {
+            thrown = ssa.NewBlock();
+            ssa.Terminate(thrown, new IrThrow(exceptionType, []));
+            throwBlocks[exceptionType] = thrown;
+        }
+
+        return thrown;
     }
 
     private void Terminate(BasicBlock block, SourceSpan span)
@@ -188,8 +283,8 @@ internal sealed class IrLowerer
         if (block.ConditionalSuccessor is { } conditional)
         {
             IrVar condition = Value(block.BranchValue!);
-            IrBlockId jump = blockIds[conditional.Destination!.Ordinal];
-            IrBlockId next = blockIds[fallThrough.Destination!.Ordinal];
+            IrBlockId jump = Destination(conditional);
+            IrBlockId next = Destination(fallThrough);
             ssa.Terminate(current, block.ConditionKind == ControlFlowConditionKind.WhenTrue
                 ? new IrBranch(condition, jump, next)
                 : new IrBranch(condition, next, jump));
@@ -199,20 +294,36 @@ internal sealed class IrLowerer
         switch (fallThrough.Semantics)
         {
             case ControlFlowBranchSemantics.Regular:
-                ssa.Terminate(current, new IrGoto(blockIds[fallThrough.Destination!.Ordinal]));
+                ssa.Terminate(current, new IrGoto(Destination(fallThrough)));
                 break;
             case ControlFlowBranchSemantics.Return:
-                IrVar value = Value(block.BranchValue!); // may move `current` past overflow and call-threw branches
-                ssa.Terminate(current, new IrReturn(value, []));
+                Return(Value(block.BranchValue!), fallThrough); // Value may move `current` past exception edges
                 break;
             case ControlFlowBranchSemantics.Throw when block.BranchValue is { } thrown:
                 Throw(thrown, span);
+                break;
+            case ControlFlowBranchSemantics.StructuredExceptionHandling when handlerExit is { } exit:
+                ssa.Terminate(current, new IrGoto(exit));
                 break;
             default:
                 // `throw;`: the exception in flight is not modelled. Also the edge erroneous code produces.
                 OpaqueExit("rethrow", span);
                 break;
         }
+    }
+
+    /// <summary>A return runs every enclosing <c>finally</c> after evaluating its value and before exiting.</summary>
+    private void Return(IrVar value, ControlFlowBranch branch)
+    {
+        if (branch.FinallyRegions.IsEmpty)
+        {
+            ssa.Terminate(current, new IrReturn(value, []));
+            return;
+        }
+
+        IrBlockId exit = ssa.NewBlock();
+        ssa.Terminate(exit, new IrReturn(value, []));
+        ssa.Terminate(current, new IrGoto(Unwind(branch.FinallyRegions, exit)));
     }
 
     /// <summary>
@@ -234,7 +345,7 @@ internal sealed class IrLowerer
         }
 
         Lower(creation); // may move `current` past the constructor's own threw branch
-        ssa.Terminate(current, new IrThrow(TypeMapper.MetadataName(creation.Type!), []));
+        ssa.Terminate(current, new IrGoto(Raise(TypeMapper.MetadataName(creation.Type!), creation.Type)));
     }
 
     /// <summary>A chain of equality tests on one scrutinee, folded back into one terminator (acceptance criterion 2).</summary>
@@ -572,16 +683,15 @@ internal sealed class IrLowerer
         return target;
     }
 
-    /// <summary>Ends the current block with a branch to the shared <paramref name="exceptionType"/> throw block when <paramref name="condition"/> holds.</summary>
-    private void ThrowIf(IrVar condition, string exceptionType)
+    /// <summary>
+    /// Ends the current block with a branch, taken when <paramref name="condition"/> holds, to wherever an
+    /// exception of <paramref name="exceptionType"/> goes from here: a matching <c>catch</c> or the shared
+    /// throw block, behind any <c>finally</c> it leaves. A null <paramref name="type"/> means the type is
+    /// not known, which is the case for an opaque call's <c>threw</c> flag.
+    /// </summary>
+    private void ThrowIf(IrVar condition, string exceptionType, bool known = true)
     {
-        if (!throwBlocks.TryGetValue(exceptionType, out IrBlockId? thrown))
-        {
-            thrown = ssa.NewBlock();
-            ssa.Terminate(thrown, new IrThrow(exceptionType, []));
-            throwBlocks[exceptionType] = thrown;
-        }
-
+        IrBlockId thrown = Raise(exceptionType, known ? compilation.GetTypeByMetadataName(exceptionType) : null);
         IrBlockId next = ssa.NewBlock();
         ssa.Terminate(current, new IrBranch(condition, thrown, next));
         current = next;
@@ -871,7 +981,7 @@ internal sealed class IrLowerer
         IrVar? target = returns is null ? null : ssa.Temp(returns);
         IrVar threw = ssa.Temp(Bool);
         ssa.Emit(current, new IrCall(target, threw, callee, args));
-        ThrowIf(threw, "System.Exception");
+        ThrowIf(threw, "System.Exception", known: false);
         return target;
     }
 

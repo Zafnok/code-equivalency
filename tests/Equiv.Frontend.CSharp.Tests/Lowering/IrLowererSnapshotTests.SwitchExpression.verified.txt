@@ -24,4 +24,6 @@ B7:
 B9:
   throw "System.Exception"
 B10:
+  goto B11
+B11:
   throw "System.Runtime.CompilerServices.SwitchExpressionException"

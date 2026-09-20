@@ -17,9 +17,11 @@ public sealed class IrLowererTests
     [InlineData("int M { get; }", "get_M", "no-body")]
     [InlineData("static void M(int[] xs) { foreach (int x in xs) { } }", "M", "foreach-enumerator")]
     [InlineData("static void M(System.Collections.Generic.List<int> l) { foreach (int x in l) { } }", "M", "foreach-enumerator")]
-    [InlineData("static int M(int n) { try { return n; } catch (Exception) { return 0; } }", "M", "try-region")]
-    [InlineData("static int M(IDisposable d) { using (d) { return 1; } }", "M", "try-region")]
-    [InlineData("static int M(IDisposable d, int n) { if (n > 0) { using IDisposable e = d; return 1; } return n; }", "M", "try-region")]
+    [InlineData("static int M(int n) { try { return n; } catch { return 0; } }", "M", "catch-filter")]
+    [InlineData("static int M(int n) { try { return n; } catch (Exception) when (n > 0) { return 0; } }", "M", "catch-filter")]
+    [InlineData("static int M(IDisposable d) { using (d) { return 1; } }", "M", "using")]
+    [InlineData("static int M(IDisposable d, int n) { if (n > 0) { using IDisposable e = d; return 1; } return n; }", "M", "using")]
+    [InlineData("static void M(object o) { lock (o) { } }", "M", "lock")]
     public void WholeBodyIsOneOpaque(string members, string name, string reason)
     {
         IrProcedure procedure = Method(members, name);
@@ -401,6 +403,144 @@ public sealed class IrLowererTests
 
         Assert.Equal(thrown, outcome is IrThrew { ExceptionType: "System.IndexOutOfRangeException" });
     }
+
+    /// <summary>Ticket M2-004 acceptance criterion 4: a throw inside a try goes to the matching catch.</summary>
+    [Theory]
+    [InlineData(-1, 10)]
+    [InlineData(1, 1)]
+    public void AThrowInsideATryGoesToTheCatchThatCatchesItsType(int a, int expected) =>
+        Assert.Equal(
+            new IrReturned(Bits(32, expected)),
+            Run(Method("""
+                static int M(int a)
+                {
+                    try
+                    {
+                        if (a < 0) throw new ArgumentOutOfRangeException();
+                        return a;
+                    }
+                    catch (ArgumentException)
+                    {
+                        return 10;
+                    }
+                }
+                """), Bits(32, a)));
+
+    /// <summary>The first catch whose type the thrown type converts to wins; a type no catch takes leaves the procedure.</summary>
+    [Theory]
+    [InlineData(2, 0, 10)]
+    [InlineData(int.MaxValue, 2, 20)]
+    [InlineData(6, 3, 1)]
+    public void TheFirstCatchThatTakesTheThrownTypeWins(int a, int b, int expected)
+    {
+        IrProcedure procedure = Method("""
+            static int M(int a, int b)
+            {
+                try
+                {
+                    int c = checked(a * b);
+                    int d = a / b;
+                    return 1;
+                }
+                catch (DivideByZeroException)
+                {
+                    return 10;
+                }
+                catch (ArithmeticException)
+                {
+                    return 20;
+                }
+            }
+            """);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
+    }
+
+    /// <summary>A finally is duplicated onto the normal path, the return path and the throw path.</summary>
+    [Theory]
+    [InlineData(0, 4)]
+    [InlineData(1, 2)]
+    [InlineData(-1, 12)]
+    public void AFinallyRunsOnEveryExitPath(int a, int expected)
+    {
+        IrProcedure procedure = Method("""
+            static int M(int a)
+            {
+                int s = 0;
+                try
+                {
+                    if (a < 0) throw new ArgumentException();
+                    if (a > 0) { s = 1; return s + 1; }
+                    s = 2;
+                }
+                catch (ArgumentException)
+                {
+                    return s + 12;
+                }
+                finally
+                {
+                    s = s + 1;
+                }
+
+                return s + 1;
+            }
+            """);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a)));
+    }
+
+    [Fact]
+    public void AFinallyWithNoCatchStillRunsBeforeTheThrowLeaves()
+    {
+        IrProcedure procedure = Method("static int M(int a, int b) { try { return a / b; } finally { Log(); } } static void Log() { }");
+
+        Assert.Equal(new IrThrew("System.DivideByZeroException"), Run(procedure, Bits(32, 1), Bits(32, 0)));
+        Assert.Equal(3, Calls(procedure).Length); // one copy of the finally per exit path: return, divide by zero, MinValue / -1
+    }
+
+    /// <summary>Exits that end the same way share one copy of the finally, instead of one per raising instruction.</summary>
+    [Fact]
+    public void ExitsThatLeaveTheSameWayShareOneFinallyCopy()
+    {
+        IrProcedure procedure = Method("static int M(int a, int b, int c) { try { return a / b + a / c; } finally { Log(); } } static void Log() { }");
+
+        // Both divide-by-zero edges reach the same shared throw block, and so do both MinValue / -1 edges.
+        Assert.Equal(3, Calls(procedure).Length);
+    }
+
+    /// <summary>An opaque call's exception type is unknown, so one candidate catch takes it and several are opaque.</summary>
+    [Fact]
+    public void ACallThatThrowsInsideATryGoesToTheOnlyCatch()
+    {
+        IrProcedure procedure = Method("static void F() { } static int M() { try { F(); return 1; } catch (ArgumentException) { return 2; } }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.DoesNotContain(procedure.Blocks, static b => b.Terminator is IrThrow);
+    }
+
+    [Fact]
+    public void ACallThatThrowsWhereSeveralCatchesCouldApplyIsOpaque()
+    {
+        IrProcedure procedure = Method("""
+            static void F() { }
+            static int M()
+            {
+                try { F(); return 1; }
+                catch (ArgumentException) { return 2; }
+                catch (InvalidOperationException) { return 3; }
+            }
+            """);
+
+        Assert.Equal("call-throw-in-try", Assert.Single(Opaques(procedure)).Reason);
+    }
+
+    [Fact]
+    public void RethrowIsOpaqueInsideACatch() =>
+        Assert.Equal(
+            "rethrow",
+            Assert.Single(Opaques(Method("static int M(int a, int b) { try { return a / b; } catch (DivideByZeroException) { throw; } }"))).Reason);
 
     [Fact]
     public void ReadWithoutDefinitionIsUndefined()

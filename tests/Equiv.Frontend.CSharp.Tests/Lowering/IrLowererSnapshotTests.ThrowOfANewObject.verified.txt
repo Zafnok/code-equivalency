@@ -13,4 +13,6 @@ B3:
 B5:
   throw "System.Exception"
 B6:
+  goto B7
+B7:
   throw "C+E"
