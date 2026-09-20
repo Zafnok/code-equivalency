@@ -69,6 +69,9 @@ public sealed class IrLowererSnapshotTests
     public Task FieldAndThrowAreOpaque() => Dump("int f; int M(int a) { if (a < 0) throw new ArgumentException(); return f + a; }");
 
     [Fact]
+    public Task ThrowOfANewObject() => Dump("class E : Exception { public E(int n) { } } static int M(int a) { if (a < 0) throw new E(a); return a; }");
+
+    [Fact]
     public Task EntirelyOpaque() => Dump("static int M(int[] xs) { int s = 0; foreach (int x in xs) s += x; return s; }");
 
     [Fact]

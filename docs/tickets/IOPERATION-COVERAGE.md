@@ -28,14 +28,14 @@ in a CFG body). Every kind found in `samples/` must have a row
 | Loop | lowered: the CFG has no loop constructs, only back edges, which the SSA builder handles; a `foreach` is the exception (see `ForEachLoop`) | IrLowererSnapshotTests.WhileLoop, .ForLoop, .DoWhileLoop; IrLowererTests.LoopsLowerWithoutOpaqueNodes | M2-004 |
 | ForEachLoop | opaque: whole body, reason `foreach-enumerator`: the CFG desugars every `foreach`, arrays included, into the enumerator pattern (ticket P1-003) | IrLowererSnapshotTests.EntirelyOpaque; IrLowererTests.WholeBodyIsOneOpaque | M2-004 |
 | MethodBodyOperation | lowered: the root: its CFG is lowered | IrLowererSnapshotTests.* | M2-003 |
-| ObjectCreation | opaque: reason `ObjectCreation` | IrLowererSnapshotTests.FieldAndThrowAreOpaque | M2-003 |
+| ObjectCreation | lowered: an `IrCall` to the constructor yielding the new object as a `Sort`, plus a threw edge; a `ref`/`out` argument: reason `ref-argument` | IrLowererTests.ObjectCreationIsACallToTheConstructor, .UnsupportedConstructIsOpaqueWithItsName | M2-004 |
 | ParameterReference | lowered: SSA variable; a primary-constructor parameter is opaque with reason `ParameterReference` | IrLowererSnapshotTests.RefAndOutParameters; IrLowererTests.PrimaryConstructorParameterIsOpaque | M2-003 |
 | PropertyReference | opaque: reason `PropertyReference` | IrLowererTests.UnsupportedConstructIsOpaqueWithItsName | M2-003 |
 | Return | lowered: a CFG Return branch becomes `ret` | IrLowererSnapshotTests.VoidEarlyReturn | M2-003 |
 | SimpleAssignment | lowered: to a local, parameter or captured lvalue; other targets opaque with the target's kind; ref assignment opaque with reason `SimpleAssignment` | IrLowererSnapshotTests.StraightLineArithmetic; IrLowererTests.UnsupportedConstructIsOpaqueWithItsName | M2-003 |
 | Switch | opaque: whole body, reason `switch` (M2-004) | IrLowererTests.WholeBodyIsOneOpaque | M2-003 |
 | SwitchExpression | opaque: whole body, reason `switch` (M2-004) | IrLowererTests.WholeBodyIsOneOpaque | M2-003 |
-| Throw | opaque: reason `Throw`: the thrown object's dynamic type is not known statically | IrLowererSnapshotTests.FieldAndThrowAreOpaque | M2-003 |
+| Throw | lowered: `throw new T(...)` records the constructor call then `IrThrow("T")` on T's static type; throwing anything else is opaque with reason `Throw`, and `throw;` with reason `rethrow` | IrLowererSnapshotTests.ThrowOfANewObject; IrLowererTests.ThrowOfANewObjectRecordsTheConstructorCallAndThrowsItsStaticType, .RethrowIsOpaque | M2-004 |
 | Try | opaque: whole body, reason `try-region` (M2-004) | IrLowererTests.WholeBodyIsOneOpaque | M2-003 |
 | Unary | lowered: `!`, `~`, `-` (checked: overflow edge), `+` on integral/bool; anything else opaque with reason `Unary` | IrLowererTests.CheckedNegationOverflowsOnlyAtMinValue, .BitwiseNotAndUnaryPlusLower | M2-003 |
 | Using | opaque: whole body, reason `try-region` (the CFG gives it a finally region) | IrLowererTests.WholeBodyIsOneOpaque | M2-003 |

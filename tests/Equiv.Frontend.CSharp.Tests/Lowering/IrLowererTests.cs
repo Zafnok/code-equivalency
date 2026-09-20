@@ -51,8 +51,9 @@ public sealed class IrLowererTests
     [InlineData("int M() => GetHashCode();", "dereference")]
     [InlineData("static bool M(string s) => int.TryParse(s, out _);", "ref-argument")]
     [InlineData("static void M(ref int a) { System.Threading.Interlocked.Increment(ref a); }", "ref-argument")]
-    [InlineData("static void M(int a) { if (a < 0) throw new ArgumentException(); }", "Throw")]
-    [InlineData("static int M(int a) { if (a < 0) throw new ArgumentException(); return a; }", "Throw")]
+    [InlineData("static void M(int a, Exception e) { if (a < 0) throw e; }", "Throw")]
+    [InlineData("static T M<T>() where T : new() => new T();", "TypeParameterObjectCreation")]
+    [InlineData("static C M(int a) { int b = 0; return new C(ref b); } C(ref int x) { }", "ref-argument")]
     [InlineData("static void M(int a) { ref int r = ref a; r = 1; }", "SimpleAssignment")]
     [InlineData("static int M(double d) => (int)d;", "Conversion")]
     [InlineData("static double M(int i) => i;", "Conversion")]
@@ -156,6 +157,30 @@ public sealed class IrLowererTests
         Assert.Equal(
             new IrReturned(Bits(32, 12)),
             Run(Method("static int M(int n) { int s = 0; for (int i = 0; i < n; i++) { int k = n; while (k > 0) { s += 1; k--; } } return s + 3; }"), Bits(32, 3)));
+
+    /// <summary>Ticket M2-004 acceptance criterion 3: the constructor call, then a throw of the static type.</summary>
+    [Fact]
+    public void ThrowOfANewObjectRecordsTheConstructorCallAndThrowsItsStaticType()
+    {
+        IrProcedure procedure = Method("class E : Exception { public E(int n) { } } static void M(int a) { if (a < 0) throw new E(a); }");
+
+        Assert.Equal("C.E::.ctor(int)", Assert.Single(Calls(procedure)).Callee.Value);
+        Assert.Contains(procedure.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "C+E" });
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Fact]
+    public void RethrowIsOpaque() =>
+        Assert.Equal("rethrow", Assert.Single(Opaques(Method("static void M() { throw; }", allowErrors: true))).Reason);
+
+    [Fact]
+    public void ObjectCreationIsACallToTheConstructor()
+    {
+        IrCall call = Assert.Single(Calls(Method("static C M(int a) => new C(a); C(int x) { }")));
+
+        Assert.Equal("C::.ctor(int)", call.Callee.Value);
+        Assert.Equal(["a"], call.Args.Select(static v => v.Name), StringComparer.Ordinal);
+    }
 
     [Fact]
     public void ReadWithoutDefinitionIsUndefined()

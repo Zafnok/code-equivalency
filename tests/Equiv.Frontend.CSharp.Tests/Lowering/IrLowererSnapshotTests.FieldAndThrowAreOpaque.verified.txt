@@ -6,9 +6,13 @@ B1:
   %$2: bool = slt %a, %$1
   br %$2, B2, B3
 B2:
-  %$3: bv32 = opaque "Throw" at "Snippet.cs" 4:8-4:80
-  ret %$3
+  %$3: sort "System.ArgumentException" = call "System.ArgumentException::.ctor()"() threw %$4: bool
+  br %$4, B5, B6
 B3:
-  %$4: bv32 = opaque "FieldReference" at "Snippet.cs" 4:72-4:73
-  %$6: bv32 = add %$4, %a
-  ret %$6
+  %$5: bv32 = opaque "FieldReference" at "Snippet.cs" 4:72-4:73
+  %$7: bv32 = add %$5, %a
+  ret %$7
+B5:
+  throw "System.Exception"
+B6:
+  throw "System.ArgumentException"

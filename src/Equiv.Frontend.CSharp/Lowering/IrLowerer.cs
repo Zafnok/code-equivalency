@@ -190,11 +190,36 @@ internal sealed class IrLowerer
                 IrVar value = Value(block.BranchValue!); // may move `current` past overflow and call-threw branches
                 ssa.Terminate(current, new IrReturn(value, []));
                 break;
+            case ControlFlowBranchSemantics.Throw when block.BranchValue is { } thrown:
+                Throw(thrown, span);
+                break;
             default:
-                // Throw (the thrown object's dynamic type is not known statically), or an edge only erroneous code has.
-                OpaqueExit(fallThrough.Semantics.ToString(), span);
+                // `throw;`: the exception in flight is not modelled. Also the edge erroneous code produces.
+                OpaqueExit("rethrow", span);
                 break;
         }
+    }
+
+    /// <summary>
+    /// <c>throw new T(...)</c> (ticket M2-004 acceptance criterion 3): the constructor call first, then
+    /// <c>IrThrow("T")</c> on T's static type. Throwing anything else leaves the type unknown, so it is opaque.
+    /// </summary>
+    private void Throw(IOperation thrown, SourceSpan span)
+    {
+        IOperation value = thrown;
+        while (value is IConversionOperation conversion)
+        {
+            value = conversion.Operand;
+        }
+
+        if (value is not IObjectCreationOperation creation)
+        {
+            OpaqueExit("Throw", span);
+            return;
+        }
+
+        Lower(creation); // may move `current` past the constructor's own threw branch
+        ssa.Terminate(current, new IrThrow(TypeMapper.MetadataName(creation.Type!), []));
     }
 
     private void OpaqueExit(string reason, SourceSpan span)
@@ -258,6 +283,8 @@ internal sealed class IrLowerer
                 return Step(step);
             case IInvocationOperation invocation:
                 return Invoke(invocation);
+            case IObjectCreationOperation creation:
+                return Create(creation);
             default:
                 return Opaque(operation, operation.Kind.ToString());
         }
@@ -540,6 +567,12 @@ internal sealed class IrLowerer
         return target;
     }
 
+    /// <summary><c>new T(...)</c>: an opaque call to the constructor yielding the new object.</summary>
+    private IrVar? Create(IObjectCreationOperation creation) =>
+        creation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out)
+            ? Opaque(creation, "ref-argument")
+            : Call(CallIdentityFactory.Of(creation.Constructor!, renames), [.. Arguments([], creation.Arguments)], TypeMapper.Map(creation.Type!));
+
     /// <summary>An opaque call (receiver first, then arguments in parameter order) that may throw System.Exception.</summary>
     private IrVar? Invoke(IInvocationOperation invocation)
     {
@@ -553,15 +586,25 @@ internal sealed class IrLowerer
             return Opaque(invocation, "ref-argument");
         }
 
-        List<IrVar> args = invocation.Instance is { } instance ? [Value(instance)] : [];
-        args.AddRange([.. invocation.Arguments
+        return Call(
+            CallIdentityFactory.Of(invocation.TargetMethod, renames),
+            [.. Arguments(invocation.Instance is { } instance ? [Value(instance)] : [], invocation.Arguments)],
+            invocation.TargetMethod.ReturnsVoid ? null : TypeMapper.Map(invocation.Type!));
+    }
+
+    /// <summary>The receiver, then the arguments in parameter order; each is evaluated in source order first.</summary>
+    private IEnumerable<IrVar> Arguments(IEnumerable<IrVar> receiver, ImmutableArray<IArgumentOperation> arguments) =>
+        receiver.Concat(arguments
             .Select(a => (a.Parameter!.Ordinal, Value: Value(a.Value)))
             .ToList()
             .OrderBy(static a => a.Ordinal)
-            .Select(static a => a.Value)]);
-        IrVar? target = invocation.TargetMethod.ReturnsVoid ? null : ssa.Temp(TypeMapper.Map(invocation.Type!));
+            .Select(static a => a.Value));
+
+    private IrVar? Call(CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns)
+    {
+        IrVar? target = returns is null ? null : ssa.Temp(returns);
         IrVar threw = ssa.Temp(Bool);
-        ssa.Emit(current, new IrCall(target, threw, CallIdentityFactory.Of(invocation.TargetMethod, renames), [.. args]));
+        ssa.Emit(current, new IrCall(target, threw, callee, args));
         ThrowIf(threw, "System.Exception");
         return target;
     }
