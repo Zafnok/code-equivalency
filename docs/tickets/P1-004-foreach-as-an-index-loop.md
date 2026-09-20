@@ -37,4 +37,11 @@ VERIFICATION-MODEL.md section 3; the `equiv-extend-ir` skill; M2-004 acceptance 
 `foreach` over `string`, `Span<T>`, a user type with a `GetEnumerator` method, or
 `IEnumerable<T>`; collection expressions; `await foreach`.
 
+The element map this ticket reads inherits the M2-004 aliasing limit ADR 0015 names: it is
+keyed per array *variable*, so a `foreach` over an array that some other variable also
+holds sees its own slice. P1-006 closes that for every array access at once. Do not work
+around it here; if P1-006 has landed first, use the input names it introduces (acceptance
+criterion 1 above says `length:<arr>`, which M2-004 shipped as `length.<v>` and P1-006
+replaces again).
+
 ## Notes

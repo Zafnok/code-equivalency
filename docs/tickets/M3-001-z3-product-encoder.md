@@ -114,6 +114,11 @@ message; do not report Divergent.
    divergence on a path that reaches no opaque, next to a branch that does) gives
    Divergent whose replay reaches no `IrOpaque`. The soundness property's `Mutate` may
    insert an `IrOpaque`, and such a pair is never Equivalent.
+9. The soundness property of criterion 4 is scoped to the encoder in its own XML doc
+   comment and in the harness's test-class summary: it generates IR, so it is evidence
+   about this encoder and the ladder, not about the C# frontend, and the two heap gaps of
+   VERIFICATION-MODEL section 2 (ADR 0015; tickets P1-005 and P1-006) are outside it. No
+   code changes for this criterion; do not attempt either gap here.
 
 ## Size guard
 Six source files in `src/Equiv.Verify.Z3/`. No abstraction over Z3 (no `ISolver`

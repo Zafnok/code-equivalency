@@ -19,3 +19,4 @@ supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.
 | 0012 | Matched pairs are skipped (null backend) until M3-001 wires a real backend |
 | 0013 | Lower C# `char` to `BitVec(16)`, not `BitVec(32)` |
 | 0014 | Reaching an `IrOpaque` makes that input's outcome unknown |
+| 0015 | A call's heap effect and array aliasing are named limits, not defects |
