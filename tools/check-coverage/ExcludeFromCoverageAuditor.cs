@@ -20,9 +20,9 @@ internal static partial class ExcludeFromCoverageAuditor
     {
         List<CoverageExclusionViolation> violations = [];
 
-        foreach (Match attribute in AttributeRegex().Matches(sourceText))
+        foreach (Match attribute in AttributeRegex.Matches(sourceText))
         {
-            Match justification = JustificationRegex().Match(attribute.Value);
+            Match justification = JustificationRegex.Match(attribute.Value);
             int lineNumber = LineNumberAt(sourceText, attribute.Index);
 
             if (!justification.Success)
@@ -32,7 +32,7 @@ internal static partial class ExcludeFromCoverageAuditor
             }
 
             string justificationText = justification.Groups["justification"].Value;
-            if (!TicketIdRegex().IsMatch(justificationText))
+            if (!TicketIdRegex.IsMatch(justificationText))
             {
                 violations.Add(new CoverageExclusionViolation(
                     filePath,
@@ -59,11 +59,11 @@ internal static partial class ExcludeFromCoverageAuditor
     }
 
     [GeneratedRegex(@"\[[^\]]*?ExcludeFromCodeCoverage[^\]]*?\]", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex AttributeRegex();
+    private static partial Regex AttributeRegex { get; }
 
     [GeneratedRegex(@"Justification\s*=\s*""(?<justification>[^""]*)""", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex JustificationRegex();
+    private static partial Regex JustificationRegex { get; }
 
     [GeneratedRegex(@"\b[A-Z]\d+-\d{3}\b", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex TicketIdRegex();
+    private static partial Regex TicketIdRegex { get; }
 }

@@ -55,6 +55,39 @@ public sealed class SarifReportWriterTests
     }
 
     [Fact]
+    public void EndpointMatchedResultCarriesAnEndpointLogicalLocation()
+    {
+        ProcedureIdentity identity = new("GET /api/orders/{id}", new SourceSpan(@"C:\src\OrdersController.cs", 10, 5, 10, 8));
+        SarifLog log = SarifReportWriter.Write([new VerificationResult(identity, new Equivalent())]);
+        Location location = Assert.Single(log.Runs[0].Results[0].Locations);
+        LogicalLocation logicalLocation = Assert.Single(location.LogicalLocations);
+
+        Assert.NotNull(location.PhysicalLocation);
+        Assert.Equal("endpoint", logicalLocation.Kind);
+        Assert.Equal("GET /api/orders/{id}", logicalLocation.FullyQualifiedName);
+    }
+
+    [Fact]
+    public void EndpointMatchedResultWithoutAPhysicalLocationStillCarriesALogicalLocation()
+    {
+        ProcedureIdentity identity = new("GET /api/orders/{id}");
+        SarifLog log = SarifReportWriter.Write([new VerificationResult(identity, new Equivalent())]);
+        Location location = Assert.Single(log.Runs[0].Results[0].Locations);
+        LogicalLocation logicalLocation = Assert.Single(location.LogicalLocations);
+
+        Assert.Null(location.PhysicalLocation);
+        Assert.Equal("endpoint", logicalLocation.Kind);
+    }
+
+    [Fact]
+    public void NonEndpointResultLocationHasNoLogicalLocations()
+    {
+        ProcedureIdentity identity = new("Samples.Math::Add(int32,int32)", new SourceSpan(@"C:\src\Math.cs", 10, 5, 10, 8));
+        SarifLog log = SarifReportWriter.Write([new VerificationResult(identity, new Added())]);
+        Assert.Null(log.Runs[0].Results[0].Locations[0].LogicalLocations);
+    }
+
+    [Fact]
     public void NullResultsThrow()
     {
         Assert.Throws<ArgumentNullException>(static () => SarifReportWriter.Write(null!));

@@ -34,7 +34,25 @@ public static class ProcedureIdentityNormalizer
         return new ProcedureIdentity($"{verb.ToUpperInvariant()} {route}");
     }
 
+    /// <summary>
+    /// True for a <see cref="ProcedureIdentity.Value"/> this class's own <see cref="Endpoint"/> built:
+    /// one of a closed set of HTTP verbs, a space, then a route starting with <c>/</c>. A
+    /// <see cref="Member"/> identity never contains a bare space before its first <c>/</c> (if any), so
+    /// this is unambiguous. <see cref="Equiv.Core.Reporting.SarifReportWriter"/> uses it to attach a
+    /// <c>logicalLocations</c> entry (ticket M2-005 acceptance criterion 4) without either format
+    /// needing a marker field of its own.
+    /// </summary>
+    public static bool IsEndpoint(string identityValue)
+    {
+        ArgumentNullException.ThrowIfNull(identityValue);
+
+        int space = identityValue.IndexOf(' ', StringComparison.Ordinal);
+        return space > 0 && identityValue.Length > space + 1 && identityValue[space + 1] == '/' && Verbs.Contains(identityValue[..space]);
+    }
+
     private static string Qualify(string @namespace, string type) => @namespace.Length == 0 ? type : $"{@namespace}.{type}";
+
+    private static readonly ImmutableHashSet<string> Verbs = ["GET", "POST", "PUT", "DELETE", "PATCH"];
 
     /// <summary>
     /// Renames a fully-qualified name (the member's own declaring type, or a parameter type):

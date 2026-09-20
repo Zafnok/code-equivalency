@@ -1,3 +1,4 @@
+using Equiv.Core.Matching;
 using Equiv.Core.Verdicts;
 
 using Microsoft.CodeAnalysis.Sarif;
@@ -79,13 +80,31 @@ public static class SarifReportWriter
             sarifResult.SetProperty("model", CounterexampleText.Dump(divergent.Counterexample));
         }
 
+        bool isEndpoint = ProcedureIdentityNormalizer.IsEndpoint(result.Identity.Value);
         if (result.Identity.Location is { } location)
         {
-            sarifResult.Locations = [ToSarifLocation(location)];
+            Location sarifLocation = ToSarifLocation(location);
+            if (isEndpoint)
+            {
+                sarifLocation.LogicalLocations = [EndpointLogicalLocation(result.Identity.Value)];
+            }
+
+            sarifResult.Locations = [sarifLocation];
+        }
+        else if (isEndpoint)
+        {
+            sarifResult.Locations = [new Location { LogicalLocations = [EndpointLogicalLocation(result.Identity.Value)] }];
         }
 
         return sarifResult;
     }
+
+    /// <summary>
+    /// M2-005 acceptance criterion 4: an endpoint-matched procedure's result carries a
+    /// <c>logicalLocations</c> entry naming the route it was matched on, alongside (or instead of, when
+    /// there is no source span) its physical <see cref="Location"/>.
+    /// </summary>
+    private static LogicalLocation EndpointLogicalLocation(string identityValue) => new() { Kind = "endpoint", FullyQualifiedName = identityValue };
 
     /// <summary>
     /// A <see cref="SourceSpan"/> (1-based, ticket M2-002) as a SARIF <see cref="Location"/>: the
