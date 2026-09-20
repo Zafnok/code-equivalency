@@ -48,6 +48,41 @@ public sealed class IrLowererSnapshotTests
     public Task Shifts() => Dump("static long M(long a, int n, int m) => (a << n) + (m >> 3) + ((uint)m >> n);");
 
     [Fact]
+    public Task CompoundAssignment() => Dump("static byte M(byte b, int a, int n) { b += 1; a *= a; a <<= n; a /= n; return b; }");
+
+    [Fact]
+    public Task IncrementAndDecrement() => Dump("static int M(int a, char c) { a++; --a; c--; return a + c; }");
+
+    [Fact]
+    public Task SwitchStatement() => Dump("static int M(int n) { switch (n) { case 1: return 10; case 2: case 3: return 30; default: return 0; } }");
+
+    [Fact]
+    public Task SwitchExpression() => Dump("static int M(char c) => c switch { 'a' => 1, 'b' => 2, _ => 0 };");
+
+    [Fact]
+    public Task NullChecks() => Dump("static int M(string s, C c) { if (s == null) return 0; c.F(); return s.CompareTo(s); } void F() { }");
+
+    [Fact]
+    public Task TryCatch() => Dump("""
+        static int M(int a)
+        {
+            try { if (a < 0) throw new ArgumentException(); return a; }
+            catch (ArgumentException) { return -1; }
+        }
+        """);
+
+    [Fact]
+    public Task TryFinally() => Dump("""
+        static int M(int a)
+        {
+            int s = 0;
+            try { if (a > 0) return 1; s = 2; }
+            finally { s = s + 1; }
+            return s;
+        }
+        """);
+
+    [Fact]
     public Task ConditionalExpression() => Dump("static int M(bool b, int x) => b ? x : -x;");
 
     [Fact]
@@ -60,10 +95,28 @@ public sealed class IrLowererSnapshotTests
     public Task VoidEarlyReturn() => Dump("static void M(bool c, int a) { if (c) return; Console.WriteLine(a); }");
 
     [Fact]
-    public Task FieldAndThrowAreOpaque() => Dump("int f; int M(int a) { if (a < 0) throw new ArgumentException(); return f + a; }");
+    public Task InstanceFieldAndThrow() => Dump("int f; int M(int a) { if (a < 0) throw new ArgumentException(); return f + a; }");
+
+    [Fact]
+    public Task StaticFieldWrite() => Dump("static int f; static int M(int a) { f = a; return f; }");
+
+    [Fact]
+    public Task ArrayElements() => Dump("static int M(int[] a, int i) { a[i] = a[0]; return a[i] + a.Length; }");
+
+    [Fact]
+    public Task ThrowOfANewObject() => Dump("class E : Exception { public E(int n) { } } static int M(int a) { if (a < 0) throw new E(a); return a; }");
 
     [Fact]
     public Task EntirelyOpaque() => Dump("static int M(int[] xs) { int s = 0; foreach (int x in xs) s += x; return s; }");
+
+    [Fact]
+    public Task WhileLoop() => Dump("static int M(int n) { int s = 0; while (n > 0) { s = s + n; n = n - 1; } return s; }");
+
+    [Fact]
+    public Task ForLoop() => Dump("static int M(int n) { int s = 0; for (int i = 0; i < n; i++) { if (i == 3) break; s += i; } return s; }");
+
+    [Fact]
+    public Task DoWhileLoop() => Dump("static int M(int n) { int s = 0; do { s += n; n--; } while (n > 0); return s; }");
 
     private static Task Dump(string members) => Verify(IrText.Dump(Lowered.Method(members)));
 }

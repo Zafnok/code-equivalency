@@ -27,6 +27,10 @@ internal static class OperatorMapper
 
     public static bool IsShift(IrBinaryOp op) => op is IrBinaryOp.Shl or IrBinaryOp.AShr or IrBinaryOp.LShr;
 
+    /// <summary>Whether a C# operator is a shift, whose operands need not share a width.</summary>
+    public static bool IsShiftKind(BinaryOperatorKind kind) =>
+        kind is BinaryOperatorKind.LeftShift or BinaryOperatorKind.RightShift or BinaryOperatorKind.UnsignedRightShift;
+
     /// <summary>The overflow test for a checked <paramref name="op"/>; null when it cannot overflow.</summary>
     public static IrOverflowOp? Overflow(IrBinaryOp op, bool signed) => op switch
     {

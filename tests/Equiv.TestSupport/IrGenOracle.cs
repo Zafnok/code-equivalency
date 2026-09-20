@@ -7,7 +7,7 @@ namespace Equiv.TestSupport;
 
 /// <summary>
 /// A deterministic call oracle: the answer is an FNV-1a hash of the callee and argument bits.
-/// Supports Bool and bitvector results; about one call in eight "throws".
+/// Supports Bool, bitvector and uninterpreted-sort results; about one call in eight "throws".
 /// </summary>
 public sealed class IrGenOracle : ICallOracle
 {
@@ -32,6 +32,7 @@ public sealed class IrGenOracle : ICallOracle
             null => null,
             IrBool => new IrBoolValue((hash & 1) != 0),
             IrBitVec bitVec => new IrBitVecValue(bitVec.Width, hash & (ulong.MaxValue >> (64 - bitVec.Width))),
+            IrSort sort => new IrSortValue(sort.Name, (int)(hash & int.MaxValue)),
             _ => throw new NotSupportedException($"IrGenOracle cannot produce {resultType}."),
         };
         return new IrCallResult(value, (hash >> 61) == 0);

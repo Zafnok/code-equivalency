@@ -15,13 +15,13 @@ public sealed class IrLowererTests
     [InlineData("C() { }", ".ctor", "ConstructorBodyOperation")]
     [InlineData("int M => 1;", "get_M", "Block")]
     [InlineData("int M { get; }", "get_M", "no-body")]
-    [InlineData("static int M(int n) { int s = 0; while (n > 0) { s = s + n; n = n - 1; } return s; }", "M", "loop")]
-    [InlineData("static void M(int[] xs) { foreach (int x in xs) { } }", "M", "loop")]
-    [InlineData("static int M(int n) { switch (n) { case 1: return 2; } return 0; }", "M", "switch")]
-    [InlineData("static int M(int n) => n switch { 1 => 2, _ => 0 };", "M", "switch")]
-    [InlineData("static int M(int n) { try { return n; } catch (Exception) { return 0; } }", "M", "try-region")]
-    [InlineData("static int M(IDisposable d) { using (d) { return 1; } }", "M", "try-region")]
-    [InlineData("static int M(IDisposable d, int n) { if (n > 0) { using IDisposable e = d; return 1; } return n; }", "M", "try-region")]
+    [InlineData("static void M(int[] xs) { foreach (int x in xs) { } }", "M", "foreach-enumerator")]
+    [InlineData("static void M(System.Collections.Generic.List<int> l) { foreach (int x in l) { } }", "M", "foreach-enumerator")]
+    [InlineData("static int M(int n) { try { return n; } catch { return 0; } }", "M", "catch-filter")]
+    [InlineData("static int M(int n) { try { return n; } catch (Exception) when (n > 0) { return 0; } }", "M", "catch-filter")]
+    [InlineData("static int M(IDisposable d) { using (d) { return 1; } }", "M", "using")]
+    [InlineData("static int M(IDisposable d, int n) { if (n > 0) { using IDisposable e = d; return 1; } return n; }", "M", "using")]
+    [InlineData("static void M(object o) { lock (o) { } }", "M", "lock")]
     public void WholeBodyIsOneOpaque(string members, string name, string reason)
     {
         IrProcedure procedure = Method(members, name);
@@ -34,7 +34,7 @@ public sealed class IrLowererTests
     [Fact]
     public void WholeBodyOpaqueKeepsByRefParametersAsOuts()
     {
-        IrProcedure procedure = Method("static void M(ref int a, out int b) { b = 0; while (a > 0) a = a - 1; }");
+        IrProcedure procedure = Method("static void M(ref int a, out int b) { b = 0; foreach (int x in new int[0]) a = a - 1; }");
 
         IrReturn exit = Assert.IsType<IrReturn>(Assert.Single(procedure.Blocks).Terminator);
         Assert.Null(exit.Value);
@@ -42,23 +42,20 @@ public sealed class IrLowererTests
     }
 
     [Theory]
-    [InlineData("int f; int M() => f;", "FieldReference")]
-    [InlineData("int f; void M(int a) { f = a; }", "FieldReference")]
-    [InlineData("static int M(int[] a) => a[0];", "ArrayElementReference")]
     [InlineData("static int M(string s) => s.Length;", "PropertyReference")]
-    [InlineData("static string M(string s) => s.Trim();", "dereference")]
-    [InlineData("static void M(System.Collections.Generic.List<int> l) { l.Clear(); }", "dereference")]
-    [InlineData("int M() => GetHashCode();", "dereference")]
+    [InlineData("static int M(int[,] a) => a[0, 1];", "ArrayElementReference")]
+    [InlineData("static int M(int[][] a) => a[0][1];", "ArrayElementReference")]
+    [InlineData("static int M(int[] a, long i) => a[i];", "ArrayElementReference")]
+    [InlineData("static int M(int[][] a) => a[0].Length;", "PropertyReference")]
     [InlineData("static bool M(string s) => int.TryParse(s, out _);", "ref-argument")]
     [InlineData("static void M(ref int a) { System.Threading.Interlocked.Increment(ref a); }", "ref-argument")]
-    [InlineData("static void M(int a) { if (a < 0) throw new ArgumentException(); }", "Throw")]
-    [InlineData("static int M(int a) { if (a < 0) throw new ArgumentException(); return a; }", "Throw")]
+    [InlineData("static void M(int a, Exception e) { if (a < 0) throw e; }", "Throw")]
+    [InlineData("static T M<T>() where T : new() => new T();", "TypeParameterObjectCreation")]
+    [InlineData("static C M(int a) { int b = 0; return new C(ref b); } C(ref int x) { }", "ref-argument")]
     [InlineData("static void M(int a) { ref int r = ref a; r = 1; }", "SimpleAssignment")]
-    [InlineData("static int M(int a) { a += 1; return a; }", "CompoundAssignment")]
-    [InlineData("static int M(int a) { a++; return a; }", "Increment")]
     [InlineData("static int M(double d) => (int)d;", "Conversion")]
     [InlineData("static double M(int i) => i;", "Conversion")]
-    [InlineData("static object M() => (string)null;", "Conversion")]
+    [InlineData("static object M(string s) => s;", "Conversion")]
     [InlineData("struct S { public static implicit operator int(S s) => 0; } static int M(S s) => s;", "Conversion")]
     [InlineData("static bool M(string a, string b) => a == b;", "Binary")]
     [InlineData("static double M(double a, double b) => a * b;", "Binary")]
@@ -78,6 +75,584 @@ public sealed class IrLowererTests
         IrProcedure procedure = Source($"class C(int p) {{ {member} }}");
 
         Assert.Equal("ParameterReference", Assert.Single(Opaques(procedure)).Reason);
+    }
+
+    [Theory]
+    [InlineData("static int M(int a, int b) { a += b; return a; }", 5, 7, 12)]
+    [InlineData("static int M(int a, int b) { a -= b; return a; }", 5, 7, -2)]
+    [InlineData("static int M(int a, int b) { a *= b; return a; }", 5, 7, 35)]
+    [InlineData("static int M(int a, int b) { a /= b; return a; }", 17, 5, 3)]
+    [InlineData("static int M(int a, int b) { a %= b; return a; }", 17, 5, 2)]
+    [InlineData("static int M(int a, int b) { a &= b; return a; }", 12, 10, 8)]
+    [InlineData("static int M(int a, int b) { a |= b; return a; }", 12, 10, 14)]
+    [InlineData("static int M(int a, int b) { a ^= b; return a; }", 12, 10, 6)]
+    [InlineData("static int M(int a, int b) { a <<= b; return a; }", 3, 33, 6)]
+    [InlineData("static int M(int a, int b) { a >>= b; return a; }", -8, 1, -4)]
+    [InlineData("static int M(int a, int b) { a >>>= b; return a; }", -8, 1, int.MaxValue - 3)]
+    public void CompoundAssignmentReadsOperatesAndWrites(string members, int a, int b, int expected) =>
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(Method(members), Bits(32, a), Bits(32, b)));
+
+    [Theory]
+    [InlineData("static int M(int a) { a++; return a; }", 5, 6)]
+    [InlineData("static int M(int a) { a--; return a; }", 5, 4)]
+    [InlineData("static int M(int a) { return ++a; }", 5, 6)]
+    [InlineData("static int M(int a) { return a++; }", 5, 5)]
+    [InlineData("static int M(int a) { return a--; }", 5, 5)]
+    [InlineData("static int M(int a) { return --a; }", 5, 4)]
+    public void IncrementAndDecrementYieldTheOldValueOnlyWhenPostfix(string members, int a, int expected) =>
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(Method(members), Bits(32, a)));
+
+    /// <summary>The operands are promoted to <c>int</c> and the result is narrowed back, as C# does.</summary>
+    [Theory]
+    [InlineData("static byte M(byte b) { b += 250; return b; }", 8, 10, 4)]
+    [InlineData("static char M(char c) { c++; return c; }", 16, 0xFFFF, 0)]
+    [InlineData("static byte M(byte b) { b <<= 1; return b; }", 8, 0x81, 2)]
+    [InlineData("static long M(long a) { a <<= 65; return a; }", 64, 3, 6)]
+    public void CompoundAssignmentNarrowsBackToTheTargetType(string members, int width, long a, long expected) =>
+        Assert.Equal(new IrReturned(Bits(width, expected)), Run(Method(members), Bits(width, a)));
+
+    [Theory]
+    [InlineData("static byte M(byte b) { checked { b += 250; } return b; }", 8, 10, "System.OverflowException")]
+    [InlineData("static byte M(byte b) { checked { b += 1; } return b; }", 8, 10, null)]
+    [InlineData("static int M(int a) { checked { a += 1; } return a; }", 32, int.MaxValue, "System.OverflowException")]
+    [InlineData("static int M(int a) { checked { a++; } return a; }", 32, int.MaxValue, "System.OverflowException")]
+    [InlineData("static int M(int a, int b) { a /= b; return a; }", 32, 1, "System.DivideByZeroException")]
+    public void CompoundAssignmentKeepsTheOperatorExceptionEdges(string members, int width, long a, string? thrown)
+    {
+        IrProcedure procedure = Method(members);
+        IrValue[] arguments = procedure.Parameters.Length == 1 ? [Bits(width, a)] : [Bits(width, a), Bits(width, 0)];
+
+        Assert.Equal(thrown is null ? new IrReturned(Bits(width, a + 1)) : new IrThrew(thrown), Run(procedure, arguments));
+    }
+
+    [Theory]
+    [InlineData("int f; void M(int a) { f += a; }", "FieldReference")]
+    [InlineData("static void M(int[] xs) { xs[0]++; }", "ArrayElementReference")]
+    [InlineData("static void M(double d) { d += 1; }", "CompoundAssignment")]
+    [InlineData("static void M(double d) { d++; }", "Increment")]
+    [InlineData("enum E { A } static void M(E e) { e += 1; }", "ParameterReference")]
+    [InlineData("struct S { public static int operator +(int a, S b) => 0; } static void M(int a, S s) { a += s; }", "CompoundAssignment")]
+    public void CompoundAssignmentToAnUnsupportedTargetIsOpaque(string members, string reason) =>
+        Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
+
+    /// <summary>The CFG has no loop constructs, only back edges; the SSA builder puts phis at the header (M2-004 acceptance criterion 1).</summary>
+    [Theory]
+    [InlineData("static int M(int n) { int s = 0; while (n > 0) { s = s + n; n = n - 1; } return s; }")]
+    [InlineData("static int M(int n) { int s = 0; for (int i = 1; i <= n; i++) s += i; return s; }")]
+    [InlineData("static int M(int n) { int s = 0; int i = n; do { s += i; i--; } while (i > 0); return s; }")]
+    [InlineData("static int M(int n) { int s = 0; while (true) { if (n <= 0) break; s += n; n--; } return s; }")]
+    [InlineData("static int M(int n) { int s = 0; for (int i = 0; i < n; i++) { if (i == 0) continue; s += i; } return s + 3; }")]
+    public void LoopsLowerWithoutOpaqueNodes(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 6)), Run(procedure, Bits(32, 3)));
+    }
+
+    [Fact]
+    public void ANestedLoopKeepsBothHeadersPhis() =>
+        Assert.Equal(
+            new IrReturned(Bits(32, 12)),
+            Run(Method("static int M(int n) { int s = 0; for (int i = 0; i < n; i++) { int k = n; while (k > 0) { s += 1; k--; } } return s + 3; }"), Bits(32, 3)));
+
+    /// <summary>Ticket M2-004 acceptance criterion 3: the constructor call, then a throw of the static type.</summary>
+    [Fact]
+    public void ThrowOfANewObjectRecordsTheConstructorCallAndThrowsItsStaticType()
+    {
+        IrProcedure procedure = Method("class E : Exception { public E(int n) { } } static void M(int a) { if (a < 0) throw new E(a); }");
+
+        Assert.Equal("C.E::.ctor(int)", Assert.Single(Calls(procedure)).Callee.Value);
+        Assert.Contains(procedure.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "C+E" });
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Fact]
+    public void RethrowIsOpaque() =>
+        Assert.Equal("rethrow", Assert.Single(Opaques(Method("static void M() { throw; }", allowErrors: true))).Reason);
+
+    [Fact]
+    public void ObjectCreationIsACallToTheConstructor()
+    {
+        IrCall call = Assert.Single(Calls(Method("static C M(int a) => new C(a); C(int x) { }")));
+
+        Assert.Equal("C::.ctor(int)", call.Callee.Value);
+        Assert.Equal(["a"], call.Args.Select(static v => v.Name), StringComparer.Ordinal);
+    }
+
+    /// <summary>Ticket M2-004 acceptance criterion 2: the CFG's chain of equality tests folds back into one switch.</summary>
+    [Theory]
+    [InlineData("static int M(int n) { switch (n) { case 1: return 10; case 3: return 30; default: return 0; } }")]
+    [InlineData("static int M(int n) => n switch { 1 => 10, 3 => 30, _ => 0 };")]
+    [InlineData("static int M(int n) { switch (n) { case 1: case 3: break; default: return 0; } return n * 10; }")]
+    public void ASwitchOnAnIntegralScrutineeLowersToOneSwitchTerminator(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        IrSwitch terminator = Assert.Single(procedure.Blocks.Select(static b => b.Terminator).OfType<IrSwitch>());
+        Assert.Equal([Bits(32, 1), Bits(32, 3)], terminator.Cases.Select(static c => c.Value));
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 30)), Run(procedure, Bits(32, 3)));
+        Assert.Equal(new IrReturned(Bits(32, 0)), Run(procedure, Bits(32, 2)));
+    }
+
+    [Fact]
+    public void ASwitchOnABoolScrutineeLowersToOneSwitchTerminator()
+    {
+        IrProcedure procedure = Method("static int M(bool b, bool c) { switch (b) { case true: return 1; default: break; } switch (c) { case false: return 2; case true: return 3; } }");
+
+        IrSwitch terminator = Assert.Single(procedure.Blocks.Select(static b => b.Terminator).OfType<IrSwitch>());
+        Assert.Equal([new IrBoolValue(false), new IrBoolValue(true)], terminator.Cases.Select(static c => c.Value));
+        Assert.Equal(new IrReturned(Bits(32, 2)), Run(procedure, new IrBoolValue(false), new IrBoolValue(false)));
+    }
+
+    /// <summary>A single equality test is not a chain, so `if` keeps its branch.</summary>
+    [Fact]
+    public void ASingleCaseSwitchStaysABranch() =>
+        Assert.Empty(Method("static int M(int n) { switch (n) { case 1: return 2; } return 0; }")
+            .Blocks.Select(static b => b.Terminator).OfType<IrSwitch>());
+
+    [Theory]
+    [InlineData("static int M(int n) => n switch { > 1 => 2, _ => 0 };")]
+    [InlineData("static int M(object o) => o switch { int n => n, _ => 0 };")]
+    public void APatternBeyondAConstantIsOpaque(string members) =>
+        Assert.Contains(Opaques(Method(members)), static o => string.Equals(o.Reason, "switch-pattern", StringComparison.Ordinal));
+
+    [Fact]
+    public void AConstantPatternOutsideASwitchIsAnEquality() =>
+        Assert.Equal(new IrReturned(new IrBoolValue(true)), Run(Method("static bool M(int n) => n is 5;"), Bits(32, 5)));
+
+    /// <summary>A guard is an ordinary branch after the constant test, so the arm still lowers.</summary>
+    [Fact]
+    public void AGuardedConstantPatternLowersAsABranch()
+    {
+        IrProcedure procedure = Method("static int M(int n, bool c) => n switch { 1 when c => 2, _ => 0 };");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 2)), Run(procedure, Bits(32, 1), new IrBoolValue(true)));
+        Assert.Equal(new IrReturned(Bits(32, 0)), Run(procedure, Bits(32, 1), new IrBoolValue(false)));
+    }
+
+    /// <summary>Ticket M2-004 acceptance criterion 5: a reference parameter starts with an unconstrained shadow.</summary>
+    [Fact]
+    public void AReferenceParameterGetsAnUnconstrainedNullShadow()
+    {
+        IrProcedure procedure = Method("static bool M(string s) => s == null;");
+
+        IrParameter nulls = Assert.Single(procedure.Parameters, static p => p.Var.Name is "null.System.String");
+        Assert.Equal(new IrMap(new IrSort("System.String"), new IrBool()), nulls.Var.Type);
+        Assert.Equal(IrParameterKind.In, nulls.Kind);
+        Assert.Contains(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>(), r => r.Map == nulls.Var);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Theory]
+    [InlineData("static bool M(string s) => s == null;", true, true)]
+    [InlineData("static bool M(string s) => s != null;", true, false)]
+    [InlineData("static bool M(string s) => null == s;", false, false)]
+    public void AComparisonWithNullReadsTheShadow(string members, bool isNull, bool expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Equal(new IrReturned(new IrBoolValue(expected)), Run(procedure, Reference(0), Nulls("System.String", 0, isNull)));
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void DereferencingAPossiblyNullReceiverThrowsNullReferenceException(bool isNull, bool thrown)
+    {
+        IrProcedure procedure = Method("static int M(string s) => s.CompareTo(s);");
+
+        IrOutcome outcome = Run(procedure, Reference(0), Nulls("System.String", 0, isNull));
+
+        // A false shadow leaves only the call's own threw edge, which is a different exception type.
+        Assert.Equal(thrown, outcome is IrThrew { ExceptionType: "System.NullReferenceException" });
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A `new` is proven non-null, so neither the shadow nor the dereference branch is emitted.</summary>
+    [Fact]
+    public void ANewObjectNeedsNoNullCheck()
+    {
+        IrProcedure procedure = Method("void F() { } static void M() { new C().F(); }");
+
+        Assert.DoesNotContain(procedure.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.NullReferenceException" });
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A local takes the nullness of what was stored into it.</summary>
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(false, 7)]
+    public void ALocalCarriesTheShadowOfWhatWasAssignedToIt(bool isNull, int expected)
+    {
+        IrProcedure procedure = Method("static int M(string s) { string t = s; if (t == null) return 0; return 7; }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Reference(0), Nulls("System.String", 0, isNull)));
+    }
+
+    /// <summary>A value with no shadow of its own asks the `null.&lt;Sort&gt;` map, so equal references are equally null.</summary>
+    [Fact]
+    public void AValueWithoutAShadowTakesItsNullnessFromTheMap()
+    {
+        IrProcedure procedure = Method("static C F() => null; static void M() { F().G(); } void G() { }");
+
+        Assert.Contains(procedure.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.NullReferenceException" });
+        Assert.Single(procedure.Parameters, static p => p.Var.Name is "null.C");
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A constant of an uninterpreted sort is a designated element, so equal constants are equal values.</summary>
+    [Fact]
+    public void ConstantsOfAnUninterpretedSortAreDesignatedElements()
+    {
+        List<IrValue> constants =
+            [.. Method("static string M(bool b) { if (b) return null; return \"hello\"; }")
+                .Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>().Select(static c => c.Value)];
+
+        Assert.Contains(constants, static c => c is IrSortValue { Sort: "System.String", Id: 0 });
+        Assert.Contains(constants, static c => c is IrSortValue { Sort: "System.String", Id: not 0 });
+    }
+
+    [Fact]
+    public void ALocalAssignedTheNullLiteralIsNull()
+    {
+        IrProcedure procedure = Method("static bool M() { string s = null; return s == null; }");
+
+        Assert.Empty(procedure.Parameters);
+        Assert.Equal(new IrReturned(new IrBoolValue(true)), Run(procedure));
+    }
+
+    [Fact]
+    public void ALocalAssignedANewObjectIsNeverNull()
+    {
+        IrProcedure procedure = Method("void F() { } static void M() { C c = new C(); c.F(); }");
+
+        Assert.Empty(procedure.Parameters);
+        Assert.NotEqual(new IrThrew("System.NullReferenceException"), Run(procedure));
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Fact]
+    public void TheReceiverOfAnInstanceMethodIsTheThisInput()
+    {
+        IrProcedure procedure = Method("int F() => 1; int M() => F();");
+
+        IrParameter receiver = Assert.Single(procedure.Parameters, static p => p.Var.Name is "this");
+        Assert.Equal(new IrSort("C"), receiver.Var.Type);
+        Assert.Equal([receiver.Var], Assert.Single(Calls(procedure)).Args);
+    }
+
+    /// <summary>Ticket M2-004 acceptance criterion 6: a field is one SSA map keyed by its receiver.</summary>
+    [Fact]
+    public void AnInstanceFieldIsAMapKeyedByTheReceiver()
+    {
+        IrProcedure procedure = Method("int f; static int M(C a, C b) { a.f = 1; b.f = 2; return a.f; }");
+
+        IrParameter map = Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.C.f");
+        Assert.Equal(new IrMap(new IrSort("C"), new IrBitVec(32)), map.Var.Type);
+        Assert.Equal(2, procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapWrite>().Count());
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Theory]
+    [InlineData(0, 1, 1)]
+    [InlineData(0, 0, 2)]
+    public void AFieldWriteIsVisibleToALaterReadOfTheSameReceiver(int a, int b, int expected) =>
+        Assert.Equal(
+            new IrReturned(Bits(32, expected)),
+            Run(
+                Method("int f; static int M(C x, C y) { x.f = 1; y.f = 2; return x.f; }"),
+                Reference(a, "C"),
+                Reference(b, "C"),
+                Fields("C", new IrBitVec(32)),
+                Nulls("C", a, false)));
+
+    [Fact]
+    public void AStaticFieldIsTheSameMapKeyedByItsTypeToken()
+    {
+        IrProcedure procedure = Method("static int f; static int M() { f = 5; return f; }");
+
+        Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.C.f");
+        Assert.Equal(new IrSortValue("C", 0), Assert.IsType<IrConst>(procedure.Blocks[1].Instructions[0]).Value);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Fact]
+    public void AnArrayElementIsAMapKeyedByTheIndexWithItsOwnLength()
+    {
+        IrProcedure procedure = Method("static int M(int[] a, int i) { a[i] = 1; return a[0] + a.Length; }");
+
+        Assert.Single(procedure.Parameters, static p => p.Var.Name is "array.a");
+        Assert.Single(procedure.Parameters, static p => p.Var.Name is "length.a" && p.Var.Type is IrBitVec { Width: 32 });
+        Assert.Contains(procedure.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.IndexOutOfRangeException" });
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(4, true)]
+    [InlineData(-1, true)]
+    public void AnIndexOutsideTheArrayThrowsIndexOutOfRange(int index, bool thrown)
+    {
+        IrProcedure procedure = Method("static int M(int[] a, int i) => a[i];");
+
+        IrOutcome outcome = Run(procedure, Reference(0, "int[]"), Bits(32, index), Elements(new IrBitVec(32)), Bits(32, 4), Nulls("int[]", 0, false));
+
+        Assert.Equal(thrown, outcome is IrThrew { ExceptionType: "System.IndexOutOfRangeException" });
+    }
+
+    /// <summary>Ticket M2-004 acceptance criterion 4: a throw inside a try goes to the matching catch.</summary>
+    [Theory]
+    [InlineData(-1, 10)]
+    [InlineData(1, 1)]
+    public void AThrowInsideATryGoesToTheCatchThatCatchesItsType(int a, int expected) =>
+        Assert.Equal(
+            new IrReturned(Bits(32, expected)),
+            Run(Method("""
+                static int M(int a)
+                {
+                    try
+                    {
+                        if (a < 0) throw new ArgumentOutOfRangeException();
+                        return a;
+                    }
+                    catch (ArgumentException)
+                    {
+                        return 10;
+                    }
+                }
+                """), Bits(32, a)));
+
+    /// <summary>The first catch whose type the thrown type converts to wins; a type no catch takes leaves the procedure.</summary>
+    [Theory]
+    [InlineData(2, 0, 10)]
+    [InlineData(int.MaxValue, 2, 20)]
+    [InlineData(6, 3, 1)]
+    public void TheFirstCatchThatTakesTheThrownTypeWins(int a, int b, int expected)
+    {
+        IrProcedure procedure = Method("""
+            static int M(int a, int b)
+            {
+                try
+                {
+                    int c = checked(a * b);
+                    int d = a / b;
+                    return 1;
+                }
+                catch (DivideByZeroException)
+                {
+                    return 10;
+                }
+                catch (ArithmeticException)
+                {
+                    return 20;
+                }
+            }
+            """);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
+    }
+
+    /// <summary>A finally is duplicated onto the normal path, the return path and the throw path.</summary>
+    [Theory]
+    [InlineData(0, 4)]
+    [InlineData(1, 2)]
+    [InlineData(-1, 12)]
+    public void AFinallyRunsOnEveryExitPath(int a, int expected)
+    {
+        IrProcedure procedure = Method("""
+            static int M(int a)
+            {
+                int s = 0;
+                try
+                {
+                    if (a < 0) throw new ArgumentException();
+                    if (a > 0) { s = 1; return s + 1; }
+                    s = 2;
+                }
+                catch (ArgumentException)
+                {
+                    return s + 12;
+                }
+                finally
+                {
+                    s = s + 1;
+                }
+
+                return s + 1;
+            }
+            """);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a)));
+    }
+
+    [Fact]
+    public void AFinallyWithNoCatchStillRunsBeforeTheThrowLeaves()
+    {
+        IrProcedure procedure = Method("static int M(int a, int b) { try { return a / b; } finally { Log(); } } static void Log() { }");
+
+        Assert.Equal(new IrThrew("System.DivideByZeroException"), Run(procedure, Bits(32, 1), Bits(32, 0)));
+        Assert.Equal(3, Calls(procedure).Length); // one copy of the finally per exit path: return, divide by zero, MinValue / -1
+    }
+
+    /// <summary>Exits that end the same way share one copy of the finally, instead of one per raising instruction.</summary>
+    [Fact]
+    public void ExitsThatLeaveTheSameWayShareOneFinallyCopy()
+    {
+        IrProcedure procedure = Method("static int M(int a, int b, int c) { try { return a / b + a / c; } finally { Log(); } } static void Log() { }");
+
+        // Both divide-by-zero edges reach the same shared throw block, and so do both MinValue / -1 edges.
+        Assert.Equal(3, Calls(procedure).Length);
+    }
+
+    /// <summary>An opaque call's exception type is unknown, so one candidate catch takes it and several are opaque.</summary>
+    [Fact]
+    public void ACallThatThrowsInsideATryGoesToTheOnlyCatch()
+    {
+        IrProcedure procedure = Method("static void F() { } static int M() { try { F(); return 1; } catch (ArgumentException) { return 2; } }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.DoesNotContain(procedure.Blocks, static b => b.Terminator is IrThrow);
+    }
+
+    [Fact]
+    public void ACallThatThrowsWhereSeveralCatchesCouldApplyIsOpaque()
+    {
+        IrProcedure procedure = Method("""
+            static void F() { }
+            static int M()
+            {
+                try { F(); return 1; }
+                catch (ArgumentException) { return 2; }
+                catch (InvalidOperationException) { return 3; }
+            }
+            """);
+
+        Assert.Equal("call-throw-in-try", Assert.Single(Opaques(procedure)).Reason);
+    }
+
+    /// <summary>
+    /// An exception raised inside a `finally` unwinds to a `catch` outside it, which only the main pass
+    /// lowered: the copy's own block map does not name it.
+    /// </summary>
+    [Theory]
+    [InlineData(2, 6)]
+    [InlineData(0, 11)]
+    public void AThrowInsideAFinallyGoesToACatchOutsideIt(int b, int expected)
+    {
+        IrProcedure procedure = Method("""
+            static int M(int a, int b)
+            {
+                int s = 0;
+                try
+                {
+                    try { s = 1; }
+                    finally { s += 10 / b; }
+                }
+                catch (DivideByZeroException) { s += 10; }
+
+                return s;
+            }
+            """);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, 0), Bits(32, b)));
+    }
+
+    /// <summary>The same, for a call's `threw` edge, whose exception type is not known.</summary>
+    [Fact]
+    public void ACallThatThrowsInsideAFinallyGoesToACatchOutsideIt()
+    {
+        IrProcedure procedure = Method("static void F() { } static int M() { try { try { return 1; } finally { F(); } } catch (ArgumentException) { return 2; } }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.DoesNotContain(procedure.Blocks, static b => b.Terminator is IrThrow);
+    }
+
+    /// <summary>A `catch` nested inside the `finally` is in the copy's own map, not the main pass's.</summary>
+    [Fact]
+    public void AThrowInsideAFinallyGoesToACatchInsideThatFinally()
+    {
+        IrProcedure procedure = Method("""
+            static int M(int a, int b)
+            {
+                int s = 0;
+                try { s = 1; }
+                finally
+                {
+                    try { s += 10 / b; }
+                    catch (DivideByZeroException) { s += 100; }
+                }
+
+                return s;
+            }
+            """);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 101)), Run(procedure, Bits(32, 0), Bits(32, 0)));
+        Assert.Equal(new IrReturned(Bits(32, 6)), Run(procedure, Bits(32, 0), Bits(32, 2)));
+    }
+
+    /// <summary>A folded chain is still a set of ordinary edges: one that leaves a `try` runs its `finally`.</summary>
+    [Theory]
+    [InlineData(1, 11)]
+    [InlineData(3, 13)]
+    [InlineData(4, 10)]
+    public void AFoldedSwitchRunsTheFinallyOnEveryEdge(int x, int expected)
+    {
+        IrProcedure procedure = Method("""
+            static int M(int x)
+            {
+                int r = 0;
+                try
+                {
+                    if (x == 1) { r = 1; }
+                    else if (x == 2) { r = 2; }
+                    else if (x == 3) { r = 3; }
+                }
+                finally { r += 10; }
+
+                return r;
+            }
+            """);
+
+        Assert.Single(procedure.Blocks.Select(static b => b.Terminator).OfType<IrSwitch>());
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, x)));
+    }
+
+    [Fact]
+    public void RethrowIsOpaqueInsideACatch() =>
+        Assert.Equal(
+            "rethrow",
+            Assert.Single(Opaques(Method("static int M(int a, int b) { try { return a / b; } catch (DivideByZeroException) { throw; } }"))).Reason);
+
+    /// <summary>Strings stay uninterpreted, so `a + b` is the call the compiler makes (needed by the `removed-null-check` sample).</summary>
+    [Fact]
+    public void StringConcatenationIsACallToStringConcat()
+    {
+        IrProcedure procedure = Method("static string M(string a, string b) => a + b;");
+
+        Assert.Equal("System.String::Concat(string,string)", Assert.Single(Calls(procedure)).Callee.Value);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket M2-004 acceptance criterion 8: the shape of the `removed-null-check` sample lowers opaque-free.</summary>
+    [Fact]
+    public void TheRemovedNullCheckSampleShapeLowersWithoutOpaqueNodes()
+    {
+        IrProcedure guarded = Method("static string M(string name) { if (name == null) throw new ArgumentNullException(\"name\"); return \"Hello, \" + name.ToUpper(); }");
+        IrProcedure unguarded = Method("static string M(string name) { return \"Hello, \" + name.ToUpper(); }");
+
+        Assert.Empty(Opaques(guarded));
+        Assert.Empty(Opaques(unguarded));
+        Assert.Contains(guarded.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.ArgumentNullException" });
+        Assert.Contains(unguarded.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.NullReferenceException" });
     }
 
     [Fact]

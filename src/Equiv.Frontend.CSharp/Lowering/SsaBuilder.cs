@@ -100,6 +100,7 @@ internal sealed class SsaBuilder
     {
         IrGoto jump => [jump.Target],
         IrBranch branch => [branch.Then, branch.Else],
+        IrSwitch choice => [.. choice.Cases.Select(static c => c.Target), choice.Default],
         _ => [],
     };
 
@@ -268,6 +269,8 @@ internal sealed class SsaBuilder
         IrUnary u => u with { Target = Resolve(u.Target), A = Resolve(u.A) },
         IrOverflows o => o with { Target = Resolve(o.Target), A = Resolve(o.A), B = Resolve(o.B) },
         IrCall c => c with { Target = c.Target is null ? null : Resolve(c.Target), Threw = Resolve(c.Threw!), Args = [.. c.Args.Select(Resolve)] },
+        IrMapRead r => r with { Target = Resolve(r.Target), Map = Resolve(r.Map), Key = Resolve(r.Key) },
+        IrMapWrite w => w with { Target = Resolve(w.Target), Map = Resolve(w.Map), Key = Resolve(w.Key), Value = Resolve(w.Value) },
         _ => Rewrite((IrOpaque)instruction),
     };
 
@@ -276,6 +279,7 @@ internal sealed class SsaBuilder
     private IrTerminator Rewrite(IrTerminator terminator) => terminator switch
     {
         IrBranch branch => branch with { Cond = Resolve(branch.Cond) },
+        IrSwitch choice => choice with { Scrutinee = Resolve(choice.Scrutinee) },
         IrReturn exit => exit with { Value = exit.Value is null ? null : Resolve(exit.Value), Outs = [.. exit.Outs.Select(o => o with { Final = Resolve(o.Final) })] },
         IrThrow exit => exit with { Outs = [.. exit.Outs.Select(o => o with { Final = Resolve(o.Final) })] },
         _ => terminator,

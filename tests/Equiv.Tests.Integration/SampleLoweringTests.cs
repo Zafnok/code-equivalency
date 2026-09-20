@@ -23,11 +23,16 @@ namespace Equiv.Tests.Integration;
 [Trait("Category", "Integration")]
 public sealed partial class SampleLoweringTests
 {
-    private static readonly string[] Samples = ["identical", "renamed-locals", "added-branch", "removed-null-check", "loop-bound-change", "added-removed"];
+    /// <summary>The five M1-001 samples: every procedure their READMEs list is expected-Equivalent or expected-Divergent.</summary>
+    private static readonly string[] Lowered = ["identical", "renamed-locals", "added-branch", "removed-null-check", "loop-bound-change"];
+
+    private static readonly string[] Samples = [.. Lowered, "added-removed"];
 
     private static string RepoRoot => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
     public static TheoryData<string> SampleNames => [.. Samples];
+
+    public static TheoryData<string> LoweredSampleNames => [.. Lowered];
 
     [Theory]
     [MemberData(nameof(SampleNames))]
@@ -40,6 +45,23 @@ public sealed partial class SampleLoweringTests
         {
             Assert.Empty(IrValidator.Validate(pair.OldBody!));
             Assert.Empty(IrValidator.Validate(pair.NewBody!));
+        }
+    }
+
+    /// <summary>
+    /// Ticket M2-004 acceptance criterion 8: the five M1-001 samples lower with zero <see cref="IrOpaque"/>
+    /// nodes. Every procedure they match is one their README marks expected-Equivalent or expected-Divergent.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(LoweredSampleNames))]
+    public void EveryMatchedPairLowersWithoutOpaqueNodes(string sample)
+    {
+        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, TestContext.Current.CancellationToken);
+
+        Assert.NotEmpty(result.Pairs);
+        foreach (IrProcedure body in result.Pairs.SelectMany(static p => new[] { p.OldBody!, p.NewBody! }))
+        {
+            Assert.Empty(body.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>().Select(o => $"{body.Identity.Value}: {o.Reason}"));
         }
     }
 

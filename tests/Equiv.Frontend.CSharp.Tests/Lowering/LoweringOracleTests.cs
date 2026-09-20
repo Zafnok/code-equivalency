@@ -32,6 +32,8 @@ public sealed class LoweringOracleTests
     private const int InputsPerCase = 20;
     private const string Seed = "000000000000";
 
+    private static readonly IrSortValue Reference = new("System.String", 1);
+
     [Fact]
     public void LoweredIrAgreesWithCompiledCSharp() =>
         Gen.Select(LoweringOracleGen.Method, LoweringOracleGen.Input.Array[InputsPerCase]).Array[Cases]
@@ -40,6 +42,12 @@ public sealed class LoweringOracleTests
     private static void Check((OracleMethod Method, OracleInput[] Inputs)[] cases)
     {
         string source = $"public static class Oracle\n{{\n{string.Concat(cases.Select(static (c, i) => c.Method.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n";
+        // Acceptance criterion 7: the run must actually reach the constructs M2-004 added.
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked"])
+        {
+            Assert.Contains(construct, source, StringComparison.Ordinal);
+        }
+
         CSharpCompilation compilation = CSharpCompilation.Create(
             "Oracle",
             [CSharpSyntaxTree.ParseText(source, path: "Oracle.cs", cancellationToken: TestContext.Current.CancellationToken)],
@@ -84,7 +92,7 @@ public sealed class LoweringOracleTests
     {
         try
         {
-            object result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E])!;
+            object result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s"])!;
             return FormattableString.Invariant($"return {result}");
         }
         catch (TargetInvocationException exception)
@@ -93,15 +101,24 @@ public sealed class LoweringOracleTests
         }
     }
 
+    private static IrValue Argument(IrVar parameter, OracleInput input) => parameter.Name switch
+    {
+        "a" => IrBitVecValue.FromSigned(32, input.A),
+        "b" => IrBitVecValue.FromSigned(32, input.B),
+        "c" => IrBitVecValue.FromSigned(64, input.C),
+        "d" => IrBitVecValue.FromSigned(64, input.D),
+        "e" => new IrBoolValue(input.E),
+        "s" => Reference,
+        _ => new IrMapValue(
+            (IrMap)parameter.Type,
+            new IrBoolValue(input.SIsNull),
+            ImmutableDictionary<IrValue, IrValue>.Empty),
+    };
+
     private static string Interpreted(IrProcedure procedure, OracleInput input)
     {
-        IrInputs arguments = new([
-            IrBitVecValue.FromSigned(32, input.A),
-            IrBitVecValue.FromSigned(32, input.B),
-            IrBitVecValue.FromSigned(64, input.C),
-            IrBitVecValue.FromSigned(64, input.D),
-            new IrBoolValue(input.E),
-        ]);
+        // By name, because the synthesised heap inputs (M2-004) are only there when the body needs them.
+        IrInputs arguments = new([.. procedure.Parameters.Select(p => Argument(p.Var, input))]);
         return IrInterpreter.Run(procedure, arguments, IrGenOracle.Instance, IrGen.StepBudget).Outcome switch
         {
             IrReturned { Value: IrBitVecValue bits } => FormattableString.Invariant($"return {bits.TwosComplement}"),

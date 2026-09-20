@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Equiv.Core.Ir;
 
 using Microsoft.CodeAnalysis;
@@ -20,6 +22,48 @@ internal static class TypeMapper
         SpecialType.System_Int64 or SpecialType.System_UInt64 => new IrBitVec(64),
         _ => new IrSort(MetadataName(type)),
     };
+
+    /// <summary>
+    /// C# binary numeric promotion of a single operand (ECMA-334 12.4.7): anything narrower than
+    /// <c>int</c> becomes a signed <c>int</c>. Null when <paramref name="type"/> is not integral.
+    /// </summary>
+    public static (IrBitVec Type, bool Signed)? Promote(ITypeSymbol type) => Map(type) switch
+    {
+        IrBitVec { Width: < 32 } => (new IrBitVec(32), true),
+        IrBitVec bits => (bits, IsSigned(type)),
+        _ => null,
+    };
+
+    /// <summary>
+    /// The IR value of a C# compile-time constant. A constant of an uninterpreted sort (a string, a
+    /// floating-point value, an enum member, <c>null</c>) is a designated element of that sort, chosen
+    /// by a stable hash of the constant so that equal constants are the same element on both sides;
+    /// <c>null</c> is always element 0.
+    /// </summary>
+    public static IrValue Constant(ITypeSymbol type, object? value) => Map(type) switch
+    {
+        IrBitVec bits when IsSigned(type) => IrBitVecValue.FromSigned(bits.Width, System.Convert.ToInt64(value, CultureInfo.InvariantCulture)),
+        IrBitVec bits => new IrBitVecValue(bits.Width, System.Convert.ToUInt64(value, CultureInfo.InvariantCulture)),
+        IrBool => new IrBoolValue((bool)value!),
+        var sort => new IrSortValue(((IrSort)sort).Name, Element(value)),
+    };
+
+    /// <summary>FNV-1a over the constant's invariant text; 0 is reserved for <c>null</c>.</summary>
+    private static int Element(object? value)
+    {
+        if (value is null)
+        {
+            return 0;
+        }
+
+        uint hash = 2166136261;
+        foreach (char c in string.Create(CultureInfo.InvariantCulture, $"{value}"))
+        {
+            hash = (hash ^ c) * 16777619;
+        }
+
+        return (int)((hash & 0x7FFFFFFF) | 1);
+    }
 
     /// <summary>Whether an integral type is signed; signedness lives on IR operations, not IR types.</summary>
     public static bool IsSigned(ITypeSymbol type) =>

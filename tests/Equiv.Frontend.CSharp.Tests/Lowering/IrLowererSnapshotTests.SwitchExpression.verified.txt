@@ -1,0 +1,29 @@
+﻿proc "C::M(char)" (%c "c": bv16) -> bv32 entry B0
+B0:
+  goto B1
+B1:
+  switch %c [bv16 97 -> B2, bv16 98 -> B3] default B4
+B2:
+  %$c1.12: bv32 = const bv32 1
+  goto B7
+B3:
+  %$c1.11: bv32 = const bv32 2
+  goto B7
+B4:
+  %$4: bool = const bool true
+  br %$4, B5, B6
+B5:
+  %$c1.10: bv32 = const bv32 0
+  goto B7
+B6:
+  %$6: sort "System.Runtime.CompilerServices.SwitchExpressionException" = call "System.Runtime.CompilerServices.SwitchExpressionException::.ctor()"() threw %$7: bool
+  br %$7, B9, B10
+B7:
+  %$c1.13: bv32 = phi [B5: %$c1.10, B3: %$c1.11, B2: %$c1.12]
+  ret %$c1.13
+B9:
+  throw "System.Exception"
+B10:
+  goto B11
+B11:
+  throw "System.Runtime.CompilerServices.SwitchExpressionException"
