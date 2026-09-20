@@ -28,12 +28,12 @@ internal static partial class RouteTemplate
     {
         string left = (prefix ?? string.Empty).Trim('/');
         string right = (route ?? string.Empty).Trim('/');
-        if (left.Length == 0)
+        return (left.Length, right.Length) switch
         {
-            return right;
-        }
-
-        return right.Length == 0 ? left : $"{left}/{right}";
+            (0, _) => right,
+            (_, 0) => left,
+            _ => $"{left}/{right}",
+        };
     }
 
     private static string ControllerName(string typeName) =>
