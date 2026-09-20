@@ -71,6 +71,14 @@ so equal references are equally null; `new` sets the shadow to false instead. Th
 heap is not an observable (section 1), so no map appears in `outs`. IR variable names take
 only letters, digits, `_`, `.` and `$`, which is why these names are spelled with dots.
 
+Two gaps the M2-004 heap model leaves open, stated here so a later ticket does not assume
+otherwise. An `IrCall` does not havoc any `field.*` map, so a call's effect on the heap is
+not modelled and a pair that differs only in where it reads a field around a call is not
+distinguished. And `array.<v>` is keyed per array *variable*, not per array value, so two
+variables holding the same array are two independent slices. Both follow the M2-004
+acceptance criteria and both are unsound in general; closing either needs its own ticket,
+and M3-001's soundness harness (section 7) should not be read as covering them.
+
 ## 3. Lowering rules (C#)
 
 Source of truth is Roslyn `ControlFlowGraph.Create` over `IOperation`. The Roslyn CFG

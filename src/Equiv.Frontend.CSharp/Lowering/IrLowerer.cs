@@ -37,6 +37,7 @@ internal sealed class IrLowerer
     private readonly Dictionary<string, IrBlockId> throwBlocks = new(StringComparer.Ordinal);
     private readonly Dictionary<(int Region, IrBlockId Continuation), IrBlockId> copies = [];
     private Dictionary<int, IrBlockId> blockIds = [];
+    private Dictionary<int, IrBlockId> mainBlocks = [];
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
     private readonly Dictionary<string, SsaBuilder.Variable> slices = new(StringComparer.Ordinal);
     private readonly HeapInputs heap = new();
@@ -79,7 +80,7 @@ internal sealed class IrLowerer
         SourceSpan span = Span(body.Syntax);
         // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles; only
         // `foreach` is left, because the CFG desugars every one of them -- arrays included -- into the
-        // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-004). `using`
+        // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-003). `using`
         // and `lock` are out of this ticket's scope even though the CFG gives them ordinary regions.
         string? wholeBody = body.Descendants().Any(static o => o is IForEachLoopOperation) ? "foreach-enumerator"
             : body.Descendants().Any(static o => o is IUsingOperation or IUsingDeclarationOperation) ? "using"
@@ -140,6 +141,8 @@ internal sealed class IrLowerer
         {
             blockIds[block.Ordinal] = ssa.NewBlock();
         }
+
+        mainBlocks = blockIds;
 
         ImmutableArray<(SsaBuilder.Variable, IrVar)>.Builder outs = ImmutableArray.CreateBuilder<(SsaBuilder.Variable, IrVar)>();
         for (int i = 0; i < parameters.Length; i++)
@@ -242,8 +245,16 @@ internal sealed class IrLowerer
             return unknown;
         }
 
-        return Unwind(finallys, handler is null ? ThrowBlock(exceptionType) : blockIds[handler.FirstBlockOrdinal]);
+        return Unwind(finallys, handler is null ? ThrowBlock(exceptionType) : Handler(handler));
     }
+
+    /// <summary>
+    /// The block a <c>catch</c> was lowered into. A <c>finally</c> copy fills a block map of its own, and
+    /// an exception raised inside a <c>finally</c> unwinds to a <c>catch</c> outside it, which only the
+    /// main pass lowered; a <c>catch</c> nested inside the <c>finally</c> is in the copy's own map.
+    /// </summary>
+    private IrBlockId Handler(ControlFlowRegion handler) =>
+        blockIds.TryGetValue(handler.FirstBlockOrdinal, out IrBlockId? lowered) ? lowered : mainBlocks[handler.FirstBlockOrdinal];
 
     private IrBlockId ThrowBlock(string exceptionType)
     {
@@ -353,10 +364,12 @@ internal sealed class IrLowerer
     private void Switch(SwitchChains.Chain chain)
     {
         IrVar scrutinee = Value(chain.Scrutinee);
+        // Every edge goes through Destination, so a case or the fall-out that leaves a `try` runs its
+        // `finally` just as the branches this chain was folded from would have.
         ssa.Terminate(current, new IrSwitch(
             scrutinee,
-            [.. chain.Cases.Select(c => (TypeMapper.Constant(c.ConstantType, c.Constant), blockIds[c.Target.Ordinal]))],
-            blockIds[chain.Default.Ordinal]));
+            [.. chain.Cases.Select(c => (TypeMapper.Constant(c.ConstantType, c.Constant), Destination(c.Target)))],
+            Destination(chain.Default)));
     }
 
     /// <summary>

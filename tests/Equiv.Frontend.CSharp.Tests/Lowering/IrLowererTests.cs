@@ -536,6 +536,96 @@ public sealed class IrLowererTests
         Assert.Equal("call-throw-in-try", Assert.Single(Opaques(procedure)).Reason);
     }
 
+    /// <summary>
+    /// An exception raised inside a `finally` unwinds to a `catch` outside it, which only the main pass
+    /// lowered: the copy's own block map does not name it.
+    /// </summary>
+    [Theory]
+    [InlineData(2, 6)]
+    [InlineData(0, 11)]
+    public void AThrowInsideAFinallyGoesToACatchOutsideIt(int b, int expected)
+    {
+        IrProcedure procedure = Method("""
+            static int M(int a, int b)
+            {
+                int s = 0;
+                try
+                {
+                    try { s = 1; }
+                    finally { s += 10 / b; }
+                }
+                catch (DivideByZeroException) { s += 10; }
+
+                return s;
+            }
+            """);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, 0), Bits(32, b)));
+    }
+
+    /// <summary>The same, for a call's `threw` edge, whose exception type is not known.</summary>
+    [Fact]
+    public void ACallThatThrowsInsideAFinallyGoesToACatchOutsideIt()
+    {
+        IrProcedure procedure = Method("static void F() { } static int M() { try { try { return 1; } finally { F(); } } catch (ArgumentException) { return 2; } }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.DoesNotContain(procedure.Blocks, static b => b.Terminator is IrThrow);
+    }
+
+    /// <summary>A `catch` nested inside the `finally` is in the copy's own map, not the main pass's.</summary>
+    [Fact]
+    public void AThrowInsideAFinallyGoesToACatchInsideThatFinally()
+    {
+        IrProcedure procedure = Method("""
+            static int M(int a, int b)
+            {
+                int s = 0;
+                try { s = 1; }
+                finally
+                {
+                    try { s += 10 / b; }
+                    catch (DivideByZeroException) { s += 100; }
+                }
+
+                return s;
+            }
+            """);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 101)), Run(procedure, Bits(32, 0), Bits(32, 0)));
+        Assert.Equal(new IrReturned(Bits(32, 6)), Run(procedure, Bits(32, 0), Bits(32, 2)));
+    }
+
+    /// <summary>A folded chain is still a set of ordinary edges: one that leaves a `try` runs its `finally`.</summary>
+    [Theory]
+    [InlineData(1, 11)]
+    [InlineData(3, 13)]
+    [InlineData(4, 10)]
+    public void AFoldedSwitchRunsTheFinallyOnEveryEdge(int x, int expected)
+    {
+        IrProcedure procedure = Method("""
+            static int M(int x)
+            {
+                int r = 0;
+                try
+                {
+                    if (x == 1) { r = 1; }
+                    else if (x == 2) { r = 2; }
+                    else if (x == 3) { r = 3; }
+                }
+                finally { r += 10; }
+
+                return r;
+            }
+            """);
+
+        Assert.Single(procedure.Blocks.Select(static b => b.Terminator).OfType<IrSwitch>());
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, x)));
+    }
+
     [Fact]
     public void RethrowIsOpaqueInsideACatch() =>
         Assert.Equal(

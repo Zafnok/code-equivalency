@@ -47,8 +47,8 @@ internal sealed class SwitchChains
     private static Test? Read(BasicBlock block)
     {
         if (block.ConditionKind != ControlFlowConditionKind.WhenFalse
-            || block.FallThroughSuccessor is not { Semantics: ControlFlowBranchSemantics.Regular, Destination: { } match }
-            || block.ConditionalSuccessor is not { Semantics: ControlFlowBranchSemantics.Regular, Destination: { } otherwise })
+            || block.FallThroughSuccessor is not { Semantics: ControlFlowBranchSemantics.Regular, Destination: not null } match
+            || block.ConditionalSuccessor is not { Semantics: ControlFlowBranchSemantics.Regular, Destination: not null } otherwise)
         {
             return null;
         }
@@ -88,9 +88,9 @@ internal sealed class SwitchChains
         List<int> steps = [];
         // Only a block with nothing of its own and no other way in can be absorbed: its test is the
         // whole block, so moving it into the head changes nothing that any other edge could observe.
-        for (BasicBlock next = head.Otherwise;
+        for (BasicBlock next = head.Otherwise.Destination!;
             next.Operations.IsEmpty && next.Predecessors.Length == 1 && Read(next) is { } step && step.Key.Equals(head.Key);
-            next = step.Otherwise)
+            next = step.Otherwise.Destination!)
         {
             tests.Add(step);
             steps.Add(next.Ordinal);
@@ -108,11 +108,15 @@ internal sealed class SwitchChains
         absorbed.UnionWith(steps);
     }
 
-    /// <summary>A folded chain: the scrutinee to lower in the head block, its cases in order, and the fall-out block.</summary>
+    /// <summary>
+    /// A folded chain: the scrutinee to lower in the head block, its cases in order, and the fall-out
+    /// edge. Each target is the CFG <em>branch</em>, not the block, so that the lowering runs whatever
+    /// <c>finally</c> that edge leaves, exactly as it does for a branch it did not fold.
+    /// </summary>
     internal sealed record Chain(
         IOperation Scrutinee,
-        ImmutableArray<(object Constant, ITypeSymbol ConstantType, BasicBlock Target)> Cases,
-        BasicBlock Default);
+        ImmutableArray<(object Constant, ITypeSymbol ConstantType, ControlFlowBranch Target)> Cases,
+        ControlFlowBranch Default);
 
-    private sealed record Test(object Key, IOperation Scrutinee, object Constant, ITypeSymbol ConstantType, BasicBlock Match, BasicBlock Otherwise);
+    private sealed record Test(object Key, IOperation Scrutinee, object Constant, ITypeSymbol ConstantType, ControlFlowBranch Match, ControlFlowBranch Otherwise);
 }
