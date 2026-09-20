@@ -14,7 +14,16 @@ internal static class RoslynTestCompilations
             .Split(Path.PathSeparator)
             .Select(static path => (MetadataReference)MetadataReference.CreateFromFile(path))];
 
-    public static Compilation Compile(string source, string assemblyName = "Snippet")
+    public static Compilation Compile(string source, string assemblyName = "Snippet") => Compile(source, [], assemblyName);
+
+    /// <summary>
+    /// <paramref name="extraReferences"/> lets a snippet reference types compiled separately (e.g. via
+    /// <see cref="ToReference"/>) instead of declaring them inline, so those types' own members never
+    /// show up when a test walks <c>this</c> compilation's own symbols (M2-005: fake route attributes
+    /// declared for a metadata-name-only lookup would otherwise add spurious constructors for
+    /// <see cref="ProcedureEnumerator"/>/<c>CSharpFrontend.Analyze</c> to enumerate).
+    /// </summary>
+    public static Compilation Compile(string source, IEnumerable<MetadataReference> extraReferences, string assemblyName = "Snippet")
     {
         using AdhocWorkspace workspace = new();
         // Build the project from a ProjectInfo: Project.WithMetadataReferences returns a copy the workspace never sees.
@@ -25,9 +34,11 @@ internal static class RoslynTestCompilations
             assemblyName,
             LanguageNames.CSharp,
             compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary),
-            metadataReferences: References));
+            metadataReferences: [.. References, .. extraReferences]));
         Document document = workspace.AddDocument(project.Id, "Snippet.cs", SourceText.From(source));
 
         return document.Project.GetCompilationAsync().GetAwaiter().GetResult()!;
     }
+
+    public static MetadataReference ToReference(this Compilation compilation) => compilation.ToMetadataReference();
 }

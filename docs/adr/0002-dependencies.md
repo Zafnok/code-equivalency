@@ -21,6 +21,8 @@ latest stable on nuget.org on 2026-09-17; re-checked 2026-09-18 by M0-002 (only
 | MinVer | 8.0.0 | all | versions from git tags, zero config |
 | dotnet-stryker (tool) | 5.0.0 | CI | mutation testing; MTP runner via `--test-runner mtp` |
 | dotnet-sonarscanner (tool) | 11.3.0 | CI | SonarQube Cloud changegate (ADR 0009); wraps build+test, reads the opencover report `build.ps1` emits |
+| Microsoft.AspNet.WebApi.Core | 5.3.0 | samples/webapi-basic (legacy) | ticket M2-005; the real Web API 2 route/verb attributes for the sample's legacy side. `samples/**` is isolated from central package management (M1-001), so this is not in `Directory.Packages.props`; pinned directly in the sample's own `.csproj` instead |
+| Microsoft.AspNetCore.Mvc.Core | 2.3.13 | samples/webapi-basic (modern) | ticket M2-005; the real ASP.NET Core route/verb attributes for the sample's modern side. Last version published as a standalone package before ASP.NET Core 3.0 moved these types into the `Microsoft.AspNetCore.App` shared framework; still netstandard2.0, so a plain net10.0 class library (no web SDK, M2-001 pitfalls) can reference it for the attributes alone. Same samples-only exemption from `Directory.Packages.props` as the row above |
 
 ## Rejected
 - FluentAssertions 8+ (commercial licence since Jan 2025). Use xUnit asserts; add

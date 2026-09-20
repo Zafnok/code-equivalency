@@ -410,3 +410,10 @@ dotnet_naming_style.s_camelcase.capitalization = camel_case
 [src/Equiv.Frontend.CSharp/Loading/SolutionLoadException.cs]
 dotnet_diagnostic.CA1064.severity = none
 dotnet_diagnostic.CA1032.severity = none
+
+# M2-005: RouteTemplate.Normalize lower-cases a route it builds for output (HTTP route convention is
+# lower-case), not a value compared case-insensitively, so CA1308's ToUpperInvariant advice (aimed at
+# comparison/normalisation keys, where lower-casing can lose information for some cultures) does not
+# apply to this genuinely-lower-case-by-design string.
+[src/Equiv.Frontend.CSharp/Endpoints/RouteTemplate.cs]
+dotnet_diagnostic.CA1308.severity = none

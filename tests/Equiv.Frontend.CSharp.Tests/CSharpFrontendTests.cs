@@ -126,4 +126,249 @@ public sealed class CSharpFrontendTests
         CSharpFrontend frontend = new(new StubLoader(_ => throw new InvalidOperationException()), new StableIdentityMatcher());
         Assert.Throws<ArgumentNullException>(() => frontend.Analyze("a.sln", "b.sln", null!, CancellationToken.None));
     }
+
+    // Declared as a separate referenced assembly, not inlined into the compilation under test: an
+    // inlined fake attribute class's own (explicit) constructor would otherwise show up as just another
+    // procedure for ProcedureEnumerator/CSharpFrontend.Analyze to enumerate and match.
+    private static readonly MetadataReference LegacyRouteAttributes = RoslynTestCompilations.Compile(
+        """
+        namespace System.Web.Http
+        {
+            public class RouteAttribute : System.Attribute { public RouteAttribute(string template = null) { } }
+            public class HttpGetAttribute : System.Attribute { }
+            public class HttpPostAttribute : System.Attribute { }
+        }
+        """,
+        "LegacyRouteAttributes").ToReference();
+
+    private static readonly MetadataReference ModernRouteAttributes = RoslynTestCompilations.Compile(
+        """
+        namespace Microsoft.AspNetCore.Mvc
+        {
+            public class RouteAttribute : System.Attribute { public RouteAttribute(string template = null) { } }
+            public class HttpGetAttribute : System.Attribute { public HttpGetAttribute(string template = null) { } }
+            public class HttpPostAttribute : System.Attribute { public HttpPostAttribute(string template = null) { } }
+        }
+        """,
+        "ModernRouteAttributes").ToReference();
+
+    /// <summary>
+    /// M2-005 acceptance criterion 3: an endpoint match bridges legacy/modern actions whose plain C#
+    /// identities differ (different namespaces here, with no user rename map at all), and it becomes
+    /// the pair's identity (both criterion 3's "MatchResult gains nothing" and criterion 4's SARIF
+    /// <c>fullyQualifiedName</c> need the pair's own <see cref="ProcedureIdentity.Value"/> to already be
+    /// <c>"VERB /template"</c>). A route with no counterpart at all on the other side — legacy-only
+    /// (<c>Old.Ns.OrdersController.Delete</c>) and modern-only (<c>New.Ns.OrdersController.Create</c>) —
+    /// is unaffected: both fall through to ordinary Removed/Added handling instead of ever reaching the
+    /// endpoint rename map.
+    /// </summary>
+    [Fact]
+    public void Analyze_EndpointRenameMapBeforeUserMap()
+    {
+        Compilation legacyCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace Old.Ns
+            {
+                using System.Web.Http;
+
+                public class OrdersController
+                {
+                    [HttpGet, Route("api/orders/{id}")]
+                    public int Get(int id) => id;
+
+                    [HttpPost, Route("api/orders/gone")]
+                    public void Delete() { }
+                }
+            }
+            """,
+            [LegacyRouteAttributes]);
+        Compilation modernCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace New.Ns
+            {
+                using Microsoft.AspNetCore.Mvc;
+
+                public class OrdersController
+                {
+                    [HttpGet("api/orders/{id}")]
+                    public int Get(int id) => id;
+
+                    [HttpPost("api/orders/new")]
+                    public void Create() { }
+                }
+            }
+            """,
+            [ModernRouteAttributes]);
+
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [])
+            : new LoadedSolution(null!, [modernCompilation], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
+
+        ProcedurePair pair = Assert.Single(result.Pairs);
+        Assert.Equal("GET /api/orders/{id}", pair.Old.Value);
+        Assert.Equal("GET /api/orders/{id}", pair.New.Value);
+        ProcedureIdentity removed = Assert.Single(result.Removed);
+        Assert.Contains("Delete", removed.Value, StringComparison.Ordinal);
+        ProcedureIdentity added = Assert.Single(result.Added);
+        Assert.Contains("Create", added.Value, StringComparison.Ordinal);
+        Assert.Empty(result.Ambiguous);
+    }
+
+    /// <summary>
+    /// M2-005 acceptance criterion 3: "ahead of the user's rename map (user entries win on conflict)".
+    /// The legacy action's namespace is explicitly renamed by the user to a namespace that is NOT where
+    /// the modern action actually lives, so the config rename map changes this action's own identity;
+    /// the endpoint rename map must not override that explicit choice by silently pairing it with the
+    /// modern action via the route match instead.
+    /// </summary>
+    [Fact]
+    public void UserRenameMapWinsOverEndpointRenameOnConflict()
+    {
+        Compilation legacyCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace Old.Ns
+            {
+                using System.Web.Http;
+
+                public class OrdersController
+                {
+                    [HttpGet, Route("api/orders/{id}")]
+                    public int Get(int id) => id;
+                }
+            }
+            """,
+            [LegacyRouteAttributes]);
+        Compilation modernCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace Other.Ns
+            {
+                using Microsoft.AspNetCore.Mvc;
+
+                public class OrdersController
+                {
+                    [HttpGet("api/orders/{id}")]
+                    public int Get(int id) => id;
+                }
+            }
+            """,
+            [ModernRouteAttributes]);
+
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [])
+            : new LoadedSolution(null!, [modernCompilation], []));
+
+        RenameMap renames = RenameMap.Empty with { Namespaces = RenameMap.Empty.Namespaces.Add("Old.Ns", "Different.Ns") };
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, CancellationToken.None);
+
+        Assert.Empty(result.Pairs);
+        Assert.Empty(result.Ambiguous);
+        Assert.Single(result.Added);
+        Assert.Single(result.Removed);
+    }
+
+    /// <summary>
+    /// M2-005 acceptance criterion 3: a (Verb, Template) with duplicates on one side but present on both
+    /// is ignored for the rename map and every action sharing it lands in <see cref="MatchResult.Ambiguous"/>
+    /// instead (SARIF Unknown(UnmatchedOverload) wiring is M3-003).
+    /// </summary>
+    [Fact]
+    public void Analyze_DuplicateEndpointYieldsUnknown()
+    {
+        Compilation legacyCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace N
+            {
+                using System.Web.Http;
+
+                public class OrdersController
+                {
+                    [HttpGet, Route("api/orders/{id}")]
+                    public int Get(int id) => id;
+
+                    [HttpGet, Route("api/orders/{id}")]
+                    public int GetOrder(int id) => id;
+                }
+            }
+            """,
+            [LegacyRouteAttributes]);
+        Compilation modernCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace N
+            {
+                using Microsoft.AspNetCore.Mvc;
+
+                public class OrdersController
+                {
+                    [HttpGet("api/orders/{id}")]
+                    public int Get(int id) => id;
+                }
+            }
+            """,
+            [ModernRouteAttributes]);
+
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [])
+            : new LoadedSolution(null!, [modernCompilation], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
+
+        Assert.Empty(result.Pairs);
+        Assert.Empty(result.Added);
+        Assert.Empty(result.Removed);
+        Assert.Equal(3, result.Ambiguous.Length);
+    }
+
+    /// <summary>The mirror of <see cref="Analyze_DuplicateEndpointYieldsUnknown"/>: duplicates on the modern side this time.</summary>
+    [Fact]
+    public void DuplicateEndpointOnTheModernSideYieldsAmbiguous()
+    {
+        Compilation legacyCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace N
+            {
+                using System.Web.Http;
+
+                public class OrdersController
+                {
+                    [HttpGet, Route("api/orders/{id}")]
+                    public int Get(int id) => id;
+                }
+            }
+            """,
+            [LegacyRouteAttributes]);
+        Compilation modernCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace N
+            {
+                using Microsoft.AspNetCore.Mvc;
+
+                public class OrdersController
+                {
+                    [HttpGet("api/orders/{id}")]
+                    public int Get(int id) => id;
+
+                    [HttpGet("api/orders/{id}")]
+                    public int GetOrder(int id) => id;
+                }
+            }
+            """,
+            [ModernRouteAttributes]);
+
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [])
+            : new LoadedSolution(null!, [modernCompilation], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
+
+        Assert.Empty(result.Pairs);
+        Assert.Empty(result.Added);
+        Assert.Empty(result.Removed);
+        Assert.Equal(3, result.Ambiguous.Length);
+    }
 }
