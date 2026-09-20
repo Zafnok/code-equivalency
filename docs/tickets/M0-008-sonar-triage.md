@@ -1,5 +1,5 @@
 # M0-008 SonarQube debt triage into batched GitHub issues
-Status: in-progress
+Status: done (PR #32)
 Effort: L
 Model: Opus, medium effort. Sonnet high is acceptable for the fix PRs this ticket generates, but not for this ticket.
 Depends on: M0-006
@@ -131,3 +131,6 @@ or `tests/`, means the ticket has been misread.
    PASS
 7. `./build.ps1 -Integration` green; 46 + 1 + 32 tests pass; coverage 100% line and branch on
    all four `src/` assemblies. PASS
+- Note: the branch is named `P2-001-sonar-triage`, from the plan's provisional ticket id,
+  and was already pushed when the id settled on M0-008. Left as is rather than re-opening
+  the PR; the commit footer and this file carry the real id.

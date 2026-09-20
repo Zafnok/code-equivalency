@@ -68,7 +68,7 @@ Everything after this milestone runs under 100% coverage and full CI.
   on missing src assembly, visible line counts, explicit `Main`, final newlines.
 - M0-006 (M) done, PR #17. SonarQube Cloud changegate: code smells + duplication
   reporting and Sonar Quality Gate on PRs, non-blocking until calibrated (ADR 0009).
-- M0-008 (L) in-progress. SonarQube debt triage: `tools/sonar-triage` batches Sonar's
+- M0-008 (L) done, PR #32. SonarQube debt triage: `tools/sonar-triage` batches Sonar's
   overall backlog into GitHub issues labelled `sonar`, filtered by a checked-in policy
   register; weekly `sonar-triage.yml`; skills `equiv-sonar-triage` and `equiv-sonar-fix`
   (ADR 0016).
