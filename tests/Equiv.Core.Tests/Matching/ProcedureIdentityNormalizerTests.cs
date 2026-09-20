@@ -40,7 +40,7 @@ public sealed class ProcedureIdentityNormalizerTests
     [Fact]
     public void NamespaceRenameAppliesWhenNoTypeRenameMatches()
     {
-        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("Old.Ns", "New.Ns"), ImmutableDictionary<string, string>.Empty);
+        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("Old.Ns", "New.Ns"), []);
         ProcedureIdentity identity = ProcedureIdentityNormalizer.Member("Old.Ns", "Type", "Method", 0, [], renames);
         Assert.Equal("New.Ns.Type::Method()", identity.Value);
     }
@@ -58,7 +58,7 @@ public sealed class ProcedureIdentityNormalizerTests
     [Fact]
     public void NamespaceRenameToEmptyOmitsTheLeadingDot()
     {
-        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("Old.Ns", string.Empty), ImmutableDictionary<string, string>.Empty);
+        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("Old.Ns", string.Empty), []);
         ProcedureIdentity identity = ProcedureIdentityNormalizer.Member("Old.Ns", "Type", "Method", 0, [], renames);
         Assert.Equal("Type::Method()", identity.Value);
     }
@@ -66,7 +66,7 @@ public sealed class ProcedureIdentityNormalizerTests
     [Fact]
     public void ParameterTypesAreRenamedTheSameWayAsTheDeclaringType()
     {
-        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("Old.Ns", "New.Ns"), ImmutableDictionary<string, string>.Empty);
+        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("Old.Ns", "New.Ns"), []);
         ProcedureIdentity identity = ProcedureIdentityNormalizer.Member("Old.Ns", "Svc", "Process", 0, ["Old.Ns.Order", "int32"], renames);
         Assert.Equal("New.Ns.Svc::Process(New.Ns.Order,int32)", identity.Value);
     }
@@ -84,7 +84,7 @@ public sealed class ProcedureIdentityNormalizerTests
     [Fact]
     public void RenamedOldSideParametersMatchTheModernSideIdentity()
     {
-        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("Old.Ns", "New.Ns"), ImmutableDictionary<string, string>.Empty);
+        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("Old.Ns", "New.Ns"), []);
         ProcedureIdentity legacy = ProcedureIdentityNormalizer.Member("Old.Ns", "Svc", "Process", 0, ["Old.Ns.Order"], renames);
         ProcedureIdentity modern = ProcedureIdentityNormalizer.Member("New.Ns", "Svc", "Process", 0, ["New.Ns.Order"], RenameMap.Empty);
         Assert.Equal(modern, legacy);
@@ -93,7 +93,7 @@ public sealed class ProcedureIdentityNormalizerTests
     [Fact]
     public void RenamedOldSideMatchesTheModernSideIdentity()
     {
-        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("System.Web.Http", "Microsoft.AspNetCore.Mvc"), ImmutableDictionary<string, string>.Empty);
+        RenameMap renames = new(ImmutableDictionary<string, string>.Empty.Add("System.Web.Http", "Microsoft.AspNetCore.Mvc"), []);
         ProcedureIdentity legacy = ProcedureIdentityNormalizer.Member("System.Web.Http", "OrdersController", "Get", 0, ["int32"], renames);
         ProcedureIdentity modern = ProcedureIdentityNormalizer.Member("Microsoft.AspNetCore.Mvc", "OrdersController", "Get", 0, ["int32"], RenameMap.Empty);
         Assert.Equal(modern, legacy);

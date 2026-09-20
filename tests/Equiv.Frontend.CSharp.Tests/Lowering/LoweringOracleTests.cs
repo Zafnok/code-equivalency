@@ -112,7 +112,7 @@ public sealed class LoweringOracleTests
         _ => new IrMapValue(
             (IrMap)parameter.Type,
             new IrBoolValue(input.SIsNull),
-            ImmutableDictionary<IrValue, IrValue>.Empty),
+            []),
     };
 
     private static string Interpreted(IrProcedure procedure, OracleInput input)

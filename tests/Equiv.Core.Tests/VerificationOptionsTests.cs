@@ -20,7 +20,7 @@ public sealed class VerificationOptionsTests
     [Fact]
     public void OptionsWithDifferentCallIdentityMapsAreUnequal()
     {
-        VerificationOptions a = new(3, 5000, ImmutableDictionary<string, string>.Empty);
+        VerificationOptions a = new(3, 5000, []);
         VerificationOptions b = new(3, 5000, ImmutableDictionary<string, string>.Empty.Add("Old::M", "New::M"));
         Assert.NotEqual(a, b);
     }
@@ -30,14 +30,14 @@ public sealed class VerificationOptionsTests
     [InlineData(3, 6000)]
     public void OptionsWithDifferentBoundOrTimeoutAreUnequal(int bound, int timeoutMs)
     {
-        VerificationOptions a = new(3, 5000, ImmutableDictionary<string, string>.Empty);
-        VerificationOptions b = new(bound, timeoutMs, ImmutableDictionary<string, string>.Empty);
+        VerificationOptions a = new(3, 5000, []);
+        VerificationOptions b = new(bound, timeoutMs, []);
         Assert.NotEqual(a, b);
     }
 
     [Fact]
     public void OptionsAreNotEqualToNull()
     {
-        Assert.False(new VerificationOptions(3, 5000, ImmutableDictionary<string, string>.Empty).Equals(Null.Of<VerificationOptions>()));
+        Assert.False(new VerificationOptions(3, 5000, []).Equals(Null.Of<VerificationOptions>()));
     }
 }

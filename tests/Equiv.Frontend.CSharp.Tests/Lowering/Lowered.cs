@@ -57,7 +57,7 @@ internal static class Lowered
     private static IrMapValue Empty(IrMap type) => new(
         type,
         type.Value is IrBool ? new IrBoolValue(false) : new IrBitVecValue(((IrBitVec)type.Value).Width, 0),
-        ImmutableDictionary<IrValue, IrValue>.Empty);
+        []);
 
     public static IrMapValue Nulls(string sort, int id, bool isNull) => new(
         new IrMap(new IrSort(sort), new IrBool()),
