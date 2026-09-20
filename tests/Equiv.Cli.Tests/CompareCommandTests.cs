@@ -410,12 +410,9 @@ public sealed class CompareCommandTests
             FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
             int exitCode = ExitCodes.Success;
 
-            string errorOutput = CaptureStdErr(() =>
-            {
-                exitCode = CompareCommand.Run(
-                    legacy.Path, modern.Path, "equiv.sarif", null, configPath, "divergent", dryRun: false,
-                    [frontend], backend, new InMemoryReportSink());
-            });
+            string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
+                legacy.Path, modern.Path, "equiv.sarif", null, configPath, "divergent", dryRun: false,
+                [frontend], backend, new InMemoryReportSink()));
 
             Assert.Equal(ExitCodes.Success, exitCode);
             Assert.Contains("CFG002", errorOutput, StringComparison.Ordinal);

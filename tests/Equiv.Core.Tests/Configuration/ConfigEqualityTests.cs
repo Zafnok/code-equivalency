@@ -66,7 +66,7 @@ public sealed class ConfigEqualityTests
     }
 
     [Theory]
-    [MemberData(nameof(UnequalConfigs))]
+    [MemberData(nameof(UnequalConfigs), DisableDiscoveryEnumeration = true)]
     public void EquivConfigsThatDifferInAnyFieldAreUnequal(EquivConfig a, EquivConfig b)
     {
         Assert.NotEqual(a, b);

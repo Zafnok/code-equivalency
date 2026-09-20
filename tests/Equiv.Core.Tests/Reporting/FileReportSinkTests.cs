@@ -36,7 +36,7 @@ public sealed class FileReportSinkTests
     [Fact]
     public void ImplementsIReportSink()
     {
-        Assert.IsAssignableFrom<IReportSink>(new FileReportSink(Path.GetTempFileName()));
+        Assert.IsType<IReportSink>(new FileReportSink(Path.GetTempFileName()), exactMatch: false);
     }
 
     [Fact]

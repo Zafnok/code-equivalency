@@ -25,6 +25,12 @@ indent_size = 2
 # default under AnalysisLevel=latest-all; pinned to error here so it can't drift.
 dotnet_diagnostic.CA1852.severity = error
 
+# GH-44: pinned so these long-tail Sonar findings cannot silently reappear below warning level.
+dotnet_diagnostic.IDE0053.severity = error
+dotnet_diagnostic.xUnit1044.severity = error
+dotnet_diagnostic.xUnit2032.severity = error
+dotnet_diagnostic.MA0040.severity = error
+
 # M1-005: test methods are named Scenario_ExpectedOutcome (e.g. Compare_Exits1OnDivergent),
 # an underscore-as-separator convention that is idiomatic xUnit test naming, not an identifier
 # hygiene problem. CA1707 ("remove underscores from member names") has no test-specific carve-out,
