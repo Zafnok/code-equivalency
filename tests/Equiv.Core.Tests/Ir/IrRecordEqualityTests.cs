@@ -52,7 +52,7 @@ public sealed class IrRecordEqualityTests
             r => r with { Trace = [] });
 
     private static IrBlock BuildBlock() =>
-        new(new IrBlockId(0), [new IrConst(A, One), new IrBinary(B, IrBinaryOp.Add, A, A)], new IrReturn(B, ImmutableArray<IrOut>.Empty));
+        new(new IrBlockId(0), [new IrConst(A, One), new IrBinary(B, IrBinaryOp.Add, A, A)], new IrReturn(B, []));
 
     private static void AssertStructural<T>(Func<T> build, Func<T, T> change)
         where T : class, IEquatable<T>

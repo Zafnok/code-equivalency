@@ -9,7 +9,7 @@ namespace Equiv.Core.Configuration;
 /// </summary>
 public sealed record RenameMap(ImmutableDictionary<string, string> Namespaces, ImmutableDictionary<string, string> Types)
 {
-    public static RenameMap Empty { get; } = new(ImmutableDictionary<string, string>.Empty, ImmutableDictionary<string, string>.Empty);
+    public static RenameMap Empty { get; } = new([], []);
 
     // Deliberate non-short-circuit '&': see the comment on EquivConfig.Equals.
     public bool Equals(RenameMap? other) =>

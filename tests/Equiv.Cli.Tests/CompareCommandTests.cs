@@ -26,7 +26,7 @@ namespace Equiv.Cli.Tests;
 public sealed class CompareCommandTests
 {
     private static readonly ProcedureIdentity PairIdentity = new("T::Pair()");
-    private static readonly ImmutableDictionary<string, Verdict> NoVerdicts = ImmutableDictionary<string, Verdict>.Empty;
+    private static readonly ImmutableDictionary<string, Verdict> NoVerdicts = [];
 
     [Fact]
     public void Router_PicksFrontendSupportingBothPaths()

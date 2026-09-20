@@ -150,7 +150,7 @@ public sealed class IrInterpreterTests
               %r: bv32 = mapread %m2, %k
               ret %r
             """);
-        IrMapValue empty = new(new IrMap(new IrBitVec(32), new IrBitVec(32)), Bv(0), ImmutableDictionary<IrValue, IrValue>.Empty);
+        IrMapValue empty = new(new IrMap(new IrBitVec(32), new IrBitVec(32)), Bv(0), []);
 
         Assert.Equal(new IrReturned(Bv(9)), Run(p, empty, Bv(4)).Outcome);
     }
