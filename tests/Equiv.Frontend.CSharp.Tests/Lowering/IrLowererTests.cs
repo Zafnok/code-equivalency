@@ -40,10 +40,11 @@ public sealed class IrLowererTests
     }
 
     [Theory]
-    [InlineData("int f; int M() => f;", "FieldReference")]
-    [InlineData("int f; void M(int a) { f = a; }", "FieldReference")]
-    [InlineData("static int M(int[] a) => a[0];", "ArrayElementReference")]
     [InlineData("static int M(string s) => s.Length;", "PropertyReference")]
+    [InlineData("static int M(int[,] a) => a[0, 1];", "ArrayElementReference")]
+    [InlineData("static int M(int[][] a) => a[0][1];", "ArrayElementReference")]
+    [InlineData("static int M(int[] a, long i) => a[i];", "ArrayElementReference")]
+    [InlineData("static int M(int[][] a) => a[0].Length;", "PropertyReference")]
     [InlineData("static bool M(string s) => int.TryParse(s, out _);", "ref-argument")]
     [InlineData("static void M(ref int a) { System.Threading.Interlocked.Increment(ref a); }", "ref-argument")]
     [InlineData("static void M(int a, Exception e) { if (a < 0) throw e; }", "Throw")]
@@ -340,6 +341,65 @@ public sealed class IrLowererTests
         IrParameter receiver = Assert.Single(procedure.Parameters, static p => p.Var.Name is "this");
         Assert.Equal(new IrSort("C"), receiver.Var.Type);
         Assert.Equal([receiver.Var], Assert.Single(Calls(procedure)).Args);
+    }
+
+    /// <summary>Ticket M2-004 acceptance criterion 6: a field is one SSA map keyed by its receiver.</summary>
+    [Fact]
+    public void AnInstanceFieldIsAMapKeyedByTheReceiver()
+    {
+        IrProcedure procedure = Method("int f; static int M(C a, C b) { a.f = 1; b.f = 2; return a.f; }");
+
+        IrParameter map = Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.C.f");
+        Assert.Equal(new IrMap(new IrSort("C"), new IrBitVec(32)), map.Var.Type);
+        Assert.Equal(2, procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapWrite>().Count());
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Theory]
+    [InlineData(0, 1, 1)]
+    [InlineData(0, 0, 2)]
+    public void AFieldWriteIsVisibleToALaterReadOfTheSameReceiver(int a, int b, int expected) =>
+        Assert.Equal(
+            new IrReturned(Bits(32, expected)),
+            Run(
+                Method("int f; static int M(C x, C y) { x.f = 1; y.f = 2; return x.f; }"),
+                Reference(a, "C"),
+                Reference(b, "C"),
+                Fields("C", new IrBitVec(32)),
+                Nulls("C", a, false)));
+
+    [Fact]
+    public void AStaticFieldIsTheSameMapKeyedByItsTypeToken()
+    {
+        IrProcedure procedure = Method("static int f; static int M() { f = 5; return f; }");
+
+        Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.C.f");
+        Assert.Equal(new IrSortValue("C", 0), Assert.IsType<IrConst>(procedure.Blocks[1].Instructions[0]).Value);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Fact]
+    public void AnArrayElementIsAMapKeyedByTheIndexWithItsOwnLength()
+    {
+        IrProcedure procedure = Method("static int M(int[] a, int i) { a[i] = 1; return a[0] + a.Length; }");
+
+        Assert.Single(procedure.Parameters, static p => p.Var.Name is "array.a");
+        Assert.Single(procedure.Parameters, static p => p.Var.Name is "length.a" && p.Var.Type is IrBitVec { Width: 32 });
+        Assert.Contains(procedure.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.IndexOutOfRangeException" });
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(4, true)]
+    [InlineData(-1, true)]
+    public void AnIndexOutsideTheArrayThrowsIndexOutOfRange(int index, bool thrown)
+    {
+        IrProcedure procedure = Method("static int M(int[] a, int i) => a[i];");
+
+        IrOutcome outcome = Run(procedure, Reference(0, "int[]"), Bits(32, index), Elements(new IrBitVec(32)), Bits(32, 4), Nulls("int[]", 0, false));
+
+        Assert.Equal(thrown, outcome is IrThrew { ExceptionType: "System.IndexOutOfRangeException" });
     }
 
     [Fact]

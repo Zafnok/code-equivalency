@@ -47,7 +47,18 @@ internal static class Lowered
     /// <summary>An element of an uninterpreted reference sort; only its identity matters.</summary>
     public static IrSortValue Reference(int id, string sort = "System.String") => new(sort, id);
 
+    /// <summary>An empty <c>field.&lt;Type&gt;.&lt;Field&gt;</c> input over receivers of <paramref name="sort"/>.</summary>
+    public static IrMapValue Fields(string sort, IrType value) => Empty(new IrMap(new IrSort(sort), value));
+
+    /// <summary>An empty <c>array.&lt;v&gt;</c> input.</summary>
+    public static IrMapValue Elements(IrType element) => Empty(new IrMap(new IrBitVec(32), element));
+
     /// <summary>A <c>null.&lt;Sort&gt;</c> input that answers <paramref name="isNull"/> for <paramref name="id"/> and false elsewhere.</summary>
+    private static IrMapValue Empty(IrMap type) => new(
+        type,
+        type.Value is IrBool ? new IrBoolValue(false) : new IrBitVecValue(((IrBitVec)type.Value).Width, 0),
+        ImmutableDictionary<IrValue, IrValue>.Empty);
+
     public static IrMapValue Nulls(string sort, int id, bool isNull) => new(
         new IrMap(new IrSort(sort), new IrBool()),
         new IrBoolValue(false),

@@ -1,4 +1,4 @@
-﻿proc "C::M(int)" (%a "a": bv32) -> bv32 entry B0
+﻿proc "C::M(int)" (%a "a": bv32, %field.C.f: map<sort "C", bv32>, %this: sort "C") -> bv32 entry B0
 B0:
   goto B1
 B1:
@@ -9,9 +9,9 @@ B2:
   %$3: sort "System.ArgumentException" = call "System.ArgumentException::.ctor()"() threw %$4: bool
   br %$4, B5, B6
 B3:
-  %$5: bv32 = opaque "FieldReference" at "Snippet.cs" 4:72-4:73
-  %$7: bv32 = add %$5, %a
-  ret %$7
+  %$6: bv32 = mapread %field.C.f, %this
+  %$8: bv32 = add %$6, %a
+  ret %$8
 B5:
   throw "System.Exception"
 B6:

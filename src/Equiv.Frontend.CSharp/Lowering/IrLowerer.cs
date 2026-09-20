@@ -35,6 +35,7 @@ internal sealed class IrLowerer
     private readonly Dictionary<string, IrBlockId> throwBlocks = new(StringComparer.Ordinal);
     private readonly Dictionary<int, IrBlockId> blockIds = [];
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
+    private readonly Dictionary<string, SsaBuilder.Variable> slices = new(StringComparer.Ordinal);
     private readonly HeapInputs heap = new();
     private SwitchChains chains = null!;
     private IrBlockId current = new(0);
@@ -315,6 +316,12 @@ internal sealed class IrLowerer
                 return ssa.Load(current, Capture(reference.Id, reference.Type!));
             case ISimpleAssignmentOperation { IsRef: false } assignment:
                 return Assign(assignment);
+            case IFieldReferenceOperation field:
+                return ReadSlice(Field(field));
+            case IArrayElementReferenceOperation element:
+                return Element(element) is { } read ? ReadSlice(read) : Opaque(element, element.Kind.ToString());
+            case IPropertyReferenceOperation property when ArrayLength(property) is { } length:
+                return length;
             case IConversionOperation conversion:
                 return Convert(conversion);
             case IBinaryOperation binary:
@@ -429,6 +436,110 @@ internal sealed class IrLowerer
         return operation;
     }
 
+    /// <summary>
+    /// The heap slice an assignment target names (acceptance criterion 6), or null when it is not a
+    /// field or a single-dimensional array element of a variable.
+    /// </summary>
+    private Access? Slice(IOperation lvalue) => lvalue switch
+    {
+        IFieldReferenceOperation field => Field(field),
+        IArrayElementReferenceOperation element => Element(element),
+        _ => null,
+    };
+
+    /// <summary>A field is a map from its receiver, or from its declaring type's token when it is static.</summary>
+    private Access Field(IFieldReferenceOperation field)
+    {
+        IrVar key;
+        if (field.Instance is { } instance)
+        {
+            key = Value(instance);
+            if (!instance.Type!.IsValueType)
+            {
+                ThrowIfNull(instance, key);
+            }
+        }
+        else
+        {
+            key = Const(HeapInputs.Token(field.Field));
+        }
+
+        return new Access(Versioned(heap.Field(field.Field)), key, null);
+    }
+
+    /// <summary>
+    /// An array element is a map from a bv32 index, bounded by the array variable's own length var. The
+    /// unsigned comparison catches a negative index too. Null when the array is not a plain variable,
+    /// the index is not bv32, or the array has several dimensions; nothing is emitted in that case.
+    /// </summary>
+    private Access? Element(IArrayElementReferenceOperation element)
+    {
+        if (element.Indices is not [{ Type: { } indexType }]
+            || TypeMapper.Map(indexType) is not IrBitVec { Width: 32 }
+            || Target(element.ArrayReference) is not { } array)
+        {
+            return null;
+        }
+
+        IrVar reference = Value(element.ArrayReference);
+        ThrowIfNull(element.ArrayReference, reference);
+        IrVar index = Value(element.Indices[0]);
+        return new Access(
+            Versioned(heap.Elements(array.Template.Name, TypeMapper.Map(element.Type!))),
+            index,
+            heap.Length(array.Template.Name));
+    }
+
+    /// <summary><c>a.Length</c> on an array variable is that variable's length var; every other property stays opaque.</summary>
+    private IrVar? ArrayLength(IPropertyReferenceOperation property)
+    {
+        if (property is not { Property: { Name: "Length", ContainingType.SpecialType: SpecialType.System_Array }, Instance: { } instance }
+            || Target(instance) is not { } array)
+        {
+            return null;
+        }
+
+        ThrowIfNull(instance, Value(instance));
+        return heap.Length(array.Template.Name);
+    }
+
+    /// <summary>The SSA variable holding the current version of a heap slice, starting at its input.</summary>
+    private SsaBuilder.Variable Versioned(IrVar input)
+    {
+        if (!slices.TryGetValue(input.Name, out SsaBuilder.Variable? variable))
+        {
+            variable = new SsaBuilder.Variable(input);
+            slices[input.Name] = variable;
+            ssa.Store(new IrBlockId(0), variable, input);
+        }
+
+        return variable;
+    }
+
+    /// <summary>An index outside the array's own length var throws; a field access has no bound.</summary>
+    private void Bounds(Access access)
+    {
+        if (access.Length is { } length)
+        {
+            ThrowIf(Emit(IrBinaryOp.Uge, access.Key, length, Bool), "System.IndexOutOfRangeException");
+        }
+    }
+
+    private IrVar ReadSlice(Access access)
+    {
+        Bounds(access);
+        return MapRead(ssa.Load(current, access.Map), access.Key);
+    }
+
+    private void WriteSlice(Access access, IrVar value)
+    {
+        Bounds(access);
+        IrVar map = ssa.Load(current, access.Map);
+        IrVar updated = ssa.Temp(map.Type);
+        ssa.Emit(current, new IrMapWrite(updated, map, access.Key, value));
+        ssa.Store(current, access.Map, updated);
+    }
+
     private IrVar MapRead(IrVar map, IrVar key)
     {
         IrVar target = ssa.Temp(((IrMap)map.Type).Value);
@@ -485,6 +596,15 @@ internal sealed class IrLowerer
 
     private IrVar? Assign(ISimpleAssignmentOperation assignment)
     {
+        if (Slice(assignment.Target) is { } slice)
+        {
+            // C# evaluates the target's receiver and index, then the value, and only then stores,
+            // so the bounds check comes after the value in an assignment but before a read.
+            IrVar written = Value(assignment.Value);
+            WriteSlice(slice, written);
+            return written;
+        }
+
         if (Target(assignment.Target) is not { } target)
         {
             return Opaque(assignment, assignment.Target.Kind.ToString());
@@ -754,4 +874,10 @@ internal sealed class IrLowerer
         ThrowIf(threw, "System.Exception");
         return target;
     }
+
+    /// <summary>
+    /// One access to a heap slice: the SSA variable holding the map's current version, the key, and the
+    /// bound the key must be under (an array variable's length var; null for a field).
+    /// </summary>
+    private readonly record struct Access(SsaBuilder.Variable Map, IrVar Key, IrVar? Length);
 }

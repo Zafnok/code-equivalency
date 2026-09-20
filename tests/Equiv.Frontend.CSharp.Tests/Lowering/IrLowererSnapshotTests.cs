@@ -75,7 +75,13 @@ public sealed class IrLowererSnapshotTests
     public Task VoidEarlyReturn() => Dump("static void M(bool c, int a) { if (c) return; Console.WriteLine(a); }");
 
     [Fact]
-    public Task FieldAndThrowAreOpaque() => Dump("int f; int M(int a) { if (a < 0) throw new ArgumentException(); return f + a; }");
+    public Task InstanceFieldAndThrow() => Dump("int f; int M(int a) { if (a < 0) throw new ArgumentException(); return f + a; }");
+
+    [Fact]
+    public Task StaticFieldWrite() => Dump("static int f; static int M(int a) { f = a; return f; }");
+
+    [Fact]
+    public Task ArrayElements() => Dump("static int M(int[] a, int i) { a[i] = a[0]; return a[i] + a.Length; }");
 
     [Fact]
     public Task ThrowOfANewObject() => Dump("class E : Exception { public E(int n) { } } static int M(int a) { if (a < 0) throw new E(a); return a; }");
