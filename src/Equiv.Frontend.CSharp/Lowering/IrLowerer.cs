@@ -249,6 +249,10 @@ internal sealed class IrLowerer
                 return Binary(binary);
             case IUnaryOperation unary:
                 return Unary(unary);
+            case ICompoundAssignmentOperation compound:
+                return Compound(compound);
+            case IIncrementOrDecrementOperation step:
+                return Step(step);
             case IInvocationOperation invocation:
                 return Invoke(invocation);
             default:
@@ -373,17 +377,23 @@ internal sealed class IrLowerer
         IrVar result = Resize(value, target, fromSigned);
         if (conversion.IsChecked && !conversion.Conversion.IsImplicit)
         {
-            IrVar lost = Emit(IrBinaryOp.Ne, Resize(result, source, toSigned), value, Bool);
-            if (fromSigned != toSigned)
-            {
-                IrVar signedSide = fromSigned ? value : result;
-                lost = Emit(IrBinaryOp.Or, lost, Emit(IrBinaryOp.Slt, signedSide, Zero(signedSide.Type), Bool), Bool);
-            }
-
-            ThrowIf(lost, OverflowException);
+            ThrowIfItDoesNotFit(value, result, fromSigned, toSigned);
         }
 
         return result;
+    }
+
+    /// <summary>Throws when <paramref name="result"/> does not round-trip to <paramref name="value"/>, or when the signed side of a signedness change is negative.</summary>
+    private void ThrowIfItDoesNotFit(IrVar value, IrVar result, bool fromSigned, bool toSigned)
+    {
+        IrVar lost = Emit(IrBinaryOp.Ne, Resize(result, (IrBitVec)value.Type, toSigned), value, Bool);
+        if (fromSigned != toSigned)
+        {
+            IrVar signedSide = fromSigned ? value : result;
+            lost = Emit(IrBinaryOp.Or, lost, Emit(IrBinaryOp.Slt, signedSide, Zero(signedSide.Type), Bool), Bool);
+        }
+
+        ThrowIf(lost, OverflowException);
     }
 
     private IrVar Resize(IrVar value, IrBitVec type, bool signed)
@@ -409,7 +419,9 @@ internal sealed class IrLowerer
             return Opaque(binary, binary.Kind.ToString());
         }
 
-        return OperatorMapper.IsShift(op) ? Shift(op, left, right, (IrBitVec)left.Type) : Arithmetic(binary, op, left, right, signed);
+        return OperatorMapper.IsShift(op)
+            ? Shift(op, left, right, (IrBitVec)left.Type)
+            : Arithmetic(op, left, right, signed, binary.IsChecked, TypeMapper.Map(binary.Type!));
     }
 
     /// <summary>C# masks the shift count to the left operand's width (ECMA-334 shift operators); the IR shift does not.</summary>
@@ -420,7 +432,7 @@ internal sealed class IrLowerer
         return Emit(op, left, masked, type);
     }
 
-    private IrVar Arithmetic(IBinaryOperation binary, IrBinaryOp op, IrVar left, IrVar right, bool signed)
+    private IrVar Arithmetic(IrBinaryOp op, IrVar left, IrVar right, bool signed, bool isChecked, IrType type)
     {
         if (op is IrBinaryOp.SDiv or IrBinaryOp.SRem or IrBinaryOp.UDiv or IrBinaryOp.URem)
         {
@@ -431,12 +443,68 @@ internal sealed class IrLowerer
                 ThrowIfOverflows(IrOverflowOp.SDiv, left, right);
             }
         }
-        else if (binary.IsChecked && OperatorMapper.Overflow(op, signed) is { } overflow)
+        else if (isChecked && OperatorMapper.Overflow(op, signed) is { } overflow)
         {
             ThrowIfOverflows(overflow, left, right);
         }
 
-        return Emit(op, left, right, TypeMapper.Map(binary.Type!));
+        return Emit(op, left, right, type);
+    }
+
+    /// <summary>
+    /// <c>x op= v</c> (ticket M2-004 acceptance criterion 9): read, promote to the operator's type, operate
+    /// with the binary operator's exception edges, narrow back to the target type, write. A shift takes its
+    /// operator type from the promoted target; every other operator from the right operand, which Roslyn has
+    /// already converted to it.
+    /// </summary>
+    private IrVar? Compound(ICompoundAssignmentOperation compound)
+    {
+        ITypeSymbol right = compound.Value.Type!;
+        (IrBitVec Type, bool Signed)? operands = OperatorMapper.IsShiftKind(compound.OperatorKind)
+            ? TypeMapper.Promote(compound.Target.Type!)
+            : TypeMapper.Map(right) is IrBitVec bits ? (bits, TypeMapper.IsSigned(right)) : null;
+        return compound.OperatorMethod is null && operands is { } promoted
+            ? Update(compound, compound.Target, compound.OperatorKind, Value(compound.Value), promoted, compound.IsChecked, isPostfix: false)
+            : Opaque(compound, compound.Kind.ToString());
+    }
+
+    /// <summary><c>x++</c>, <c>--x</c>: the right operand is a promoted <c>1</c>; postfix yields the value read.</summary>
+    private IrVar? Step(IIncrementOrDecrementOperation step)
+    {
+        if (TypeMapper.Promote(step.Type!) is not { } promoted)
+        {
+            return Opaque(step, step.Kind.ToString());
+        }
+
+        IrVar one = Const(new IrBitVecValue(promoted.Type.Width, 1));
+        BinaryOperatorKind kind = step.Kind == OperationKind.Increment ? BinaryOperatorKind.Add : BinaryOperatorKind.Subtract;
+        return Update(step, step.Target, kind, one, promoted, step.IsChecked, step.IsPostfix);
+    }
+
+    private IrVar? Update(IOperation node, IOperation lvalue, BinaryOperatorKind kind, IrVar right, (IrBitVec Type, bool Signed) promoted, bool isChecked, bool isPostfix)
+    {
+        if (Target(lvalue) is not { } target || TypeMapper.Map(lvalue.Type!) is not IrBitVec narrow)
+        {
+            return Opaque(node, lvalue.Kind.ToString());
+        }
+
+        // Never null here: a shift takes operands of any two widths, and every other compound operator
+        // was given the right operand's own bitvector type.
+        IrBinaryOp op = OperatorMapper.Binary(kind, promoted.Signed, promoted.Type, right.Type)!.Value;
+        bool targetSigned = TypeMapper.IsSigned(lvalue.Type!);
+        IrVar old = ssa.Load(current, target);
+        IrVar wide = Resize(old, promoted.Type, targetSigned);
+        IrVar computed = OperatorMapper.IsShift(op)
+            ? Shift(op, wide, right, promoted.Type)
+            : Arithmetic(op, wide, right, promoted.Signed, isChecked, promoted.Type);
+        IrVar result = Resize(computed, narrow, promoted.Signed);
+        if (isChecked && narrow != promoted.Type)
+        {
+            ThrowIfItDoesNotFit(computed, result, promoted.Signed, targetSigned);
+        }
+
+        ssa.Store(current, target, result);
+        return isPostfix ? old : result;
     }
 
     private IrVar? Unary(IUnaryOperation unary)

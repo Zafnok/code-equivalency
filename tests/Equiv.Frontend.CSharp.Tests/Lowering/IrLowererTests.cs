@@ -54,8 +54,6 @@ public sealed class IrLowererTests
     [InlineData("static void M(int a) { if (a < 0) throw new ArgumentException(); }", "Throw")]
     [InlineData("static int M(int a) { if (a < 0) throw new ArgumentException(); return a; }", "Throw")]
     [InlineData("static void M(int a) { ref int r = ref a; r = 1; }", "SimpleAssignment")]
-    [InlineData("static int M(int a) { a += 1; return a; }", "CompoundAssignment")]
-    [InlineData("static int M(int a) { a++; return a; }", "Increment")]
     [InlineData("static int M(double d) => (int)d;", "Conversion")]
     [InlineData("static double M(int i) => i;", "Conversion")]
     [InlineData("static object M() => (string)null;", "Conversion")]
@@ -79,6 +77,64 @@ public sealed class IrLowererTests
 
         Assert.Equal("ParameterReference", Assert.Single(Opaques(procedure)).Reason);
     }
+
+    [Theory]
+    [InlineData("static int M(int a, int b) { a += b; return a; }", 5, 7, 12)]
+    [InlineData("static int M(int a, int b) { a -= b; return a; }", 5, 7, -2)]
+    [InlineData("static int M(int a, int b) { a *= b; return a; }", 5, 7, 35)]
+    [InlineData("static int M(int a, int b) { a /= b; return a; }", 17, 5, 3)]
+    [InlineData("static int M(int a, int b) { a %= b; return a; }", 17, 5, 2)]
+    [InlineData("static int M(int a, int b) { a &= b; return a; }", 12, 10, 8)]
+    [InlineData("static int M(int a, int b) { a |= b; return a; }", 12, 10, 14)]
+    [InlineData("static int M(int a, int b) { a ^= b; return a; }", 12, 10, 6)]
+    [InlineData("static int M(int a, int b) { a <<= b; return a; }", 3, 33, 6)]
+    [InlineData("static int M(int a, int b) { a >>= b; return a; }", -8, 1, -4)]
+    [InlineData("static int M(int a, int b) { a >>>= b; return a; }", -8, 1, int.MaxValue - 3)]
+    public void CompoundAssignmentReadsOperatesAndWrites(string members, int a, int b, int expected) =>
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(Method(members), Bits(32, a), Bits(32, b)));
+
+    [Theory]
+    [InlineData("static int M(int a) { a++; return a; }", 5, 6)]
+    [InlineData("static int M(int a) { a--; return a; }", 5, 4)]
+    [InlineData("static int M(int a) { return ++a; }", 5, 6)]
+    [InlineData("static int M(int a) { return a++; }", 5, 5)]
+    [InlineData("static int M(int a) { return a--; }", 5, 5)]
+    [InlineData("static int M(int a) { return --a; }", 5, 4)]
+    public void IncrementAndDecrementYieldTheOldValueOnlyWhenPostfix(string members, int a, int expected) =>
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(Method(members), Bits(32, a)));
+
+    /// <summary>The operands are promoted to <c>int</c> and the result is narrowed back, as C# does.</summary>
+    [Theory]
+    [InlineData("static byte M(byte b) { b += 250; return b; }", 8, 10, 4)]
+    [InlineData("static char M(char c) { c++; return c; }", 16, 0xFFFF, 0)]
+    [InlineData("static byte M(byte b) { b <<= 1; return b; }", 8, 0x81, 2)]
+    [InlineData("static long M(long a) { a <<= 65; return a; }", 64, 3, 6)]
+    public void CompoundAssignmentNarrowsBackToTheTargetType(string members, int width, long a, long expected) =>
+        Assert.Equal(new IrReturned(Bits(width, expected)), Run(Method(members), Bits(width, a)));
+
+    [Theory]
+    [InlineData("static byte M(byte b) { checked { b += 250; } return b; }", 8, 10, "System.OverflowException")]
+    [InlineData("static byte M(byte b) { checked { b += 1; } return b; }", 8, 10, null)]
+    [InlineData("static int M(int a) { checked { a += 1; } return a; }", 32, int.MaxValue, "System.OverflowException")]
+    [InlineData("static int M(int a) { checked { a++; } return a; }", 32, int.MaxValue, "System.OverflowException")]
+    [InlineData("static int M(int a, int b) { a /= b; return a; }", 32, 1, "System.DivideByZeroException")]
+    public void CompoundAssignmentKeepsTheOperatorExceptionEdges(string members, int width, long a, string? thrown)
+    {
+        IrProcedure procedure = Method(members);
+        IrValue[] arguments = procedure.Parameters.Length == 1 ? [Bits(width, a)] : [Bits(width, a), Bits(width, 0)];
+
+        Assert.Equal(thrown is null ? new IrReturned(Bits(width, a + 1)) : new IrThrew(thrown), Run(procedure, arguments));
+    }
+
+    [Theory]
+    [InlineData("int f; void M(int a) { f += a; }", "FieldReference")]
+    [InlineData("static void M(int[] xs) { xs[0]++; }", "ArrayElementReference")]
+    [InlineData("static void M(double d) { d += 1; }", "CompoundAssignment")]
+    [InlineData("static void M(double d) { d++; }", "Increment")]
+    [InlineData("enum E { A } static void M(E e) { e += 1; }", "ParameterReference")]
+    [InlineData("struct S { public static int operator +(int a, S b) => 0; } static void M(int a, S s) { a += s; }", "CompoundAssignment")]
+    public void CompoundAssignmentToAnUnsupportedTargetIsOpaque(string members, string reason) =>
+        Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
 
     [Fact]
     public void ReadWithoutDefinitionIsUndefined()

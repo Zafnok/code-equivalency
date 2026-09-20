@@ -21,6 +21,17 @@ internal static class TypeMapper
         _ => new IrSort(MetadataName(type)),
     };
 
+    /// <summary>
+    /// C# binary numeric promotion of a single operand (ECMA-334 12.4.7): anything narrower than
+    /// <c>int</c> becomes a signed <c>int</c>. Null when <paramref name="type"/> is not integral.
+    /// </summary>
+    public static (IrBitVec Type, bool Signed)? Promote(ITypeSymbol type) => Map(type) switch
+    {
+        IrBitVec { Width: < 32 } => (new IrBitVec(32), true),
+        IrBitVec bits => (bits, IsSigned(type)),
+        _ => null,
+    };
+
     /// <summary>Whether an integral type is signed; signedness lives on IR operations, not IR types.</summary>
     public static bool IsSigned(ITypeSymbol type) =>
         type.SpecialType is SpecialType.System_SByte or SpecialType.System_Int16 or SpecialType.System_Int32 or SpecialType.System_Int64;

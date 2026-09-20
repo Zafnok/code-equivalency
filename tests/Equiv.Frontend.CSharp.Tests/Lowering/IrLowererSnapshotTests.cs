@@ -48,6 +48,12 @@ public sealed class IrLowererSnapshotTests
     public Task Shifts() => Dump("static long M(long a, int n, int m) => (a << n) + (m >> 3) + ((uint)m >> n);");
 
     [Fact]
+    public Task CompoundAssignment() => Dump("static byte M(byte b, int a, int n) { b += 1; a *= a; a <<= n; a /= n; return b; }");
+
+    [Fact]
+    public Task IncrementAndDecrement() => Dump("static int M(int a, char c) { a++; --a; c--; return a + c; }");
+
+    [Fact]
     public Task ConditionalExpression() => Dump("static int M(bool b, int x) => b ? x : -x;");
 
     [Fact]

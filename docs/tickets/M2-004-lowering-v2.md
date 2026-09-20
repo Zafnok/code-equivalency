@@ -1,5 +1,5 @@
 # M2-004 Lowering v2: loops, switch, try, null, maps
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort (extends the M2-003 SSA builder to loops, try regions and heap maps). Sonnet only at high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-003
@@ -67,3 +67,4 @@ Strings as anything but `Sort`. `using`, `lock`, `async`, iterators, LINQ, deleg
 generics-specific behaviour (all `IrOpaque` with a reason).
 
 ## Notes
+- Decision: compound assignment and `++`/`--` -> one `Update` helper that reads the target, resizes it to the C# promoted operator type (`TypeMapper.Promote`), reuses the binary-operator path (so the overflow, divide-by-zero and `MinValue / -1` edges are identical), resizes back to the target type and, when checked, throws if the narrowing loses the value. The shift operator's type comes from the promoted target; every other operator's from `compound.Value.Type`, which Roslyn has already converted to it. Alternatives: re-implementing C# binary numeric promotion for both operands. Rule: 1.

@@ -11,15 +11,16 @@ in a CFG body). Every kind found in `samples/` must have a row
 | ArrayElementReference | opaque: reason `ArrayElementReference` (arrays are M2-004) | IrLowererTests.UnsupportedConstructIsOpaqueWithItsName | M2-003 |
 | Binary | lowered: integral and bool operands; overflow, divide-by-zero and `MinValue / -1` edges; anything else opaque with reason `Binary` | IrLowererSnapshotTests.StraightLineArithmetic, .Division, .Shifts | M2-003 |
 | Block | n/a: the CFG flattens blocks; an arrow-bodied accessor body is one whole-body opaque with reason `Block` | IrLowererTests.WholeBodyIsOneOpaque | M2-003 |
-| CompoundAssignment | opaque: reason `CompoundAssignment` (not in the M2-003 list) | IrLowererTests.UnsupportedConstructIsOpaqueWithItsName | M2-003 |
+| CompoundAssignment | lowered: integral local or parameter target: read, promote, operate (same exception edges as the binary operator), narrow back, write; any other target opaque with the target's kind, a non-integral one with reason `CompoundAssignment` | IrLowererSnapshotTests.CompoundAssignment; IrLowererTests.CompoundAssignmentReadsOperatesAndWrites, .CompoundAssignmentToAnUnsupportedTargetIsOpaque | M2-004 |
 | Conditional | n/a: `if` and `?:` become CFG branches, lowered as `br` and phis | IrLowererSnapshotTests.IfElse, .NestedIf | M2-003 |
 | ConstructorBodyOperation | opaque: whole body, reason `ConstructorBodyOperation` | IrLowererTests.WholeBodyIsOneOpaque | M2-003 |
 | Conversion | lowered: integral to integral (zext/sext/trunc, checked narrowing throws); anything else opaque with reason `Conversion` | IrLowererSnapshotTests.Conversions, .CheckedConversion | M2-003 |
+| Decrement | lowered: as `Increment` | IrLowererSnapshotTests.IncrementAndDecrement | M2-004 |
 | ExpressionStatement | lowered: its operation, value discarded | IrLowererSnapshotTests.OpaqueCall | M2-003 |
 | FieldReference | opaque: reason `FieldReference`, also as an assignment target (fields are M2-004) | IrLowererSnapshotTests.FieldAndThrowAreOpaque | M2-003 |
 | FlowCapture | lowered: a variable; a captured local or parameter is also an lvalue | IrLowererSnapshotTests.ConditionalExpression; IrLowererTests.CapturedLocalIsAssignedThroughTheCapture | M2-003 |
 | FlowCaptureReference | lowered: a read of the capture variable, or the captured lvalue as an assignment target | IrLowererSnapshotTests.ConditionalExpression | M2-003 |
-| Increment | opaque: reason `Increment` (not in the M2-003 list) | IrLowererTests.UnsupportedConstructIsOpaqueWithItsName | M2-003 |
+| Increment | lowered: as `CompoundAssignment` with a promoted `1`; postfix yields the value read | IrLowererSnapshotTests.IncrementAndDecrement; IrLowererTests.IncrementAndDecrementYieldTheOldValueOnlyWhenPostfix | M2-004 |
 | Invalid | opaque: erroneous code only; reason `Invalid` | IrLowererTests.FallingOffANonVoidMethodIsMissingReturn | M2-003 |
 | Invocation | lowered: `IrCall` plus a threw edge to `System.Exception`; receiver not a value type: reason `dereference`; `ref`/`out` argument: reason `ref-argument` | IrLowererSnapshotTests.OpaqueCall; IrLowererTests.UnsupportedConstructIsOpaqueWithItsName | M2-003 |
 | Literal | lowered: integral and bool constants; other literals (string, floating point, null) opaque with reason `Literal` | IrLowererTests.UnsignedAndCharConstantsKeepTheirBits | M2-003 |
