@@ -21,7 +21,7 @@ public sealed class IVerificationBackendTests
     {
         IVerificationBackend backend = new AlwaysEquivalent();
         ProcedureIdentity identity = new("T::M()");
-        Verdict verdict = backend.Verify(new ProcedurePair(identity, identity), new VerificationOptions(3, 5000, ImmutableDictionary<string, string>.Empty));
+        Verdict verdict = backend.Verify(new ProcedurePair(identity, identity), new VerificationOptions(3, 5000, []));
         Assert.IsType<Equivalent>(verdict);
     }
 }

@@ -87,5 +87,5 @@ public sealed class IrValueTests
         Assert.False(empty.Equals((IrMapValue?)null));
     }
 
-    private static IrMapValue Map() => new(BvToBool, new IrBoolValue(false), ImmutableDictionary<IrValue, IrValue>.Empty);
+    private static IrMapValue Map() => new(BvToBool, new IrBoolValue(false), []);
 }

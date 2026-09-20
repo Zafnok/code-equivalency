@@ -65,13 +65,13 @@ public static class EquivConfigLoader
     {
         if (!root.TryGetProperty(property, out JsonElement element))
         {
-            return ImmutableDictionary<string, string>.Empty;
+            return [];
         }
 
         if (element.ValueKind != JsonValueKind.Object)
         {
             diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidRenameEntry, property, $"\"{property}\" must be an object of string to string"));
-            return ImmutableDictionary<string, string>.Empty;
+            return [];
         }
 
         ImmutableDictionary<string, string>.Builder map = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.Ordinal);

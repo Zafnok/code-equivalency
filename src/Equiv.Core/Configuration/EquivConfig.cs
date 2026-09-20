@@ -9,7 +9,7 @@ namespace Equiv.Core.Configuration;
 /// </summary>
 public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, string> CallIdentityRenames, int Bound, int TimeoutMs)
 {
-    public static EquivConfig Default { get; } = new(RenameMap.Empty, ImmutableDictionary<string, string>.Empty, Bound: 3, TimeoutMs: 5000);
+    public static EquivConfig Default { get; } = new(RenameMap.Empty, [], Bound: 3, TimeoutMs: 5000);
 
     // Deliberate non-short-circuit '&' after the null check, matching Equiv.Core.Ir.IrEquality's
     // documented rationale: '&&' always compiles to a branch per operand, which would need extra
