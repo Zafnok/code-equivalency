@@ -46,6 +46,15 @@ and stop; do not silently deviate.
   targeting pack (see README). The engine itself is cross-platform.
 - The git default branch is `main` (renamed from `master` in M0-001). One branch per ticket, merged by PR.
 - Never commit `samples/**/bin`, `obj`, `TestResults`, `StrykerOutput`.
+- Never filesystem-search for `Sarif.Sdk` (`find`, `Get-ChildItem -Recurse`). It ships as
+  `Sarif.dll`/`Sarif.xml` in namespace `Microsoft.CodeAnalysis.Sarif` — nothing on disk is
+  called `Sarif.Sdk.dll`, so the search scans the whole drive and returns nothing, every
+  time. It is at `<global-packages>/sarif.sdk/<version>/lib/netstandard2.0/`, and the
+  `Sarif.xml` there is the full documented API — read it instead of guessing or writing a
+  probe app. Restored packages generally live at `$env:NUGET_PACKAGES` (else
+  `$env:USERPROFILE\.nuget\packages`) `/<id lower-cased>/<version>/lib/<tfm>/`, version
+  pinned in `Directory.Packages.props`; computing that path beats searching for any
+  package. See `.claude/skills/equiv-package-api`.
 
 ## Decisions
 
