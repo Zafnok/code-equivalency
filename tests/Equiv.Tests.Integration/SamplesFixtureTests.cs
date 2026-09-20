@@ -22,8 +22,8 @@ public sealed class SamplesFixtureTests
     private static string SamplesRoot =>
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples"));
 
-    public static IEnumerable<object[]> Samples =>
-        ExpectedVerdictsBySample.Keys.Select(name => new object[] { name });
+    public static TheoryData<string> Samples =>
+        [.. ExpectedVerdictsBySample.Keys];
 
     [Theory]
     [MemberData(nameof(Samples))]
