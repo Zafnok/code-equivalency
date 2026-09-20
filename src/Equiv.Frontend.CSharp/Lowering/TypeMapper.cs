@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Equiv.Core.Ir;
 
 using Microsoft.CodeAnalysis;
@@ -30,6 +32,17 @@ internal static class TypeMapper
         IrBitVec { Width: < 32 } => (new IrBitVec(32), true),
         IrBitVec bits => (bits, IsSigned(type)),
         _ => null,
+    };
+
+    /// <summary>
+    /// The IR value of a C# compile-time constant. The caller must have checked that
+    /// <paramref name="type"/> maps to a bitvector or to Bool.
+    /// </summary>
+    public static IrValue Constant(ITypeSymbol type, object value) => Map(type) switch
+    {
+        IrBitVec bits when IsSigned(type) => IrBitVecValue.FromSigned(bits.Width, System.Convert.ToInt64(value, CultureInfo.InvariantCulture)),
+        IrBitVec bits => new IrBitVecValue(bits.Width, System.Convert.ToUInt64(value, CultureInfo.InvariantCulture)),
+        _ => new IrBoolValue((bool)value),
     };
 
     /// <summary>Whether an integral type is signed; signedness lives on IR operations, not IR types.</summary>

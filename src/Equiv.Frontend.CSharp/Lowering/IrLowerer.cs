@@ -34,6 +34,7 @@ internal sealed class IrLowerer
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captureTargets = [];
     private readonly Dictionary<string, IrBlockId> throwBlocks = new(StringComparer.Ordinal);
     private readonly Dictionary<int, IrBlockId> blockIds = [];
+    private SwitchChains chains = null!;
     private IrBlockId current = new(0);
 
     private IrLowerer(RenameMap renames, IrType? returnType)
@@ -69,7 +70,6 @@ internal sealed class IrLowerer
         // `foreach` is left, because the CFG desugars every one of them -- arrays included -- into the
         // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-004).
         string? wholeBody = body.Descendants().Any(static o => o is IForEachLoopOperation) ? "foreach-enumerator"
-            : body.Descendants().Any(static o => o is ISwitchOperation or ISwitchExpressionOperation) ? "switch"
             : HasExceptionRegion(cfg.Root) ? "try-region"
             : null;
         if (wholeBody is not null)
@@ -120,7 +120,8 @@ internal sealed class IrLowerer
 
     private ImmutableArray<IrBlock> LowerBlocks(ControlFlowGraph cfg, IMethodSymbol method, ImmutableArray<IrParameter> parameters, SourceSpan span)
     {
-        ImmutableArray<BasicBlock> reachable = [.. cfg.Blocks.Where(static b => b.IsReachable)];
+        chains = SwitchChains.Find(cfg);
+        ImmutableArray<BasicBlock> reachable = [.. cfg.Blocks.Where(b => b.IsReachable && !chains.IsAbsorbed(b.Ordinal))];
         foreach (BasicBlock block in reachable)
         {
             blockIds[block.Ordinal] = ssa.NewBlock();
@@ -166,6 +167,12 @@ internal sealed class IrLowerer
                 OpaqueExit("missing-return", span);
             }
 
+            return;
+        }
+
+        if (chains.Head(block.Ordinal) is { } chain)
+        {
+            Switch(chain);
             return;
         }
 
@@ -220,6 +227,34 @@ internal sealed class IrLowerer
 
         Lower(creation); // may move `current` past the constructor's own threw branch
         ssa.Terminate(current, new IrThrow(TypeMapper.MetadataName(creation.Type!), []));
+    }
+
+    /// <summary>A chain of equality tests on one scrutinee, folded back into one terminator (acceptance criterion 2).</summary>
+    private void Switch(SwitchChains.Chain chain)
+    {
+        IrVar scrutinee = Value(chain.Scrutinee);
+        ssa.Terminate(current, new IrSwitch(
+            scrutinee,
+            [.. chain.Cases.Select(c => (TypeMapper.Constant(c.ConstantType, c.Constant), blockIds[c.Target.Ordinal]))],
+            blockIds[chain.Default.Ordinal]));
+    }
+
+    /// <summary>
+    /// A pattern test (acceptance criterion 2): a constant pattern is an equality, a discard is <c>true</c>,
+    /// and every other pattern is opaque, which is how a pattern switch beyond constant cases stops here.
+    /// </summary>
+    private IrVar? Match(IIsPatternOperation pattern)
+    {
+        switch (pattern.Pattern)
+        {
+            case IDiscardPatternOperation:
+                return Const(new IrBoolValue(true));
+            case IConstantPatternOperation { Value: { Type: { } type, ConstantValue: { HasValue: true, Value: { } constant } } }
+                when TypeMapper.Map(type) is IrBitVec or IrBool && TypeMapper.Map(pattern.Value.Type!) == TypeMapper.Map(type):
+                return Emit(IrBinaryOp.Eq, Value(pattern.Value), Constant(type, constant), Bool);
+            default:
+                return Opaque(pattern, "switch-pattern");
+        }
     }
 
     private void OpaqueExit(string reason, SourceSpan span)
@@ -285,6 +320,8 @@ internal sealed class IrLowerer
                 return Invoke(invocation);
             case IObjectCreationOperation creation:
                 return Create(creation);
+            case IIsPatternOperation pattern:
+                return Match(pattern);
             default:
                 return Opaque(operation, operation.Kind.ToString());
         }
@@ -319,17 +356,7 @@ internal sealed class IrLowerer
         return target;
     }
 
-    private IrVar Constant(ITypeSymbol type, object value)
-    {
-        IrType irType = TypeMapper.Map(type);
-        IrValue irValue = irType switch
-        {
-            IrBitVec bits when TypeMapper.IsSigned(type) => IrBitVecValue.FromSigned(bits.Width, System.Convert.ToInt64(value, CultureInfo.InvariantCulture)),
-            IrBitVec bits => new IrBitVecValue(bits.Width, System.Convert.ToUInt64(value, CultureInfo.InvariantCulture)),
-            _ => new IrBoolValue((bool)value),
-        };
-        return Const(irValue);
-    }
+    private IrVar Constant(ITypeSymbol type, object value) => Const(TypeMapper.Constant(type, value));
 
     private IrVar Const(IrValue value)
     {

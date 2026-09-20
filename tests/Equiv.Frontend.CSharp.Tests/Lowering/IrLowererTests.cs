@@ -17,8 +17,6 @@ public sealed class IrLowererTests
     [InlineData("int M { get; }", "get_M", "no-body")]
     [InlineData("static void M(int[] xs) { foreach (int x in xs) { } }", "M", "foreach-enumerator")]
     [InlineData("static void M(System.Collections.Generic.List<int> l) { foreach (int x in l) { } }", "M", "foreach-enumerator")]
-    [InlineData("static int M(int n) { switch (n) { case 1: return 2; } return 0; }", "M", "switch")]
-    [InlineData("static int M(int n) => n switch { 1 => 2, _ => 0 };", "M", "switch")]
     [InlineData("static int M(int n) { try { return n; } catch (Exception) { return 0; } }", "M", "try-region")]
     [InlineData("static int M(IDisposable d) { using (d) { return 1; } }", "M", "try-region")]
     [InlineData("static int M(IDisposable d, int n) { if (n > 0) { using IDisposable e = d; return 1; } return n; }", "M", "try-region")]
@@ -180,6 +178,59 @@ public sealed class IrLowererTests
 
         Assert.Equal("C::.ctor(int)", call.Callee.Value);
         Assert.Equal(["a"], call.Args.Select(static v => v.Name), StringComparer.Ordinal);
+    }
+
+    /// <summary>Ticket M2-004 acceptance criterion 2: the CFG's chain of equality tests folds back into one switch.</summary>
+    [Theory]
+    [InlineData("static int M(int n) { switch (n) { case 1: return 10; case 3: return 30; default: return 0; } }")]
+    [InlineData("static int M(int n) => n switch { 1 => 10, 3 => 30, _ => 0 };")]
+    [InlineData("static int M(int n) { switch (n) { case 1: case 3: break; default: return 0; } return n * 10; }")]
+    public void ASwitchOnAnIntegralScrutineeLowersToOneSwitchTerminator(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        IrSwitch terminator = Assert.Single(procedure.Blocks.Select(static b => b.Terminator).OfType<IrSwitch>());
+        Assert.Equal([Bits(32, 1), Bits(32, 3)], terminator.Cases.Select(static c => c.Value));
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 30)), Run(procedure, Bits(32, 3)));
+        Assert.Equal(new IrReturned(Bits(32, 0)), Run(procedure, Bits(32, 2)));
+    }
+
+    [Fact]
+    public void ASwitchOnABoolScrutineeLowersToOneSwitchTerminator()
+    {
+        IrProcedure procedure = Method("static int M(bool b, bool c) { switch (b) { case true: return 1; default: break; } switch (c) { case false: return 2; case true: return 3; } }");
+
+        IrSwitch terminator = Assert.Single(procedure.Blocks.Select(static b => b.Terminator).OfType<IrSwitch>());
+        Assert.Equal([new IrBoolValue(false), new IrBoolValue(true)], terminator.Cases.Select(static c => c.Value));
+        Assert.Equal(new IrReturned(Bits(32, 2)), Run(procedure, new IrBoolValue(false), new IrBoolValue(false)));
+    }
+
+    /// <summary>A single equality test is not a chain, so `if` keeps its branch.</summary>
+    [Fact]
+    public void ASingleCaseSwitchStaysABranch() =>
+        Assert.Empty(Method("static int M(int n) { switch (n) { case 1: return 2; } return 0; }")
+            .Blocks.Select(static b => b.Terminator).OfType<IrSwitch>());
+
+    [Theory]
+    [InlineData("static int M(int n) => n switch { > 1 => 2, _ => 0 };")]
+    [InlineData("static int M(object o) => o switch { int n => n, _ => 0 };")]
+    public void APatternBeyondAConstantIsOpaque(string members) =>
+        Assert.Contains(Opaques(Method(members)), static o => string.Equals(o.Reason, "switch-pattern", StringComparison.Ordinal));
+
+    [Fact]
+    public void AConstantPatternOutsideASwitchIsAnEquality() =>
+        Assert.Equal(new IrReturned(new IrBoolValue(true)), Run(Method("static bool M(int n) => n is 5;"), Bits(32, 5)));
+
+    /// <summary>A guard is an ordinary branch after the constant test, so the arm still lowers.</summary>
+    [Fact]
+    public void AGuardedConstantPatternLowersAsABranch()
+    {
+        IrProcedure procedure = Method("static int M(int n, bool c) => n switch { 1 when c => 2, _ => 0 };");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 2)), Run(procedure, Bits(32, 1), new IrBoolValue(true)));
+        Assert.Equal(new IrReturned(Bits(32, 0)), Run(procedure, Bits(32, 1), new IrBoolValue(false)));
     }
 
     [Fact]

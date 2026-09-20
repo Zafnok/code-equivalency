@@ -54,6 +54,12 @@ public sealed class IrLowererSnapshotTests
     public Task IncrementAndDecrement() => Dump("static int M(int a, char c) { a++; --a; c--; return a + c; }");
 
     [Fact]
+    public Task SwitchStatement() => Dump("static int M(int n) { switch (n) { case 1: return 10; case 2: case 3: return 30; default: return 0; } }");
+
+    [Fact]
+    public Task SwitchExpression() => Dump("static int M(char c) => c switch { 'a' => 1, 'b' => 2, _ => 0 };");
+
+    [Fact]
     public Task ConditionalExpression() => Dump("static int M(bool b, int x) => b ? x : -x;");
 
     [Fact]
