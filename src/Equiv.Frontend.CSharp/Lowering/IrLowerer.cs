@@ -80,7 +80,7 @@ internal sealed class IrLowerer
         SourceSpan span = Span(body.Syntax);
         // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles; only
         // `foreach` is left, because the CFG desugars every one of them -- arrays included -- into the
-        // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-003). `using`
+        // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-004). `using`
         // and `lock` are out of this ticket's scope even though the CFG gives them ordinary regions.
         string? wholeBody = body.Descendants().Any(static o => o is IForEachLoopOperation) ? "foreach-enumerator"
             : body.Descendants().Any(static o => o is IUsingOperation or IUsingDeclarationOperation) ? "using"
