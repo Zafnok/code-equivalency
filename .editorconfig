@@ -31,6 +31,10 @@ dotnet_diagnostic.xUnit1044.severity = error
 dotnet_diagnostic.xUnit2032.severity = error
 dotnet_diagnostic.MA0040.severity = error
 
+# GH-48: MemberData sources must return typed rows (TheoryData<>), not object[], so a
+# mismatched parameter type fails at compile time instead of at test run time.
+dotnet_diagnostic.xUnit1042.severity = error
+
 # sonar(IDE0301): pinned to error so an empty-collection initializer regressing to
 # `Foo.Empty`/`new()` fails the build instead of quietly re-accumulating as Sonar debt.
 dotnet_diagnostic.IDE0301.severity = error
