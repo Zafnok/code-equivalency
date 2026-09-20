@@ -16,6 +16,7 @@ A PR cannot merge unless every gate is green. Versions are pinned in
 | Integration | `Equiv.Tests.Integration` runs the CLI on every `samples/*` and compares SARIF snapshot | Windows runner only (needs VS Build Tools) | yes |
 | Mutation | Stryker.NET 5 (`--test-runner mtp`) | threshold: break < 90 initially, raised per milestone; MTP runner is new, so this job is `continue-on-error` until M2, then blocking. PRs run incrementally (`--since` the base branch, M0-007); the nightly schedule is a full sweep | later |
 | Code smells / duplication | SonarQube Cloud | Sonar "Sonar way" Quality Gate on new code (duplication, maintainability/reliability/security ratings); `continue-on-error` until calibrated against a few real PRs, then promoted (ADR 0009) | later |
+| Code smell backlog | `tools/sonar-triage` | Sonar's *overall* findings, which the new-code gate never sees, batched into GitHub issues labelled `sonar` by `sonar-triage.yml` (weekly + manual). Filing only; the fixes are ordinary PRs (ADR 0016) | no (reporting) |
 | Security | GitHub CodeQL (C#), `dotnet list package --vulnerable --include-transitive` fails on any | | yes |
 | Secrets | gitleaks action | | yes |
 | Supply chain | Dependabot weekly, NuGet lock files (`RestorePackagesWithLockFile`), `--locked-mode` in CI | | yes |

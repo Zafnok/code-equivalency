@@ -1,0 +1,32 @@
+// Accepted deviations from SonarQube Cloud's findings.
+//
+// This is the one place a Sonar finding is argued with. A fix session that thinks a finding
+// is wrong adds an entry here with a reason; it does not sprinkle // NOSONAR comments or
+// disable an analyzer. See docs/adr/0016-sonar-issue-triage.md.
+//
+// Entry shape:
+//   rule     required. The full Sonar rule key, e.g. "csharpsquid:S2178".
+//   verdict  "fix" (default), "accept" (never file it), or "defer" (not now).
+//   paths    optional globs narrowing the entry. "**" crosses directories, "*" does not.
+//   message  optional regex the finding's message must match.
+//   reason   required for accept and defer. A reason appealing to a repo-wide design
+//            choice must cite an ADR or a ticket, so review can check it.
+//
+// A verdict of accept or defer without a reason is a hard error: that is how a backlog
+// quietly rots. Nothing here is hidden - every run prints the suppressed count by rule.
+{
+  "rules": [
+    {
+      "rule": "csharpsquid:S2178",
+      "verdict": "accept",
+      "paths": ["src/Equiv.Core/**"],
+      "reason": "Non-short-circuit & on bools is deliberate here: it keeps each field to one branch, which the 100% branch-coverage gate requires. Rewriting to && doubles the branches per field and the gate then cannot be met. Rationale and the original Sonar report: src/Equiv.Core/Ir/IrEquality.cs and docs/tickets/M1-003-verdicts-matching-config.md."
+    },
+    {
+      "rule": "csharpsquid:S2094",
+      "verdict": "accept",
+      "paths": ["**/AssemblyMarker.cs"],
+      "reason": "These types are empty on purpose: they exist only so the ArchUnitNET rules in tests/Equiv.Tests.Architecture can resolve each src/ assembly (M0-003). Giving them members or turning them into interfaces would defeat the point."
+    }
+  ]
+}
