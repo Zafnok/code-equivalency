@@ -29,6 +29,7 @@ public sealed class PackageInventoryBuilderTests : IDisposable
         PackageInventory inventory = PackageInventoryBuilder.Build(_repoRoot, _nugetCache);
 
         Assert.Empty(inventory.ExtraPackages);
+        Assert.False(inventory.SamplesFullyRestored);
     }
 
     [Fact]
@@ -44,6 +45,7 @@ public sealed class PackageInventoryBuilderTests : IDisposable
         Assert.Equal("Widget.Restored", package.Id);
         Assert.Equal(PackageRole.SamplesOnly, package.Role);
         Assert.Equal("Apache-2.0", package.DeclaredLicence);
+        Assert.True(inventory.SamplesFullyRestored);
     }
 
     private void WriteMinimalRepoScaffold()

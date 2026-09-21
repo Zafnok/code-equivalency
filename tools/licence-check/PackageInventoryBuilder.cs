@@ -20,9 +20,10 @@ internal static class PackageInventoryBuilder
 
         List<ResolvedPackage> extra = [];
         extra.AddRange(ReadLocalTools(repoRoot, nugetPackagesRoot));
-        extra.AddRange(ReadSamplesDirectReferences(repoRoot, nugetPackagesRoot, redistributedIds));
+        (List<ResolvedPackage> samples, bool samplesFullyRestored) = ReadSamplesDirectReferences(repoRoot, nugetPackagesRoot, redistributedIds);
+        extra.AddRange(samples);
 
-        return new PackageInventory(redistributedIds, extra);
+        return new PackageInventory(redistributedIds, extra, samplesFullyRestored);
     }
 
     private static HashSet<string> ReadPrivateAssetsAll(string directoryBuildPropsPath)
@@ -102,13 +103,14 @@ internal static class PackageInventoryBuilder
         return packages;
     }
 
-    private static List<ResolvedPackage> ReadSamplesDirectReferences(string repoRoot, string nugetPackagesRoot, IReadOnlySet<string> redistributedIds)
+    private static (List<ResolvedPackage> Packages, bool FullyRestored) ReadSamplesDirectReferences(string repoRoot, string nugetPackagesRoot, IReadOnlySet<string> redistributedIds)
     {
         List<ResolvedPackage> packages = [];
+        bool fullyRestored = true;
         string samplesDirectory = Path.Combine(repoRoot, "samples");
         if (!Directory.Exists(samplesDirectory))
         {
-            return packages;
+            return (packages, fullyRestored);
         }
 
         HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
@@ -133,8 +135,10 @@ internal static class PackageInventoryBuilder
                 // samples/ is only restored under -Integration (the legacy side needs MSBuild.exe,
                 // Windows-only); a plain ./build.ps1 run on ubuntu-latest never restores it, so a
                 // missing nuspec here means "not part of this run", not an undetermined licence.
+                // The caller must not compare THIRD-PARTY-NOTICES.md against a run that hit this.
                 if (!NuspecLicenseReader.IsRestored(id, version, nugetPackagesRoot))
                 {
+                    fullyRestored = false;
                     continue;
                 }
 
@@ -143,7 +147,7 @@ internal static class PackageInventoryBuilder
             }
         }
 
-        return packages;
+        return (packages, fullyRestored);
     }
 
     /// <summary>

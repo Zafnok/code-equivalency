@@ -41,21 +41,32 @@ try
         return 1;
     }
 
-    string notices = ThirdPartyNoticesRenderer.Render(result.Passed);
-    string noticesPath = Path.Combine(repoRoot, "THIRD-PARTY-NOTICES.md");
-    string? existing = File.Exists(noticesPath) ? File.ReadAllText(noticesPath) : null;
-
-    if (!string.Equals(Normalize(existing), Normalize(notices), StringComparison.Ordinal))
+    if (!inventory.SamplesFullyRestored)
     {
-        if (fix)
+        // samples/ is only restored under build.ps1 -Integration (the legacy side needs
+        // MSBuild.exe, Windows-only). This run's resolved package set is a real subset of the
+        // truth, so comparing it against THIRD-PARTY-NOTICES.md would report false drift (or,
+        // with --fix, overwrite the tracked file with an incomplete one). Skip the check.
+        Console.WriteLine($"licence-check: samples/ was not restored under '{repoRoot}' in this run; skipping the THIRD-PARTY-NOTICES.md freshness check.");
+    }
+    else
+    {
+        string notices = ThirdPartyNoticesRenderer.Render(result.Passed);
+        string noticesPath = Path.Combine(repoRoot, "THIRD-PARTY-NOTICES.md");
+        string? existing = File.Exists(noticesPath) ? File.ReadAllText(noticesPath) : null;
+
+        if (!string.Equals(Normalize(existing), Normalize(notices), StringComparison.Ordinal))
         {
-            File.WriteAllText(noticesPath, notices);
-            Console.WriteLine($"licence-check: regenerated {noticesPath}.");
-        }
-        else
-        {
-            Console.Error.WriteLine($"licence-check: {noticesPath} is out of date. Run with --fix to regenerate it.");
-            return 1;
+            if (fix)
+            {
+                File.WriteAllText(noticesPath, notices);
+                Console.WriteLine($"licence-check: regenerated {noticesPath}.");
+            }
+            else
+            {
+                Console.Error.WriteLine($"licence-check: {noticesPath} is out of date. Run with --fix to regenerate it.");
+                return 1;
+            }
         }
     }
 
