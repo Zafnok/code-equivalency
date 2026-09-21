@@ -53,6 +53,16 @@
               defaultConfiguration: {
                 level: note
               }
+            },
+            {
+              id: EQ006,
+              name: RuntimeChangedDivergence,
+              shortDescription: {
+                text: The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET.
+              },
+              defaultConfiguration: {
+                level: error
+              }
             }
           ]
         }

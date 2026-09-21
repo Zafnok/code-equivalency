@@ -185,7 +185,7 @@ internal sealed class IrTextParser
             return (IrTokenKind.Symbol, "->");
         }
 
-        if (!"()[],:=<>-".Contains(c, StringComparison.Ordinal))
+        if (!"()[],:=<>-!".Contains(c, StringComparison.Ordinal))
         {
             throw new IrParseException($"unexpected character '{c}'", line, column);
         }
@@ -417,7 +417,8 @@ internal sealed class IrTextParser
 
     private IrCall ParseCall(IrVar? target)
     {
-        CallIdentity callee = new(ExpectString());
+        string calleeValue = ExpectString();
+        CallIdentity callee = new(calleeValue, AcceptSymbol("!"));
         ImmutableArray<IrVar> args = ParseList("(", ")", ParseUse);
         IrVar? threw = AcceptWord("threw") ? ParseDefinition() : null;
         return new IrCall(target, threw, callee, args);

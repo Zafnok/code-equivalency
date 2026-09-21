@@ -1,0 +1,77 @@
+// Runtime-changed BCL members (VERIFICATION-MODEL.md section 3; ADR 0008): calls whose observable
+// behaviour differs between .NET Framework 4.8 and .NET 10 even though the call is textually
+// identical on both sides. "member" is a prefix matched against CallIdentity.Value
+// (Equiv.Core.Matching.ProcedureIdentityNormalizer's "Namespace.Type::Member(ParamType,...)"
+// shape), so one row covers every overload of a family, or every member of a type when the
+// prefix ends right after "::".
+//
+// x87 vs SSE floating-point on x86 is NOT a row here: floats are an uninterpreted Sort in the
+// MVP, so there is no bit-level float semantics yet for a row to flag calls against. Add it once
+// floats gain a real encoding (post-MVP).
+[
+  {
+    "member": "System.String::IndexOf(",
+    "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
+  },
+  {
+    "member": "System.String::LastIndexOf(",
+    "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
+  },
+  {
+    "member": "System.String::StartsWith(",
+    "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
+  },
+  {
+    "member": "System.String::EndsWith(",
+    "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
+  },
+  {
+    "member": "System.String::Compare(",
+    "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
+  },
+  {
+    "member": "System.String::CompareTo(",
+    "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
+  },
+  {
+    "member": "System.String::GetHashCode(",
+    "reason": "String.GetHashCode is randomized per process on .NET and is not guaranteed to match .NET Framework 4.8's algorithm, so the same string can hash differently on each side.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0"
+  },
+  {
+    "member": "System.Globalization.CompareInfo::",
+    "reason": "CompareInfo's culture-sensitive comparison, sort-key and index members use ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
+  },
+  {
+    "member": "System.Text.Encoding::get_Default(",
+    "reason": "Encoding.Default is UTF-8 on .NET but the process's ANSI code page on .NET Framework 4.8, so the same bytes decode differently.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.text.encoding.default?view=net-10.0"
+  },
+  {
+    "member": "System.Runtime.Serialization.Formatters.Binary.BinaryFormatter::",
+    "reason": "BinaryFormatter is obsolete and disabled by default on .NET, so a payload serialized through it on .NET Framework 4.8 does not round-trip through the same calls on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/serialization/8.0/binaryformatter-disabled"
+  },
+  {
+    "member": "System.Double::ToString(",
+    "reason": "Floating-point formatting became IEEE 754-compliant in .NET Core 3.0, so the exact string produced for the same double can differ from .NET Framework 4.8.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#floating-point-formatting-and-parsing-behavior-changed"
+  },
+  {
+    "member": "System.Single::ToString(",
+    "reason": "Floating-point formatting became IEEE 754-compliant in .NET Core 3.0, so the exact string produced for the same float can differ from .NET Framework 4.8.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#floating-point-formatting-and-parsing-behavior-changed"
+  },
+  {
+    "member": "System.Double::Parse(",
+    "reason": "Floating-point parsing became IEEE 754-compliant in .NET Core 3.0, so the same string can parse to a different nearest double than it did on .NET Framework 4.8.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#floating-point-formatting-and-parsing-behavior-changed"
+  }
+]

@@ -61,6 +61,38 @@ public sealed class IrTextTests
     }
 
     [Fact]
+    public void IrText_RoundTripsRuntimeChangedFlag()
+    {
+        CallIdentity flagged = new("System.String::IndexOf(char)", RuntimeChanged: true);
+        IrProcedure p = new(
+            new ProcedureIdentity("P"),
+            [],
+            null,
+            [new IrBlock(new IrBlockId(0), [new IrCall(null, null, flagged, [])], new IrReturn(null, []))],
+            new IrBlockId(0));
+
+        string dumped = IrText.Dump(p);
+        Assert.Contains("\"System.String::IndexOf(char)\"!", dumped, StringComparison.Ordinal);
+
+        IrCall parsed = Assert.IsType<IrCall>(IrText.Parse(dumped).Blocks[0].Instructions[0]);
+        Assert.Equal(flagged, parsed.Callee);
+        Assert.True(parsed.Callee.RuntimeChanged);
+    }
+
+    [Fact]
+    public void IrText_DoesNotSuffixAnUnflaggedCallee()
+    {
+        IrProcedure p = new(
+            new ProcedureIdentity("P"),
+            [],
+            null,
+            [new IrBlock(new IrBlockId(0), [new IrCall(null, null, new CallIdentity("F"), [])], new IrReturn(null, []))],
+            new IrBlockId(0));
+
+        Assert.Contains("call \"F\"()", IrText.Dump(p), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MapEntriesAreDumpedInTextOrder()
     {
         IrMap type = new(new IrBitVec(8), new IrBitVec(8));
