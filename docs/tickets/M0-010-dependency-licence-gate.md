@@ -1,5 +1,5 @@
 # M0-010 Dependency licence gate and generated third-party notices
-Status: in-progress
+Status: done (PR #73)
 Effort: M
 Model: Sonnet, high effort.
 Depends on: M0-009
@@ -109,15 +109,11 @@ for the one LGPL package in the tree is worse than no gate.
   shape. Rule: 3 (the ticket's own Tests section asks for a policy-evaluation test project and a
   snapshot-tested renderer, which is the check-coverage.Tests pattern, not sonar-triage's).
 
-### Blocked: the gate fails on an already-in-tree dependency (Out of scope, item 1)
+### Resolved: an already-in-tree dependency the gate correctly caught (Out of scope, item 1)
 
-Everything below is implemented and independently green: `tools/licence-check` builds, its own
-20-case test suite passes (`LicenceGateTests` covers all five required scenarios,
-`ThirdPartyNoticesRendererTests` has two Verify snapshots), `dotnet format --verify-no-changes`
-is clean, and `./build.ps1` runs the new `licence-check` step through restore/build/format/test/
-check-coverage without incident. Running it for real against this repo's own lock files
-(`./build.ps1`, no flags) fails at the new `licence-check` step — the only step that fails — on
-one package already in the tree before this ticket:
+Running the finished gate for real against this repo's own lock files first failed on one package
+already in the tree before this ticket, with no ADR 0002/0017 row and nothing in
+`THIRD-PARTY-NOTICES.md` today:
 
 ```
 licence-check: 1 package(s) failed the dependency licence gate:
@@ -126,30 +122,54 @@ licence-check: 1 package(s) failed the dependency licence gate:
     'http://go.microsoft.com/fwlink/?LinkId=329770') and no policy exception declares it.
 ```
 
-What this is: `Microsoft.Diagnostics.Tracing.EventRegister` 1.1.28 is a transitive dependency of
-`Sarif.Sdk` 5.7.0 (`Sarif.Sdk` -> `Microsoft.Diagnostics.Tracing.EventRegister` directly, exclude=
+`Microsoft.Diagnostics.Tracing.EventRegister` 1.1.28 is a transitive dependency of `Sarif.Sdk`
+5.7.0 (`Sarif.Sdk` -> `Microsoft.Diagnostics.Tracing.EventRegister` directly, exclude=
 "Build,Analyzers", `.NETStandard2.0` dependency group — confirmed in the restored
-`sarif.sdk.nuspec`), and so appears in `src/Equiv.Core/packages.lock.json` and
-`src/Equiv.Cli/packages.lock.json`: both redistributed projects. Its own nuspec
-(`microsoft.diagnostics.tracing.eventregister.nuspec`, `minClientVersion="2.5"`, an old-style
-package that predates SPDX `<license>` expressions) has no `<license>` element at all, only
-`<licenseUrl>http://go.microsoft.com/fwlink/?LinkId=329770</licenseUrl>` and
-`requireLicenseAcceptance="true"`. It bundles a `License-Stable.rtf` at the package root, not
-wired to the nuspec's licence metadata by any convention `nuget-license` or a first-party nuspec
-reader can follow automatically. Nothing in ADR 0002, ADR 0017 or `THIRD-PARTY-NOTICES.md`
-mentions this package today — it has been in the dependency closure, undocumented, since M0-009
-pinned `Sarif.Sdk` 5.7.0.
+`sarif.sdk.nuspec`), reaching `src/Equiv.Core/packages.lock.json` and
+`src/Equiv.Cli/packages.lock.json` (both redistributed projects). Its own nuspec
+(`minClientVersion="2.5"`, predates SPDX `<license>` expressions) has no `<license>` element,
+only `<licenseUrl>http://go.microsoft.com/fwlink/?LinkId=329770</licenseUrl>` and
+`requireLicenseAcceptance="true"`.
 
-This is exactly the situation the Out of scope section calls out ("If the gate fails on something
-already in the tree, record it in Notes and stop; swapping a package is its own ticket"), and
-sibling-scoped to the same paragraph: neither guessing this package's real licence from the
-`fwlink` redirect nor swapping/pinning a different `Sarif.Sdk` version to drop the dependency is
-something this ticket should decide unilaterally — the whole point of the gate is that a licence
-claim here needs a human to actually look, not a script to assume.
+Per the user's direction: checked whether a newer `Sarif.Sdk` drops the dependency first
+(nuget.org's registration index tops out at 5.7.0, already pinned — no newer version exists, so
+swapping is not an option), then resolved the licence by hand instead of guessing:
 
-**Status: stopping here.** `./build.ps1 -Integration` is red on `main` plus this branch's changes
-for the reason above (AC9 cannot hold), so no PR is opened. Everything else — AC1 through AC8 —
-holds and is demonstrated by the test suite and by every other `./build.ps1` step passing. Next
-step is a human decision (new ADR 0002/0017 exception with a real answer for what
-`Microsoft.Diagnostics.Tracing.EventRegister`'s licence actually is, or drop it by changing how
-`Sarif.Sdk` is consumed) before this ticket can land.
+- The fwlink resolves to `https://dotnet.microsoft.com/en-us/perfview_library_license.htm`,
+  titled "MICROSOFT SOFTWARE LICENSE TERMS - MICROSOFT PERFVIEW .NET LIBRARY" — a restrictive
+  Microsoft EULA (no reverse engineering, no redistributing as a stand-alone offering, scoped to
+  "the Microsoft implementation of PerfView located on GitHub"), **not** MIT, even though the
+  sibling package `Microsoft.Diagnostics.Tracing.TraceEvent` (same repo, same author) is MIT —
+  PerfView's GitHub source was later relicensed MIT but this older NuGet binary package was not.
+- Checked whether it is actually redistributed: it is an old-style package with no `lib/` folder
+  (its files sit at the package root), so SDK-style `PackageReference` restore never copies
+  `eventRegister.exe` or `Microsoft.Diagnostics.Tracing.EventSource.dll` into build output —
+  confirmed directly against `src/Equiv.Core/bin` and `src/Equiv.Cli/bin` (neither file present).
+
+Added as a third ADR 0017 standing exception (`Microsoft PerfView .NET Library EULA`, restored to
+satisfy the graph, never shipped) in `tools/licence-check/policy.json`, ADR 0017 and ADR 0002's
+prose. `./build.ps1` and `./build.ps1 -Integration` are both green; `THIRD-PARTY-NOTICES.md` is
+regenerated (76 packages) and committed.
+
+- Decision: `Microsoft.Diagnostics.Tracing.EventRegister`'s licence and disposition -> Microsoft
+  PerfView .NET Library EULA, treated as a third ADR 0017 standing exception (restored, never
+  shipped), per direct user instruction after confirming no newer `Sarif.Sdk` exists and that the
+  package's assemblies are never copied to build output. Alternatives: swap `Sarif.Sdk` (no newer
+  version available); assume permissive without checking (rejected — real license info was found
+  and it is not permissive). Rule: n/a (not an implementation detail; a licensing call made on the
+  user's explicit direction, not a `equiv-decide` five-rule pick).
+
+### Toolchain quirk worth recording
+
+`PackageInventoryBuilder`'s first pass used `XDocument.Descendants("PackageReference")`
+(namespace-qualified) to read direct references from `samples/**/*.csproj`. That silently missed
+`samples/webapi-basic/legacy/Equiv.Samples.WebApiBasic.Legacy.csproj`, which declares
+`xmlns="http://schemas.microsoft.com/developer/msbuild/2003"` (old-style, non-SDK project) — SDK-
+style csproj and `Directory.Build.props` have no namespace, so the modern-side package showed up
+and the legacy-side one silently vanished from both the gate's package count and the generated
+notices. Fixed by matching `XName.LocalName` instead of the qualified name. Caught by eyeballing
+the generated `THIRD-PARTY-NOTICES.md`'s samples-only section (one row instead of two) rather than
+by a failing test — the existing `NuspecLicenseReaderTests`/`LicenceGateTests` fixtures do not
+exercise real csproj files, so this class of bug was invisible to them. Left as-is (no new test
+added against real repo files, consistent with the rest of `PackageInventoryBuilder` being
+exercised only by the real end-to-end run, not unit tests, per the Size guard).
