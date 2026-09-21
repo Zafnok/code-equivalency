@@ -21,8 +21,11 @@ Everything else (timing, allocation, log text, exception messages) is not observ
 No single algorithm decides equivalence for every program pair, but this sub-problem
 (regression verification: same language family, mostly identical code) is tractable in
 practice. Loops are handled by the ladder in section 5.1; a procedure gets **Unknown**
-only when every rung fails, the solver times out, or some input reaches an `IrOpaque`
-node on either side (ADR 0014). Every result carries `properties.proofMethod` (which rung proved it),
+only when every rung fails, the solver times out, some input reaches an `IrOpaque` node
+that is not shared by both sides (ADRs 0014 and 0024), or every divergence found depends on
+an abstraction (ADR 0026). A pair whose bound bodies fingerprint equal and are not
+runtime-sensitive is Equivalent by congruence, without the solver (`proofMethod:
+congruence`, ADR 0024): identical bound code makes the same claim a shared call does. Every result carries `properties.proofMethod` (which rung proved it),
 `properties.boundedBy` when the claim is bounded, and `properties.opaqueNodes`, so a
 reader can see exactly how strong the claim is. Never report Equivalent without saying how.
 
@@ -36,7 +39,10 @@ Types: `Bool`; `BitVec(n)` for integral types (n in 8, 16, 32, 64, signedness ke
 the operation, not the type); `Sort(name)` for everything else (strings, objects,
 decimals, floats), treated as uninterpreted with equality only; `Map(key, value)` for
 SSA heap slices (one map per field, one per array) encoded as SMT arrays. Floating
-point is a `Sort` in the MVP (not IEEE-modelled); a post-MVP ticket exists.
+point is a `Sort` in the MVP (not IEEE-modelled); a post-MVP ticket exists. Operators on
+floating point, `decimal` and user-defined operators are `IrPure` applications of named
+functions both sides share (ADR 0025, ticket M3-018), so unchanged arithmetic is provable
+without modelling its semantics.
 
 IR instructions never throw. Every exception edge is explicit in the CFG: the frontend
 lowers `checked` arithmetic to an overflow test plus a branch to a throw block, and a
@@ -53,7 +59,8 @@ Instructions:
 | `IrPhi(var, [(block, var)])` | SSA merge |
 | `IrCall(var?, threw?, callee identity, args)` | opaque call; appended to the observable call trace; `threw` is a Bool output. Result, `threw` and heap effect are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018; heap in and out land in P1-005) |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
-| `IrOpaque(var?, reason, sourceSpan)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014) |
+| `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025) |
+| `IrOpaque(var?, reason, sourceSpan, fingerprint?, reads)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024) |
 
 Terminators: `IrGoto`, `IrBranch(cond, then, else)`, `IrSwitch`, `IrReturn(var?, outs)`,
 `IrThrow(exceptionTypeIdentity, outs)`, `IrUnreachable` (assume false; produced by loop
@@ -157,7 +164,10 @@ where the position is the number of calls the same side made before it (ADR 0018
 at the same position with the same identity, arguments and heap therefore agree across
 sides. Two calls on one side are never forced to agree, because a real callee may be
 stateful. The exception is an identity in the runtime-changes table, which gets
-side-specific functions. The call trace is a bounded list compared element-wise; an event
+side-specific functions. An `IrOpaque` whose fingerprint occurs on both sides is encoded as
+exactly such a call, with identity `opaque:<fingerprint>` and its reads as arguments (ADR
+0024). An `IrPure` is a function of its arguments only, shared unless runtime-sensitive (ADR
+0025). The call trace is a bounded list compared element-wise; an event
 is (identity, arguments, heap at the call).
 
 ### 5.1 Loop ladder
@@ -184,7 +194,7 @@ have a syntactic termination argument (bounded counters), otherwise not claimed.
 |---|---|---|---|
 | Equivalent | none | `pass` | EQ001 |
 | Divergent | `error` | `fail` | EQ002 (counterexample in `properties.model` and in `message`) |
-| Unknown | none (rule default `warning`) | `open` | EQ003 (reason: timeout, opaque, unmatched overload, loop until the M3-002 ladder) |
+| Unknown | none (rule default `warning`) | `open` | EQ003 (reason: timeout, opaque, unmatched overload, abstraction, loop until the M3-002 ladder) |
 | Added | none (rule default `note`) | `informational` | EQ004 |
 | Removed | none (rule default `note`) | `informational` | EQ005 |
 | Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link in `message`) |
@@ -192,6 +202,21 @@ have a syntactic termination argument (bounded counters), otherwise not claimed.
 Every verdict on a matched pair with bodies also carries `properties.assumedCallees` and
 `properties.unprovenAssumptions` (ADR 0019), and `properties.equivalencesApplied` when a
 catalogue entry fired (ADR 0020).
+
+A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
+and of `opaque:` calls are tainted, taint follows data, and a branch on a tainted value taints
+the rest of that side. The result is Divergent only when a compared observable differs and is
+untainted on both sides. Otherwise it is Unknown with reason `Abstraction`, carrying the model
+as `properties.candidateCounterexample` and the abstractions it depends on as
+`properties.abstractions`.
+
+An Unknown result lists every reached opaque node and every abstraction it depends on as a
+`relatedLocation` whose message is the reason. Its primary location is the first of them on
+the modern side, else the procedure (ADR 0027). `partialFingerprints` do not change with it.
+
+Every run writes `run.properties.loweringCensus`: procedures per side, matched pairs, pairs
+without `IrOpaque`, whole-body opaque pairs, congruent pairs, and `IrOpaque` counts by reason
+per side (ADR 0027).
 
 A pair whose verification throws (an encoder bug, a `Z3Exception`) has no result: a crash is
 a fact about the tool, not a verdict about the code (ADR 0023). It is recorded as an `error`
@@ -238,4 +263,7 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   `IrInterpreter` (production code in Core, also used to replay counterexamples);
   outputs agree.
 - Snapshot tests (Verify): IR dump and SARIF for every sample in `samples/`.
+- Congruence (property test, ADR 0024): whenever congruence reports Equivalent on a
+  generated or sample pair, the solver on the same pair never reports Divergent.
+- Taint (ADR 0026): no Divergent result's differing observable is tainted.
 - Every row in the tables above has at least one unit test named after it.

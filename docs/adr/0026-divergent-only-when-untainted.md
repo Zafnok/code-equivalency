@@ -1,6 +1,6 @@
 # ADR 0026: A Divergent must not depend on an abstraction; otherwise it is Unknown(Abstraction)
 
-Status: proposed (2026-09-21)
+Status: accepted (2026-09-21)
 
 ## Context
 M3-001 reports Divergent only for a counterexample "whose replay reaches no `IrOpaque`, so replay is
@@ -50,6 +50,6 @@ untainted observables agree while the solver said they differ remains an encoder
 - EQ002 stays a claim the tool stands behind. Unknown gains the reason Abstraction, which by
   construction comes with a candidate input.
 - `IrInterpreter` grows a taint shadow. Its oracles and budget are unchanged.
-- VERIFICATION-MODEL section 6 (the Unknown row, the candidate counterexample) and the M3-001 replay
-  paragraph change when this ADR is accepted.
+- VERIFICATION-MODEL section 6 (the Unknown row, the candidate counterexample, the replay rule)
+  changed in the PR that accepted this ADR.
 - Ticket: M3-016. M3-017 and M3-018 depend on it.

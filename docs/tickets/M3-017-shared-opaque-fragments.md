@@ -1,5 +1,5 @@
 # M3-017 An opaque fragment present on both sides is a shared call
-Status: todo (blocked on ADR 0024 acceptance)
+Status: todo
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-015, M3-016, P1-005

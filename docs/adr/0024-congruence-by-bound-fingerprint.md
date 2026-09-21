@@ -1,6 +1,6 @@
 # ADR 0024: Identical bound code is Equivalent by congruence, and an unlowerable fragment present on both sides is shared
 
-Status: proposed (2026-09-21). Would supersede ADR 0014 in part: reaching an `IrOpaque` stops
+Status: accepted (2026-09-21). Supersedes ADR 0014 in part: reaching an `IrOpaque` stops
 making the outcome unknown when the same fragment is on both sides.
 
 ## Context
@@ -76,6 +76,5 @@ the tree is **runtime-sensitive**, meaning it contains any of:
   what such a result becomes, and it must land before shared fragments.
 - The fingerprint becomes part of what matching and api-equivalences must keep stable, and a
   normaliser change can invalidate many congruences at once. The sample snapshots pin this.
-- VERIFICATION-MODEL sections 1, 2 and 5 gain the congruence rule and the fragment encoding when
-  this ADR is accepted, and ADR 0014 gains "superseded in part by 0024".
+- VERIFICATION-MODEL sections 1, 2 and 5 gain the congruence rule and the fragment encoding in the PR that accepted this ADR, and ADR 0014 gains "superseded in part by 0024".
 - Tickets: M3-015 (fingerprints and congruence), M3-017 (shared fragments).

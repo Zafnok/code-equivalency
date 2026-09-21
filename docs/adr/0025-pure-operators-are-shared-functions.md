@@ -1,6 +1,6 @@
 # ADR 0025: Floating-point, decimal and user-defined operators are shared pure functions
 
-Status: proposed (2026-09-21)
+Status: accepted (2026-09-21)
 
 ## Context
 VERIFICATION-MODEL section 2 makes `float`, `double` and `decimal` uninterpreted sorts with
@@ -54,6 +54,5 @@ the heap or on position.
   instead of a whole region.
 - `IrInterpreter` must evaluate or taint `IrPure` (ADR 0026), and the IR validator, text format and
   CsCheck generators gain one instruction (the `equiv-extend-ir` skill).
-- VERIFICATION-MODEL section 2 (instruction table, types paragraph) and section 5 change when this
-  ADR is accepted.
+- VERIFICATION-MODEL section 2 (instruction table, types paragraph) and section 5 changed in the PR that accepted this ADR.
 - Ticket: M3-018. It depends on M3-016.

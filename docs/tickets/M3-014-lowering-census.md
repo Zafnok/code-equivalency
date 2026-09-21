@@ -1,5 +1,5 @@
 # M3-014 Lowering census, `--lower-only`, and the `business-layer` sample
-Status: todo (blocked on ADR 0027 acceptance)
+Status: todo
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-006
@@ -26,7 +26,7 @@ ADR 0027; ADR 0014; ADR 0006 (SARIF only); ARCHITECTURE.md (CLI, exit codes);
    Counts are per procedure body. A whole-body opaque counts once under its reason.
 2. `equiv compare --lower-only` loads, matches and lowers. It writes a SARIF log holding the census
    and the EQ004 and EQ005 results, never calls `IVerificationBackend`, and exits 0 unless loading
-   fails. The option is rejected with exit 2 when combined with `--baseline` or `--fail-on`.
+   fails. The option is rejected with exit 3 (usage) when combined with `--baseline` or `--fail-on`.
 3. The census is computed in `Equiv.Cli` from the lowered bodies (`IrOpaque` reasons). No frontend
    API change beyond what already returns the bodies. If bodies are not yet returned (M3-003 criterion 2),
    this ticket adds `ProcedurePair.OldBody`/`NewBody` as M3-003 specifies, and M3-003 keeps them.

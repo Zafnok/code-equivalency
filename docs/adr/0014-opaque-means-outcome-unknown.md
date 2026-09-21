@@ -1,6 +1,6 @@
 # ADR 0014: Reaching an `IrOpaque` makes that input's outcome unknown
 
-Status: accepted (2026-09-19)
+Status: accepted (2026-09-19); superseded in part by 0024 (an `IrOpaque` whose fingerprint occurs on both sides is a shared call)
 
 ## Context
 VERIFICATION-MODEL.md section 2 says `IrOpaque` "poisons every dependent value", and M3-001

@@ -1,6 +1,6 @@
 # ADR 0027: The Unknown rate is measured before it is optimised, and every Unknown points at lines
 
-Status: proposed (2026-09-21)
+Status: accepted (2026-09-21)
 
 ## Context
 Whether the product works depends on its Unknown rate on real code, and nothing measures it.
@@ -52,6 +52,5 @@ engine.
 ## Consequences
 - The M3 order changes: M3-014 and M3-022 go first, in parallel with M3-002.
 - SARIF snapshots of every sample gain the census block when M3-003 lands.
-- ARCHITECTURE.md (CLI options) and VERIFICATION-MODEL section 6 (locations of Unknown) change when
-  this ADR is accepted.
+- ARCHITECTURE.md (CLI options) and VERIFICATION-MODEL section 6 (locations of Unknown) changed in the PR that accepted this ADR.
 - Tickets: M3-014, M3-022, M3-023.

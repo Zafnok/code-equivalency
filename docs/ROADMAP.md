@@ -166,7 +166,7 @@ Added by ADR 0023 (2026-09-21):
 - M3-013 (S) A pair whose verification throws is reported as a SARIF tool-execution
   notification and skipped; the run exits 5, and its baseline result is carried as `unchanged`.
 
-Added by the Unknown-rate review (2026-09-21; ADRs 0024 to 0027, proposed). The M3 plan would
+Added by the Unknown-rate review (2026-09-21; ADRs 0024 to 0027). The M3 plan would
 ship a sound tool whose Unknown rate grows with codebase size, and it measures that rate last.
 These tickets measure it first, make unchanged code free, and keep EQ002 exact while the engine
 abstracts more:

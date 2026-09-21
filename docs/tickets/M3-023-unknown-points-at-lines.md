@@ -1,5 +1,5 @@
 # M3-023 An Unknown result points at the lines that made it Unknown
-Status: todo (blocked on ADR 0027 acceptance)
+Status: todo
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-016
