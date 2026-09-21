@@ -18,6 +18,7 @@ A PR cannot merge unless every gate is green. Versions are pinned in
 | Code smells / duplication | SonarQube Cloud | Sonar "Sonar way" Quality Gate on new code (duplication, maintainability/reliability/security ratings); `continue-on-error` until calibrated against a few real PRs, then promoted (ADR 0009) | later |
 | Code smell backlog | `tools/sonar-triage` | Sonar's *overall* findings, which the new-code gate never sees, batched into GitHub issues labelled `sonar` by `sonar-triage.yml` (weekly + manual). Filing only; the fixes are ordinary PRs (ADR 0016) | no (reporting) |
 | Security | GitHub CodeQL (C#), `dotnet list package --vulnerable --include-transitive` fails on any | | yes |
+| Dependency licence | `tools/licence-check` (M0-010), wraps the `nuget-license` local tool | every package in every `packages.lock.json`, `.config/dotnet-tools.json` and samples/ direct reference must resolve to a licence on `tools/licence-check/policy.json`'s allowlist or a reasoned exception in it (ADR 0017); also regenerates `THIRD-PARTY-NOTICES.md` and fails if that changes the tracked file | yes |
 | Secrets | gitleaks action | | yes |
 | Supply chain | Dependabot weekly, NuGet lock files (`RestorePackagesWithLockFile`), `--locked-mode` in CI | | yes |
 | Versioning | MinVer from git tags | | n/a |
