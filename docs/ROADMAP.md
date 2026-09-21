@@ -49,6 +49,12 @@ Not yet owned by any ticket (schedule when a milestone touches the area):
   needs an ADR 0002 row.
 - Verify's `SmallRevenue` sponsorship exemption in `Directory.Build.props` expires
   2027-09; re-evaluate on monetisation.
+- The dependency licence gate is M0-010 and **must land before M3-001**, the first ticket to add
+  a redistributed native dependency. Until it does, ADR 0017's allowlist is enforced only by the
+  CLAUDE.md rule that a new package needs an ADR 0002 row stating its licence.
+- M3-004 carries the rest of the licensing work as its criteria 7 to 9: notices in the artifacts,
+  a per-release Change Date, and the MSBuild redistribution question (VS Build Tools is not
+  freely redistributable in a container image).
 
 ## M0 — Skeleton and gates (day 1) — done
 
@@ -74,6 +80,13 @@ Everything after this milestone runs under 100% coverage and full CI.
   (ADR 0016).
 - M0-007 (S) done, PR #18. Faster mutation job: PRs run Stryker incrementally (`--since`
   the base branch) with full runner concurrency; the nightly schedule stays a full sweep.
+- M0-009 (M) Licensing: `LICENSE` (BUSL-1.1, three-seat and 50k-LOC-per-codebase free tier,
+  converting to Apache-2.0 on 2030-09-20), `THIRD-PARTY-NOTICES.md`, `CONTRIBUTING.md`,
+  package metadata, and ADR 0017 with the dependency licence allowlist. The repo had been
+  public with no licence at all since 2026-09-18.
+- M0-010 (M) todo. Dependency licence gate: a local tool reading real licences from the lock
+  files, failing the build outside the ADR 0017 allowlist, and generating
+  `THIRD-PARTY-NOTICES.md`. Must land before M3-001.
 
 ## M1 — Core IR, samples, SARIF (days 2–3) — done
 
@@ -121,6 +134,8 @@ Everything after this milestone runs under 100% coverage and full CI.
   Stryker becomes blocking.
 - M3-005 (S) Run against one real-world 4.8/10 pair (user-supplied); record findings
   as new tickets, not fixes.
+- M3-006 (S) Report analysed lines of code per codebase, so the BUSL free tier's 50,000-line
+  limit is observable. Reporting only, no enforcement (ADR 0017).
 
 ## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
 
