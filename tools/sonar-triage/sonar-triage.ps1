@@ -60,50 +60,29 @@ function Get-Prop {
 }
 
 # JSON with comments. A naive regex would corrupt any reason containing '//', and policy
-# reasons cite URLs, so string literals are tracked explicitly.
+# reasons cite URLs, so string literals are matched as tokens of their own and kept whole.
+# An unterminated string or block comment runs to the end of the text.
 function Remove-JsonComment {
     param([string]$Text)
-    $out = [System.Text.StringBuilder]::new()
-    $inString = $false; $inLine = $false; $inBlock = $false; $escaped = $false
-    for ($i = 0; $i -lt $Text.Length; $i++) {
-        $c = $Text[$i]
-        $next = if ($i + 1 -lt $Text.Length) { $Text[$i + 1] } else { [char]0 }
-        if ($inLine) { if ($c -eq "`n") { $inLine = $false; [void]$out.Append($c) }; continue }
-        if ($inBlock) { if ($c -eq '*' -and $next -eq '/') { $inBlock = $false; $i++ }; continue }
-        if ($inString) {
-            [void]$out.Append($c)
-            if ($escaped) { $escaped = $false }
-            elseif ($c -eq '\') { $escaped = $true }
-            elseif ($c -eq '"') { $inString = $false }
-            continue
-        }
-        if ($c -eq '"') { $inString = $true; [void]$out.Append($c); continue }
-        if ($c -eq '/' -and $next -eq '/') { $inLine = $true; $i++; continue }
-        if ($c -eq '/' -and $next -eq '*') { $inBlock = $true; $i++; continue }
-        [void]$out.Append($c)
-    }
-    return $out.ToString()
+    $tokens = '"(?:[^"\\]|\\[\s\S])*(?:"|\z)|//[^\n]*|/\*[\s\S]*?(?:\*/|\z)'
+    return [regex]::Replace($Text, $tokens, [System.Text.RegularExpressions.MatchEvaluator]{
+            param($Match)
+            if ($Match.Value.StartsWith('"')) { return $Match.Value }
+            return ''
+        })
 }
 
-# Glob semantics: '**' crosses directory separators, '*' and '?' do not.
+# Glob semantics: '**' crosses directory separators, '*' and '?' do not. A '**/' prefix
+# also matches zero directories. Tokens are matched longest first, so '***' is '**' then '*'.
 function ConvertTo-GlobRegex {
     param([string]$Glob)
-    $sb = [System.Text.StringBuilder]::new('^')
-    for ($i = 0; $i -lt $Glob.Length; $i++) {
-        $c = $Glob[$i]
-        if ($c -eq '*') {
-            if ($i + 1 -lt $Glob.Length -and $Glob[$i + 1] -eq '*') {
-                $i++
-                if ($i + 1 -lt $Glob.Length -and $Glob[$i + 1] -eq '/') { $i++; [void]$sb.Append('(?:.*/)?') }
-                else { [void]$sb.Append('.*') }
-            }
-            else { [void]$sb.Append('[^/]*') }
-        }
-        elseif ($c -eq '?') { [void]$sb.Append('[^/]') }
-        else { [void]$sb.Append([regex]::Escape([string]$c)) }
-    }
-    [void]$sb.Append('$')
-    return [regex]::new($sb.ToString(), 'IgnoreCase')
+    $regexFor = @{ '**/' = '(?:.*/)?'; '**' = '.*'; '*' = '[^/]*'; '?' = '[^/]' }
+    $body = [regex]::Replace($Glob, '\*\*/|\*\*|[*?]|[^*?]+', [System.Text.RegularExpressions.MatchEvaluator]{
+            param($Match)
+            if ($regexFor.ContainsKey($Match.Value)) { return $regexFor[$Match.Value] }
+            return [regex]::Escape($Match.Value)
+        })
+    return [regex]::new("^$body`$", 'IgnoreCase')
 }
 
 function Invoke-SonarApi {
@@ -236,18 +215,21 @@ function Import-Policy {
     return $entries
 }
 
+# An entry applies when the rule matches, any of its path globs matches (or it has none),
+# and its message regex matches (or it has none).
+function Test-PolicyEntry {
+    param($Entry, $Finding)
+    if ($Entry.rule -ne $Finding.Rule) { return $false }
+    $regexes = @($Entry.PathRegexes)
+    if ($regexes.Count -gt 0 -and -not @($regexes | Where-Object { $_.IsMatch($Finding.Path) })) { return $false }
+    $messagePattern = [string](Get-Prop $Entry 'message' '')
+    return (-not $messagePattern) -or ($Finding.Message -match $messagePattern)
+}
+
 function Get-PolicyVerdict {
     param($Finding, $Policy)
     foreach ($entry in $Policy) {
-        if ($entry.rule -ne $Finding.Rule) { continue }
-        if (@($entry.PathRegexes).Count -gt 0) {
-            $matched = $false
-            foreach ($regex in $entry.PathRegexes) { if ($regex.IsMatch($Finding.Path)) { $matched = $true; break } }
-            if (-not $matched) { continue }
-        }
-        $messagePattern = [string](Get-Prop $entry 'message' '')
-        if ($messagePattern -and $Finding.Message -notmatch $messagePattern) { continue }
-        return $entry
+        if (Test-PolicyEntry $entry $Finding) { return $entry }
     }
     return $null
 }
@@ -401,9 +383,9 @@ function Write-IssueBodyFile {
     return $file
 }
 
-function Sync-GitHubIssue {
-    param([object[]]$Batches)
-
+# Open 'sonar' issues keyed by the batch key in their marker comment. Issues without a
+# marker were filed by hand and are left alone.
+function Get-ExistingIssue {
     $existing = @{}
     $listed = Invoke-Gh @('issue', 'list', '--label', $Label, '--state', 'open',
         '--json', 'number,title,body', '--limit', '300') | ConvertFrom-Json
@@ -412,41 +394,42 @@ function Sync-GitHubIssue {
         $match = [regex]::Match($body, [regex]::Escape($MarkerPrefix) + '([^\s>]+)')
         if ($match.Success) { $existing[$match.Groups[1].Value] = $issue }
     }
+    return $existing
+}
 
-    $created = 0; $edited = 0; $closed = 0; $unchanged = 0
-    foreach ($batch in $Batches) {
-        $body = Format-IssueBody $batch
-        $severityLabel = 'sonar:' + (Get-BatchSeverity $batch).ToLowerInvariant()
-        $current = $existing[$batch.Key]
-
-        if ($null -eq $current) {
-            Write-Host "  create  $($batch.Title)" -ForegroundColor Green
-            if ($Apply) {
-                $file = Write-IssueBodyFile $body
-                try {
-                    Invoke-Gh @('issue', 'create', '--title', $batch.Title, '--body-file', $file,
-                        '--label', $Label, '--label', 'tech-debt', '--label', $severityLabel) | Out-Null
-                }
-                finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
-            }
-            $created++
+# Creates or edits the one issue for a batch. Returns 'Created', 'Edited' or 'Unchanged'.
+function Sync-BatchIssue {
+    param($Batch, $Current)
+    $body = Format-IssueBody $Batch
+    if ($null -eq $Current) {
+        Write-Host "  create  $($Batch.Title)" -ForegroundColor Green
+        $severityLabel = 'sonar:' + (Get-BatchSeverity $Batch).ToLowerInvariant()
+        if ($Apply) {
+            Invoke-GhWithBodyFile $body @('issue', 'create', '--title', $Batch.Title,
+                '--label', $Label, '--label', 'tech-debt', '--label', $severityLabel)
         }
-        elseif ((([string](Get-Prop $current 'body' '')) -replace "`r`n", "`n").TrimEnd() -ne $body.TrimEnd()) {
-            Write-Host "  edit    #$($current.number)  $($batch.Title)" -ForegroundColor Yellow
-            if ($Apply) {
-                $file = Write-IssueBodyFile $body
-                try { Invoke-Gh @('issue', 'edit', [string]$current.number, '--body-file', $file) | Out-Null }
-                finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
-            }
-            $edited++
-        }
-        else { $unchanged++ }
+        return 'Created'
     }
+    if ((([string](Get-Prop $Current 'body' '')) -replace "`r`n", "`n").TrimEnd() -eq $body.TrimEnd()) { return 'Unchanged' }
+    Write-Host "  edit    #$($Current.number)  $($Batch.Title)" -ForegroundColor Yellow
+    if ($Apply) { Invoke-GhWithBodyFile $body @('issue', 'edit', [string]$Current.number) }
+    return 'Edited'
+}
 
+function Invoke-GhWithBodyFile {
+    param([string]$Body, [string[]]$Arguments)
+    $file = Write-IssueBodyFile $Body
+    try { Invoke-Gh ($Arguments + @('--body-file', $file)) | Out-Null }
+    finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
+}
+
+# Closes every marked issue whose batch no longer exists. Returns how many.
+function Close-StaleIssue {
+    param([hashtable]$Existing, [object[]]$Batches)
     $liveKeys = [System.Collections.Generic.HashSet[string]]::new([string[]]@($Batches | ForEach-Object { $_.Key }))
-    foreach ($key in @($existing.Keys)) {
-        if ($liveKeys.Contains($key)) { continue }
-        $issue = $existing[$key]
+    $closed = 0
+    foreach ($key in @($Existing.Keys | Where-Object { -not $liveKeys.Contains($_) })) {
+        $issue = $Existing[$key]
         Write-Host "  close   #$($issue.number)  $($issue.title)" -ForegroundColor Cyan
         if ($Apply) {
             Invoke-Gh @('issue', 'close', [string]$issue.number, '--comment',
@@ -454,7 +437,18 @@ function Sync-GitHubIssue {
         }
         $closed++
     }
-    return [pscustomobject]@{ Created = $created; Edited = $edited; Closed = $closed; Unchanged = $unchanged }
+    return $closed
+}
+
+function Sync-GitHubIssue {
+    param([object[]]$Batches)
+    $existing = Get-ExistingIssue
+    $counts = @{ Created = 0; Edited = 0; Unchanged = 0 }
+    foreach ($batch in $Batches) { $counts[(Sync-BatchIssue $batch $existing[$batch.Key])]++ }
+    $closed = Close-StaleIssue $existing $Batches
+    return [pscustomobject]@{
+        Created = $counts.Created; Edited = $counts.Edited; Closed = $closed; Unchanged = $counts.Unchanged
+    }
 }
 
 function Initialize-Label {

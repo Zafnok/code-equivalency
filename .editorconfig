@@ -54,10 +54,12 @@ dotnet_diagnostic.MA0111.severity = error
 dotnet_diagnostic.IDE0066.severity = error
 dotnet_diagnostic.IDE0059.severity = error
 
-# GH-52: ToList() over a query expression can be a collection expression, and OrderBy
-# with an identity selector is just Order(). Sonar filed these as silent suggestions;
-# pinning them to error means the build now catches a regression.
+# GH-46: dotnet_style_prefer_collection_expression above is only a suggestion, which is how
+# this sat unfixed until Sonar filed it. Pinned to error so the build catches a regression.
 dotnet_diagnostic.IDE0305.severity = error
+
+# GH-52: OrderBy with an identity selector is just Order(). Sonar filed this as a silent
+# suggestion; pinning it to error means the build now catches a regression.
 dotnet_diagnostic.MA0159.severity = error
 
 # M1-005: test methods are named Scenario_ExpectedOutcome (e.g. Compare_Exits1OnDivergent),
