@@ -33,6 +33,27 @@ What exists today:
   ArchUnitNET dependency rules, CodeQL, gitleaks, Dependabot, locked restores. Stryker
   and SonarQube Cloud run on every PR but are not yet required checks.
 
+## Licence
+
+`equiv` is **source-available, not open source**. It is licensed under the
+[Business Source License 1.1](LICENSE); each version converts to Apache-2.0 on the Change
+Date (2030-09-20) or four years after that version is first published, whichever is sooner.
+
+In plain terms, production use is free while **both** of the following hold:
+
+- no more than **3 people** use `equiv` or act on its output, and
+- **no codebase you analyse exceeds 50,000 lines** (each side of a comparison is measured
+  separately, so 49k against 49k is fine and 49k against 52k is not).
+
+Using `equiv` in CI counts as production use. Non-production evaluation is free and uncapped.
+Offering `equiv` as a hosted or embedded service, using it to run migrations or reviews for
+third parties, or reselling it, is never permitted under this licence at any size.
+
+[LICENSE](LICENSE) is the controlling text and this summary is not a substitute for it. For a
+commercial licence, open an issue. Reasoning and the dependency licence policy are in
+[ADR 0017](docs/adr/0017-licensing-and-ip.md); attribution for bundled third-party code is in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
 ## Usage (current surface)
 
 ```

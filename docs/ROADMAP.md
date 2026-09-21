@@ -49,6 +49,20 @@ Not yet owned by any ticket (schedule when a milestone touches the area):
   needs an ADR 0002 row.
 - Verify's `SmallRevenue` sponsorship exemption in `Directory.Build.props` expires
   2027-09; re-evaluate on monetisation.
+- Dependency licence gate (ADR 0017): a `nuget-license`-style local tool in
+  `.config/dotnet-tools.json` failing the build on any package outside the ADR 0017 allowlist,
+  plus generation of `THIRD-PARTY-NOTICES.md` from the lock files instead of by hand. Needs an
+  ADR 0002 row for the tool. **Should land before M3-001**, the first ticket to add a
+  redistributed native dependency.
+- Analysed-LOC reporting, so the BUSL free tier's per-codebase 50,000-line cap is observable
+  rather than an honour system: a line count for the legacy and modern codebases in the CLI
+  summary and in the SARIF run properties. Reported separately, not summed, to match the grant
+  in `LICENSE`. Natural home is M3-003 or M3-004.
+- M3-004 licensing work: stamp a per-release Change Date (BUSL dates are per version), embed
+  `LICENSE` and `THIRD-PARTY-NOTICES.md` in the container and the single-file artifacts, set the
+  `action.yml` licence field, and resolve MSBuild redistribution — VS Build Tools is not freely
+  redistributable in an image, so the container must use the SDK's MSBuild or Microsoft's
+  build-tools base image under its EULA (ADR 0017).
 
 ## M0 — Skeleton and gates (day 1) — done
 

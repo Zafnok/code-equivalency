@@ -17,6 +17,30 @@
     <Verify_SponsorshipExemptionUntil>2027-09</Verify_SponsorshipExemptionUntil>
   </PropertyGroup>
 
+  <!-- Licensing and ownership (ADR 0017). The product is BUSL-1.1, not open source. -->
+  <PropertyGroup>
+    <Product>equiv</Product>
+    <Authors>Nicholas Wentz</Authors>
+    <Company>Ibasho Corp.</Company>
+    <Copyright>Copyright (c) 2026 Nicholas Wentz and Ibasho Corp.</Copyright>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageProjectUrl>https://github.com/Zafnok/code-equivalency</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Zafnok/code-equivalency</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!--
+      Default off so no project is publishable by accident: the src/ projects previously set
+      nothing and were packable-by-default with no licence metadata at all. M3-004 opts the
+      one shipping project back in explicitly.
+    -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="" Visible="false" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="MinVer" PrivateAssets="All" />
     <PackageReference Include="Meziantou.Analyzer" PrivateAssets="All" />
