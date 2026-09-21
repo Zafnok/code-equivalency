@@ -7,23 +7,23 @@ a milestone list their own dependencies. Ticket files: `docs/tickets/M<n>-<nnn>-
 Effort labels are for a Sonnet/Opus-class agent driving, with a human reviewing PRs:
 S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it is.
 
-## Status (2026-09-18)
+## Status (2026-09-21)
 
 | Milestone | Planned | Actual | State |
 |---|---|---|---|
-| M0 Skeleton and gates | day 1 | 2026-09-18, PRs 1 to 4, 12, 17, 18 | done |
+| M0 Skeleton and gates | day 1 | 2026-09-18 to 2026-09-21, PRs 1 to 4, 12, 17, 18, 32, 68, 73, M0-011 | done |
 | M1 Core IR, samples, SARIF | days 2–3 | 2026-09-18, PRs 13, 15, 19, 20, 22 | done |
-| M2 C# frontend | days 3–5 | | next: M2-001 |
-| M3 Z3 backend and shipping | days 5–7 | | |
+| M2 C# frontend | days 3–5 | 2026-09-18 to 2026-09-20, PRs 24, 25, 27, 30, 59, 67 | done |
+| M3 Z3 backend and shipping | days 5–7 | | next: M3-001 |
 
-M0 and M1 landed in one calendar day, ahead of the three days planned. `./build.ps1` is
-green on `main`: about 400 tests, 100% line and branch coverage on `Equiv.Core` and
-`Equiv.Cli` (the other two `src/` projects are still empty shells). Four tickets were
-added during M0 that were not in the original plan (M0-005, M0-006, M0-007, M0-008), and two
-review-driven docs PRs (#10, #21) rewrote every open ticket into acceptance-criteria
-form after Sonnet over-scoped M1-005 from its one-paragraph goal.
+M0 and M1 landed in one calendar day and M2 in three, still ahead of the five days planned.
+`main` is green in CI on Windows and Ubuntu with 100% line and branch coverage on every `src/`
+project (`Equiv.Verify.Z3` is still an empty shell until M3-001). Three gate tickets were added after M2's plan
+(M0-009 licensing, M0-010 licence gate, M0-011 blocking mutation gate). Mutation scores on
+the 2026-09-20 nightly were Core 96.5%, Frontend.CSharp 96.4%, Cli 69.3% (97.7% after M0-011).
+Reviews of M2-003 and M2-004 produced ADRs 0014 and 0015 and the P1-003 to P1-006 tickets.
 
-### Carried forward from M0/M1
+### Carried forward from M0 to M2
 
 Owned by a later ticket (already written into that ticket's text):
 
@@ -33,7 +33,6 @@ Owned by a later ticket (already written into that ticket's text):
   of identities: M3-001. `ProcedurePair` gaining `OldBody`/`NewBody`: M2-003.
 - Null backend in `Equiv.Cli` (matched pairs skipped, ADR 0012) replaced by `Z3Backend`
   and made non-nullable: M3-001.
-- Stryker becomes a required check: M2 (see QUALITY-GATES.md, Mutation row).
 - ADR 0011 (EQ003 to EQ005 emitted with `level: none`): reopen at M3-003 if real Code
   Scanning or SonarQube output shows `Unknown` results are invisible to users.
 - `expected.sarif.json` per sample and the integration-test snapshot gate: M3-003.
@@ -49,9 +48,6 @@ Not yet owned by any ticket (schedule when a milestone touches the area):
   needs an ADR 0002 row.
 - Verify's `SmallRevenue` sponsorship exemption in `Directory.Build.props` expires
   2027-09; re-evaluate on monetisation.
-- The dependency licence gate is M0-010 and **must land before M3-001**, the first ticket to add
-  a redistributed native dependency. Until it does, ADR 0017's allowlist is enforced only by the
-  CLAUDE.md rule that a new package needs an ADR 0002 row stating its licence.
 - M3-004 carries the rest of the licensing work as its criteria 7 to 9: notices in the artifacts,
   a per-release Change Date, and the MSBuild redistribution question (VS Build Tools is not
   freely redistributable in a container image).
@@ -80,13 +76,17 @@ Everything after this milestone runs under 100% coverage and full CI.
   (ADR 0016).
 - M0-007 (S) done, PR #18. Faster mutation job: PRs run Stryker incrementally (`--since`
   the base branch) with full runner concurrency; the nightly schedule stays a full sweep.
-- M0-009 (M) Licensing: `LICENSE` (BUSL-1.1, three-seat and 50k-LOC-per-codebase free tier,
-  converting to Apache-2.0 on 2030-09-20), `THIRD-PARTY-NOTICES.md`, `CONTRIBUTING.md`,
-  package metadata, and ADR 0017 with the dependency licence allowlist. The repo had been
-  public with no licence at all since 2026-09-18.
-- M0-010 (M) todo. Dependency licence gate: a local tool reading real licences from the lock
-  files, failing the build outside the ADR 0017 allowlist, and generating
-  `THIRD-PARTY-NOTICES.md`. Must land before M3-001.
+- M0-009 (M) done, PR #68. Licensing: `LICENSE` (BUSL-1.1, three-seat and
+  50k-LOC-per-codebase free tier, converting to Apache-2.0 on 2030-09-20),
+  `THIRD-PARTY-NOTICES.md`, `CONTRIBUTING.md`, package metadata, and ADR 0017 with the
+  dependency licence allowlist. The repo had been public with no licence at all since 2026-09-18.
+- M0-010 (M) done, PR #73. Dependency licence gate: `tools/licence-check` reads real licences
+  from the lock files, fails the build outside the ADR 0017 allowlist, and generates
+  `THIRD-PARTY-NOTICES.md`. Landed before M3-001 as required. (#73 merged before its CI
+  finished and turned `main` red; fixed in #74, and the `main` ruleset now has required checks.)
+- M0-011 (S) done. Blocking mutation gate: `mutation.yml` fails below `--break-at 90` and is
+  no longer `continue-on-error`; `Equiv.Cli` raised from 69% to 98%. Pulled forward from
+  M3-004 criterion 5, since M3 is where the solver code lands.
 
 ## M1 — Core IR, samples, SARIF (days 2–3) — done
 
@@ -108,16 +108,20 @@ Everything after this milestone runs under 100% coverage and full CI.
   language detection and rejection, exit codes 0 to 4, `--dry-run`, `--baseline`,
   `--fail-on`. No frontend yet.
 
-## M2 — C# frontend (days 3–5)
+## M2 — C# frontend (days 3–5) — done
 
-- M2-001 (L) `MSBuildWorkspace` loader with loud diagnostics; loads both sample sides
-  on Windows. Integration test gate turns on.
-- M2-002 (M) Symbol enumeration → `ProcedureIdentity`; Added/Removed detection end to end.
-- M2-003 (L) Lowering v1: straight-line code, `if`/`else`, integer arithmetic, bool
-  logic, returns, opaque calls, `IrOpaque` fallback. Lowering-oracle property test.
-- M2-004 (M) Lowering v2: loops (bounded), `switch`, `throw`, null checks, fields/arrays.
-- M2-005 (M) Endpoint discovery: Web API 2 / MVC 5 vs ASP.NET Core attribute routes.
-- M2-006 (M) Runtime-changes table: `runtime-changes.json` of BCL members whose behaviour
+- M2-001 (L) done, PR #24. `MSBuildWorkspace` loader with loud diagnostics; loads both
+  sample sides on Windows. Integration test gate turns on.
+- M2-002 (M) done, PR #25. Symbol enumeration → `ProcedureIdentity`; Added/Removed
+  detection end to end.
+- M2-003 (L) done, PR #27. Lowering v1: straight-line code, `if`/`else`, integer
+  arithmetic, bool logic, returns, opaque calls, `IrOpaque` fallback. Lowering-oracle
+  property test. Its review produced ADR 0014 (reaching `IrOpaque` makes the outcome unknown).
+- M2-004 (M) done, PR #30. Lowering v2: loops (bounded), `switch`, `throw`, null checks,
+  fields/arrays. Its review produced ADR 0015 (heap-model limits, P1-005/P1-006) and P1-003.
+- M2-005 (M) done, PR #59. Endpoint discovery: Web API 2 / MVC 5 vs ASP.NET Core attribute
+  routes.
+- M2-006 (M) done, PR #67. Runtime-changes table: `runtime-changes.json` of BCL members whose behaviour
   differs between .NET Framework and .NET 10 (ICU vs NLS, x87 vs SSE, hash randomisation);
   matched calls to them are EQ006, never assumed equal.
 
@@ -131,7 +135,6 @@ Everything after this milestone runs under 100% coverage and full CI.
 - M3-003 (M) End to end on all samples; snapshots checked in; exit codes verified;
   `Ambiguous` → `Unknown(UnmatchedOverload)` wiring.
 - M3-004 (M) Packaging: single-file publish, Dockerfile, `action.yml`, README usage.
-  Stryker becomes blocking.
 - M3-005 (S) Run against one real-world 4.8/10 pair (user-supplied); record findings
   as new tickets, not fixes.
 - M3-006 (S) Report analysed lines of code per codebase, so the BUSL free tier's 50,000-line

@@ -7,7 +7,7 @@ Depends on: M3-003
 ## Goal
 Anyone can run `equiv` without cloning: a single-file binary per OS from a GitHub
 release, a container image, and a GitHub Action that uploads the SARIF to Code Scanning.
-Stryker becomes a required check.
+(Making Stryker a required check moved to M0-011, done before M3.)
 
 ## Spec references
 QUALITY-GATES.md (packaging row, mutation row); ADR 0006 (container is the free tier).
@@ -27,9 +27,7 @@ QUALITY-GATES.md (packaging row, mutation row); ADR 0006 (container is the free 
    `category: equiv`.
 4. `.github/workflows/release.yml`: on tag `v*`, publish both binaries, build and push
    the image to GHCR, attach binaries to the GitHub release. Actions pinned by SHA.
-5. `mutation.yml`: `continue-on-error` removed; Stryker `--break-at` set to the
-   current score minus 2 (read it from the last nightly report and write the number in
-   Notes); QUALITY-GATES.md required-checks list updated to include `stryker`.
+5. (Moved to M0-011: `mutation.yml` is blocking at `--break-at 90`. Nothing to do here.)
 6. `build.ps1` unchanged.
 7. Licensing (ADR 0017, M0-009). `Equiv.Cli` sets `IsPackable` explicitly if it needs to be
    packable — `Directory.Build.props` now defaults it to `false` so nothing publishes by
@@ -48,7 +46,7 @@ QUALITY-GATES.md (packaging row, mutation row); ADR 0006 (container is the free 
 
 ## Files
 `src/Equiv.Cli/Equiv.Cli.csproj` (publish properties), `Dockerfile`, `.dockerignore`,
-`action.yml`, `.github/workflows/release.yml`, `.github/workflows/mutation.yml`,
+`action.yml`, `.github/workflows/release.yml`,
 `README.md`, `docs/QUALITY-GATES.md`, `LICENSE` (Change Date stamping in `release.yml` only;
 the checked-in file keeps its placeholder date).
 
