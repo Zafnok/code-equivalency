@@ -33,6 +33,12 @@
       "verdict": "accept",
       "paths": ["src/Equiv.Frontend.CSharp/Lowering/IrLowerer.cs"],
       "reason": "False positive from GH-39: Sonar's finding at IrLowerer.Match claims the null-forgiving operator on pattern.Value.Type! is redundant, but pattern.Value.Type is a different property than the type-pattern's own Value.Type bound by the enclosing case (same member name, unrelated operations). Removing the ! makes Roslyn's nullable flow analysis raise CS8604, which fails the build under warnings-as-errors -- the compiler does not, in fact, already know this is non-null."
+    },
+    {
+      "rule": "csharpsquid:S3871",
+      "verdict": "accept",
+      "paths": ["tools/licence-check/LicenceCheckException.cs"],
+      "reason": "GH-58: S3871 wants this exception public so external catch sites can name it, but licence-check is an Exe app (M0-010), not a library, and CA1515 (already error under AnalysisLevel=latest-all) rejects a public type there for exactly the opposite reason: an app's API isn't referenced from outside its assembly. Program.cs is the only catch site. Same rationale already recorded in .editorconfig's CA1032 entry for this file."
     }
   ]
 }

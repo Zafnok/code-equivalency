@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace LicenceCheck;
@@ -16,7 +17,7 @@ internal static class NuGetLicenseInvoker
     {
         // Invoked as a local tool via "dotnet nuget-license", the same convention this repo
         // already uses for dotnet-sonarscanner ("dotnet sonarscanner begin") and dotnet-stryker.
-        ProcessStartInfo startInfo = new("dotnet")
+        ProcessStartInfo startInfo = new(ResolveDotnetHostPath())
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -41,6 +42,26 @@ internal static class NuGetLicenseInvoker
         }
 
         return Parse(stdout, redistributedIds);
+    }
+
+    /// <summary>
+    /// Resolves the absolute path to the running 'dotnet' host, rather than trusting an unqualified
+    /// "dotnet" resolved off PATH (csharpsquid:S4036). The current process is an apphost, not the
+    /// dotnet muxer itself, so <c>Environment.ProcessPath</c> points at this tool's own executable and
+    /// can't be used. Instead this walks up from the shared runtime directory (".../dotnet/shared/
+    /// Microsoft.NETCore.App/&lt;version&gt;/", always present for a framework-dependent app) three
+    /// levels to the dotnet install root, the same layout every .NET SDK and runtime installer uses.
+    /// </summary>
+    internal static string ResolveDotnetHostPath()
+    {
+        string runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory();
+        DirectoryInfo? dotnetRoot = new DirectoryInfo(runtimeDirectory).Parent?.Parent?.Parent;
+        string hostFileName = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
+        string? candidate = dotnetRoot is null ? null : Path.Combine(dotnetRoot.FullName, hostFileName);
+
+        return candidate is not null && File.Exists(candidate)
+            ? candidate
+            : throw new LicenceCheckException($"could not resolve an absolute path to the 'dotnet' host from the runtime directory '{runtimeDirectory}'.");
     }
 
     internal static IReadOnlyList<ResolvedPackage> Parse(string json, IReadOnlySet<string> redistributedIds)

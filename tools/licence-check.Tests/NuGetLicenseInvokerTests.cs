@@ -42,6 +42,15 @@ public sealed class NuGetLicenseInvokerTests
     }
 
     [Fact]
+    public void ResolveDotnetHostPathReturnsAnExistingAbsolutePath()
+    {
+        string path = NuGetLicenseInvoker.ResolveDotnetHostPath();
+
+        Assert.True(Path.IsPathRooted(path));
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
     public void PackagesNotInRedistributedIdsAreBuildAndTestOnly()
     {
         const string json = """
