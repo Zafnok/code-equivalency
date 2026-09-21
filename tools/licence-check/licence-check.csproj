@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>LicenceCheck</RootNamespace>
+    <AssemblyName>LicenceCheck</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LicenceCheck.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="policy.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

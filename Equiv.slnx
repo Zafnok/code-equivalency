@@ -17,5 +17,7 @@
   <Folder Name="/tools/">
     <Project Path="tools/check-coverage/check-coverage.csproj" />
     <Project Path="tools/check-coverage.Tests/check-coverage.Tests.csproj" />
+    <Project Path="tools/licence-check/licence-check.csproj" />
+    <Project Path="tools/licence-check.Tests/licence-check.Tests.csproj" />
   </Folder>
 </Solution>
