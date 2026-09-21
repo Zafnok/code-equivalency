@@ -3,8 +3,7 @@ namespace LicenceCheck;
 /// <summary>
 /// The gate's real orchestration (file I/O, the nuget-license process, console output). Lives here
 /// rather than in Program.cs's top-level statements because a top-level entry point compiles to a
-/// method a test cannot call (private, not internal, regardless of InternalsVisibleTo); an
-/// integration test drives this directly against the real repository instead.
+/// method a test cannot call (private, not internal, regardless of InternalsVisibleTo).
 /// </summary>
 internal static class GateRunner
 {
@@ -19,6 +18,17 @@ internal static class GateRunner
         List<ResolvedPackage> allPackages = [.. fromSolution, .. inventory.ExtraPackages];
         LicenceGateResult result = LicenceGate.Evaluate(allPackages, policy);
 
+        return await ReportAsync(repoRoot, inventory, result, fix).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Everything after the gate has a <see cref="LicenceGateResult"/>: reporting violations, or
+    /// checking/regenerating THIRD-PARTY-NOTICES.md. Split out from <see cref="RunAsync"/> (which
+    /// needs a real, restored solution to reach this point) so a test can drive every branch
+    /// directly with a fabricated result and a throwaway temp directory as repoRoot.
+    /// </summary>
+    internal static async Task<int> ReportAsync(string repoRoot, PackageInventory inventory, LicenceGateResult result, bool fix)
+    {
         if (!result.Success)
         {
             foreach (string line in ViolationReport.FormatLines(result.Violations))
