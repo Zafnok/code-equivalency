@@ -27,7 +27,7 @@ internal static class CoverageGate
         [
             .. srcAssemblyNames
                 .Where(name => !assemblies.ContainsKey(name))
-                .OrderBy(name => name, StringComparer.Ordinal),
+                .Order(StringComparer.Ordinal),
         ];
 
         StringBuilder report = new();
