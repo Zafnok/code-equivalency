@@ -45,8 +45,8 @@ public sealed class IrInterpreterTests
               ret %r
             """);
 
-        Assert.Equal(new IrReturned(new IrBoolValue(false)), Run(p, new IrBitVecValue(8, 0x7F)).Outcome);
-        Assert.Equal(new IrReturned(new IrBoolValue(true)), Run(p, new IrBitVecValue(8, 1)).Outcome);
+        Assert.Equal(new IrReturned(new IrBoolValue(Value: false)), Run(p, new IrBitVecValue(8, 0x7F)).Outcome);
+        Assert.Equal(new IrReturned(new IrBoolValue(Value: true)), Run(p, new IrBitVecValue(8, 1)).Outcome);
     }
 
     [Fact]
@@ -136,8 +136,8 @@ public sealed class IrInterpreterTests
               ret %r
             """);
 
-        Assert.Throws<InvalidOperationException>(() => IrInterpreter.Run(p, new IrInputs([]), new ScriptedOracle(static (_, _, _) => new IrCallResult(new IrBoolValue(true), false)), 10));
-        Assert.Throws<InvalidOperationException>(() => IrInterpreter.Run(p, new IrInputs([]), new ScriptedOracle(static (_, _, _) => new IrCallResult(null, false)), 10));
+        Assert.Throws<InvalidOperationException>(() => IrInterpreter.Run(p, new IrInputs([]), new ScriptedOracle(static (_, _, _) => new IrCallResult(new IrBoolValue(Value: true), Threw: false)), 10));
+        Assert.Throws<InvalidOperationException>(() => IrInterpreter.Run(p, new IrInputs([]), new ScriptedOracle(static (_, _, _) => new IrCallResult(Value: null, Threw: false)), 10));
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public sealed class IrInterpreterTests
               ret
             """);
 
-        Assert.Equal(new IrReturned(null), Run(p).Outcome);
+        Assert.Equal(new IrReturned(Value: null), Run(p).Outcome);
     }
 
     [Fact]
@@ -212,10 +212,10 @@ public sealed class IrInterpreterTests
               throw "E" outs(%r = %r, %o = %r1)
             """);
 
-        IrRun returned = Run(p, new IrBoolValue(true), Bv(1), Bv(2));
-        IrRun threw = Run(p, new IrBoolValue(false), Bv(1), Bv(2));
+        IrRun returned = Run(p, new IrBoolValue(Value: true), Bv(1), Bv(2));
+        IrRun threw = Run(p, new IrBoolValue(Value: false), Bv(1), Bv(2));
 
-        Assert.Equal(new IrRun(new IrReturned(null), [Bv(5), Bv(5)], []), returned);
+        Assert.Equal(new IrRun(new IrReturned(Value: null), [Bv(5), Bv(5)], []), returned);
         Assert.Equal(new IrRun(new IrThrew("E"), [Bv(1), Bv(5)], []), threw);
     }
 
@@ -247,7 +247,7 @@ public sealed class IrInterpreterTests
         IrProcedure invalid = p with { Entry = new IrBlockId(7) };
 
         Assert.Throws<ArgumentException>(() => IrInterpreter.Run(invalid, new IrInputs([Bv(1)]), Answers42, 10));
-        Assert.Throws<ArgumentException>(() => IrInterpreter.Run(p, new IrInputs([new IrBoolValue(true)]), Answers42, 10));
+        Assert.Throws<ArgumentException>(() => IrInterpreter.Run(p, new IrInputs([new IrBoolValue(Value: true)]), Answers42, 10));
         Assert.Throws<ArgumentException>(() => IrInterpreter.Run(p, new IrInputs([]), Answers42, 10));
         Assert.Throws<ArgumentOutOfRangeException>(() => IrInterpreter.Run(p, new IrInputs([Bv(1)]), Answers42, -1));
     }

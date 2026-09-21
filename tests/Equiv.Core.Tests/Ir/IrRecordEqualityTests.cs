@@ -27,7 +27,7 @@ public sealed class IrRecordEqualityTests
     public void Phi() => AssertStructural(() => new IrPhi(A, [(new IrBlockId(0), B)]), p => p with { Incoming = [] });
 
     [Fact]
-    public void Call() => AssertStructural(() => new IrCall(A, null, new CallIdentity("F"), [B]), c => c with { Args = [] });
+    public void Call() => AssertStructural(() => new IrCall(A, Threw: null, new CallIdentity("F"), [B]), c => c with { Args = [] });
 
     [Fact]
     public void Switch() =>
@@ -62,6 +62,6 @@ public sealed class IrRecordEqualityTests
         Assert.True(first.Equals(second));
         Assert.Equal(first.GetHashCode(), second.GetHashCode());
         Assert.False(first.Equals(change(first)));
-        Assert.False(first.Equals(null));
+        Assert.False(first.Equals(other: null));
     }
 }
