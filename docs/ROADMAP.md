@@ -11,7 +11,7 @@ S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it 
 
 | Milestone | Planned | Actual | State |
 |---|---|---|---|
-| M0 Skeleton and gates | day 1 | 2026-09-18 to 2026-09-21, PRs 1 to 4, 12, 17, 18, 32, 68, 73, M0-011 | done |
+| M0 Skeleton and gates | day 1 | 2026-09-18 to 2026-09-21, PRs 1 to 4, 12, 17, 18, 32, 68, 73, 76 | done |
 | M1 Core IR, samples, SARIF | days 2–3 | 2026-09-18, PRs 13, 15, 19, 20, 22 | done |
 | M2 C# frontend | days 3–5 | 2026-09-18 to 2026-09-20, PRs 24, 25, 27, 30, 59, 67 | done |
 | M3 Z3 backend and shipping | days 5–7 | | next: M3-001 |
@@ -84,7 +84,7 @@ Everything after this milestone runs under 100% coverage and full CI.
   from the lock files, fails the build outside the ADR 0017 allowlist, and generates
   `THIRD-PARTY-NOTICES.md`. Landed before M3-001 as required. (#73 merged before its CI
   finished and turned `main` red; fixed in #74, and the `main` ruleset now has required checks.)
-- M0-011 (S) done. Blocking mutation gate: `mutation.yml` fails below `--break-at 90` and is
+- M0-011 (S) done, PR #76. Blocking mutation gate: `mutation.yml` fails below `--break-at 90` and is
   no longer `continue-on-error`; `Equiv.Cli` raised from 69% to 98%. Pulled forward from
   M3-004 criterion 5, since M3 is where the solver code lands.
 

@@ -1,5 +1,5 @@
 # M0-011 Blocking mutation gate
-Status: in-progress
+Status: done (PR #76)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M0-007
