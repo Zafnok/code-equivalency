@@ -2,8 +2,9 @@
 Status: todo
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: M2-004, M2-005, M2-006, M3-002, M3-007, M3-009, M3-012, M3-013, P1-005, P1-006 (ADR 0018: no sample
-verdicts ship with a known silent false Equivalent)
+Depends on: M2-004, M2-005, M2-006, M3-002, M3-007, M3-009, M3-012, M3-013, M3-015, M3-016, M3-023, P1-005, P1-006 (ADR 0018: no sample
+verdicts ship with a known silent false Equivalent; ADRs 0024, 0026 and 0027: snapshots are taken
+with congruence, taint and Unknown locations in place, so they are not rewritten three times)
 
 ## Goal
 Wire the real backend into the CLI, run every sample through `equiv compare`, check in

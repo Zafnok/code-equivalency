@@ -28,3 +28,7 @@ supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.
 | 0021 | Source-language parameters are shared by position, synthesised inputs by name |
 | 0022 | A Sonar batch over 25 findings splits into a parent issue and sub-issues |
 | 0023 | A pair whose verification crashes is reported and skipped, and the run exits 5 |
+| 0024 | (proposed) Identical bound code is Equivalent by congruence; an unlowerable fragment on both sides is shared |
+| 0025 | (proposed) Floating-point, decimal and user-defined operators are shared pure functions |
+| 0026 | (proposed) A Divergent must not depend on an abstraction; otherwise it is Unknown(Abstraction) |
+| 0027 | (proposed) The Unknown rate is measured before it is optimised, and every Unknown points at lines |
