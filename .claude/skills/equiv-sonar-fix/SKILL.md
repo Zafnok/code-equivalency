@@ -18,6 +18,15 @@ are made not asked, and the session stops after the PR.
    Its acceptance criteria are the checklist — copy them into your first message. Do not
    re-plan the batch or widen it.
 
+   **Parent or part?** A batch over 25 findings is split (ADR 0022): a *parent* issue with a
+   `## Parts` table and no findings, and one *part* sub-issue per slice, each holding at most
+   25 findings. Never work a parent: if pointed at one, pick its first open sub-issue and
+   say which. For a part, also read the parent and its comments
+   (`gh issue view <parent> --comments`) — the rule-wide decision and the shape of fix
+   already used live there — and look at the merged PRs of closed sibling parts so your fix
+   matches theirs. List siblings with
+   `gh api repos/{owner}/{repo}/issues/<parent>/sub_issues --jq '.[] | "\(.number) \(.state) \(.title)"'`.
+
 2. **Re-verify every finding against `HEAD`.** Sonar's data is as old as the last analysis of
    `main`, and this batch may have been filed before the last merge. For each row, open the
    file at that line and confirm the finding is still there and still means what the message
@@ -38,6 +47,11 @@ are made not asked, and the session stops after the PR.
    matches the files involved. This is the point of the batch: the finding existed only
    because the rule sat below warning level, and pinning it means the build now catches a
    regression that Sonar would otherwise re-file next week.
+
+   For a **part**, pin only if every sibling part is already closed; then the PR closes both
+   the part and the parent. Otherwise do not pin: the build would fail on the parts not yet
+   fixed. The first part to land settles the shape of the fix; post a one-paragraph comment
+   on the parent saying what it was, so later parts copy it.
 
 6. **Or accept it.** If a finding turns out to be wrong for this repo, add an entry to
    `tools/sonar-triage/policy.jsonc` with a `reason` citing an ADR or a ticket. Use the
@@ -61,12 +75,16 @@ are made not asked, and the session stops after the PR.
 
 9. **PR:** `gh pr create`, title matching the issue, body listing each acceptance criterion
    with what proves it, plus `Closes #<n>` and any findings that no longer reproduced. Then
-   stop — do not pick up the next batch in the same session.
+   stop — do not pick up the next batch in the same session. A part is a batch: do not pick
+   up its sibling either.
 
 ## Rules that trip agents up here
 
 - **The batch is the scope.** A rule-wide batch touching 19 files is still one PR; a tempting
-  adjacent cleanup in one of those files is not part of it.
+  adjacent cleanup in one of those files is not part of it. For a part, the same finding in a
+  file listed in a sibling part is the sibling's, even if you are already in the file.
+- **Accepting from a part accepts the rule.** A `policy.jsonc` entry is rule-wide unless its
+  `paths` narrow it. Say so on the parent before accepting from one part.
 - **Do not edit the issue body.** The next triage run overwrites it. Say it in the PR instead.
 - **Do not re-run the triage script** to "refresh" the issue mid-fix. Finish the PR; triage
   reconciles afterwards and closes the issue when Sonar next analyses `main`.
