@@ -459,6 +459,9 @@ dotnet_diagnostic.CA1308.severity = none
 [tools/licence-check.Tests/NuspecLicenseReaderTests.cs]
 dotnet_diagnostic.CA1308.severity = none
 
+[tools/licence-check.Tests/PackageInventoryBuilderTests.cs]
+dotnet_diagnostic.CA1308.severity = none
+
 # M0-010: LicenceCheckException is internal and never crosses an assembly boundary (Program.cs is
 # its only catch site), same rationale as SolutionLoadException above for CA1032's three standard
 # constructors.

@@ -20,24 +20,24 @@ internal static class PackageInventoryBuilder
 
         List<ResolvedPackage> extra = [];
         extra.AddRange(ReadLocalTools(repoRoot, nugetPackagesRoot));
-        extra.AddRange(ReadSamplesDirectReferences(repoRoot, nugetPackagesRoot, redistributedIds));
+        (List<ResolvedPackage> samples, bool samplesFullyRestored) = ReadSamplesDirectReferences(repoRoot, nugetPackagesRoot, redistributedIds);
+        extra.AddRange(samples);
 
-        return new PackageInventory(redistributedIds, extra);
+        return new PackageInventory(redistributedIds, extra, samplesFullyRestored);
     }
 
     private static HashSet<string> ReadPrivateAssetsAll(string directoryBuildPropsPath)
     {
         HashSet<string> ids = new(StringComparer.OrdinalIgnoreCase);
         XDocument document = XDocument.Load(directoryBuildPropsPath);
-        foreach (XElement reference in PackageReferences(document))
+        IEnumerable<XElement> privateAssetsAllReferences = PackageReferences(document)
+            .Where(static reference => string.Equals(reference.Attribute("PrivateAssets")?.Value, "All", StringComparison.OrdinalIgnoreCase));
+        foreach (XElement reference in privateAssetsAllReferences)
         {
-            if (string.Equals(reference.Attribute("PrivateAssets")?.Value, "All", StringComparison.OrdinalIgnoreCase))
+            string? id = reference.Attribute("Include")?.Value;
+            if (!string.IsNullOrEmpty(id))
             {
-                string? id = reference.Attribute("Include")?.Value;
-                if (!string.IsNullOrEmpty(id))
-                {
-                    ids.Add(id);
-                }
+                ids.Add(id);
             }
         }
 
@@ -102,13 +102,14 @@ internal static class PackageInventoryBuilder
         return packages;
     }
 
-    private static List<ResolvedPackage> ReadSamplesDirectReferences(string repoRoot, string nugetPackagesRoot, IReadOnlySet<string> redistributedIds)
+    private static (List<ResolvedPackage> Packages, bool FullyRestored) ReadSamplesDirectReferences(string repoRoot, string nugetPackagesRoot, IReadOnlySet<string> redistributedIds)
     {
         List<ResolvedPackage> packages = [];
+        bool fullyRestored = true;
         string samplesDirectory = Path.Combine(repoRoot, "samples");
         if (!Directory.Exists(samplesDirectory))
         {
-            return packages;
+            return (packages, fullyRestored);
         }
 
         HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
@@ -130,12 +131,22 @@ internal static class PackageInventoryBuilder
                     continue;
                 }
 
+                // samples/ is only restored under -Integration (the legacy side needs MSBuild.exe,
+                // Windows-only); a plain ./build.ps1 run on ubuntu-latest never restores it, so a
+                // missing nuspec here means "not part of this run", not an undetermined licence.
+                // The caller must not compare THIRD-PARTY-NOTICES.md against a run that hit this.
+                if (!NuspecLicenseReader.IsRestored(id, version, nugetPackagesRoot))
+                {
+                    fullyRestored = false;
+                    continue;
+                }
+
                 (string licence, bool isSpdxExpression) = NuspecLicenseReader.Read(id, version, nugetPackagesRoot);
                 packages.Add(new ResolvedPackage(id, version, PackageRole.SamplesOnly, licence, isSpdxExpression));
             }
         }
 
-        return packages;
+        return (packages, fullyRestored);
     }
 
     /// <summary>
