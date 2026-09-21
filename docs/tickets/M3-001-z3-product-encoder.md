@@ -1,5 +1,5 @@
 # M3-001 Z3 product-program encoder for acyclic IR
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M1-002, M1-003
@@ -80,8 +80,9 @@ Counterexample (`ModelDecoder`): read parameter values from `solver.Model` with
 `Eval(c, completion: true)`; render bitvectors as signed and unsigned decimals; sorts as
 `#n` tokens; produce `Counterexample(inputs, oldOutcome, newOutcome, oldTrace, newTrace)`.
 Then replay both procedures in `IrInterpreter` with a call oracle built from the model's
-function interpretations (`model.FuncInterp`, default `Else` for unlisted args), keyed by
-the position `IrInterpreter` now passes to `ICallOracle.Answer`. If the
+function interpretations (the model evaluated on `f(args, pos)`, which is `model.FuncInterp`'s
+entries with `Else` for unlisted args), keyed by the position `IrInterpreter` now passes to
+`ICallOracle.Answer`. If the
 replay does not diverge, that is an encoder bug: fail loudly with both results in the
 message; do not report Divergent.
 
@@ -173,3 +174,22 @@ Loops, unrolling, induction (M3-002). SARIF (M1-004 already owns it; this ticket
 `Verdict` objects only).
 
 ## Notes
+- Decision: `IVerificationBackend.Verify`'s parameters are named `oldBody`/`newBody`, not `old`/`@new`: CA1716 (warnings are errors) rejects a parameter named after the keyword `new` on an interface member. The names mirror `ProcedurePair.OldBody`/`NewBody`. Alternatives: `legacy`/`modern`, suppressing CA1716. Rule: 1.
+- Decision: `UnknownReason` gains `Loop`, which criterion 2 names (`Unknown(UnknownReason.Loop, ...)`); VERIFICATION-MODEL section 6's EQ003 reason list is patched to include it. No other Core contract changes (criterion 12). Rule: 1.
+- Decision: parameters are shared by name, as one constant `in.<name>` per name in the union of both sides (the Design's "or one constant reused"). A name on both sides with different types is an `ArgumentException` (a matched pair has equal C# parameter types; a synthesised map whose field changed type is M3-007's to handle). A C# parameter renamed between sides becomes two independent inputs: that can only cost precision (a false Divergent), never give a false Equivalent. Alternatives: positional sharing of the C# prefix (the IR does not mark where the C# parameters end). Rule: 1.
+- Decision: a return type that differs between the sides (the matcher's identity does not include it) makes the return values agree only on inputs where neither side returns; equal return types compare through a shared `ret.none` default so two throwing runs agree. Alternatives: `ArgumentException` (would crash the CLI on a legitimate `int` to `long` change). Rule: 4.
+- Decision: `CompareCommand.BuildResults` throws `InvalidOperationException` for a matched pair without a lowered body (a frontend bug; `CSharpFrontend` always attaches both), covered by `Compare_PairWithoutBodyIsAFrontendBug`. Alternatives: an Unknown verdict (needs an `UnknownReason` the spec does not define). Rule: 2.
+- Decision: the replay oracle evaluates the model on the call function applied to the replayed arguments and position (`model.Eval(f(args, pos), completion: true)`) instead of walking `model.FuncInterp` entries itself. Z3 evaluates an application exactly as the interpretation's entries plus `Else` (and completes a function the model leaves out), so the answers are identical with less translation code. The Design sentence is patched. Alternatives: walk `FuncInterp.Entries` and match decoded arguments. Rule: 1.
+- Decision: the counterexample is Core's existing `Counterexample(Inputs, Old, New)`, whose `IrRun`s already carry outcome, outs and trace; its inputs are the union of both sides' parameters, the old side's first. Values are `IrValue`s, so an uninterpreted element is `sort "S" n` (a literal keeps its id, any other element gets the next free id) and a bitvector keeps its bits; `CounterexampleText` (Core, criterion 12) renders them as before, so no signed/unsigned rendering change lands here. Rule: 4.
+- Decision: the `Value` datatype always has a Bool constructor, so it is never empty when no call has arguments. Rule: 5.
+- Decision: `Side` and `ProductEncoding` are nested in `ProductEncoder`: Meziantou MA0048 wants one top-level type per file, and the size guard allows six files. `VerificationOptions` already lives in Core (the interface names it), so `src/Equiv.Verify.Z3/` has five source files. Rule: 4.
+- Decision: the solver is a tactic pipeline, `solve-eqs`, `simplify`, `propagate-values`, `solve-eqs`, `smt`, with one fresh solver per query and no check-assumptions (see the first Note for why). Rule: 1.
+- Decision: the timeout fixture is the 64-bit division identity `(a / b) * b + a % b` vs `a` (Equivalent, but the solver was still running after 20 s). A 64-bit semiprime factoring query was solved in 13 ms, and 64-bit distributivity is normalised away by `simplify`. Rule: 3.
+- Decision: the soundness generators live in `Equiv.TestSupport` (`IrGen.AcyclicProcedure`, a `ref` heap map `field.Gen.x` with `Store`/`Load`, and the new `IrGen.Mutation` edits: insert an opaque, drop or change a map write, duplicate a call). `IrGen.Procedure` gets the heap too, so M3-002 inherits it; `Equiv.Core.Tests`' generator properties still pass (discard rate within bounds). Rule: 4.
+- Decision: the Linux CI legs (`gates (ubuntu-latest)`, every `stryker` leg) take `libz3.so` from the PyPI `z3-solver==4.12.2.0` manylinux wheel, pinned by the SHA-256 PyPI publishes and checked by `pip --require-hashes`, and put it on `LD_LIBRARY_PATH`. No NuGet package changes, so `docs/adr/0002-dependencies.md` is unchanged per the deliverable, although its "ships win/linux/osx natives" is wrong (see below). Alternatives: Ubuntu's `libz3` (4.8.x, older than the 4.12.2 binding), the GitHub release zip (no published digest). Rule: 1.
+- Note: `Microsoft.Z3` 4.12.2 ships `libz3` for `win-x64` and `osx-x64` only; there is no `runtimes/linux-x64`. ADR 0002's "ships win/linux/osx natives" is wrong, and M3-004's linux-x64 publish and Docker image will need `libz3.so` from elsewhere. Only Windows was run locally; the Linux step is unverified until CI runs it.
+- Note: Z3's default solver is unreliable for this encoding. After one query with check-assumptions (or `push`) it stays incremental and skips preprocessing, so the two sides' copies of an unchanged symbolic `udiv` are left as two circuits and `Verify(P, P)` timed out. The non-incremental default tactic timed out on a plain diamond. `solve-eqs` has to run before `simplify`: `simplify` rewrites `(= r (not x))` to `(not (= x r))`, which `solve-eqs` no longer reads as a definition, and a `reach` variable left behind again hides a copied multiplier. The tactic pipeline makes both sides one term, and the self-comparison folds to `false` in preprocessing.
+- Note: `Microsoft.Z3.Constructor`'s finalizer calls `Z3_del_constructor` directly. If it runs after the `Context` is disposed, the test host dies with `0xC0000005`. `TraceEncoder` disposes its constructors right after `MkDatatypeSort` and keeps only the sort's constructor `FuncDecl`s.
+- Note: with completion, Z3 4.12 evaluates a model array to a store chain over a constant array; no probe produced `as-array`, so the decoder handles only that shape, and any other shape fails loudly.
+- Note: `equiv.config.json`'s `suppressRuntimeChanges` is not applied by the backend. `VerificationOptions` does not carry it, and criterion 12 rules out changing that contract here. Every flagged call gets side-specific functions, which can only produce false alarms (EQ006), never a false Equivalent. Suppression needs a follow-up ticket that adds it to `VerificationOptions`.
+- Note: on the samples, the wired CLI now gives `identical` and `renamed-locals` EQ001, `removed-null-check` and `added-branch` EQ002, `loop-bound-change` EQ003 (Loop), and `added-removed`'s matched `Add` EQ001. `ComparePipelineTests.IdenticalYieldsNoResults` became `IdenticalYieldsOnlyEquivalentResults`, and the `AddedAndRemovedHaveLocations` snapshot gained the `Add` EQ001 result.
