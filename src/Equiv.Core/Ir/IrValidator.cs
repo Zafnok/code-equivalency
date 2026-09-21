@@ -62,7 +62,7 @@ public static class IrValidator
             }
             else
             {
-                Report(IrDiagnosticIds.MissingEntry, null, $"entry block {IrText.Block(procedure.Entry)} does not exist");
+                Report(IrDiagnosticIds.MissingEntry, block: null, $"entry block {IrText.Block(procedure.Entry)} does not exist");
             }
 
             CheckUses();
@@ -106,7 +106,7 @@ public static class IrValidator
         {
             foreach (IrParameter parameter in procedure.Parameters)
             {
-                Define(parameter.Var, null, -1);
+                Define(parameter.Var, block: null, -1);
             }
 
             foreach (IrBlock block in procedure.Blocks)

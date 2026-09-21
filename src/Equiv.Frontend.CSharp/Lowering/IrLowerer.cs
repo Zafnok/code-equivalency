@@ -243,7 +243,7 @@ internal sealed class IrLowerer
         if (ambiguous)
         {
             IrBlockId unknown = ssa.NewBlock();
-            ssa.Emit(unknown, new IrOpaque(null, "call-throw-in-try", bodySpan));
+            ssa.Emit(unknown, new IrOpaque(Target: null, "call-throw-in-try", bodySpan));
             ssa.Terminate(unknown, new IrThrow(exceptionType, []));
             return unknown;
         }
@@ -278,7 +278,7 @@ internal sealed class IrLowerer
             // Reached by a Regular fall-through: a void method's end, or erroneous code in a non-void one.
             if (returnType is null)
             {
-                ssa.Terminate(current, new IrReturn(null, []));
+                ssa.Terminate(current, new IrReturn(Value: null, []));
             }
             else
             {
@@ -382,7 +382,7 @@ internal sealed class IrLowerer
     private IrVar? Match(IIsPatternOperation pattern) => pattern.Pattern switch
     {
         IDiscardPatternOperation =>
-            Const(new IrBoolValue(true)),
+            Const(new IrBoolValue(Value: true)),
         IConstantPatternOperation { Value: { Type: { } type, ConstantValue: { HasValue: true, Value: { } constant } } }
             when TypeMapper.Map(type) is IrBitVec or IrBool && TypeMapper.Map(pattern.Value.Type!) == TypeMapper.Map(type) =>
             Emit(IrBinaryOp.Eq, Value(pattern.Value), Constant(type, constant), Bool),
@@ -528,7 +528,7 @@ internal sealed class IrLowerer
         }
 
         return unwrapped.ConstantValue is { HasValue: true, Value: null }
-            ? Const(new IrBoolValue(true))
+            ? Const(new IrBoolValue(Value: true))
             : MapRead(heap.Nulls((IrSort)value.Type), value);
     }
 
@@ -537,7 +537,7 @@ internal sealed class IrLowerer
     {
         if (Shadow(target) is { } shadow)
         {
-            ssa.Store(current, shadow, Nullness(source, value) ?? Const(new IrBoolValue(false)));
+            ssa.Store(current, shadow, Nullness(source, value) ?? Const(new IrBoolValue(Value: false)));
         }
     }
 
@@ -588,7 +588,7 @@ internal sealed class IrLowerer
             key = Const(HeapInputs.Token(field.Field));
         }
 
-        return new Access(Versioned(heap.Field(field.Field)), key, null);
+        return new Access(Versioned(heap.Field(field.Field)), key, Length: null);
     }
 
     /// <summary>
@@ -840,7 +840,7 @@ internal sealed class IrLowerer
             return null;
         }
 
-        IrVar isNull = Nullness(other, Value(other)) ?? Const(new IrBoolValue(false));
+        IrVar isNull = Nullness(other, Value(other)) ?? Const(new IrBoolValue(Value: false));
         return binary.OperatorKind == BinaryOperatorKind.Equals ? isNull : EmitUnary(IrUnaryOp.BoolNot, isNull);
     }
 

@@ -71,7 +71,7 @@ public static class IrInterpreter
                     }
                 }
 
-                IrJump jump = steps++ == stepBudget ? new IrJump(null, new IrBudgetExhausted(), []) : block.Terminator.Accept(terminators);
+                IrJump jump = steps++ == stepBudget ? new IrJump(Next: null, new IrBudgetExhausted(), []) : block.Terminator.Accept(terminators);
                 if (jump.Outcome is not null)
                 {
                     return new IrRun(jump.Outcome, ImmutableArray.CreateRange(jump.Outs, static (o, values) => values[o.Final.Name], values), trace.ToImmutable());
@@ -132,24 +132,24 @@ public static class IrInterpreter
 
         private sealed class IrStepper(IrMachine machine) : IrTerminatorVisitor<IrJump>
         {
-            public override IrJump Visit(IrGoto terminator) => new(terminator.Target, null, []);
+            public override IrJump Visit(IrGoto terminator) => new(terminator.Target, Outcome: null, []);
 
             public override IrJump Visit(IrBranch terminator) =>
-                new(((IrBoolValue)machine.Get(terminator.Cond)).Value ? terminator.Then : terminator.Else, null, []);
+                new(((IrBoolValue)machine.Get(terminator.Cond)).Value ? terminator.Then : terminator.Else, Outcome: null, []);
 
             public override IrJump Visit(IrSwitch terminator)
             {
                 IrValue scrutinee = machine.Get(terminator.Scrutinee);
                 IrBlockId target = terminator.Cases.Where(c => c.Value == scrutinee).Select(static c => c.Target).FirstOrDefault(terminator.Default);
-                return new(target, null, []);
+                return new(target, Outcome: null, []);
             }
 
             public override IrJump Visit(IrReturn terminator) =>
-                new(null, new IrReturned(terminator.Value is null ? null : machine.Get(terminator.Value)), terminator.Outs);
+                new(Next: null, new IrReturned(terminator.Value is null ? null : machine.Get(terminator.Value)), terminator.Outs);
 
-            public override IrJump Visit(IrThrow terminator) => new(null, new IrThrew(terminator.ExceptionType), terminator.Outs);
+            public override IrJump Visit(IrThrow terminator) => new(Next: null, new IrThrew(terminator.ExceptionType), terminator.Outs);
 
-            public override IrJump Visit(IrUnreachable terminator) => new(null, new IrInfeasible(), []);
+            public override IrJump Visit(IrUnreachable terminator) => new(Next: null, new IrInfeasible(), []);
         }
     }
 }
