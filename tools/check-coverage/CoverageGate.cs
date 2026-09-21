@@ -16,15 +16,19 @@ internal static class CoverageGate
         ArgumentNullException.ThrowIfNull(srcAssemblyNames);
         ArgumentNullException.ThrowIfNull(exclusionViolations);
 
-        List<AssemblyCoverage> srcAssemblies = assemblies.Values
-            .Where(a => srcAssemblyNames.Contains(a.AssemblyName))
-            .OrderBy(a => a.AssemblyName, StringComparer.Ordinal)
-            .ToList();
+        List<AssemblyCoverage> srcAssemblies =
+        [
+            .. assemblies.Values
+                .Where(a => srcAssemblyNames.Contains(a.AssemblyName))
+                .OrderBy(a => a.AssemblyName, StringComparer.Ordinal),
+        ];
 
-        List<string> missingAssemblyNames = srcAssemblyNames
-            .Where(name => !assemblies.ContainsKey(name))
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToList();
+        List<string> missingAssemblyNames =
+        [
+            .. srcAssemblyNames
+                .Where(name => !assemblies.ContainsKey(name))
+                .Order(StringComparer.Ordinal),
+        ];
 
         StringBuilder report = new();
         bool success = srcAssemblies.Count > 0 && missingAssemblyNames.Count == 0;

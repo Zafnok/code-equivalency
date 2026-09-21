@@ -21,9 +21,10 @@ if (!Directory.Exists(testResultsDir))
     return 1;
 }
 
-List<string> xmlContents = CoberturaReportDiscovery.FindReportFiles(testResultsDir)
-    .Select(File.ReadAllText)
-    .ToList();
+List<string> xmlContents =
+[
+    .. CoberturaReportDiscovery.FindReportFiles(testResultsDir).Select(File.ReadAllText),
+];
 
 IReadOnlyDictionary<string, AssemblyCoverage> assemblies = CoberturaCoverageReader.Merge(xmlContents);
 IReadOnlySet<string> srcAssemblyNames = SrcAssemblyDiscovery.DiscoverAssemblyNames(srcDir);
