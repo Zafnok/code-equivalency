@@ -25,8 +25,8 @@ public sealed class DependencyRuleTests
     [Fact]
     public void CoreDoesNotDependOnOtherEquivComponents()
     {
-        IArchRule rule = Types(true).That().ResideInNamespaceMatching(@"^Equiv\.Core(\.|$)")
-            .Should().NotDependOnAny(Types(true).That().ResideInNamespaceMatching(@"^(Equiv\.Frontend|Equiv\.Verify|Equiv\.Cli)(\.|$)"))
+        IArchRule rule = Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Core(\.|$)")
+            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^(Equiv\.Frontend|Equiv\.Verify|Equiv\.Cli)(\.|$)"))
             .Because("Equiv.Core is the shared contract; ARCHITECTURE.md forbids it depending on the frontend, backend, or CLI.");
 
         rule.Check(SystemArchitecture);
@@ -37,8 +37,8 @@ public sealed class DependencyRuleTests
     {
         // Excludes Microsoft.CodeAnalysis.Sarif (Sarif.Sdk, an approved Equiv.Core dependency)
         // from the Roslyn namespace prefix it happens to share; see ADR 0010.
-        IArchRule rule = Types(true).That().ResideInNamespaceMatching(@"^Equiv\.Core(\.|$)")
-            .Should().NotDependOnAny(Types(true).That().ResideInNamespaceMatching(
+        IArchRule rule = Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Core(\.|$)")
+            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(
                 @"^Microsoft\.CodeAnalysis$|^Microsoft\.CodeAnalysis\.(?!Sarif(\.|$))|^Microsoft\.Z3(\.|$)"))
             .Because("Equiv.Core must have no Roslyn or Z3 dependency; those are frontend/backend concerns.");
 
@@ -48,8 +48,8 @@ public sealed class DependencyRuleTests
     [Fact]
     public void FrontendDoesNotDependOnVerify()
     {
-        IArchRule rule = Types(true).That().ResideInNamespaceMatching(@"^Equiv\.Frontend\.CSharp(\.|$)")
-            .Should().NotDependOnAny(Types(true).That().ResideInNamespaceMatching(@"^Equiv\.Verify\.Z3(\.|$)"))
+        IArchRule rule = Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Frontend\.CSharp(\.|$)")
+            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Verify\.Z3(\.|$)"))
             .Because("Only Equiv.Cli is allowed to depend on both the frontend and the backend.");
 
         rule.Check(SystemArchitecture);
@@ -58,8 +58,8 @@ public sealed class DependencyRuleTests
     [Fact]
     public void VerifyDoesNotDependOnFrontend()
     {
-        IArchRule rule = Types(true).That().ResideInNamespaceMatching(@"^Equiv\.Verify\.Z3(\.|$)")
-            .Should().NotDependOnAny(Types(true).That().ResideInNamespaceMatching(@"^Equiv\.Frontend\.CSharp(\.|$)"))
+        IArchRule rule = Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Verify\.Z3(\.|$)")
+            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Frontend\.CSharp(\.|$)"))
             .Because("Only Equiv.Cli is allowed to depend on both the frontend and the backend.");
 
         rule.Check(SystemArchitecture);

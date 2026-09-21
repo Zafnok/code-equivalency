@@ -82,7 +82,7 @@ public sealed class SsaBuilderTests
         ssa.Emit(entry, new IrConst(two, new IrBitVecValue(32, 2)));
         ssa.Store(entry, variable, two);
         ssa.Terminate(entry, new IrThrow("E", []));
-        ssa.Terminate(dead, new IrReturn(null, []));
+        ssa.Terminate(dead, new IrReturn(Value: null, []));
 
         ImmutableArray<IrBlock> blocks = ssa.Build(entry, [(variable, r)], Span);
 
