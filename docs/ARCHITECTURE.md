@@ -59,7 +59,11 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 `Equiv.Cli`:
 
 - `equiv compare --legacy <path.sln> --modern <path.sln> [--baseline prev.sarif]
-  [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]`.
+  [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
+  [--lower-only]`.
+- `--lower-only` loads, matches and lowers, writes the lowering census and the Added and
+  Removed results, never calls the backend, and exits 0 (ADR 0027). It cannot be combined
+  with `--baseline` or `--fail-on` (exit 3).
 - Router: inspects inputs, rejects mismatched or unsupported languages (exit 3), else
   selects the frontend. One frontend in the MVP; the router exists from day one so that
   Java is a new project, not a refactor.

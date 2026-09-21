@@ -14,7 +14,7 @@ S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it 
 | M0 Skeleton and gates | day 1 | 2026-09-18 to 2026-09-21, PRs 1 to 4, 12, 17, 18, 32, 68, 73, 76 | done |
 | M1 Core IR, samples, SARIF | days 2–3 | 2026-09-18, PRs 13, 15, 19, 20, 22 | done |
 | M2 C# frontend | days 3–5 | 2026-09-18 to 2026-09-20, PRs 24, 25, 27, 30, 59, 67 | done |
-| M3 Z3 backend and shipping | days 5–7 | | next: M3-001 |
+| M3 Z3 backend and shipping | days 5–7 | M3-001 PR #78 | next: M3-014 and M3-002 in parallel |
 
 M0 and M1 landed in one calendar day and M2 in three, still ahead of the five days planned.
 `main` is green in CI on Windows and Ubuntu with 100% line and branch coverage on every `src/`
@@ -166,9 +166,38 @@ Added by ADR 0023 (2026-09-21):
 - M3-013 (S) A pair whose verification throws is reported as a SARIF tool-execution
   notification and skipped; the run exits 5, and its baseline result is carried as `unchanged`.
 
-Order: M3-001 → M3-002. In parallel on the frontend: M3-007 → P1-003 → P1-006 → P1-005 (P1-005
-also needs M3-001), and M3-010 → M3-011 and M3-009; M3-012 and M3-013 once M3-001 is merged. Then M3-003 (needs M3-002, M3-007, M3-009,
-M3-012, M3-013, P1-005, P1-006) → M3-008 → M3-004 → M3-005 (also needs M3-010, M3-011) → M3-006.
+Added by the Unknown-rate review (2026-09-21; ADRs 0024 to 0027). The M3 plan would
+ship a sound tool whose Unknown rate grows with codebase size, and it measures that rate last.
+These tickets measure it first, make unchanged code free, and keep EQ002 exact while the engine
+abstracts more:
+
+- M3-014 (M) Lowering census in every SARIF run, `--lower-only`, and a `business-layer` sample
+  that every precision ticket must move towards its target verdicts (ADR 0027).
+- M3-022 (S) Census of the user's real 4.8/10 pair; its histogram reorders the precision list
+  (ADR 0027). No engine changes.
+- M3-015 (M) Bound fingerprints: equal, non-runtime-sensitive bodies are Equivalent by
+  `congruence` without the solver (ADR 0024).
+- M3-016 (M) Replay taint: a divergence that depends on an abstraction is Unknown(Abstraction)
+  with a candidate counterexample, never EQ002 (ADR 0026).
+- M3-023 (S) Unknown results point at the opaque or abstract lines, not the method (ADR 0027).
+- Precision (default order; M3-022 reorders it by pairs unlocked per effort point):
+  M3-010, M3-011, M3-018 (L, `IrPure` for float, decimal and operators, ADR 0025),
+  M3-019 (M, `ref`/`out` call arguments and `lock`), M3-017 (L, fragments on both sides are
+  shared calls, ADR 0024), M3-020 (M, type tests and downcasts), M3-021 (M, `await`).
+
+Order:
+1. **Measure first, in parallel with M3-002:** M3-014 → M3-022. This needs no Z3 and answers
+   "is the Unknown rate survivable" before any more engine work.
+2. **Soundness (unchanged):** M3-001 → M3-002; M3-007 → P1-003 → P1-006 → P1-005 (P1-005 also
+   needs M3-001); M3-009; M3-012 and M3-013 once M3-001 is merged.
+3. **Blast radius, before any snapshot is taken:** M3-015 (needs M3-014, M3-001, M3-009);
+   M3-016 (needs M3-001) → M3-023.
+4. M3-003 (needs M3-002, M3-007, M3-009, M3-012, M3-013, M3-015, M3-016, M3-023, P1-005, P1-006)
+   → M3-008 → M3-004.
+5. **Precision, in M3-022's order:** M3-010 → M3-011 and M3-020 (after M3-010) and M3-021
+   (after M3-011); M3-018 (after M3-016); M3-019 (after P1-005); M3-017 (after M3-015, M3-016,
+   P1-005). Each updates the `business-layer` snapshot.
+6. M3-005 (needs M3-004, M3-008 and the precision tickets M3-022 kept) → M3-006.
 
 ## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
 
