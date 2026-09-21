@@ -456,7 +456,8 @@
       "equiv.verify.z3": {
         "type": "Project",
         "dependencies": {
-          "Equiv.Core": "[1.0.0, )"
+          "Equiv.Core": "[1.0.0, )",
+          "Microsoft.Z3": "[4.12.2, )"
         }
       },
       "Microsoft.CodeAnalysis.CSharp.Workspaces": {
@@ -491,6 +492,12 @@
           "Microsoft.VisualStudio.SolutionPersistence": "1.0.52",
           "System.Composition": "10.0.1"
         }
+      },
+      "Microsoft.Z3": {
+        "type": "CentralTransitive",
+        "requested": "[4.12.2, )",
+        "resolved": "4.12.2",
+        "contentHash": "dOV/D1K+OH2Ris7HcXHM2OIyHaFc6t3twNg9d8xqRKs3JZBvWgTp+OmzVfNGPn+Yz/wQDAHeWgecJly5aHGYAw=="
       },
       "System.CommandLine": {
         "type": "CentralTransitive",

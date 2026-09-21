@@ -1,0 +1,14 @@
+# Divergent
+proc "T::M(int, int)" (%a: bv32, %b: bv32) -> bool entry B0
+B0:
+  goto B1
+B1:
+  %o: bool = overflows sadd %a, %b
+  ret %o
+---
+proc "T::M(int, int)" (%a: bv32, %b: bv32) -> bool entry B0
+B0:
+  goto B1
+B1:
+  %o: bool = overflows uadd %a, %b
+  ret %o

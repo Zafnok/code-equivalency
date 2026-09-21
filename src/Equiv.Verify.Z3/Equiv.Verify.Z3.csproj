@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Z3" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Equiv.Core\Equiv.Core.csproj" />
   </ItemGroup>
 

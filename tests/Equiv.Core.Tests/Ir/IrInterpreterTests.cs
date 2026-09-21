@@ -123,6 +123,7 @@ public sealed class IrInterpreterTests
             [new IrCallRecord(new CallIdentity("Log"), [Bv(1)]), new IrCallRecord(new CallIdentity("F"), [Bv(1), Bv(1)])],
             normal.Trace);
         Assert.Equal(new IrThrew("System.Exception"), threw.Outcome);
+        Assert.Equal([0, 1], throwing.Positions);
     }
 
     [Fact]
@@ -260,6 +261,12 @@ public sealed class IrInterpreterTests
 
     private sealed class ScriptedOracle(Func<CallIdentity, ImmutableArray<IrValue>, IrType?, IrCallResult> answer) : ICallOracle
     {
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType) => answer(callee, arguments, resultType);
+        public List<int> Positions { get; } = [];
+
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position)
+        {
+            Positions.Add(position);
+            return answer(callee, arguments, resultType);
+        }
     }
 }

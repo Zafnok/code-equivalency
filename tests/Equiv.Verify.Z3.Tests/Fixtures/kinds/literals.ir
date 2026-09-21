@@ -1,0 +1,20 @@
+# Divergent
+proc "T::M(string)" (%s: sort "S") -> bool entry B0
+B0:
+  %a: sort "S" = const sort "S" 1
+  %b: sort "S" = const sort "S" 2
+  %e: bool = eq %a, %b
+  %d: map<bv32, bool> = const map<bv32, bool> [bv32 1 -> bool true, bv32 2 -> bool false] default bool false
+  %k: bv32 = const bv32 1
+  %v: bool = mapread %d, %k
+  %r: bool = or %e, %v
+  goto B1
+B1:
+  ret %r
+---
+proc "T::M(string)" (%s: sort "S") -> bool entry B0
+B0:
+  %f: bool = const bool false
+  goto B1
+B1:
+  ret %f

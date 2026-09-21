@@ -13,27 +13,32 @@ namespace Equiv.TestSupport;
 /// </summary>
 internal sealed class IrGenLowering
 {
+    private const int Heap = SlotCount;
+
     private static readonly IrBitVec Bv32 = new(32);
     private static readonly IrBitVec Bv8 = new(8);
     private static readonly IrBool Bool = new();
+    private static readonly IrMap HeapType = new(Bv32, Bv32);
 
     private readonly List<Pending> blocks = [];
     private readonly string[] names;
     private readonly IrParameter? byRef;
+    private readonly IrParameter? heap;
     private IrVar[] env;
     private Pending? current;
     private int counter;
 
-    private IrGenLowering(bool hasRef)
+    private IrGenLowering(bool hasRef, bool hasHeap)
     {
-        names = ["a", "b", hasRef ? "r" : "c", "v0", "v1", "v2"];
-        env = [.. names.Select(static n => new IrVar(n, Bv32, n))];
+        names = ["a", "b", hasRef ? "r" : "c", "v0", "v1", "v2", .. hasHeap ? new[] { "field.Gen.x" } : []];
+        env = [.. names.Select(static (n, i) => new IrVar(n, i == Heap ? HeapType : Bv32, n))];
         byRef = hasRef ? new IrParameter(env[2], IrParameterKind.Ref) : null;
+        heap = hasHeap ? new IrParameter(env[Heap], IrParameterKind.Ref) : null;
     }
 
     public static IrProcedure Lower(Program program)
     {
-        IrGenLowering lowering = new(program.HasRef);
+        IrGenLowering lowering = new(program.HasRef, program.HasHeap);
         return lowering.Run(program);
     }
 
@@ -43,7 +48,7 @@ internal sealed class IrGenLowering
         [
             new(env[0], IrParameterKind.In),
             new(env[1], IrParameterKind.In),
-            .. byRef is null ? [] : new[] { byRef },
+            .. new[] { byRef, heap }.OfType<IrParameter>(),
         ];
         Enter(NewBlock());
         for (int slot = byRef is null ? 2 : 3; slot < SlotCount; slot++)
@@ -71,7 +76,11 @@ internal sealed class IrGenLowering
         return new IrProcedure(new ProcedureIdentity("Gen.Type::M"), parameters, Bv32, [.. blocks.Select(static b => b.Build())], new IrBlockId(0));
     }
 
-    private ImmutableArray<IrOut> Outs() => byRef is null ? [] : [new IrOut(byRef.Var, env[2])];
+    private ImmutableArray<IrOut> Outs() =>
+    [
+        .. byRef is null ? [] : new[] { new IrOut(byRef.Var, env[2]) },
+        .. heap is null ? [] : new[] { new IrOut(heap.Var, env[Heap]) },
+    ];
 
     private Pending NewBlock()
     {
@@ -92,7 +101,7 @@ internal sealed class IrGenLowering
 
     private IrVar Temp(IrType type) => new($"t{counter++}", type);
 
-    private IrVar Version(int slot) => new($"{names[slot]}.{counter++}", Bv32, names[slot]);
+    private IrVar Version(int slot) => new($"{names[slot]}.{counter++}", env[slot].Type, names[slot]);
 
     private IrVar Constant(uint value)
     {
@@ -123,6 +132,16 @@ internal sealed class IrGenLowering
                     IrVar operand = Lower(unary.Operand);
                     IrVar target = Temp(Bv32);
                     Emit(new IrUnary(target, unary.Op, operand));
+                    return target;
+                }
+
+            case Load load when heap is null:
+                return Lower(load.Key);
+            case Load load:
+                {
+                    IrVar key = Lower(load.Key);
+                    IrVar target = Temp(Bv32);
+                    Emit(new IrMapRead(target, env[Heap], key));
                     return target;
                 }
 
@@ -214,6 +233,17 @@ internal sealed class IrGenLowering
             case Throw exit:
                 Seal(new IrThrow(exit.ExceptionType, Outs()));
                 break;
+            case Store when heap is null:
+                break;
+            case Store store:
+                {
+                    IrVar key = Lower(store.Key);
+                    IrVar value = Lower(store.Value);
+                    IrVar written = Version(Heap);
+                    Emit(new IrMapWrite(written, env[Heap], key, value));
+                    env[Heap] = written;
+                    break;
+                }
             default:
                 throw new System.Diagnostics.UnreachableException(statement.GetType().Name);
         }
@@ -315,7 +345,7 @@ internal sealed class IrGenLowering
 
         Enter(join);
         env = [.. live[0].Env];
-        for (int slot = 0; slot < SlotCount; slot++)
+        for (int slot = 0; slot < env.Length; slot++)
         {
             if (live.Any(a => a.Env[slot] != live[0].Env[slot]))
             {
@@ -335,8 +365,8 @@ internal sealed class IrGenLowering
         Pending header = NewBlock();
         Seal(new IrGoto(header.Id));
         Enter(header);
-        List<(IrBlockId, IrVar)>[] incoming = new List<(IrBlockId, IrVar)>[SlotCount];
-        for (int slot = 0; slot < SlotCount; slot++)
+        List<(IrBlockId, IrVar)>[] incoming = new List<(IrBlockId, IrVar)>[env.Length];
+        for (int slot = 0; slot < env.Length; slot++)
         {
             IrVar merged = Version(slot);
             incoming[slot] = [(preheader.Id, env[slot])];
@@ -362,7 +392,7 @@ internal sealed class IrGenLowering
             Emit(new IrBinary(next, IrBinaryOp.Add, index, one));
             Pending latch = current;
             Seal(new IrGoto(header.Id));
-            for (int slot = 0; slot < SlotCount; slot++)
+            for (int slot = 0; slot < env.Length; slot++)
             {
                 incoming[slot].Add((latch.Id, env[slot]));
             }

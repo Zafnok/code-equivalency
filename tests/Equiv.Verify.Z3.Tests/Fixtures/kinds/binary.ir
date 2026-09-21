@@ -1,0 +1,16 @@
+# Equivalent
+proc "T::M(int, int)" (%a: bv32, %b: bv32) -> bool entry B0
+B0:
+  %s: bv32 = add %a, %b
+  goto B1
+B1:
+  %c: bool = ult %s, %a
+  ret %c
+---
+proc "T::M(int, int)" (%a: bv32, %b: bv32) -> bool entry B0
+B0:
+  %s: bv32 = add %b, %a
+  goto B1
+B1:
+  %c: bool = ugt %a, %s
+  ret %c
