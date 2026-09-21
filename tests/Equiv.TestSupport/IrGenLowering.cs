@@ -36,16 +36,6 @@ internal sealed class IrGenLowering
         heap = hasHeap ? new IrParameter(env[Heap], IrParameterKind.Ref) : null;
     }
 
-    /// <summary>
-    /// Lowers <paramref name="program"/>. With <paramref name="renamed"/>, the source-language parameters are
-    /// <c>p</c>, <c>q</c> (and <c>s</c>) instead of <c>a</c>, <c>b</c> (and <c>r</c>): the same procedure to a caller (ADR 0021).
-    /// </summary>
-    public static IrProcedure Lower(Program program, bool renamed = false)
-    {
-        IrGenLowering lowering = new(program.HasRef, program.HasHeap, renamed);
-        return lowering.Run(program);
-    }
-
     private IrProcedure Run(Program program)
     {
         ImmutableArray<IrParameter> parameters =
@@ -112,6 +102,16 @@ internal sealed class IrGenLowering
         IrVar target = Temp(Bv32);
         Emit(new IrConst(target, new IrBitVecValue(32, value)));
         return target;
+    }
+
+    /// <summary>
+    /// Lowers <paramref name="program"/>. With <paramref name="renamed"/>, the source-language parameters are
+    /// <c>p</c>, <c>q</c> (and <c>s</c>) instead of <c>a</c>, <c>b</c> (and <c>r</c>): the same procedure to a caller (ADR 0021).
+    /// </summary>
+    public static IrProcedure Lower(Program program, bool renamed = false)
+    {
+        IrGenLowering lowering = new(program.HasRef, program.HasHeap, renamed);
+        return lowering.Run(program);
     }
 
     private IrVar Lower(Expr expr)
@@ -199,19 +199,6 @@ internal sealed class IrGenLowering
         }
     }
 
-    private void LowerAll(ImmutableArray<Stmt> statements)
-    {
-        foreach (Stmt statement in statements)
-        {
-            if (current is null)
-            {
-                return;
-            }
-
-            Lower(statement);
-        }
-    }
-
     private void Lower(Stmt statement)
     {
         switch (statement)
@@ -250,6 +237,19 @@ internal sealed class IrGenLowering
                 }
             default:
                 throw new System.Diagnostics.UnreachableException(statement.GetType().Name);
+        }
+    }
+
+    private void LowerAll(ImmutableArray<Stmt> statements)
+    {
+        foreach (Stmt statement in statements)
+        {
+            if (current is null)
+            {
+                return;
+            }
+
+            Lower(statement);
         }
     }
 
@@ -351,7 +351,7 @@ internal sealed class IrGenLowering
         env = [.. live[0].Env];
         for (int slot = 0; slot < env.Length; slot++)
         {
-            if (live.Any(a => a.Env[slot] != live[0].Env[slot]))
+            if (live.Exists(a => a.Env[slot] != live[0].Env[slot]))
             {
                 IrVar merged = Version(slot);
                 join.Phis.Add((merged, [.. live.Select(a => (a.End.Id, a.Env[slot]))]));

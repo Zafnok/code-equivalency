@@ -67,6 +67,11 @@ dotnet_diagnostic.MA0159.severity = error
 # build catches a regression instead of relying on the next Sonar analysis of main.
 dotnet_diagnostic.IDE0028.severity = error
 
+# GH-57: List<T>.Exists() over Enumerable.Any() on a List<T> avoids the LINQ enumerator
+# allocation. Sonar filed this as a silent suggestion; pinning it to error means the build
+# now catches a regression instead of relying on the next Sonar analysis of main.
+dotnet_diagnostic.MA0020.severity = error
+
 # M1-005: test methods are named Scenario_ExpectedOutcome (e.g. Compare_Exits1OnDivergent),
 # an underscore-as-separator convention that is idiomatic xUnit test naming, not an identifier
 # hygiene problem. CA1707 ("remove underscores from member names") has no test-specific carve-out,
