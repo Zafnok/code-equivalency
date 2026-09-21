@@ -48,8 +48,8 @@ internal sealed class IrTextParser
     private static readonly FrozenDictionary<string, Func<IrTextParser, IrInstruction>> Statements =
         new Dictionary<string, Func<IrTextParser, IrInstruction>>(StringComparer.Ordinal)
         {
-            ["call"] = static p => p.ParseCall(null),
-            ["opaque"] = static p => p.ParseOpaque(null),
+            ["call"] = static p => p.ParseCall(target: null),
+            ["opaque"] = static p => p.ParseOpaque(target: null),
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
     private static readonly FrozenDictionary<string, Func<IrTextParser, IrTerminator>> Terminators =
