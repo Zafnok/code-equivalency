@@ -1,5 +1,5 @@
 # M3-001 Z3 product-program encoder for acyclic IR
-Status: in-progress
+Status: done (PR #78)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M1-002, M1-003
