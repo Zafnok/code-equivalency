@@ -74,8 +74,8 @@ public sealed class IrBitsTests
     [Fact]
     public void SortsCompareByIdNotByReference()
     {
-        Assert.Equal(new IrBoolValue(true), IrBits.Binary(IrBinaryOp.Eq, new IrSortValue("S", 1), new IrSortValue("S", 1)));
-        Assert.Equal(new IrBoolValue(true), IrBits.Binary(IrBinaryOp.Ne, new IrSortValue("S", 1), new IrSortValue("S", 2)));
+        Assert.Equal(new IrBoolValue(Value: true), IrBits.Binary(IrBinaryOp.Eq, new IrSortValue("S", 1), new IrSortValue("S", 1)));
+        Assert.Equal(new IrBoolValue(Value: true), IrBits.Binary(IrBinaryOp.Ne, new IrSortValue("S", 1), new IrSortValue("S", 2)));
     }
 
     [Theory]
@@ -124,6 +124,6 @@ public sealed class IrBitsTests
     [Fact]
     public void BoolNotNegates()
     {
-        Assert.Equal(new IrBoolValue(false), IrBits.UnaryOp(IrUnaryOp.BoolNot, new IrBoolValue(true), new IrBool()));
+        Assert.Equal(new IrBoolValue(Value: false), IrBits.UnaryOp(IrUnaryOp.BoolNot, new IrBoolValue(Value: true), new IrBool()));
     }
 }

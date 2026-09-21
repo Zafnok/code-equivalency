@@ -97,7 +97,7 @@ public sealed class IrTextSnapshotTests
                 new IrParameter(kind, IrParameterKind.In),
                 new IrParameter(count, IrParameterKind.Ref),
             ],
-            null,
+            ReturnType: null,
             [
                 new IrBlock(new IrBlockId(0), [new IrConst(zero, new IrBitVecValue(32, 0))], new IrSwitch(kind, [(new IrBitVecValue(32, 1), new IrBlockId(1))], new IrBlockId(3))),
                 new IrBlock(new IrBlockId(1), [new IrCall(next, threw, new CallIdentity("Samples.Svc::Next(int32)"), [kind])], new IrBranch(threw, new IrBlockId(2), new IrBlockId(3))),
@@ -111,9 +111,9 @@ public sealed class IrTextSnapshotTests
                     new IrBlockId(5),
                     [
                         new IrMapWrite(count2, count, o, value),
-                        new IrOpaque(null, "lock statement", new SourceSpan("Samples/Orders.cs", 12, 9, 12, 20)),
+                        new IrOpaque(Target: null, "lock statement", new SourceSpan("Samples/Orders.cs", 12, 9, 12, 20)),
                     ],
-                    new IrReturn(null, [new IrOut(count, count2)])),
+                    new IrReturn(Value: null, [new IrOut(count, count2)])),
             ],
             new IrBlockId(0));
 
