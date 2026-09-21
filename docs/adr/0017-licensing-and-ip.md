@@ -75,14 +75,26 @@ non-commercial, evaluation-only, or conditioned on sponsorship for commercial us
 `EPL-2.0` are denied for anything linked into the product, and permitted only for a standalone
 executable invoked as a separate process and never redistributed.
 
-Two standing exceptions, both outside the shipped artifact:
+Three standing exceptions (found by the M0-010 dependency licence gate, which enforces exactly
+this list via `tools/licence-check/policy.json`), all outside the shipped artifact:
 
 - `dotnet-sonarscanner` is **LGPL-3.0**. It is a CI executable invoked as a process, never linked
   and never redistributed. No `PackageReference` on a Sonar library may be taken.
 - `Microsoft.AspNet.WebApi.Core` 5.3.0 is under the **Microsoft .NET Library EULA**
-  (`requireLicenseAcceptance=true`), the only non-OSI licence in the repository. It is referenced by
-  a `samples/` fixture, isolated from the root build by `samples/Directory.Build.props`. Those
-  assemblies must never be vendored into the container image or a release artifact.
+  (`requireLicenseAcceptance=true`). It is referenced by a `samples/` fixture, isolated from the
+  root build by `samples/Directory.Build.props`. Those assemblies must never be vendored into the
+  container image or a release artifact.
+- `Microsoft.Diagnostics.Tracing.EventRegister` 1.1.28 is under the **Microsoft PerfView .NET
+  Library EULA** (`https://dotnet.microsoft.com/en-us/perfview_library_license.htm`), a
+  restrictive EULA, unlike its sibling `Microsoft.Diagnostics.Tracing.TraceEvent` which is MIT.
+  It arrives transitively through `Sarif.Sdk` -> `TraceEvent` into `Equiv.Core` and `Equiv.Cli`
+  (both shipped), with no ADR 0002 row of its own because it is transitive rather than a direct
+  `Directory.Packages.props` entry. It is an old-style package with no `lib/` folder, so
+  SDK-style `PackageReference` restore never copies its assemblies (`eventRegister.exe`,
+  `Microsoft.Diagnostics.Tracing.EventSource.dll`) into build output — confirmed by inspecting
+  `src/Equiv.Core/bin` and `src/Equiv.Cli/bin` directly. It stays restored, to satisfy the
+  dependency graph, but must never actually ship; if a future `Sarif.Sdk` or `TraceEvent` upgrade
+  starts copying it into output, that upgrade must drop or replace the dependency instead.
 
 First-party data files that encode third-party knowledge — `src/Equiv.Core/RuntimeChanges/runtime-changes.json`
 today, and the equivalent tables the Java frontend will need — cite vendor documentation by URL and

@@ -36,6 +36,7 @@ function Invoke-Step {
 }
 
 Invoke-Step "restore" { dotnet restore --locked-mode }
+Invoke-Step "restore tools" { dotnet tool restore }
 
 if ($Integration) {
     # samples/** is outside Equiv.slnx (M1-001: isolated from root build settings), so the
@@ -112,6 +113,10 @@ Invoke-Step "check-coverage" {
     dotnet run --no-restore --no-build --project (Join-Path $repoRoot "tools/check-coverage") -- `
         --test-results (Join-Path $repoRoot "TestResults") `
         --src (Join-Path $repoRoot "src") | Tee-Object -FilePath $summaryPath
+}
+
+Invoke-Step "licence-check" {
+    dotnet run --no-restore --no-build --project (Join-Path $repoRoot "tools/licence-check") -- --repo-root $repoRoot
 }
 
 Write-Host "All gates green." -ForegroundColor Green

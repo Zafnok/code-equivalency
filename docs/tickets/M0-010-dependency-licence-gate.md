@@ -1,5 +1,5 @@
 # M0-010 Dependency licence gate and generated third-party notices
-Status: todo
+Status: done (PR #73)
 Effort: M
 Model: Sonnet, high effort.
 Depends on: M0-009
@@ -69,3 +69,107 @@ read a bundled `licenses/LICENSE.txt` (the form `dotnet-sonarscanner` uses, wher
 says `<license type="file">` rather than an SPDX expression), prefer a small first-party script
 over bending a tool that cannot see the real licence — a gate that silently reports "Unknown"
 for the one LGPL package in the tree is worse than no gate.
+
+- Decision: which candidate tool to adopt -> `nuget-license` (Apache-2.0, dotnet tool). Alternatives:
+  `dotnet-project-licenses`, a fully first-party nuspec reader. Rule: 1 (mirrors the consumer —
+  it restores the same `project.assets.json`/nuspec data our lock files already pin, and its
+  `--override-package-information`/file-license handling is the closest fit to reading the real
+  file rather than a hardcoded table).
+- Decision: package enumeration scope -> run `nuget-license -i Equiv.slnx -t` for every package
+  reachable from a `packages.lock.json` (src, tests, tools — the literal AC1 scope), then read
+  two more sources directly by nuspec lookup since neither has a lock file: `.config/dotnet-tools.json`
+  local tools (`dotnet-stryker`, `dotnet-sonarscanner`) and the direct `PackageReference`s in
+  `samples/webapi-basic/**/*.csproj` (isolated from the root build, M1-001). Alternatives: only
+  scan lock files and leave the ADR 0017 exceptions unverified; teach the tool to restore samples
+  via MSBuild. Rule: 1 (mirrors what ADR 0002 already tracks as three separate buckets).
+- Decision: licence-resolved signal -> treat `nuget-license`'s per-package `LicenseInformationOrigin
+  == 0` (empirically confirmed as the SPDX-`<license type="expression">` case for all 69 packages
+  in the tree that declare one) as machine-resolved; every other value requires a matching
+  `policy.json` exception or the run fails (AC5). Alternatives: parse nuspecs first-party and skip
+  the tool's own classification; hardcode the enum's other member names from decompilation.
+  Rule: 3 (pinned by a fixture test with literal origin values, not by trusting undocumented
+  enum names).
+- Decision: policy file shape -> flat JSON `{ "allowedLicenses": string[], "exceptions":
+  [{ "packageId": string, "licence": string, "reason": string }] }`. An exception matches by
+  package id only (not id+version); its `licence` is trusted once matched, and a missing/blank
+  `reason` is a hard error before any package is evaluated. Alternatives: version-scoped exception
+  keys; separate allow/deny files mirroring `tools/sonar-triage/policy.jsonc`'s richer per-rule
+  shape. Rule: 4 (smallest schema that AC2 and AC5's five test cases need).
+- Decision: notices section (AC7) derivation -> a package is "redistributed" if it appears in a
+  `src/*/packages.lock.json` and is not one of the two packages `Directory.Build.props` marks
+  `PrivateAssets="All"` for every project (`MinVer`, `Meziantou.Analyzer`, read from that file,
+  not hardcoded); "samples only" if it is a direct reference in `samples/webapi-basic/**/*.csproj`
+  and not already redistributed; everything else reachable (tests, tools, the two local tools) is
+  "build-and-test-only". Alternatives: invoke MSBuild per-project to ask what each project
+  actually references. Rule: 1 (mirrors the three sections the hand-written file already has).
+- Decision: tool architecture -> a C# console app at `tools/licence-check/`, mirroring
+  `tools/check-coverage`'s shape (`Program.cs` doing I/O, pure classes for policy evaluation and
+  notices rendering, an xUnit test project with Verify snapshots), not a PowerShell script
+  mirroring `tools/sonar-triage/`. Alternatives: PowerShell script matching sonar-triage's literal
+  shape. Rule: 3 (the ticket's own Tests section asks for a policy-evaluation test project and a
+  snapshot-tested renderer, which is the check-coverage.Tests pattern, not sonar-triage's).
+
+### Resolved: an already-in-tree dependency the gate correctly caught (Out of scope, item 1)
+
+Running the finished gate for real against this repo's own lock files first failed on one package
+already in the tree before this ticket, with no ADR 0002/0017 row and nothing in
+`THIRD-PARTY-NOTICES.md` today:
+
+```
+licence-check: 1 package(s) failed the dependency licence gate:
+  - Microsoft.Diagnostics.Tracing.EventRegister 1.1.28: licence could not be determined
+    (nuspec did not expose an SPDX expression; found
+    'http://go.microsoft.com/fwlink/?LinkId=329770') and no policy exception declares it.
+```
+
+`Microsoft.Diagnostics.Tracing.EventRegister` 1.1.28 is a transitive dependency of `Sarif.Sdk`
+5.7.0 (`Sarif.Sdk` -> `Microsoft.Diagnostics.Tracing.EventRegister` directly, exclude=
+"Build,Analyzers", `.NETStandard2.0` dependency group — confirmed in the restored
+`sarif.sdk.nuspec`), reaching `src/Equiv.Core/packages.lock.json` and
+`src/Equiv.Cli/packages.lock.json` (both redistributed projects). Its own nuspec
+(`minClientVersion="2.5"`, predates SPDX `<license>` expressions) has no `<license>` element,
+only `<licenseUrl>http://go.microsoft.com/fwlink/?LinkId=329770</licenseUrl>` and
+`requireLicenseAcceptance="true"`.
+
+Per the user's direction: checked whether a newer `Sarif.Sdk` drops the dependency first
+(nuget.org's registration index tops out at 5.7.0, already pinned — no newer version exists, so
+swapping is not an option), then resolved the licence by hand instead of guessing:
+
+- The fwlink resolves to `https://dotnet.microsoft.com/en-us/perfview_library_license.htm`,
+  titled "MICROSOFT SOFTWARE LICENSE TERMS - MICROSOFT PERFVIEW .NET LIBRARY" — a restrictive
+  Microsoft EULA (no reverse engineering, no redistributing as a stand-alone offering, scoped to
+  "the Microsoft implementation of PerfView located on GitHub"), **not** MIT, even though the
+  sibling package `Microsoft.Diagnostics.Tracing.TraceEvent` (same repo, same author) is MIT —
+  PerfView's GitHub source was later relicensed MIT but this older NuGet binary package was not.
+- Checked whether it is actually redistributed: it is an old-style package with no `lib/` folder
+  (its files sit at the package root), so SDK-style `PackageReference` restore never copies
+  `eventRegister.exe` or `Microsoft.Diagnostics.Tracing.EventSource.dll` into build output —
+  confirmed directly against `src/Equiv.Core/bin` and `src/Equiv.Cli/bin` (neither file present).
+
+Added as a third ADR 0017 standing exception (`Microsoft PerfView .NET Library EULA`, restored to
+satisfy the graph, never shipped) in `tools/licence-check/policy.json`, ADR 0017 and ADR 0002's
+prose. `./build.ps1` and `./build.ps1 -Integration` are both green; `THIRD-PARTY-NOTICES.md` is
+regenerated (76 packages) and committed.
+
+- Decision: `Microsoft.Diagnostics.Tracing.EventRegister`'s licence and disposition -> Microsoft
+  PerfView .NET Library EULA, treated as a third ADR 0017 standing exception (restored, never
+  shipped), per direct user instruction after confirming no newer `Sarif.Sdk` exists and that the
+  package's assemblies are never copied to build output. Alternatives: swap `Sarif.Sdk` (no newer
+  version available); assume permissive without checking (rejected — real license info was found
+  and it is not permissive). Rule: n/a (not an implementation detail; a licensing call made on the
+  user's explicit direction, not a `equiv-decide` five-rule pick).
+
+### Toolchain quirk worth recording
+
+`PackageInventoryBuilder`'s first pass used `XDocument.Descendants("PackageReference")`
+(namespace-qualified) to read direct references from `samples/**/*.csproj`. That silently missed
+`samples/webapi-basic/legacy/Equiv.Samples.WebApiBasic.Legacy.csproj`, which declares
+`xmlns="http://schemas.microsoft.com/developer/msbuild/2003"` (old-style, non-SDK project) — SDK-
+style csproj and `Directory.Build.props` have no namespace, so the modern-side package showed up
+and the legacy-side one silently vanished from both the gate's package count and the generated
+notices. Fixed by matching `XName.LocalName` instead of the qualified name. Caught by eyeballing
+the generated `THIRD-PARTY-NOTICES.md`'s samples-only section (one row instead of two) rather than
+by a failing test — the existing `NuspecLicenseReaderTests`/`LicenceGateTests` fixtures do not
+exercise real csproj files, so this class of bug was invisible to them. Left as-is (no new test
+added against real repo files, consistent with the rest of `PackageInventoryBuilder` being
+exercised only by the real end-to-end run, not unit tests, per the Size guard).

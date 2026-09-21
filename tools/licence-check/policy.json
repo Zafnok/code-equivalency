@@ -1,0 +1,43 @@
+{
+  "$comment": "Dependency licence policy for ADR 0017. allowedLicenses is the allowlist; exceptions are manual, reasoned overrides for a package whose nuspec cannot be read as an SPDX expression (a bundled licence file, an old-style licenseUrl-only nuspec) or whose licence is genuinely off the allowlist but permitted under ADR 0017 (LGPL-3.0 as a separate CI process, an EULA that never leaves samples/). An exception matches by package id; every exception must carry a non-empty reason or the run fails before any package is evaluated.",
+  "allowedLicenses": [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "MS-PL",
+    "ISC"
+  ],
+  "exceptions": [
+    {
+      "packageId": "dotnet-sonarscanner",
+      "licence": "LGPL-3.0",
+      "reason": "ADR 0017 standing exception: invoked as a separate CI process, never linked or shipped. Its nuspec declares <license type=\"file\">licenses/LICENSE.txt</license>, which is the GNU Lesser General Public License v3 text; no SPDX expression is present to read automatically."
+    },
+    {
+      "packageId": "Microsoft.AspNet.WebApi.Core",
+      "licence": "MS .NET Library EULA",
+      "reason": "ADR 0017 standing exception: referenced only by samples/webapi-basic (legacy), isolated from the root build by samples/Directory.Build.props, and never vendored into a release artifact. Its nuspec declares <license type=\"file\">NET_Library_EULA_ENU.txt</license>, the Microsoft .NET Library EULA (requireLicenseAcceptance=true), the only non-OSI licence in the repository."
+    },
+    {
+      "packageId": "Microsoft.AspNetCore.Mvc.Core",
+      "licence": "Apache-2.0",
+      "reason": "Samples-only (samples/webapi-basic, modern side). Its nuspec predates SPDX <license> expressions and exposes only a licenseUrl pointing at aspnet/AspNetCore's Apache-2.0 LICENSE.txt; confirmed Apache-2.0 in ADR 0002."
+    },
+    {
+      "packageId": "dotnet-stryker",
+      "licence": "Apache-2.0",
+      "reason": "Build-and-test-only local tool (mutation testing), never shipped. Its nuspec declares <license type=\"file\">LICENSE</license>, the Apache License 2.0 text; no SPDX expression is present to read automatically. Confirmed Apache-2.0 in ADR 0002."
+    },
+    {
+      "packageId": "Verify",
+      "licence": "MIT",
+      "reason": "Build-and-test-only transitive dependency of Verify.XunitV3 (snapshot testing). Its nuspec declares <license type=\"file\">OsmfEula.txt</license>, which is not the code licence itself but VerifyTests' Open Source Maintenance Fee rider on top of the underlying MIT-licensed project (the rider text says so directly: \"an open source software project licensed under the MIT\"). The MIT code licence and the maintenance-fee rider are already tracked for Verify.XunitV3 in ADR 0002 and THIRD-PARTY-NOTICES.md via the SmallRevenue exemption in Directory.Build.props; this entry extends that same treatment to the base Verify package the fee rider actually documents."
+    },
+    {
+      "packageId": "Microsoft.Diagnostics.Tracing.EventRegister",
+      "licence": "Microsoft PerfView .NET Library EULA",
+      "reason": "ADR 0017 standing exception (third): transitive dependency of Sarif.Sdk (Core, Cli), pulled in via Microsoft.Diagnostics.Tracing.TraceEvent's dependency group for .NETStandard2.0, exclude=\"Build,Analyzers\". Its nuspec has no <license> element, only a licenseUrl fwlink; resolved by hand (M0-010) to https://dotnet.microsoft.com/en-us/perfview_library_license.htm, \"MICROSOFT SOFTWARE LICENSE TERMS - MICROSOFT PERFVIEW .NET LIBRARY\" - a restrictive Microsoft EULA, not the MIT licence its sibling TraceEvent carries (PerfView's GitHub source is MIT; this specific old NuGet package binary predates that and was never re-licensed on nuget.org). Verified it is never actually shipped: the package is an old-style nuspec with no lib/ folder, so SDK-style PackageReference restore does not copy eventRegister.exe or Microsoft.Diagnostics.Tracing.EventSource.dll into build output (checked src/Equiv.Core/bin and src/Equiv.Cli/bin directly - neither file is present). It is restored (present in the lock file and the NuGet cache) to satisfy the dependency graph but never linked into a release artifact, the same standing as the other two exceptions above."
+    }
+  ]
+}

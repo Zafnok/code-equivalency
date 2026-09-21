@@ -449,3 +449,18 @@ dotnet_diagnostic.CA1032.severity = none
 # apply to this genuinely-lower-case-by-design string.
 [src/Equiv.Frontend.CSharp/Endpoints/RouteTemplate.cs]
 dotnet_diagnostic.CA1308.severity = none
+
+# M0-010: the NuGet package cache path convention is genuinely lower-case (<cache>/<id lower-cased>/
+# <version>/<id lower-cased>.nuspec, per CLAUDE.md), not a value compared case-insensitively, so
+# CA1308's ToUpperInvariant advice does not apply here either.
+[tools/licence-check/NuspecLicenseReader.cs]
+dotnet_diagnostic.CA1308.severity = none
+
+[tools/licence-check.Tests/NuspecLicenseReaderTests.cs]
+dotnet_diagnostic.CA1308.severity = none
+
+# M0-010: LicenceCheckException is internal and never crosses an assembly boundary (Program.cs is
+# its only catch site), same rationale as SolutionLoadException above for CA1032's three standard
+# constructors.
+[tools/licence-check/LicenceCheckException.cs]
+dotnet_diagnostic.CA1032.severity = none
