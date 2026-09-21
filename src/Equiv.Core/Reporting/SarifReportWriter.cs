@@ -1,4 +1,5 @@
 using Equiv.Core.Matching;
+using Equiv.Core.RuntimeChanges;
 using Equiv.Core.Verdicts;
 
 using Microsoft.CodeAnalysis.Sarif;
@@ -53,7 +54,7 @@ public static class SarifReportWriter
     private static Result ToResult(VerificationResult result, SarifLog? baseline)
     {
         string fingerprint = ResultFingerprint.Compute(result);
-        (string ruleId, FailureLevel level, ResultKind kind) = VerdictRule.Describe(result.Verdict);
+        (string ruleId, FailureLevel level, ResultKind kind, RuntimeChange? runtimeChange) = VerdictRule.Describe(result.Verdict);
 
         // SARIF 2.1.0 (search "kind" property, ss3.27.9): a result's `level` is only meaningful
         // when `kind` is "fail" ("If kind has any value other than fail, then level SHALL be
@@ -66,7 +67,7 @@ public static class SarifReportWriter
             RuleId = ruleId,
             Level = kind == ResultKind.Fail ? level : FailureLevel.None,
             Kind = kind,
-            Message = new Message { Text = MessageText(result) },
+            Message = new Message { Text = MessageText(result, runtimeChange) },
             BaselineState = BaselineComputer.StateFor(result.Identity.Value, ruleId, fingerprint, baseline),
             PartialFingerprints = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -78,6 +79,14 @@ public static class SarifReportWriter
         if (result.Verdict is Divergent divergent)
         {
             sarifResult.SetProperty("model", CounterexampleText.Dump(divergent.Counterexample));
+        }
+
+        // Sarif.Sdk's Result has no per-result help-link property (only ReportingDescriptor.HelpUri,
+        // one fixed value per rule); EQ006's url is specific to the matched member, so it travels as
+        // a custom property alongside "model", the same way a Divergent's counterexample does.
+        if (runtimeChange is not null)
+        {
+            sarifResult.SetProperty("helpUri", runtimeChange.Url.OriginalString);
         }
 
         bool isEndpoint = ProcedureIdentityNormalizer.IsEndpoint(result.Identity.Value);
@@ -128,10 +137,13 @@ public static class SarifReportWriter
     /// <summary>
     /// <see cref="Verdict"/> is a closed hierarchy (private protected constructor) with five
     /// members; the final arm covers <see cref="Removed"/>, mirroring <see cref="VerdictRule.Describe"/>.
+    /// <paramref name="runtimeChange"/> is non-null only for an EQ006 <see cref="Divergent"/>.
     /// </summary>
-    private static string MessageText(VerificationResult result) => result.Verdict switch
+    private static string MessageText(VerificationResult result, RuntimeChange? runtimeChange) => result.Verdict switch
     {
         Equivalent => $"{result.Identity.Value} is equivalent.",
+        Divergent divergent when runtimeChange is not null =>
+            $"{result.Identity.Value} diverges via a runtime-changed API ({runtimeChange.Reason} {runtimeChange.Url.OriginalString}): {CounterexampleText.Dump(divergent.Counterexample)}",
         Divergent divergent => $"{result.Identity.Value} diverges: {CounterexampleText.Dump(divergent.Counterexample)}",
         Unknown unknown => $"{result.Identity.Value} is unknown ({unknown.Reason}): {unknown.Detail}",
         Added => $"{result.Identity.Value} was added.",
@@ -148,6 +160,7 @@ public static class SarifReportWriter
             Rule("EQ003", "Unknown", "Equivalence could not be decided for this procedure pair.", FailureLevel.Warning),
             Rule("EQ004", "Added", "The procedure is present on the modern side only.", FailureLevel.Note),
             Rule("EQ005", "Removed", "The procedure is present on the legacy side only.", FailureLevel.Note),
+            Rule("EQ006", "RuntimeChangedDivergence", "The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET.", FailureLevel.Error),
         ],
     };
 

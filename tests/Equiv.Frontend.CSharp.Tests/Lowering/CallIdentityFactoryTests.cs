@@ -4,6 +4,7 @@ using Equiv.Core.Ir;
 using Xunit;
 
 using static Equiv.Frontend.CSharp.Tests.Lowering.Lowered;
+using static VerifyXunit.Verifier;
 
 namespace Equiv.Frontend.CSharp.Tests.Lowering;
 
@@ -29,5 +30,16 @@ public sealed class CallIdentityFactoryTests
 
         Assert.Equal("New.H::F(int)", Assert.Single(Calls(procedure)).Callee.Value);
         Assert.Equal("C::M(int)", procedure.Identity.Value);
+    }
+
+    /// <summary>Ticket M2-006: a call to a runtime-changes-table member is flagged, dumped with a <c>!</c> suffix.</summary>
+    [Fact]
+    public Task Lowering_FlagsIndexOfCall() => Verify(IrText.Dump(Method("static int M(string s, char c) => s.IndexOf(c);")));
+
+    [Fact]
+    public void AnUnflaggedCallIsNotMarkedRuntimeChanged()
+    {
+        IrProcedure procedure = Method("static int M(int a) => System.Math.Abs(a);");
+        Assert.False(Assert.Single(Calls(procedure)).Callee.RuntimeChanged);
     }
 }

@@ -69,17 +69,20 @@
       },
       results: [
         {
-          ruleId: EQ001,
-          kind: pass,
-          level: none,
+          ruleId: EQ006,
+          level: error,
           message: {
-            text: Samples.Math::Add(int32,int32) is equivalent.
+            text: Samples.Math::Add(int32,int32) diverges via a runtime-changed API (String.GetHashCode is randomized per process on .NET and is not guaranteed to match .NET Framework 4.8's algorithm, so the same string can hash differently on each side. https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0): inputs(bv32 0) old(returned bv32 1 outs() trace("System.String::GetHashCode()"())) new(returned bv32 2 outs() trace())
           },
           partialFingerprints: {
             procedureIdentity/v1: Samples.Math::Add(int32,int32),
-            resultFingerprint/v1: 6360e17b8837b9da856b8705529df3df879b40ee6df0e4b2de3ff0735cfc0a66
+            resultFingerprint/v1: 91aed6d0b18d138b21259495899fa98f81be9d05438aa1f956baaaae18575ea7
           },
-          baselineState: new
+          baselineState: new,
+          properties: {
+            model: inputs(bv32 0) old(returned bv32 1 outs() trace("System.String::GetHashCode()"())) new(returned bv32 2 outs() trace()),
+            helpUri: https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0
+          }
         }
       ],
       columnKind: utf16CodeUnits

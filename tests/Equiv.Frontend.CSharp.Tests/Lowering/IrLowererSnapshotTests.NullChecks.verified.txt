@@ -20,7 +20,7 @@ B7:
 B8:
   br %s.isNull.14, B5, B9
 B9:
-  %$11: bv32 = call "System.String::CompareTo(string)"(%s, %s) threw %$12: bool
+  %$11: bv32 = call "System.String::CompareTo(string)"!(%s, %s) threw %$12: bool
   br %$12, B7, B10
 B10:
   ret %$11

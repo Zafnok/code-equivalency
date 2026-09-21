@@ -8,4 +8,8 @@
     <PackageReference Include="Sarif.Sdk" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="RuntimeChanges/runtime-changes.json" />
+  </ItemGroup>
+
 </Project>

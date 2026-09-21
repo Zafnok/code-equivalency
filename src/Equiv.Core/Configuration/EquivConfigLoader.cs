@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text.Json;
 
 namespace Equiv.Core.Configuration;
@@ -12,7 +13,7 @@ namespace Equiv.Core.Configuration;
 public static class EquivConfigLoader
 {
     private static readonly FrozenSet<string> KnownProperties =
-        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs" }.ToFrozenSet(StringComparer.Ordinal);
+        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "suppressRuntimeChanges" }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Parses <paramref name="json"/> and validates it against the schema. Throws <see cref="EquivConfigParseException"/>
@@ -44,8 +45,9 @@ public static class EquivConfigLoader
         ImmutableDictionary<string, string> callIdentityRenames = ReadRenameMap(root, "callIdentityRenames", diagnostics);
         int bound = ReadPositiveInt(root, "bound", EquivConfig.Default.Bound, EquivConfigDiagnosticIds.InvalidBound, diagnostics);
         int timeoutMs = ReadPositiveInt(root, "timeoutMs", EquivConfig.Default.TimeoutMs, EquivConfigDiagnosticIds.InvalidTimeout, diagnostics);
+        ImmutableArray<string> suppressRuntimeChanges = ReadStringArray(root, "suppressRuntimeChanges", diagnostics);
 
-        EquivConfig config = new(renames, callIdentityRenames, bound, timeoutMs);
+        EquivConfig config = new(renames, callIdentityRenames, bound, timeoutMs) { SuppressRuntimeChanges = suppressRuntimeChanges };
         return new EquivConfigResult(config, diagnostics.ToImmutable());
     }
 
@@ -106,6 +108,40 @@ public static class EquivConfigLoader
         }
 
         return map.ToImmutable();
+    }
+
+    private static ImmutableArray<string> ReadStringArray(JsonElement root, string property, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    {
+        if (!root.TryGetProperty(property, out JsonElement element))
+        {
+            return [];
+        }
+
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry, property, $"\"{property}\" must be an array of non-empty strings"));
+            return [];
+        }
+
+        ImmutableArray<string>.Builder items = ImmutableArray.CreateBuilder<string>();
+        int index = 0;
+        foreach (JsonElement item in element.EnumerateArray())
+        {
+            string path = $"{property}/{index.ToString(CultureInfo.InvariantCulture)}";
+            string? value = item.ValueKind == JsonValueKind.String ? item.GetString() : null;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry, path, "value must be a non-empty string"));
+            }
+            else
+            {
+                items.Add(value);
+            }
+
+            index++;
+        }
+
+        return items.ToImmutable();
     }
 
     private static int ReadPositiveInt(JsonElement root, string property, int defaultValue, string diagnosticId, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)

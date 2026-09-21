@@ -132,6 +132,9 @@ public static class IrText
 
     private static string Assigned(IrVar? target) => target is null ? string.Empty : Definition(target) + " = ";
 
+    /// <summary>A callee's quoted identity, with a <c>!</c> suffix when <see cref="CallIdentity.RuntimeChanged"/> (ticket M2-006).</summary>
+    private static string Callee(CallIdentity callee) => Quote(callee.Value) + (callee.RuntimeChanged ? "!" : string.Empty);
+
     private static string Outs(ImmutableArray<IrOut> outs) =>
         outs.IsEmpty ? string.Empty : $" outs({string.Join(", ", outs.Select(static o => $"{Use(o.Param)} = {Use(o.Final)}"))})";
 
@@ -153,7 +156,7 @@ public static class IrText
             $"{Definition(instruction.Target)} = phi [{string.Join(", ", instruction.Incoming.Select(static i => $"{Block(i.From)}: {Use(i.Value)}"))}]";
 
         public override string Visit(IrCall instruction) =>
-            $"{Assigned(instruction.Target)}call {Quote(instruction.Callee.Value)}({string.Join(", ", instruction.Args.Select(Use))})"
+            $"{Assigned(instruction.Target)}call {Callee(instruction.Callee)}({string.Join(", ", instruction.Args.Select(Use))})"
             + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw));
 
         public override string Visit(IrMapRead instruction) =>

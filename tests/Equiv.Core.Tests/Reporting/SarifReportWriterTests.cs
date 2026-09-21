@@ -1,5 +1,6 @@
 using System.Linq;
 
+using Equiv.Core.Ir;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
 
@@ -32,6 +33,9 @@ public sealed class SarifReportWriterTests
 
     [Fact]
     public Task Removed() => VerifyJson(Serialize(Fixtures.Result(new Removed())));
+
+    [Fact]
+    public Task RuntimeChangedDivergent() => VerifyJson(Serialize(Fixtures.Result(new Divergent(RuntimeChangedCounterexample()))));
 
     [Fact]
     public void ResultWithALocationCarriesAPhysicalLocation()
@@ -94,10 +98,10 @@ public sealed class SarifReportWriterTests
     }
 
     [Fact]
-    public void ToolDriverListsAllFiveRulesInOrder()
+    public void ToolDriverListsAllSixRulesInOrder()
     {
         SarifLog log = SarifReportWriter.Write([]);
-        Assert.Equal(["EQ001", "EQ002", "EQ003", "EQ004", "EQ005"], log.Runs[0].Tool.Driver.Rules.Select(static r => r.Id), StringComparer.Ordinal);
+        Assert.Equal(["EQ001", "EQ002", "EQ003", "EQ004", "EQ005", "EQ006"], log.Runs[0].Tool.Driver.Rules.Select(static r => r.Id), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -117,6 +121,27 @@ public sealed class SarifReportWriterTests
 
         Assert.Equal(model, result.GetProperty<string>("model"));
         Assert.Contains(model, result.Message.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeChangedDivergentResultIsEQ006WithHelpUriAndReasonInTheMessage()
+    {
+        SarifLog log = SarifReportWriter.Write([Fixtures.Result(new Divergent(RuntimeChangedCounterexample()))]);
+        Result result = log.Runs[0].Results[0];
+
+        Assert.Equal("EQ006", result.RuleId);
+        Assert.Equal(FailureLevel.Error, result.Level);
+        Assert.Equal(ResultKind.Fail, result.Kind);
+        Assert.Equal("https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0", result.GetProperty<string>("helpUri"));
+        Assert.Contains("https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0", result.Message.Text, StringComparison.Ordinal);
+        Assert.Contains("randomized", result.Message.Text, StringComparison.Ordinal);
+    }
+
+    private static Counterexample RuntimeChangedCounterexample()
+    {
+        CallIdentity flagged = new("System.String::GetHashCode()", RuntimeChanged: true);
+        IrCallRecord record = new(flagged, []);
+        return Fixtures.Counterexample() with { Old = Fixtures.Run() with { Trace = [record] } };
     }
 
     [Fact]

@@ -65,6 +65,15 @@ public sealed class ConfigEqualityTests
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
     }
 
+    [Fact]
+    public void EquivConfigsWithTheSameSuppressRuntimeChangesEntriesAreEqualEvenAsSeparatelyBuiltArrays()
+    {
+        EquivConfig a = new(RenameMap.Empty, Map(), 3, 5000) { SuppressRuntimeChanges = ["System.String::IndexOf("] };
+        EquivConfig b = new(RenameMap.Empty, Map(), 3, 5000) { SuppressRuntimeChanges = ["System.String::IndexOf("] };
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
     [Theory]
     [MemberData(nameof(UnequalConfigs), DisableDiscoveryEnumeration = true)]
     public void EquivConfigsThatDifferInAnyFieldAreUnequal(EquivConfig a, EquivConfig b)
@@ -81,6 +90,7 @@ public sealed class ConfigEqualityTests
             { baseline, baseline with { CallIdentityRenames = Map(("A", "B")) } },
             { baseline, baseline with { Bound = 4 } },
             { baseline, baseline with { TimeoutMs = 6000 } },
+            { baseline, baseline with { SuppressRuntimeChanges = ["System.String::IndexOf("] } },
         };
     }
 

@@ -20,4 +20,7 @@ public static class EquivConfigDiagnosticIds
 
     /// <summary>A rename map repeats a key; the JSON parser keeps only the last occurrence.</summary>
     public const string DuplicateRenameEntry = "CFG006";
+
+    /// <summary>"suppressRuntimeChanges" is present but not an array of non-empty strings.</summary>
+    public const string InvalidSuppressRuntimeChangesEntry = "CFG007";
 }

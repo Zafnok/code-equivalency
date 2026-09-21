@@ -128,4 +128,41 @@ public sealed class EquivConfigLoaderTests
     {
         Assert.Throws<ArgumentNullException>(static () => EquivConfigLoader.Load(null!));
     }
+
+    [Fact]
+    public void Config_ParsesSuppressRuntimeChanges()
+    {
+        EquivConfigResult result = EquivConfigLoader.Load("""{ "suppressRuntimeChanges": ["System.String::IndexOf(", "System.String::GetHashCode("] }""");
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["System.String::IndexOf(", "System.String::GetHashCode("], result.Config.SuppressRuntimeChanges);
+    }
+
+    [Fact]
+    public void MissingSuppressRuntimeChangesYieldsAnEmptyArray()
+    {
+        EquivConfigResult result = EquivConfigLoader.Load("{}");
+        Assert.Empty(result.Config.SuppressRuntimeChanges);
+    }
+
+    [Theory]
+    [InlineData("""{ "suppressRuntimeChanges": "nope" }""")]
+    [InlineData("""{ "suppressRuntimeChanges": [""] }""")]
+    [InlineData("""{ "suppressRuntimeChanges": ["   "] }""")]
+    [InlineData("""{ "suppressRuntimeChanges": [5] }""")]
+    public void InvalidSuppressRuntimeChangesEntryFallsBackToEmptyAndIsReported(string json)
+    {
+        EquivConfigResult result = EquivConfigLoader.Load(json);
+        Assert.Equal([EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry], result.Diagnostics.Select(static d => d.Id), StringComparer.Ordinal);
+        Assert.Empty(result.Config.SuppressRuntimeChanges);
+    }
+
+    [Fact]
+    public void ASuppressRuntimeChangesEntryThatIsValidIsKeptEvenWhenAnotherEntryIsInvalid()
+    {
+        EquivConfigResult result = EquivConfigLoader.Load("""{ "suppressRuntimeChanges": ["System.String::IndexOf(", ""] }""");
+
+        Assert.Equal([EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry], result.Diagnostics.Select(static d => d.Id), StringComparer.Ordinal);
+        Assert.Equal(["System.String::IndexOf("], result.Config.SuppressRuntimeChanges);
+    }
 }
