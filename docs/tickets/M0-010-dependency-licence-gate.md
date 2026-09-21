@@ -1,5 +1,5 @@
 # M0-010 Dependency licence gate and generated third-party notices
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, high effort.
 Depends on: M0-009
@@ -69,3 +69,87 @@ read a bundled `licenses/LICENSE.txt` (the form `dotnet-sonarscanner` uses, wher
 says `<license type="file">` rather than an SPDX expression), prefer a small first-party script
 over bending a tool that cannot see the real licence — a gate that silently reports "Unknown"
 for the one LGPL package in the tree is worse than no gate.
+
+- Decision: which candidate tool to adopt -> `nuget-license` (Apache-2.0, dotnet tool). Alternatives:
+  `dotnet-project-licenses`, a fully first-party nuspec reader. Rule: 1 (mirrors the consumer —
+  it restores the same `project.assets.json`/nuspec data our lock files already pin, and its
+  `--override-package-information`/file-license handling is the closest fit to reading the real
+  file rather than a hardcoded table).
+- Decision: package enumeration scope -> run `nuget-license -i Equiv.slnx -t` for every package
+  reachable from a `packages.lock.json` (src, tests, tools — the literal AC1 scope), then read
+  two more sources directly by nuspec lookup since neither has a lock file: `.config/dotnet-tools.json`
+  local tools (`dotnet-stryker`, `dotnet-sonarscanner`) and the direct `PackageReference`s in
+  `samples/webapi-basic/**/*.csproj` (isolated from the root build, M1-001). Alternatives: only
+  scan lock files and leave the ADR 0017 exceptions unverified; teach the tool to restore samples
+  via MSBuild. Rule: 1 (mirrors what ADR 0002 already tracks as three separate buckets).
+- Decision: licence-resolved signal -> treat `nuget-license`'s per-package `LicenseInformationOrigin
+  == 0` (empirically confirmed as the SPDX-`<license type="expression">` case for all 69 packages
+  in the tree that declare one) as machine-resolved; every other value requires a matching
+  `policy.json` exception or the run fails (AC5). Alternatives: parse nuspecs first-party and skip
+  the tool's own classification; hardcode the enum's other member names from decompilation.
+  Rule: 3 (pinned by a fixture test with literal origin values, not by trusting undocumented
+  enum names).
+- Decision: policy file shape -> flat JSON `{ "allowedLicenses": string[], "exceptions":
+  [{ "packageId": string, "licence": string, "reason": string }] }`. An exception matches by
+  package id only (not id+version); its `licence` is trusted once matched, and a missing/blank
+  `reason` is a hard error before any package is evaluated. Alternatives: version-scoped exception
+  keys; separate allow/deny files mirroring `tools/sonar-triage/policy.jsonc`'s richer per-rule
+  shape. Rule: 4 (smallest schema that AC2 and AC5's five test cases need).
+- Decision: notices section (AC7) derivation -> a package is "redistributed" if it appears in a
+  `src/*/packages.lock.json` and is not one of the two packages `Directory.Build.props` marks
+  `PrivateAssets="All"` for every project (`MinVer`, `Meziantou.Analyzer`, read from that file,
+  not hardcoded); "samples only" if it is a direct reference in `samples/webapi-basic/**/*.csproj`
+  and not already redistributed; everything else reachable (tests, tools, the two local tools) is
+  "build-and-test-only". Alternatives: invoke MSBuild per-project to ask what each project
+  actually references. Rule: 1 (mirrors the three sections the hand-written file already has).
+- Decision: tool architecture -> a C# console app at `tools/licence-check/`, mirroring
+  `tools/check-coverage`'s shape (`Program.cs` doing I/O, pure classes for policy evaluation and
+  notices rendering, an xUnit test project with Verify snapshots), not a PowerShell script
+  mirroring `tools/sonar-triage/`. Alternatives: PowerShell script matching sonar-triage's literal
+  shape. Rule: 3 (the ticket's own Tests section asks for a policy-evaluation test project and a
+  snapshot-tested renderer, which is the check-coverage.Tests pattern, not sonar-triage's).
+
+### Blocked: the gate fails on an already-in-tree dependency (Out of scope, item 1)
+
+Everything below is implemented and independently green: `tools/licence-check` builds, its own
+20-case test suite passes (`LicenceGateTests` covers all five required scenarios,
+`ThirdPartyNoticesRendererTests` has two Verify snapshots), `dotnet format --verify-no-changes`
+is clean, and `./build.ps1` runs the new `licence-check` step through restore/build/format/test/
+check-coverage without incident. Running it for real against this repo's own lock files
+(`./build.ps1`, no flags) fails at the new `licence-check` step — the only step that fails — on
+one package already in the tree before this ticket:
+
+```
+licence-check: 1 package(s) failed the dependency licence gate:
+  - Microsoft.Diagnostics.Tracing.EventRegister 1.1.28: licence could not be determined
+    (nuspec did not expose an SPDX expression; found
+    'http://go.microsoft.com/fwlink/?LinkId=329770') and no policy exception declares it.
+```
+
+What this is: `Microsoft.Diagnostics.Tracing.EventRegister` 1.1.28 is a transitive dependency of
+`Sarif.Sdk` 5.7.0 (`Sarif.Sdk` -> `Microsoft.Diagnostics.Tracing.EventRegister` directly, exclude=
+"Build,Analyzers", `.NETStandard2.0` dependency group — confirmed in the restored
+`sarif.sdk.nuspec`), and so appears in `src/Equiv.Core/packages.lock.json` and
+`src/Equiv.Cli/packages.lock.json`: both redistributed projects. Its own nuspec
+(`microsoft.diagnostics.tracing.eventregister.nuspec`, `minClientVersion="2.5"`, an old-style
+package that predates SPDX `<license>` expressions) has no `<license>` element at all, only
+`<licenseUrl>http://go.microsoft.com/fwlink/?LinkId=329770</licenseUrl>` and
+`requireLicenseAcceptance="true"`. It bundles a `License-Stable.rtf` at the package root, not
+wired to the nuspec's licence metadata by any convention `nuget-license` or a first-party nuspec
+reader can follow automatically. Nothing in ADR 0002, ADR 0017 or `THIRD-PARTY-NOTICES.md`
+mentions this package today — it has been in the dependency closure, undocumented, since M0-009
+pinned `Sarif.Sdk` 5.7.0.
+
+This is exactly the situation the Out of scope section calls out ("If the gate fails on something
+already in the tree, record it in Notes and stop; swapping a package is its own ticket"), and
+sibling-scoped to the same paragraph: neither guessing this package's real licence from the
+`fwlink` redirect nor swapping/pinning a different `Sarif.Sdk` version to drop the dependency is
+something this ticket should decide unilaterally — the whole point of the gate is that a licence
+claim here needs a human to actually look, not a script to assume.
+
+**Status: stopping here.** `./build.ps1 -Integration` is red on `main` plus this branch's changes
+for the reason above (AC9 cannot hold), so no PR is opened. Everything else — AC1 through AC8 —
+holds and is demonstrated by the test suite and by every other `./build.ps1` step passing. Next
+step is a human decision (new ADR 0002/0017 exception with a real answer for what
+`Microsoft.Diagnostics.Tracing.EventRegister`'s licence actually is, or drop it by changing how
+`Sarif.Sdk` is consumed) before this ticket can land.
