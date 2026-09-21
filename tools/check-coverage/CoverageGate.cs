@@ -20,14 +20,14 @@ internal static class CoverageGate
         [
             .. assemblies.Values
                 .Where(a => srcAssemblyNames.Contains(a.AssemblyName))
-                .OrderBy(a => a.AssemblyName, StringComparer.Ordinal)
+                .OrderBy(a => a.AssemblyName, StringComparer.Ordinal),
         ];
 
         List<string> missingAssemblyNames =
         [
             .. srcAssemblyNames
                 .Where(name => !assemblies.ContainsKey(name))
-                .OrderBy(name => name, StringComparer.Ordinal)
+                .OrderBy(name => name, StringComparer.Ordinal),
         ];
 
         StringBuilder report = new();

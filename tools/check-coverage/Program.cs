@@ -10,7 +10,7 @@ if (!Directory.Exists(options.TestResultsDir))
 
 List<string> xmlContents =
 [
-    .. CoberturaReportDiscovery.FindReportFiles(options.TestResultsDir).Select(File.ReadAllText)
+    .. CoberturaReportDiscovery.FindReportFiles(options.TestResultsDir).Select(File.ReadAllText),
 ];
 
 IReadOnlyDictionary<string, AssemblyCoverage> assemblies = CoberturaCoverageReader.Merge(xmlContents);
