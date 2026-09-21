@@ -57,7 +57,7 @@ public sealed class IrValueTests
     [Fact]
     public void ScalarValuesReportTheirType()
     {
-        Assert.Equal(new IrBool(), new IrBoolValue(true).Type);
+        Assert.Equal(new IrBool(), new IrBoolValue(Value: true).Type);
         Assert.Equal(new IrSort("S"), new IrSortValue("S", 3).Type);
         Assert.Equal(BvToBool, Map().Type);
     }
@@ -65,27 +65,27 @@ public sealed class IrValueTests
     [Fact]
     public void MapReadsTheDefaultUnlessWritten()
     {
-        IrMapValue map = Map().Write(new IrBitVecValue(8, 1), new IrBoolValue(true));
-        Assert.Equal(new IrBoolValue(true), map.Read(new IrBitVecValue(8, 1)));
-        Assert.Equal(new IrBoolValue(false), map.Read(new IrBitVecValue(8, 2)));
+        IrMapValue map = Map().Write(new IrBitVecValue(8, 1), new IrBoolValue(Value: true));
+        Assert.Equal(new IrBoolValue(Value: true), map.Read(new IrBitVecValue(8, 1)));
+        Assert.Equal(new IrBoolValue(Value: false), map.Read(new IrBitVecValue(8, 2)));
     }
 
     [Fact]
     public void MapEqualityIsExtensional()
     {
         IrMapValue empty = Map();
-        IrMapValue writtenWithDefault = empty.Write(new IrBitVecValue(8, 1), new IrBoolValue(false));
-        IrMapValue written = empty.Write(new IrBitVecValue(8, 1), new IrBoolValue(true));
+        IrMapValue writtenWithDefault = empty.Write(new IrBitVecValue(8, 1), new IrBoolValue(Value: false));
+        IrMapValue written = empty.Write(new IrBitVecValue(8, 1), new IrBoolValue(Value: true));
 
         Assert.Equal(empty, writtenWithDefault);
         Assert.Equal(writtenWithDefault, empty);
         Assert.Equal(empty.GetHashCode(), writtenWithDefault.GetHashCode());
         Assert.NotEqual(empty, written);
         Assert.NotEqual(written, empty);
-        Assert.NotEqual(empty, empty with { Default = new IrBoolValue(true) });
+        Assert.NotEqual(empty, empty with { Default = new IrBoolValue(Value: true) });
         Assert.NotEqual(empty, empty with { MapType = new IrMap(new IrBitVec(16), new IrBool()) });
         Assert.False(empty.Equals((IrMapValue?)null));
     }
 
-    private static IrMapValue Map() => new(BvToBool, new IrBoolValue(false), []);
+    private static IrMapValue Map() => new(BvToBool, new IrBoolValue(Value: false), []);
 }

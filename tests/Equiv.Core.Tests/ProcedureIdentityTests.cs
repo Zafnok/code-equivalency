@@ -29,7 +29,7 @@ public sealed class ProcedureIdentityTests
     [Fact]
     public void NotEqualToNull()
     {
-        Assert.False(new ProcedureIdentity("T::M()").Equals(null));
+        Assert.False(new ProcedureIdentity("T::M()").Equals(other: null));
     }
 
     [Fact]
