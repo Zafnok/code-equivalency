@@ -20,7 +20,7 @@ internal static class NoticesChecker
 
         if (string.Equals(Normalize(existingNotices), Normalize(renderedNotices), StringComparison.Ordinal))
         {
-            return new NoticesDecision(NoticesOutcome.UpToDate, null);
+            return new NoticesDecision(NoticesOutcome.UpToDate, Message: null);
         }
 
         return fix

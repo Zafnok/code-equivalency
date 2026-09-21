@@ -66,8 +66,8 @@ public sealed class FixtureTests
     {
         Divergent divergent = Assert.IsType<Divergent>(Verify(Fixture.Load("repeated-call")));
 
-        Assert.Equal(new IrReturned(new IrBoolValue(false)), divergent.Counterexample.Old.Outcome);
-        Assert.Equal(new IrReturned(new IrBoolValue(true)), divergent.Counterexample.New.Outcome);
+        Assert.Equal(new IrReturned(new IrBoolValue(Value: false)), divergent.Counterexample.Old.Outcome);
+        Assert.Equal(new IrReturned(new IrBoolValue(Value: true)), divergent.Counterexample.New.Outcome);
     }
 
     [Fact]
