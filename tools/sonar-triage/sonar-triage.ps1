@@ -33,6 +33,10 @@ param(
     # A file left with fewer than this many findings rolls up into its area's long-tail batch.
     [int]$FileBatchMin = 2,
 
+    # No issue lists more findings than this. A bigger batch becomes a parent issue with one
+    # sub-issue per part, so each fix session gets a batch it can finish (ADR 0022).
+    [int]$MaxFindingsPerIssue = 25,
+
     [string]$Label = 'sonar'
 )
 
@@ -289,7 +293,100 @@ function Group-Finding {
                 Findings = @($group.Group)
             })
     }
-    return $batches
+    return @($batches | ForEach-Object { Split-Batch $_ })
+}
+
+# Directory of every path in common, or the path itself when there is only one.
+function Get-CommonScope {
+    param([string[]]$Paths)
+    if ($Paths.Count -eq 1) { return $Paths[0] }
+    $first = $Paths[0] -split '/'
+    $depth = $first.Count - 1
+    foreach ($path in $Paths) {
+        $segments = $path -split '/'
+        $i = 0
+        while ($i -lt $depth -and $i -lt $segments.Count - 1 -and $segments[$i] -eq $first[$i]) { $i++ }
+        $depth = $i
+    }
+    if ($depth -ge 2) { return ($first[0..($depth - 1)] -join '/') + '/' }
+    # Spans projects: name them, since 'tests/' alone says nothing about where to look.
+    $projects = @($Paths | ForEach-Object { (@($_ -split '/') | Select-Object -First 2) -join '/' } | Select-Object -Unique)
+    if ($projects.Count -le 3) { return $projects -join ', ' }
+    return "$($projects[0]) and $($projects.Count - 1) more"
+}
+
+# Cuts findings into parts of at most -MaxFindingsPerIssue, following the directory tree so a
+# part is a coherent area and a fixed part leaves its neighbours' membership alone. Small
+# siblings are packed back together in path order; a single file over the cap is cut by line.
+function Get-FindingPart {
+    param([object[]]$Findings, [int]$Depth)
+    $parts = [System.Collections.Generic.List[object]]::new()
+    if ($Findings.Count -le $MaxFindingsPerIssue) {
+        $parts.Add([pscustomobject]@{ Findings = $Findings; Chunk = 0 })
+        return $parts
+    }
+    if (@($Findings | Select-Object -ExpandProperty Path -Unique).Count -eq 1) {
+        $sorted = @($Findings | Sort-Object Line)
+        $chunks = [math]::Ceiling($sorted.Count / $MaxFindingsPerIssue)
+        $size = [math]::Ceiling($sorted.Count / $chunks)
+        for ($i = 0; $i -lt $chunks; $i++) {
+            $parts.Add([pscustomobject]@{ Findings = @($sorted | Select-Object -Skip ($i * $size) -First $size); Chunk = $i + 1 })
+        }
+        return $parts
+    }
+    $children = [System.Collections.Generic.List[object]]::new()
+    $prefixOf = {
+        $segments = $_.Path -split '/'
+        $segments[0..[math]::Min($Depth, $segments.Count - 1)] -join '/'
+    }
+    foreach ($group in ($Findings | Group-Object $prefixOf | Sort-Object Name)) {
+        foreach ($child in @(Get-FindingPart @($group.Group) ($Depth + 1))) { $children.Add($child) }
+    }
+    foreach ($child in $children) {
+        $last = if ($parts.Count -gt 0) { $parts[$parts.Count - 1] } else { $null }
+        if ($null -ne $last -and $last.Chunk -eq 0 -and $child.Chunk -eq 0 -and
+            $last.Findings.Count + $child.Findings.Count -le $MaxFindingsPerIssue) {
+            $parts[$parts.Count - 1] = [pscustomobject]@{ Findings = @($last.Findings) + @($child.Findings); Chunk = 0 }
+        }
+        else { $parts.Add($child) }
+    }
+    return $parts
+}
+
+# A batch within the cap passes through. A bigger one becomes a parent ('umbrella') issue that
+# keeps the batch's key, so the issue already filed for it becomes the parent, plus one part
+# issue per slice keyed '<parent key>@<first path>[#<chunk>]'.
+function Split-Batch {
+    param($Batch)
+    if ($Batch.Findings.Count -le $MaxFindingsPerIssue) { return $Batch }
+    $slices = @(Get-FindingPart @($Batch.Findings | Sort-Object Path, Line) 0)
+    $parts = foreach ($slice in $slices) {
+        $sorted = @($slice.Findings | Sort-Object Path, Line)
+        $scope = Get-CommonScope @($sorted | Select-Object -ExpandProperty Path -Unique)
+        $key = "$($Batch.Key)@$($sorted[0].Path)"
+        if ($slice.Chunk -gt 0) {
+            $key += "#$($slice.Chunk)"
+            $scope += " (part $($slice.Chunk))"
+        }
+        [pscustomobject]@{
+            Key       = $key
+            Kind      = $Batch.Kind
+            Rule      = $Batch.Rule
+            Title     = "$($Batch.Title) [$scope, $(Format-Count $sorted.Count 'finding')]"
+            Findings  = $sorted
+            ParentKey = $Batch.Key
+            Scope     = $scope
+        }
+    }
+    return [pscustomobject]@{
+        Key      = $Batch.Key
+        Kind     = 'umbrella'
+        BaseKind = $Batch.Kind
+        Rule     = $Batch.Rule
+        Title    = $Batch.Title
+        Findings = $Batch.Findings
+        Parts    = @($parts)
+    }
 }
 
 # ---------------------------------------------------------------- rendering
@@ -304,8 +401,94 @@ function Get-BatchSeverity {
     return $ranked[0].Severity
 }
 
+function Get-PinnedRule {
+    param($Batch)
+    return @($Batch.Findings |
+            Where-Object { $_.Rule -like 'external_roslyn:*' } |
+            Select-Object -ExpandProperty Rule -Unique |
+            ForEach-Object { $_ -replace '^external_roslyn:', '' })
+}
+
+function Format-PinList {
+    param([string[]]$Rules)
+    return ($Rules | ForEach-Object { "``dotnet_diagnostic.$_.severity = error``" }) -join ', '
+}
+
+function Add-RuleLink {
+    param($Lines, [string]$Rule)
+    $encoded = [uri]::EscapeDataString($Rule)
+    $Lines.Add("- In SonarCloud: $HostUrl/project/issues?id=$ProjectKey&rules=$encoded&resolved=false")
+    if ($Rule -like 'csharpsquid:S*') {
+        $rspec = $Rule -replace '^csharpsquid:S', ''
+        $Lines.Add("- Rule description: https://rules.sonarsource.com/csharp/RSPEC-$rspec/")
+    }
+}
+
+# The parent of a split batch. It carries the decision and the part list, never findings:
+# the findings live in the sub-issues, where a fix session picks them up.
+function Format-UmbrellaBody {
+    param($Batch)
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("<!-- $MarkerPrefix$($Batch.Key) -->")
+    $lines.Add('')
+    $lines.Add('_Filed by `tools/sonar-triage/sonar-triage.ps1`. Parent of a split batch: see `docs/adr/0016-sonar-issue-triage.md` and `docs/adr/0022-sonar-batch-cap.md`._')
+    $lines.Add('')
+    $fileCount = @($Batch.Findings | Select-Object -ExpandProperty Path -Unique).Count
+    $lines.Add('## Goal')
+    $lines.Add('')
+    if ($Batch.BaseKind -eq 'rule') {
+        $meta = Get-RuleMetadata $Batch.Rule
+        $lines.Add("Clear every ``$($Batch.Rule)`` finding in the project: _$($meta.Name)_.")
+    }
+    else {
+        $lines.Add("Clear the SonarCloud findings batched as ``$($Batch.Key)``.")
+    }
+    $lines.Add("$($Batch.Findings.Count) findings across $fileCount files: more than one session should take on, so the")
+    $lines.Add("work is split into $($Batch.Parts.Count) sub-issues of at most $MaxFindingsPerIssue findings each. One sub-issue, one PR.")
+    $lines.Add('')
+    if ($Batch.BaseKind -eq 'rule') {
+        Add-RuleLink $lines $Batch.Rule
+        $lines.Add('')
+        $lines.Add('## The decision is rule-wide')
+        $lines.Add('')
+        $lines.Add('Fix or accept is decided once, here, and every part follows it. The first part to be worked')
+        $lines.Add('settles the shape of the fix; later parts copy it. If the rule turns out to be wrong for this')
+        $lines.Add('repo, one `tools/sonar-triage/policy.jsonc` entry accepts it and the next triage run closes')
+        $lines.Add('every part at once. Record the decision as a comment on this issue so every part session sees it.')
+        $lines.Add('')
+    }
+    $lines.Add('## Parts')
+    $lines.Add('')
+    $lines.Add('| Scope | Findings | Files |')
+    $lines.Add('|---|---|---|')
+    foreach ($part in $Batch.Parts) {
+        $partFiles = @($part.Findings | Select-Object -ExpandProperty Path -Unique).Count
+        $lines.Add("| ``$($part.Scope)`` | $($part.Findings.Count) | $partFiles |")
+    }
+    $lines.Add('')
+    $lines.Add('## Acceptance criteria')
+    $lines.Add('')
+    $lines.Add('1. Every sub-issue is closed.')
+    $pins = @(Get-PinnedRule $Batch)
+    if ($pins.Count -gt 0) {
+        $lines.Add("2. The PR that closes the **last** open sub-issue also pins $(Format-PinList $pins) in")
+        $lines.Add('   `.editorconfig` and closes this issue. No earlier part pins it: the build would fail on the')
+        $lines.Add('   parts not yet fixed.')
+    }
+    else {
+        $lines.Add('2. The PR that closes the last open sub-issue also closes this issue.')
+    }
+    $lines.Add('')
+    $lines.Add('## How to fix')
+    $lines.Add('')
+    $lines.Add('Do not work this issue directly. Point a session at any open sub-issue and say `use equiv-sonar-fix`.')
+    return ($lines -join "`n")
+}
+
 function Format-IssueBody {
     param($Batch)
+    if ($Batch.Kind -eq 'umbrella') { return Format-UmbrellaBody $Batch }
+    $parentKey = Get-Prop $Batch 'ParentKey'
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("<!-- $MarkerPrefix$($Batch.Key) -->")
     $lines.Add('')
@@ -315,17 +498,20 @@ function Format-IssueBody {
     $fileCount = @($Batch.Findings | Select-Object -ExpandProperty Path -Unique).Count
     $lines.Add('## Goal')
     $lines.Add('')
-    if ($Batch.Kind -eq 'rule') {
+    if ($parentKey) {
+        $lines.Add("One part of the ``$parentKey`` batch, which is too big for one PR. Clear the")
+        $lines.Add("$($Batch.Findings.Count) findings below, across $fileCount files under ``$($Batch.Scope)``. The parent issue")
+        $lines.Add('(shown by GitHub above this one) holds the rule-wide decision: follow it, and match the shape')
+        $lines.Add('of fix that already-merged parts used.')
+        $lines.Add('')
+        if ($Batch.Rule) { Add-RuleLink $lines $Batch.Rule }
+    }
+    elseif ($Batch.Kind -eq 'rule') {
         $meta = Get-RuleMetadata $Batch.Rule
         $lines.Add("Clear every ``$($Batch.Rule)`` finding in the project: _$($meta.Name)_.")
         $lines.Add("$($Batch.Findings.Count) findings across $fileCount files. One rule, one decision, one PR.")
         $lines.Add('')
-        $encoded = [uri]::EscapeDataString($Batch.Rule)
-        $lines.Add("- In SonarCloud: $HostUrl/project/issues?id=$ProjectKey&rules=$encoded&resolved=false")
-        if ($Batch.Rule -like 'csharpsquid:S*') {
-            $rspec = $Batch.Rule -replace '^csharpsquid:S', ''
-            $lines.Add("- Rule description: https://rules.sonarsource.com/csharp/RSPEC-$rspec/")
-        }
+        Add-RuleLink $lines $Batch.Rule
     }
     elseif ($Batch.Kind -eq 'file') {
         $lines.Add("Clear all $($Batch.Findings.Count) SonarCloud findings in ``$(@($Batch.Findings)[0].Path)``.")
@@ -353,14 +539,16 @@ function Format-IssueBody {
     $lines.Add('1. Every finding above is either fixed, or added to `tools/sonar-triage/policy.jsonc` with')
     $lines.Add('   `verdict: accept` and a reason citing an ADR or a ticket. A finding that no longer')
     $lines.Add('   reproduces on `HEAD` is called out in the PR body, not silently dropped.')
-    $externalRules = @($Batch.Findings |
-            Where-Object { $_.Rule -like 'external_roslyn:*' } |
-            Select-Object -ExpandProperty Rule -Unique |
-            ForEach-Object { $_ -replace '^external_roslyn:', '' })
+    $externalRules = @(Get-PinnedRule $Batch)
     $n = 2
-    if ($externalRules.Count -gt 0) {
-        $pins = ($externalRules | ForEach-Object { "``dotnet_diagnostic.$_.severity = error``" }) -join ', '
-        $lines.Add("$n. ``.editorconfig`` pins $pins, so the build now fails on what was")
+    if ($externalRules.Count -gt 0 -and $parentKey) {
+        $lines.Add("$n. Only if this is the **last** open sub-issue of its parent: ``.editorconfig`` pins")
+        $lines.Add("   $(Format-PinList $externalRules) and the PR also closes the parent. Otherwise do")
+        $lines.Add('   not pin: the build would fail on the parts not yet fixed.')
+        $n++
+    }
+    elseif ($externalRules.Count -gt 0) {
+        $lines.Add("$n. ``.editorconfig`` pins $(Format-PinList $externalRules), so the build now fails on what was")
         $lines.Add('   previously a silent suggestion and the finding cannot come back.')
         $n++
     }
@@ -397,29 +585,38 @@ function Get-ExistingIssue {
     return $existing
 }
 
-# Creates or edits the one issue for a batch. Returns 'Created', 'Edited' or 'Unchanged'.
+# Creates or edits the one issue for a batch. Returns its status ('Created', 'Edited' or
+# 'Unchanged') and its number, which is 0 for an issue a dry run would create.
 function Sync-BatchIssue {
     param($Batch, $Current)
     $body = Format-IssueBody $Batch
+    $indent = if (Get-Prop $Batch 'ParentKey') { '    ' } else { '' }
     if ($null -eq $Current) {
-        Write-Host "  create  $($Batch.Title)" -ForegroundColor Green
+        Write-Host "  create  $indent$($Batch.Title)" -ForegroundColor Green
         $severityLabel = 'sonar:' + (Get-BatchSeverity $Batch).ToLowerInvariant()
+        $number = 0
         if ($Apply) {
-            Invoke-GhWithBodyFile $body @('issue', 'create', '--title', $Batch.Title,
+            $url = Invoke-GhWithBodyFile $body @('issue', 'create', '--title', $Batch.Title,
                 '--label', $Label, '--label', 'tech-debt', '--label', $severityLabel)
+            $match = [regex]::Match(($url -join "`n"), '/issues/(\d+)')
+            if (-not $match.Success) { throw "gh issue create printed no issue URL: $url" }
+            $number = [int]$match.Groups[1].Value
         }
-        return 'Created'
+        return [pscustomobject]@{ Status = 'Created'; Number = $number }
     }
-    if ((([string](Get-Prop $Current 'body' '')) -replace "`r`n", "`n").TrimEnd() -eq $body.TrimEnd()) { return 'Unchanged' }
-    Write-Host "  edit    #$($Current.number)  $($Batch.Title)" -ForegroundColor Yellow
-    if ($Apply) { Invoke-GhWithBodyFile $body @('issue', 'edit', [string]$Current.number) }
-    return 'Edited'
+    $number = [int]$Current.number
+    $sameBody = (([string](Get-Prop $Current 'body' '')) -replace "`r`n", "`n").TrimEnd() -eq $body.TrimEnd()
+    $sameTitle = [string](Get-Prop $Current 'title' '') -eq $Batch.Title
+    if ($sameBody -and $sameTitle) { return [pscustomobject]@{ Status = 'Unchanged'; Number = $number } }
+    Write-Host "  edit    #$number  $indent$($Batch.Title)" -ForegroundColor Yellow
+    if ($Apply) { Invoke-GhWithBodyFile $body @('issue', 'edit', [string]$number, '--title', $Batch.Title) | Out-Null }
+    return [pscustomobject]@{ Status = 'Edited'; Number = $number }
 }
 
 function Invoke-GhWithBodyFile {
     param([string]$Body, [string[]]$Arguments)
     $file = Write-IssueBodyFile $Body
-    try { Invoke-Gh ($Arguments + @('--body-file', $file)) | Out-Null }
+    try { return Invoke-Gh ($Arguments + @('--body-file', $file)) }
     finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
 }
 
@@ -440,14 +637,49 @@ function Close-StaleIssue {
     return $closed
 }
 
+# Makes every part a GitHub sub-issue of its parent. Linking is idempotent: existing links are
+# read first, so a settled run links nothing. Returns how many links it made (or would make).
+function Sync-SubIssue {
+    param([object[]]$Batches, [hashtable]$Numbers)
+    $linked = 0
+    foreach ($parent in @($Batches | Where-Object { $_.Kind -eq 'umbrella' })) {
+        $parentNumber = $Numbers[$parent.Key]
+        $current = @()
+        if ($parentNumber -gt 0) {
+            $current = @(Invoke-Gh @('api', "repos/{owner}/{repo}/issues/$parentNumber/sub_issues",
+                    '--paginate', '--jq', '.[].number') | ForEach-Object { ([string]$_).Trim() })
+        }
+        foreach ($part in $parent.Parts) {
+            $childNumber = $Numbers[$part.Key]
+            if ($childNumber -gt 0 -and $current -contains [string]$childNumber) { continue }
+            $parentLabel = if ($parentNumber -gt 0) { "#$parentNumber" } else { 'new parent' }
+            Write-Host "  link    $($part.Title) -> $parentLabel" -ForegroundColor Magenta
+            if ($Apply) {
+                # The sub-issues API takes the issue's database id, not its number.
+                $id = ([string](Invoke-Gh @('api', "repos/{owner}/{repo}/issues/$childNumber", '--jq', '.id'))).Trim()
+                Invoke-Gh @('api', '--method', 'POST', "repos/{owner}/{repo}/issues/$parentNumber/sub_issues",
+                    '-F', "sub_issue_id=$id", '-F', 'replace_parent=true') | Out-Null
+            }
+            $linked++
+        }
+    }
+    return $linked
+}
+
 function Sync-GitHubIssue {
     param([object[]]$Batches)
     $existing = Get-ExistingIssue
     $counts = @{ Created = 0; Edited = 0; Unchanged = 0 }
-    foreach ($batch in $Batches) { $counts[(Sync-BatchIssue $batch $existing[$batch.Key])]++ }
+    $numbers = @{}
+    foreach ($batch in $Batches) {
+        $result = Sync-BatchIssue $batch $existing[$batch.Key]
+        $counts[$result.Status]++
+        $numbers[$batch.Key] = $result.Number
+    }
+    $linked = Sync-SubIssue $Batches $numbers
     $closed = Close-StaleIssue $existing $Batches
     return [pscustomobject]@{
-        Created = $counts.Created; Edited = $counts.Edited; Closed = $closed; Unchanged = $counts.Unchanged
+        Created = $counts.Created; Edited = $counts.Edited; Linked = $linked; Closed = $closed; Unchanged = $counts.Unchanged
     }
 }
 
@@ -508,17 +740,23 @@ function Invoke-Triage {
         else { $kept.Add($finding) }
     }
 
-    $batches = @(Group-Finding -Findings $kept.ToArray() | Sort-Object { -$_.Findings.Count })
+    $topLevel = @(Group-Finding -Findings $kept.ToArray() | Sort-Object { -$_.Findings.Count })
+    # A parent is synced before its parts, so it exists by the time they are linked to it.
+    $batches = @(foreach ($batch in $topLevel) {
+            $batch
+            if ($batch.Kind -eq 'umbrella') { $batch.Parts }
+        })
 
     Write-Host ''
-    Write-Host "fetched $($all.Count) / suppressed $($suppressed.Count) / batches $($batches.Count)"
+    Write-Host "fetched $($all.Count) / suppressed $($suppressed.Count) / batches $($topLevel.Count) / issues $($batches.Count)"
     if ($hotspots.Count -gt 0) {
         Write-Host "  (includes $($hotspots.Count) security hotspots awaiting review)" -ForegroundColor Yellow
     }
     Write-Host ''
     foreach ($batch in $batches) {
         $fileCount = @($batch.Findings | Select-Object -ExpandProperty Path -Unique).Count
-        Write-Host ('{0,5} in {1,3}   {2}' -f (Format-Count $batch.Findings.Count 'finding'), (Format-Count $fileCount 'file'), $batch.Key)
+        $indent = if (Get-Prop $batch 'ParentKey') { '    ' } else { '' }
+        Write-Host ('{0,5} in {1,3}   {2}{3}' -f (Format-Count $batch.Findings.Count 'finding'), (Format-Count $fileCount 'file'), $indent, $batch.Key)
     }
     if ($suppressed.Count -gt 0) {
         Write-Host ''
@@ -538,7 +776,7 @@ function Invoke-Triage {
     }
     $result = Sync-GitHubIssue -Batches $batches
     Write-Host ''
-    Write-Host "created $($result.Created) / edited $($result.Edited) / closed $($result.Closed) / unchanged $($result.Unchanged)"
+    Write-Host "created $($result.Created) / edited $($result.Edited) / linked $($result.Linked) / closed $($result.Closed) / unchanged $($result.Unchanged)"
 
     if ($PushResolutions) { Push-Resolution -Suppressed $suppressed.ToArray() }
 }

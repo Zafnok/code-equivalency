@@ -14,18 +14,24 @@ is the mechanical part.
 1. Dry run first, always:
    `./tools/sonar-triage/sonar-triage.ps1`
    It reads SonarCloud anonymously and writes nothing.
-2. Read the summary line — `fetched N / suppressed N / batches N` — and the create/edit/close
-   list under it. Three things deserve a pause:
+2. Read the summary line — `fetched N / suppressed N / batches N / issues N` — and the
+   create/edit/link/close list under it. Parts of a split batch are indented under their
+   parent. Four things deserve a pause:
    - **A batch you do not recognise.** New rule, or a rule that has spread. Decide its verdict
      (below) before filing it.
    - **An `edit` on a batch whose findings you expect to be unchanged.** Usually means a file
      moved or Sonar re-analysed; harmless, but check it is not a fix PR half-landed.
    - **A `close` you did not earn.** A batch closes when Sonar reports nothing in it. If no
      one fixed it, Sonar's analysis may have failed or `sonar.exclusions` may have changed.
+   - **Parts reshuffling.** When a batch is over `-MaxFindingsPerIssue` (25) it splits into a
+     parent and sub-issues along the directory tree (ADR 0022). Closing one part should leave
+     the others `unchanged`; a run that closes some parts and creates others with the same
+     files means the split is unstable, and that is a script bug.
 3. Settle any new verdict in `tools/sonar-triage/policy.jsonc`, then re-run the dry run.
 4. Sync: `./tools/sonar-triage/sonar-triage.ps1 -Apply`
-5. Re-run `-Apply` once more. It must report `created 0 / edited 0 / closed 0`. If it does
-   not, the body renderer is non-deterministic and that is a bug to fix, not to re-run past.
+5. Re-run `-Apply` once more. It must report `created 0 / edited 0 / linked 0 / closed 0`.
+   If it does not, the renderer or the split is non-deterministic and that is a bug to fix,
+   not to re-run past.
 
 ## Deciding a verdict
 
@@ -60,7 +66,8 @@ policy file settles, not during experimentation.
 
 ## Do not
 
-- File findings by hand. If the script would not file it, neither should you.
+- File findings by hand. If the script would not file it, neither should you. That includes
+  splitting a big issue by hand: lower `-MaxFindingsPerIssue` in a PR instead.
 - Edit an issue body by hand: the next `-Apply` overwrites it. Change the policy or the
   renderer instead.
 - Add `// NOSONAR` to make a batch disappear. That hides the reasoning at the call site;

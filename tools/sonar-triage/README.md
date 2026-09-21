@@ -29,6 +29,7 @@ and on `pwsh` 7; CI uses the latter.
 | `-PushResolutions` | off | Also mark policy-accepted findings Won't Fix in SonarCloud. Needs `SONAR_TOKEN` with issue-admin rights and prompts for confirmation, because it changes shared state. |
 | `-RuleBatchMinFiles` | 3 | A rule found in at least this many files becomes one rule-wide batch. |
 | `-FileBatchMin` | 2 | A file left with fewer findings than this rolls into its area's long-tail batch. |
+| `-MaxFindingsPerIssue` | 25 | No issue lists more findings than this; a bigger batch splits into a parent and sub-issues (below). |
 | `-PolicyPath` | `policy.jsonc` beside the script | Useful for testing a policy change without editing the real file. |
 | `-ProjectKey`, `-Organization`, `-HostUrl`, `-Label` | this repo's values | |
 
@@ -48,11 +49,19 @@ Hybrid, because the right unit of work differs by finding:
 3. A file left holding fewer than `-FileBatchMin` findings rolls into a **long-tail** batch
    for its top-level area (`src`, `tests`, `tools`), so the queue does not fill with
    one-finding issues.
+4. A batch over **`-MaxFindingsPerIssue`** findings is too big for one fix session, so it
+   splits (ADR 0022). The batch's own issue becomes a **parent** holding the rule-wide
+   decision and a table of parts; each part, at most the cap, is filed as its own issue and
+   linked as a GitHub **sub-issue** of the parent. Parts follow the directory tree (project,
+   then directory, then file), with small neighbours packed back together in path order and a
+   single file over the cap cut by line, so fixing one part leaves the others' membership
+   alone. A part's marker key is `<parent key>@<first path>[#<chunk>]`.
 
 Each issue body opens with `<!-- sonar-triage:v1 key=... -->`. That marker is the only state
 the script keeps: it re-reads open `sonar` issues, matches markers, and creates, edits or
-closes accordingly. Re-running is therefore idempotent, and renaming an issue's title or
-adding labels by hand never orphans a batch.
+closes accordingly. Re-running is therefore idempotent, and adding labels by hand never orphans a batch; a
+hand-edited title is put back. Sub-issue links are read before any is added, so a settled run
+reports `linked 0`.
 
 ## Saying a finding is wrong
 

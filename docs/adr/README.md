@@ -26,3 +26,4 @@ supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.
 | 0019 | Verdicts are modular, and an Equivalent names the callee pairs it assumed |
 | 0020 | A shipped catalogue of known-equivalent API pairs, applied visibly |
 | 0021 | Source-language parameters are shared by position, synthesised inputs by name |
+| 0022 | A Sonar batch over 25 findings splits into a parent issue and sub-issues |
