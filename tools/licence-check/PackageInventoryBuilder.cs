@@ -30,15 +30,14 @@ internal static class PackageInventoryBuilder
     {
         HashSet<string> ids = new(StringComparer.OrdinalIgnoreCase);
         XDocument document = XDocument.Load(directoryBuildPropsPath);
-        foreach (XElement reference in PackageReferences(document))
+        IEnumerable<XElement> privateAssetsAllReferences = PackageReferences(document)
+            .Where(static reference => string.Equals(reference.Attribute("PrivateAssets")?.Value, "All", StringComparison.OrdinalIgnoreCase));
+        foreach (XElement reference in privateAssetsAllReferences)
         {
-            if (string.Equals(reference.Attribute("PrivateAssets")?.Value, "All", StringComparison.OrdinalIgnoreCase))
+            string? id = reference.Attribute("Include")?.Value;
+            if (!string.IsNullOrEmpty(id))
             {
-                string? id = reference.Attribute("Include")?.Value;
-                if (!string.IsNullOrEmpty(id))
-                {
-                    ids.Add(id);
-                }
+                ids.Add(id);
             }
         }
 
