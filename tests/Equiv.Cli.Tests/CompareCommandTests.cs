@@ -305,6 +305,22 @@ public sealed class CompareCommandTests
     }
 
     [Fact]
+    public void Compare_BackendFailureIsRethrownNamingThePair()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+
+        // No canned verdict for the pair, so the fake backend throws KeyNotFoundException.
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => CompareCommand.Run(
+            legacy.Path, modern.Path, "equiv.sarif", null, null, "divergent", dryRun: false,
+            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+
+        Assert.StartsWith($"Verifying {PairIdentity.Value} against {PairIdentity.Value} failed: ", exception.Message, StringComparison.Ordinal);
+        Assert.IsType<KeyNotFoundException>(exception.InnerException);
+    }
+
+    [Fact]
     public void Compare_Exits4OnFrontendLoadException()
     {
         using TempFile legacy = new();

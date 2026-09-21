@@ -52,6 +52,13 @@ public static class IrGen
     /// <summary>As <see cref="Procedure"/> without loops, so every CFG is acyclic (the M3-001 encoder's domain).</summary>
     public static Gen<IrProcedure> AcyclicProcedure { get; } = Procedures(loops: false);
 
+    /// <summary>
+    /// An acyclic procedure and the same procedure with its source-language parameters renamed, which a
+    /// caller cannot tell apart (ADR 0021).
+    /// </summary>
+    public static Gen<(IrProcedure Original, IrProcedure Renamed)> AcyclicRenamedPair { get; } =
+        Programs(loops: false).Select(static p => (IrGenLowering.Lower(p), IrGenLowering.Lower(p, renamed: true)));
+
     /// <summary>One procedure per validator rule, each breaking exactly that rule.</summary>
     public static Gen<IrViolation> Violations { get; } =
         Gen.Select(Procedure, Gen.Int[0, 9], static (procedure, rule) => Violate(procedure, rule));
@@ -65,7 +72,8 @@ public static class IrGen
     }
 
     /// <summary>
-    /// Semantics-changing edits of <paramref name="procedure"/>: swap the operands of a
+    /// Semantics-changing edits of <paramref name="procedure"/>: swap the two bv32 parameters in the
+    /// signature only (a caller binds them by position, ADR 0021), swap the operands of a
     /// non-commutative operation, flip a branch, change a constant, insert an opaque statement at
     /// the start of a block (ADR 0014), drop or change a heap map write, or duplicate a call (ADR
     /// 0018; calls are not idempotent). An edit is kept only when some input (edge values plus
@@ -97,9 +105,11 @@ public static class IrGen
             Gen.Const(ImmutableArray<IrValue>.Empty),
             static (acc, value) => Gen.Select(acc, value, static (a, v) => a.Add(v)));
 
-    private static Gen<IrProcedure> Procedures(bool loops) =>
+    private static Gen<IrProcedure> Procedures(bool loops) => Programs(loops).Select(static p => IrGenLowering.Lower(p));
+
+    private static Gen<Program> Programs(bool loops) =>
         Gen.Select(Gen.Bool, Gen.Bool, Word.Array[4], Statements(2, loops), Expression(2), static (hasRef, hasHeap, inits, body, result) =>
-            IrGenLowering.Lower(new Program(hasRef, hasHeap, [.. inits], body, result)));
+            new Program(hasRef, hasHeap, [.. inits], body, result));
 
     private static Gen<IrValue> Value(IrType type) => type switch
     {
@@ -135,7 +145,11 @@ public static class IrGen
 
     private static List<(string, Func<IrProcedure>)> Edits(IrProcedure procedure)
     {
-        List<(string, Func<IrProcedure>)> edits = [];
+        // Every generated procedure starts with the bv32 parameters a and b.
+        List<(string, Func<IrProcedure>)> edits =
+        [
+            ("swap parameters a and b", () => procedure with { Parameters = procedure.Parameters.SetItem(0, procedure.Parameters[1]).SetItem(1, procedure.Parameters[0]) }),
+        ];
         for (int b = 0; b < procedure.Blocks.Length; b++)
         {
             IrBlock block = procedure.Blocks[b];

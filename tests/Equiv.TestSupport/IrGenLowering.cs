@@ -28,17 +28,21 @@ internal sealed class IrGenLowering
     private Pending? current;
     private int counter;
 
-    private IrGenLowering(bool hasRef, bool hasHeap)
+    private IrGenLowering(bool hasRef, bool hasHeap, bool renamed)
     {
-        names = ["a", "b", hasRef ? "r" : "c", "v0", "v1", "v2", .. hasHeap ? new[] { "field.Gen.x" } : []];
+        names = [renamed ? "p" : "a", renamed ? "q" : "b", hasRef ? (renamed ? "s" : "r") : "c", "v0", "v1", "v2", .. hasHeap ? new[] { "field.Gen.x" } : []];
         env = [.. names.Select(static (n, i) => new IrVar(n, i == Heap ? HeapType : Bv32, n))];
         byRef = hasRef ? new IrParameter(env[2], IrParameterKind.Ref) : null;
         heap = hasHeap ? new IrParameter(env[Heap], IrParameterKind.Ref) : null;
     }
 
-    public static IrProcedure Lower(Program program)
+    /// <summary>
+    /// Lowers <paramref name="program"/>. With <paramref name="renamed"/>, the source-language parameters are
+    /// <c>p</c>, <c>q</c> (and <c>s</c>) instead of <c>a</c>, <c>b</c> (and <c>r</c>): the same procedure to a caller (ADR 0021).
+    /// </summary>
+    public static IrProcedure Lower(Program program, bool renamed = false)
     {
-        IrGenLowering lowering = new(program.HasRef, program.HasHeap);
+        IrGenLowering lowering = new(program.HasRef, program.HasHeap, renamed);
         return lowering.Run(program);
     }
 

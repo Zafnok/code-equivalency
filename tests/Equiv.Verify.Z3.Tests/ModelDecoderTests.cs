@@ -29,18 +29,14 @@ public sealed class ModelDecoderTests
 
     private static readonly IrMapValue Heap = new(new IrMap(new IrBitVec(32), new IrBitVec(32)), Bv(0), []);
 
-    private static readonly Dictionary<string, IrValue> Inputs = new(StringComparer.Ordinal)
-    {
-        ["a"] = Bv(1),
-        ["field.C.x"] = Heap,
-    };
+    private static readonly IrInputs Inputs = new([Bv(1), Heap]);
 
     [Fact]
     public void RunsWithTheSameOutcomeTraceAndFinalHeapDoNotDiverge()
     {
         using Context context = new();
 
-        Assert.False(ModelDecoder.Diverges(WithHeap, WithoutHeap, Inputs, Returned([Heap]), Returned([]), Calls(context)));
+        Assert.False(ModelDecoder.Diverges(WithHeap, WithoutHeap, Shared(WithHeap, WithoutHeap), Inputs, Returned([Heap]), Returned([]), Calls(context)));
     }
 
     [Fact]
@@ -48,8 +44,8 @@ public sealed class ModelDecoderTests
     {
         using Context context = new();
 
-        Assert.True(ModelDecoder.Diverges(WithHeap, WithoutHeap, Inputs, Returned([Heap.Write(Bv(1), Bv(2))]), Returned([]), Calls(context)));
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithHeap, Inputs, Returned([]), Returned([Heap.Write(Bv(1), Bv(2))]), Calls(context)));
+        Assert.True(ModelDecoder.Diverges(WithHeap, WithoutHeap, Shared(WithHeap, WithoutHeap), Inputs, Returned([Heap.Write(Bv(1), Bv(2))]), Returned([]), Calls(context)));
+        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithHeap, Shared(WithoutHeap, WithHeap), Inputs, Returned([]), Returned([Heap.Write(Bv(1), Bv(2))]), Calls(context)));
     }
 
     [Fact]
@@ -58,7 +54,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
         IrRun threw = new(new IrThrew("System.Exception"), [], []);
 
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Inputs, Returned([]), threw, Calls(context)));
+        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Returned([]), threw, Calls(context)));
     }
 
     [Fact]
@@ -67,9 +63,9 @@ public sealed class ModelDecoderTests
         using Context context = new();
         TraceEncoder calls = Calls(context, ImmutableDictionary<string, string>.Empty.Add("Old::F", "New::F"));
 
-        Assert.False(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Inputs, Traced("Old::F"), Traced("New::F"), calls));
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Inputs, Traced("New::F"), Traced("Old::F"), calls));
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Inputs, Traced("Old::F"), Traced("Other::F"), calls));
+        Assert.False(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("Old::F"), Traced("New::F"), calls));
+        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("New::F"), Traced("Old::F"), calls));
+        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("Old::F"), Traced("Other::F"), calls));
     }
 
     [Fact]
@@ -78,7 +74,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Inputs, Traced("F"), Traced("F"), Calls(context)));
+            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("F"), Traced("F"), Calls(context)));
 
         Assert.StartsWith("Encoder bug: the solver found a divergence between T::M(int) and T::M(int), but the replay does not diverge.", exception.Message, StringComparison.Ordinal);
         Assert.Contains("a=IrBitVecValue", exception.Message, StringComparison.Ordinal);
@@ -90,10 +86,27 @@ public sealed class ModelDecoderTests
     {
         using Context context = new();
 
-        ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Inputs, Traced("F"), Traced("G"), Calls(context));
+        ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("F"), Traced("G"), Calls(context));
+    }
+
+    [Fact]
+    public void AMapInAnUnreadShapeIsAnEncoderBug()
+    {
+        using Context context = new();
+        using Solver solver = context.MkSolver();
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+        ModelDecoder decoder = new(context, solver.Model, ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []));
+        using BitVecSort bv32 = context.MkBitVecSort(32);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            decoder.Decode(context.MkArrayConst("m", bv32, bv32), Heap.MapType));
+
+        Assert.StartsWith("Encoder bug: the model gives a map in a shape the decoder does not read", exception.Message, StringComparison.Ordinal);
     }
 
     private static IrBitVecValue Bv(ulong bits) => new(32, bits);
+
+    private static ImmutableArray<ProductEncoder.SharedParameter> Shared(IrProcedure old, IrProcedure @new) => ProductEncoder.Pair(old, @new);
 
     private static IrRun Returned(ImmutableArray<IrValue> outs) => new(new IrReturned(null), outs, []);
 

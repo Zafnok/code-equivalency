@@ -1,0 +1,11 @@
+# Equivalent
+# ADR 0021: renaming a C# parameter changes nothing a caller sees; the inputs are shared by position.
+proc "T::Sub(int, int)" (%a: bv32, %b: bv32) -> bv32 entry B0
+B0:
+  %r: bv32 = sub %a, %b
+  ret %r
+---
+proc "T::Sub(int, int)" (%left: bv32, %right: bv32) -> bv32 entry B0
+B0:
+  %r: bv32 = sub %left, %right
+  ret %r

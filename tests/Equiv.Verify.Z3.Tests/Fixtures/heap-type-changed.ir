@@ -1,0 +1,15 @@
+# Divergent
+# ADR 0021: field.C.x changed type, so each side reads its own heap input; nothing ties the two reads together.
+proc "C::IsZero()" (%field.C.x: map<sort "C", bv32>, %this: sort "C") -> bool entry B0
+B0:
+  %x: bv32 = mapread %field.C.x, %this
+  %zero: bv32 = const bv32 0
+  %r: bool = eq %x, %zero
+  ret %r
+---
+proc "C::IsZero()" (%field.C.x: map<sort "C", bv64>, %this: sort "C") -> bool entry B0
+B0:
+  %x: bv64 = mapread %field.C.x, %this
+  %zero: bv64 = const bv64 0
+  %r: bool = eq %x, %zero
+  ret %r

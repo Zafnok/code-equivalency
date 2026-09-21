@@ -17,7 +17,8 @@ namespace Equiv.Verify.Z3;
 /// on an input where neither side reaches an <see cref="IrOpaque"/> gives <see cref="Divergent"/>, with a
 /// counterexample replayed in <see cref="IrInterpreter"/>; if not, an input reaching an opaque gives
 /// <see cref="UnknownReason.Opaque"/>, and otherwise the pair is <see cref="Equivalent"/>. A solver
-/// <c>unknown</c> is <see cref="UnknownReason.Timeout"/> with the solver's reason.
+/// <c>unknown</c> is <see cref="UnknownReason.Timeout"/>, the only reason Core has for it; the detail
+/// carries the solver's own reason, which is not always a timeout.
 /// </summary>
 public sealed class Z3Backend : IVerificationBackend
 {
@@ -95,7 +96,7 @@ public sealed class Z3Backend : IVerificationBackend
     }
 
     private static Unknown Timeout(Solver solver, VerificationOptions options) =>
-        new(UnknownReason.Timeout, $"solver returned unknown after at most {options.TimeoutMs} ms: {solver.ReasonUnknown}");
+        new(UnknownReason.Timeout, $"solver returned unknown ({solver.ReasonUnknown}) with a {options.TimeoutMs} ms timeout");
 
     /// <summary>The opaque nodes the model reaches, as <c>side: reason at path line:column</c>.</summary>
     private static string OpaqueReasons(Model model, ProductEncoding encoding) =>

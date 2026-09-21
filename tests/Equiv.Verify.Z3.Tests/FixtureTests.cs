@@ -9,7 +9,7 @@ namespace Equiv.Verify.Z3.Tests;
 
 /// <summary>
 /// Every fixture under <c>Fixtures/</c> gets the verdict its first comment line names (ticket M3-001
-/// criteria 3, 5, 8, 10 and 11), and every Divergent one replays to a divergence that reaches no opaque.
+/// criteria 3, 5, 8, 10 and 11; ADR 0021), and every Divergent one replays to a divergence that reaches no opaque.
 /// </summary>
 public sealed class FixtureTests
 {
@@ -18,6 +18,7 @@ public sealed class FixtureTests
         "return-value", "out-param", "throw-vs-return", "exception-type", "call-order", "extra-call", "runtime-changed", "equivalent-refactor",
         "opaque-void-effect", "opaque-other-path",
         "heap-write-dropped", "heap-one-sided", "repeated-call",
+        "parameters-swapped", "parameter-renamed", "heap-type-changed",
         "hard-multiplication",
     ];
 

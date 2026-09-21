@@ -8,6 +8,7 @@ using Equiv.Core.Verdicts;
 using Microsoft.Z3;
 
 using ProductEncoding = Equiv.Verify.Z3.ProductEncoder.ProductEncoding;
+using SharedParameter = Equiv.Verify.Z3.ProductEncoder.SharedParameter;
 using Side = Equiv.Verify.Z3.ProductEncoder.Side;
 
 namespace Equiv.Verify.Z3;
@@ -43,35 +44,31 @@ internal sealed class ModelDecoder
     {
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
-        Dictionary<string, IrValue> byName = new(StringComparer.Ordinal);
-        for (int i = 0; i < encoding.Inputs.Length; i++)
-        {
-            byName.Add(encoding.Inputs[i].Parameter.Var.Name, inputs.Arguments[i]);
-        }
-
-        IrRun oldRun = Run(old, byName, decoder.Oracle(Side.Old));
-        IrRun newRun = Run(@new, byName, decoder.Oracle(Side.New));
-        EnsureDiverges(old, @new, byName, oldRun, newRun, encoding.Calls);
+        ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
+        IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), decoder.Oracle(Side.Old));
+        IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), decoder.Oracle(Side.New));
+        EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls);
         return new Counterexample(inputs, oldRun, newRun);
     }
 
     /// <summary>A model whose replay does not diverge is an encoder bug: fail loudly, never report it as Divergent.</summary>
-    public static void EnsureDiverges(IrProcedure old, IrProcedure @new, IReadOnlyDictionary<string, IrValue> inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
+    public static void EnsureDiverges(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
     {
-        if (!Diverges(old, @new, inputs, oldRun, newRun, calls))
+        if (!Diverges(old, @new, shared, inputs, oldRun, newRun, calls))
         {
             throw new InvalidOperationException(
                 $"Encoder bug: the solver found a divergence between {old.Identity.Value} and {@new.Identity.Value}, but the replay does not diverge. "
-                + $"Inputs: {string.Join(", ", inputs.Select(static i => $"{i.Key}={i.Value}"))}. Old: {Describe(oldRun)}. New: {Describe(newRun)}.");
+                + $"Inputs: {string.Join(", ", shared.Select((s, i) => $"{s.Var.Name}={inputs.Arguments[i]}"))}. Old: {Describe(oldRun)}. New: {Describe(newRun)}.");
         }
     }
 
     /// <summary>
     /// True when the two runs differ on an observable the encoder compares: outcome, call trace (legacy
-    /// identities renamed through the call-identity map), or the final value of a by-ref parameter over
-    /// the union of both sides' names, a name one side lacks standing for its unchanged input.
+    /// identities renamed through the call-identity map), or the final value of a by-ref shared input
+    /// (<paramref name="shared"/>, valued by <paramref name="inputs"/>), a side without that parameter
+    /// standing for its unchanged input.
     /// </summary>
-    public static bool Diverges(IrProcedure old, IrProcedure @new, IReadOnlyDictionary<string, IrValue> inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
+    public static bool Diverges(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
     {
         if (oldRun.Outcome != newRun.Outcome)
         {
@@ -85,15 +82,15 @@ internal sealed class ModelDecoder
             return true;
         }
 
-        return old.Parameters.Concat(@new.Parameters)
-            .Where(static p => p.Kind != IrParameterKind.In)
-            .Select(static p => p.Var.Name)
-            .Any(name => Final(old, oldRun, inputs, name) != Final(@new, newRun, inputs, name));
+        return shared
+            .Select((s, i) => (Shared: s, Input: inputs.Arguments[i]))
+            .Where(static s => s.Shared.ByRef)
+            .Any(s => Final(old, oldRun, s.Shared.Old, s.Input) != Final(@new, newRun, s.Shared.New, s.Input));
     }
 
     /// <summary>The shared inputs, in <see cref="ProductEncoding.Inputs"/> order.</summary>
     public IrInputs Inputs() =>
-        new([.. encoding.Inputs.Select(i => Decode(model.Eval(i.Input, true), i.Parameter.Var.Type))]);
+        new([.. encoding.Inputs.Select(i => Decode(model.Eval(i.Term, true), i.Shared.Type))]);
 
     public IrValue Decode(Expr value, IrType type) => type switch
     {
@@ -115,21 +112,27 @@ internal sealed class ModelDecoder
 
     public ICallOracle Oracle(Side side) => new ModelOracle(this, side);
 
-    private static IrRun Run(IrProcedure procedure, Dictionary<string, IrValue> inputs, ICallOracle oracle) =>
-        IrInterpreter.Run(
-            procedure,
-            new IrInputs([.. procedure.Parameters.Select(p => inputs[p.Var.Name])]),
-            oracle,
-            procedure.Blocks.Sum(static b => b.Instructions.Length + 1));
+    private static IrRun Run(IrProcedure procedure, IrInputs inputs, ICallOracle oracle) =>
+        IrInterpreter.Run(procedure, inputs, oracle, procedure.Blocks.Sum(static b => b.Instructions.Length + 1));
 
-    private static IrValue Final(IrProcedure procedure, IrRun run, IReadOnlyDictionary<string, IrValue> inputs, string name)
+    /// <summary>One side's arguments, in its own parameter order, from the shared inputs it binds.</summary>
+    private static IrInputs Bind(IrProcedure procedure, ImmutableArray<SharedParameter> shared, IrInputs inputs, Func<SharedParameter, IrParameter?> side)
+    {
+        Dictionary<string, IrValue> byName = shared
+            .Select((s, i) => (Parameter: side(s), Value: inputs.Arguments[i]))
+            .Where(static s => s.Parameter is not null)
+            .ToDictionary(static s => s.Parameter!.Var.Name, static s => s.Value, StringComparer.Ordinal);
+        return new IrInputs([.. procedure.Parameters.Select(p => byName[p.Var.Name])]);
+    }
+
+    /// <summary>The final value of <paramref name="parameter"/> in <paramref name="run"/>, else (not by-ref on this side, or absent) <paramref name="input"/>.</summary>
+    private static IrValue Final(IrProcedure procedure, IrRun run, IrParameter? parameter, IrValue input)
     {
         int index = procedure.Parameters
             .Where(static p => p.Kind != IrParameterKind.In)
-            .Select(static p => p.Var.Name)
             .ToList()
-            .IndexOf(name);
-        return index < 0 ? inputs[name] : run.Outs[index];
+            .FindIndex(p => p == parameter);
+        return index < 0 ? input : run.Outs[index];
     }
 
     private static string Describe(IrRun run) =>
@@ -162,12 +165,14 @@ internal sealed class ModelDecoder
 
     /// <summary>
     /// Z3 4.12 evaluates a model array, with completion, to a store chain over a constant array; any other
-    /// shape fails loudly on its missing arguments rather than decoding to a wrong map.
+    /// shape (an <c>as-array</c>, a lambda) fails loudly, naming the term, rather than decoding to a wrong map.
     /// </summary>
-    private IrMapValue DecodeMap(Expr value, IrMap type) =>
-        value.IsStore
-            ? DecodeMap(value.Args[0], type).Write(Decode(value.Args[1], type.Key), Decode(value.Args[2], type.Value))
-            : new IrMapValue(type, Decode(value.Args[0], type.Value), []);
+    private IrMapValue DecodeMap(Expr value, IrMap type) => value switch
+    {
+        { IsStore: true } => DecodeMap(value.Args[0], type).Write(Decode(value.Args[1], type.Key), Decode(value.Args[2], type.Value)),
+        { IsConstantArray: true } => new IrMapValue(type, Decode(value.Args[0], type.Value), []),
+        _ => throw new InvalidOperationException($"Encoder bug: the model gives a map in a shape the decoder does not read (store chain over a constant array expected): {value}"),
+    };
 
     /// <summary>Answers a call from the model: the side's result and <c>threw</c> functions applied to the arguments and position.</summary>
     private sealed class ModelOracle(ModelDecoder decoder, Side side) : ICallOracle

@@ -90,20 +90,18 @@ public sealed class Z3BackendTests
     [Fact]
     public void TheContextIsDisposedWhenEncodingThrows()
     {
-        (IrProcedure old, IrProcedure @new) = Fixture.Pair("""
-            proc "T::M(int)" (%a: bv32) entry B0
-            B0:
-              ret
-            ---
-            proc "T::M(int)" (%a: bv64) entry B0
-            B0:
-              ret
-            """);
+        // Ill-typed IR (IrText.Parse would reject it): a Bool operand of a bitvector add.
+        IrVar c = new("c", new IrBool());
+        IrProcedure illTyped = new(
+            new ProcedureIdentity("T::M(bool)"),
+            [new IrParameter(c, IrParameterKind.In)],
+            null,
+            [new IrBlock(new IrBlockId(0), [new IrBinary(new IrVar("r", new IrBitVec(32)), IrBinaryOp.Add, c, c)], new IrReturn(null, []))],
+            new IrBlockId(0));
         List<CountingContext> contexts = [];
 
-        ArgumentException exception = Assert.Throws<ArgumentException>(() => new Z3Backend(() => Track(contexts)).Verify(old, @new, Options));
+        Assert.ThrowsAny<Exception>(() => new Z3Backend(() => Track(contexts)).Verify(illTyped, illTyped, Options));
 
-        Assert.StartsWith("Parameter a has a different type on each side.", exception.Message, StringComparison.Ordinal);
         Assert.Equal(1, Assert.Single(contexts).Disposals);
     }
 
@@ -116,7 +114,8 @@ public sealed class Z3BackendTests
 
         Unknown unknown = Assert.IsType<Unknown>(verdict);
         Assert.Equal(UnknownReason.Timeout, unknown.Reason);
-        Assert.StartsWith("solver returned unknown after at most 50 ms: ", unknown.Detail, StringComparison.Ordinal);
+        Assert.StartsWith("solver returned unknown (", unknown.Detail, StringComparison.Ordinal);
+        Assert.EndsWith(") with a 50 ms timeout", unknown.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

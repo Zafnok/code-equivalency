@@ -10,8 +10,8 @@ namespace Equiv.Verify.Z3;
 
 /// <summary>
 /// The product program of an acyclic pair (VERIFICATION-MODEL.md sections 1, 2 and 5; ADR 0014; ADR 0018;
-/// ticket M3-001). Both sides are encoded over one set of inputs, <c>in.&lt;name&gt;</c>, a parameter name
-/// present on either side. Every other SSA variable is a constant <c>old.&lt;name&gt;</c> or
+/// ADR 0021; ticket M3-001). Both sides are encoded over one set of inputs, the <see cref="SharedParameter"/>s
+/// of <see cref="Pair"/>. Every other SSA variable is a constant <c>old.&lt;name&gt;</c> or
 /// <c>new.&lt;name&gt;</c> fixed by a definitional equality; SSA makes that sound even for blocks no input
 /// reaches. Control flow is a Bool <c>reach</c> per block, and the call position a bv32 <c>cnt</c> per block.
 /// </summary>
@@ -107,32 +107,64 @@ internal static class ProductEncoder
         return ([.. postorder], backEdge);
     }
 
+    /// <summary>
+    /// Pairs the parameters of both sides into shared inputs (ADR 0021). A caller binds the source-language
+    /// parameters by position, so those pair by position, whatever their names; the synthesised inputs
+    /// (<see cref="IsSynthesised"/>) pair by name. Two parameters pair only when their types are equal:
+    /// any other parameter is an input of its own side alone, which can cost precision (a false Divergent)
+    /// but never shares a value that a caller does not. The old side's parameters come first, in order.
+    /// </summary>
+    public static ImmutableArray<SharedParameter> Pair(IrProcedure old, IrProcedure @new)
+    {
+        IrParameter[] positional = [.. @new.Parameters.Where(static p => !IsSynthesised(p.Var.Name))];
+        Dictionary<string, IrParameter> synthesised = @new.Parameters
+            .Where(static p => IsSynthesised(p.Var.Name))
+            .ToDictionary(static p => p.Var.Name, StringComparer.Ordinal);
+        HashSet<string> paired = new(StringComparer.Ordinal);
+        List<SharedParameter> shared = [];
+        int position = 0;
+        foreach (IrParameter parameter in old.Parameters)
+        {
+            IrParameter? counterpart = IsSynthesised(parameter.Var.Name)
+                ? synthesised.GetValueOrDefault(parameter.Var.Name)
+                : positional.ElementAtOrDefault(position++);
+            if (counterpart is not null && counterpart.Var.Type == parameter.Var.Type)
+            {
+                paired.Add(counterpart.Var.Name);
+                shared.Add(new SharedParameter(parameter, counterpart));
+            }
+            else
+            {
+                shared.Add(new SharedParameter(parameter, null));
+            }
+        }
+
+        shared.AddRange(@new.Parameters.Where(p => !paired.Contains(p.Var.Name)).Select(static p => new SharedParameter(null, p)));
+        return [.. shared];
+    }
+
+    /// <summary>
+    /// Whether a parameter is one the frontend synthesised (VERIFICATION-MODEL.md section 2): the receiver
+    /// <c>this</c>, or a heap or nullness input, whose name is spelled with dots. No source-language
+    /// parameter name contains a dot.
+    /// </summary>
+    public static bool IsSynthesised(string name) => string.Equals(name, "this", StringComparison.Ordinal) || name.Contains('.', StringComparison.Ordinal);
+
     public static ProductEncoding Encode(Context context, IrProcedure old, IrProcedure @new, ImmutableDictionary<string, string> callIdentityMap)
     {
         SortMapper sorts = new(context);
-        Dictionary<string, (IrParameter Parameter, Expr Input)> inputs = new(StringComparer.Ordinal);
-        foreach (IrParameter parameter in old.Parameters.Concat(@new.Parameters))
-        {
-            if (inputs.TryGetValue(parameter.Var.Name, out (IrParameter Parameter, Expr Input) shared))
-            {
-                if (shared.Parameter.Var.Type != parameter.Var.Type)
-                {
-                    throw new ArgumentException($"Parameter {parameter.Var.Name} has a different type on each side.", nameof(@new));
-                }
-
-                continue;
-            }
-
-            inputs.Add(parameter.Var.Name, (parameter, context.MkConst("in." + parameter.Var.Name, sorts.Sort(parameter.Var.Type))));
-        }
+        ImmutableArray<(SharedParameter Shared, Expr Term)> inputs =
+        [
+            .. Pair(old, @new).Select(s => (s, context.MkConst(s.InputName, sorts.Sort(s.Type)))),
+        ];
 
         IEnumerable<IrType> argumentTypes = old.Blocks.Concat(@new.Blocks)
             .SelectMany(static b => b.Instructions.OfType<IrCall>())
             .SelectMany(static c => c.Args.Select(static a => a.Type));
         TraceEncoder calls = new(sorts, argumentTypes, callIdentityMap);
         Dictionary<string, int> exceptionTypes = new(StringComparer.Ordinal);
-        SideEncoder oldSide = new(Side.Old, old, sorts, calls, inputs, exceptionTypes);
-        SideEncoder newSide = new(Side.New, @new, sorts, calls, inputs, exceptionTypes);
+        SideEncoder oldSide = new(Side.Old, old, sorts, calls, Bound(inputs, static s => s.Old), exceptionTypes);
+        SideEncoder newSide = new(Side.New, @new, sorts, calls, Bound(inputs, static s => s.New), exceptionTypes);
 
         List<BoolExpr> equal =
         [
@@ -141,11 +173,9 @@ internal static class ProductEncoder
             context.MkEq(oldSide.Threw, newSide.Threw),
             context.MkEq(oldSide.ExceptionType, newSide.ExceptionType),
         ];
-        IEnumerable<string> byRef = old.Parameters.Concat(@new.Parameters)
-            .Where(static p => p.Kind != IrParameterKind.In)
-            .Select(static p => p.Var.Name)
-            .Distinct(StringComparer.Ordinal);
-        equal.AddRange(byRef.Select(name => context.MkEq(oldSide.Final(name), newSide.Final(name))));
+        equal.AddRange(inputs
+            .Where(static i => i.Shared.ByRef)
+            .Select(i => context.MkEq(oldSide.Final(i.Shared.Old, i.Term), newSide.Final(i.Shared.New, i.Term))));
         equal.Add(context.MkEq(oldSide.Trace, newSide.Trace));
 
         return new ProductEncoding(
@@ -153,11 +183,17 @@ internal static class ProductEncoder
             context.MkNot(context.MkAnd(equal)),
             oldSide.Opaque,
             newSide.Opaque,
-            [.. inputs.Values],
+            inputs,
             [.. oldSide.Opaques, .. newSide.Opaques],
             sorts,
             calls);
     }
+
+    /// <summary>One side's parameter names and the input term each is bound to.</summary>
+    private static Dictionary<string, Expr> Bound(ImmutableArray<(SharedParameter Shared, Expr Term)> inputs, Func<SharedParameter, IrParameter?> side) =>
+        inputs
+            .Where(i => side(i.Shared) is not null)
+            .ToDictionary(i => side(i.Shared)!.Var.Name, static i => i.Term, StringComparer.Ordinal);
 
     /// <summary>
     /// Return values agree. A return type that differs between the sides (the matcher's identity does not
@@ -196,8 +232,7 @@ internal static class ProductEncoder
         private readonly SortMapper sorts;
         private readonly TraceEncoder calls;
         private readonly Context context;
-        private readonly IReadOnlyDictionary<string, (IrParameter Parameter, Expr Input)> inputs;
-        private readonly HashSet<string> parameters;
+        private readonly Dictionary<string, Expr> inputs;
         private readonly Dictionary<string, Expr> constants = new(StringComparer.Ordinal);
         private readonly Dictionary<IrBlockId, BoolExpr> reach = [];
         private readonly Dictionary<IrBlockId, BitVecExpr> countOut = [];
@@ -212,7 +247,7 @@ internal static class ProductEncoder
             IrProcedure procedure,
             SortMapper sorts,
             TraceEncoder calls,
-            IReadOnlyDictionary<string, (IrParameter Parameter, Expr Input)> inputs,
+            Dictionary<string, Expr> inputs,
             Dictionary<string, int> exceptionTypes)
         {
             this.side = side;
@@ -221,7 +256,6 @@ internal static class ProductEncoder
             this.inputs = inputs;
             Procedure = procedure;
             context = sorts.Context;
-            parameters = [.. procedure.Parameters.Select(static p => p.Var.Name)];
 
             foreach (IrBlock block in Analyze(procedure).ReversePostorder)
             {
@@ -261,14 +295,17 @@ internal static class ProductEncoder
                 .Reverse()
                 .Aggregate(none, (rest, e) => context.MkITE(reach[e.Block], Var(((IrReturn)e.Exit).Value!), rest));
 
-        /// <summary>The final value of by-ref parameter <paramref name="name"/>: its version at the exit taken, else the shared input.</summary>
-        public Expr Final(string name) =>
+        /// <summary>
+        /// The final value of <paramref name="parameter"/>: its version at the exit taken, else
+        /// <paramref name="input"/>, which is also the value on a side without the parameter.
+        /// </summary>
+        public Expr Final(IrParameter? parameter, Expr input) =>
             exits
                 .AsEnumerable()
                 .Reverse()
-                .Aggregate(inputs[name].Input, (rest, e) =>
+                .Aggregate(input, (rest, e) =>
                 {
-                    IrOut? @out = Outs(e.Exit).FirstOrDefault(o => string.Equals(o.Param.Name, name, StringComparison.Ordinal));
+                    IrOut? @out = Outs(e.Exit).FirstOrDefault(o => string.Equals(o.Param.Name, parameter?.Var.Name, StringComparison.Ordinal));
                     return @out is null ? rest : context.MkITE(reach[e.Block], Var(@out.Final), rest);
                 });
 
@@ -294,9 +331,9 @@ internal static class ProductEncoder
 
         private Expr Var(IrVar var)
         {
-            if (parameters.Contains(var.Name))
+            if (inputs.TryGetValue(var.Name, out Expr? input))
             {
-                return inputs[var.Name].Input;
+                return input;
             }
 
             if (!constants.TryGetValue(var.Name, out Expr? constant))
@@ -485,17 +522,34 @@ internal static class ProductEncoder
     }
 
     /// <summary>
+    /// One input of the product (ADR 0021): the parameter each side binds to it, or <c>null</c> on a side
+    /// without one. Its Z3 constant is named <see cref="InputName"/>: <c>in.&lt;old name&gt;</c>, or
+    /// <c>in.new.&lt;new name&gt;</c> for an input only the new side has, so no two inputs share a name.
+    /// </summary>
+    public sealed record SharedParameter(IrParameter? Old, IrParameter? New)
+    {
+        public IrVar Var => (Old ?? New)!.Var;
+
+        public IrType Type => Var.Type;
+
+        public string InputName => (Old is null ? "in.new." : "in.") + Var.Name;
+
+        /// <summary>Whether its final value is an observable: it is <c>ref</c> or <c>out</c> on either side.</summary>
+        public bool ByRef => new[] { Old, New }.Any(static p => p is not null && p.Kind != IrParameterKind.In);
+    }
+
+    /// <summary>
     /// The product query for one pair: <see cref="Assertions"/> hold on every input, <see cref="Differs"/>
     /// says some observable differs, and <see cref="OpaqueOld"/>/<see cref="OpaqueNew"/> say that side
-    /// reaches an <see cref="IrOpaque"/> (ADR 0014). <see cref="Inputs"/> lists the shared inputs, the old
-    /// side's parameters first.
+    /// reaches an <see cref="IrOpaque"/> (ADR 0014). <see cref="Inputs"/> lists the shared inputs in
+    /// <see cref="Pair"/> order with their Z3 constants.
     /// </summary>
     public sealed record ProductEncoding(
         ImmutableArray<BoolExpr> Assertions,
         BoolExpr Differs,
         BoolExpr OpaqueOld,
         BoolExpr OpaqueNew,
-        ImmutableArray<(IrParameter Parameter, Expr Input)> Inputs,
+        ImmutableArray<(SharedParameter Shared, Expr Term)> Inputs,
         ImmutableArray<(Side Side, IrOpaque Node, BoolExpr Reach)> Opaques,
         SortMapper Sorts,
         TraceEncoder Calls);
