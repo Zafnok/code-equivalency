@@ -27,3 +27,4 @@ supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.
 | 0020 | A shipped catalogue of known-equivalent API pairs, applied visibly |
 | 0021 | Source-language parameters are shared by position, synthesised inputs by name |
 | 0022 | A Sonar batch over 25 findings splits into a parent issue and sub-issues |
+| 0023 | A pair whose verification crashes is reported and skipped, and the run exits 5 |

@@ -193,6 +193,14 @@ Every verdict on a matched pair with bodies also carries `properties.assumedCall
 `properties.unprovenAssumptions` (ADR 0019), and `properties.equivalencesApplied` when a
 catalogue entry fired (ADR 0020).
 
+A pair whose verification throws (an encoder bug, a `Z3Exception`) has no result: a crash is
+a fact about the tool, not a verdict about the code (ADR 0023). It is recorded as an `error`
+entry in `invocations[0].toolExecutionNotifications` naming both identities, the invocation
+has `executionSuccessful: false`, the run's `properties.unverified` lists the pair's identity,
+and the other pairs are reported as usual. Its baseline result, if any, is carried through as
+`unchanged` with `properties.unverified: true`, never as `absent`, so a crash cannot make a
+known divergence look fixed.
+
 Baseline: SARIF `baselineState` (`new`, `unchanged`, `updated`, `absent`) computed from
 a result fingerprint (procedure identity + verdict + model hash). The exit code considers
 only `new` results unless `--no-baseline` is given. Accepting a divergence as the new

@@ -64,7 +64,9 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   selects the frontend. One frontend in the MVP; the router exists from day one so that
   Java is a new project, not a refactor.
 - Exit codes: 0 all equivalent (or all results match baseline), 1 divergence, 2 unknown
-  present and `--fail-on unknown`, 3 usage or unsupported input, 4 load failure.
+  present and `--fail-on unknown`, 3 usage or unsupported input, 4 load failure, 5 internal
+  error: at least one pair could not be verified, or any other unhandled exception. 5 outranks
+  1 and 2, because the result set is incomplete (ADR 0023).
 
 ## What is deliberately NOT in the MVP
 
