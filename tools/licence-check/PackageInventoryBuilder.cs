@@ -130,6 +130,14 @@ internal static class PackageInventoryBuilder
                     continue;
                 }
 
+                // samples/ is only restored under -Integration (the legacy side needs MSBuild.exe,
+                // Windows-only); a plain ./build.ps1 run on ubuntu-latest never restores it, so a
+                // missing nuspec here means "not part of this run", not an undetermined licence.
+                if (!NuspecLicenseReader.IsRestored(id, version, nugetPackagesRoot))
+                {
+                    continue;
+                }
+
                 (string licence, bool isSpdxExpression) = NuspecLicenseReader.Read(id, version, nugetPackagesRoot);
                 packages.Add(new ResolvedPackage(id, version, PackageRole.SamplesOnly, licence, isSpdxExpression));
             }

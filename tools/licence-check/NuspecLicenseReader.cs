@@ -10,10 +10,18 @@ namespace LicenceCheck;
 /// </summary>
 internal static class NuspecLicenseReader
 {
+    /// <summary>
+    /// Whether this package's nuspec is on disk at all. Used by callers whose source is only
+    /// conditionally restored in a given build.ps1 run (samples/, restored only under
+    /// -Integration since the legacy side needs MSBuild.exe) to tell "not restored here" apart
+    /// from a genuine missing-licence failure.
+    /// </summary>
+    public static bool IsRestored(string packageId, string version, string nugetPackagesRoot) =>
+        File.Exists(NuspecPath(packageId, version, nugetPackagesRoot));
+
     public static (string Licence, bool IsSpdxExpression) Read(string packageId, string version, string nugetPackagesRoot)
     {
-        string idLower = packageId.ToLowerInvariant();
-        string nuspecPath = Path.Combine(nugetPackagesRoot, idLower, version, $"{idLower}.nuspec");
+        string nuspecPath = NuspecPath(packageId, version, nugetPackagesRoot);
         if (!File.Exists(nuspecPath))
         {
             throw new LicenceCheckException($"could not find a restored nuspec for {packageId} {version} at '{nuspecPath}'. Was it restored (dotnet restore / dotnet tool restore)?");
@@ -34,5 +42,11 @@ internal static class NuspecLicenseReader
 
         string? licenseUrl = metadata?.Element(ns + "licenseUrl")?.Value.Trim();
         return (licenseUrl is { Length: > 0 } ? licenseUrl : "(nuspec has no <license> or <licenseUrl>)", false);
+    }
+
+    private static string NuspecPath(string packageId, string version, string nugetPackagesRoot)
+    {
+        string idLower = packageId.ToLowerInvariant();
+        return Path.Combine(nugetPackagesRoot, idLower, version, $"{idLower}.nuspec");
     }
 }
