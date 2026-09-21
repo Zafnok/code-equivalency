@@ -25,3 +25,4 @@ supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.
 | 0018 | The final heap is observable, and a call is a function of its position and the heap |
 | 0019 | Verdicts are modular, and an Equivalent names the callee pairs it assumed |
 | 0020 | A shipped catalogue of known-equivalent API pairs, applied visibly |
+| 0022 | A pair whose verification crashes is reported and skipped, and the run exits 5 (proposed) |
