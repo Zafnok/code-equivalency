@@ -93,7 +93,7 @@ public sealed class LoweringOracleTests
         try
         {
             object result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s"])!;
-            return string.Create(CultureInfo.InvariantCulture, $"return {result}");
+            return $"return {result}";
         }
         catch (TargetInvocationException exception)
         {
@@ -122,7 +122,7 @@ public sealed class LoweringOracleTests
         return IrInterpreter.Run(procedure, arguments, IrGenOracle.Instance, IrGen.StepBudget).Outcome switch
         {
             IrReturned { Value: IrBitVecValue bits } => string.Create(CultureInfo.InvariantCulture, $"return {bits.TwosComplement}"),
-            IrReturned { Value: IrBoolValue flag } => string.Create(CultureInfo.InvariantCulture, $"return {flag.Value}"),
+            IrReturned { Value: IrBoolValue flag } => $"return {flag.Value}",
             IrThrew thrown => $"throw {thrown.ExceptionType}",
             var other => other.ToString(),
         };
