@@ -140,19 +140,41 @@ Everything after this milestone runs under 100% coverage and full CI.
 - M3-006 (S) Report analysed lines of code per codebase, so the BUSL free tier's 50,000-line
   limit is observable. Reporting only, no enforcement (ADR 0017).
 
+Added by the pre-M3 architecture review (2026-09-21; ADRs 0018 to 0020), which found three
+silent false-Equivalent paths in the spec and a precision gap that would make the first real
+run almost all Unknown:
+
+- M3-007 (M) Field and array maps are `Ref` parameters, so the final heap is observable
+  (ADR 0018).
+- M3-008 (S) Every verdict names the matched callee pairs it assumed, and flags the unproven
+  ones (ADR 0019).
+- M3-009 (M) `api-equivalences.json`: cited overload-drift and Web API result equivalences,
+  applied on the legacy side and listed on each result (ADR 0020).
+- M3-010 (M) Property access as accessor calls; implicit upcasts and boxing as cast maps.
+- M3-011 (L) `foreach`, `using` and constructors lowered through the CFG instead of whole-body
+  opaque.
+- P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
+  and arrays are keyed by value. P1-003 comes with them as their shared prerequisite.
+
+Order: M3-001 → M3-002. In parallel on the frontend: M3-007 → P1-003 → P1-006 → P1-005 (P1-005
+also needs M3-001), and M3-010 → M3-011 and M3-009. Then M3-003 (needs M3-002, M3-007, M3-009,
+P1-005, P1-006) → M3-008 → M3-004 → M3-005 (also needs M3-010, M3-011) → M3-006.
+
 ## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
 
 - P1-001 (L) Constrained Horn clause encoding solved by Z3 Spacer for non-aligned loops.
 - P1-002 (M) LLM-proposed coupling invariants, Z3-checked; pluggable model, off by default.
-- P1-003 (M) Split `IrLowerer` into heap and exception collaborators, with the swapped block-map
+- P1-003 (M) (promoted into M3) Split `IrLowerer` into heap and exception collaborators, with the swapped block-map
   state as an explicit `LoweringContext` parameter (PR #30 review; behaviour-preserving).
 - P1-004 (M) `foreach` over an array as an index loop (M2-004 size guard; Roslyn's CFG desugars every `foreach` into the enumerator pattern). Do P1-003 first: this ticket adds to both paths it extracts.
-- P1-005 (L) An `IrCall` havocs the field maps its callee could reach, as an uninterpreted
-  function of the callee and its arguments shared by both sides (ADR 0015).
-- P1-006 (L) Array element and length maps keyed by the array value instead of the array
+- P1-005 (L) (promoted into M3) An `IrCall` reads and writes the heap: its effects and
+  results are functions of the callee, its arguments, the heap at the call and its position,
+  shared by both sides (ADRs 0015, 0018).
+- P1-006 (L) (promoted into M3) Array element and length maps keyed by the array value instead of the array
   variable, so two variables holding one array are one slice (ADR 0015).
 
-P1-005 and P1-006 are the two soundness limits ADR 0015 names. Until both land, an
+P1-005 and P1-006 are the two soundness limits ADR 0015 names. ADR 0018 moves both ahead
+of M3-003, so no build that reports sample verdicts carries them. Until they land, an
 Equivalent verdict on a procedure that writes a field around a call, or that takes two
 array parameters, rests on an assumption no gate can see; M3-001's soundness harness runs
 over IR and does not cover them.

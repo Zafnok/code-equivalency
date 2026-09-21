@@ -12,15 +12,18 @@ Every verdict carries `proofMethod`; bounded ones carry `boundedBy`. Unknown rea
 are precise.
 
 ## Spec references
-VERIFICATION-MODEL.md sections 1, 5, 5.1, 7; ADR 0008; M3-001 design (reuse
+VERIFICATION-MODEL.md sections 1, 5, 5.1, 7; ADR 0008; ADR 0018; M3-001 design (reuse
 `ProductEncoder` on IR fragments; do not write a second encoder).
 
 ## Design
 
 Loop structure (`IrLoopAnalysis`, in `Equiv.Core.Ir`): back edges from a DFS of the
 CFG; natural loop per back edge (header, body blocks, exit edges, latch); loop nesting
-forest. The Roslyn CFG is reducible, so every loop has a single header. Live variables
-at the header are the phis of the header; those are the loop state.
+forest. The Roslyn CFG is reducible, so every loop has a single header. The loop state is
+(a) the header's phis, (b) every SSA value defined outside the loop and used inside it
+(loop-invariant live-ins such as `n` in `var n = a.Length; for (...; i < n; ...)`: in SSA these
+are not phis, but the body reads them), and (c) the call-position counter `cnt` of M3-001
+(ADR 0018). Heap maps that are live at the header are phis or live-ins like any other value.
 
 **Rung 1, bounded unrolling** (`IrUnroller.Unroll(proc, k)` -> acyclic `IrProcedure`):
 clone the loop body k times with fresh SSA names (suffix `@i`), rewrite the header phis
@@ -39,21 +42,30 @@ procedure into three acyclic fragments, each an `IrProcedure` whose parameters a
 live-in variables of the fragment:
 
 - prefix: entry to header (the loop is cut at the header; the fragment returns the
-  header state as a tuple of out-params),
-- body: header to latch, with the guard evaluated first; returns the next header state
-  plus the guard value and whether the body threw,
-- suffix: exit edges to return.
+  header state as a tuple of out-params). Paths that leave the procedure before reaching
+  the header (early return, throw) stay in the fragment as ordinary exits.
+- body: one iteration from the header. It returns how the iteration ended, as an exit
+  kind: `continue` (back edge, with the next header state), `leave(e)` (a loop exit edge
+  `e`, taken from the header's guard *or* from a `break` or `goto` inside the body, with
+  the state at that edge), `return` or `throw` (leaving the procedure from inside the
+  loop, with its observables). Iteration trace events are part of the result.
+- suffix: one fragment per loop exit edge, from that edge to the procedure's exits.
+  Exit edges are paired across sides by their position in the loop's reverse-postorder
+  exit list; unequal exit counts mean the loop does not align.
 
 Coupling: header states are related by pairing variables by `SourceName` when both
 sides have one, else by position among the header phis; unpaired variables on either
 side mean the loop does not align (fall to Unknown(unaligned-loop), rung 4 later).
 Three obligations, each a product-program query on fragments:
 
-1. Base: equal inputs imply equal header states (prefix_old vs prefix_new).
-2. Step: equal header states and both guards true imply equal next states, equal
-   guards, and equal threw flags and traces for that iteration (body_old vs body_new).
-   Also: equal header states imply equal guards (so the loops exit together).
-3. Exit: equal header states with both guards false imply equal observables
+1. Base: equal inputs imply that both sides either reach the header with equal header
+   states and equal prefix traces, or both leave before it with equal observables
+   (prefix_old vs prefix_new).
+2. Step: equal header states imply the same exit kind on both sides and, per kind: equal
+   next states (`continue`); the same paired exit edge with equal states at it (`leave`);
+   equal observables (`return`, `throw`); and in every case equal iteration traces
+   (body_old vs body_new).
+3. Exit: for each paired exit edge, equal states at the edge imply equal observables
    (suffix_old vs suffix_new).
 
 All three UNSAT: unbounded Equivalent, `proofMethod: lockstep-induction`. A SAT in the
@@ -97,7 +109,11 @@ human-readable detail. SARIF properties: `proofMethod`, `boundedBy`, `unknownRea
    {`Timeout`, `Opaque`, `UnalignedLoop`, `Recursion`}.
 2. `properties.boundedBy` is present exactly when `proofMethod == bounded` and a loop
    existed; `properties.ladderTrace` lists every rung attempted with its outcome.
-3. The five fixtures under Tests produce the named verdict path.
+3. The five fixtures under Tests produce the named verdict path, and so do two more:
+   `loop-break-return` (an aligned loop with a `break` and a `return` inside the body,
+   unchanged on both sides) and `loop-invariant-livein` (an aligned loop whose guard
+   reads a value computed before the loop that is not a header phi). Both are
+   `lockstep-induction` Equivalent, and each has a one-line mutation that is Divergent.
 4. `samples/identical` and `samples/renamed-locals` loops are `lockstep-induction`
    Equivalent (unbounded); `samples/loop-bound-change` is Divergent on rung 1.
 5. Soundness and monotonicity properties pass 200 cases each with looping generators.
@@ -113,7 +129,9 @@ alignment and mutual recursion are Unknown, not code.
 - Unrolling and fragmenting must produce valid SSA; run `IrValidator` on every
   intermediate procedure in tests and in debug builds.
 - The step obligation's assumed state must include the heap map variables that are live
-  at the header, not only scalars.
+  at the header, the loop-invariant live-ins and `cnt`, not only the scalar phis.
+- `break`, `return` inside the loop and the enumerator `foreach` (M3-010) all give loops
+  several exits; do not assume the header's guard is the only way out.
 - Traces inside loops: rung 1 compares whole traces; rungs 2 and 3 compare one
   iteration's trace fragment per obligation. Do not try to compare unbounded traces.
 - Do not attempt loop invariant synthesis here; that is rung 4 (P1-001).

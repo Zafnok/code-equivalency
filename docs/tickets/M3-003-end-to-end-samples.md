@@ -2,7 +2,8 @@
 Status: todo
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: M2-004, M2-005, M2-006, M3-002
+Depends on: M2-004, M2-005, M2-006, M3-002, M3-007, M3-009, P1-005, P1-006 (ADR 0018: no sample
+verdicts ship with a known silent false Equivalent)
 
 ## Goal
 Wire the real backend into the CLI, run every sample through `equiv compare`, check in
@@ -34,7 +35,9 @@ sample's README (expected verdicts).
    `identical` all Equivalent with `proofMethod` present; `renamed-locals` Equivalent;
    `added-branch` Divergent with a counterexample in the message; `removed-null-check`
    Divergent with `exceptionType` differing; `loop-bound-change` Divergent on rung 1;
-   `webapi-basic` matched by endpoint and Equivalent; `added-removed` EQ004 and EQ005.
+   `webapi-basic` matched by endpoint and Equivalent, including `Find` with
+   `properties.equivalencesApplied` (M3-009); `api-drift` `Parts` Equivalent and `HasX`
+   Divergent on a null `s`; `added-removed` EQ004 and EQ005.
 5. `--baseline` round trip: running a sample, then running it again with the first SARIF
    as baseline, exits 0 and every result has `baselineState: unchanged`.
 6. README gains a "Usage" section with the exact command, the exit code table, and one

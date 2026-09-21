@@ -6,9 +6,15 @@ This document is the specification the code must satisfy. Tests cite its section
 
 For a matched procedure pair (P_old, P_new) with the same input signature, we claim
 **Equivalent** iff for every input state the observable outputs are equal. Observable
-outputs are: the return value, the final values of `ref`/`out` parameters, the sequence
-of opaque calls made (callee identity plus arguments), and whether the procedure throws
-(exception type, not message).
+outputs are: the return value, the final values of `ref`/`out` parameters, the final heap
+(every field and array slice either side touches; ADR 0018), the sequence of opaque calls
+made (callee identity, arguments, and the heap at the call), and whether the procedure
+throws (exception type, not message).
+
+Verdicts are modular (ADR 0019). A call to another matched procedure is an uninterpreted
+function that both sides share, so a verdict assumes those callee pairs are equivalent. The
+SARIF result names them (`assumedCallees`) and flags the ones not proved in the same run
+(`unprovenAssumptions`).
 
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
@@ -45,7 +51,7 @@ Instructions:
 | `IrOverflows(var, overflowOp, a, b)` | Bool: would the checked operation overflow; `overflowOp` in SAdd, UAdd, SSub, USub, SMul, UMul, SDiv |
 | `IrUnary(var, op, a)` | negation, not, conversions with explicit target width and signedness |
 | `IrPhi(var, [(block, var)])` | SSA merge |
-| `IrCall(var?, threw?, callee identity, args)` | opaque call; appended to the observable call trace; `threw` is a Bool output |
+| `IrCall(var?, threw?, callee identity, args)` | opaque call; appended to the observable call trace; `threw` is a Bool output. Result, `threw` and heap effect are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018; heap in and out land in P1-005) |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
 | `IrOpaque(var?, reason, sourceSpan)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014) |
 
@@ -64,15 +70,20 @@ variable. A dereference lowers to a conditional `IrThrow(NullReferenceException)
 Heap and nullness are inputs (M2-004). A procedure's parameter list is its C# parameters
 followed by the synthesised inputs its body needs, ordered by name: the receiver `this`,
 one `null.<Sort>` map from a reference sort to Bool, one `field.<Type>.<Field>` map per
-field touched, and `array.<v>` plus `length.<v>` per array variable indexed. They are `In`
-parameters of the same name on both sides, so the product encoding (M3-001) shares them
-exactly as it shares the C# parameters. A value's shadow is a `mapread` of `null.<Sort>`,
-so equal references are equally null; `new` sets the shadow to false instead. The final
-heap is not an observable (section 1), so no map appears in `outs`. IR variable names take
-only letters, digits, `_`, `.` and `$`, which is why these names are spelled with dots.
+field touched, and `array.<v>` plus `length.<v>` per array variable indexed. They are
+parameters of the same name on both sides, so the product encoding (M3-001) shares their
+inputs exactly as it shares the C# parameters. A value's shadow is a `mapread` of `null.<Sort>`,
+so equal references are equally null; `new` sets the shadow to false instead. `this`,
+`null.*` and `length.*` are `In`, because nothing changes them. `field.*` and `array.*` are
+`Ref` (ADR 0018, ticket M3-007), so every exit names their final version in `outs` and the
+final heap is an observable like any `ref` parameter. When only one side of a pair has a given
+`Ref` map, the other side never touches that slice, and the encoder compares the first side's
+final value against the shared input. IR variable names take only letters, digits, `_`, `.`
+and `$`, which is why these names are spelled with dots.
 
 Two gaps the M2-004 heap model leaves open, stated here so a later ticket does not assume
-otherwise (ADR 0015). An `IrCall` does not havoc any `field.*` map, so a call's effect on the
+otherwise (ADR 0015). ADR 0018 schedules both fixes, and M3-007's, before M3-003, so no
+build that reports sample verdicts carries them. An `IrCall` does not havoc any `field.*` map, so a call's effect on the
 heap is not modelled and a pair that differs only in where it reads a field around a call is not
 distinguished; ticket P1-005 closes this. And `array.<v>` is keyed per array *variable*, not per
 array value, so two variables holding the same array are two independent slices; ticket P1-006
@@ -107,11 +118,18 @@ Migration-specific normalisations (applied to both sides before matching):
 
 - `System.Web` vs `Microsoft.AspNetCore` attribute routes map to one route identity.
 - `HttpResponseMessage` / `IHttpActionResult` vs `IActionResult` map to one result
-  identity (status code observed, body opaque).
+  identity (status code observed, body opaque). This is done by `api-equivalences.json`
+  type and member entries (ADR 0020, ticket M3-009), not by a separate normaliser.
 - Namespace and type rename maps come from `equiv.config.json`.
 - BCL API changes are NOT auto-equated (`WebClient` vs `HttpClient` calls are different
   identities and therefore Divergent unless the user maps them). False alarms are
-  cheaper than false proofs.
+  cheaper than false proofs. The one exception is a shipped, cited catalogue
+  (`api-equivalences.json`, ADR 0020, ticket M3-009) of member and type pairs that are
+  exactly equivalent whenever both are invoked: overload drift such as
+  `String::Split(Char[])` → `String::Split(Char, StringSplitOptions)`, and Web API 2 →
+  ASP.NET Core result helpers and result types. The frontend rewrites a legacy call while
+  lowering it, with an argument adapter, and every entry applied to a pair is listed in
+  `properties.equivalencesApplied`. Users can suppress entries in `equiv.config.json`.
 - Runtime-changed APIs: a shipped data table (`runtime-changes.json`, sourced from
   Microsoft's .NET Core 3.0 to .NET 10 breaking-changes list) names BCL members whose
   behaviour differs between .NET Framework and .NET even when the call is textually
@@ -131,9 +149,14 @@ Ambiguous overload mapping means `Unknown`.
 
 Product program: declare inputs once, inline P_old and P_new with disjoint SSA names,
 assert that some observable differs (disjunction over return, out params, call trace,
-threw flag, exception type), check. Calls with the same identity and equal arguments
-return equal values on both sides (uninterpreted functions) unless the identity is in
-the runtime-changes table. The call trace is a bounded list compared element-wise.
+threw flag, exception type, final heap), check. A call's result, `threw` flag and heap
+effect are uninterpreted functions of (identity, arguments, heap at the call, position),
+where the position is the number of calls the same side made before it (ADR 0018). Calls
+at the same position with the same identity, arguments and heap therefore agree across
+sides. Two calls on one side are never forced to agree, because a real callee may be
+stateful. The exception is an identity in the runtime-changes table, which gets
+side-specific functions. The call trace is a bounded list compared element-wise; an event
+is (identity, arguments, heap at the call).
 
 ### 5.1 Loop ladder
 
@@ -164,6 +187,10 @@ have a syntactic termination argument (bounded counters), otherwise not claimed.
 | Removed | none (rule default `note`) | `informational` | EQ005 |
 | Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link in `message`) |
 
+Every verdict on a matched pair with bodies also carries `properties.assumedCallees` and
+`properties.unprovenAssumptions` (ADR 0019), and `properties.equivalencesApplied` when a
+catalogue entry fired (ADR 0020).
+
 Baseline: SARIF `baselineState` (`new`, `unchanged`, `updated`, `absent`) computed from
 a result fingerprint (procedure identity + verdict + model hash). The exit code considers
 only `new` results unless `--no-baseline` is given. Accepting a divergence as the new
@@ -186,7 +213,9 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
 
 - Soundness harness (property test, `Equiv.Verify.Z3.Tests`): for any generated IR
   procedure P, `verify(P, P)` is Equivalent; for P and a random semantics-changing
-  mutation P', the verdict is Divergent or Unknown, never Equivalent. Runs against
+  mutation P', the verdict is Divergent or Unknown, never Equivalent. Mutations include
+  dropping or changing a map write (the final heap is observable) and duplicating a call
+  whose results are compared (calls are not idempotent; ADR 0018). Runs against
   every ladder rung independently. It generates IR, so it covers the encoder and the
   ladder only: a C#-to-IR lowering gap is invisible to it by construction, and the two
   section 2 heap gaps are exactly that (ADR 0015). The obligation that covers C#-to-IR is

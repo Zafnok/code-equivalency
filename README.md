@@ -12,11 +12,12 @@ cross-language rewrites. The language frontends are the only language-specific p
 
 ## Status
 
-Milestones M0 (skeleton and gates) and M1 (core IR, samples, SARIF, CLI shell) are
-merged. The pipeline exists end to end in `Equiv.Core` and `Equiv.Cli`, but no language
-frontend or solver backend is plugged in yet, so `equiv compare` on a real solution
-reports "no frontend" and exits 3. Next up is M2 (the C# frontend), starting with
-M2-001. Progress and carried-forward items: [docs/ROADMAP.md](docs/ROADMAP.md).
+Milestones M0 (skeleton and gates), M1 (core IR, samples, SARIF, CLI shell) and M2 (the
+C# frontend) are merged. `equiv compare` loads real 4.8 and .NET 10 solutions, matches
+procedures (including by HTTP route) and lowers them to IR, and reports Added/Removed. No
+verification backend is wired yet, so matched pairs get no verdict (ADR 0012). Next is M3:
+the Z3 backend, the loop ladder, and the soundness and precision work that the pre-M3
+review added (ADRs 0018 to 0020). Progress and ordering: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 What exists today:
 
@@ -24,14 +25,20 @@ What exists today:
   CsCheck generators in `tests/Equiv.TestSupport`; verdict model (`Equivalent`,
   `Divergent` + counterexample, `Unknown` + reason, `Added`, `Removed`); procedure
   identity normalisation with rename maps; `equiv.config.json` loader; stable identity
-  matcher; SARIF 2.1.0 writer with fingerprint-based `baselineState`.
+  matcher; SARIF 2.1.0 writer with fingerprint-based `baselineState`; the
+  runtime-changes table (EQ006).
+- `Equiv.Frontend.CSharp` — `MSBuildWorkspace` loader, symbol enumeration, endpoint
+  discovery (Web API 2 / MVC 5 / ASP.NET Core attribute routes), and lowering from
+  Roslyn's CFG to IR. Coverage per `OperationKind` is in
+  [docs/tickets/IOPERATION-COVERAGE.md](docs/tickets/IOPERATION-COVERAGE.md).
 - `Equiv.Cli` — `equiv compare` argument parsing, frontend routing by language, exit
   codes, `--dry-run`, `--baseline`, `--fail-on`.
-- `Equiv.Frontend.CSharp`, `Equiv.Verify.Z3` — empty shells until M2 and M3.
-- `samples/` — five paired 4.8/10 solutions, each README stating the expected verdicts.
+- `Equiv.Verify.Z3` — empty shell until M3-001.
+- `samples/` — paired 4.8/10 solutions, each README stating the expected verdicts.
 - Gates — 100% line and branch coverage on every `src/` project, warnings as errors,
-  ArchUnitNET dependency rules, CodeQL, gitleaks, Dependabot, locked restores. Stryker
-  and SonarQube Cloud run on every PR but are not yet required checks.
+  ArchUnitNET dependency rules, CodeQL, gitleaks, Dependabot, locked restores, a
+  dependency licence gate, and Stryker mutation testing. SonarQube Cloud runs on every
+  PR but is not yet a required check.
 
 ## Licence
 
