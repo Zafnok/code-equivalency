@@ -51,7 +51,10 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   when only the bounded rung succeeded.
 - Uninterpreted calls: same identity on both sides means the same uninterpreted
   function (the mutual-summary assumption from SymDiff), except members listed in the
-  runtime-changes table, which are Divergent (EQ006). Mapped identities via config.
+  runtime-changes table, which are Divergent (EQ006). Mapped identities via config and the
+  `api-equivalences.json` catalogue (ADR 0020). The functions also take the heap at the call
+  and the call's position in the trace, because callees are stateful (ADR 0018). A verdict
+  that relies on a matched callee pair names it in the SARIF (ADR 0019).
 
 `Equiv.Cli`:
 

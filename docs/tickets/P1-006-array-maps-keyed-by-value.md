@@ -2,7 +2,10 @@
 Status: todo
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
-Depends on: M2-004, M3-001, P1-003
+Depends on: M2-004, M3-001, M3-007, P1-003
+
+Promoted into M3 by ADR 0018: lands before M3-003, despite the P1 id. The new `array.<Elem>`
+maps are `Ref` like every `array.*` map (M3-007); `length` stays `In`.
 
 ## Goal
 `void M(int[] a, int[] b)` stops treating `a` and `b` as disjoint when the caller passes one

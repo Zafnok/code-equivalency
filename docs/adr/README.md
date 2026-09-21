@@ -21,3 +21,7 @@ supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.
 | 0014 | Reaching an `IrOpaque` makes that input's outcome unknown |
 | 0015 | A call's heap effect and array aliasing are named limits, not defects |
 | 0016 | SonarQube's overall backlog becomes batched GitHub issues, filtered by a checked-in policy |
+| 0017 | BUSL-1.1 with a three-seat, 50k-LOC free tier; permissive-only dependencies |
+| 0018 | The final heap is observable, and a call is a function of its position and the heap |
+| 0019 | Verdicts are modular, and an Equivalent names the callee pairs it assumed |
+| 0020 | A shipped catalogue of known-equivalent API pairs, applied visibly |

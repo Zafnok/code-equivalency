@@ -1,6 +1,6 @@
 # ADR 0015: A call's heap effect and array aliasing are named limits, not defects
 
-Status: accepted (2026-09-20)
+Status: accepted (2026-09-20); superseded in part by 0018 (P1-005 and P1-006 land before M3-003)
 
 ## Context
 M2-004 (PR #30) lowers fields and arrays as SSA maps, per its acceptance criterion 6. Two gaps

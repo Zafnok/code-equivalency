@@ -11,7 +11,8 @@ model into a readable counterexample, and replay it through `IrInterpreter` to c
 Loops are rejected here with `Unknown(loop)`; M3-002 adds the ladder on top of this encoder.
 
 ## Spec references
-VERIFICATION-MODEL.md sections 1, 5, 6, 7; ADR 0005; ARCHITECTURE.md backend bullets.
+VERIFICATION-MODEL.md sections 1, 2, 5, 6, 7; ADR 0005; ADR 0014; ADR 0018; ARCHITECTURE.md
+backend bullets.
 
 ## Design
 
@@ -29,7 +30,10 @@ Encoding (`ProductEncoder`), one `Z3.Context` and `Solver` per pair, both dispos
 - Sorts: `IrBool` -> `BoolSort`; `IrBitVec(n)` -> `BitVecSort(n)`; `IrSort(name)` -> one
   `UninterpretedSort` per name, shared by both sides; `IrMap(k, v)` -> `ArraySort`.
 - Every SSA var becomes a constant named `old.<name>` or `new.<name>`. Parameters are
-  shared: `old.param:a == new.param:a` asserted (or one constant reused).
+  shared: `old.param:a == new.param:a` asserted (or one constant reused). A parameter
+  present on only one side (a synthesised heap map the other side never names) is
+  declared once as the shared input; the other side's final value of it *is* that input
+  (ADR 0018).
 - Instructions become definitional equalities asserted unconditionally: `t = bvadd(a, b)`,
   `t = select(m, k)`, `m2 = store(m, k, v)`. SSA makes this sound: a definition in an
   unreachable block constrains a name nothing reads. `IrOverflows` uses
@@ -41,10 +45,17 @@ Encoding (`ProductEncoder`), one `Z3.Context` and `Solver` per pair, both dispos
   `IrUnreachable` asserts `not reach.B`. Phi: `x = ite(reach.P1 AND edge(P1->B), v1, ite(...))`.
 - Observables per side: `returned = OR reach of return blocks`; `ret = ite chain over
   return blocks`; `threw = OR reach of throw blocks`; `exceptionType` an `Int` constant
-  per interned type name selected by ite chain; out-params likewise.
-- Calls (mutual summaries): per `CallIdentity` and signature, one `FuncDecl`
-  `f_callee(args...) -> result` and `f_callee_threw(args...) -> Bool`, shared by both
-  sides. Identities present in the config call-identity map are unified before lookup.
+  per interned type name selected by ite chain; every `Ref`/`Out` parameter's final value
+  likewise, from the exits' `outs`, over the union of both sides' by-ref parameter names.
+  Heap maps are `Ref` parameters (ADR 0018), so this is how the final heap is compared;
+  map equality is plain Z3 array equality. There is no special case for maps.
+- Calls (mutual summaries, stateful per ADR 0018): per `CallIdentity` and signature, one
+  `FuncDecl` `f_callee(args..., pos) -> result` and `f_callee_threw(args..., pos) -> Bool`,
+  shared by both sides. `pos` is the call's position in its own side's trace: the number of
+  calls that side executed before it. Encode it as a bv32 term, `cnt.<side>.<block>` at
+  block entry (an ite over predecessors, like a phi, with entry = 0), plus 1 per earlier
+  call in the block. Two calls on one side therefore never share a result, while an
+  unchanged call sequence still does. Identities present in the config call-identity map are unified before lookup.
   Identities in the runtime-changes table (M2-006) get side-specific functions
   `f_callee_old` / `f_callee_new`, which is what makes them divergent.
 - Call trace: a Z3 datatype `Value` with one constructor per IR type in use
@@ -69,7 +80,8 @@ Counterexample (`ModelDecoder`): read parameter values from `solver.Model` with
 `Eval(c, completion: true)`; render bitvectors as signed and unsigned decimals; sorts as
 `#n` tokens; produce `Counterexample(inputs, oldOutcome, newOutcome, oldTrace, newTrace)`.
 Then replay both procedures in `IrInterpreter` with a call oracle built from the model's
-function interpretations (`model.FuncInterp`, default `Else` for unlisted args). If the
+function interpretations (`model.FuncInterp`, default `Else` for unlisted args), keyed by
+the position `IrInterpreter` now passes to `ICallOracle.Answer`. If the
 replay does not diverge, that is an encoder bug: fail loudly with both results in the
 message; do not report Divergent.
 
@@ -82,6 +94,8 @@ message; do not report Divergent.
 - [ ] Fixtures for each observable: return, out param, throw vs no-throw, different
       exception type, same calls different order, extra call, runtime-changed callee.
 - [ ] Opaque fixtures (ADR 0014): `opaque-void-effect`, `opaque-other-path`.
+- [ ] Heap and call-state fixtures (ADR 0018): `heap-write-dropped`, `heap-one-sided`,
+      `repeated-call`.
 - [ ] Property (soundness, `Equiv.TestSupport` generators): `Verify(P, P)` is Equivalent
       for 200 generated acyclic P; `Verify(P, Mutate(P))` is never Equivalent; every
       Divergent replays to divergence in the interpreter.
@@ -119,6 +133,24 @@ message; do not report Divergent.
    about this encoder and the ladder, not about the C# frontend, and the two heap gaps of
    VERIFICATION-MODEL section 2 (ADR 0015; tickets P1-005 and P1-006) are outside it. No
    code changes for this criterion; do not attempt either gap here.
+10. Final heap (ADR 0018). Final values of `Ref`/`Out` parameters are compared over the
+    union of both sides' parameter names, and a name present on one side only is compared
+    against the shared input. Fixtures: `heap-write-dropped.ir` (`field.C.x` is a `Ref`
+    parameter; old writes it and returns, new just returns) is Divergent;
+    `heap-one-sided.ir` (only old names `field.C.x`, and it writes back the value it
+    read) is Equivalent.
+11. Stateful calls (ADR 0018). Call functions take the position term of the Design
+    section. Fixture `repeated-call.ir` (old: two calls to the same callee with the same
+    argument, returning whether the results are equal; new: the same two calls, returning
+    `true`) is Divergent, and its replay diverges.
+12. `ICallOracle.Answer` gains an `int position` parameter (the number of calls the run
+    has made before this one), `IrInterpreter` passes it, and `ICallOracle`'s XML doc
+    says the oracle must be deterministic in (callee, arguments, position). Existing
+    oracles in tests ignore the new parameter. No other `Equiv.Core` contract changes
+    beyond criterion 1's.
+13. The soundness property's `Mutate` can also drop or change an `IrMapWrite` on a `Ref`
+    map, and duplicate an `IrCall` whose result feeds an observable; such pairs are never
+    Equivalent.
 
 ## Size guard
 Six source files in `src/Equiv.Verify.Z3/`. No abstraction over Z3 (no `ISolver`
@@ -133,6 +165,8 @@ interface): the backend is the abstraction.
 - Reverse-postorder is required for the trace concatenation to reflect execution order
   on any path; compute it once per procedure and reuse in M3-002.
 - Keep the encoder pure over IR; nothing in it may know about Roslyn.
+- Until M3-007 lands, the C# frontend still emits heap maps as `In`, so on real samples the
+  heap comparison is inert. The fixtures above are hand-written IR and do not depend on it.
 
 ## Out of scope
 Loops, unrolling, induction (M3-002). SARIF (M1-004 already owns it; this ticket returns
