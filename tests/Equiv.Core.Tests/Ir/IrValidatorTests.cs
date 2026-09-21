@@ -116,8 +116,8 @@ public sealed class IrValidatorTests
         IrProcedure undefined = new(
             new ProcedureIdentity("T::M"),
             [],
-            null,
-            [new IrBlock(new IrBlockId(0), [new IrUnary(new IrVar("y", bv32), IrUnaryOp.Neg, x)], new IrReturn(null, []))],
+            ReturnType: null,
+            [new IrBlock(new IrBlockId(0), [new IrUnary(new IrVar("y", bv32), IrUnaryOp.Neg, x)], new IrReturn(Value: null, []))],
             new IrBlockId(0));
         IrProcedure mismatched = undefined with
         {

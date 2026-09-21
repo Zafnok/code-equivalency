@@ -14,7 +14,7 @@ public sealed class CounterexampleTextTests
     [Fact]
     public void ReturnedWithNoValueDumpsAsReturned()
     {
-        IrRun run = new(new IrReturned(null), [], []);
+        IrRun run = new(new IrReturned(Value: null), [], []);
         Counterexample counterexample = new(NoInputs, run, run);
         Assert.Contains("returned outs() trace()", CounterexampleText.Dump(counterexample), StringComparison.Ordinal);
     }

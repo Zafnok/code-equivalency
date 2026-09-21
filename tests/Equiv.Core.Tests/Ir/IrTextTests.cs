@@ -67,8 +67,8 @@ public sealed class IrTextTests
         IrProcedure p = new(
             new ProcedureIdentity("P"),
             [],
-            null,
-            [new IrBlock(new IrBlockId(0), [new IrCall(null, null, flagged, [])], new IrReturn(null, []))],
+            ReturnType: null,
+            [new IrBlock(new IrBlockId(0), [new IrCall(Target: null, Threw: null, flagged, [])], new IrReturn(Value: null, []))],
             new IrBlockId(0));
 
         string dumped = IrText.Dump(p);
@@ -85,8 +85,8 @@ public sealed class IrTextTests
         IrProcedure p = new(
             new ProcedureIdentity("P"),
             [],
-            null,
-            [new IrBlock(new IrBlockId(0), [new IrCall(null, null, new CallIdentity("F"), [])], new IrReturn(null, []))],
+            ReturnType: null,
+            [new IrBlock(new IrBlockId(0), [new IrCall(Target: null, Threw: null, new CallIdentity("F"), [])], new IrReturn(Value: null, []))],
             new IrBlockId(0));
 
         Assert.Contains("call \"F\"()", IrText.Dump(p), StringComparison.Ordinal);
@@ -105,8 +105,8 @@ public sealed class IrTextTests
         IrProcedure p = new(
             new ProcedureIdentity("P"),
             [],
-            null,
-            [new IrBlock(new IrBlockId(0), [new IrConst(new IrVar("m", type), map)], new IrReturn(null, []))],
+            ReturnType: null,
+            [new IrBlock(new IrBlockId(0), [new IrConst(new IrVar("m", type), map)], new IrReturn(Value: null, []))],
             new IrBlockId(0));
 
         Assert.Contains("[bv8 20 -> bv8 1, bv8 3 -> bv8 1]", IrText.Dump(p), StringComparison.Ordinal);
