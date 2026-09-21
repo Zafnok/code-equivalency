@@ -14,9 +14,8 @@ permissions:
 
 jobs:
   stryker:
-    # Not a required check yet: MTP support in Stryker 5 is new (see QUALITY-GATES.md).
-    # Blocking from M2.
-    continue-on-error: true
+    # Blocking since M0-011: --break-at below fails the job, and each matrix leg is a
+    # required check (see QUALITY-GATES.md). A leg with no mutants (no score) still passes.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -48,6 +47,7 @@ jobs:
           --project ${{ matrix.project.src }}.csproj
           --target-framework net10.0
           --concurrency 4
+          --break-at 90
           ${{ github.event_name == 'pull_request' && format('--since:origin/{0}', github.base_ref) || '' }}
           --reporter html
           --reporter progress
