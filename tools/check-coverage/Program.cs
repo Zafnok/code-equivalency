@@ -1,35 +1,23 @@
 using CheckCoverage;
 
-string testResultsDir = "TestResults";
-string srcDir = "src";
+CommandLineOptions options = CommandLineOptions.Parse(args);
 
-for (int i = 0; i < args.Length; i++)
+if (!Directory.Exists(options.TestResultsDir))
 {
-    if (string.Equals(args[i], "--test-results", StringComparison.Ordinal) && i + 1 < args.Length)
-    {
-        testResultsDir = args[++i];
-    }
-    else if (string.Equals(args[i], "--src", StringComparison.Ordinal) && i + 1 < args.Length)
-    {
-        srcDir = args[++i];
-    }
-}
-
-if (!Directory.Exists(testResultsDir))
-{
-    Console.Error.WriteLine($"check-coverage: test results directory '{testResultsDir}' does not exist.");
+    await Console.Error.WriteLineAsync($"check-coverage: test results directory '{options.TestResultsDir}' does not exist.").ConfigureAwait(false);
     return 1;
 }
 
-List<string> xmlContents = CoberturaReportDiscovery.FindReportFiles(testResultsDir)
-    .Select(File.ReadAllText)
-    .ToList();
+List<string> xmlContents =
+[
+    .. CoberturaReportDiscovery.FindReportFiles(options.TestResultsDir).Select(File.ReadAllText),
+];
 
 IReadOnlyDictionary<string, AssemblyCoverage> assemblies = CoberturaCoverageReader.Merge(xmlContents);
-IReadOnlySet<string> srcAssemblyNames = SrcAssemblyDiscovery.DiscoverAssemblyNames(srcDir);
+IReadOnlySet<string> srcAssemblyNames = SrcAssemblyDiscovery.DiscoverAssemblyNames(options.SrcDir);
 
-IReadOnlyList<CoverageExclusionViolation> violations = Directory.Exists(srcDir)
-    ? ExcludeFromCoverageAuditor.AuditDirectory(srcDir)
+IReadOnlyList<CoverageExclusionViolation> violations = Directory.Exists(options.SrcDir)
+    ? ExcludeFromCoverageAuditor.AuditDirectory(options.SrcDir)
     : [];
 
 CoverageGateResult result = CoverageGate.Evaluate(assemblies, srcAssemblyNames, violations);
