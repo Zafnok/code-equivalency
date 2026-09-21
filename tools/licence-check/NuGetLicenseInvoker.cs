@@ -55,13 +55,23 @@ internal static class NuGetLicenseInvoker
     internal static string ResolveDotnetHostPath()
     {
         string runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory();
-        DirectoryInfo? dotnetRoot = new DirectoryInfo(runtimeDirectory).Parent?.Parent?.Parent;
         string hostFileName = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
-        string? candidate = dotnetRoot is null ? null : Path.Combine(dotnetRoot.FullName, hostFileName);
 
-        return candidate is not null && File.Exists(candidate)
-            ? candidate
-            : throw new LicenceCheckException($"could not resolve an absolute path to the 'dotnet' host from the runtime directory '{runtimeDirectory}'.");
+        return TryResolveDotnetHostPath(runtimeDirectory, hostFileName, File.Exists)
+            ?? throw new LicenceCheckException($"could not resolve an absolute path to the 'dotnet' host from the runtime directory '{runtimeDirectory}'.");
+    }
+
+    /// <summary>Pure candidate-building logic, split out from <see cref="ResolveDotnetHostPath"/> so a test can drive every branch without depending on the real filesystem or OS.</summary>
+    internal static string? TryResolveDotnetHostPath(string runtimeDirectory, string hostFileName, Func<string, bool> fileExists)
+    {
+        DirectoryInfo? dotnetRoot = new DirectoryInfo(runtimeDirectory).Parent?.Parent?.Parent;
+        if (dotnetRoot is null)
+        {
+            return null;
+        }
+
+        string candidate = Path.Combine(dotnetRoot.FullName, hostFileName);
+        return fileExists(candidate) ? candidate : null;
     }
 
     internal static IReadOnlyList<ResolvedPackage> Parse(string json, IReadOnlySet<string> redistributedIds)
