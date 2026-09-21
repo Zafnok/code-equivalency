@@ -19,7 +19,7 @@ internal static class Lowered
         Source($"using System;\nclass C\n{{\n{members}\n}}\n", name, allowErrors);
 
     /// <summary>Lowers the method named <paramref name="name"/> (metadata name: <c>.ctor</c>, <c>get_P</c>) of class <c>C</c> in a whole compilation unit.</summary>
-    public static IrProcedure Source(string source, string name = "M", bool allowErrors = false, RenameMap? renames = null)
+    public static IrProcedure Source(string source, string name = "M", bool allowErrors = false, RenameMap? renames = null, ImmutableArray<string> suppressedRuntimeChanges = default)
     {
         Compilation compilation = RoslynTestCompilations.Compile(source);
         if (!allowErrors)
@@ -28,7 +28,7 @@ internal static class Lowered
         }
 
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single();
-        IrProcedure procedure = IrLowerer.Lower(method, compilation, renames ?? RenameMap.Empty);
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, renames ?? RenameMap.Empty, suppressedRuntimeChanges.IsDefault ? [] : suppressedRuntimeChanges);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

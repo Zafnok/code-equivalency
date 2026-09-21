@@ -69,7 +69,7 @@ public sealed class LoweringOracleTests
             for (int i = 0; i < cases.Length; i++)
             {
                 IMethodBodyOperation body = (IMethodBodyOperation)model.GetOperation(declarations[i], TestContext.Current.CancellationToken)!;
-                IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty);
+                IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty, []);
                 Assert.Empty(IrValidator.Validate(procedure));
                 MethodInfo method = oracle.GetMethod(declarations[i].Identifier.Text)!;
                 foreach (OracleInput input in cases[i].Inputs)

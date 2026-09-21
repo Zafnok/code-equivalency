@@ -30,6 +30,7 @@ internal sealed class IrLowerer
 
     private readonly SsaBuilder ssa = new();
     private readonly RenameMap renames;
+    private readonly ImmutableArray<string> suppressedRuntimeChanges;
     private readonly IrType? returnType;
     private readonly Dictionary<ISymbol, SsaBuilder.Variable> variables = new(SymbolEqualityComparer.Default);
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captures = [];
@@ -49,17 +50,19 @@ internal sealed class IrLowerer
     private IrBlockId? handlerExit;
     private IrBlockId current = new(0);
 
-    private IrLowerer(RenameMap renames, IrType? returnType)
+    private IrLowerer(RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, IrType? returnType)
     {
         this.renames = renames;
+        this.suppressedRuntimeChanges = suppressedRuntimeChanges;
         this.returnType = returnType;
     }
 
     /// <summary>
     /// Lowers <paramref name="method"/>'s first declaration. A body that is not an <see cref="IMethodBodyOperation"/>
     /// (a constructor, an arrow-bodied property, an auto-accessor) is one whole-body <see cref="IrOpaque"/>.
+    /// A call to a member listed in <paramref name="suppressedRuntimeChanges"/> is not flagged runtime-changed.
     /// </summary>
-    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, RenameMap renames)
+    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
@@ -67,11 +70,11 @@ internal sealed class IrLowerer
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
         return operation is IMethodBodyOperation body
-            ? Lower(body, model, renames)
+            ? Lower(body, model, renames, suppressedRuntimeChanges)
             : Opaque(method, renames, operation?.Kind.ToString() ?? "no-body", Span(syntax));
     }
 
-    public static IrProcedure Lower(IMethodBodyOperation body, SemanticModel model, RenameMap renames)
+    public static IrProcedure Lower(IMethodBodyOperation body, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(model);
@@ -93,7 +96,7 @@ internal sealed class IrLowerer
         }
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method);
-        IrLowerer lowerer = new(renames, returnType) { compilation = (CSharpCompilation)model.Compilation, cfg = graph };
+        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, returnType) { compilation = (CSharpCompilation)model.Compilation, cfg = graph };
         ImmutableArray<IrBlock> blocks = lowerer.LowerBlocks(graph, method, parameters, span);
         IrProcedure procedure = new(
             RoslynIdentity.Of(method, renames),
@@ -960,7 +963,7 @@ internal sealed class IrLowerer
     private IrVar? Create(IObjectCreationOperation creation) =>
         creation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out)
             ? Opaque(creation, "ref-argument")
-            : Call(CallIdentityFactory.Of(creation.Constructor!, renames), [.. Arguments([], creation.Arguments)], TypeMapper.Map(creation.Type!));
+            : Call(CallIdentityFactory.Of(creation.Constructor!, renames, suppressedRuntimeChanges), [.. Arguments([], creation.Arguments)], TypeMapper.Map(creation.Type!));
 
     /// <summary>An opaque call (receiver first, then arguments in parameter order) that may throw System.Exception.</summary>
     private IrVar? Invoke(IInvocationOperation invocation)
@@ -982,7 +985,7 @@ internal sealed class IrLowerer
         }
 
         return Call(
-            CallIdentityFactory.Of(invocation.TargetMethod, renames),
+            CallIdentityFactory.Of(invocation.TargetMethod, renames, suppressedRuntimeChanges),
             [.. Arguments(receiver, invocation.Arguments)],
             invocation.TargetMethod.ReturnsVoid ? null : TypeMapper.Map(invocation.Type!));
     }

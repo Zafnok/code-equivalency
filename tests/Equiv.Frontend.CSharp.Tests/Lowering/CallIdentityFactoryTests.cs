@@ -37,6 +37,15 @@ public sealed class CallIdentityFactoryTests
     public Task Lowering_FlagsIndexOfCall() => Verify(IrText.Dump(Method("static int M(string s, char c) => s.IndexOf(c);")));
 
     [Fact]
+    public void ASuppressedMemberIsNotMarkedRuntimeChanged()
+    {
+        const string Source = "class C { static int M(string s, char c) => s.IndexOf(c); }";
+
+        Assert.True(Assert.Single(Calls(Lowered.Source(Source))).Callee.RuntimeChanged);
+        Assert.False(Assert.Single(Calls(Lowered.Source(Source, suppressedRuntimeChanges: ["System.String::IndexOf("]))).Callee.RuntimeChanged);
+    }
+
+    [Fact]
     public void AnUnflaggedCallIsNotMarkedRuntimeChanged()
     {
         IrProcedure procedure = Method("static int M(int a) => System.Math.Abs(a);");

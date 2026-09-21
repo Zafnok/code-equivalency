@@ -14,12 +14,12 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// (rename map applied), plus <c>&lt;typeArgs&gt;</c> when the method or a containing type is a
 /// constructed generic, so <c>F&lt;int&gt;()</c> and <c>F&lt;long&gt;()</c> are different functions.
 /// <see cref="CallIdentity.RuntimeChanged"/> is set when the identity matches
-/// <see cref="RuntimeChangeTable"/> (ticket M2-006); suppression from <c>equiv.config.json</c> is
-/// applied later, once the config reaches the backend (M3-001).
+/// <see cref="RuntimeChangeTable"/> (ticket M2-006) and is not listed in <c>equiv.config.json</c>'s
+/// <c>suppressRuntimeChanges</c>; the flag is the backend's only input about it (ticket M3-001).
 /// </summary>
 internal static class CallIdentityFactory
 {
-    public static CallIdentity Of(IMethodSymbol method, RenameMap renames)
+    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
     {
         ArgumentNullException.ThrowIfNull(method);
         string identity = RoslynIdentity.Of(method, renames).Value;
@@ -28,7 +28,7 @@ internal static class CallIdentityFactory
             ? identity
             : $"{identity}<{string.Join(",", typeArguments.Select(static t => t.ToDisplayString()))}>";
         CallIdentity callee = new(value);
-        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, out _) };
+        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, suppressedRuntimeChanges, out _) };
     }
 
     private static IEnumerable<ITypeSymbol> TypeArguments(INamedTypeSymbol? type) =>
