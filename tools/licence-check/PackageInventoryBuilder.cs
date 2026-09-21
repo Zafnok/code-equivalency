@@ -29,7 +29,7 @@ internal static class PackageInventoryBuilder
     {
         HashSet<string> ids = new(StringComparer.OrdinalIgnoreCase);
         XDocument document = XDocument.Load(directoryBuildPropsPath);
-        foreach (XElement reference in document.Descendants("PackageReference"))
+        foreach (XElement reference in PackageReferences(document))
         {
             if (string.Equals(reference.Attribute("PrivateAssets")?.Value, "All", StringComparison.OrdinalIgnoreCase))
             {
@@ -121,7 +121,7 @@ internal static class PackageInventoryBuilder
             }
 
             XDocument document = XDocument.Load(csprojPath);
-            foreach (XElement reference in document.Descendants("PackageReference"))
+            foreach (XElement reference in PackageReferences(document))
             {
                 string? id = reference.Attribute("Include")?.Value;
                 string? version = reference.Attribute("Version")?.Value;
@@ -137,4 +137,13 @@ internal static class PackageInventoryBuilder
 
         return packages;
     }
+
+    /// <summary>
+    /// &lt;PackageReference&gt; elements regardless of XML namespace: legacy (non-SDK) csproj like
+    /// samples/webapi-basic/legacy declare the MSBuild 2003 xmlns, SDK-style csproj and
+    /// Directory.Build.props declare none. <see cref="XContainer.Descendants(XName)"/> matches by
+    /// exact qualified name, so a plain "PackageReference" lookup silently misses the namespaced ones.
+    /// </summary>
+    private static IEnumerable<XElement> PackageReferences(XDocument document) =>
+        document.Descendants().Where(static element => string.Equals(element.Name.LocalName, "PackageReference", StringComparison.Ordinal));
 }

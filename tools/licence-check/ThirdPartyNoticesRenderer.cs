@@ -44,6 +44,8 @@ internal static class ThirdPartyNoticesRenderer
         ["BSD-3-Clause"] = "https://opensource.org/licenses/BSD-3-Clause",
         ["MS-PL"] = "https://opensource.org/licenses/MS-PL",
         ["ISC"] = "https://opensource.org/licenses/ISC",
+        ["MS .NET Library EULA"] = "https://go.microsoft.com/fwlink/?LinkId=329770",
+        ["Microsoft PerfView .NET Library EULA"] = "https://dotnet.microsoft.com/en-us/perfview_library_license.htm",
     };
 
     public static string Render(IReadOnlyList<ResolvedPackage> passed)

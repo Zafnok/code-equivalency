@@ -33,6 +33,11 @@
       "packageId": "Verify",
       "licence": "MIT",
       "reason": "Build-and-test-only transitive dependency of Verify.XunitV3 (snapshot testing). Its nuspec declares <license type=\"file\">OsmfEula.txt</license>, which is not the code licence itself but VerifyTests' Open Source Maintenance Fee rider on top of the underlying MIT-licensed project (the rider text says so directly: \"an open source software project licensed under the MIT\"). The MIT code licence and the maintenance-fee rider are already tracked for Verify.XunitV3 in ADR 0002 and THIRD-PARTY-NOTICES.md via the SmallRevenue exemption in Directory.Build.props; this entry extends that same treatment to the base Verify package the fee rider actually documents."
+    },
+    {
+      "packageId": "Microsoft.Diagnostics.Tracing.EventRegister",
+      "licence": "Microsoft PerfView .NET Library EULA",
+      "reason": "ADR 0017 standing exception (third): transitive dependency of Sarif.Sdk (Core, Cli), pulled in via Microsoft.Diagnostics.Tracing.TraceEvent's dependency group for .NETStandard2.0, exclude=\"Build,Analyzers\". Its nuspec has no <license> element, only a licenseUrl fwlink; resolved by hand (M0-010) to https://dotnet.microsoft.com/en-us/perfview_library_license.htm, \"MICROSOFT SOFTWARE LICENSE TERMS - MICROSOFT PERFVIEW .NET LIBRARY\" - a restrictive Microsoft EULA, not the MIT licence its sibling TraceEvent carries (PerfView's GitHub source is MIT; this specific old NuGet package binary predates that and was never re-licensed on nuget.org). Verified it is never actually shipped: the package is an old-style nuspec with no lib/ folder, so SDK-style PackageReference restore does not copy eventRegister.exe or Microsoft.Diagnostics.Tracing.EventSource.dll into build output (checked src/Equiv.Core/bin and src/Equiv.Cli/bin directly - neither file is present). It is restored (present in the lock file and the NuGet cache) to satisfy the dependency graph but never linked into a release artifact, the same standing as the other two exceptions above."
     }
   ]
 }
