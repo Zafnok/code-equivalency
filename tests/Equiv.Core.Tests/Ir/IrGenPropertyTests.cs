@@ -65,4 +65,13 @@ public sealed class IrGenPropertyTests(ITestOutputHelper output)
         output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Mutation discard rate: {discarded:P1} of {sample.Length}"));
         Assert.InRange(discarded, 0, 0.4);
     }
+
+    /// <summary>Every block gets an "insert opaque" edit candidate; this checks it is not just generated but
+    /// actually kept (i.e. the opaque call is observable) for at least one procedure.</summary>
+    [Fact]
+    public void AnInsertOpaqueMutationIsSometimesKept()
+    {
+        IrMutant?[] sample = IrGen.Procedure.SelectMany(IrGen.Mutation).Array[500].Single();
+        Assert.Contains(sample, static m => m is not null && m.Description.StartsWith("insert opaque", StringComparison.Ordinal));
+    }
 }
