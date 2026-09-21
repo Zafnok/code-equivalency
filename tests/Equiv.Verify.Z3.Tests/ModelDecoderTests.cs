@@ -86,7 +86,10 @@ public sealed class ModelDecoderTests
     {
         using Context context = new();
 
-        ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("F"), Traced("G"), Calls(context));
+        Exception? exception = Record.Exception(() =>
+            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("F"), Traced("G"), Calls(context)));
+
+        Assert.Null(exception);
     }
 
     [Fact]
