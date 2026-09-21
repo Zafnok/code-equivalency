@@ -49,20 +49,12 @@ Not yet owned by any ticket (schedule when a milestone touches the area):
   needs an ADR 0002 row.
 - Verify's `SmallRevenue` sponsorship exemption in `Directory.Build.props` expires
   2027-09; re-evaluate on monetisation.
-- Dependency licence gate (ADR 0017): a `nuget-license`-style local tool in
-  `.config/dotnet-tools.json` failing the build on any package outside the ADR 0017 allowlist,
-  plus generation of `THIRD-PARTY-NOTICES.md` from the lock files instead of by hand. Needs an
-  ADR 0002 row for the tool. **Should land before M3-001**, the first ticket to add a
-  redistributed native dependency.
-- Analysed-LOC reporting, so the BUSL free tier's per-codebase 50,000-line cap is observable
-  rather than an honour system: a line count for the legacy and modern codebases in the CLI
-  summary and in the SARIF run properties. Reported separately, not summed, to match the grant
-  in `LICENSE`. Natural home is M3-003 or M3-004.
-- M3-004 licensing work: stamp a per-release Change Date (BUSL dates are per version), embed
-  `LICENSE` and `THIRD-PARTY-NOTICES.md` in the container and the single-file artifacts, set the
-  `action.yml` licence field, and resolve MSBuild redistribution — VS Build Tools is not freely
-  redistributable in an image, so the container must use the SDK's MSBuild or Microsoft's
-  build-tools base image under its EULA (ADR 0017).
+- The dependency licence gate is M0-010 and **must land before M3-001**, the first ticket to add
+  a redistributed native dependency. Until it does, ADR 0017's allowlist is enforced only by the
+  CLAUDE.md rule that a new package needs an ADR 0002 row stating its licence.
+- M3-004 carries the rest of the licensing work as its criteria 7 to 9: notices in the artifacts,
+  a per-release Change Date, and the MSBuild redistribution question (VS Build Tools is not
+  freely redistributable in a container image).
 
 ## M0 — Skeleton and gates (day 1) — done
 
@@ -88,6 +80,13 @@ Everything after this milestone runs under 100% coverage and full CI.
   (ADR 0016).
 - M0-007 (S) done, PR #18. Faster mutation job: PRs run Stryker incrementally (`--since`
   the base branch) with full runner concurrency; the nightly schedule stays a full sweep.
+- M0-009 (M) Licensing: `LICENSE` (BUSL-1.1, three-seat and 50k-LOC-per-codebase free tier,
+  converting to Apache-2.0 on 2030-09-20), `THIRD-PARTY-NOTICES.md`, `CONTRIBUTING.md`,
+  package metadata, and ADR 0017 with the dependency licence allowlist. The repo had been
+  public with no licence at all since 2026-09-18.
+- M0-010 (M) todo. Dependency licence gate: a local tool reading real licences from the lock
+  files, failing the build outside the ADR 0017 allowlist, and generating
+  `THIRD-PARTY-NOTICES.md`. Must land before M3-001.
 
 ## M1 — Core IR, samples, SARIF (days 2–3) — done
 
@@ -135,6 +134,8 @@ Everything after this milestone runs under 100% coverage and full CI.
   Stryker becomes blocking.
 - M3-005 (S) Run against one real-world 4.8/10 pair (user-supplied); record findings
   as new tickets, not fixes.
+- M3-006 (S) Report analysed lines of code per codebase, so the BUSL free tier's 50,000-line
+  limit is observable. Reporting only, no enforcement (ADR 0017).
 
 ## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
 

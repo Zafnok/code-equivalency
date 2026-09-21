@@ -31,11 +31,26 @@ QUALITY-GATES.md (packaging row, mutation row); ADR 0006 (container is the free 
    current score minus 2 (read it from the last nightly report and write the number in
    Notes); QUALITY-GATES.md required-checks list updated to include `stryker`.
 6. `build.ps1` unchanged.
+7. Licensing (ADR 0017, M0-009). `Equiv.Cli` sets `IsPackable` explicitly if it needs to be
+   packable — `Directory.Build.props` now defaults it to `false` so nothing publishes by
+   accident. `LICENSE` and `THIRD-PARTY-NOTICES.md` are present in the container image and
+   alongside each released binary. `action.yml` states the licence. The GitHub release body
+   states that `equiv` is BUSL-1.1, source-available and not open source, and links `LICENSE`.
+8. The released version gets its own Change Date. BUSL applies separately to each version, so
+   `release.yml` stamps the `Change Date` of the published artifact's `LICENSE` to four years
+   from the release date rather than shipping the repo's placeholder unchanged.
+9. MSBuild redistribution is resolved and the resolution is written in Notes. VS Build Tools is
+   **not** freely redistributable inside an image, so the container must either rely on the .NET
+   SDK's own redistributable MSBuild or use a Microsoft-published build-tools base image under
+   its per-container EULA. If neither is workable, the container ships without legacy `.csproj`
+   support and README says so — shipping an image that embeds non-redistributable Microsoft
+   build tooling is not an option.
 
 ## Files
 `src/Equiv.Cli/Equiv.Cli.csproj` (publish properties), `Dockerfile`, `.dockerignore`,
 `action.yml`, `.github/workflows/release.yml`, `.github/workflows/mutation.yml`,
-`README.md`, `docs/QUALITY-GATES.md`.
+`README.md`, `docs/QUALITY-GATES.md`, `LICENSE` (Change Date stamping in `release.yml` only;
+the checked-in file keeps its placeholder date).
 
 ## Tests
 `Equiv.Cli.Tests`: `Version_PrintsMinVer`. Everything else is verified by running the
@@ -46,7 +61,8 @@ workflow is verified by pushing a `v0.1.0-rc.1` tag (ask the user before tagging
 No code changes in `src/` beyond `--version` and the platform message.
 
 ## Out of scope
-Hosted tier, API keys, Helm charts, SonarQube upload (the SARIF path is already
+Hosted tier, API keys, Helm charts, licence enforcement or any runtime licence check,
+SonarQube upload (the SARIF path is already
 consumable by `sonar.sarifReportPaths`; document it in README, do not integrate).
 
 ## Notes

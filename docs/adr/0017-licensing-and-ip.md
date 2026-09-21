@@ -84,6 +84,11 @@ Two standing exceptions, both outside the shipped artifact:
   a `samples/` fixture, isolated from the root build by `samples/Directory.Build.props`. Those
   assemblies must never be vendored into the container image or a release artifact.
 
+First-party data files that encode third-party knowledge — `src/Equiv.Core/RuntimeChanges/runtime-changes.json`
+today, and the equivalent tables the Java frontend will need — cite vendor documentation by URL and
+must contain original prose. Do not paste vendor documentation text into the repository. Facts about
+behaviour are not copyrightable; the wording describing them is.
+
 ### Known landmines for M3 and later
 Nothing adopted so far is copyleft. The risks are all ahead, in areas the roadmap already names:
 
