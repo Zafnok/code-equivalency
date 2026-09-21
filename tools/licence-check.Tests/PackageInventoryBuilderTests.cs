@@ -48,6 +48,60 @@ public sealed class PackageInventoryBuilderTests : IDisposable
         Assert.True(inventory.SamplesFullyRestored);
     }
 
+    [Fact]
+    public void ALocalToolFromTheManifestIsResolvedAsBuildAndTestOnly()
+    {
+        WriteMinimalRepoScaffold();
+        Directory.CreateDirectory(Path.Combine(_repoRoot, ".config"));
+        File.WriteAllText(
+            Path.Combine(_repoRoot, ".config", "dotnet-tools.json"),
+            """{ "version": 1, "isRoot": true, "tools": { "some-tool": { "version": "1.2.3", "commands": ["some-tool"] } } }""");
+        WriteNuspec("some-tool", "1.2.3", """<license type="expression">MIT</license>""");
+
+        PackageInventory inventory = PackageInventoryBuilder.Build(_repoRoot, _nugetCache);
+
+        ResolvedPackage package = Assert.Single(inventory.ExtraPackages);
+        Assert.Equal("some-tool", package.Id);
+        Assert.Equal(PackageRole.BuildAndTestOnly, package.Role);
+        Assert.Equal("MIT", package.DeclaredLicence);
+    }
+
+    [Fact]
+    public void APrivateAssetsAllPackageIsExcludedFromRedistributedIds()
+    {
+        WriteMinimalRepoScaffold();
+        File.WriteAllText(
+            Path.Combine(_repoRoot, "Directory.Build.props"),
+            """
+            <Project>
+              <ItemGroup>
+                <PackageReference Include="SomeAnalyzer" PrivateAssets="All" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        string srcProjectDir = Path.Combine(_repoRoot, "src", "Widget.Core");
+        Directory.CreateDirectory(srcProjectDir);
+        File.WriteAllText(
+            Path.Combine(srcProjectDir, "packages.lock.json"),
+            """
+            {
+              "version": 2,
+              "dependencies": {
+                "net10.0": {
+                  "SomeAnalyzer": { "type": "Direct", "resolved": "1.0.0" },
+                  "Redistributed.Package": { "type": "Direct", "resolved": "2.0.0" }
+                }
+              }
+            }
+            """);
+
+        PackageInventory inventory = PackageInventoryBuilder.Build(_repoRoot, _nugetCache);
+
+        Assert.Contains("Redistributed.Package", inventory.RedistributedIds);
+        Assert.DoesNotContain("SomeAnalyzer", inventory.RedistributedIds);
+    }
+
     private void WriteMinimalRepoScaffold()
     {
         File.WriteAllText(Path.Combine(_repoRoot, "Directory.Build.props"), "<Project />");
