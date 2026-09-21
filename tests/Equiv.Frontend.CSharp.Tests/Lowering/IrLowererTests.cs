@@ -202,8 +202,8 @@ public sealed class IrLowererTests
         IrProcedure procedure = Method("static int M(bool b, bool c) { switch (b) { case true: return 1; default: break; } switch (c) { case false: return 2; case true: return 3; } }");
 
         IrSwitch terminator = Assert.Single(procedure.Blocks.Select(static b => b.Terminator).OfType<IrSwitch>());
-        Assert.Equal([new IrBoolValue(false), new IrBoolValue(true)], terminator.Cases.Select(static c => c.Value));
-        Assert.Equal(new IrReturned(Bits(32, 2)), Run(procedure, new IrBoolValue(false), new IrBoolValue(false)));
+        Assert.Equal([new IrBoolValue(Value: false), new IrBoolValue(Value: true)], terminator.Cases.Select(static c => c.Value));
+        Assert.Equal(new IrReturned(Bits(32, 2)), Run(procedure, new IrBoolValue(Value: false), new IrBoolValue(Value: false)));
     }
 
     /// <summary>A single equality test is not a chain, so `if` keeps its branch.</summary>
@@ -220,7 +220,7 @@ public sealed class IrLowererTests
 
     [Fact]
     public void AConstantPatternOutsideASwitchIsAnEquality() =>
-        Assert.Equal(new IrReturned(new IrBoolValue(true)), Run(Method("static bool M(int n) => n is 5;"), Bits(32, 5)));
+        Assert.Equal(new IrReturned(new IrBoolValue(Value: true)), Run(Method("static bool M(int n) => n is 5;"), Bits(32, 5)));
 
     /// <summary>A guard is an ordinary branch after the constant test, so the arm still lowers.</summary>
     [Fact]
@@ -229,8 +229,8 @@ public sealed class IrLowererTests
         IrProcedure procedure = Method("static int M(int n, bool c) => n switch { 1 when c => 2, _ => 0 };");
 
         Assert.Empty(Opaques(procedure));
-        Assert.Equal(new IrReturned(Bits(32, 2)), Run(procedure, Bits(32, 1), new IrBoolValue(true)));
-        Assert.Equal(new IrReturned(Bits(32, 0)), Run(procedure, Bits(32, 1), new IrBoolValue(false)));
+        Assert.Equal(new IrReturned(Bits(32, 2)), Run(procedure, Bits(32, 1), new IrBoolValue(Value: true)));
+        Assert.Equal(new IrReturned(Bits(32, 0)), Run(procedure, Bits(32, 1), new IrBoolValue(Value: false)));
     }
 
     /// <summary>Ticket M2-004 acceptance criterion 5: a reference parameter starts with an unconstrained shadow.</summary>
@@ -322,7 +322,7 @@ public sealed class IrLowererTests
         IrProcedure procedure = Method("static bool M() { string s = null; return s == null; }");
 
         Assert.Empty(procedure.Parameters);
-        Assert.Equal(new IrReturned(new IrBoolValue(true)), Run(procedure));
+        Assert.Equal(new IrReturned(new IrBoolValue(Value: true)), Run(procedure));
     }
 
     [Fact]
@@ -368,7 +368,7 @@ public sealed class IrLowererTests
                 Reference(a, "C"),
                 Reference(b, "C"),
                 Fields("C", new IrBitVec(32)),
-                Nulls("C", a, false)));
+                Nulls("C", a, isNull: false)));
 
     [Fact]
     public void AStaticFieldIsTheSameMapKeyedByItsTypeToken()
@@ -399,7 +399,7 @@ public sealed class IrLowererTests
     {
         IrProcedure procedure = Method("static int M(int[] a, int i) => a[i];");
 
-        IrOutcome outcome = Run(procedure, Reference(0, "int[]"), Bits(32, index), Elements(new IrBitVec(32)), Bits(32, 4), Nulls("int[]", 0, false));
+        IrOutcome outcome = Run(procedure, Reference(0, "int[]"), Bits(32, index), Elements(new IrBitVec(32)), Bits(32, 4), Nulls("int[]", 0, isNull: false));
 
         Assert.Equal(thrown, outcome is IrThrew { ExceptionType: "System.IndexOutOfRangeException" });
     }
@@ -781,7 +781,7 @@ public sealed class IrLowererTests
     public void CapturedLocalIsAssignedThroughTheCapture() =>
         Assert.Equal(
             new IrReturned(Bits(32, 3)),
-            Run(Method("static int M(bool b, int a) { int x = 0; x = b ? a : -a; return x; }"), new IrBoolValue(true), Bits(32, 3)));
+            Run(Method("static int M(bool b, int a) { int x = 0; x = b ? a : -a; return x; }"), new IrBoolValue(Value: true), Bits(32, 3)));
 
     [Fact]
     public void DivisionByZeroThrows() =>

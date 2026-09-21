@@ -129,7 +129,7 @@ public static class IrGen
             {
                 IrBitVec { Width: 32 } => [.. Edges.Select(static e => (IrValue)new IrBitVecValue(32, e))],
                 IrMap map => [Map(map, 0, []), Map(map, 0xFFFF_FFFF, [(0, 1), (1, 0x8000_0000)])],
-                _ => [new IrBoolValue(false), new IrBoolValue(true)],
+                _ => [new IrBoolValue(Value: false), new IrBoolValue(Value: true)],
             };
             combinations = [.. combinations.SelectMany(c => choices.Select(c.Add))];
         }
@@ -156,7 +156,7 @@ public static class IrGen
             int firstBody = block.Instructions.TakeWhile(static i => i is IrPhi).Count();
             int opaqueBlock = b;
             edits.Add(($"insert opaque in {block.Id}", () =>
-                InsertInstructions(procedure, opaqueBlock, firstBody, new IrOpaque(null, "mutant", new SourceSpan("gen", 1, 1, 1, 1)))));
+                InsertInstructions(procedure, opaqueBlock, firstBody, new IrOpaque(Target: null, "mutant", new SourceSpan("gen", 1, 1, 1, 1)))));
             for (int i = 0; i < block.Instructions.Length; i++)
             {
                 int blockIndex = b;

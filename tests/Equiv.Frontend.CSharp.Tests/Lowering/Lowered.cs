@@ -56,11 +56,11 @@ internal static class Lowered
     /// <summary>A <c>null.&lt;Sort&gt;</c> input that answers <paramref name="isNull"/> for <paramref name="id"/> and false elsewhere.</summary>
     private static IrMapValue Empty(IrMap type) => new(
         type,
-        type.Value is IrBool ? new IrBoolValue(false) : new IrBitVecValue(((IrBitVec)type.Value).Width, 0),
+        type.Value is IrBool ? new IrBoolValue(Value: false) : new IrBitVecValue(((IrBitVec)type.Value).Width, 0),
         []);
 
     public static IrMapValue Nulls(string sort, int id, bool isNull) => new(
         new IrMap(new IrSort(sort), new IrBool()),
-        new IrBoolValue(false),
+        new IrBoolValue(Value: false),
         ImmutableDictionary<IrValue, IrValue>.Empty.Add(new IrSortValue(sort, id), new IrBoolValue(isNull)));
 }
