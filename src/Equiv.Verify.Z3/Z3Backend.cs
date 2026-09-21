@@ -103,6 +103,6 @@ public sealed class Z3Backend : IVerificationBackend
         string.Join(
             "; ",
             encoding.Opaques
-                .Where(o => model.Eval(o.Reach, true).IsTrue)
+                .Where(o => model.Eval(o.Reach, completion: true).IsTrue)
                 .Select(static o => $"{ProductEncoder.Prefix(o.Side)}: {o.Node.Reason} at {o.Node.Span.Path} {o.Node.Span.StartLine}:{o.Node.Span.StartColumn}"));
 }

@@ -97,7 +97,7 @@ internal sealed class TraceEncoder
         Constructor[] constructors =
         [
             .. fields.GroupBy(static f => f.Constructor, StringComparer.Ordinal).Select(g =>
-                context.MkConstructor(g.Key, "is:" + g.Key, [.. g.Select(static f => f.Field)], [.. g.Select(static f => f.Sort)], null)),
+                context.MkConstructor(g.Key, "is:" + g.Key, [.. g.Select(static f => f.Field)], [.. g.Select(static f => f.Sort)], sortRefs: null)),
         ];
         try
         {
