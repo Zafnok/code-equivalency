@@ -62,7 +62,7 @@ internal static class CoberturaCoverageReader
 
             if (!byAssembly.TryGetValue(assemblyName, out Dictionary<LineKey, LineAccumulator>? assemblyLines))
             {
-                assemblyLines = new Dictionary<LineKey, LineAccumulator>();
+                assemblyLines = [];
                 byAssembly[assemblyName] = assemblyLines;
             }
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace LicenceCheck;
@@ -16,7 +17,7 @@ internal static class NuGetLicenseInvoker
     {
         // Invoked as a local tool via "dotnet nuget-license", the same convention this repo
         // already uses for dotnet-sonarscanner ("dotnet sonarscanner begin") and dotnet-stryker.
-        ProcessStartInfo startInfo = new("dotnet")
+        ProcessStartInfo startInfo = new(ResolveDotnetHostPath())
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -41,6 +42,36 @@ internal static class NuGetLicenseInvoker
         }
 
         return Parse(stdout, redistributedIds);
+    }
+
+    /// <summary>
+    /// Resolves the absolute path to the running 'dotnet' host, rather than trusting an unqualified
+    /// "dotnet" resolved off PATH (csharpsquid:S4036). The current process is an apphost, not the
+    /// dotnet muxer itself, so <c>Environment.ProcessPath</c> points at this tool's own executable and
+    /// can't be used. Instead this walks up from the shared runtime directory (".../dotnet/shared/
+    /// Microsoft.NETCore.App/&lt;version&gt;/", always present for a framework-dependent app) three
+    /// levels to the dotnet install root, the same layout every .NET SDK and runtime installer uses.
+    /// </summary>
+    internal static string ResolveDotnetHostPath()
+    {
+        string runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory();
+        string hostFileName = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
+
+        return TryResolveDotnetHostPath(runtimeDirectory, hostFileName, File.Exists)
+            ?? throw new LicenceCheckException($"could not resolve an absolute path to the 'dotnet' host from the runtime directory '{runtimeDirectory}'.");
+    }
+
+    /// <summary>Pure candidate-building logic, split out from <see cref="ResolveDotnetHostPath"/> so a test can drive every branch without depending on the real filesystem or OS.</summary>
+    internal static string? TryResolveDotnetHostPath(string runtimeDirectory, string hostFileName, Func<string, bool> fileExists)
+    {
+        DirectoryInfo? dotnetRoot = new DirectoryInfo(runtimeDirectory).Parent?.Parent?.Parent;
+        if (dotnetRoot is null)
+        {
+            return null;
+        }
+
+        string candidate = Path.Combine(dotnetRoot.FullName, hostFileName);
+        return fileExists(candidate) ? candidate : null;
     }
 
     internal static IReadOnlyList<ResolvedPackage> Parse(string json, IReadOnlySet<string> redistributedIds)

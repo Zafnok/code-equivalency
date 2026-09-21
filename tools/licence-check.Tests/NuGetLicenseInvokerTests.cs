@@ -42,6 +42,46 @@ public sealed class NuGetLicenseInvokerTests
     }
 
     [Fact]
+    public void ResolveDotnetHostPathReturnsAnExistingAbsolutePath()
+    {
+        string path = NuGetLicenseInvoker.ResolveDotnetHostPath();
+
+        Assert.True(Path.IsPathRooted(path));
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public void TryResolveDotnetHostPathReturnsCandidateWhenItExists()
+    {
+        string tempRoot = Path.GetTempPath();
+        string runtimeDirectory = Path.Combine(tempRoot, "a", "b", "c");
+
+        string? result = NuGetLicenseInvoker.TryResolveDotnetHostPath(runtimeDirectory, "dotnet", static _ => true);
+
+        Assert.Equal(Path.Combine(tempRoot.TrimEnd(Path.DirectorySeparatorChar), "dotnet"), result);
+    }
+
+    [Fact]
+    public void TryResolveDotnetHostPathReturnsNullWhenCandidateDoesNotExist()
+    {
+        string runtimeDirectory = Path.Combine(Path.GetTempPath(), "a", "b", "c");
+
+        string? result = NuGetLicenseInvoker.TryResolveDotnetHostPath(runtimeDirectory, "dotnet", static _ => false);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void TryResolveDotnetHostPathReturnsNullWhenRuntimeDirectoryHasNoGrandparent()
+    {
+        string runtimeDirectory = Path.GetPathRoot(Path.GetTempPath())!;
+
+        string? result = NuGetLicenseInvoker.TryResolveDotnetHostPath(runtimeDirectory, "dotnet", static _ => true);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
     public void PackagesNotInRedistributedIdsAreBuildAndTestOnly()
     {
         const string json = """
