@@ -161,9 +161,14 @@ Added by the M3-001 review (2026-09-21; ADR 0021):
 - M3-012 (S) The synthesised-input naming rule ADR 0021 relies on is enforced over `samples/`,
   and a C# parameter named `@this` no longer collides with the receiver input.
 
+Added by ADR 0023 (2026-09-21):
+
+- M3-013 (S) A pair whose verification throws is reported as a SARIF tool-execution
+  notification and skipped; the run exits 5, and its baseline result is carried as `unchanged`.
+
 Order: M3-001 → M3-002. In parallel on the frontend: M3-007 → P1-003 → P1-006 → P1-005 (P1-005
-also needs M3-001), and M3-010 → M3-011 and M3-009; M3-012 once M3-001 is merged. Then M3-003 (needs M3-002, M3-007, M3-009,
-M3-012, P1-005, P1-006) → M3-008 → M3-004 → M3-005 (also needs M3-010, M3-011) → M3-006.
+also needs M3-001), and M3-010 → M3-011 and M3-009; M3-012 and M3-013 once M3-001 is merged. Then M3-003 (needs M3-002, M3-007, M3-009,
+M3-012, M3-013, P1-005, P1-006) → M3-008 → M3-004 → M3-005 (also needs M3-010, M3-011) → M3-006.
 
 ## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
 

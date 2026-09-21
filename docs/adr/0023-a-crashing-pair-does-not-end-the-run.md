@@ -1,6 +1,6 @@
-# ADR 0022: A pair whose verification crashes is reported and skipped, and the run exits 5
+# ADR 0023: A pair whose verification crashes is reported and skipped, and the run exits 5
 
-Status: proposed (2026-09-21)
+Status: accepted (2026-09-21)
 
 ## Context
 With M3-001 (PR #78) the CLI verifies every matched pair through `Z3Backend`. Any exception on one

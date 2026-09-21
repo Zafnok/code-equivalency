@@ -50,7 +50,7 @@ it has drifted: ADR 0021 already decided that.
 ## Out of scope
 - Replacing the naming rule with an explicit flag on `IrParameter` (rejected in ADR 0021).
 - Turning `IrLowerer`'s `Debug.Assert` on the validator into a Release-mode check. Worth doing,
-  but it changes what a lowering bug does to a run, which is ADR 0022's question.
+  but it changes what a lowering bug does to a run, which is ADR 0023's question.
 - A Java frontend.
 
 ## Notes
