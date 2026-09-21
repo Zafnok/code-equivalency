@@ -118,7 +118,7 @@ internal static class ThirdPartyNoticesRenderer
             return;
         }
 
-        foreach (string licence in packages.Select(package => package.DeclaredLicence).Distinct(StringComparer.Ordinal).OrderBy(licence => licence, StringComparer.Ordinal))
+        foreach (string licence in packages.Select(package => package.DeclaredLicence).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
             builder.AppendLine(CultureInfo.InvariantCulture, $"### {licence} License");
             builder.AppendLine();
