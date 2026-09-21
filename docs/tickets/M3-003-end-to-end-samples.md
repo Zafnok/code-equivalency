@@ -2,7 +2,7 @@
 Status: todo
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: M2-004, M2-005, M2-006, M3-002, M3-007, M3-009, P1-005, P1-006 (ADR 0018: no sample
+Depends on: M2-004, M2-005, M2-006, M3-002, M3-007, M3-009, M3-012, P1-005, P1-006 (ADR 0018: no sample
 verdicts ship with a known silent false Equivalent)
 
 ## Goal

@@ -68,8 +68,8 @@ public sealed class CSharpFrontend : ILanguageFrontend
         {
             Pairs = [.. match.Pairs.Select(pair => pair with
             {
-                OldBody = legacyByIdentity[pair.Old].Lower(config.Renames),
-                NewBody = modernByIdentity[pair.New].Lower(config.Renames),
+                OldBody = legacyByIdentity[pair.Old].Lower(config),
+                NewBody = modernByIdentity[pair.New].Lower(config),
             })],
             Ambiguous = [.. match.Ambiguous, .. legacyAmbiguous, .. modernAmbiguous],
         };
@@ -205,6 +205,6 @@ public sealed class CSharpFrontend : ILanguageFrontend
 
     private sealed record SideProcedure(ProcedureIdentity Identity, IMethodSymbol Symbol, Compilation Compilation)
     {
-        public IrProcedure Lower(RenameMap renames) => IrLowerer.Lower(Symbol, Compilation, renames);
+        public IrProcedure Lower(EquivConfig config) => IrLowerer.Lower(Symbol, Compilation, config.Renames, config.SuppressRuntimeChanges);
     }
 }

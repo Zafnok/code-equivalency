@@ -1,0 +1,15 @@
+# Divergent
+# ADR 0018: two calls with the same argument may return different values (a stateful callee).
+proc "R::Same(int)" (%a: bv32) -> bool entry B0
+B0:
+  %x: bv32 = call "R::Read(int)"(%a)
+  %y: bv32 = call "R::Read(int)"(%a)
+  %same: bool = eq %x, %y
+  ret %same
+---
+proc "R::Same(int)" (%a: bv32) -> bool entry B0
+B0:
+  %x: bv32 = call "R::Read(int)"(%a)
+  %y: bv32 = call "R::Read(int)"(%a)
+  %same: bool = const bool true
+  ret %same

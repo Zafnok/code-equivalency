@@ -34,13 +34,19 @@ public sealed class CompareCommandTests
     [Fact]
     public void Create_RejectsNullFrontends()
     {
-        Assert.Throws<ArgumentNullException>(() => CompareCommand.Create(null!, backend: null));
+        Assert.Throws<ArgumentNullException>(() => CompareCommand.Create(null!, new FakeBackend(NoVerdicts)));
+    }
+
+    [Fact]
+    public void Create_RejectsNullBackend()
+    {
+        Assert.Throws<ArgumentNullException>(() => CompareCommand.Create([], null!));
     }
 
     [Fact]
     public void Create_RequiresLegacyAndModern()
     {
-        ParseResult parseResult = CompareCommand.Create([], backend: null).Parse([]);
+        ParseResult parseResult = CompareCommand.Create([], new FakeBackend(NoVerdicts)).Parse([]);
 
         Assert.Contains(parseResult.Errors, e => e.Message.Contains("--legacy", StringComparison.Ordinal));
         Assert.Contains(parseResult.Errors, e => e.Message.Contains("--modern", StringComparison.Ordinal));
@@ -49,7 +55,7 @@ public sealed class CompareCommandTests
     [Fact]
     public void Create_DefaultsOutAndFailOn()
     {
-        ParseResult parseResult = CompareCommand.Create([], backend: null).Parse(["--legacy", "a.sln", "--modern", "b.sln"]);
+        ParseResult parseResult = CompareCommand.Create([], new FakeBackend(NoVerdicts)).Parse(["--legacy", "a.sln", "--modern", "b.sln"]);
 
         Assert.Empty(parseResult.Errors);
         Assert.Equal("equiv.sarif", parseResult.GetValue<string>("--out"));
@@ -62,7 +68,7 @@ public sealed class CompareCommandTests
     [InlineData("never", false)]
     public void Create_FailOnAcceptsOnlyDivergentOrUnknown(string failOn, bool accepted)
     {
-        ParseResult parseResult = CompareCommand.Create([], backend: null).Parse(["--legacy", "a.sln", "--modern", "b.sln", "--fail-on", failOn]);
+        ParseResult parseResult = CompareCommand.Create([], new FakeBackend(NoVerdicts)).Parse(["--legacy", "a.sln", "--modern", "b.sln", "--fail-on", failOn]);
 
         Assert.Equal(accepted, parseResult.Errors.Count == 0);
     }
@@ -72,7 +78,15 @@ public sealed class CompareCommandTests
     {
         Assert.Throws<ArgumentNullException>(() => CompareCommand.Run(
             "a.sln", "b.sln", "out.sarif", null, null, "divergent", dryRun: false,
-            null!, backend: null, new InMemoryReportSink()));
+            null!, new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+    }
+
+    [Fact]
+    public void Run_RejectsNullBackend()
+    {
+        Assert.Throws<ArgumentNullException>(() => CompareCommand.Run(
+            "a.sln", "b.sln", "out.sarif", null, null, "divergent", dryRun: false,
+            [], null!, new InMemoryReportSink()));
     }
 
     [Fact]
@@ -80,7 +94,7 @@ public sealed class CompareCommandTests
     {
         Assert.Throws<ArgumentNullException>(() => CompareCommand.Run(
             "a.sln", "b.sln", "out.sarif", null, null, "divergent", dryRun: false,
-            [], backend: null, null!));
+            [], new FakeBackend(NoVerdicts), null!));
     }
 
     [Fact]
@@ -191,7 +205,7 @@ public sealed class CompareCommandTests
         ProcedureIdentity added = new("T::Added()");
         ProcedureIdentity removed = new("T::Removed()");
         MatchResult matchResult = new(
-            [new ProcedurePair(pairA, pairA), new ProcedurePair(pairB, pairB)],
+            [Pair(pairA), Pair(pairB)],
             [added],
             [removed],
             []);
@@ -216,7 +230,7 @@ public sealed class CompareCommandTests
     {
         using TempFile legacy = new();
         using TempFile modern = new();
-        MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [], [], []);
+        MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
         FakeFrontend frontend = new("csharp", _ => true, matchResult);
         FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
         {
@@ -235,7 +249,7 @@ public sealed class CompareCommandTests
     {
         using TempFile legacy = new();
         using TempFile modern = new();
-        MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [], [], []);
+        MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
         FakeFrontend frontend = new("csharp", _ => true, matchResult);
         FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
         {
@@ -254,7 +268,7 @@ public sealed class CompareCommandTests
     {
         using TempFile legacy = new();
         using TempFile modern = new();
-        MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [], [], []);
+        MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
         FakeFrontend frontend = new("csharp", _ => true, matchResult);
         FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
         {
@@ -269,23 +283,41 @@ public sealed class CompareCommandTests
     }
 
     [Fact]
-    public void Compare_WithoutBackend_SkipsMatchedPairs()
+    public void Compare_PairWithoutBodyIsAFrontendBug()
     {
         using TempFile legacy = new();
         using TempFile modern = new();
-        ProcedureIdentity added = new("T::Added()");
-        ProcedureIdentity removed = new("T::Removed()");
-        MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [added], [removed], []);
-        FakeFrontend frontend = new("csharp", _ => true, matchResult);
-        InMemoryReportSink sink = new();
+        ProcedurePair lowered = Pair(PairIdentity);
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
 
-        int exitCode = CompareCommand.Run(
+        foreach (ProcedurePair pair in new[] { lowered with { OldBody = null }, lowered with { NewBody = null } })
+        {
+            FakeFrontend frontend = new("csharp", _ => true, new MatchResult([pair], [], [], []));
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => CompareCommand.Run(
+                legacy.Path, modern.Path, "equiv.sarif", null, null, "divergent", dryRun: false,
+                [frontend], backend, new InMemoryReportSink()));
+
+            Assert.Contains(PairIdentity.Value, exception.Message, StringComparison.Ordinal);
+        }
+
+        Assert.Empty(backend.Calls);
+    }
+
+    [Fact]
+    public void Compare_BackendFailureIsRethrownNamingThePair()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+
+        // No canned verdict for the pair, so the fake backend throws KeyNotFoundException.
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => CompareCommand.Run(
             legacy.Path, modern.Path, "equiv.sarif", null, null, "divergent", dryRun: false,
-            [frontend], backend: null, sink);
+            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
 
-        Assert.Equal(ExitCodes.Success, exitCode);
-        Assert.Equal(2, sink.Log!.Runs[0].Results.Count);
-        Assert.DoesNotContain(sink.Log!.Runs[0].Results, r => string.Equals(r.RuleId, "EQ001", StringComparison.Ordinal));
+        Assert.StartsWith($"Verifying {PairIdentity.Value} against {PairIdentity.Value} failed: ", exception.Message, StringComparison.Ordinal);
+        Assert.IsType<KeyNotFoundException>(exception.InnerException);
     }
 
     [Fact]
@@ -318,7 +350,7 @@ public sealed class CompareCommandTests
             SarifLog baseline = SarifReportWriter.Write([new VerificationResult(PairIdentity, divergent)]);
             baseline.Save(baselinePath);
 
-            MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [], [], []);
+            MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
             FakeFrontend frontend = new("csharp", _ => true, matchResult);
             FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = divergent });
             InMemoryReportSink sink = new();
@@ -351,7 +383,7 @@ public sealed class CompareCommandTests
             // A rule-id change (Divergent -> Equivalent) for an identity already in the baseline is
             // always `new` per M1-004's BaselineComputer, but it must not exit 1: only a *new*
             // Divergent counts, and this one is now Equivalent.
-            MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [], [], []);
+            MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
             FakeFrontend frontend = new("csharp", _ => true, matchResult);
             FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
 
@@ -376,7 +408,7 @@ public sealed class CompareCommandTests
         try
         {
             File.WriteAllText(configPath, """{ "bound": 7, "timeoutMs": 12000, "callIdentityRenames": { "Old::M": "New::M" } }""");
-            MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [], [], []);
+            MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
             FakeFrontend frontend = new("csharp", _ => true, matchResult);
             FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
 
@@ -497,7 +529,7 @@ public sealed class CompareCommandTests
         try
         {
             File.WriteAllText(configPath, """{ "bound": 0 }""");
-            MatchResult matchResult = new([new ProcedurePair(PairIdentity, PairIdentity)], [], [], []);
+            MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
             FakeFrontend frontend = new("csharp", _ => true, matchResult);
             FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
             int exitCode = ExitCodes.Success;
@@ -514,6 +546,12 @@ public sealed class CompareCommandTests
         {
             File.Delete(configPath);
         }
+    }
+
+    private static ProcedurePair Pair(ProcedureIdentity identity)
+    {
+        IrProcedure body = IrText.Parse($"proc \"{identity.Value}\" () entry B0 B0: ret");
+        return new ProcedurePair(identity, identity, body, body);
     }
 
     private static Counterexample Counterexample() =>

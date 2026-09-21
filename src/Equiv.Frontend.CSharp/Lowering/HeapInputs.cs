@@ -12,7 +12,7 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// section 2; ticket M2-004): the receiver <c>this</c>, one <c>null.&lt;Sort&gt;</c> map per reference
 /// sort whose nullness is read, one <c>field.&lt;Type&gt;.&lt;Field&gt;</c> map per field touched, and
 /// <c>array.&lt;v&gt;</c> plus <c>length.&lt;v&gt;</c> per array variable indexed. Each is created once, on first use, and they become <see cref="IrParameterKind.In"/> parameters ordered by name, so both
-/// sides of a pair share them by name exactly as they share the C# parameters. IR variable names take
+/// sides of a pair share them by name, while the C# parameters, which a caller binds by position, are shared by position (ADR 0021). IR variable names take
 /// only letters, digits, <c>_</c>, <c>.</c> and <c>$</c>, so every part of a name is spelled with dots.
 /// </summary>
 internal sealed class HeapInputs

@@ -1,0 +1,13 @@
+# Unknown(Timeout)
+# 64-bit division identity, (a / b) * b + a % b vs a: equivalent, but a proof has to bit-blast a 64-bit multiplier and divider.
+proc "T::Rebuild(ulong, ulong)" (%a: bv64, %b: bv64) -> bv64 entry B0
+B0:
+  %q: bv64 = udiv %a, %b
+  %m: bv64 = mul %q, %b
+  %r: bv64 = urem %a, %b
+  %s: bv64 = add %m, %r
+  ret %s
+---
+proc "T::Rebuild(ulong, ulong)" (%a: bv64, %b: bv64) -> bv64 entry B0
+B0:
+  ret %a

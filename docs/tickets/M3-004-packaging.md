@@ -64,3 +64,4 @@ SonarQube upload (the SARIF path is already
 consumable by `sonar.sarifReportPaths`; document it in README, do not integrate).
 
 ## Notes
+- Note (from the M3-001 review, 2026-09-21): `Microsoft.Z3` 4.12.2 ships no `runtimes/linux-x64` native, so criterion 1's `IncludeNativeLibrariesForSelfExtract` has no Linux `libz3.so` to bundle, and the Docker image lacks one too. CI takes it from the pinned PyPI `z3-solver==4.12.2.0` manylinux wheel (`.github/workflows/ci.yml`, "Provide libz3 (Linux)"); this ticket must choose how the linux-x64 artifact and the image get it (same wheel, or a source build) and verify the Linux binary actually loads it. ADR 0002's Microsoft.Z3 row records the gap.

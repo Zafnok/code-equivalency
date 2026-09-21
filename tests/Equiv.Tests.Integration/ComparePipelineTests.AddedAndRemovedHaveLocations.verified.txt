@@ -69,6 +69,34 @@
       },
       results: [
         {
+          ruleId: EQ001,
+          kind: pass,
+          level: none,
+          message: {
+            text: Equiv.Samples.AddedRemoved.Calculator::Add(int,int) is equivalent.
+          },
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: {
+                  uri: file:///<samples>/added-removed/legacy/Calculator.cs
+                },
+                region: {
+                  startLine: 5,
+                  startColumn: 20,
+                  endLine: 5,
+                  endColumn: 23
+                }
+              }
+            }
+          ],
+          partialFingerprints: {
+            procedureIdentity/v1: Equiv.Samples.AddedRemoved.Calculator::Add(int,int),
+            resultFingerprint/v1: 22e4fa9e30f899e218cdeb9a75b2be5062adce24c0596dd1228b50271d9a0841
+          },
+          baselineState: new
+        },
+        {
           ruleId: EQ004,
           kind: informational,
           level: none,

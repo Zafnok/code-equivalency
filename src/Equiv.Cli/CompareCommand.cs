@@ -2,6 +2,7 @@ using System.CommandLine;
 
 using Equiv.Core;
 using Equiv.Core.Configuration;
+using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
@@ -20,9 +21,10 @@ namespace Equiv.Cli;
 /// </summary>
 internal static class CompareCommand
 {
-    public static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend? backend)
+    public static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend)
     {
         ArgumentNullException.ThrowIfNull(frontends);
+        ArgumentNullException.ThrowIfNull(backend);
 
         Option<string> legacyOption = new("--legacy") { Required = true };
         Option<string> modernOption = new("--modern") { Required = true };
@@ -62,10 +64,11 @@ internal static class CompareCommand
         string failOn,
         bool dryRun,
         IReadOnlyList<ILanguageFrontend> frontends,
-        IVerificationBackend? backend,
+        IVerificationBackend backend,
         IReportSink sink)
     {
         ArgumentNullException.ThrowIfNull(frontends);
+        ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(sink);
 
         if (!File.Exists(legacyPath) || !File.Exists(modernPath))
@@ -181,21 +184,20 @@ internal static class CompareCommand
     }
 
     /// <summary>
-    /// <paramref name="backend"/> is <c>null</c> before M3-001 wires a real
-    /// <see cref="IVerificationBackend"/> (ADR 0012): matched pairs get no result at all (not even
-    /// <c>Unknown</c>) until then; Added/Removed are unaffected.
+    /// Every matched pair goes to <paramref name="backend"/> with both lowered bodies. A frontend must
+    /// attach them (ticket M2-003); a pair without one is a frontend bug, not an input problem. So is a
+    /// backend failure (M3-001 fails loudly on an encoder bug); it is rethrown naming the pair.
     /// </summary>
-    private static List<VerificationResult> BuildResults(MatchResult matchResult, IVerificationBackend? backend, EquivConfig config)
+    private static List<VerificationResult> BuildResults(MatchResult matchResult, IVerificationBackend backend, EquivConfig config)
     {
         VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames);
 
         List<VerificationResult> results = new(matchResult.Pairs.Length + matchResult.Added.Length + matchResult.Removed.Length);
-        if (backend is not null)
+        foreach (ProcedurePair pair in matchResult.Pairs)
         {
-            foreach (ProcedurePair pair in matchResult.Pairs)
-            {
-                results.Add(new VerificationResult(pair.New, backend.Verify(pair, options)));
-            }
+            IrProcedure old = pair.OldBody ?? throw new InvalidOperationException($"The frontend matched {pair.Old.Value} without lowering its legacy body.");
+            IrProcedure @new = pair.NewBody ?? throw new InvalidOperationException($"The frontend matched {pair.New.Value} without lowering its modern body.");
+            results.Add(new VerificationResult(pair.New, Verify(backend, pair, old, @new, options)));
         }
 
         foreach (ProcedureIdentity identity in matchResult.Added)
@@ -209,6 +211,18 @@ internal static class CompareCommand
         }
 
         return results;
+    }
+
+    private static Verdict Verify(IVerificationBackend backend, ProcedurePair pair, IrProcedure old, IrProcedure @new, VerificationOptions options)
+    {
+        try
+        {
+            return backend.Verify(old, @new, options);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"Verifying {pair.Old.Value} against {pair.New.Value} failed: {exception.Message}", exception);
+        }
     }
 
     private static int DecideExitCode(List<VerificationResult> results, SarifLog log, string failOn)

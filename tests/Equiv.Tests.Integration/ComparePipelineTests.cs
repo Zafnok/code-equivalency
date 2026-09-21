@@ -1,6 +1,7 @@
 using Equiv.Cli;
 using Equiv.Core.Reporting;
 using Equiv.Frontend.CSharp;
+using Equiv.Verify.Z3;
 
 using Microsoft.CodeAnalysis.Sarif;
 
@@ -9,9 +10,9 @@ using Xunit;
 namespace Equiv.Tests.Integration;
 
 /// <summary>
-/// <c>equiv compare</c> end to end on real samples (ticket M2-002; ADR 0012): <see cref="CSharpFrontend"/>
-/// enumerates and matches both sides, a matched pair gets no result (no backend before M3-001),
-/// and an Added/Removed identity carries a <c>physicalLocation</c>.
+/// <c>equiv compare</c> end to end on real samples (tickets M2-002 and M3-001): <see cref="CSharpFrontend"/>
+/// enumerates and matches both sides, <see cref="Z3Backend"/> gives every matched pair a verdict, and an
+/// Added/Removed identity carries a <c>physicalLocation</c>.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class ComparePipelineTests
@@ -20,7 +21,7 @@ public sealed class ComparePipelineTests
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples"));
 
     [Fact]
-    public void IdenticalYieldsNoResults()
+    public void IdenticalYieldsOnlyEquivalentResults()
     {
         string legacy = Directory.GetFiles(Path.Combine(SamplesRoot, "identical", "legacy"), "*.sln").Single();
         string modern = Directory.GetFiles(Path.Combine(SamplesRoot, "identical", "modern"), "*.slnx").Single();
@@ -30,11 +31,12 @@ public sealed class ComparePipelineTests
         {
             int exitCode = CompareCommand.Run(
                 legacy, modern, outPath, baselinePath: null, configPath: null, failOn: "divergent", dryRun: false,
-                [new CSharpFrontend()], backend: null, new FileReportSink(outPath));
+                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath));
 
             Assert.Equal(ExitCodes.Success, exitCode);
             SarifLog log = SarifLog.Load(outPath);
-            Assert.Empty(log.Runs[0].Results);
+            Assert.NotEmpty(log.Runs[0].Results);
+            Assert.All(log.Runs[0].Results, static r => Assert.Equal("EQ001", r.RuleId));
         }
         finally
         {
@@ -53,12 +55,13 @@ public sealed class ComparePipelineTests
         {
             int exitCode = CompareCommand.Run(
                 legacy, modern, outPath, baselinePath: null, configPath: null, failOn: "divergent", dryRun: false,
-                [new CSharpFrontend()], backend: null, new FileReportSink(outPath));
+                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath));
 
             Assert.Equal(ExitCodes.Success, exitCode);
             SarifLog log = SarifLog.Load(outPath);
 
-            Assert.Equal(2, log.Runs[0].Results.Count);
+            Assert.Contains(log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ001", StringComparison.Ordinal));
+            Assert.Equal(2, log.Runs[0].Results.Count(static r => !string.Equals(r.RuleId, "EQ001", StringComparison.Ordinal)));
             Assert.Contains(log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ004", StringComparison.Ordinal)
                 && r.Locations[0].PhysicalLocation.ArtifactLocation.Uri.OriginalString.EndsWith("modern/Calculator.cs", StringComparison.Ordinal));
             Assert.Contains(log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ005", StringComparison.Ordinal)

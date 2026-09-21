@@ -1,0 +1,10 @@
+# Divergent
+# ADR 0018: old writes this.x and returns, new just returns; the final heap is observable.
+proc "C::Set(int)" (%v: bv32, ref %field.C.x: map<sort "C", bv32>, %this: sort "C") entry B0
+B0:
+  %x1: map<sort "C", bv32> = mapwrite %field.C.x, %this, %v
+  ret outs(%field.C.x = %x1)
+---
+proc "C::Set(int)" (%v: bv32, ref %field.C.x: map<sort "C", bv32>, %this: sort "C") entry B0
+B0:
+  ret outs(%field.C.x = %field.C.x)

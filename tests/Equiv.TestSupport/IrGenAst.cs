@@ -7,7 +7,9 @@ namespace Equiv.TestSupport;
 /// <summary>
 /// The small structured language <see cref="IrGen"/> generates and <see cref="IrGenLowering"/>
 /// lowers to SSA. Six bv32 slots: parameters <c>a</c> and <c>b</c>, slot 2 (a <c>ref</c>
-/// parameter <c>r</c> or a local <c>c</c>), and locals <c>v0</c> to <c>v2</c>.
+/// parameter <c>r</c> or a local <c>c</c>), and locals <c>v0</c> to <c>v2</c>. With a heap, a
+/// <c>ref</c> map parameter <c>field.Gen.x</c> (bv32 to bv32) is read by <see cref="Load"/> and
+/// written by <see cref="Store"/>; without one, a load is its key and a store does nothing.
 /// </summary>
 internal static class IrGenAst
 {
@@ -22,6 +24,9 @@ internal static class IrGenAst
     internal sealed record Binary(IrBinaryOp Op, Expr Left, Expr Right) : Expr;
 
     internal sealed record Unary(IrUnaryOp Op, Expr Operand) : Expr;
+
+    /// <summary>Reads the heap map at <paramref name="Key"/>.</summary>
+    internal sealed record Load(Expr Key) : Expr;
 
     /// <summary>Truncate to bv8, then sign- or zero-extend back to bv32.</summary>
     internal sealed record Narrow(bool Signed, Expr Operand) : Expr;
@@ -53,5 +58,8 @@ internal static class IrGenAst
 
     internal sealed record Throw(string ExceptionType) : Stmt;
 
-    internal sealed record Program(bool HasRef, ImmutableArray<uint> Inits, ImmutableArray<Stmt> Body, Expr Result);
+    /// <summary>Writes <paramref name="Value"/> into the heap map at <paramref name="Key"/>.</summary>
+    internal sealed record Store(Expr Key, Expr Value) : Stmt;
+
+    internal sealed record Program(bool HasRef, bool HasHeap, ImmutableArray<uint> Inits, ImmutableArray<Stmt> Body, Expr Result);
 }

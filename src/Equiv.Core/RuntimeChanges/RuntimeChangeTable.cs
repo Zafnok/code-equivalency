@@ -10,8 +10,7 @@ namespace Equiv.Core.RuntimeChanges;
 /// embedded <c>runtime-changes.json</c> resource. <see cref="TryMatch(CallIdentity, out RuntimeChange)"/>
 /// matches a call's <see cref="CallIdentity.Value"/> by prefix against <see cref="Rows"/>; a member
 /// listed in <c>equiv.config.json</c>'s <c>suppressRuntimeChanges</c> is excluded by the suppressing
-/// overload (the frontend's own flagging, ticket M2-006, does not suppress; that is left for the
-/// backend, M3-001, once it has the config in hand).
+/// overload, which the frontend's flagging uses (ticket M3-001), so a suppressed call is never flagged.
 /// </summary>
 public sealed class RuntimeChangeTable
 {

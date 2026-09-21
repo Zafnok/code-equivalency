@@ -9,10 +9,17 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="coverlet.MTP" />
+    <PackageReference Include="Verify.XunitV3" />
+    <PackageReference Include="CsCheck" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Equiv.Verify.Z3\Equiv.Verify.Z3.csproj" />
+    <ProjectReference Include="..\Equiv.TestSupport\Equiv.TestSupport.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Fixtures\**\*.ir" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

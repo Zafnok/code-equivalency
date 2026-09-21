@@ -70,9 +70,11 @@ variable. A dereference lowers to a conditional `IrThrow(NullReferenceException)
 Heap and nullness are inputs (M2-004). A procedure's parameter list is its C# parameters
 followed by the synthesised inputs its body needs, ordered by name: the receiver `this`,
 one `null.<Sort>` map from a reference sort to Bool, one `field.<Type>.<Field>` map per
-field touched, and `array.<v>` plus `length.<v>` per array variable indexed. They are
-parameters of the same name on both sides, so the product encoding (M3-001) shares their
-inputs exactly as it shares the C# parameters. A value's shadow is a `mapread` of `null.<Sort>`,
+field touched, and `array.<v>` plus `length.<v>` per array variable indexed. The product
+encoding (M3-001, ADR 0021) shares the C# parameters by position, because that is how a caller
+binds them, and the synthesised inputs by name; two parameters of different types are never
+shared, each is then an input of its own side. A synthesised input's name is `this` or contains
+a dot, and a C# parameter's never does: that is how the encoder tells them apart. A value's shadow is a `mapread` of `null.<Sort>`,
 so equal references are equally null; `new` sets the shadow to false instead. `this`,
 `null.*` and `length.*` are `In`, because nothing changes them. `field.*` and `array.*` are
 `Ref` (ADR 0018, ticket M3-007), so every exit names their final version in `outs` and the
@@ -182,7 +184,7 @@ have a syntactic termination argument (bounded counters), otherwise not claimed.
 |---|---|---|---|
 | Equivalent | none | `pass` | EQ001 |
 | Divergent | `error` | `fail` | EQ002 (counterexample in `properties.model` and in `message`) |
-| Unknown | none (rule default `warning`) | `open` | EQ003 (reason: timeout, opaque, unmatched overload) |
+| Unknown | none (rule default `warning`) | `open` | EQ003 (reason: timeout, opaque, unmatched overload, loop until the M3-002 ladder) |
 | Added | none (rule default `note`) | `informational` | EQ004 |
 | Removed | none (rule default `note`) | `informational` | EQ005 |
 | Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link in `message`) |

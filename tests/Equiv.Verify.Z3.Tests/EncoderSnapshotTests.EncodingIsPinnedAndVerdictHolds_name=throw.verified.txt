@@ -1,0 +1,17 @@
+﻿old.reach.B0
+(= old.cnt.B0 #x00000000)
+(= old.reach.B1 (or (and old.reach.B0 true)))
+(= old.cnt.B1 (bvadd old.cnt.B0 #x00000000))
+new.reach.B0
+(= new.cnt.B0 #x00000000)
+(= new.reach.B1 (or (and new.reach.B0 true)))
+(= new.cnt.B1 (bvadd new.cnt.B0 #x00000000))
+differs: (not (and (= (or false) (or false))
+          true
+          (= (or false old.reach.B1) (or false new.reach.B1))
+          (= (ite old.reach.B1 1 0) (ite new.reach.B1 1 0))
+          (= (ite old.reach.B1 in.a in.r) (ite new.reach.B1 in.r in.r))
+          (= (seq.++ (as seq.empty (Seq Event)))
+             (seq.++ (as seq.empty (Seq Event))))))
+opaque.old: (or false)
+opaque.new: (or false)

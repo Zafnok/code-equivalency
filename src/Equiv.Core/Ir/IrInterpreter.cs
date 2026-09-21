@@ -101,8 +101,9 @@ public static class IrInterpreter
         public override IrOutcome? Visit(IrCall instruction)
         {
             ImmutableArray<IrValue> args = [.. instruction.Args.Select(Get)];
+            int position = trace.Count;
             trace.Add(new IrCallRecord(instruction.Callee, args));
-            IrCallResult result = oracle.Answer(instruction.Callee, args, instruction.Target?.Type);
+            IrCallResult result = oracle.Answer(instruction.Callee, args, instruction.Target?.Type, position);
             if (instruction.Target is not null)
             {
                 Set(instruction.Target, result.Value?.Type == instruction.Target.Type

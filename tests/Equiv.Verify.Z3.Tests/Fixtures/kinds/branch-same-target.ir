@@ -1,0 +1,12 @@
+# Equivalent
+proc "T::M(bool)" (%c: bool) -> bool entry B0
+B0:
+  br %c, B1, B1
+B1:
+  ret %c
+---
+proc "T::M(bool)" (%c: bool) -> bool entry B0
+B0:
+  goto B1
+B1:
+  ret %c
