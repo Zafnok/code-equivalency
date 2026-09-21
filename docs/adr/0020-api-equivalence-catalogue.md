@@ -38,7 +38,10 @@ them in that result's `properties.equivalencesApplied`, so an Equivalent says wh
 rests on.
 Users can disable entries in `equiv.config.json` (`suppressApiEquivalences`, prefix-matched like
 `suppressRuntimeChanges`). The soundness condition is: for every adapted argument tuple on which
-both members are actually invoked, they return the same value and throw or do not throw alike. A
+both members are actually invoked, they return the same value, and either neither throws or both throw the same exception type
+(the exception type is an observable, VERIFICATION-MODEL section 1). A rewritten legacy call
+keeps the guards of the legacy call as written, not of its modern target: a static or extension
+legacy call gets no receiver null check. A
 guard the frontend emits before a call (for example the null-receiver check on an instance call)
 is outside the entry and is still compared as usual. An equivalence that needs any further
 precondition is not an entry.
@@ -64,6 +67,10 @@ precondition is not an entry.
 ## Consequences
 - VERIFICATION-MODEL section 3 is amended so that BCL changes are not auto-equated except through a
   cited catalogue entry, which is recorded on the result. Section 6 lists `equivalencesApplied`.
+- The Web API entries equate action results (status code observed, body opaque, as section 3
+  already says), not wire responses. Pipeline configuration such as the default JSON serializer
+  (Newtonsoft, PascalCase, on Web API 2; System.Text.Json, camelCase, on ASP.NET Core) lives
+  outside every procedure and is not checked. Each Web API entry's `reason` says so.
 - New ticket M3-009 builds the catalogue, the adapter and the config key, extends `webapi-basic`
   with actions that return `Ok(...)` and `NotFound()`, and adds a sample `api-drift`. M3-003 depends
   on it and asserts both.

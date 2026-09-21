@@ -153,8 +153,8 @@ run almost all Unknown:
 - M3-010 (M) Property access as accessor calls; implicit upcasts and boxing as cast maps.
 - M3-011 (L) `foreach`, `using` and constructors lowered through the CFG instead of whole-body
   opaque.
-- P1-003, P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
-  and arrays are keyed by value.
+- P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
+  and arrays are keyed by value. P1-003 comes with them as their shared prerequisite.
 
 Order: M3-001 → M3-002. In parallel on the frontend: M3-007 → P1-003 → P1-006 → P1-005 (P1-005
 also needs M3-001), and M3-010 → M3-011 and M3-009. Then M3-003 (needs M3-002, M3-007, M3-009,

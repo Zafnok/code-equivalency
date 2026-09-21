@@ -34,7 +34,8 @@ Each entry is one of two kinds.
 `TypeMapper` maps a legacy sort name to its modern one on the legacy side only. The call lowering
 checks the legacy side's `CallIdentityFactory` result against member entries before emitting
 `IrCall`. The soundness condition is ADR 0020's: whenever both members are invoked on adapted
-arguments, they return the same value and throw alike. The `reason` must say why that holds,
+arguments, they return the same value and either neither throws or both throw the same
+exception type. The `reason` must say why that holds,
 including null handling.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
@@ -49,19 +50,24 @@ including null handling.
      `String` → `String::Contains(Char)` (ADR 0020 explains why the null case stays Divergent,
      correctly);
    - member entries for the Web API 2 `ApiController` helpers `Ok()`, `Ok<T>(T)` (argument
-     converted to `System.Object`), `NotFound()`, `BadRequest()`, `StatusCode(HttpStatusCode)`
+     converted to `System.Object`), `NotFound()`, `BadRequest()`
      → the matching `ControllerBase` helpers;
    - type entries `System.Web.Http.IHttpActionResult` → `Microsoft.AspNetCore.Mvc.IActionResult`
      and each helper's concrete legacy result type → its modern counterpart.
 
    Each entry's `reason` states why it meets the soundness condition. If an entry cannot meet
-   it, leave that entry out and record a `Decision:` line in Notes.
+   it, leave that entry out and record a `Decision:` line in Notes. The Web API entries'
+   `reason` also says that they equate action results, not serialized responses (ADR 0020).
+   `StatusCode(HttpStatusCode)` is not an entry: `ControllerBase.StatusCode` takes an `int`,
+   and an enum-to-`int` conversion is explicit, outside the adapter language.
 3. `equiv.config.json` accepts `suppressApiEquivalences` (an array of id prefixes). The config
    loader, its diagnostics and its tests follow `suppressRuntimeChanges`.
 4. The frontend applies member and type entries on the legacy side only. `ProcedurePair` gains
    `ImmutableArray<string> EquivalencesApplied` (the sorted, distinct ids that fired in either
    body; empty by default). The SARIF writer emits `properties.equivalencesApplied` when it is
-   non-empty.
+   non-empty. A rewritten call keeps the guards of the legacy call as written: a static or
+   extension legacy call gets no receiver null check even when its modern target is an instance
+   member (ADR 0020). Test `LegacyLinqContains_EmitsNoReceiverNullCheck`.
 5. A `params`-expanded legacy call whose element count differs from the entry's is left as it
    is, and so is any call whose arguments the adapter cannot address. Test
    `SplitWithTwoSeparators_IsNotRewritten`.
@@ -87,7 +93,7 @@ their tests.
 `Table_EveryEntryHasReasonAndLearnUrl`, `Table_IdsAreUnique`, `Config_SuppressApiEquivalences_*`
 (mirroring the runtime-changes config tests), `LegacySplit_IsRewrittenToTheModernOverload`,
 `SplitWithTwoSeparators_IsNotRewritten`, `LegacyLinqContains_UnwrapsTheStringArgument`,
-`OkOfInt_ConvertsItsArgumentToObject`, `ModernSide_IsNeverRewritten`,
+`LegacyLinqContains_EmitsNoReceiverNullCheck`, `OkOfInt_ConvertsItsArgumentToObject`, `ModernSide_IsNeverRewritten`,
 `LegacyResultSort_MapsToTheModernSort`, `Sarif_ListsEquivalencesApplied`, and the two sample
 lowering snapshots.
 
