@@ -108,9 +108,9 @@ public sealed class ModelDecoderTests
 
     private static ImmutableArray<ProductEncoder.SharedParameter> Shared(IrProcedure old, IrProcedure @new) => ProductEncoder.Pair(old, @new);
 
-    private static IrRun Returned(ImmutableArray<IrValue> outs) => new(new IrReturned(null), outs, []);
+    private static IrRun Returned(ImmutableArray<IrValue> outs) => new(new IrReturned(Value: null), outs, []);
 
-    private static IrRun Traced(string callee) => new(new IrReturned(null), [], [new IrCallRecord(new CallIdentity(callee), [Bv(1)])]);
+    private static IrRun Traced(string callee) => new(new IrReturned(Value: null), [], [new IrCallRecord(new CallIdentity(callee), [Bv(1)])]);
 
     private static TraceEncoder Calls(Context context, ImmutableDictionary<string, string>? map = null) =>
         new(new SortMapper(context), [], map ?? []);

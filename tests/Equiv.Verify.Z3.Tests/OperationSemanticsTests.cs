@@ -69,7 +69,7 @@ public sealed class OperationSemanticsTests
         IrValue[] bits8 = [.. Edges8.Select(static v => new IrBitVecValue(8, v))];
         (IrValue[] operands, IrType result) = op switch
         {
-            IrUnaryOp.BoolNot => (new IrValue[] { new IrBoolValue(false), new IrBoolValue(true) }, (IrType)Bool),
+            IrUnaryOp.BoolNot => (new IrValue[] { new IrBoolValue(Value: false), new IrBoolValue(Value: true) }, (IrType)Bool),
             IrUnaryOp.ZExt or IrUnaryOp.SExt => (bits8, Bv16),
             IrUnaryOp.Trunc => ([.. Edges16.Select(static v => new IrBitVecValue(16, v))], Bv8),
             _ => (bits8, Bv8),
@@ -89,7 +89,7 @@ public sealed class OperationSemanticsTests
             body.Add(new IrConst(a, operands[i].A));
             body.Add(new IrConst(b, operands[i].B));
             body.Add(operation(r, a, b));
-            body.Add(new IrCall(null, null, new CallIdentity("Sink"), [r]));
+            body.Add(new IrCall(Target: null, Threw: null, new CallIdentity("Sink"), [r]));
         }
 
         IrProcedure old = Procedure(body);
@@ -110,14 +110,14 @@ public sealed class OperationSemanticsTests
         {
             IrVar r = new($"r{i}", values[i].Type);
             body.Add(new IrConst(r, values[i]));
-            body.Add(new IrCall(null, null, new CallIdentity("Sink"), [r]));
+            body.Add(new IrCall(Target: null, Threw: null, new CallIdentity("Sink"), [r]));
         }
 
         return Procedure(body);
     }
 
     private static IrProcedure Procedure(List<IrInstruction> body) =>
-        new(new ProcedureIdentity("Ops::M()"), [], null, [new IrBlock(new IrBlockId(0), [.. body], new IrReturn(null, []))], new IrBlockId(0));
+        new(new ProcedureIdentity("Ops::M()"), [], ReturnType: null, [new IrBlock(new IrBlockId(0), [.. body], new IrReturn(Value: null, []))], new IrBlockId(0));
 
     private static IrValue Flip(IrValue value) => value is IrBoolValue b
         ? new IrBoolValue(!b.Value)
@@ -125,6 +125,6 @@ public sealed class OperationSemanticsTests
 
     private sealed class NoAnswers : ICallOracle
     {
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position) => new(null, false);
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position) => new(Value: null, Threw: false);
     }
 }

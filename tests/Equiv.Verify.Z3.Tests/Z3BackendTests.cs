@@ -95,8 +95,8 @@ public sealed class Z3BackendTests
         IrProcedure illTyped = new(
             new ProcedureIdentity("T::M(bool)"),
             [new IrParameter(c, IrParameterKind.In)],
-            null,
-            [new IrBlock(new IrBlockId(0), [new IrBinary(new IrVar("r", new IrBitVec(32)), IrBinaryOp.Add, c, c)], new IrReturn(null, []))],
+            ReturnType: null,
+            [new IrBlock(new IrBlockId(0), [new IrBinary(new IrVar("r", new IrBitVec(32)), IrBinaryOp.Add, c, c)], new IrReturn(Value: null, []))],
             new IrBlockId(0));
         List<CountingContext> contexts = [];
 
