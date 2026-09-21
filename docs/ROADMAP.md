@@ -156,9 +156,14 @@ run almost all Unknown:
 - P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
   and arrays are keyed by value. P1-003 comes with them as their shared prerequisite.
 
+Added by the M3-001 review (2026-09-21; ADR 0021):
+
+- M3-012 (S) The synthesised-input naming rule ADR 0021 relies on is enforced over `samples/`,
+  and a C# parameter named `@this` no longer collides with the receiver input.
+
 Order: M3-001 → M3-002. In parallel on the frontend: M3-007 → P1-003 → P1-006 → P1-005 (P1-005
-also needs M3-001), and M3-010 → M3-011 and M3-009. Then M3-003 (needs M3-002, M3-007, M3-009,
-P1-005, P1-006) → M3-008 → M3-004 → M3-005 (also needs M3-010, M3-011) → M3-006.
+also needs M3-001), and M3-010 → M3-011 and M3-009; M3-012 once M3-001 is merged. Then M3-003 (needs M3-002, M3-007, M3-009,
+M3-012, P1-005, P1-006) → M3-008 → M3-004 → M3-005 (also needs M3-010, M3-011) → M3-006.
 
 ## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
 
