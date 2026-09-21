@@ -55,12 +55,12 @@ internal static class ProductEncoder
     private static readonly FrozenDictionary<IrOverflowOp, Func<Context, BitVecExpr, BitVecExpr, BoolExpr>> NoOverflow =
         new Dictionary<IrOverflowOp, Func<Context, BitVecExpr, BitVecExpr, BoolExpr>>
         {
-            [IrOverflowOp.SAdd] = static (c, a, b) => c.MkAnd(c.MkBVAddNoOverflow(a, b, true), c.MkBVAddNoUnderflow(a, b)),
-            [IrOverflowOp.UAdd] = static (c, a, b) => c.MkBVAddNoOverflow(a, b, false),
-            [IrOverflowOp.SSub] = static (c, a, b) => c.MkAnd(c.MkBVSubNoOverflow(a, b), c.MkBVSubNoUnderflow(a, b, true)),
-            [IrOverflowOp.USub] = static (c, a, b) => c.MkBVSubNoUnderflow(a, b, false),
-            [IrOverflowOp.SMul] = static (c, a, b) => c.MkAnd(c.MkBVMulNoOverflow(a, b, true), c.MkBVMulNoUnderflow(a, b)),
-            [IrOverflowOp.UMul] = static (c, a, b) => c.MkBVMulNoOverflow(a, b, false),
+            [IrOverflowOp.SAdd] = static (c, a, b) => c.MkAnd(c.MkBVAddNoOverflow(a, b, isSigned: true), c.MkBVAddNoUnderflow(a, b)),
+            [IrOverflowOp.UAdd] = static (c, a, b) => c.MkBVAddNoOverflow(a, b, isSigned: false),
+            [IrOverflowOp.SSub] = static (c, a, b) => c.MkAnd(c.MkBVSubNoOverflow(a, b), c.MkBVSubNoUnderflow(a, b, isSigned: true)),
+            [IrOverflowOp.USub] = static (c, a, b) => c.MkBVSubNoUnderflow(a, b, isSigned: false),
+            [IrOverflowOp.SMul] = static (c, a, b) => c.MkAnd(c.MkBVMulNoOverflow(a, b, isSigned: true), c.MkBVMulNoUnderflow(a, b)),
+            [IrOverflowOp.UMul] = static (c, a, b) => c.MkBVMulNoOverflow(a, b, isSigned: false),
             [IrOverflowOp.SDiv] = static (c, a, b) => c.MkBVSDivNoOverflow(a, b),
         }.ToFrozenDictionary();
 
@@ -135,11 +135,11 @@ internal static class ProductEncoder
             }
             else
             {
-                shared.Add(new SharedParameter(parameter, null));
+                shared.Add(new SharedParameter(parameter, New: null));
             }
         }
 
-        shared.AddRange(@new.Parameters.Where(p => !paired.Contains(p.Var.Name)).Select(static p => new SharedParameter(null, p)));
+        shared.AddRange(@new.Parameters.Where(p => !paired.Contains(p.Var.Name)).Select(static p => new SharedParameter(Old: null, p)));
         return [.. shared];
     }
 

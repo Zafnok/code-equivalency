@@ -35,7 +35,7 @@ internal sealed class ModelDecoder
         this.encoding = encoding;
         foreach ((IrSortValue literal, Expr constant) in encoding.Sorts.SortLiterals)
         {
-            Remember(literal, model.Eval(constant, true));
+            Remember(literal, model.Eval(constant, completion: true));
         }
     }
 
@@ -90,7 +90,7 @@ internal sealed class ModelDecoder
 
     /// <summary>The shared inputs, in <see cref="ProductEncoding.Inputs"/> order.</summary>
     public IrInputs Inputs() =>
-        new([.. encoding.Inputs.Select(i => Decode(model.Eval(i.Term, true), i.Shared.Type))]);
+        new([.. encoding.Inputs.Select(i => Decode(model.Eval(i.Term, completion: true), i.Shared.Type))]);
 
     public IrValue Decode(Expr value, IrType type) => type switch
     {
@@ -184,8 +184,8 @@ internal sealed class ModelDecoder
             TraceEncoder calls = decoder.encoding.Calls;
             IrValue? value = resultType is null
                 ? null
-                : decoder.Decode(decoder.model.Eval(decoder.context.MkApp(calls.ResultFunction(side, callee, types, resultType), applied), true), resultType);
-            bool threw = decoder.model.Eval(decoder.context.MkApp(calls.ThrewFunction(side, callee, types), applied), true).IsTrue;
+                : decoder.Decode(decoder.model.Eval(decoder.context.MkApp(calls.ResultFunction(side, callee, types, resultType), applied), completion: true), resultType);
+            bool threw = decoder.model.Eval(decoder.context.MkApp(calls.ThrewFunction(side, callee, types), applied), completion: true).IsTrue;
             return new IrCallResult(value, threw);
         }
     }
