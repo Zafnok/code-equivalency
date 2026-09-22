@@ -9,5 +9,10 @@ public sealed record OracleMethod(Type ReturnType, string Body)
     public string Render(string name) =>
         $"public static {Keyword(ReturnType)} {name}(int a, int b, long c, long d, bool e, string s)\n{{\n    int x = a; long y = c; bool z = e;\n{Body}}}\n";
 
-    internal static string Keyword(Type type) => type == typeof(int) ? "int" : type == typeof(long) ? "long" : "bool";
+    internal static string Keyword(Type type) => type switch
+    {
+        _ when type == typeof(int) => "int",
+        _ when type == typeof(long) => "long",
+        _ => "bool",
+    };
 }

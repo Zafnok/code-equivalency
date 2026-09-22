@@ -30,7 +30,8 @@ internal sealed class IrGenLowering
 
     private IrGenLowering(bool hasRef, bool hasHeap, bool renamed)
     {
-        names = [renamed ? "p" : "a", renamed ? "q" : "b", hasRef ? (renamed ? "s" : "r") : "c", "v0", "v1", "v2", .. hasHeap ? new[] { "field.Gen.x" } : []];
+        string refName = renamed ? "s" : "r";
+        names = [renamed ? "p" : "a", renamed ? "q" : "b", hasRef ? refName : "c", "v0", "v1", "v2", .. hasHeap ? new[] { "field.Gen.x" } : []];
         env = [.. names.Select(static (n, i) => new IrVar(n, i == Heap ? HeapType : Bv32, n))];
         byRef = hasRef ? new IrParameter(env[2], IrParameterKind.Ref) : null;
         heap = hasHeap ? new IrParameter(env[Heap], IrParameterKind.Ref) : null;
