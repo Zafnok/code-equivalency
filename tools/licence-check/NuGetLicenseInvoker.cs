@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
@@ -37,7 +38,7 @@ internal static class NuGetLicenseInvoker
         process.WaitForExit();
 
         return process.ExitCode != 0
-            ? throw new LicenceCheckException($"'nuget-license' failed (exit {process.ExitCode}): {stderr}")
+            ? throw new LicenceCheckException($"'nuget-license' failed (exit {process.ExitCode.ToString(CultureInfo.InvariantCulture)}): {stderr}")
             : Parse(stdout, redistributedIds);
     }
 

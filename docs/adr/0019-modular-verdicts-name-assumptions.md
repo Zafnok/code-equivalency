@@ -39,5 +39,7 @@ equivalent. The CLI makes that condition visible without changing any verdict or
 
 ## Consequences
 - VERIFICATION-MODEL section 1 states the modular reading, and section 6 lists the two properties.
-- New ticket M3-008 implements this after M3-003, so that its snapshots are approved once.
-- M3-003's snapshots do not yet carry the properties. M3-008 re-approves them.
+- Ticket M3-015 implements this, before M3-003, so M3-003's snapshots carry the properties when
+  they are first approved. (This ADR first scheduled it after M3-003 as its own ticket, M3-008;
+  the 2026-09-21 ticket consolidation merged it into M3-015, which already emitted
+  `assumedCallees` for congruence verdicts.)

@@ -10,7 +10,7 @@ makes lambdas, `await`, type patterns, floating point, `decimal`, interpolated s
 iterators and `ref` arguments opaque. So a method nobody touched is Unknown only because of what it
 contains. In a 4.8-to-10 migration, and on almost every ordinary PR, most method bodies are
 unchanged. The pre-M3 review predicted the first real run would be "almost all Unknown", and M3-010
-and M3-011 only cover part of that. Opacity is caused by the construct, not by the change, so the
+and M4-001 only cover part of that. Opacity is caused by the construct, not by the change, so the
 Unknown rate follows the size of the codebase instead of the size of the diff.
 
 ## Decision
@@ -77,4 +77,4 @@ the tree is **runtime-sensitive**, meaning it contains any of:
 - The fingerprint becomes part of what matching and api-equivalences must keep stable, and a
   normaliser change can invalidate many congruences at once. The sample snapshots pin this.
 - VERIFICATION-MODEL sections 1, 2 and 5 gain the congruence rule and the fragment encoding in the PR that accepted this ADR, and ADR 0014 gains "superseded in part by 0024".
-- Tickets: M3-015 (fingerprints and congruence), M3-017 (shared fragments).
+- Tickets: M3-015 (fingerprints and congruence), M4-004 (shared fragments).

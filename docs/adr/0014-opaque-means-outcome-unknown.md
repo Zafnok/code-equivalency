@@ -43,7 +43,7 @@ The static def-use short circuit is removed.
   paths with no opaque.
 - A `pure` flag on `IrOpaque` (string literals, non-integral constants) so the def-use
   rule can still apply to side-effect-free values: changes a Core record for a precision
-  gain nobody has measured yet. Revisit if M3-005 shows many `Unknown(opaque)` results
+  gain nobody has measured yet. Revisit if M4-007 shows many `Unknown(opaque)` results
   caused only by pure values.
 
 ## Consequences

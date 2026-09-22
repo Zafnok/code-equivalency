@@ -15,6 +15,7 @@ S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it 
 | M1 Core IR, samples, SARIF | days 2–3 | 2026-09-18, PRs 13, 15, 19, 20, 22 | done |
 | M2 C# frontend | days 3–5 | 2026-09-18 to 2026-09-20, PRs 24, 25, 27, 30, 59, 67 | done |
 | M3 Z3 backend and shipping | days 5–7 | M3-001 PR #78 | next: M3-014 and M3-002 in parallel |
+| M4 Precision and first real run | after M3 | | order set by M3-022 |
 
 M0 and M1 landed in one calendar day and M2 in three, still ahead of the five days planned.
 `main` is green in CI on Windows and Ubuntu with 100% line and branch coverage on every `src/`
@@ -127,7 +128,14 @@ Everything after this milestone runs under 100% coverage and full CI.
 
 ## M3 — Z3 backend and shipping (days 5–7)
 
-- M3-001 (L) Product-program encoder + Z3 driver + counterexample decoding.
+M3 ships a sound tool that measures its own Unknown rate. Making it precise on real code is M4.
+M3 grew from six tickets to twenty-two through three reviews (below). On 2026-09-21 it was
+consolidated. The precision tickets moved to M4 and were renumbered (M3-011, M3-018, M3-019,
+M3-017, M3-020, M3-021 and M3-005 became M4-001 to M4-007). Four pairs merged: M3-006 into M3-014,
+M3-008 into M3-015, M3-012 into M3-007, and M3-023 into M3-016. Eleven tickets remain open, plus
+the three promoted P1 tickets.
+
+- M3-001 (L) done, PR #78. Product-program encoder + Z3 driver + counterexample decoding.
   Soundness property harness from VERIFICATION-MODEL §7.
 - M3-002 (L) Loop ladder rungs 1 to 3: bounded unrolling, lockstep relational
   induction (unbounded Equivalent for aligned loops), k-induction; timeouts, `Unknown`
@@ -135,69 +143,64 @@ Everything after this milestone runs under 100% coverage and full CI.
 - M3-003 (M) End to end on all samples; snapshots checked in; exit codes verified;
   `Ambiguous` → `Unknown(UnmatchedOverload)` wiring.
 - M3-004 (M) Packaging: single-file publish, Dockerfile, `action.yml`, README usage.
-- M3-005 (S) Run against one real-world 4.8/10 pair (user-supplied); record findings
-  as new tickets, not fixes.
-- M3-006 (S) Report analysed lines of code per codebase, so the BUSL free tier's 50,000-line
-  limit is observable. Reporting only, no enforcement (ADR 0017).
-
-Added by the pre-M3 architecture review (2026-09-21; ADRs 0018 to 0020), which found three
-silent false-Equivalent paths in the spec and a precision gap that would make the first real
-run almost all Unknown:
-
-- M3-007 (M) Field and array maps are `Ref` parameters, so the final heap is observable
-  (ADR 0018).
-- M3-008 (S) Every verdict names the matched callee pairs it assumed, and flags the unproven
-  ones (ADR 0019).
+- M3-007 (L) Synthesised inputs: field and array maps are `Ref` parameters, so the final heap is
+  observable (ADR 0018). The naming rule ADR 0021 relies on is enforced over `samples/`, and a C#
+  parameter named `@this` no longer collides with the receiver input.
 - M3-009 (M) `api-equivalences.json`: cited overload-drift and Web API result equivalences,
   applied on the legacy side and listed on each result (ADR 0020).
-- M3-010 (M) Property access as accessor calls; implicit upcasts and boxing as cast maps.
-- M3-011 (L) `foreach`, `using` and constructors lowered through the CFG instead of whole-body
-  opaque.
-- P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
+- M3-010 (M) Property access as accessor calls; implicit upcasts and boxing as cast maps. It stays
+  in M3 because M3-009's samples need it.
+- M3-013 (S) A pair whose verification throws is reported as a SARIF tool-execution
+  notification and skipped; the run exits 5, and its baseline result is carried as `unchanged`
+  (ADR 0023).
+- M3-014 (L) Lowering census and per-codebase analysed line counts in every SARIF run,
+  `--lower-only`, and a `business-layer` sample that every precision ticket must move towards
+  its target verdicts (ADR 0027). The line counts make the BUSL free tier's 50,000-line limit
+  observable. They are reported only, never enforced (ADR 0017).
+- M3-015 (L) Bound fingerprints: equal, non-runtime-sensitive bodies are Equivalent by
+  `congruence` without the solver (ADR 0024). Every verdict names the matched callee pairs it
+  assumed, and flags the unproven ones (ADR 0019).
+- M3-016 (L) Replay taint: a divergence that depends on an abstraction is Unknown(Abstraction)
+  with a candidate counterexample, never EQ002 (ADR 0026). Unknown results point at the opaque
+  or abstract lines, not the method (ADR 0027).
+- M3-022 (S) Census of the user's real 4.8/10 pair. Its histogram orders M4 (ADR 0027). No engine
+  changes.
+- P1-003, P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
   and arrays are keyed by value. P1-003 comes with them as their shared prerequisite.
 
-Added by the M3-001 review (2026-09-21; ADR 0021):
-
-- M3-012 (S) The synthesised-input naming rule ADR 0021 relies on is enforced over `samples/`,
-  and a C# parameter named `@this` no longer collides with the receiver input.
-
-Added by ADR 0023 (2026-09-21):
-
-- M3-013 (S) A pair whose verification throws is reported as a SARIF tool-execution
-  notification and skipped; the run exits 5, and its baseline result is carried as `unchanged`.
-
-Added by the Unknown-rate review (2026-09-21; ADRs 0024 to 0027). The M3 plan would
-ship a sound tool whose Unknown rate grows with codebase size, and it measures that rate last.
-These tickets measure it first, make unchanged code free, and keep EQ002 exact while the engine
-abstracts more:
-
-- M3-014 (M) Lowering census in every SARIF run, `--lower-only`, and a `business-layer` sample
-  that every precision ticket must move towards its target verdicts (ADR 0027).
-- M3-022 (S) Census of the user's real 4.8/10 pair; its histogram reorders the precision list
-  (ADR 0027). No engine changes.
-- M3-015 (M) Bound fingerprints: equal, non-runtime-sensitive bodies are Equivalent by
-  `congruence` without the solver (ADR 0024).
-- M3-016 (M) Replay taint: a divergence that depends on an abstraction is Unknown(Abstraction)
-  with a candidate counterexample, never EQ002 (ADR 0026).
-- M3-023 (S) Unknown results point at the opaque or abstract lines, not the method (ADR 0027).
-- Precision (default order; M3-022 reorders it by pairs unlocked per effort point):
-  M3-010, M3-011, M3-018 (L, `IrPure` for float, decimal and operators, ADR 0025),
-  M3-019 (M, `ref`/`out` call arguments and `lock`), M3-017 (L, fragments on both sides are
-  shared calls, ADR 0024), M3-020 (M, type tests and downcasts), M3-021 (M, `await`).
+Where the tickets came from: the pre-M3 architecture review (ADRs 0018 to 0020) found three
+silent false-Equivalent paths in the spec and a precision gap. The M3-001 review added ADR 0021,
+and ADR 0023 added M3-013. The Unknown-rate review (ADRs 0024 to 0027) found that the plan would
+ship a sound tool whose Unknown rate grows with codebase size, and that it measured that rate
+last. So measuring comes first, unchanged code is free, and EQ002 stays exact while the engine
+abstracts more.
 
 Order:
 1. **Measure first, in parallel with M3-002:** M3-014 → M3-022. This needs no Z3 and answers
    "is the Unknown rate survivable" before any more engine work.
-2. **Soundness (unchanged):** M3-001 → M3-002; M3-007 → P1-003 → P1-006 → P1-005 (P1-005 also
-   needs M3-001); M3-009; M3-012 and M3-013 once M3-001 is merged.
-3. **Blast radius, before any snapshot is taken:** M3-015 (needs M3-014, M3-001, M3-009);
-   M3-016 (needs M3-001) → M3-023.
-4. M3-003 (needs M3-002, M3-007, M3-009, M3-012, M3-013, M3-015, M3-016, M3-023, P1-005, P1-006)
-   → M3-008 → M3-004.
-5. **Precision, in M3-022's order:** M3-010 → M3-011 and M3-020 (after M3-010) and M3-021
-   (after M3-011); M3-018 (after M3-016); M3-019 (after P1-005); M3-017 (after M3-015, M3-016,
-   P1-005). Each updates the `business-layer` snapshot.
-6. M3-005 (needs M3-004, M3-008 and the precision tickets M3-022 kept) → M3-006.
+2. **Soundness:** M3-002; M3-007 → P1-003 → P1-006 → P1-005; M3-010 → M3-009; M3-013.
+3. **Blast radius, before any snapshot is taken:** M3-015 (needs M3-014, M3-009); M3-016 (needs
+   M3-014).
+4. M3-003 (needs M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, P1-005, P1-006)
+   → M3-004.
+
+## M4 — Precision and the first real run
+
+M4 makes the first real run say something. Without these tickets it is mostly `Unknown(opaque)`.
+M3-022's census reorders this list by pairs unlocked per effort point (S=1, M=2, L=4). It may
+also drop a ticket that unlocks nothing on the real pair to the post-MVP backlog. Soundness
+dependencies still win. Each precision ticket updates the `business-layer` snapshot.
+
+- M4-001 (L) `foreach`, `using` and constructors lowered through the CFG instead of whole-body
+  opaque. Needs M3-007, M3-010.
+- M4-002 (L) `IrPure` for float, decimal and user-defined operators (ADR 0025). Needs M3-015,
+  M3-016.
+- M4-003 (M) `ref`/`out` call arguments and `lock`. Needs P1-005.
+- M4-004 (L) Fragments on both sides are shared calls (ADR 0024). Needs M3-015, M3-016, P1-005.
+- M4-005 (M) Type tests and downcasts. Needs M3-010.
+- M4-006 (M) `await` as a call. Needs M4-001.
+- M4-007 (S) First real run against the user's 4.8/10 pair. Record findings as new tickets,
+  not fixes. Needs M3-004, M3-022 and the M4 tickets M3-022 kept.
 
 ## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
 
@@ -205,7 +208,7 @@ Order:
 - P1-002 (M) LLM-proposed coupling invariants, Z3-checked; pluggable model, off by default.
 - P1-003 (M) (promoted into M3) Split `IrLowerer` into heap and exception collaborators, with the swapped block-map
   state as an explicit `LoweringContext` parameter (PR #30 review; behaviour-preserving).
-- P1-004 (M) `foreach` over an array as an index loop (M2-004 size guard; Roslyn's CFG desugars every `foreach` into the enumerator pattern). Do P1-003 first: this ticket adds to both paths it extracts.
+- P1-004 (M) `foreach` over an array as an index loop (M2-004 size guard; Roslyn's CFG desugars every `foreach` into the enumerator pattern). Needs M4-001, and P1-003 first: this ticket adds to both paths it extracts.
 - P1-005 (L) (promoted into M3) An `IrCall` reads and writes the heap: its effects and
   results are functions of the callee, its arguments, the heap at the call and its position,
   shared by both sides (ADRs 0015, 0018).

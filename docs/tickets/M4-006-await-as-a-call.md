@@ -1,8 +1,8 @@
-# M3-021 `await` in async methods as a call
+# M4-006 `await` in async methods as a call
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
-Depends on: M3-011
+Depends on: M4-001
 
 ## Goal
 ASP.NET Core controllers and services are overwhelmingly `async`, so a migration that also adds
