@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 
 namespace Equiv.Core.Configuration;
@@ -31,12 +32,9 @@ public static class EquivConfigLoader
         }
 
         ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<EquivConfigDiagnostic>();
-        foreach (JsonProperty property in root.EnumerateObject())
+        foreach (JsonProperty property in root.EnumerateObject().Where(property => !KnownProperties.Contains(property.Name)))
         {
-            if (!KnownProperties.Contains(property.Name))
-            {
-                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.UnknownProperty, property.Name, $"unknown property \"{property.Name}\""));
-            }
+            diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.UnknownProperty, property.Name, $"unknown property \"{property.Name}\""));
         }
 
         RenameMap renames = new(

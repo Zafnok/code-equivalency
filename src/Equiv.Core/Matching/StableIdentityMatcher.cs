@@ -20,15 +20,8 @@ public sealed class StableIdentityMatcher : IProcedureMatcher
         Dictionary<ProcedureIdentity, int> oldCounts = CountBy(oldIdentities);
         Dictionary<ProcedureIdentity, int> newCounts = CountBy(newIdentities);
 
-        List<ProcedureIdentity> order = [];
         HashSet<ProcedureIdentity> seen = [];
-        foreach (ProcedureIdentity identity in oldIdentities.Concat(newIdentities))
-        {
-            if (seen.Add(identity))
-            {
-                order.Add(identity);
-            }
-        }
+        List<ProcedureIdentity> order = [.. oldIdentities.Concat(newIdentities).Where(seen.Add)];
 
         ImmutableArray<ProcedurePair>.Builder pairs = ImmutableArray.CreateBuilder<ProcedurePair>();
         ImmutableArray<ProcedureIdentity>.Builder added = ImmutableArray.CreateBuilder<ProcedureIdentity>();
