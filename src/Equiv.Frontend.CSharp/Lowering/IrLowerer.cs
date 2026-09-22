@@ -891,15 +891,10 @@ internal sealed class IrLowerer
     private IrVar? Compound(ICompoundAssignmentOperation compound)
     {
         ITypeSymbol right = compound.Value.Type!;
-        (IrBitVec Type, bool Signed)? operands;
-        if (OperatorMapper.IsShiftKind(compound.OperatorKind))
-        {
-            operands = TypeMapper.Promote(compound.Target.Type!);
-        }
-        else
-        {
-            operands = TypeMapper.Map(right) is IrBitVec bits ? (bits, TypeMapper.IsSigned(right)) : null;
-        }
+        (IrBitVec Type, bool Signed)? mappedRight = TypeMapper.Map(right) is IrBitVec bits ? (bits, TypeMapper.IsSigned(right)) : null;
+        (IrBitVec Type, bool Signed)? operands = OperatorMapper.IsShiftKind(compound.OperatorKind)
+            ? TypeMapper.Promote(compound.Target.Type!)
+            : mappedRight;
         return compound.OperatorMethod is null && operands is { } promoted
             ? Update(compound, compound.Target, compound.OperatorKind, Value(compound.Value), promoted, compound.IsChecked, isPostfix: false)
             : Opaque(compound, compound.Kind.ToString());
