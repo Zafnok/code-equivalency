@@ -331,12 +331,11 @@ internal sealed class IrTextParser
         bool negative = AcceptSymbol("-");
         IrToken token = Expect(IrTokenKind.Number, "a number");
         ulong limit = negative ? 1UL << (width - 1) : IrBits.Mask(width);
-        if (!ulong.TryParse(token.Text, NumberStyles.None, CultureInfo.InvariantCulture, out ulong magnitude) || magnitude > limit)
-        {
-            throw Fail(token, $"literal does not fit in {width.ToString(CultureInfo.InvariantCulture)} bits");
-        }
-
-        return new IrBitVecValue(width, (negative ? 0 - magnitude : magnitude) & IrBits.Mask(width));
+        bool fits = ulong.TryParse(token.Text, NumberStyles.None, CultureInfo.InvariantCulture, out ulong magnitude) && magnitude <= limit;
+        ulong signed = negative ? 0 - magnitude : magnitude;
+        return fits
+            ? new IrBitVecValue(width, signed & IrBits.Mask(width))
+            : throw Fail(token, $"literal does not fit in {width.ToString(CultureInfo.InvariantCulture)} bits");
     }
 
     private IrMapValue ParseMap(IrMap type)
@@ -405,19 +404,16 @@ internal sealed class IrTextParser
         IrVar target = ParseDefinition();
         ExpectSymbol("=");
         IrToken op = Expect(IrTokenKind.Word, "an instruction");
-        if (Assignments.TryGetValue(op.Text, out Func<IrTextParser, IrVar, IrInstruction>? parse))
+        bool isAssignment = Assignments.TryGetValue(op.Text, out Func<IrTextParser, IrVar, IrInstruction>? parse);
+        bool isBinary = BinaryOps.TryGetValue(op.Text, out IrBinaryOp binary);
+        bool isUnary = UnaryOps.TryGetValue(op.Text, out IrUnaryOp unary);
+        return (isAssignment, isBinary, isUnary) switch
         {
-            return parse(this, target);
-        }
-
-        if (BinaryOps.TryGetValue(op.Text, out IrBinaryOp binary))
-        {
-            return new IrBinary(target, binary, ParseUse(), ParseNextUse());
-        }
-
-        return UnaryOps.TryGetValue(op.Text, out IrUnaryOp unary)
-            ? new IrUnary(target, unary, ParseUse())
-            : throw Fail(op, $"unknown instruction '{op.Text}'");
+            (true, _, _) => parse!(this, target),
+            (_, true, _) => new IrBinary(target, binary, ParseUse(), ParseNextUse()),
+            (_, _, true) => new IrUnary(target, unary, ParseUse()),
+            _ => throw Fail(op, $"unknown instruction '{op.Text}'"),
+        };
     }
 
     private IrOverflowOp ParseOverflowOp()

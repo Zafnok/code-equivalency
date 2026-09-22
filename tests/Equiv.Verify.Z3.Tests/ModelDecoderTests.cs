@@ -106,6 +106,76 @@ public sealed class ModelDecoderTests
     }
 
     [Fact]
+    public void TheEncoderBugMessageListsEachInputSeparatedByAComma()
+    {
+        using Context context = new();
+        ImmutableArray<ProductEncoder.SharedParameter> shared = Shared(WithHeap, WithHeap);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            ModelDecoder.EnsureDiverges(WithHeap, WithHeap, shared, Inputs, Returned([Heap]), Returned([Heap]), Calls(context)));
+
+        string joined = string.Join(", ", shared.Select((s, i) => $"{s.Var.Name}={Inputs.Arguments[i]}"));
+        Assert.Contains($"Inputs: {joined}.", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheEncoderBugMessageDescribesMultipleOutsAndTracedCallsWithCommaSeparators()
+    {
+        using Context context = new();
+        IrRun run = new(
+            new IrReturned(Value: null),
+            [Bv(1), Bv(2)],
+            [
+                new IrCallRecord(new CallIdentity("F"), [Bv(1), Bv(2)]),
+                new IrCallRecord(new CallIdentity("G"), [Bv(3)]),
+            ]);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, run, run, Calls(context)));
+
+        Assert.Contains($"Old: {ExpectedDescribe(run)}.", exception.Message, StringComparison.Ordinal);
+        Assert.Contains($"New: {ExpectedDescribe(run)}.", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ADecodedValueEqualToAKnownSortLiteralReusesItsId()
+    {
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
+        encoding.Sorts.Literal(new IrSortValue("S", 0));
+        Expr lit5 = encoding.Sorts.Literal(new IrSortValue("S", 5));
+        Expr fresh = context.MkConst("fresh", encoding.Sorts.Sort(new IrSort("S")));
+
+        using Solver solver = context.MkSolver();
+        solver.Assert(context.MkEq(fresh, lit5));
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+        ModelDecoder decoder = new(context, solver.Model, encoding);
+
+        IrValue decoded = decoder.Decode(solver.Model.Eval(fresh, completion: true), new IrSort("S"));
+
+        Assert.Equal(new IrSortValue("S", 5), decoded);
+    }
+
+    [Fact]
+    public void ADecodedValueDistinctFromKnownLiteralsGetsTheNextFreeId()
+    {
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
+        Expr lit0 = encoding.Sorts.Literal(new IrSortValue("S", 0));
+        Expr lit5 = encoding.Sorts.Literal(new IrSortValue("S", 5));
+        Expr fresh = context.MkConst("fresh", encoding.Sorts.Sort(new IrSort("S")));
+
+        using Solver solver = context.MkSolver();
+        solver.Assert(context.MkDistinct(fresh, lit0, lit5));
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+        ModelDecoder decoder = new(context, solver.Model, encoding);
+
+        IrValue decoded = decoder.Decode(solver.Model.Eval(fresh, completion: true), new IrSort("S"));
+
+        Assert.Equal(new IrSortValue("S", 6), decoded);
+    }
+
+    [Fact]
     public void AMapInAnUnreadShapeIsAnEncoderBug()
     {
         using Context context = new();
@@ -227,4 +297,8 @@ public sealed class ModelDecoderTests
 
     private static TraceEncoder Calls(Context context, ImmutableDictionary<string, string>? map = null) =>
         new(new SortMapper(context), [], map ?? []);
+
+    /// <summary>Mirrors the private <c>ModelDecoder.Describe</c> format, so a comma-separator mutation there fails this assertion.</summary>
+    private static string ExpectedDescribe(IrRun run) =>
+        $"{run.Outcome} outs [{string.Join(", ", run.Outs)}] trace [{string.Join(", ", run.Trace.Select(static c => $"{c.Callee.Value}({string.Join(", ", c.Arguments)})"))}]";
 }

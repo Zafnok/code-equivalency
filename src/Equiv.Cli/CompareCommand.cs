@@ -245,16 +245,11 @@ internal static class CompareCommand
             }
         }
 
-        if (anyNewDivergent)
+        return anyNewDivergent switch
         {
-            return ExitCodes.Divergent;
-        }
-
-        if (string.Equals(failOn, "unknown", StringComparison.Ordinal) && anyNewUnknown)
-        {
-            return ExitCodes.UnknownPresent;
-        }
-
-        return ExitCodes.Success;
+            true => ExitCodes.Divergent,
+            false when string.Equals(failOn, "unknown", StringComparison.Ordinal) && anyNewUnknown => ExitCodes.UnknownPresent,
+            _ => ExitCodes.Success,
+        };
     }
 }
