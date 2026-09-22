@@ -1,4 +1,4 @@
-# M3-011 Lower `foreach`, `using` and constructor bodies instead of making the whole body opaque
+# M4-001 Lower `foreach`, `using` and constructor bodies instead of making the whole body opaque
 Status: todo
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
@@ -7,7 +7,7 @@ Depends on: M3-007, M3-010
 ## Goal
 Under ADR 0014, a whole-body `IrOpaque` makes every input Unknown. Today the lowerer makes the whole
 body opaque for any method containing a `foreach` or a `using`, and for every constructor. Those
-are among the most common constructs in real C#, so the first real-world run (M3-005) would be
+are among the most common constructs in real C#, so the first real-world run (M4-007) would be
 almost entirely Unknown. Roslyn's CFG already desugars `foreach` and `using` into calls
 (`GetEnumerator`, `MoveNext`, `Current`, `Dispose`), property reads, implicit conversions and a
 `try`/`finally`. Since M3-010 lowers the last two, these constructs need no special case. The

@@ -9,7 +9,7 @@ a `Z3Exception`, an ill-formed lowering) ends the whole `compare` run: no SARIF 
 pairs that did verify. System.CommandLine's default exception handler then prints the stack and
 exits 1, which ARCHITECTURE.md defines as "divergence", so CI cannot tell a tool bug from a finding.
 The M3-001 review made the error name the pair, but left the exit-code contract alone, because
-exit codes are a component boundary. The first real run (M3-005) will hit whatever crashes remain,
+exit codes are a component boundary. The first real run (M4-007) will hit whatever crashes remain,
 and one crash should not cost the other verdicts.
 
 ## Decision

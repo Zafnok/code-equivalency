@@ -71,7 +71,7 @@ the ticket.
 ## Out of scope
 Any behaviour change. Memoising the shared `IrOpaque(null, "call-throw-in-try")` block that
 `Raise` mints per raising instruction (deliberately left: the verdict is identical either way
-under ADR 0014, and memoising rewrites snapshots for no behavioural gain; revisit only if M3-005
+under ADR 0014, and memoising rewrites snapshots for no behavioural gain; revisit only if M4-007
 shows block counts in solver time). The `foreach` work (P1-004). Havocking `field.*` maps on a
 call, or keying array maps per array value (the two heap-model gaps in VERIFICATION-MODEL
 section 2).

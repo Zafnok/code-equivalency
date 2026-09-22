@@ -52,4 +52,4 @@ untainted observables agree while the solver said they differ remains an encoder
 - `IrInterpreter` grows a taint shadow. Its oracles and budget are unchanged.
 - VERIFICATION-MODEL section 6 (the Unknown row, the candidate counterexample, the replay rule)
   changed in the PR that accepted this ADR.
-- Ticket: M3-016. M3-017 and M3-018 depend on it.
+- Ticket: M3-016. M4-004 and M4-002 depend on it.

@@ -50,7 +50,7 @@ silent false Equivalent.
   IR construct.
 - The review of M2-004 showed that a lowering gap sitting under 100% coverage is invisible to the
   IR-level soundness harness. Leaving the call gaps for a post-MVP milestone would ship the first
-  real-world run (M3-005) with Equivalent verdicts nobody should trust.
+  real-world run (M4-007) with Equivalent verdicts nobody should trust.
 
 ## Rejected
 - **Final heap stays unobserved and void mutators are documented as a limit.** Mutators are most
