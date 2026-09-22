@@ -258,9 +258,14 @@ internal sealed class IrTextParser
 
     private IrParameter ParseParameter()
     {
-        IrParameterKind kind = AcceptWord("ref") ? IrParameterKind.Ref
-            : AcceptWord("out") ? IrParameterKind.Out
-            : IrParameterKind.In;
+        bool isRef = AcceptWord("ref");
+        bool isOut = !isRef && AcceptWord("out");
+        IrParameterKind kind = (isRef, isOut) switch
+        {
+            (true, _) => IrParameterKind.Ref,
+            (_, true) => IrParameterKind.Out,
+            _ => IrParameterKind.In,
+        };
         return new IrParameter(ParseDefinition(), kind);
     }
 
