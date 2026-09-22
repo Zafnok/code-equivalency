@@ -47,9 +47,11 @@ internal static class VerdictRule
     private static RuntimeChange? FindRuntimeChange(Counterexample counterexample)
     {
         RuntimeChangeTable table = RuntimeChangeTable.Load();
-        foreach (IrCallRecord record in counterexample.Old.Trace.Concat(counterexample.New.Trace))
+        foreach (CallIdentity callee in counterexample.Old.Trace.Concat(counterexample.New.Trace)
+            .Select(static record => record.Callee)
+            .Where(static callee => callee.RuntimeChanged))
         {
-            if (record.Callee.RuntimeChanged && table.TryMatch(record.Callee, out RuntimeChange match))
+            if (table.TryMatch(callee, out RuntimeChange match))
             {
                 return match;
             }

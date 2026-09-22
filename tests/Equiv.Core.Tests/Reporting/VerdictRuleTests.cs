@@ -62,6 +62,19 @@ public sealed class VerdictRuleTests
     }
 
     [Fact]
+    public void DivergentWithAFlaggedCallThatDoesNotMatchTheTableIsStillEQ002()
+    {
+        CallIdentity flaggedButUnmatched = new("Some.Unmatched.Type::Member()", RuntimeChanged: true);
+        IrCallRecord record = new(flaggedButUnmatched, []);
+        Counterexample counterexample = Fixtures.Counterexample() with { Old = Fixtures.Run() with { Trace = [record] } };
+
+        (string ruleId, _, _, RuntimeChange? runtimeChange) = VerdictRule.Describe(new Divergent(counterexample));
+
+        Assert.Equal("EQ002", ruleId);
+        Assert.Null(runtimeChange);
+    }
+
+    [Fact]
     public void UnknownIsEQ003()
     {
         (string ruleId, FailureLevel level, ResultKind kind, RuntimeChange? runtimeChange) = VerdictRule.Describe(new Unknown(UnknownReason.Timeout, "gave up"));

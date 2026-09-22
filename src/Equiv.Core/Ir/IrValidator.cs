@@ -227,12 +227,9 @@ public static class IrValidator
         private void Walk(IrBlockId block, HashSet<IrBlockId> visited, List<IrBlockId> postorder)
         {
             visited.Add(block);
-            foreach (IrBlockId successor in blocks[block].Terminator.Successors())
+            foreach (IrBlockId successor in blocks[block].Terminator.Successors().Where(successor => blocks.ContainsKey(successor) && !visited.Contains(successor)))
             {
-                if (blocks.ContainsKey(successor) && !visited.Contains(successor))
-                {
-                    Walk(successor, visited, postorder);
-                }
+                Walk(successor, visited, postorder);
             }
 
             postorder.Add(block);

@@ -1,3 +1,5 @@
+using System.Linq;
+
 using Equiv.Core;
 
 namespace Equiv.Cli;
@@ -13,14 +15,6 @@ internal static class FrontendRouter
     {
         ArgumentNullException.ThrowIfNull(frontends);
 
-        foreach (ILanguageFrontend frontend in frontends)
-        {
-            if (frontend.Supports(legacyPath) && frontend.Supports(modernPath))
-            {
-                return frontend;
-            }
-        }
-
-        return null;
+        return frontends.FirstOrDefault(frontend => frontend.Supports(legacyPath) && frontend.Supports(modernPath));
     }
 }

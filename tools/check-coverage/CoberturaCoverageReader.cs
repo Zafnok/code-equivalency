@@ -34,13 +34,7 @@ internal static class CoberturaCoverageReader
                 }
 
                 branchesValid += line.Conditions.Count;
-                foreach (bool covered in line.Conditions.Values)
-                {
-                    if (covered)
-                    {
-                        branchesCovered++;
-                    }
-                }
+                branchesCovered += line.Conditions.Values.Count(static covered => covered);
             }
 
             result[assembly.Key] = new AssemblyCoverage(assembly.Key, linesValid, linesCovered, branchesValid, branchesCovered);
