@@ -35,12 +35,9 @@ internal static class ProcedureEnumerator
 
     private static bool IsIncluded(IMethodSymbol method)
     {
-        if (method.IsImplicitlyDeclared || method.IsAbstract || method.IsExtern)
-        {
-            return false;
-        }
-
-        return method.MethodKind is MethodKind.Ordinary
+        return method.IsImplicitlyDeclared || method.IsAbstract || method.IsExtern
+            ? false
+            : method.MethodKind is MethodKind.Ordinary
             or MethodKind.Constructor
             or MethodKind.StaticConstructor
             or MethodKind.PropertyGet

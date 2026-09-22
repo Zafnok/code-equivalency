@@ -517,17 +517,11 @@ internal sealed class IrLowerer
     private IrVar? Nullness(IOperation source, IrVar value)
     {
         IOperation unwrapped = Unwrap(source);
-        if (unwrapped is IObjectCreationOperation or IInstanceReferenceOperation)
-        {
-            return null;
-        }
-
-        if (ShadowOf(unwrapped) is { } shadow)
-        {
-            return ssa.Load(current, shadow);
-        }
-
-        return unwrapped.ConstantValue is { HasValue: true, Value: null }
+        return unwrapped is IObjectCreationOperation or IInstanceReferenceOperation
+            ? null
+            : ShadowOf(unwrapped) is { } shadow
+            ? ssa.Load(current, shadow)
+            : unwrapped.ConstantValue is { HasValue: true, Value: null }
             ? Const(new IrBoolValue(Value: true))
             : MapRead(heap.Nulls((IrSort)value.Type), value);
     }
@@ -816,12 +810,9 @@ internal sealed class IrLowerer
         bool signed = TypeMapper.IsSigned(binary.LeftOperand.Type!);
         IrVar left = Value(binary.LeftOperand);
         IrVar right = Value(binary.RightOperand);
-        if (OperatorMapper.Binary(binary.OperatorKind, signed, left.Type, right.Type) is not { } op)
-        {
-            return Opaque(binary, binary.Kind.ToString());
-        }
-
-        return OperatorMapper.IsShift(op)
+        return OperatorMapper.Binary(binary.OperatorKind, signed, left.Type, right.Type) is not { } op
+            ? Opaque(binary, binary.Kind.ToString())
+            : OperatorMapper.IsShift(op)
             ? Shift(op, left, right, (IrBitVec)left.Type)
             : Arithmetic(op, left, right, signed, binary.IsChecked, TypeMapper.Map(binary.Type!));
     }

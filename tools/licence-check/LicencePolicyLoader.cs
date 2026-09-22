@@ -49,21 +49,15 @@ internal static class LicencePolicyLoader
 
     private static string RequireProperty(JsonElement element, string property)
     {
-        if (!element.TryGetProperty(property, out JsonElement value))
-        {
-            throw new LicenceCheckException($"policy.json: an exception entry is missing required property '{property}'.");
-        }
-
-        return RequireString(value, property);
+        return !element.TryGetProperty(property, out JsonElement value)
+            ? throw new LicenceCheckException($"policy.json: an exception entry is missing required property '{property}'.")
+            : RequireString(value, property);
     }
 
     private static string RequireString(JsonElement element, string what)
     {
-        if (element.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(element.GetString()))
-        {
-            throw new LicenceCheckException($"policy.json: {what} must be a non-empty string.");
-        }
-
-        return element.GetString()!;
+        return element.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(element.GetString())
+            ? throw new LicenceCheckException($"policy.json: {what} must be a non-empty string.")
+            : element.GetString()!;
     }
 }

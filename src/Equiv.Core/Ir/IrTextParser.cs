@@ -313,12 +313,9 @@ internal sealed class IrTextParser
         bool negative = AcceptSymbol("-");
         IrToken token = Expect(IrTokenKind.Number, "a number");
         ulong limit = negative ? 1UL << (width - 1) : IrBits.Mask(width);
-        if (!ulong.TryParse(token.Text, NumberStyles.None, CultureInfo.InvariantCulture, out ulong magnitude) || magnitude > limit)
-        {
-            throw Fail(token, $"literal does not fit in {width} bits");
-        }
-
-        return new IrBitVecValue(width, (negative ? 0 - magnitude : magnitude) & IrBits.Mask(width));
+        return !ulong.TryParse(token.Text, NumberStyles.None, CultureInfo.InvariantCulture, out ulong magnitude) || magnitude > limit
+            ? throw Fail(token, $"literal does not fit in {width} bits")
+            : new IrBitVecValue(width, (negative ? 0 - magnitude : magnitude) & IrBits.Mask(width));
     }
 
     private IrMapValue ParseMap(IrMap type)
@@ -387,17 +384,11 @@ internal sealed class IrTextParser
         IrVar target = ParseDefinition();
         ExpectSymbol("=");
         IrToken op = Expect(IrTokenKind.Word, "an instruction");
-        if (Assignments.TryGetValue(op.Text, out Func<IrTextParser, IrVar, IrInstruction>? parse))
-        {
-            return parse(this, target);
-        }
-
-        if (BinaryOps.TryGetValue(op.Text, out IrBinaryOp binary))
-        {
-            return new IrBinary(target, binary, ParseUse(), ParseNextUse());
-        }
-
-        return UnaryOps.TryGetValue(op.Text, out IrUnaryOp unary)
+        return Assignments.TryGetValue(op.Text, out Func<IrTextParser, IrVar, IrInstruction>? parse)
+            ? parse(this, target)
+            : BinaryOps.TryGetValue(op.Text, out IrBinaryOp binary)
+            ? new IrBinary(target, binary, ParseUse(), ParseNextUse())
+            : UnaryOps.TryGetValue(op.Text, out IrUnaryOp unary)
             ? new IrUnary(target, unary, ParseUse())
             : throw Fail(op, $"unknown instruction '{op.Text}'");
     }

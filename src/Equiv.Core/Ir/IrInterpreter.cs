@@ -21,17 +21,11 @@ public static class IrInterpreter
         ArgumentNullException.ThrowIfNull(oracle);
         ArgumentOutOfRangeException.ThrowIfNegative(stepBudget);
         ImmutableArray<IrDiagnostic> diagnostics = IrValidator.Validate(procedure);
-        if (!diagnostics.IsEmpty)
-        {
-            throw new ArgumentException($"Procedure is not valid IR: {diagnostics[0].Id} {diagnostics[0].Message}", nameof(procedure));
-        }
-
-        if (!inputs.Arguments.Select(static a => a.Type).SequenceEqual(procedure.Parameters.Select(static p => p.Var.Type)))
-        {
-            throw new ArgumentException("Inputs do not match the procedure's parameter types.", nameof(inputs));
-        }
-
-        return new IrMachine(oracle).Run(procedure, inputs, stepBudget);
+        return !diagnostics.IsEmpty
+            ? throw new ArgumentException($"Procedure is not valid IR: {diagnostics[0].Id} {diagnostics[0].Message}", nameof(procedure))
+            : !inputs.Arguments.Select(static a => a.Type).SequenceEqual(procedure.Parameters.Select(static p => p.Var.Type))
+                ? throw new ArgumentException("Inputs do not match the procedure's parameter types.", nameof(inputs))
+                : new IrMachine(oracle).Run(procedure, inputs, stepBudget);
     }
 
     private readonly record struct IrJump(IrBlockId? Next, IrOutcome? Outcome, ImmutableArray<IrOut> Outs);

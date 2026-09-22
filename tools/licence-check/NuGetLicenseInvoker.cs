@@ -36,12 +36,9 @@ internal static class NuGetLicenseInvoker
         string stderr = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        if (process.ExitCode != 0)
-        {
-            throw new LicenceCheckException($"'nuget-license' failed (exit {process.ExitCode}): {stderr}");
-        }
-
-        return Parse(stdout, redistributedIds);
+        return process.ExitCode != 0
+            ? throw new LicenceCheckException($"'nuget-license' failed (exit {process.ExitCode}): {stderr}")
+            : Parse(stdout, redistributedIds);
     }
 
     /// <summary>

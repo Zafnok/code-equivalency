@@ -18,12 +18,9 @@ internal static class NoticesChecker
             return new NoticesDecision(NoticesOutcome.Skipped, $"licence-check: samples/ was not restored under '{repoRoot}' in this run; skipping the THIRD-PARTY-NOTICES.md freshness check.");
         }
 
-        if (string.Equals(Normalize(existingNotices), Normalize(renderedNotices), StringComparison.Ordinal))
-        {
-            return new NoticesDecision(NoticesOutcome.UpToDate, Message: null);
-        }
-
-        return fix
+        return string.Equals(Normalize(existingNotices), Normalize(renderedNotices), StringComparison.Ordinal)
+            ? new NoticesDecision(NoticesOutcome.UpToDate, Message: null)
+            : fix
             ? new NoticesDecision(NoticesOutcome.Regenerated, $"licence-check: regenerated {noticesPath}.")
             : new NoticesDecision(NoticesOutcome.OutOfDate, $"licence-check: {noticesPath} is out of date. Run with --fix to regenerate it.");
     }
