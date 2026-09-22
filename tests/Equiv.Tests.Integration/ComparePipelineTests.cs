@@ -30,7 +30,7 @@ public sealed class ComparePipelineTests
         try
         {
             int exitCode = CompareCommand.Run(
-                legacy, modern, outPath, baselinePath: null, configPath: null, failOn: "divergent", dryRun: false,
+                new CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: "divergent", DryRun: false),
                 [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath));
 
             Assert.Equal(ExitCodes.Success, exitCode);
@@ -54,7 +54,7 @@ public sealed class ComparePipelineTests
         try
         {
             int exitCode = CompareCommand.Run(
-                legacy, modern, outPath, baselinePath: null, configPath: null, failOn: "divergent", dryRun: false,
+                new CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: "divergent", DryRun: false),
                 [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath));
 
             Assert.Equal(ExitCodes.Success, exitCode);
