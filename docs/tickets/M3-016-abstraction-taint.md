@@ -1,17 +1,28 @@
-# M3-016 Replay taint: a Divergent that depends on an abstraction is Unknown(Abstraction)
+# M3-016 Replay taint, and Unknown results that point at their lines
 Status: todo
-Effort: M
+Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
-Depends on: M3-001
+Depends on: M3-001, M3-014
 
 ## Goal
-ADR 0026: keep EQ002 exact once shared fragments (M3-017) and pure operators (M3-018) let the solver
+ADR 0026: keep EQ002 exact once shared fragments (M4-004) and pure operators (M4-002) let the solver
 interpret code freely. The replay tracks taint, and only an untainted divergence is Divergent.
 This ticket lands the mechanism before any abstraction exists. It is exercised through
 call identities with the `opaque:` prefix, which the lowerer does not emit yet.
 
+ADR 0027 decision 4: a reviewer of an Unknown result should read the lines that caused it, not
+the whole method. Every opaque node reached and every abstraction depended on becomes a
+`relatedLocation`, and the primary location moves to the first one on the modern side. (This
+ticket absorbed M3-023 in the 2026-09-21 consolidation: both change `Unknown` and the SARIF
+writer, and the abstraction causes are this ticket's `abstractions`.)
+
 ## Spec references
-ADR 0026; ADR 0018; ADR 0019; VERIFICATION-MODEL sections 5 and 6; M3-001 replay design.
+ADR 0026; ADR 0027; ADR 0018; ADR 0019; ADR 0010 (partialFingerprints); ADR 0014;
+VERIFICATION-MODEL sections 5 and 6; M3-001 replay design.
+
+## Design
+Two commits: taint and `Unknown(Abstraction)` (criteria 1 to 6), then causes and locations
+(criteria 7 to 10), which read the abstractions the first commit records.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. `IrInterpreter` gains an optional taint predicate over call identities, and it treats `IrPure`
@@ -32,22 +43,38 @@ ADR 0026; ADR 0018; ADR 0019; VERIFICATION-MODEL sections 5 and 6; M3-001 replay
 6. Tests build IR directly: a divergence only through an `opaque:` call is Unknown(Abstraction); a
    divergence on an untainted return in a procedure that also calls `opaque:` is Divergent; a
    branch on an `opaque:` result taints the rest of the path.
+7. `Unknown` carries `ImmutableArray<SourceSpan> Causes` with a side marker. Opaque causes come
+   from the reached `IrOpaque` spans. Abstraction causes come from criterion 4's `abstractions`.
+8. The SARIF writer emits each cause as a `relatedLocation` whose message is the reason, and sets
+   the primary location to the first modern-side cause. With no modern-side cause, it keeps the
+   procedure location.
+9. `partialFingerprints` and `baselineState` are unaffected. A test runs a baseline round trip
+   where only the cause moves and asserts `unchanged`.
+10. A test lowers `business-layer` and runs `Z3Backend` on one loop-free method that stays Unknown
+    because of an expression-level opaque. Its primary location is that construct's line. M3-003's
+    snapshot of the sample then pins this for every remaining Unknown.
 
 ## Files
 `src/Equiv.Core/Ir/IrInterpreter.cs`, `src/Equiv.Core/Ir/IrRun*.cs`,
-`src/Equiv.Core/Verdicts/UnknownReason.cs`, `src/Equiv.Verify.Z3/ModelDecoder.cs`,
+`src/Equiv.Core/Verdicts/UnknownReason.cs`, `src/Equiv.Core/Verdicts/Unknown.cs`,
+`src/Equiv.Verify.Z3/ModelDecoder.cs`, `src/Equiv.Verify.Z3/Z3Backend.cs` (collect causes),
 `src/Equiv.Core/Reporting/*`, tests in the matching projects.
 
 ## Tests
-`TaintFlowsThroughDataDependencies`, `BranchOnTaintTaintsTheRestOfTheSide`,
-`UntaintedDivergenceIsDivergent`, `TaintOnlyDivergenceIsUnknownAbstraction`,
-`CandidateCounterexampleIsWritten`, `UntaintedAgreementIsStillAnEncoderBug`, plus a CsCheck property:
-with no taint predicate, results equal the M3-001 interpreter's.
+- `TaintFlowsThroughDataDependencies`, `BranchOnTaintTaintsTheRestOfTheSide`,
+  `UntaintedDivergenceIsDivergent`, `TaintOnlyDivergenceIsUnknownAbstraction`,
+  `CandidateCounterexampleIsWritten`, `UntaintedAgreementIsStillAnEncoderBug`, plus a CsCheck property:
+  with no taint predicate, results equal the M3-001 interpreter's.
+- `UnknownListsEveryReachedOpaqueSpan`, `PrimaryLocationIsFirstModernCause`,
+  `NoModernCauseKeepsTheProcedureLocation`, `MovingACauseKeepsTheBaselineUnchanged`,
+  `BusinessLayerUnknownPointsAtItsConstruct`.
 
 ## Size guard
-No change to `ProductEncoder`. If one appears necessary, stop: taint is a replay concern.
+No change to how `ProductEncoder` encodes anything: taint is a replay concern. The one allowed
+backend addition is reporting which opaque nodes were reachable (criterion 7). If more seems
+necessary, stop.
 
 ## Out of scope
-Emitting abstractions (M3-017, M3-018). Locations (M3-023).
+Emitting abstractions (M4-004, M4-002). Code Scanning upload (M3-004's `action.yml`).
 
 ## Notes

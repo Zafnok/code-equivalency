@@ -56,7 +56,7 @@ docs/adr/0017-licensing-and-ip.md; docs/adr/0002-dependencies.md; canonical BUSL
 - `docs/adr/0017-licensing-and-ip.md`, `docs/adr/0002-dependencies.md`
 - `README.md`, `docs/ROADMAP.md`
 - `docs/tickets/M0-009-licensing-and-ip.md`, `M0-010-dependency-licence-gate.md`,
-  `M3-006-analysed-loc-reporting.md`, `M3-004-packaging.md`
+  `M3-006-analysed-loc-reporting.md` (since merged into M3-014), `M3-004-packaging.md`
 
 ## Tests
 None. No code changes, so nothing here is coverable. The check is `./build.ps1` staying green
@@ -67,7 +67,7 @@ Twelve files. More than that and the scope has drifted into the deferred gate ti
 
 ## Out of scope
 - The dependency licence CI gate and generated notices: M0-010.
-- Analysed-LOC reporting: M3-006.
+- Analysed-LOC reporting: M3-014.
 - Per-release Change Date stamping and embedding notices in artifacts: M3-004.
 - Any CLA bot, signing flow, or commercial-licence purchase path.
 - Per-file `SPDX-License-Identifier` headers. `LICENSE` plus the `Copyright` assembly property
