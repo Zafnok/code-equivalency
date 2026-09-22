@@ -18,15 +18,13 @@ public sealed class RuntimeChangeTable
 
     private static readonly Lazy<RuntimeChangeTable> Cached = new(LoadFromResource);
 
-    private readonly ImmutableArray<RuntimeChange> rows;
-
     private RuntimeChangeTable(ImmutableArray<RuntimeChange> rows)
     {
-        this.rows = rows;
+        Rows = rows;
     }
 
     /// <summary>Every row, in file order.</summary>
-    public ImmutableArray<RuntimeChange> Rows => rows;
+    public ImmutableArray<RuntimeChange> Rows { get; }
 
     /// <summary>Reads and parses the embedded resource on first use; later calls return the same instance.</summary>
     public static RuntimeChangeTable Load() => Cached.Value;
@@ -39,10 +37,9 @@ public sealed class RuntimeChangeTable
     {
         ArgumentNullException.ThrowIfNull(identity);
 
-        RuntimeChange? found = rows.FirstOrDefault(row =>
-            identity.Value.StartsWith(row.Member, StringComparison.Ordinal) && !suppressed.Contains(row.Member, StringComparer.Ordinal));
-        match = found!;
-        return found is not null;
+        match = Rows.FirstOrDefault(row =>
+            identity.Value.StartsWith(row.Member, StringComparison.Ordinal) && !suppressed.Contains(row.Member, StringComparer.Ordinal))!;
+        return match is not null;
     }
 
     /// <summary>

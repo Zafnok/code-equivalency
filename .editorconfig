@@ -77,6 +77,18 @@ dotnet_diagnostic.MA0020.severity = error
 # unfixed until Sonar filed it. Pinned to error so the build catches a regression.
 dotnet_diagnostic.MA0003.severity = error
 
+# GH-40: these long-tail Sonar findings sat below warning level, which is how they went
+# unfixed until Sonar filed them. Pinned to error so the build catches a regression.
+dotnet_diagnostic.IDE0032.severity = error
+dotnet_diagnostic.MA0031.severity = error
+dotnet_diagnostic.MA0185.severity = error
+dotnet_diagnostic.MA0029.severity = error
+
+# GH-36: implicit culture-sensitive ToString in interpolated strings sat below warning
+# level, which is how the whole rule-wide batch went unfixed until Sonar filed it.
+# Pinned to error so the build catches a regression.
+dotnet_diagnostic.MA0076.severity = error
+
 # M1-005: test methods are named Scenario_ExpectedOutcome (e.g. Compare_Exits1OnDivergent),
 # an underscore-as-separator convention that is idiomatic xUnit test naming, not an identifier
 # hygiene problem. CA1707 ("remove underscores from member names") has no test-specific carve-out,
@@ -482,3 +494,10 @@ dotnet_diagnostic.CA1308.severity = none
 # constructors.
 [tools/licence-check/LicenceCheckException.cs]
 dotnet_diagnostic.CA1032.severity = none
+
+# GH-40: TypeMapper.Element hashes "the constant's invariant text" by design (M2-004 ticket
+# Decision, acceptance criterion 8). A boxed floating-point constant's plain ToString() is
+# culture-sensitive (decimal separator), so the explicit CultureInfo.InvariantCulture that
+# MA0185 wants to drop is load-bearing here, not redundant.
+[src/Equiv.Frontend.CSharp/Lowering/TypeMapper.cs]
+dotnet_diagnostic.MA0185.severity = none

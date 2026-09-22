@@ -148,19 +148,10 @@ internal sealed class IrTextParser
     /// <summary>Reads one token starting at <paramref name="i"/> and leaves <paramref name="i"/> after it.</summary>
     private static (IrTokenKind Kind, string Value) ReadToken(string text, ref int i, int line, int column)
     {
-        int start = i;
         char c = text[i];
         if (c == '%')
         {
-            i++;
-            while (i < text.Length && (char.IsAsciiLetterOrDigit(text[i]) || text[i] is '_' or '.' or '$'))
-            {
-                i++;
-            }
-
-            return i == start + 1
-                ? throw new IrParseException("expected a variable name after '%'", line, column)
-                : (IrTokenKind.Var, text[(start + 1)..i]);
+            return ReadVariable(text, ref i, line, column);
         }
 
         if (c == '"')
@@ -170,13 +161,7 @@ internal sealed class IrTextParser
 
         if (char.IsAsciiDigit(c) || char.IsAsciiLetter(c) || c == '_')
         {
-            IrTokenKind kind = char.IsAsciiDigit(c) ? IrTokenKind.Number : IrTokenKind.Word;
-            while (i < text.Length && (char.IsAsciiLetterOrDigit(text[i]) || text[i] == '_'))
-            {
-                i++;
-            }
-
-            return (kind, text[start..i]);
+            return ReadWordOrNumber(text, ref i);
         }
 
         if (text.AsSpan(i).StartsWith("->", StringComparison.Ordinal))
@@ -192,6 +177,34 @@ internal sealed class IrTextParser
 
         i++;
         return (IrTokenKind.Symbol, c.ToString());
+    }
+
+    /// <summary>Reads a <c>%name</c> variable token starting at <paramref name="i"/>, which points at the <c>%</c>.</summary>
+    private static (IrTokenKind Kind, string Value) ReadVariable(string text, ref int i, int line, int column)
+    {
+        int start = i;
+        i++;
+        while (i < text.Length && (char.IsAsciiLetterOrDigit(text[i]) || text[i] is '_' or '.' or '$'))
+        {
+            i++;
+        }
+
+        return i == start + 1
+            ? throw new IrParseException("expected a variable name after '%'", line, column)
+            : (IrTokenKind.Var, text[(start + 1)..i]);
+    }
+
+    /// <summary>Reads a word or number token starting at <paramref name="i"/>, which points at its first character.</summary>
+    private static (IrTokenKind Kind, string Value) ReadWordOrNumber(string text, ref int i)
+    {
+        int start = i;
+        IrTokenKind kind = char.IsAsciiDigit(text[i]) ? IrTokenKind.Number : IrTokenKind.Word;
+        while (i < text.Length && (char.IsAsciiLetterOrDigit(text[i]) || text[i] == '_'))
+        {
+            i++;
+        }
+
+        return (kind, text[start..i]);
     }
 
     private static string ReadString(string text, ref int i, int line, int column)
@@ -315,7 +328,7 @@ internal sealed class IrTextParser
         ulong limit = negative ? 1UL << (width - 1) : IrBits.Mask(width);
         if (!ulong.TryParse(token.Text, NumberStyles.None, CultureInfo.InvariantCulture, out ulong magnitude) || magnitude > limit)
         {
-            throw Fail(token, $"literal does not fit in {width} bits");
+            throw Fail(token, $"literal does not fit in {width.ToString(CultureInfo.InvariantCulture)} bits");
         }
 
         return new IrBitVecValue(width, (negative ? 0 - magnitude : magnitude) & IrBits.Mask(width));
