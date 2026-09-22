@@ -39,6 +39,18 @@
       "verdict": "accept",
       "paths": ["tools/licence-check/LicenceCheckException.cs"],
       "reason": "GH-58: S3871 wants this exception public so external catch sites can name it, but licence-check is an Exe app (M0-010), not a library, and CA1515 (already error under AnalysisLevel=latest-all) rejects a public type there for exactly the opposite reason: an app's API isn't referenced from outside its assembly. Program.cs is the only catch site. Same rationale already recorded in .editorconfig's CA1032 entry for this file."
+    },
+    {
+      "rule": "csharpsquid:S3871",
+      "verdict": "accept",
+      "paths": ["src/Equiv.Frontend.CSharp/Loading/SolutionLoadException.cs"],
+      "reason": "GH-40: SolutionLoadException is internal by design (M2-001) -- it carries Roslyn-side diagnostics, and Equiv.Core cannot see Roslyn, so it never crosses the frontend assembly boundary (the frontend maps it to Equiv.Core.FrontendLoadException). There is no cross-assembly catch site to name it. Same rationale already recorded in .editorconfig's CA1064/CA1032 entry for this file."
+    },
+    {
+      "rule": "external_roslyn:MA0185",
+      "verdict": "accept",
+      "paths": ["src/Equiv.Frontend.CSharp/Lowering/TypeMapper.cs"],
+      "reason": "GH-40: TypeMapper.Element hashes 'the constant's invariant text' by design (M2-004 ticket Decision, acceptance criterion 8), because a floating-point constant boxed as `object` formats with a culture-sensitive decimal separator via plain ToString(); MA0185's simplification would drop the explicit CultureInfo.InvariantCulture and make the hash (and so the chosen IrSort element) depend on the process's current culture."
     }
   ]
 }
