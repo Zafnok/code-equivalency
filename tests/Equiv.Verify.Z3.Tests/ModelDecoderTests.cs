@@ -27,6 +27,19 @@ public sealed class ModelDecoderTests
           ret
         """);
 
+    private static readonly IrProcedure TwoParams = IrText.Parse("""
+        proc "T::N(int,int)" (%a: bv32, %b: bv32) entry B0
+        B0:
+          ret
+        """);
+
+    private static readonly IrProcedure WithSortLiteral = IrText.Parse("""
+        proc "T::S()" () -> sort "S" entry B0
+        B0:
+          %x: sort "S" = const sort "S" 5
+          ret %x
+        """);
+
     private static readonly IrMapValue Heap = new(new IrMap(new IrBitVec(32), new IrBitVec(32)), Bv(0), []);
 
     private static readonly IrInputs Inputs = new([Bv(1), Heap]);
@@ -175,6 +188,103 @@ public sealed class ModelDecoderTests
             decoder.Decode(context.MkArrayConst("m", bv32, bv32), Heap.MapType));
 
         Assert.StartsWith("Encoder bug: the model gives a map in a shape the decoder does not read", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReplayThrowsWhenTheModelDoesNotActuallyDiverge()
+    {
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
+        using Solver solver = context.MkSolver();
+        solver.Add(encoding.Assertions);
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            ModelDecoder.Replay(context, solver.Model, encoding, WithoutHeap, WithoutHeap));
+
+        Assert.StartsWith("Encoder bug:", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheEncoderBugMessageSeparatesEachSharedInput()
+    {
+        using Context context = new();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            ModelDecoder.EnsureDiverges(TwoParams, TwoParams, Shared(TwoParams, TwoParams), Inputs, Traced("F"), Traced("F"), Calls(context)));
+
+        Assert.Contains(", b=", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheEncoderBugMessageSeparatesMultipleOutsTraceEntriesAndArguments()
+    {
+        using Context context = new();
+        IrRun run = new(new IrReturned(Value: null), [Bv(7), Bv(9)], [new IrCallRecord(new CallIdentity("F"), [Bv(1), Bv(2)]), new IrCallRecord(new CallIdentity("G"), [Bv(3)])]);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, run, run, Calls(context)));
+
+        Assert.Matches(@"outs \[[^\]]*, [^\]]*\]", exception.Message);
+        Assert.Matches(@"trace \[[^\]]*\), [A-Za-z]+\(", exception.Message);
+        Assert.Matches(@"F\([^)]*, [^)]*\)", exception.Message);
+    }
+
+    [Fact]
+    public void SortLiteralsAreRememberedAtConstruction()
+    {
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithSortLiteral, WithSortLiteral, []);
+        using Solver solver = context.MkSolver();
+        solver.Add(encoding.Assertions);
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+
+        ModelDecoder decoder = new(context, solver.Model, encoding);
+        Expr literal = encoding.Sorts.Literal(new IrSortValue("S", 5));
+        IrValue decoded = decoder.Decode(solver.Model.Eval(literal, completion: true), new IrSort("S"));
+
+        Assert.Equal(new IrSortValue("S", 5), decoded);
+    }
+
+    [Fact]
+    public void TheSameSortElementReusesItsId()
+    {
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
+        using Solver solver = context.MkSolver();
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+        ModelDecoder decoder = new(context, solver.Model, encoding);
+
+        Sort sort = context.MkUninterpretedSort("S");
+        Expr value = context.MkConst("v0", sort);
+
+        IrValue first = decoder.Decode(value, new IrSort("S"));
+        IrValue again = decoder.Decode(value, new IrSort("S"));
+
+        Assert.Equal(first, again);
+    }
+
+    [Fact]
+    public void UnknownSortElementsGetTheNextFreeId()
+    {
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
+        using Solver solver = context.MkSolver();
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+        ModelDecoder decoder = new(context, solver.Model, encoding);
+
+        Sort sort = context.MkUninterpretedSort("S");
+        Expr v0 = context.MkConst("v0", sort);
+        Expr v1 = context.MkConst("v1", sort);
+        Expr v2 = context.MkConst("v2", sort);
+
+        IrSortValue first = Assert.IsType<IrSortValue>(decoder.Decode(v0, new IrSort("S")));
+        IrSortValue second = Assert.IsType<IrSortValue>(decoder.Decode(v1, new IrSort("S")));
+        IrSortValue third = Assert.IsType<IrSortValue>(decoder.Decode(v2, new IrSort("S")));
+
+        Assert.Equal(0, first.Id);
+        Assert.Equal(1, second.Id);
+        Assert.Equal(2, third.Id);
     }
 
     private static IrBitVecValue Bv(ulong bits) => new(32, bits);

@@ -48,17 +48,30 @@ internal static class ExceptionRegions
                 continue;
             }
 
-            foreach (ControlFlowRegion candidate in region.EnclosingRegion!.NestedRegions.Where(static n => n.Kind == ControlFlowRegionKind.Catch))
-            {
-                candidates++;
-                if (handler is null && (thrown is null || compilation.ClassifyConversion(thrown, candidate.ExceptionType!).IsImplicit))
-                {
-                    handler = candidate;
-                }
-            }
+            candidates += MatchCatches(compilation, region.EnclosingRegion!, thrown, ref handler);
         }
 
         return (finallys.ToImmutable(), handler, thrown is null && candidates > 1);
+    }
+
+    /// <summary>
+    /// Counts <paramref name="wrapper"/>'s <c>catch</c> regions and, when <paramref name="handler"/> is
+    /// still unset, assigns it the first whose type an exception of <paramref name="thrown"/> converts
+    /// to implicitly (or the first at all, when <paramref name="thrown"/> is unknown).
+    /// </summary>
+    private static int MatchCatches(CSharpCompilation compilation, ControlFlowRegion wrapper, ITypeSymbol? thrown, ref ControlFlowRegion? handler)
+    {
+        int candidates = 0;
+        foreach (ControlFlowRegion candidate in wrapper.NestedRegions.Where(static n => n.Kind == ControlFlowRegionKind.Catch))
+        {
+            candidates++;
+            if (handler is null && (thrown is null || compilation.ClassifyConversion(thrown, candidate.ExceptionType!).IsImplicit))
+            {
+                handler = candidate;
+            }
+        }
+
+        return candidates;
     }
 
     /// <summary>The innermost <c>finally</c> region a block sits in, or null when it is in none.</summary>

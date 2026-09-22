@@ -148,7 +148,7 @@ public static class IrValidator
                     }
 
                     List<IrBlockId> from = [.. phi.Incoming.Select(static i => i.From)];
-                    if ((from.Distinct().Count() != from.Count) | !predecessors[block.Id].SetEquals(from))
+                    if ((from.Distinct().Take(from.Count + 1).Count() != from.Count) | !predecessors[block.Id].SetEquals(from))
                     {
                         Report(IrDiagnosticIds.PhiPredecessors, block.Id, $"phi incoming blocks are not the predecessors: {IrText.Line(phi)}");
                     }

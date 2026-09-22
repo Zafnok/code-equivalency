@@ -41,13 +41,14 @@ internal static class CompareCommand
         };
 
         command.SetAction(parseResult => Run(
-            parseResult.GetValue(legacyOption)!,
-            parseResult.GetValue(modernOption)!,
-            parseResult.GetValue(outOption)!,
-            parseResult.GetValue(baselineOption),
-            parseResult.GetValue(configOption),
-            parseResult.GetValue(failOnOption)!,
-            parseResult.GetValue(dryRunOption),
+            new CompareOptions(
+                parseResult.GetValue(legacyOption)!,
+                parseResult.GetValue(modernOption)!,
+                parseResult.GetValue(outOption)!,
+                parseResult.GetValue(baselineOption),
+                parseResult.GetValue(configOption),
+                parseResult.GetValue(failOnOption)!,
+                parseResult.GetValue(dryRunOption)),
             frontends,
             backend,
             new FileReportSink(parseResult.GetValue(outOption)!)));
@@ -56,41 +57,36 @@ internal static class CompareCommand
     }
 
     public static int Run(
-        string legacyPath,
-        string modernPath,
-        string outPath,
-        string? baselinePath,
-        string? configPath,
-        string failOn,
-        bool dryRun,
+        CompareOptions options,
         IReadOnlyList<ILanguageFrontend> frontends,
         IVerificationBackend backend,
         IReportSink sink)
     {
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(frontends);
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(sink);
 
-        if (!File.Exists(legacyPath) || !File.Exists(modernPath))
+        if (!File.Exists(options.LegacyPath) || !File.Exists(options.ModernPath))
         {
-            Console.Error.WriteLine($"error: file not found (legacy={legacyPath}, modern={modernPath})");
+            Console.Error.WriteLine($"error: file not found (legacy={options.LegacyPath}, modern={options.ModernPath})");
             return ExitCodes.UsageError;
         }
 
-        ILanguageFrontend? frontend = FrontendRouter.Route(frontends, legacyPath, modernPath);
+        ILanguageFrontend? frontend = FrontendRouter.Route(frontends, options.LegacyPath, options.ModernPath);
         if (frontend is null)
         {
-            Console.Error.WriteLine($"error: no frontend supports both legacy={legacyPath} and modern={modernPath}");
+            Console.Error.WriteLine($"error: no frontend supports both legacy={options.LegacyPath} and modern={options.ModernPath}");
             return ExitCodes.UsageError;
         }
 
-        if (dryRun)
+        if (options.DryRun)
         {
-            Console.WriteLine($"route: {frontend.Language} legacy={legacyPath} modern={modernPath} out={outPath}");
+            Console.WriteLine($"route: {frontend.Language} legacy={options.LegacyPath} modern={options.ModernPath} out={options.OutPath}");
             return ExitCodes.Success;
         }
 
-        if (!TryLoadInputs(baselinePath, configPath, out EquivConfig config, out SarifLog? baseline, out int inputErrorExitCode))
+        if (!TryLoadInputs(options.BaselinePath, options.ConfigPath, out EquivConfig config, out SarifLog? baseline, out int inputErrorExitCode))
         {
             return inputErrorExitCode;
         }
@@ -98,7 +94,7 @@ internal static class CompareCommand
         MatchResult matchResult;
         try
         {
-            matchResult = frontend.Analyze(legacyPath, modernPath, config, CancellationToken.None);
+            matchResult = frontend.Analyze(options.LegacyPath, options.ModernPath, config, CancellationToken.None);
         }
         catch (FrontendLoadException exception)
         {
@@ -110,7 +106,7 @@ internal static class CompareCommand
         SarifLog log = SarifReportWriter.Write(results, baseline);
         sink.Write(log);
 
-        return DecideExitCode(results, log, failOn);
+        return DecideExitCode(results, log, options.FailOn);
     }
 
     /// <summary>

@@ -85,11 +85,14 @@ internal sealed class IrLowerer
         // `foreach` is left, because the CFG desugars every one of them -- arrays included -- into the
         // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-004). `using`
         // and `lock` are out of this ticket's scope even though the CFG gives them ordinary regions.
-        string? wholeBody = body.Descendants().Any(static o => o is IForEachLoopOperation) ? "foreach-enumerator"
-            : body.Descendants().Any(static o => o is IUsingOperation or IUsingDeclarationOperation) ? "using"
-            : body.Descendants().Any(static o => o is ILockOperation) ? "lock"
-            : ExceptionRegions.HasUnsupportedCatch(graph.Root) ? "catch-filter"
-            : null;
+        string? wholeBody = body switch
+        {
+            _ when body.Descendants().Any(static o => o is IForEachLoopOperation) => "foreach-enumerator",
+            _ when body.Descendants().Any(static o => o is IUsingOperation or IUsingDeclarationOperation) => "using",
+            _ when body.Descendants().Any(static o => o is ILockOperation) => "lock",
+            _ when ExceptionRegions.HasUnsupportedCatch(graph.Root) => "catch-filter",
+            _ => null,
+        };
         if (wholeBody is not null)
         {
             return Opaque(method, renames, wholeBody, span);
@@ -787,7 +790,13 @@ internal sealed class IrLowerer
         }
 
         IrVar target = ssa.Temp(type);
-        ssa.Emit(current, new IrUnary(target, width < type.Width ? (signed ? IrUnaryOp.SExt : IrUnaryOp.ZExt) : IrUnaryOp.Trunc, value));
+        IrUnaryOp op = width switch
+        {
+            _ when width >= type.Width => IrUnaryOp.Trunc,
+            _ when signed => IrUnaryOp.SExt,
+            _ => IrUnaryOp.ZExt,
+        };
+        ssa.Emit(current, new IrUnary(target, op, value));
         return target;
     }
 
@@ -874,9 +883,10 @@ internal sealed class IrLowerer
     private IrVar? Compound(ICompoundAssignmentOperation compound)
     {
         ITypeSymbol right = compound.Value.Type!;
+        (IrBitVec Type, bool Signed)? mappedRight = TypeMapper.Map(right) is IrBitVec bits ? (bits, TypeMapper.IsSigned(right)) : null;
         (IrBitVec Type, bool Signed)? operands = OperatorMapper.IsShiftKind(compound.OperatorKind)
             ? TypeMapper.Promote(compound.Target.Type!)
-            : TypeMapper.Map(right) is IrBitVec bits ? (bits, TypeMapper.IsSigned(right)) : null;
+            : mappedRight;
         return compound.OperatorMethod is null && operands is { } promoted
             ? Update(compound, compound.Target, compound.OperatorKind, Value(compound.Value), promoted, compound.IsChecked, isPostfix: false)
             : Opaque(compound, compound.Kind.ToString());

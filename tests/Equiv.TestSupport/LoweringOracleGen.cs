@@ -78,7 +78,12 @@ public static class LoweringOracleGen
     private static Expr ShiftCount(string op, Expr value, Type type) =>
         op is "<<" or ">>" && type == typeof(long) ? new Conversion(typeof(int), value, IsChecked: false) : value;
 
-    private static string Local(Type type) => type == typeof(int) ? "x" : type == typeof(long) ? "y" : "z";
+    private static string Local(Type type) => type switch
+    {
+        _ when type == typeof(int) => "x",
+        _ when type == typeof(long) => "y",
+        _ => "z",
+    };
 
     private static Gen<Expr> ExprGen(Type type, int depth)
     {
@@ -91,7 +96,12 @@ public static class LoweringOracleGen
         };
     }
 
-    private static string[] Names(Type type) => type == typeof(int) ? ["a", "b", "x"] : type == typeof(long) ? ["c", "d", "y"] : ["e", "z"];
+    private static string[] Names(Type type) => type switch
+    {
+        _ when type == typeof(int) => ["a", "b", "x"],
+        _ when type == typeof(long) => ["c", "d", "y"],
+        _ => ["e", "z"],
+    };
 
     private static Gen<Expr> Number(Type type, int depth, Gen<Expr> leaf)
     {

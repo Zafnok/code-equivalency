@@ -80,7 +80,8 @@ internal sealed class ModelDecoder
         return !oldTrace.SequenceEqual(newTrace)
             || shared
             .Select((s, i) => (Shared: s, Input: inputs.Arguments[i]))
-            .Any(s => s.Shared.ByRef && Final(old, oldRun, s.Shared.Old, s.Input) != Final(@new, newRun, s.Shared.New, s.Input));
+            .Any(s => s.Shared.ByRef
+                && Final(old, oldRun, s.Shared.Old, s.Input) != Final(@new, newRun, s.Shared.New, s.Input));
     }
 
     /// <summary>The shared inputs, in <see cref="ProductEncoding.Inputs"/> order.</summary>

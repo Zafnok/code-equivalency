@@ -96,7 +96,7 @@ internal sealed class SwitchChains
             steps.Add(next.Ordinal);
         }
 
-        if (tests.Count < 2 || tests.Select(static t => t.Constant).Distinct().Count() != tests.Count)
+        if (tests.Count < 2 || tests.Select(static t => t.Constant).Distinct().Take(tests.Count + 1).Count() != tests.Count)
         {
             return;
         }
