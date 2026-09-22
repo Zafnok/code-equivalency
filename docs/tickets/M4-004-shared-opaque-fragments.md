@@ -1,4 +1,4 @@
-# M3-017 An opaque fragment present on both sides is a shared call
+# M4-004 An opaque fragment present on both sides is a shared call
 Status: todo
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.

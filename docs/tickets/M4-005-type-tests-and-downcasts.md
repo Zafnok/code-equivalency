@@ -1,4 +1,4 @@
-# M3-020 Type tests, `as` and downcasts
+# M4-005 Type tests, `as` and downcasts
 Status: todo
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.

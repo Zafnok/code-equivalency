@@ -4,8 +4,8 @@ Status: accepted (2026-09-21)
 
 ## Context
 Whether the product works depends on its Unknown rate on real code, and nothing measures it.
-M3-005 is the first real run, and it is the last ticket in M3. It sits behind the loop ladder,
-packaging and every soundness ticket. The precision work (M3-010, M3-011, ADRs 0024 and 0025) is
+M4-007 (then M3-005) is the first real run, and it was the last ticket in M3. It sits behind the loop ladder,
+packaging and every soundness ticket. The precision work (M3-010, M4-001, ADRs 0024 and 0025) is
 ordered by guesswork. An Unknown result also points at the method declaration, not at the
 construct that caused it. So on a 400-line method a reviewer has to reread the whole thing, and the
 blast radius of one opaque node is the whole method for the human even when it is one line for the
@@ -45,7 +45,7 @@ engine.
 ## Rejected
 - **A separate census JSON or Markdown output.** CLAUDE.md forbids a parallel result schema, and a
   SARIF property bag carries the same data.
-- **Waiting for M3-005.** It depends on packaging and the ladder, neither of which affects lowering.
+- **Waiting for M4-007.** It depends on packaging and the ladder, neither of which affects lowering.
 - **Downgrading Unknown to a note to make the rate look lower.** ADR 0011 already keeps Unknown
   visible through the exit code, and hiding it would lose the reason people adopt the tool.
 
@@ -53,4 +53,4 @@ engine.
 - The M3 order changes: M3-014 and M3-022 go first, in parallel with M3-002.
 - SARIF snapshots of every sample gain the census block when M3-003 lands.
 - ARCHITECTURE.md (CLI options) and VERIFICATION-MODEL section 6 (locations of Unknown) changed in the PR that accepted this ADR.
-- Tickets: M3-014, M3-022, M3-023.
+- Tickets: M3-014, M3-022, M3-016.

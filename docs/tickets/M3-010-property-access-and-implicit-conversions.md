@@ -64,6 +64,6 @@ should reuse the `Invocation` path, not copy it.
 ## Out of scope
 Explicit (downcast) conversions, `as`, `is` type patterns, user-defined conversions, unboxing.
 Inlining auto-property bodies as field accesses. Object and collection initializers. `foreach`,
-`using` and constructors (M3-011).
+`using` and constructors (M4-001).
 
 ## Notes

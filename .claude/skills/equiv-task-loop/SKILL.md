@@ -1,6 +1,6 @@
 ---
 name: equiv-task-loop
-description: The only way to implement a ticket in this repo. Use whenever asked to work on, pick up, start, or finish a ticket (M0-001 ... M3-005, P1-001 ...) or any change to src/ or tests/.
+description: The only way to implement a ticket in this repo. Use whenever asked to work on, pick up, start, or finish a ticket (M0-001 ... M4-007, P1-001 ...) or any change to src/ or tests/.
 ---
 
 # Ticket loop (definition of done)

@@ -55,4 +55,4 @@ the heap or on position.
 - `IrInterpreter` must evaluate or taint `IrPure` (ADR 0026), and the IR validator, text format and
   CsCheck generators gain one instruction (the `equiv-extend-ir` skill).
 - VERIFICATION-MODEL section 2 (instruction table, types paragraph) and section 5 changed in the PR that accepted this ADR.
-- Ticket: M3-018. It depends on M3-016.
+- Ticket: M4-002. It depends on M3-016.

@@ -41,7 +41,7 @@ decimals, floats), treated as uninterpreted with equality only; `Map(key, value)
 SSA heap slices (one map per field, one per array) encoded as SMT arrays. Floating
 point is a `Sort` in the MVP (not IEEE-modelled); a post-MVP ticket exists. Operators on
 floating point, `decimal` and user-defined operators are `IrPure` applications of named
-functions both sides share (ADR 0025, ticket M3-018), so unchanged arithmetic is provable
+functions both sides share (ADR 0025, ticket M4-002), so unchanged arithmetic is provable
 without modelling its semantics.
 
 IR instructions never throw. Every exception edge is explicit in the CFG: the frontend
