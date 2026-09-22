@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Equiv.Core.Ir;
 
 /// <summary>A bitvector as its unsigned magnitude <see cref="Bits"/>; it has no sign of its own.</summary>
@@ -8,7 +10,7 @@ public sealed record IrBitVecValue : IrValue
         IrBitVec type = new(width);
         if ((bits & ~IrBits.Mask(width)) != 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(bits), bits, $"Value does not fit in {width} bits.");
+            throw new ArgumentOutOfRangeException(nameof(bits), bits, $"Value does not fit in {width.ToString(CultureInfo.InvariantCulture)} bits.");
         }
 
         BitVecType = type;

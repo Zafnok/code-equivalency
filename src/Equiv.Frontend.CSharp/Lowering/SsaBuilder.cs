@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Linq;
 
 using Equiv.Core;
@@ -39,7 +40,7 @@ internal sealed class SsaBuilder
     /// <summary>A fresh temporary. If it is later stored to a variable, it takes the variable's name.</summary>
     public IrVar Temp(IrType type)
     {
-        IrVar temp = new($"${counter++}", type);
+        IrVar temp = new($"${(counter++).ToString(CultureInfo.InvariantCulture)}", type);
         renameable.Add(temp);
         return temp;
     }
@@ -49,7 +50,7 @@ internal sealed class SsaBuilder
     /// <summary>Reads <paramref name="variable"/> at this point of <paramref name="block"/>.</summary>
     public IrVar Load(IrBlockId block, Variable variable)
     {
-        IrVar temp = new($"${counter++}", variable.Template.Type);
+        IrVar temp = new($"${(counter++).ToString(CultureInfo.InvariantCulture)}", variable.Template.Type);
         drafts[block.Value].Steps.Add(new LoadStep(variable, temp));
         return temp;
     }
@@ -149,7 +150,7 @@ internal sealed class SsaBuilder
             return value;
         }
 
-        IrVar named = new($"{variable.Template.Name}.{counter++}", value.Type, variable.Template.SourceName);
+        IrVar named = new($"{variable.Template.Name}.{(counter++).ToString(CultureInfo.InvariantCulture)}", value.Type, variable.Template.SourceName);
         alias[value] = named;
         return named;
     }
@@ -185,7 +186,7 @@ internal sealed class SsaBuilder
 
     private Phi NewPhi(Variable variable, IrBlockId block)
     {
-        Phi phi = new(new IrVar($"{variable.Template.Name}.{counter++}", variable.Template.Type, variable.Template.SourceName), block);
+        Phi phi = new(new IrVar($"{variable.Template.Name}.{(counter++).ToString(CultureInfo.InvariantCulture)}", variable.Template.Type, variable.Template.SourceName), block);
         phis.Add(phi);
         return phi;
     }
@@ -222,7 +223,7 @@ internal sealed class SsaBuilder
 
     private IrVar Undefined(IrType type)
     {
-        IrVar value = new($"${counter++}", type);
+        IrVar value = new($"${(counter++).ToString(CultureInfo.InvariantCulture)}", type);
         undefined.Add(new IrOpaque(value, "undefined", span!));
         return value;
     }

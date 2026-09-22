@@ -315,7 +315,7 @@ internal sealed class IrTextParser
         ulong limit = negative ? 1UL << (width - 1) : IrBits.Mask(width);
         if (!ulong.TryParse(token.Text, NumberStyles.None, CultureInfo.InvariantCulture, out ulong magnitude) || magnitude > limit)
         {
-            throw Fail(token, $"literal does not fit in {width} bits");
+            throw Fail(token, $"literal does not fit in {width.ToString(CultureInfo.InvariantCulture)} bits");
         }
 
         return new IrBitVecValue(width, (negative ? 0 - magnitude : magnitude) & IrBits.Mask(width));
