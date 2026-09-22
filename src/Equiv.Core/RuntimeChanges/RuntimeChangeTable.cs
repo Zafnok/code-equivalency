@@ -37,17 +37,9 @@ public sealed class RuntimeChangeTable
     {
         ArgumentNullException.ThrowIfNull(identity);
 
-        foreach (RuntimeChange row in Rows)
-        {
-            if (identity.Value.StartsWith(row.Member, StringComparison.Ordinal) && !suppressed.Contains(row.Member, StringComparer.Ordinal))
-            {
-                match = row;
-                return true;
-            }
-        }
-
-        match = null!;
-        return false;
+        match = Rows.FirstOrDefault(row =>
+            identity.Value.StartsWith(row.Member, StringComparison.Ordinal) && !suppressed.Contains(row.Member, StringComparer.Ordinal))!;
+        return match is not null;
     }
 
     /// <summary>
