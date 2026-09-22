@@ -78,11 +78,9 @@ internal sealed class ModelDecoder
         IEnumerable<IrCallRecord> oldTrace = oldRun.Trace.Select(r => r with { Callee = new CallIdentity(calls.Canonical(Side.Old, r.Callee)) });
         IEnumerable<IrCallRecord> newTrace = newRun.Trace.Select(r => r with { Callee = new CallIdentity(r.Callee.Value) });
         return !oldTrace.SequenceEqual(newTrace)
-            ? true
-            : shared
+            || shared
             .Select((s, i) => (Shared: s, Input: inputs.Arguments[i]))
-            .Where(static s => s.Shared.ByRef)
-            .Any(s => Final(old, oldRun, s.Shared.Old, s.Input) != Final(@new, newRun, s.Shared.New, s.Input));
+            .Any(s => s.Shared.ByRef && Final(old, oldRun, s.Shared.Old, s.Input) != Final(@new, newRun, s.Shared.New, s.Input));
     }
 
     /// <summary>The shared inputs, in <see cref="ProductEncoding.Inputs"/> order.</summary>

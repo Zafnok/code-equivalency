@@ -128,6 +128,11 @@ internal static class IrBits
     {
         long dividend = ToSigned(a, width);
         long divisor = ToSigned(b, width);
-        return divisor == 0 ? a : divisor == -1 ? 0 : (ulong)(dividend % divisor);
+        return divisor switch
+        {
+            0 => a,
+            -1 => 0,
+            _ => (ulong)(dividend % divisor),
+        };
     }
 }

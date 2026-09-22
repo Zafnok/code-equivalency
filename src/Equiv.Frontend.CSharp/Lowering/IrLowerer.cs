@@ -517,13 +517,13 @@ internal sealed class IrLowerer
     private IrVar? Nullness(IOperation source, IrVar value)
     {
         IOperation unwrapped = Unwrap(source);
-        return unwrapped is IObjectCreationOperation or IInstanceReferenceOperation
-            ? null
-            : ShadowOf(unwrapped) is { } shadow
-            ? ssa.Load(current, shadow)
-            : unwrapped.ConstantValue is { HasValue: true, Value: null }
-            ? Const(new IrBoolValue(Value: true))
-            : MapRead(heap.Nulls((IrSort)value.Type), value);
+        return unwrapped switch
+        {
+            IObjectCreationOperation or IInstanceReferenceOperation => null,
+            _ when ShadowOf(unwrapped) is { } shadow => ssa.Load(current, shadow),
+            { ConstantValue.HasValue: true, ConstantValue.Value: null } => Const(new IrBoolValue(Value: true)),
+            _ => MapRead(heap.Nulls((IrSort)value.Type), value),
+        };
     }
 
     /// <summary>Records the nullness of a value stored into a reference-typed variable.</summary>
@@ -810,11 +810,12 @@ internal sealed class IrLowerer
         bool signed = TypeMapper.IsSigned(binary.LeftOperand.Type!);
         IrVar left = Value(binary.LeftOperand);
         IrVar right = Value(binary.RightOperand);
-        return OperatorMapper.Binary(binary.OperatorKind, signed, left.Type, right.Type) is not { } op
-            ? Opaque(binary, binary.Kind.ToString())
-            : OperatorMapper.IsShift(op)
-            ? Shift(op, left, right, (IrBitVec)left.Type)
-            : Arithmetic(op, left, right, signed, binary.IsChecked, TypeMapper.Map(binary.Type!));
+        return OperatorMapper.Binary(binary.OperatorKind, signed, left.Type, right.Type) switch
+        {
+            not { } => Opaque(binary, binary.Kind.ToString()),
+            { } op when OperatorMapper.IsShift(op) => Shift(op, left, right, (IrBitVec)left.Type),
+            { } op => Arithmetic(op, left, right, signed, binary.IsChecked, TypeMapper.Map(binary.Type!)),
+        };
     }
 
     /// <summary><c>x == null</c> and <c>x != null</c> compare the shadow (acceptance criterion 5); null when neither side is <c>null</c>.</summary>

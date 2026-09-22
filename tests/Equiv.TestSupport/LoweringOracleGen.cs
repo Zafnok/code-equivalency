@@ -83,7 +83,12 @@ public static class LoweringOracleGen
     private static Gen<Expr> ExprGen(Type type, int depth)
     {
         Gen<Expr> leaf = Gen.OneOfConst<Expr>([.. Names(type).Select(static n => new Name(n))]);
-        return depth == 0 ? leaf : type == typeof(bool) ? Bool(depth, leaf) : Number(type, depth, leaf);
+        return depth switch
+        {
+            0 => leaf,
+            _ when type == typeof(bool) => Bool(depth, leaf),
+            _ => Number(type, depth, leaf),
+        };
     }
 
     private static string[] Names(Type type) => type == typeof(int) ? ["a", "b", "x"] : type == typeof(long) ? ["c", "d", "y"] : ["e", "z"];

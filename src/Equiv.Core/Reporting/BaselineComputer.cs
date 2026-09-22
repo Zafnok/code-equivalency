@@ -24,10 +24,15 @@ internal static class BaselineComputer
 {
     public static BaselineState StateFor(string identity, string ruleId, string fingerprint, SarifLog? baseline)
     {
-        return !PreviousEntries(baseline).TryGetValue(identity, out (string RuleId, string Fingerprint) previous)
-            || !string.Equals(previous.RuleId, ruleId, StringComparison.Ordinal)
-            ? BaselineState.New
-            : string.Equals(previous.Fingerprint, fingerprint, StringComparison.Ordinal) ? BaselineState.Unchanged : BaselineState.Updated;
+        bool found = PreviousEntries(baseline).TryGetValue(identity, out (string RuleId, string Fingerprint) previous)
+            && string.Equals(previous.RuleId, ruleId, StringComparison.Ordinal);
+        bool unchanged = found && string.Equals(previous.Fingerprint, fingerprint, StringComparison.Ordinal);
+        return (found, unchanged) switch
+        {
+            (false, _) => BaselineState.New,
+            (true, true) => BaselineState.Unchanged,
+            (true, false) => BaselineState.Updated,
+        };
     }
 
     public static IReadOnlyList<Result> AbsentResults(IReadOnlySet<string> currentIdentities, SarifLog? baseline)

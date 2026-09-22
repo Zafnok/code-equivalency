@@ -342,7 +342,7 @@ public static class IrValidator
         public override string? Visit(IrUnary instruction)
         {
             return instruction.Op == IrUnaryOp.BoolNot
-                ? Operands((instruction.A.Type is IrBool) & (instruction.Target.Type is IrBool))
+                ? Operands((instruction.A.Type is IrBool) && (instruction.Target.Type is IrBool))
                 : Operands(instruction.A.Type is IrBitVec operand
                 && instruction.Target.Type is IrBitVec target
                 && Math.Sign(target.Width - operand.Width) == WidthChange[instruction.Op]);
