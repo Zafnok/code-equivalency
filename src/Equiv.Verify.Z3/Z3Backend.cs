@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
@@ -96,7 +98,7 @@ public sealed class Z3Backend : IVerificationBackend
     }
 
     private static Unknown Timeout(Solver solver, VerificationOptions options) =>
-        new(UnknownReason.Timeout, $"solver returned unknown ({solver.ReasonUnknown}) with a {options.TimeoutMs} ms timeout");
+        new(UnknownReason.Timeout, $"solver returned unknown ({solver.ReasonUnknown}) with a {options.TimeoutMs.ToString(CultureInfo.InvariantCulture)} ms timeout");
 
     /// <summary>The opaque nodes the model reaches, as <c>side: reason at path line:column</c>.</summary>
     private static string OpaqueReasons(Model model, ProductEncoding encoding) =>
@@ -104,5 +106,6 @@ public sealed class Z3Backend : IVerificationBackend
             "; ",
             encoding.Opaques
                 .Where(o => model.Eval(o.Reach, completion: true).IsTrue)
-                .Select(static o => $"{ProductEncoder.Prefix(o.Side)}: {o.Node.Reason} at {o.Node.Span.Path} {o.Node.Span.StartLine}:{o.Node.Span.StartColumn}"));
+                .Select(static o => $"{ProductEncoder.Prefix(o.Side)}: {o.Node.Reason} at {o.Node.Span.Path} " +
+                    $"{o.Node.Span.StartLine.ToString(CultureInfo.InvariantCulture)}:{o.Node.Span.StartColumn.ToString(CultureInfo.InvariantCulture)}"));
 }

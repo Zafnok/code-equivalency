@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 
 using CsCheck;
 
@@ -181,7 +182,7 @@ public static class IrGen
                         }
 
                     case IrCall call:
-                        edits.Add(($"duplicate call {index} in {block.Id}", () =>
+                        edits.Add(($"duplicate call {index.ToString(CultureInfo.InvariantCulture)} in {block.Id}", () =>
                             InsertInstructions(procedure, blockIndex, index, call with { Target = Renamed(call.Target, ".dup"), Threw = Renamed(call.Threw, ".dup") })));
                         break;
                     case IrBinary binary when !Commutative.Contains(binary.Op) && binary.A != binary.B:

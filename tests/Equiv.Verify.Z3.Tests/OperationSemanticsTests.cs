@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -83,9 +84,9 @@ public sealed class OperationSemanticsTests
         List<IrInstruction> body = [];
         for (int i = 0; i < operands.Length; i++)
         {
-            IrVar a = new($"a{i}", operands[i].A.Type);
-            IrVar b = new($"b{i}", operands[i].B.Type);
-            IrVar r = new($"r{i}", result);
+            IrVar a = new($"a{i.ToString(CultureInfo.InvariantCulture)}", operands[i].A.Type);
+            IrVar b = new($"b{i.ToString(CultureInfo.InvariantCulture)}", operands[i].B.Type);
+            IrVar r = new($"r{i.ToString(CultureInfo.InvariantCulture)}", result);
             body.Add(new IrConst(a, operands[i].A));
             body.Add(new IrConst(b, operands[i].B));
             body.Add(operation(r, a, b));
@@ -108,7 +109,7 @@ public sealed class OperationSemanticsTests
         List<IrInstruction> body = [];
         for (int i = 0; i < values.Length; i++)
         {
-            IrVar r = new($"r{i}", values[i].Type);
+            IrVar r = new($"r{i.ToString(CultureInfo.InvariantCulture)}", values[i].Type);
             body.Add(new IrConst(r, values[i]));
             body.Add(new IrCall(Target: null, Threw: null, new CallIdentity("Sink"), [r]));
         }

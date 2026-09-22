@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -47,7 +48,7 @@ internal sealed class IrGenLowering
         Enter(NewBlock());
         for (int slot = byRef is null ? 2 : 3; slot < SlotCount; slot++)
         {
-            IrVar init = new($"{names[slot]}.{counter++}", Bv32, names[slot]);
+            IrVar init = new($"{names[slot]}.{(counter++).ToString(CultureInfo.InvariantCulture)}", Bv32, names[slot]);
             Emit(new IrConst(init, new IrBitVecValue(32, program.Inits[slot - 2])));
             env[slot] = init;
         }
@@ -93,9 +94,9 @@ internal sealed class IrGenLowering
 
     private void Emit(IrInstruction instruction) => current!.Body.Add(instruction);
 
-    private IrVar Temp(IrType type) => new($"t{counter++}", type);
+    private IrVar Temp(IrType type) => new($"t{(counter++).ToString(CultureInfo.InvariantCulture)}", type);
 
-    private IrVar Version(int slot) => new($"{names[slot]}.{counter++}", env[slot].Type, names[slot]);
+    private IrVar Version(int slot) => new($"{names[slot]}.{(counter++).ToString(CultureInfo.InvariantCulture)}", env[slot].Type, names[slot]);
 
     private IrVar Constant(uint value)
     {
@@ -378,7 +379,7 @@ internal sealed class IrGenLowering
             env[slot] = merged;
         }
 
-        IrVar index = new($"i{counter++}", Bv32);
+        IrVar index = new($"i{(counter++).ToString(CultureInfo.InvariantCulture)}", Bv32);
         List<(IrBlockId, IrVar)> indexIncoming = [(preheader.Id, start)];
         header.Phis.Add((index, indexIncoming));
         IrVar more = Temp(Bool);
