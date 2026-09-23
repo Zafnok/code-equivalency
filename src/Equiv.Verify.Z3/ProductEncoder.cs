@@ -269,7 +269,8 @@ internal static class ProductEncoder
                 .Reverse()
                 .Aggregate((IntExpr)context.MkInt(0), (rest, e) => (IntExpr)context.MkITE(reach[e.Block], context.MkInt(Intern(exceptionTypes, ((IrThrow)e.Exit).ExceptionType)), rest));
             Trace = calls.Trace(events);
-            Opaque = context.MkOr([context.MkFalse(), .. opaques.Select(static o => o.Reach).Distinct()]);
+            BoolExpr[] opaqueDisjuncts = [context.MkFalse(), .. opaques.Select(static o => o.Reach).Distinct()];
+            Opaque = context.MkOr(opaqueDisjuncts);
         }
 
         public IrProcedure Procedure { get; }
@@ -322,8 +323,11 @@ internal static class ProductEncoder
             return id;
         }
 
-        private BoolExpr Any(IEnumerable<(IrBlockId Block, IrTerminator Exit)> blocks) =>
-            context.MkOr([context.MkFalse(), .. blocks.Select(e => reach[e.Block])]);
+        private BoolExpr Any(IEnumerable<(IrBlockId Block, IrTerminator Exit)> blocks)
+        {
+            BoolExpr[] disjuncts = [context.MkFalse(), .. blocks.Select(e => reach[e.Block])];
+            return context.MkOr(disjuncts);
+        }
 
         private string Name(string suffix) => Prefix(side) + "." + suffix;
 
@@ -484,11 +488,13 @@ internal static class ProductEncoder
                         foreach ((IrValue value, IrBlockId target) in choice.Cases)
                         {
                             BoolExpr matches = context.MkEq(scrutinee, sorts.Literal(value));
-                            edges.Add((target, context.MkAnd([matches, .. earlier.Select(context.MkNot)])));
+                            BoolExpr[] caseConjuncts = [matches, .. earlier.Select(context.MkNot)];
+                            edges.Add((target, context.MkAnd(caseConjuncts)));
                             earlier.Add(matches);
                         }
 
-                        edges.Add((choice.Default, context.MkAnd([context.MkTrue(), .. earlier.Select(context.MkNot)])));
+                        BoolExpr[] defaultConjuncts = [context.MkTrue(), .. earlier.Select(context.MkNot)];
+                        edges.Add((choice.Default, context.MkAnd(defaultConjuncts)));
                         break;
                     }
 
