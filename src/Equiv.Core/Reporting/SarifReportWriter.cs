@@ -23,7 +23,12 @@ public static class SarifReportWriter
 
     private const string ToolName = "Equiv";
 
-    public static SarifLog Write(IReadOnlyList<VerificationResult> results, SarifLog? baseline = null)
+    /// <summary>
+    /// <paramref name="runProperties"/> go into the run's property bag in the order given, each value serialised as
+    /// JSON (ADR 0006: extra data travels in SARIF <c>properties</c>, never in a parallel schema). The CLI puts the
+    /// lowering census and the analysed line counts there (ticket M3-014).
+    /// </summary>
+    public static SarifLog Write(IReadOnlyList<VerificationResult> results, SarifLog? baseline = null, IReadOnlyDictionary<string, object>? runProperties = null)
     {
         ArgumentNullException.ThrowIfNull(results);
 
@@ -42,6 +47,11 @@ public static class SarifReportWriter
             Tool = new Tool { Driver = Driver() },
             Results = sarifResults,
         };
+
+        foreach ((string name, object value) in runProperties ?? new Dictionary<string, object>(StringComparer.Ordinal))
+        {
+            run.SetProperty(name, value);
+        }
 
         return new SarifLog
         {

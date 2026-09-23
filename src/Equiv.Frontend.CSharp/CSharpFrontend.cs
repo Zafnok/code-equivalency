@@ -17,7 +17,8 @@ namespace Equiv.Frontend.CSharp;
 /// <see cref="ILanguageFrontend"/> for C# (ARCHITECTURE.md): loads both sides through
 /// <see cref="ISolutionLoader"/> (M2-001), enumerates procedures (M2-002), applies the config's
 /// rename map plus the endpoint rename map <see cref="EndpointDiscovery"/> derives (M2-005), hands the
-/// identity sets to <see cref="IProcedureMatcher"/>, and lowers both bodies of every matched pair (M2-003).
+/// identity sets to <see cref="IProcedureMatcher"/>, lowers both bodies of every matched pair (M2-003), and counts
+/// each side's analysed lines (<see cref="CodeLines"/>, M3-014).
 /// </summary>
 public sealed class CSharpFrontend : ILanguageFrontend
 {
@@ -44,7 +45,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
         return path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase);
     }
 
-    public MatchResult Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct)
+    public FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(config);
 
@@ -64,7 +65,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
         Dictionary<ProcedureIdentity, SideProcedure> legacyByIdentity = ByIdentity(legacyProcedures);
         Dictionary<ProcedureIdentity, SideProcedure> modernByIdentity = ByIdentity(modernProcedures);
 
-        return match with
+        MatchResult lowered = match with
         {
             Pairs = [.. match.Pairs.Select(pair => pair with
             {
@@ -73,6 +74,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
             })],
             Ambiguous = [.. match.Ambiguous, .. legacyAmbiguous, .. modernAmbiguous],
         };
+        return new FrontendAnalysis(lowered, new AnalysedLines(CodeLines.Count(legacy.Compilations), CodeLines.Count(modern.Compilations)));
     }
 
     private LoadedSolution LoadOrThrow(string path, CancellationToken ct)

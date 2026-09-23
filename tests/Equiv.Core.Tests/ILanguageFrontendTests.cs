@@ -14,8 +14,8 @@ public sealed class ILanguageFrontendTests
 
         public bool Supports(string path) => true;
 
-        public MatchResult Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct) =>
-            new([], [], [], []);
+        public FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct) =>
+            new(new MatchResult([], [], [], []), new AnalysedLines(1, 2));
     }
 
     [Fact]
@@ -25,6 +25,8 @@ public sealed class ILanguageFrontendTests
 
         Assert.Equal("stub", frontend.Language);
         Assert.True(frontend.Supports("anything"));
-        Assert.Equal(new MatchResult([], [], [], []), frontend.Analyze("a", "b", EquivConfig.Default, CancellationToken.None));
+        Assert.Equal(
+            new FrontendAnalysis(new MatchResult([], [], [], []), new AnalysedLines(1, 2)),
+            frontend.Analyze("a", "b", EquivConfig.Default, CancellationToken.None));
     }
 }

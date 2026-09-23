@@ -246,6 +246,18 @@ without `IrOpaque`, whole-body opaque pairs, congruent pairs, and `IrOpaque` cou
 per side (ADR 0027). It also records skipped projects per side, and, when the run produced
 verdicts, Unknown counts by scope (ADR 0029).
 
+Counts in the census are per lowered body of a matched pair. `procedures` counts, per side, the
+matched pairs plus the removed (legacy) or added (modern) procedures. `opaqueByReason` counts the
+bodies on each side that hold at least one `IrOpaque` with that reason, sorted by reason. A body is
+whole-body opaque when it is one block whose only instruction is an `IrOpaque`, and a pair counts
+under `pairsWholeBodyOpaque` when either side is (ticket M3-014).
+
+Every run also writes `run.properties.analysedLinesOfCode`: `legacy` and `modern`, one count per
+codebase and never a total (ticket M3-014). The rule is the one in README's "Licence" section,
+applied identically to both sides. It counts the lines that hold part of a C# token, in every C#
+file the loaded projects compile (generated files included), and a file compiled by more than one
+project once. `--dry-run` prints the same two numbers without verifying.
+
 A pair whose verification throws (an encoder bug, a `Z3Exception`) has no result: a crash is
 a fact about the tool, not a verdict about the code (ADR 0023). It is recorded as an `error`
 entry in `invocations[0].toolExecutionNotifications` naming both identities, the invocation
