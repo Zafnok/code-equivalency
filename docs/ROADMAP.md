@@ -16,6 +16,7 @@ S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it 
 | M2 C# frontend | days 3–5 | 2026-09-18 to 2026-09-20, PRs 24, 25, 27, 30, 59, 67 | done |
 | M3 Z3 backend and shipping | days 5–7 | M3-001 PR #78 | next: M3-014 and M3-024, in parallel with M3-002 |
 | M4 Precision and first corpus run | after M3 | | order set by M3-022's corpus census |
+| M5 Agent surface (MCP) | after M3-004, parallel with M4 | | M5-001 written |
 
 M0 and M1 landed in one calendar day and M2 in three, still ahead of the five days planned.
 `main` is green in CI on Windows and Ubuntu with 100% line and branch coverage on every `src/`
@@ -241,6 +242,15 @@ dependencies still win. Each precision ticket updates the `business-layer` snaps
   0028 criteria, including 100% recall on seeded behaviour changes. Findings become tickets, not
   fixes. Needs M3-004, M3-022 and the M4 tickets M3-022 kept.
 
+## M5 — Agent surface (MCP)
+
+Coding agents do migrations; M5 lets them check their own work while they do it (ADR 0033). It
+needs only a shippable binary, so it can run alongside M4.
+
+- M5-001 (M) `equiv mcp`: an MCP server over stdio in the same binary and container, with
+  `compare` and `lower_only` tools that return the SARIF log. Needs M3-004. A remote (HTTP)
+  transport waits for the hosted tier.
+
 ## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
 
 - P1-001 (L) Constrained Horn clause encoding solved by Z3 Spacer for non-aligned loops.
@@ -262,10 +272,10 @@ over IR and does not cover them.
 
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
 
-- Bare (MSBuild-free) loader for Linux/containers.
 - Floating point as IEEE sorts; `decimal`; string theory for common `string` ops.
 - Boogie backend behind `IVerificationBackend` for invariant-driven unbounded loops.
 - Java frontend (Eclipse JDT sidecar) reusing Core, Verify, Cli unchanged.
 - Web UI: SARIF viewer + CFG split pane (React Flow). Only after users ask.
-- Hosted tier: container behind an API, AKS, per-key quotas.
+- Hosted tier: the same image as Azure Container Apps Jobs, queue-triggered, per-key quotas (ADR
+  0032); `equiv mcp` over Streamable HTTP with auth (ADR 0033).
 - SonarQube: confirm `sonar.sarifReportPaths` ingestion of EQ* rules; GitHub Code Scanning upload step in `action.yml`.

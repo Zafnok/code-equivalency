@@ -38,3 +38,5 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0029 | A failure's blast radius is the smallest unit it touches (project, method, line), and every Unknown says which |
 | 0030 | Z3 comes from its official GitHub release nupkg through a hash-pinned local feed |
 | 0031 | Linux parity is a release requirement; the Windows-only loader is not shippable |
+| 0032 | The hosted tier runs on Azure Container Apps Jobs, not AKS |
+| 0033 | `equiv mcp` exposes the pipeline to coding agents as an MCP server (stdio, SARIF results) |
