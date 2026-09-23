@@ -2,7 +2,7 @@
 Status: todo
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: M3-003
+Depends on: M3-003, M3-027, M3-029
 
 ## Goal
 Anyone can run `equiv` without cloning: a single-file binary per OS from a GitHub
@@ -65,3 +65,4 @@ consumable by `sonar.sarifReportPaths`; document it in README, do not integrate)
 
 ## Notes
 - Note (from the M3-001 review, 2026-09-21): `Microsoft.Z3` 4.12.2 ships no `runtimes/linux-x64` native, so criterion 1's `IncludeNativeLibrariesForSelfExtract` has no Linux `libz3.so` to bundle, and the Docker image lacks one too. CI takes it from the pinned PyPI `z3-solver==4.12.2.0` manylinux wheel (`.github/workflows/ci.yml`, "Provide libz3 (Linux)"); this ticket must choose how the linux-x64 artifact and the image get it (same wheel, or a source build) and verify the Linux binary actually loads it. ADR 0002's Microsoft.Z3 row records the gap.
+- Note (2026-09-23, ADRs 0030 and 0031): this ticket now also depends on M3-027 (Z3 5.1 ships `libz3.so` for linux-x64, which answers the note above) and on M3-029 (Linux loader). M3-028 rewrites criteria 1 and 2 once the loader mechanism is chosen: the Linux binary and the container must analyse the samples, not exit 3, and the final image must be Ubuntu 24.04-based (glibc 2.38 floor for `libz3`). Prefer `dotnet publish -t:PublishContainer` over a hand-written Dockerfile unless the chosen loader needs packages the SDK container tooling cannot add.

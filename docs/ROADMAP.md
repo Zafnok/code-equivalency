@@ -143,8 +143,10 @@ M3 grew from six tickets to twenty-two through three reviews (below). On 2026-09
 consolidated. The precision tickets moved to M4 and were renumbered (M3-011, M3-018, M3-019,
 M3-017, M3-020, M3-021 and M3-005 became M4-001 to M4-007). Four pairs merged: M3-006 into M3-014,
 M3-008 into M3-015, M3-012 into M3-007, and M3-023 into M3-016. On 2026-09-23 ADR 0029 added
-M3-024 and M3-025, and M3-014's review found the IR007 lowering bug M3-026 fixes. Fourteen tickets
-remain open, plus the three promoted P1 tickets.
+M3-024 and M3-025, and M3-014's review found the IR007 lowering bug M3-026 fixes. The dependency
+and architecture audit added ADR 0030 (Z3 5.1 from the official GitHub release, M3-027) and ADR 0031
+(Linux parity before release, M3-028). Sixteen tickets remain open, plus the three promoted P1
+tickets.
 
 - M3-001 (L) done, PR #78. Product-program encoder + Z3 driver + counterexample decoding.
   Soundness property harness from VERIFICATION-MODEL §7.
@@ -154,6 +156,10 @@ remain open, plus the three promoted P1 tickets.
 - M3-003 (M) End to end on all samples; snapshots checked in; exit codes verified;
   `Ambiguous` → `Unknown(UnmatchedOverload)` wiring.
 - M3-004 (M) Packaging: single-file publish, Dockerfile, `action.yml`, README usage.
+- M3-027 (M) Z3 4.12.2 to 5.1.0 from the official GitHub release through a hash-pinned local feed;
+  drops the PyPI `libz3.so` workaround (ADR 0030).
+- M3-028 (M) Spike: which loader reaches Linux parity on the samples and one corpus pair; writes
+  M3-029, the loader itself, and the Windows/Ubuntu SARIF parity job (ADR 0031).
 - M3-007 (L) Synthesised inputs: field and array maps are `Ref` parameters, so the final heap is
   observable (ADR 0018). The naming rule ADR 0021 relies on is enforced over `samples/`, and a C#
   parameter named `@this` no longer collides with the receiver input.
@@ -205,13 +211,14 @@ Order:
    engine work. If M3-022's verdict is re-scope or stop, everything below waits for a new ADR.
    M3-026 comes right after M3-022: running the census first keeps today's real per-reason opaque
    counts (`Await`, `PropertyReference`, ...) instead of collapsing them into one `async` reason.
-2. **Soundness:** M3-002; M3-007 → P1-003 → P1-006 → P1-005; M3-010 → M3-009; M3-026 → M3-013 (an
+2. **Soundness:** M3-002 → M3-027; M3-007 → P1-003 → P1-006 → P1-005; M3-010 → M3-009; M3-026 → M3-013 (an
    `async Task<T>` pair must stop being ill-typed IR before a pair can throw its way into M3-013's
    exit-5 path, and before any full verifying corpus run).
 3. **Blast radius, before any snapshot is taken:** M3-015 (needs M3-014, M3-009, M3-024); M3-016
    (needs M3-014); M3-025 (needs M3-016, M3-024).
 4. M3-003 (needs M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, M3-024, M3-025, P1-005,
-   P1-006) → M3-004.
+   P1-006). M3-004 needs M3-003, M3-027 and M3-029.
+5. **Linux parity:** M3-028 (needs M3-024) → M3-029.
 
 ## M4 — Precision and the first corpus run
 
