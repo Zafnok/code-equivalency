@@ -177,14 +177,24 @@ Equivalent or finds a counterexample wins, and `proofMethod` names it.
 
 | Rung | Method | Claim | When it applies | Ticket |
 |---|---|---|---|---|
-| 1 | Bounded unrolling, k iterations, `assume false` on the last back edge | Equivalent up to k (`boundedBy: k`), or Divergent with a concrete trace | always; runs first because counterexamples surface at small k | M3-002 |
-| 2 | Lockstep relational induction (mutual summaries): align loop pairs by CFG position and normalised guard; assume equal states at loop entry, prove bodies produce equal states and equal guards | **unbounded** Equivalent | both sides have a loop at the same position; covers unchanged and cosmetically changed loops | M3-002 |
+| 1 | Bounded unrolling, k iterations, `assume false` on the last back edge; self-calls inlined k deep | Divergent with a concrete trace; Equivalent (`boundedBy: k`) only when no input reaches the bound | always; runs first because counterexamples surface at small k | M3-002 |
+| 2 | Lockstep relational induction (mutual summaries): align loop pairs by position in the loop nesting forest and pair each header's state; cut both sides at every header and prove, from equal inputs and from each pair of equal header states, that both sides reach the same next header with equal states or leave with equal observables | **unbounded** Equivalent | both sides have the same loop forest and pairable header states; covers unchanged and cosmetically changed loops | M3-002 |
 | 3 | k-induction: rung 2 with k prior iterations assumed equal | unbounded Equivalent | bodies agree only after warm-up | M3-002 |
 | 4 | Constrained Horn clauses solved by Z3 Spacer: each loop is a recursive predicate, Z3 synthesises the coupling invariant | unbounded Equivalent, or Unknown(chc-timeout) | loops do not align (loop to LINQ, fusion, iterator rewrite) | P1-001 |
 | 5 | LLM-proposed coupling invariant checked by Z3; a wrong guess can never yield Equivalent | unbounded Equivalent, or Unknown(no-invariant) | rung 4 timed out | P1-002 |
 
 Recursion is handled by rung 2 with the recursive call as the induction point
-(the standard regression-verification treatment). Partial equivalence is what every
+(the standard regression-verification treatment): a self-call stays a call both sides share. Rung 1 inlines it
+instead, so its counterexamples are real.
+
+Rung 1's result is a proof only when no input reaches the bound; otherwise it only refutes, and rungs 2 and 3
+decide. A pair with loops or a self-call that no rung decides is Unknown: `Opaque` when a failed obligation reaches
+an `IrOpaque`, `Recursion` when a side calls itself, `UnalignedLoop` when the loops do not align or neither
+induction proves them, `Timeout` when only the solver gave up. A header's state is its phis plus every other value
+live on entry to it (loop-invariant values, heap maps, values used after the loop). A rung 2 obligation's model is a
+counterexample only when it comes from the base (real inputs) and replays to a divergence through the original
+procedures; a step's model may start from an unreachable state. Every result lists the rungs it ran, with their
+outcomes, in `properties.ladderTrace`. Partial equivalence is what every
 rung proves; termination is compared separately as an observable only when both sides
 have a syntactic termination argument (bounded counters), otherwise not claimed.
 
@@ -194,7 +204,7 @@ have a syntactic termination argument (bounded counters), otherwise not claimed.
 |---|---|---|---|
 | Equivalent | none | `pass` | EQ001 |
 | Divergent | `error` | `fail` | EQ002 (counterexample in `properties.model` and in `message`) |
-| Unknown | none (rule default `warning`) | `open` | EQ003 (reason: timeout, opaque, unmatched overload, abstraction, loop until the M3-002 ladder) |
+| Unknown | none (rule default `warning`) | `open` | EQ003 (reason in `properties.unknownReason`: timeout, opaque, unmatched-overload, unaligned-loop, recursion, abstraction) |
 | Added | none (rule default `note`) | `informational` | EQ004 |
 | Removed | none (rule default `note`) | `informational` | EQ005 |
 | Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link in `message`) |
