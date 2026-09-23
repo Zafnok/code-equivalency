@@ -48,9 +48,14 @@ If you are editing engine code, stop; that is a new ticket.
 Verification. Fixes. Any code not listed in `tools/corpus/`.
 
 ## Notes
-- Result: **continue** (`docs/runs/2026-09-23-census-verdict.md`). Git Extensions 74.0% unchanged;
-  agent median 100% unchanged, 22.1% lowerable, 100% load rate. M4 is now M4-001, M4-008, M4-004;
-  M4-002, M4-003, M4-005 and M4-006 moved to the post-MVP backlog.
+- Result: **incomplete: human pair pending** (`docs/runs/2026-09-23-census-verdict.md`). Git
+  Extensions 74.0% unchanged, and no census because it crashed. Agent median: 100% unchanged,
+  22.1% lowerable, 100% load rate. All three agent pairs are pure retargets, with no `.cs` file
+  changed.
+- Deviation (PR #139 review): criterion 4's reorder is not applied. Its lowerable numbers come
+  from byte-identical bodies the solver never sees, so the M4 list and M4-007's `Depends on:` are
+  unchanged. The reorder waits for a Git Extensions census after P2-011, P2-010 and P2-012.
+  P2-001 to P2-009 stay as an unscheduled backlog.
 - Git Extensions produced no census: `IrLowerer.Destination` throws `KeyNotFoundException` and the
   run exits 1 (P2-010; containment P2-011). Only its unchanged share could be measured.
 - `chrismckelt/WebMinder` was skipped: its agent migration does not build (`System.Web`, ASP.NET

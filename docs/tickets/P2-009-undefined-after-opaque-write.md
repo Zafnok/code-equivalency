@@ -17,8 +17,8 @@ static int ParseOr(string s, int fallback) => int.TryParse(s, out var n) ? n : f
 
 After this ticket, an opaque that stands for a construct writing a local, parameter or capture
 (`out`/`ref` argument, deconstruction, pattern binding) also writes a fresh opaque value to each
-written variable. A later read then sees that value, not `undefined`. Now that M4-003 has moved to
-the backlog, this is the only thing that keeps such methods well-formed.
+written variable. A later read then sees that value, not `undefined`. Until M4-003 lowers `ref`/`out`
+for real, this is what keeps such methods well-formed.
 
 ## Spec references
 `SsaBuilder.Undefined`; `IrLowerer.Opaque`; ADR 0014 (opaque semantics).
@@ -33,6 +33,6 @@ the backlog, this is the only thing that keeps such methods well-formed.
 If the fix needs changes in `SsaBuilder` beyond defining the written variables, stop.
 
 ## Out of scope
-Lowering `ref`/`out` for real (M4-003, backlog).
+Lowering `ref`/`out` for real (M4-003).
 
 ## Notes
