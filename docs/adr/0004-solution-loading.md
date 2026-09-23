@@ -1,6 +1,6 @@
 # ADR 0004: MSBuildWorkspace on Windows for the MVP loader
 
-Status: accepted (2026-09-17)
+Status: accepted (2026-09-17); its Windows-only MVP scope is superseded by ADR 0031
 
 ## Fact check on the "needs Windows API bindings" premise
 The engine calls no Windows API. To read a .NET Framework 4.8 solution it needs
