@@ -5,6 +5,17 @@ description: Run or debug this repo's quality gates (build, format, tests, 100% 
 
 # Running the gates
 
+**Default: do not run this locally.** CI runs the identical gate
+(`./build.ps1 -Integration` on windows-latest, `./build.ps1` on ubuntu-latest, see
+`.github/workflows/ci.yml`) as a required check on every PR, and mutation runs in CI only
+(never locally — see the table below). Push and let CI gate it instead of spinning a
+full local build/test/mutation run, which takes 20-40+ minutes on this box. Only run a
+gate locally when CI has already failed on the same issue more than once and a local
+debug-mode run is genuinely cheaper than iterating through CI again — and then run only
+the one step that's failing (e.g. `dotnet test <proj>` or `dotnet stryker ...` for the one
+project), not the full `./build.ps1`, unless the failure is in restore/build/format where
+the full script is the only way to reproduce it.
+
 Single entry point: `./build.ps1` (Windows PowerShell 5.1 or PowerShell 7). One flag:
 `-Integration` (Windows only; also runs `Equiv.Tests.Integration`, which needs VS Build
 Tools and the 4.8 targeting pack). Debug configuration on purpose: Release inlining
