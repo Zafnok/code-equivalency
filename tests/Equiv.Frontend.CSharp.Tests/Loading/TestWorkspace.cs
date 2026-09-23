@@ -18,7 +18,7 @@ internal sealed class TestWorkspace() : Workspace(MefHostServices.DefaultHost, "
     /// <param name="raiseOnTextLoad">
     /// Raised when the document text is first read, which happens during <c>GetCompilationAsync</c>, not when the solution opens.
     /// </param>
-    public void AddCSharpProject(string name, string source, bool referenceCoreLibrary = true, WorkspaceDiagnostic? raiseOnTextLoad = null)
+    public void AddCSharpProject(string name, string source, bool referenceCoreLibrary = true, WorkspaceDiagnostic? raiseOnTextLoad = null, string? filePath = null)
     {
         TextAndVersion text = TextAndVersion.Create(SourceText.From(source), VersionStamp.Create());
         ProjectId projectId = ProjectId.CreateNewId(name);
@@ -33,6 +33,7 @@ internal sealed class TestWorkspace() : Workspace(MefHostServices.DefaultHost, "
             name,
             name,
             LanguageNames.CSharp,
+            filePath: filePath,
             compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary),
             documents: [document],
             metadataReferences: referenceCoreLibrary ? [CoreLibrary] : []));

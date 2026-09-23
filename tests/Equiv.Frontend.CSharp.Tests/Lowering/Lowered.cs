@@ -6,6 +6,7 @@ using Equiv.Frontend.CSharp.Lowering;
 using Equiv.TestSupport;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Operations;
 
 using Xunit;
 
@@ -29,6 +30,22 @@ internal static class Lowered
 
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single();
         IrProcedure procedure = IrLowerer.Lower(method, compilation, renames ?? RenameMap.Empty, suppressedRuntimeChanges.IsDefault ? [] : suppressedRuntimeChanges);
+        Assert.Empty(IrValidator.Validate(procedure));
+        return procedure;
+    }
+
+    /// <summary>
+    /// Lowers method <c>M</c> of <c>class C { <paramref name="members"/> }</c> through the body overload, which lowers
+    /// erroneous code as bound instead of making it one <c>unbound</c> opaque.
+    /// </summary>
+    public static IrProcedure ErroneousBody(string members)
+    {
+        Compilation compilation = RoslynTestCompilations.Compile($"using System;\nclass C\n{{\n{members}\n}}\n");
+        IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+        SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax(TestContext.Current.CancellationToken);
+        SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
+        IMethodBodyOperation body = (IMethodBodyOperation)model.GetOperation(syntax, TestContext.Current.CancellationToken)!;
+        IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty, []);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

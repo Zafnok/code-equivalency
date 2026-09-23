@@ -268,7 +268,7 @@ public sealed class CompareCommandTests
         Assert.Equal(["EQ004", "EQ005"], run.Results.Select(static r => r.RuleId), StringComparer.Ordinal);
         Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Equal(
-            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":1,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"opaqueByReason":{}}""",
+            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":1,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{}}""",
             census);
         Assert.True(run.TryGetSerializedPropertyValue("analysedLinesOfCode", out string? _));
     }
@@ -677,6 +677,193 @@ public sealed class CompareCommandTests
             File.Delete(configPath);
         }
     }
+
+    [Fact]
+    public void AnUnboundMethodIsUnknownUnbound()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedurePair pair = Pair(PairIdentity) with { NewBody = UnboundBody(PairIdentity) };
+        FakeBackend backend = new(NoVerdicts);
+        InMemoryReportSink sink = new();
+
+        int exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink);
+
+        Assert.Equal(ExitCodes.UnknownPresent, exitCode);
+        Assert.Empty(backend.Calls);
+        Result result = Assert.Single(sink.Log!.Runs[0].Results);
+        Assert.Equal("EQ003", result.RuleId);
+        Assert.Equal("unbound", result.GetProperty<string>("unknownReason"));
+        Assert.Contains("modern: unbound at a.cs 3:5; modern: unbound at a.cs 4:1", result.Message.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnUnboundLegacyBodyIsUnknownUnbound()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedurePair pair = Pair(PairIdentity) with { OldBody = UnboundBody(PairIdentity) };
+        InMemoryReportSink sink = new();
+
+        CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], new FakeBackend(NoVerdicts), sink);
+
+        Assert.Contains("legacy: unbound at a.cs 3:5", Assert.Single(sink.Log!.Runs[0].Results).Message.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SkippedProjectProceduresAreUnverifiedNotAddedOrRemoved()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        MatchResult matchResult = new MatchResult([Pair(PairIdentity)], [], [], []) with
+        {
+            LegacySkipped = [new UnverifiedProject("Lib", "Lib.Assembly", IsCSharp: true, ["CS0246: missing", "CS0012: other"], [new ProcedureIdentity("L::X()")])],
+            ModernSkipped =
+            [
+                new UnverifiedProject("Native", "Native", IsCSharp: false, ["Cannot open project 'Native.vcxproj'"], []),
+                new UnverifiedProject(string.Empty, string.Empty, IsCSharp: true, ["project file could not be evaluated"], []),
+            ],
+        };
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.Success;
+
+        string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, matchResult)], backend, sink));
+
+        Assert.Equal(ExitCodes.LoadFailure, exitCode);
+        Run run = sink.Log!.Runs[0];
+        Assert.Equal("EQ001", Assert.Single(run.Results).RuleId);
+        Assert.Equal(["L::X()"], run.GetProperty<List<string>>("unverified"), StringComparer.Ordinal);
+        Invocation invocation = Assert.Single(run.Invocations);
+        Assert.False(invocation.ExecutionSuccessful);
+        Assert.Equal(
+            [
+                (FailureLevel.Error, "legacy project 'Lib' (assembly 'Lib.Assembly') was skipped: CS0246: missing; CS0012: other"),
+                (FailureLevel.Warning, "modern project 'Native' (assembly 'Native') was skipped: Cannot open project 'Native.vcxproj'"),
+                (FailureLevel.Error, "a modern project the workspace did not name was skipped: project file could not be evaluated"),
+            ],
+            invocation.ToolExecutionNotifications.Select(static n => (n.Level, n.Message.Text)));
+        Assert.Equal(
+            """{"legacy":1,"modern":2}""",
+            Newtonsoft.Json.JsonConvert.SerializeObject(run.GetProperty<Dictionary<string, object>>("loweringCensus")["projectsSkipped"]));
+        Assert.Contains("error: legacy project 'Lib'", errorOutput, StringComparison.Ordinal);
+        Assert.Contains("warning: modern project 'Native'", errorOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ANonCSharpProjectAloneDoesNotChangeTheExitCode()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        MatchResult matchResult = new MatchResult([Pair(PairIdentity)], [], [], []) with
+        {
+            LegacySkipped = [new UnverifiedProject("Native", "Native", IsCSharp: false, ["Cannot open project 'Native.vcxproj'"], [])],
+        };
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
+        InMemoryReportSink sink = new();
+        int exitCode = -1;
+
+        CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, matchResult)], backend, sink));
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.True(Assert.Single(sink.Log!.Runs[0].Invocations).ExecutionSuccessful);
+    }
+
+    [Theory]
+    [InlineData("divergent", true)]
+    [InlineData("unknown", false)]
+    public void ExitCodePrecedenceIsFourThenVerdicts(string failOn, bool divergent)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        Verdict verdict = divergent ? new Divergent(Counterexample()) : new Unknown(UnknownReason.Timeout, "gave up");
+        MatchResult matchResult = new MatchResult([Pair(PairIdentity)], [], [], []) with
+        {
+            ModernSkipped = [new UnverifiedProject("Lib", "Lib", IsCSharp: true, ["CS0246: missing"], [])],
+        };
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = verdict });
+        int exitCode = -1;
+
+        CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, failOn, DryRun: false),
+            [new FakeFrontend("csharp", _ => true, matchResult)], backend, new InMemoryReportSink()));
+
+        Assert.Equal(ExitCodes.LoadFailure, exitCode);
+    }
+
+    [Fact]
+    public void LowerOnlyExits4WhenACSharpProjectWasSkipped()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        MatchResult matchResult = new MatchResult([Pair(PairIdentity)], [], [], []) with
+        {
+            LegacySkipped = [new UnverifiedProject("Lib", "Lib", IsCSharp: true, ["CS0246: missing"], [])],
+        };
+        FakeBackend backend = new(NoVerdicts);
+        int exitCode = -1;
+
+        CaptureStdErr(() => CaptureStdOut(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: true),
+            [new FakeFrontend("csharp", _ => true, matchResult)], backend, new InMemoryReportSink())));
+
+        Assert.Equal(ExitCodes.LoadFailure, exitCode);
+        Assert.Empty(backend.Calls);
+    }
+
+    [Fact]
+    public void ABaselineResultInASkippedProjectIsCarriedUnchanged()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        string baselinePath = Path.GetTempFileName();
+        try
+        {
+            ProcedureIdentity skippedIdentity = new("L::X()");
+            SarifReportWriter.Write([new VerificationResult(skippedIdentity, new Divergent(Counterexample()))]).Save(baselinePath);
+            MatchResult matchResult = new MatchResult([], [], [], []) with
+            {
+                LegacySkipped = [new UnverifiedProject("Lib", "Lib", IsCSharp: true, ["CS0246: missing"], [skippedIdentity])],
+            };
+            InMemoryReportSink sink = new();
+
+            CaptureStdErr(() => CompareCommand.Run(
+                new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", baselinePath, ConfigPath: null, "divergent", DryRun: false),
+                [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(NoVerdicts), sink));
+
+            Result carried = Assert.Single(sink.Log!.Runs[0].Results);
+            Assert.Equal(BaselineState.Unchanged, carried.BaselineState);
+            Assert.True(carried.GetProperty<bool>("unverified"));
+        }
+        finally
+        {
+            File.Delete(baselinePath);
+        }
+    }
+
+    private static IrProcedure UnboundBody(ProcedureIdentity identity) => new(
+        identity,
+        [],
+        ReturnType: null,
+        [
+            new IrBlock(
+                new IrBlockId(0),
+                [
+                    new IrOpaque(Target: null, Unknown.UnboundOpaqueReason, new SourceSpan("a.cs", 3, 5, 3, 9)),
+                    new IrOpaque(Target: null, "Invalid", new SourceSpan("a.cs", 3, 7, 3, 8)),
+                    new IrOpaque(Target: null, Unknown.UnboundOpaqueReason, new SourceSpan("a.cs", 4, 1, 4, 2)),
+                ],
+                new IrReturn(Value: null, [])),
+        ],
+        new IrBlockId(0));
 
     private static ProcedurePair Pair(ProcedureIdentity identity)
     {

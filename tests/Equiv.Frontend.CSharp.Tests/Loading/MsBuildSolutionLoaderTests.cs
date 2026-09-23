@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 using Equiv.Frontend.CSharp.Loading;
 
 using Microsoft.CodeAnalysis;
@@ -61,25 +63,105 @@ public sealed class MsBuildSolutionLoaderTests
     }
 
     [Fact]
-    public async Task Load_FailureEventAborts()
+    public async Task Load_FailureEventNamingALoadedProjectSkipsIt()
     {
-        SolutionLoadException ex = await Assert.ThrowsAsync<SolutionLoadException>(() => LoadAsync(ws =>
+        LoadedSolution loaded = await LoadAsync(ws =>
         {
-            ws.AddCSharpProject("A", ValidSource);
-            ws.Raise(WorkspaceDiagnosticKind.Failure, "project file could not be evaluated");
-        }));
+            ws.AddCSharpProject("A", ValidSource, filePath: @"C:\src\A\A.csproj");
+            ws.AddCSharpProject("B", ValidSource);
+            ws.Raise(WorkspaceDiagnosticKind.Failure, @"Msbuild failed when processing the file 'C:\src\A\A.csproj' with message: evaluation failed");
+        });
 
-        LoadDiagnostic diagnostic = Assert.Single(ex.Diagnostics);
-        Assert.Equal(new LoadDiagnostic(LoadDiagnosticKind.WorkspaceFailure, string.Empty, string.Empty, "project file could not be evaluated"), diagnostic);
+        Assert.Equal(["B"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
+        SkippedProject skipped = Assert.Single(loaded.Skipped);
+        Assert.Equal(("A", "A", true), (skipped.Name, skipped.AssemblyName, skipped.IsCSharp));
+        Assert.NotNull(skipped.Compilation);
+        LoadDiagnostic diagnostic = Assert.Single(skipped.Diagnostics);
+        Assert.Equal(LoadDiagnosticKind.WorkspaceFailure, diagnostic.Kind);
+        Assert.Equal("A", diagnostic.Project);
     }
 
     [Fact]
-    public async Task Load_FailureEventDuringCompilationAborts()
+    public async Task Load_FailureEventNamingNoProjectIsSkippedUnderTheEmptyName()
     {
-        SolutionLoadException ex = await Assert.ThrowsAsync<SolutionLoadException>(() => LoadAsync(static ws =>
-            ws.AddCSharpProject("A", ValidSource, raiseOnTextLoad: new WorkspaceDiagnostic(WorkspaceDiagnosticKind.Failure, "document could not be read"))));
+        LoadedSolution loaded = await LoadAsync(ws =>
+        {
+            ws.AddCSharpProject("A", ValidSource);
+            ws.Raise(WorkspaceDiagnosticKind.Failure, "project file could not be evaluated");
+        });
 
-        Assert.Contains(ex.Diagnostics, static d => d is { Kind: LoadDiagnosticKind.WorkspaceFailure, Message: "document could not be read" });
+        Assert.Single(loaded.Compilations);
+        SkippedProject skipped = Assert.Single(loaded.Skipped);
+        Assert.Equal((string.Empty, string.Empty, true), (skipped.Name, skipped.AssemblyName, skipped.IsCSharp));
+        Assert.Null(skipped.Compilation);
+        Assert.Equal(new LoadDiagnostic(LoadDiagnosticKind.WorkspaceFailure, string.Empty, string.Empty, "project file could not be evaluated"), Assert.Single(skipped.Diagnostics));
+    }
+
+    [Fact]
+    public async Task Load_FailureEventNamingAProjectThatNeverOpenedSkipsIt()
+    {
+        LoadedSolution loaded = await LoadAsync(ws =>
+        {
+            ws.AddCSharpProject("A", ValidSource);
+            ws.Raise(WorkspaceDiagnosticKind.Failure, @"Msbuild failed when processing the file 'C:\src\Gone\Gone.csproj' with message: not found");
+            ws.Raise(WorkspaceDiagnosticKind.Failure, @"Msbuild failed when processing the file 'C:\src\Gone\Gone.csproj' with message: still not found");
+        });
+
+        SkippedProject skipped = Assert.Single(loaded.Skipped);
+        Assert.Equal(("Gone", "Gone", true), (skipped.Name, skipped.AssemblyName, skipped.IsCSharp));
+        Assert.Null(skipped.Compilation);
+        Assert.Equal(2, skipped.Diagnostics.Length);
+    }
+
+    [Theory]
+    [InlineData("Native.vcxproj")]
+    [InlineData("Setup.wixproj")]
+    [InlineData("Db.sqlproj")]
+    [InlineData("Legacy.vbproj")]
+    [InlineData("Functional.fsproj")]
+    public async Task ANonCSharpProjectIsSkippedWithAWarning(string file)
+    {
+        LoadedSolution loaded = await LoadAsync(ws =>
+        {
+            ws.AddCSharpProject("A", ValidSource);
+            ws.Raise(WorkspaceDiagnosticKind.Failure, $@"Cannot open project 'C:\src\{file}' because the file extension is not associated with a language.");
+        });
+
+        Assert.Single(loaded.Compilations);
+        SkippedProject skipped = Assert.Single(loaded.Skipped);
+        Assert.False(skipped.IsCSharp);
+        Assert.Equal(Path.GetFileNameWithoutExtension(file), skipped.Name);
+        Assert.Equal(LoadDiagnosticKind.UnsupportedProject, Assert.Single(skipped.Diagnostics).Kind);
+    }
+
+    [Fact]
+    public async Task Load_FailureEventDuringCompilationSkipsThatProject()
+    {
+        LoadedSolution loaded = await LoadAsync(static ws =>
+        {
+            ws.AddCSharpProject("A", ValidSource, raiseOnTextLoad: new WorkspaceDiagnostic(WorkspaceDiagnosticKind.Failure, "document could not be read"));
+            ws.AddCSharpProject("B", ValidSource);
+        });
+
+        Assert.Equal(["B"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
+        SkippedProject skipped = Assert.Single(loaded.Skipped);
+        Assert.Equal("A", skipped.Name);
+        Assert.Contains(skipped.Diagnostics, static d => d is { Kind: LoadDiagnosticKind.WorkspaceFailure, Project: "A", Message: "document could not be read" });
+    }
+
+    [Fact]
+    public async Task ProcessorArchitectureMismatchIsAWarning()
+    {
+        const string Message = @"Msbuild failed when processing the file 'C:\src\A\A.csproj' with message: warning MSB3270: There was a mismatch between the processor architecture";
+        LoadedSolution loaded = await LoadAsync(ws =>
+        {
+            ws.AddCSharpProject("A", ValidSource, filePath: @"C:\src\A\A.csproj");
+            ws.Raise(WorkspaceDiagnosticKind.Failure, Message);
+        });
+
+        Assert.Single(loaded.Compilations);
+        Assert.Empty(loaded.Skipped);
+        Assert.Equal(new LoadDiagnostic(LoadDiagnosticKind.WorkspaceWarning, string.Empty, string.Empty, Message), Assert.Single(loaded.Diagnostics));
     }
 
     [Fact]
@@ -95,22 +177,40 @@ public sealed class MsBuildSolutionLoaderTests
         Assert.Equal(LoadDiagnosticKind.WorkspaceWarning, diagnostic.Kind);
         Assert.Equal("found project reference without a matching metadata reference", diagnostic.Message);
         Assert.Single(loaded.Compilations);
+        Assert.Empty(loaded.Skipped);
     }
 
     [Fact]
-    public async Task Load_UnresolvedReferenceAborts()
+    public async Task AProjectWithAnUnresolvedReferenceIsSkippedNotTheSolution()
     {
-        SolutionLoadException ex = await Assert.ThrowsAsync<SolutionLoadException>(() => LoadAsync(ws =>
-            ws.AddCSharpProject("A", "class C { Missing.Thing field; }")));
+        LoadedSolution loaded = await LoadAsync(ws =>
+        {
+            ws.AddCSharpProject("A", "class C { Missing.Thing field; }");
+            ws.AddCSharpProject("B", ValidSource);
+        });
 
-        LoadDiagnostic diagnostic = Assert.Single(ex.Diagnostics, static d => string.Equals(d.Id, "CS0246", StringComparison.Ordinal));
+        Assert.Equal(["B"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
+        SkippedProject skipped = Assert.Single(loaded.Skipped);
+        Assert.Equal(("A", "A", true), (skipped.Name, skipped.AssemblyName, skipped.IsCSharp));
+        Assert.NotNull(skipped.Compilation);
+        LoadDiagnostic diagnostic = Assert.Single(skipped.Diagnostics, static d => string.Equals(d.Id, "CS0246", StringComparison.Ordinal));
         Assert.Equal(LoadDiagnosticKind.UnresolvedReference, diagnostic.Kind);
         Assert.Equal("A", diagnostic.Project);
         Assert.Contains("Missing", diagnostic.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task Load_MissingCoreLibraryAbortsAsUnresolvedReference()
+    public async Task ZeroLoadableProjectsIsStillALoadFailure()
+    {
+        SolutionLoadException ex = await Assert.ThrowsAsync<SolutionLoadException>(() => LoadAsync(ws =>
+            ws.AddCSharpProject("A", "class C { Missing.Thing field; }")));
+
+        Assert.Equal(LoadDiagnosticKind.UnsupportedSolution, ex.Diagnostics[0].Kind);
+        Assert.Contains(ex.Diagnostics, static d => d is { Id: "CS0246", Kind: LoadDiagnosticKind.UnresolvedReference, Project: "A" });
+    }
+
+    [Fact]
+    public async Task Load_MissingCoreLibraryIsAnUnresolvedReference()
     {
         SolutionLoadException ex = await Assert.ThrowsAsync<SolutionLoadException>(() => LoadAsync(ws =>
             ws.AddCSharpProject("A", ValidSource, referenceCoreLibrary: false)));
@@ -128,6 +228,7 @@ public sealed class MsBuildSolutionLoaderTests
         Assert.Equal(LoadDiagnosticKind.CompilerError, diagnostic.Kind);
         Assert.Equal("CS0029", diagnostic.Id);
         Assert.Single(loaded.Compilations);
+        Assert.Empty(loaded.Skipped);
     }
 
     [Fact]
@@ -137,35 +238,43 @@ public sealed class MsBuildSolutionLoaderTests
 
         LoadDiagnostic diagnostic = Assert.Single(ex.Diagnostics);
         Assert.Equal(LoadDiagnosticKind.UnsupportedSolution, diagnostic.Kind);
-        Assert.Equal("the solution contains no C# project", diagnostic.Message);
+        Assert.Equal("the solution contains no C# project that loads", diagnostic.Message);
     }
 
     [Fact]
-    public void UnsupportedProjects_VisualBasicProjectIsRejected()
+    public void NotCSharp_SkipsEachProjectWithItsFailures()
     {
-        // Rejection is tested on (name, language) pairs: a real VB project needs the VB
-        // workspace package, which this repo does not take a dependency on (ADR 0002).
-        LoadDiagnostic diagnostic = Assert.Single(MsBuildSolutionLoader.UnsupportedProjects(
-            [("Cs", LanguageNames.CSharp), ("Vb", LanguageNames.VisualBasic)]));
+        LoadDiagnostic failure = new(LoadDiagnosticKind.WorkspaceFailure, string.Empty, "Vb", "could not evaluate");
+        Dictionary<string, (string Path, List<LoadDiagnostic> Failures)> failures = new(StringComparer.OrdinalIgnoreCase) { ["Vb"] = (@"C:\Vb.vbproj", [failure]) };
 
+        ImmutableArray<SkippedProject> skipped = [.. MsBuildSolutionLoader.NotCSharp(
+            [("Vb", "VbAssembly", LanguageNames.VisualBasic, "Vb"), ("Fs", "FsAssembly", LanguageNames.FSharp, "Fs")],
+            failures)];
+
+        Assert.Equal(["Vb", "Fs"], skipped.Select(static s => s.Name), StringComparer.Ordinal);
+        Assert.All(skipped, static s => Assert.False(s.IsCSharp));
+        Assert.Equal("VbAssembly", skipped[0].AssemblyName);
         Assert.Equal(
-            new LoadDiagnostic(LoadDiagnosticKind.UnsupportedSolution, string.Empty, "Vb", "project language 'Visual Basic' is not supported; only C# is"),
-            diagnostic);
+            [new LoadDiagnostic(LoadDiagnosticKind.UnsupportedProject, string.Empty, "Vb", "project language 'Visual Basic' is not supported; only C# is"), failure],
+            skipped[0].Diagnostics);
+        Assert.Single(skipped[1].Diagnostics);
+        Assert.Empty(failures);
     }
 
-    [Fact]
-    public void UnsupportedProjects_FSharpOnlySolutionIsRejected()
-    {
-        LoadDiagnostic diagnostic = Assert.Single(MsBuildSolutionLoader.UnsupportedProjects([("Fs", LanguageNames.FSharp)]));
+    [Theory]
+    [InlineData(@"C:\src\A\A.csproj", "A")]
+    [InlineData("/src/A/A.csproj", "A")]
+    [InlineData("A.csproj", "A")]
+    [InlineData("", "")]
+    public void Stem_SplitsOnEitherSeparator(string path, string stem) =>
+        Assert.Equal(stem, MsBuildSolutionLoader.Stem(path));
 
-        Assert.Equal("Fs", diagnostic.Project);
-    }
-
-    [Fact]
-    public void UnsupportedProjects_AllCSharpIsAccepted()
-    {
-        Assert.Empty(MsBuildSolutionLoader.UnsupportedProjects([("A", LanguageNames.CSharp), ("B", LanguageNames.CSharp)]));
-    }
+    [Theory]
+    [InlineData(@"Cannot open project 'C:\a b\N.vcxproj' because ...", @"C:\a b\N.vcxproj")]
+    [InlineData("processing the file 'A.csproj' with message: 'x'", "A.csproj")]
+    [InlineData("no project here", "")]
+    public void ProjectPath_IsTheFirstQuotedProjectFile(string message, string path) =>
+        Assert.Equal(path, MsBuildSolutionLoader.ProjectPath(message));
 
     [Fact]
     public void SolutionLoadException_CarriesPathAndDiagnosticsInItsMessage()

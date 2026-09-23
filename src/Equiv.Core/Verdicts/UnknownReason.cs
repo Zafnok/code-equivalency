@@ -20,4 +20,10 @@ public enum UnknownReason
 
     /// <summary>A self-recursive procedure the ladder could not decide (ticket M3-002).</summary>
     Recursion,
+
+    /// <summary>
+    /// A side's bound body is erroneous: a compiler error, an invalid operation or an error-type symbol (ADR 0029
+    /// decision 2). The frontend lowers it to an <c>IrOpaque</c> with reason <see cref="Unknown.UnboundOpaqueReason"/>.
+    /// </summary>
+    Unbound,
 }

@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 
 using Equiv.Core.Ir;
 using Equiv.Core.Reporting;
@@ -36,6 +36,45 @@ public sealed class SarifReportWriterTests
 
     [Fact]
     public Task RuntimeChangedDivergent() => VerifyJson(Serialize(Fixtures.Result(new Divergent(RuntimeChangedCounterexample()))));
+
+    [Fact]
+    public void WithoutNotificationsOrUnverifiedTheRunHasNoInvocationOrProperties()
+    {
+        Run run = SarifReportWriter.Write([Fixtures.Result(new Added())], notifications: [], unverified: []).Runs[0];
+
+        Assert.Null(run.Invocations);
+        Assert.False(run.TryGetProperty("unverified", out List<string>? _));
+    }
+
+    [Fact]
+    public void AnErrorNotificationMakesTheInvocationUnsuccessful()
+    {
+        Notification error = new() { Level = FailureLevel.Error, Message = new Message { Text = "project A skipped" } };
+        Notification warning = new() { Level = FailureLevel.Warning, Message = new Message { Text = "project B skipped" } };
+
+        Invocation invocation = Assert.Single(SarifReportWriter.Write([], notifications: [warning, error]).Runs[0].Invocations);
+
+        Assert.False(invocation.ExecutionSuccessful);
+        Assert.Equal(["project B skipped", "project A skipped"], invocation.ToolExecutionNotifications.Select(static n => n.Message.Text), StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void WarningNotificationsAloneLeaveTheInvocationSuccessful()
+    {
+        Notification warning = new() { Level = FailureLevel.Warning, Message = new Message { Text = "project B skipped" } };
+
+        Invocation invocation = Assert.Single(SarifReportWriter.Write([], notifications: [warning]).Runs[0].Invocations);
+
+        Assert.True(invocation.ExecutionSuccessful);
+    }
+
+    [Fact]
+    public void UnverifiedIdentitiesAreListedOnceEachOnTheRun()
+    {
+        Run run = SarifReportWriter.Write([], unverified: [new ProcedureIdentity("B"), new ProcedureIdentity("A"), new ProcedureIdentity("B")]).Runs[0];
+
+        Assert.Equal(["B", "A"], run.GetProperty<List<string>>("unverified"), StringComparer.Ordinal);
+    }
 
     [Fact]
     public void ResultWithALocationCarriesAPhysicalLocation()
@@ -163,6 +202,7 @@ public sealed class SarifReportWriterTests
     [InlineData(UnknownReason.UnmatchedOverload, "unmatched-overload")]
     [InlineData(UnknownReason.UnalignedLoop, "unaligned-loop")]
     [InlineData(UnknownReason.Recursion, "recursion")]
+    [InlineData(UnknownReason.Unbound, "unbound")]
     public void UnknownResultCarriesItsReason(UnknownReason reason, string name)
     {
         Result result = SarifReportWriter.Write([Fixtures.Result(new Unknown(reason, "detail"))]).Runs[0].Results[0];

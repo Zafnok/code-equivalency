@@ -11,7 +11,8 @@ namespace Equiv.Cli;
 /// removed (legacy) or added (modern) ones. Every other count is per lowered body of a matched pair.
 /// <see cref="OpaqueByReason"/> counts, per side, the bodies holding at least one <see cref="IrOpaque"/> with that
 /// reason, so a whole-body opaque counts once under its reason. <see cref="PairsCongruent"/> stays 0 until
-/// ticket M3-015.
+/// ticket M3-015. <see cref="ProjectsSkipped"/> counts the projects each side's frontend skipped, in any language
+/// (ADR 0029; ticket M3-024).
 /// </summary>
 internal sealed record LoweringCensus(
     SideCounts Procedures,
@@ -19,9 +20,10 @@ internal sealed record LoweringCensus(
     int PairsWithoutOpaque,
     int PairsWholeBodyOpaque,
     int PairsCongruent,
+    SideCounts ProjectsSkipped,
     ImmutableSortedDictionary<string, SideCounts> OpaqueByReason)
 {
-    public static LoweringCensus Compute(IReadOnlyList<(IrProcedure Old, IrProcedure New)> pairs, int removed, int added)
+    public static LoweringCensus Compute(IReadOnlyList<(IrProcedure Old, IrProcedure New)> pairs, int removed, int added, SideCounts? projectsSkipped = null)
     {
         ArgumentNullException.ThrowIfNull(pairs);
 
@@ -50,6 +52,7 @@ internal sealed record LoweringCensus(
             withoutOpaque,
             wholeBodyOpaque,
             PairsCongruent: 0,
+            projectsSkipped ?? new SideCounts(0, 0),
             byReason.ToImmutableSortedDictionary(StringComparer.Ordinal));
     }
 
@@ -61,6 +64,7 @@ internal sealed record LoweringCensus(
         ["pairsWithoutOpaque"] = PairsWithoutOpaque,
         ["pairsWholeBodyOpaque"] = PairsWholeBodyOpaque,
         ["pairsCongruent"] = PairsCongruent,
+        ["projectsSkipped"] = Property(ProjectsSkipped),
         ["opaqueByReason"] = new SortedDictionary<string, object>(
             OpaqueByReason.ToDictionary(static e => e.Key, static e => (object)Property(e.Value), StringComparer.Ordinal),
             StringComparer.Ordinal),

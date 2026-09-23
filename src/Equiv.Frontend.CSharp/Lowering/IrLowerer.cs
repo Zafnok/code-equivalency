@@ -7,6 +7,7 @@ using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Verdicts;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -60,7 +61,9 @@ internal sealed class IrLowerer
     /// <summary>
     /// Lowers <paramref name="method"/>'s first declaration. A body that is not an <see cref="IMethodBodyOperation"/>
     /// (a constructor, an arrow-bodied property, an auto-accessor) is one whole-body <see cref="IrOpaque"/>.
-    /// A call to a member listed in <paramref name="suppressedRuntimeChanges"/> is not flagged runtime-changed.
+    /// A call to a member listed in <paramref name="suppressedRuntimeChanges"/> is not flagged runtime-changed. A method
+    /// whose bound code is erroneous is one whole-body <see cref="IrOpaque"/> per cause, with reason
+    /// <see cref="Unknown.UnboundOpaqueReason"/> (ADR 0029 decision 2), and is not lowered further.
     /// </summary>
     public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
     {
@@ -69,11 +72,19 @@ internal sealed class IrLowerer
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
-        return operation is IMethodBodyOperation body
-            ? Lower(body, model, renames, suppressedRuntimeChanges)
-            : Opaque(method, renames, operation?.Kind.ToString() ?? "no-body", Span(syntax));
+        ImmutableArray<SourceSpan> unbound = UnboundCauses(syntax, model, operation);
+        return (unbound.IsEmpty, operation) switch
+        {
+            (false, _) => Opaque(method, renames, Unknown.UnboundOpaqueReason, unbound),
+            (true, IMethodBodyOperation body) => Lower(body, model, renames, suppressedRuntimeChanges),
+            _ => Opaque(method, renames, operation?.Kind.ToString() ?? "no-body", [Span(syntax)]),
+        };
     }
 
+    /// <summary>
+    /// Lowers <paramref name="body"/> as it is bound. It does not check for erroneous code; the symbol overload does, and
+    /// is the one the frontend uses. Erroneous constructs reaching here lower to named opaques (<c>Invalid</c>, <c>rethrow</c>).
+    /// </summary>
     public static IrProcedure Lower(IMethodBodyOperation body, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -95,7 +106,7 @@ internal sealed class IrLowerer
         };
         if (wholeBody is not null)
         {
-            return Opaque(method, renames, wholeBody, span);
+            return Opaque(method, renames, wholeBody, [span]);
         }
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method);
@@ -122,14 +133,41 @@ internal sealed class IrLowerer
             }))],
         method.ReturnsVoid ? null : TypeMapper.Map(method.ReturnType));
 
-    /// <summary>One block: an opaque value (reason <paramref name="reason"/>) returned, by-ref parameters unchanged.</summary>
-    private static IrProcedure Opaque(IMethodSymbol method, RenameMap renames, string reason, SourceSpan span)
+    /// <summary>
+    /// Where <paramref name="syntax"/>'s bound code is erroneous (ADR 0029 decision 2): the span of every compiler error
+    /// in it or, when there is none, of every <see cref="IInvalidOperation"/> and every operation of an error type in
+    /// <paramref name="operation"/>, such as a reference to a field whose type did not resolve. Empty when it binds.
+    /// </summary>
+    private static ImmutableArray<SourceSpan> UnboundCauses(SyntaxNode syntax, SemanticModel model, IOperation? operation)
+    {
+        ImmutableArray<SourceSpan> errors =
+        [
+            .. model.GetDiagnostics(syntax.Span)
+                .Where(static d => d.Severity == DiagnosticSeverity.Error)
+                .Select(static d => CSharpFrontend.ToSourceSpan(d.Location))
+                .Distinct(),
+        ];
+        ImmutableArray<SourceSpan> operations =
+        [
+            .. (operation?.DescendantsAndSelf() ?? [])
+                .Where(static o => o is IInvalidOperation || o.Type is { TypeKind: TypeKind.Error })
+                .Select(static o => Span(o.Syntax))
+                .Distinct(),
+        ];
+        return errors.IsEmpty ? operations : errors;
+    }
+
+    /// <summary>
+    /// One block: an opaque value (reason <paramref name="reason"/>) returned, by-ref parameters unchanged. There is one
+    /// <see cref="IrOpaque"/> per span in <paramref name="spans"/>, the last one defining the value.
+    /// </summary>
+    private static IrProcedure Opaque(IMethodSymbol method, RenameMap renames, string reason, ImmutableArray<SourceSpan> spans)
     {
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method);
         IrVar? value = returnType is null ? null : new IrVar("$0", returnType);
         IrBlock block = new(
             new IrBlockId(0),
-            [new IrOpaque(value, reason, span)],
+            [.. spans[..^1].Select(span => new IrOpaque(Target: null, reason, span)), new IrOpaque(value, reason, spans[^1])],
             new IrReturn(value, [.. parameters.Where(static p => p.Kind != IrParameterKind.In).Select(static p => new IrOut(p.Var, p.Var))]));
         return new IrProcedure(RoslynIdentity.Of(method, renames), parameters, returnType, [block], block.Id);
     }

@@ -117,7 +117,8 @@ internal static class CompareCommand
 
     /// <summary>
     /// The lowering census and the analysed line counts go into the run's property bag on every run (ADR 0027;
-    /// ticket M3-014). <c>--lower-only</c> stops there: the Added and Removed results, no backend call, exit 0.
+    /// ticket M3-014), and every skipped project is a notification (ADR 0029). <c>--lower-only</c> stops there: the
+    /// Added and Removed results, no backend call, exit 0 unless a C# project was skipped.
     /// </summary>
     private static int Report(
         CompareOptions options, FrontendAnalysis analysis, EquivConfig config, IVerificationBackend backend, SarifLog? baseline, IReportSink sink)
@@ -125,20 +126,61 @@ internal static class CompareCommand
         MatchResult matchResult = analysis.Match;
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered = Lowered(matchResult);
         LoweringCensus census = LoweringCensus.Compute(
-            [.. lowered.Select(static p => (p.Old, p.New))], removed: matchResult.Removed.Length, added: matchResult.Added.Length);
+            [.. lowered.Select(static p => (p.Old, p.New))],
+            removed: matchResult.Removed.Length,
+            added: matchResult.Added.Length,
+            projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length));
 
         List<VerificationResult> results = options.LowerOnly ? [] : Verified(lowered, backend, config);
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));
         results.AddRange(matchResult.Removed.Select(static identity => new VerificationResult(identity, new Removed())));
 
-        SarifLog log = SarifReportWriter.Write(results, baseline, new Dictionary<string, object>(StringComparer.Ordinal)
-        {
-            ["loweringCensus"] = census.ToProperty(),
-            ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
-        });
+        (List<Notification> notifications, List<ProcedureIdentity> unverified) = SkippedProjects(matchResult);
+        SarifLog log = SarifReportWriter.Write(
+            results,
+            baseline,
+            new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["loweringCensus"] = census.ToProperty(),
+                ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
+            },
+            notifications,
+            unverified);
         sink.Write(log);
 
-        return options.LowerOnly ? ExitCodes.Success : DecideExitCode(results, log, options.FailOn);
+        bool incomplete = notifications.Exists(static n => n.Level == FailureLevel.Error);
+        return (incomplete, options.LowerOnly) switch
+        {
+            (true, _) => ExitCodes.LoadFailure,
+            (false, true) => ExitCodes.Success,
+            _ => DecideExitCode(results, log, options.FailOn),
+        };
+    }
+
+    /// <summary>
+    /// ADR 0029 decision 1: one tool-execution notification per project the frontend skipped, on stderr as well as in
+    /// the SARIF, and every procedure that is unverified because of it. A skipped C# project is an <c>error</c>, which
+    /// makes the run incomplete and outranks any verdict (<see cref="ExitCodes"/>); a project in another language is a
+    /// <c>warning</c>.
+    /// </summary>
+    private static (List<Notification> Notifications, List<ProcedureIdentity> Unverified) SkippedProjects(MatchResult matchResult)
+    {
+        List<Notification> notifications = [];
+        List<ProcedureIdentity> unverified = [];
+        foreach ((string side, UnverifiedProject project) in matchResult.LegacySkipped.Select(static p => ("legacy", p))
+            .Concat(matchResult.ModernSkipped.Select(static p => ("modern", p))))
+        {
+            FailureLevel level = project.IsCSharp ? FailureLevel.Error : FailureLevel.Warning;
+            string subject = project.Name.Length > 0
+                ? $"{side} project '{project.Name}' (assembly '{project.AssemblyName}')"
+                : $"a {side} project the workspace did not name";
+            string text = $"{subject} was skipped: {string.Join("; ", project.Diagnostics)}";
+            Console.Error.WriteLine($"{(project.IsCSharp ? "error" : "warning")}: {text}");
+            notifications.Add(new Notification { Level = level, Message = new Message { Text = text } });
+            unverified.AddRange(project.Procedures);
+        }
+
+        return (notifications, unverified);
     }
 
     /// <summary>
@@ -233,6 +275,13 @@ internal static class CompareCommand
 
     private static Verdict Verify(IVerificationBackend backend, ProcedurePair pair, IrProcedure old, IrProcedure @new, VerificationOptions options)
     {
+        // ADR 0029 decision 2: erroneous code is Unknown(Unbound) without asking the solver; it is never evidence of equivalence.
+        string unbound = string.Join("; ", UnboundCauses("legacy", old).Concat(UnboundCauses("modern", @new)));
+        if (unbound.Length > 0)
+        {
+            return new Unknown(UnknownReason.Unbound, unbound);
+        }
+
         try
         {
             return backend.Verify(old, @new, options);
@@ -242,6 +291,14 @@ internal static class CompareCommand
             throw new InvalidOperationException($"Verifying {pair.Old.Value} against {pair.New.Value} failed: {exception.Message}", exception);
         }
     }
+
+    /// <summary>Each <see cref="Unknown.UnboundOpaqueReason"/> opaque in <paramref name="body"/>, as <c>side: unbound at path line:column</c>.</summary>
+    private static IEnumerable<string> UnboundCauses(string side, IrProcedure body) =>
+        body.Blocks
+            .SelectMany(static b => b.Instructions)
+            .OfType<IrOpaque>()
+            .Where(static o => string.Equals(o.Reason, Unknown.UnboundOpaqueReason, StringComparison.Ordinal))
+            .Select(o => string.Create(CultureInfo.InvariantCulture, $"{side}: unbound at {o.Span.Path} {o.Span.StartLine}:{o.Span.StartColumn}"));
 
     private static int DecideExitCode(List<VerificationResult> results, SarifLog log, string? failOn)
     {

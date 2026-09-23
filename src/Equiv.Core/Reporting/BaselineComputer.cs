@@ -6,7 +6,8 @@ namespace Equiv.Core.Reporting;
 /// Computes SARIF <c>baselineState</c> (VERIFICATION-MODEL.md section 6) for the current run's
 /// results against a previous log, by matching <see cref="SarifReportWriter.ProcedureIdentityFingerprintId"/>
 /// partial fingerprints. A previous result whose procedure identity has no match in the current
-/// run becomes an <see cref="BaselineState.Absent"/> carry-over (a copy of the previous result).
+/// run becomes an <see cref="BaselineState.Absent"/> carry-over (a copy of the previous result), unless the run
+/// could not verify it (see <see cref="AbsentResults"/>).
 /// </summary>
 /// <remarks>
 /// <see cref="StateFor"/> matches a previous result by procedure identity <em>and</em> rule id
@@ -35,7 +36,12 @@ internal static class BaselineComputer
         };
     }
 
-    public static IReadOnlyList<Result> AbsentResults(IReadOnlySet<string> currentIdentities, SarifLog? baseline)
+    /// <summary>
+    /// A copy of every previous result whose identity the current run has no result for: <see cref="BaselineState.Absent"/>,
+    /// or, when the identity is in <paramref name="unverifiedIdentities"/>, <see cref="BaselineState.Unchanged"/> with
+    /// <c>properties.unverified: true</c>, because the run did not look at it and so cannot say it went away (ADRs 0023, 0029).
+    /// </summary>
+    public static IReadOnlyList<Result> AbsentResults(IReadOnlySet<string> currentIdentities, SarifLog? baseline, IReadOnlySet<string> unverifiedIdentities)
     {
         if (baseline is null)
         {
@@ -49,7 +55,16 @@ internal static class BaselineComputer
             if (identity is not null && !currentIdentities.Contains(identity))
             {
                 Result carryOver = previous.DeepClone();
-                carryOver.BaselineState = BaselineState.Absent;
+                if (unverifiedIdentities.Contains(identity))
+                {
+                    carryOver.BaselineState = BaselineState.Unchanged;
+                    carryOver.SetProperty("unverified", value: true);
+                }
+                else
+                {
+                    carryOver.BaselineState = BaselineState.Absent;
+                }
+
                 absent.Add(carryOver);
             }
         }

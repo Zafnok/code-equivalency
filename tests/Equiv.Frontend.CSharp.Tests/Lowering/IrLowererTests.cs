@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 using Equiv.Core.Ir;
 
 using Xunit;
@@ -167,9 +169,49 @@ public sealed class IrLowererTests
         Assert.Empty(Opaques(procedure));
     }
 
+    [Theory]
+    [InlineData("static int M() { return Undefined(); }", "M")]
+    [InlineData("static int M(int a) { int x = \"text\"; return x + a; }", "M")]
+    [InlineData("static void M() { throw; }", "M")]
+    [InlineData("int M => Undefined();", "get_M")]
+    [InlineData("C() { Undefined(); }", ".ctor")]
+    public void AnUnboundMethodLowersToOneUnboundOpaque(string members, string name)
+    {
+        IrProcedure procedure = Method(members, name, allowErrors: true);
+
+        IrBlock block = Assert.Single(procedure.Blocks);
+        IrOpaque opaque = Assert.Single(Opaques(procedure));
+        Assert.Equal("unbound", opaque.Reason);
+        Assert.Equal(4, opaque.Span.StartLine);
+        Assert.IsType<IrReturn>(block.Terminator);
+    }
+
+    [Fact]
+    public void EveryErrorInAnUnboundMethodIsACause()
+    {
+        IrProcedure procedure = Method("static int M(int a) {\n int x = Undefined();\n int y = Missing();\n return a; }", allowErrors: true);
+
+        ImmutableArray<IrOpaque> opaques = Opaques(procedure);
+        Assert.Equal([5, 6], opaques.Select(static o => o.Span.StartLine));
+        Assert.All(opaques, static o => Assert.Equal("unbound", o.Reason));
+        Assert.Null(opaques[0].Target);
+        Assert.NotNull(opaques[1].Target);
+    }
+
+    [Fact]
+    public void AMethodReadingAnErrorTypedFieldIsUnboundAtTheRead()
+    {
+        // The error is on the field's declaration, outside M; M's own body binds without a diagnostic.
+        IrProcedure procedure = Method("Missing f;\nobject M() {\n return f; }", allowErrors: true);
+
+        IrOpaque opaque = Assert.Single(Opaques(procedure));
+        Assert.Equal("unbound", opaque.Reason);
+        Assert.Equal(6, opaque.Span.StartLine);
+    }
+
     [Fact]
     public void RethrowIsOpaque() =>
-        Assert.Equal("rethrow", Assert.Single(Opaques(Method("static void M() { throw; }", allowErrors: true))).Reason);
+        Assert.Equal("rethrow", Assert.Single(Opaques(ErroneousBody("static void M() { throw; }"))).Reason);
 
     [Fact]
     public void ObjectCreationIsACallToTheConstructor()
@@ -658,7 +700,7 @@ public sealed class IrLowererTests
     [Fact]
     public void ReadWithoutDefinitionIsUndefined()
     {
-        IrProcedure procedure = Method("static int M() { int x; return x; }", allowErrors: true);
+        IrProcedure procedure = ErroneousBody("static int M() { int x; return x; }");
 
         IrOpaque opaque = Assert.IsType<IrOpaque>(procedure.Blocks[0].Instructions[0]);
         Assert.Equal("undefined", opaque.Reason);
@@ -667,7 +709,7 @@ public sealed class IrLowererTests
     [Fact]
     public void FallingOffANonVoidMethodIsMissingReturn()
     {
-        IrProcedure procedure = Method("static int M() { goto missing; }", allowErrors: true);
+        IrProcedure procedure = ErroneousBody("static int M() { goto missing; }");
 
         Assert.Contains(Opaques(procedure), static o => o.Reason is "missing-return");
         Assert.Contains(Opaques(procedure), static o => o.Reason is "Invalid" && o.Target is null);

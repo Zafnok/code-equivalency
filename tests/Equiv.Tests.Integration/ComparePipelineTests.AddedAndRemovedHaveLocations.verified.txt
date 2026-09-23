@@ -173,7 +173,11 @@
           matchedPairs: 1,
           pairsWithoutOpaque: 1,
           pairsWholeBodyOpaque: 0,
-          pairsCongruent: 0
+          pairsCongruent: 0,
+          projectsSkipped: {
+            legacy: 0,
+            modern: 0
+          }
         },
         analysedLinesOfCode: {
           legacy: 31,

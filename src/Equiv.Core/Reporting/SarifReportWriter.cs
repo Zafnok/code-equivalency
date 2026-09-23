@@ -23,14 +23,31 @@ public static class SarifReportWriter
 
     private const string ToolName = "Equiv";
 
-    /// <summary>
-    /// <paramref name="runProperties"/> go into the run's property bag in the order given, each value serialised as
-    /// JSON (ADR 0006: extra data travels in SARIF <c>properties</c>, never in a parallel schema). The CLI puts the
-    /// lowering census and the analysed line counts there (ticket M3-014).
-    /// </summary>
-    public static SarifLog Write(IReadOnlyList<VerificationResult> results, SarifLog? baseline = null, IReadOnlyDictionary<string, object>? runProperties = null)
+    /// <param name="results">One SARIF result each, in order, ahead of any baseline carry-overs.</param>
+    /// <param name="baseline">The previous log <c>baselineState</c> is computed against.</param>
+    /// <param name="runProperties">
+    /// Go into the run's property bag in the order given, each value serialised as JSON (ADR 0006: extra data travels
+    /// in SARIF <c>properties</c>, never in a parallel schema). The CLI puts the lowering census and the analysed line
+    /// counts there (ticket M3-014).
+    /// </param>
+    /// <param name="notifications">
+    /// Tool-execution notifications, such as a skipped project (ADR 0029). Given any, the run has one invocation,
+    /// and <c>executionSuccessful</c> is false when one of them is an <c>error</c>.
+    /// </param>
+    /// <param name="unverified">
+    /// Identities the run could not verify, listed in <c>run.properties.unverified</c>. A baseline result for one of
+    /// them is carried as <c>unchanged</c> with <c>properties.unverified: true</c>, never <c>absent</c> (ADRs 0023, 0029).
+    /// </param>
+    public static SarifLog Write(
+        IReadOnlyList<VerificationResult> results,
+        SarifLog? baseline = null,
+        IReadOnlyDictionary<string, object>? runProperties = null,
+        IReadOnlyList<Notification>? notifications = null,
+        IReadOnlyList<ProcedureIdentity>? unverified = null)
     {
         ArgumentNullException.ThrowIfNull(results);
+        notifications ??= [];
+        List<string> unverifiedIdentities = [.. (unverified ?? []).Select(static i => i.Value).Distinct(StringComparer.Ordinal)];
 
         List<Result> sarifResults = new(results.Count);
         HashSet<string> currentIdentities = new(StringComparer.Ordinal);
@@ -40,7 +57,7 @@ public static class SarifReportWriter
             sarifResults.Add(ToResult(result, baseline));
         }
 
-        sarifResults.AddRange(BaselineComputer.AbsentResults(currentIdentities, baseline));
+        sarifResults.AddRange(BaselineComputer.AbsentResults(currentIdentities, baseline, new HashSet<string>(unverifiedIdentities, StringComparer.Ordinal)));
 
         Run run = new()
         {
@@ -51,6 +68,23 @@ public static class SarifReportWriter
         foreach ((string name, object value) in runProperties ?? new Dictionary<string, object>(StringComparer.Ordinal))
         {
             run.SetProperty(name, value);
+        }
+
+        if (notifications.Count > 0)
+        {
+            run.Invocations =
+            [
+                new Invocation
+                {
+                    ExecutionSuccessful = notifications.All(static n => n.Level != FailureLevel.Error),
+                    ToolExecutionNotifications = [.. notifications],
+                },
+            ];
+        }
+
+        if (unverifiedIdentities.Count > 0)
+        {
+            run.SetProperty("unverified", unverifiedIdentities);
         }
 
         return new SarifLog
@@ -166,7 +200,8 @@ public static class SarifReportWriter
         UnknownReason.Opaque => "opaque",
         UnknownReason.UnmatchedOverload => "unmatched-overload",
         UnknownReason.UnalignedLoop => "unaligned-loop",
-        _ => "recursion",
+        UnknownReason.Recursion => "recursion",
+        _ => "unbound",
     };
 
     internal static string Name(RungOutcome outcome) => outcome switch

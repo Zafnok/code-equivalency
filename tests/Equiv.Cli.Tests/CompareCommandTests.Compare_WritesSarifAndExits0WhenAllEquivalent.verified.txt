@@ -137,7 +137,11 @@
           matchedPairs: 2,
           pairsWithoutOpaque: 2,
           pairsWholeBodyOpaque: 0,
-          pairsCongruent: 0
+          pairsCongruent: 0,
+          projectsSkipped: {
+            legacy: 0,
+            modern: 0
+          }
         },
         analysedLinesOfCode: {
           legacy: 120,

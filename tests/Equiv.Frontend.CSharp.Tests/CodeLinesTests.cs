@@ -87,7 +87,7 @@ public sealed class CodeLinesTests
     public void AnEmptyFileHasNoLines() =>
         Assert.Equal(0, CodeLines.Count(CSharpSyntaxTree.ParseText("// Only a comment.\n\n", cancellationToken: TestContext.Current.CancellationToken)));
 
-    private static LoadedSolution Solution(Compilation compilation) => new(null!, [compilation], []);
+    private static LoadedSolution Solution(Compilation compilation) => new(null!, [compilation], [], []);
 
     private static CSharpCompilation Compilation(params (string Path, string Source)[] files) => CSharpCompilation.Create(
         "Fixture",

@@ -102,7 +102,19 @@ public sealed class LoweringCensusTests
         Assert.Equal(2, census.MatchedPairs);
         Assert.Equal(2, census.PairsWithoutOpaque);
         Assert.Equal(0, census.PairsCongruent);
+        Assert.Equal(new SideCounts(0, 0), census.ProjectsSkipped);
         Assert.Empty(census.OpaqueByReason);
+    }
+
+    [Fact]
+    public void ProjectsSkippedAreCountedPerSide()
+    {
+        LoweringCensus census = LoweringCensus.Compute([], removed: 0, added: 0, projectsSkipped: new SideCounts(Legacy: 2, Modern: 1));
+
+        Assert.Equal(new SideCounts(2, 1), census.ProjectsSkipped);
+        Assert.Equal(
+            """{"legacy":2,"modern":1}""",
+            Newtonsoft.Json.JsonConvert.SerializeObject(census.ToProperty()["projectsSkipped"]));
     }
 
     [Fact]
@@ -118,14 +130,15 @@ public sealed class LoweringCensusTests
             PairsWithoutOpaque: 2,
             PairsWholeBodyOpaque: 1,
             PairsCongruent: 0,
+            ProjectsSkipped: new SideCounts(0, 0),
             new Dictionary<string, SideCounts>(StringComparer.Ordinal) { ["using"] = new(1, 0), ["Binary"] = new(0, 1) }
                 .ToImmutableSortedDictionary(StringComparer.Ordinal));
 
         Dictionary<string, object> property = census.ToProperty();
 
-        Assert.Equal(["procedures", "matchedPairs", "pairsWithoutOpaque", "pairsWholeBodyOpaque", "pairsCongruent", "opaqueByReason"], property.Keys, StringComparer.Ordinal);
+        Assert.Equal(["procedures", "matchedPairs", "pairsWithoutOpaque", "pairsWholeBodyOpaque", "pairsCongruent", "projectsSkipped", "opaqueByReason"], property.Keys, StringComparer.Ordinal);
         Assert.Equal(
-            """{"procedures":{"legacy":4,"modern":5},"matchedPairs":3,"pairsWithoutOpaque":2,"pairsWholeBodyOpaque":1,"pairsCongruent":0,"opaqueByReason":{"Binary":{"legacy":0,"modern":1},"using":{"legacy":1,"modern":0}}}""",
+            """{"procedures":{"legacy":4,"modern":5},"matchedPairs":3,"pairsWithoutOpaque":2,"pairsWholeBodyOpaque":1,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{"Binary":{"legacy":0,"modern":1},"using":{"legacy":1,"modern":0}}}""",
             Newtonsoft.Json.JsonConvert.SerializeObject(property));
     }
 
