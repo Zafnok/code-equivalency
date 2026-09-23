@@ -32,8 +32,8 @@ copy with a goto to a block whose terminator is `IrUnreachable`. Nested loops ar
 unrolled inside out. Validate the result. Encode the pair with `ProductEncoder`:
 SAT gives a real trace (unrolling under-approximates, so refutations are sound):
 Divergent. UNSAT gives Equivalent with `boundedBy: k` if either side had a loop.
-Self-recursion is treated as a loop with depth k by inlining; mutual recursion is
-Unknown(recursion) in this ticket.
+Self-recursion is treated as a loop with depth k by inlining. Mutual recursion needs
+nothing here: it is modular under ADR 0019 (see its Clarifications).
 
 **Rung 2, lockstep relational induction.** Only for pairs where the loops align:
 same number of loops, same nesting forest shape, and pairing by pre-order in the
@@ -95,7 +95,8 @@ human-readable detail. SARIF properties: `proofMethod`, `boundedBy`, `unknownRea
 - [ ] `LoopLadder`, `LockstepInduction`, `KInduction` in `Equiv.Verify.Z3`.
 - [ ] Fixtures for each verdict path: aligned unchanged loop (rung 2 Equivalent); loop
       bound changed (rung 1 Divergent, replayed); loop body needs warm-up (rung 3);
-      loop-to-LINQ rewrite (Unknown(unaligned-loop)); mutual recursion (Unknown(recursion)).
+      loop-to-LINQ rewrite (Unknown(unaligned-loop)); self-recursion no rung decides
+      (Unknown(recursion)).
 - [ ] Property tests: soundness harness from M3-001 extended with looping generators;
       ladder monotonicity (a pair proved on rung n is not refuted on rung m; every
       Divergent replays).
@@ -123,7 +124,7 @@ human-readable detail. SARIF properties: `proofMethod`, `boundedBy`, `unknownRea
 ## Size guard
 Three files in `Equiv.Core.Ir` (analysis, unroller, fragmenter) and three in
 `Equiv.Verify.Z3` (ladder, lockstep, k-induction). Nested loops beyond one level of
-alignment and mutual recursion are Unknown, not code.
+alignment are Unknown, not code. Mutual recursion is modular (ADR 0019), not code.
 
 ## Pitfalls
 - Unrolling and fragmenting must produce valid SSA; run `IrValidator` on every
@@ -148,7 +149,7 @@ Rungs 4 and 5. Termination. Mutual recursion.
 - Decision: a header's state is its phis, then every other variable live on entry (parameters in declaration order, then definition order): loop-invariant live-ins, heap maps, and values read after the loop. Coupling pairs phis with phis by unambiguous `SourceName` (same type), else by position; live-ins by shared parameter (ADR 0021), then source name, then position; anything left unpaired, or paired by position with another type, does not align (as the Design says). Loops pair by pre-order of the nesting forest, siblings by header reverse postorder. Rule: 1.
 - Decision: rung 3 runs when rung 2 failed on a step obligation (not its base) and each side has exactly one loop. The step unrolls the loop k + 1 times in place (`IrUnroller.UnrollInPlace`) and assumes both sides reach the next k header copies with equal coupled phis; the base peels k iterations (`IrUnroller.Peel`) and checks the peeled headers' phis as well as the segment, so the first k + 1 arrivals agree. Rule: 4.
 - Decision: rung 1 inlines self-calls k deep only when that is exact: every parameter `In`, no `IrMapWrite`, no `array.`/`length.` input, every self-call has a threw flag and a receiver-plus-arguments shape; otherwise rung 1 is `not-applicable`. A callee's `throw` becomes `threw = true` with a default result. Rung 2 keeps the self-call as the shared call (section 5.1's mutual summary), so it can prove recursion unbounded, and its models are never replayed (the call's answer is not the procedure's). Rule: 4.
-- Decision: mutual recursion is not visible to a pair-wise backend (a call to another matched procedure is a shared function, ADR 0019; an IR fixture has one procedure per side), so criterion 3's mutual-recursion fixture cannot give Unknown(recursion) without a Core contract change. ADR 0030 is proposed (PR #120) (modular reading is sound by the mutual-summary rule); `recursion-unaligned` (self-recursion no rung decides) is the Unknown(Recursion) fixture meanwhile. Rule: ADR.
+- Decision: mutual recursion is not visible to a pair-wise backend (a call to another matched procedure is a shared function, ADR 0019; an IR fixture has one procedure per side), so criterion 3's mutual-recursion fixture cannot give Unknown(recursion) without a Core contract change. ADR 0030 was proposed (PR #120) and withdrawn: it restated ADR 0019, whose Clarifications now cover cycles. The Design and Deliverables text is corrected; `recursion-unaligned` (self-recursion no rung decides) is the Unknown(Recursion) fixture. Rule: ADR.
 - Decision: the Unknown reason of an undecided looping pair is `Opaque` if a failed obligation's model reaches an opaque, else `Recursion` if a side calls itself, else `UnalignedLoop` (not aligned, or aligned and no induction proved it), else `Timeout`; the detail is that rung's detail. `UnknownReason.Loop` is gone (criterion 1). Rule: 1.
 - Decision: `Equivalent(ProofMethod Method, int? BoundedBy = null)`, a `ProofMethod` enum, and `Verdict.Ladder` (an `ImmutableArray<LadderStep>` init property on the base record, compared structurally) carry the new properties; `SarifReportWriter` writes `properties.proofMethod`, `boundedBy`, `unknownReason` and `ladderTrace` (a list of `{rung, outcome, detail}`), because criterion 2 names `properties.*`. Alternatives: leave SARIF to M3-003 (whose size guard allows only composition). Rule: 1.
 - Decision: `IrUnreachable` is no longer an assertion of `ProductEncoder`; each side's `Unreachable` term is assumed false by every query except rung 1's bound query. The 13 encoder snapshots gain two `unreachable.*` lines and `unreachable` loses its `(not old.reach.B1)` line. `ProductEncoder.Analyze` is replaced by `IrLoopAnalysis`. Rule: 1.

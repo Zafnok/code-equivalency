@@ -43,3 +43,15 @@ equivalent. The CLI makes that condition visible without changing any verdict or
   they are first approved. (This ADR first scheduled it after M3-003 as its own ticket, M3-008;
   the 2026-09-21 ticket consolidation merged it into M3-015, which already emitted
   `assumedCallees` for congruence verdicts.)
+
+## Clarifications
+- 2026-09-23 (M3-002, replaces proposed ADR 0030). **Cycles.** The decision covers matched
+  procedures that call each other in a cycle. Each pair still assumes its matched callees
+  equivalent, and for a cycle that assumption is the mutual-summary proof rule (Godlin and
+  Strichman, "Regression verification", DAC 2009): if every pair on the cycle is Equivalent
+  under shared call functions, every pair is partially equivalent, by induction on the recursion
+  depth of terminating runs. Termination is not claimed. A pair on the cycle that is not
+  Equivalent is already in the others' `unprovenAssumptions`. `UnknownReason.Recursion` is only
+  for a self-recursive pair no rung of the loop ladder decides; a self-call is not listed in
+  `assumedCallees` (M3-015). Not done: passing the call graph to the backend to return
+  `Unknown(Recursion)` for cycles. That would change a Core contract only to lose precision.

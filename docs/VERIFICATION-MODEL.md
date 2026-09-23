@@ -14,7 +14,8 @@ throws (exception type, not message).
 Verdicts are modular (ADR 0019). A call to another matched procedure is an uninterpreted
 function that both sides share, so a verdict assumes those callee pairs are equivalent. The
 SARIF result names them (`assumedCallees`) and flags the ones not proved in the same run
-(`unprovenAssumptions`).
+(`unprovenAssumptions`). This holds for cycles too: if every pair on a cycle of matched
+procedures is Equivalent, every pair is partially equivalent (the mutual-summary rule).
 
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
@@ -185,7 +186,8 @@ Equivalent or finds a counterexample wins, and `proofMethod` names it.
 
 Recursion is handled by rung 2 with the recursive call as the induction point
 (the standard regression-verification treatment): a self-call stays a call both sides share. Rung 1 inlines it
-instead, so its counterexamples are real.
+instead, so its counterexamples are real. Mutual recursion needs no rung: a call to another matched procedure is
+shared (section 1, ADR 0019), so `Recursion` means only a self-call that no rung decided.
 
 Rung 1's result is a proof only when no input reaches the bound; otherwise it only refutes, and rungs 2 and 3
 decide. A pair with loops or a self-call that no rung decides is Unknown: `Opaque` when a failed obligation reaches
