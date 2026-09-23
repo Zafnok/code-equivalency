@@ -118,7 +118,7 @@ internal sealed class SsaBuilder
 
     private void Fill(Draft draft, ImmutableArray<(Variable Variable, IrVar Param)> outs)
     {
-        foreach (Step step in draft.Steps)
+        foreach (IStep step in draft.Steps)
         {
             switch (step)
             {
@@ -295,19 +295,19 @@ internal sealed class SsaBuilder
         public IrVar Template { get; } = template;
     }
 
-    private abstract record Step;
+    private interface IStep;
 
-    private sealed record Instruction(IrInstruction Value) : Step;
+    private sealed record Instruction(IrInstruction Value) : IStep;
 
-    private sealed record LoadStep(Variable Variable, IrVar Temp) : Step;
+    private sealed record LoadStep(Variable Variable, IrVar Temp) : IStep;
 
-    private sealed record StoreStep(Variable Variable, IrVar Value) : Step;
+    private sealed record StoreStep(Variable Variable, IrVar Value) : IStep;
 
     private sealed class Draft(IrBlockId id)
     {
         public IrBlockId Id { get; } = id;
 
-        public List<Step> Steps { get; } = [];
+        public List<IStep> Steps { get; } = [];
 
         public IrTerminator? Terminator { get; set; }
     }
