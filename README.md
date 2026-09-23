@@ -13,11 +13,15 @@ cross-language rewrites. The language frontends are the only language-specific p
 ## Status
 
 Milestones M0 (skeleton and gates), M1 (core IR, samples, SARIF, CLI shell) and M2 (the
-C# frontend) are merged. `equiv compare` loads real 4.8 and .NET 10 solutions, matches
-procedures (including by HTTP route) and lowers them to IR, and reports Added/Removed. No
-verification backend is wired yet, so matched pairs get no verdict (ADR 0012). Next is M3:
-the Z3 backend, the loop ladder, and the soundness and precision work that the pre-M3
-review added (ADRs 0018 to 0020). Progress and ordering: [docs/ROADMAP.md](docs/ROADMAP.md).
+C# frontend) are merged, and so is M3-001, the Z3 product-program encoder for loop-free IR.
+`equiv compare` loads 4.8 and .NET 10 solutions, matches procedures (including by HTTP route),
+lowers them to IR and verifies the matched pairs. Loops and packaging are still to come.
+
+M3 is in progress. It adds the loop ladder, the soundness and precision work from the pre-M3
+review (ADRs 0018 to 0020), and the measurement work from the Unknown-rate and feasibility reviews
+(ADRs 0024 to 0029). Success is judged on a public corpus against thresholds fixed in advance
+(ADR 0028), and the first census on it decides whether the precision milestone (M4) goes ahead.
+Progress and ordering: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 What exists today:
 
@@ -33,8 +37,13 @@ What exists today:
   [docs/tickets/IOPERATION-COVERAGE.md](docs/tickets/IOPERATION-COVERAGE.md).
 - `Equiv.Cli` — `equiv compare` argument parsing, frontend routing by language, exit
   codes, `--dry-run`, `--baseline`, `--fail-on`.
-- `Equiv.Verify.Z3` — empty shell until M3-001.
+- `Equiv.Verify.Z3` — product-program encoder, Z3 driver and counterexample replay for loop-free
+  IR (M3-001); the loop ladder is M3-002.
 - `samples/` — paired 4.8/10 solutions, each README stating the expected verdicts.
+- `tools/corpus/` — the public migration corpus `equiv` is assessed on (ADR 0028): a pinned copy
+  of Amazon's Poly-MigrationBench .NET list (100 repos) and public before/after pairs such as Git
+  Extensions' 4.8-to-.NET 5 migration. Fetched into the git-ignored `.corpus/`, run through the
+  `equiv-corpus-run` skill, and summarised under `docs/runs/`. No third-party code is committed.
 - Gates — 100% line and branch coverage on every `src/` project, warnings as errors,
   ArchUnitNET dependency rules, CodeQL, gitleaks, Dependabot, locked restores, a
   dependency licence gate, and Stryker mutation testing. SonarQube Cloud runs on every
@@ -107,8 +116,9 @@ src/        production code, one project per component (see ARCHITECTURE.md)
 tests/      one test project per src project, Equiv.TestSupport (generators),
             Equiv.Tests.Architecture, Equiv.Tests.Integration
 samples/    tiny paired legacy/modern solutions used as fixtures and demos
-tools/      check-coverage: merges cobertura reports and enforces the 100% gate
-docs/       everything above
+tools/      check-coverage (100% gate), licence-check, sonar-triage, corpus (ADR 0028)
+docs/       everything above; docs/runs/ holds corpus-run summaries
+.corpus/    git-ignored: third-party checkouts and raw output of corpus runs
 .github/    ci.yml, codeql.yml, mutation.yml, sonar.yml, dependabot.yml
 .claude/    skills that encode the workflow for coding agents
 ```

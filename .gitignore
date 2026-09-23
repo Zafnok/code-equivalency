@@ -78,3 +78,7 @@ secrets.json
 
 # Verify snapshot tool output
 *.received.*
+
+# Public migration corpus (ADR 0028): third-party checkouts, agent migrations and raw SARIF.
+# Never commit anything from here; tools/corpus/corpus.ps1 refuses to run unless this is ignored.
+.corpus/

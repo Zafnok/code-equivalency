@@ -62,15 +62,21 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
   [--lower-only]`.
 - `--lower-only` loads, matches and lowers, writes the lowering census and the Added and
-  Removed results, never calls the backend, and exits 0 (ADR 0027). It cannot be combined
-  with `--baseline` or `--fail-on` (exit 3).
+  Removed results, never calls the backend, and exits 0 unless a project was skipped (exit 4)
+  (ADR 0027). It cannot be combined with `--baseline` or `--fail-on` (exit 3).
 - Router: inspects inputs, rejects mismatched or unsupported languages (exit 3), else
   selects the frontend. One frontend in the MVP; the router exists from day one so that
   Java is a new project, not a refactor.
 - Exit codes: 0 all equivalent (or all results match baseline), 1 divergence, 2 unknown
   present and `--fail-on unknown`, 3 usage or unsupported input, 4 load failure, 5 internal
-  error: at least one pair could not be verified, or any other unhandled exception. 5 outranks
-  1 and 2, because the result set is incomplete (ADR 0023).
+  error: at least one pair could not be verified, or any other unhandled exception.
+- Load failure is contained to the project (ADR 0029). A C# project that fails to load, or has
+  unresolved references, and any project that is not C#, is skipped. It is reported as a
+  tool-execution notification, and its procedures are listed in `run.properties.unverified`. The run
+  still writes every other result and then exits 4. A skipped non-C# project alone does not
+  change the exit code. Exit 4 without a SARIF log means no C# project loaded on some side.
+- Precedence: 5 outranks 4, and both outrank 1 and 2, because a tool fault makes the result set
+  incomplete (ADRs 0023 and 0029).
 
 ## What is deliberately NOT in the MVP
 

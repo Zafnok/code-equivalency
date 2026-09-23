@@ -1,2 +1,5 @@
 * text=auto
 *.verified.* -text
+
+# Verbatim upstream copies; keep their bytes so a refresh diff is exact (ADR 0028).
+tools/corpus/*.csv -text
