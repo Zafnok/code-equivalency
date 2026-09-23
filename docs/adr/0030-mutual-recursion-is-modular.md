@@ -34,6 +34,6 @@ rung of the loop ladder decided.
 
 ## Consequences
 - M3-002's mutual-recursion fixture is `recursion-unaligned` (self-recursion). Once accepted, VERIFICATION-MODEL.md
-  section 5.1's recursion sentence gains "mutual recursion is modular (ADR 0019, ADR 0028)", and the ticket's Design
+  section 5.1's recursion sentence gains "mutual recursion is modular (ADR 0019, ADR 0030)", and the ticket's Design
   sentence "mutual recursion is Unknown(recursion) in this ticket" is struck.
 - Termination is still not claimed (section 5.1): partial equivalence only, as for loops.
