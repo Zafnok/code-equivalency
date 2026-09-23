@@ -58,9 +58,10 @@ are made not asked, and the session stops after the PR.
    verdict ladder in `equiv-sonar-triage`. Never reach for `// NOSONAR`, `#pragma warning
    disable`, a coverage exclusion, or a lowered gate.
 
-7. **Gate:** `./build.ps1 -Integration` fully green before every commit. Coverage stays at
-   100% line and branch — a refactor that moves code out of a covered path needs its test
-   moved too.
+7. **Gate:** must be green before merge (`.claude/skills/equiv-quality-gates`: default to
+   trusting CI, don't run `./build.ps1 -Integration` locally before every commit — only
+   after CI has failed on the same issue more than once). Coverage stays at 100% line and
+   branch — a refactor that moves code out of a covered path needs its test moved too.
 
 8. **Commit** with Conventional Commits and the footer `Ticket: GH-<issue number>`:
 
