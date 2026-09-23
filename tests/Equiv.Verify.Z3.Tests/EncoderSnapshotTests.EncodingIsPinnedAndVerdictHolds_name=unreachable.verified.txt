@@ -6,7 +6,6 @@
 (= old.cnt.B2 (bvadd old.cnt.B0 #x00000000))
 (= old.reach.B1 (or (and old.reach.B0 old.c)))
 (= old.cnt.B1 (bvadd old.cnt.B0 #x00000000))
-(not old.reach.B1)
 new.reach.B0
 (= new.cnt.B0 #x00000000)
 (= new.z #x00000000)
@@ -25,3 +24,5 @@ differs: (let ((a!1 (and (= (or false old.reach.B2) (or false new.reach.B2 new.r
   (not a!1))
 opaque.old: (or false)
 opaque.new: (or false)
+unreachable.old: (or false old.reach.B1)
+unreachable.new: (or false)

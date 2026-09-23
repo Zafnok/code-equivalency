@@ -36,3 +36,5 @@ differs: (let ((a!1 (event 0
             (= a!3 a!4)))))
 opaque.old: (or false)
 opaque.new: (or false)
+unreachable.old: (or false)
+unreachable.new: (or false)

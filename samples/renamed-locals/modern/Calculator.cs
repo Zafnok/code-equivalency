@@ -18,4 +18,15 @@ public class Calculator
 
         return best;
     }
+
+    public int SumTo(int n)
+    {
+        int total = 0;
+        for (int k = 0; k < n; k++)
+        {
+            total += k;
+        }
+
+        return total;
+    }
 }

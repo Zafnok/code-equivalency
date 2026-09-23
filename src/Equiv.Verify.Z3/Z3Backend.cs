@@ -7,20 +7,17 @@ using Equiv.Core.Verdicts;
 using Microsoft.Z3;
 
 using ProductEncoding = Equiv.Verify.Z3.ProductEncoder.ProductEncoding;
-using Side = Equiv.Verify.Z3.ProductEncoder.Side;
 
 namespace Equiv.Verify.Z3;
 
 /// <summary>
-/// <see cref="IVerificationBackend"/> over Z3 for acyclic pairs (ARCHITECTURE.md; VERIFICATION-MODEL.md
-/// sections 1, 5 and 6; ADR 0014; ticket M3-001). One <see cref="Context"/> per pair, disposed on every
-/// path. A pair with a back edge on either side is <see cref="UnknownReason.Loop"/> before any Z3 call
-/// (the M3-002 ladder replaces that branch). Otherwise two queries decide it: some observable differs
-/// on an input where neither side reaches an <see cref="IrOpaque"/> gives <see cref="Divergent"/>, with a
-/// counterexample replayed in <see cref="IrInterpreter"/>; if not, an input reaching an opaque gives
-/// <see cref="UnknownReason.Opaque"/>, and otherwise the pair is <see cref="Equivalent"/>. A solver
-/// <c>unknown</c> is <see cref="UnknownReason.Timeout"/>, the only reason Core has for it; the detail
-/// carries the solver's own reason, which is not always a timeout.
+/// <see cref="IVerificationBackend"/> over Z3 (ARCHITECTURE.md; VERIFICATION-MODEL.md sections 1, 5, 5.1 and 6; ADR
+/// 0014; tickets M3-001 and M3-002). Every pair goes through the <see cref="LoopLadder"/>, whose rung 1 is the
+/// M3-001 product query on the pair with its loops unrolled: some observable differs on an input where neither side
+/// reaches an <see cref="IrOpaque"/> gives <see cref="Divergent"/>, with a counterexample replayed in
+/// <see cref="IrInterpreter"/>; if not, an input reaching an opaque gives <see cref="UnknownReason.Opaque"/>. Each
+/// query gets its own <see cref="Context"/>, disposed on every path. A solver <c>unknown</c> is
+/// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason, which is not always a timeout.
 /// </summary>
 public sealed class Z3Backend : IVerificationBackend
 {
@@ -31,7 +28,7 @@ public sealed class Z3Backend : IVerificationBackend
     {
     }
 
-    /// <summary>For tests: supplies the <see cref="Context"/> each verification uses and disposes.</summary>
+    /// <summary>For tests: supplies the <see cref="Context"/> each query uses and disposes.</summary>
     internal Z3Backend(Func<Context> createContext)
     {
         this.createContext = createContext;
@@ -42,35 +39,7 @@ public sealed class Z3Backend : IVerificationBackend
         ArgumentNullException.ThrowIfNull(oldBody);
         ArgumentNullException.ThrowIfNull(newBody);
         ArgumentNullException.ThrowIfNull(options);
-
-        IrProcedure? looping = new[] { oldBody, newBody }.FirstOrDefault(static p => ProductEncoder.Analyze(p).HasBackEdge);
-        if (looping is not null)
-        {
-            return new Unknown(UnknownReason.Loop, $"{looping.Identity.Value} has a loop; loops need the M3-002 ladder.");
-        }
-
-        using Context context = createContext();
-        ProductEncoding encoding = ProductEncoder.Encode(context, oldBody, newBody, options.CallIdentityMap);
-
-        using Solver divergence = Query(context, encoding, options, encoding.Differs, context.MkNot(encoding.OpaqueOld), context.MkNot(encoding.OpaqueNew));
-        Status status = divergence.Check();
-        if (status == Status.SATISFIABLE)
-        {
-            return new Divergent(ModelDecoder.Replay(context, divergence.Model, encoding, oldBody, newBody));
-        }
-
-        if (status == Status.UNKNOWN)
-        {
-            return Timeout(divergence, options);
-        }
-
-        using Solver opaque = Query(context, encoding, options, context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew));
-        return opaque.Check() switch
-        {
-            Status.UNSATISFIABLE => new Equivalent(),
-            Status.SATISFIABLE => new Unknown(UnknownReason.Opaque, OpaqueReasons(opaque.Model, encoding)),
-            _ => Timeout(opaque, options),
-        };
+        return new LoopLadder(createContext, options).Verify(oldBody, newBody);
     }
 
     /// <summary>
@@ -83,7 +52,7 @@ public sealed class Z3Backend : IVerificationBackend
     /// incremental mode it skips preprocessing, and its non-incremental default tactic times out on a
     /// plain diamond.
     /// </summary>
-    private static Solver Query(Context context, ProductEncoding encoding, VerificationOptions options, params BoolExpr[] query)
+    internal static Solver Query(Context context, ProductEncoding encoding, VerificationOptions options, params BoolExpr[] query)
     {
         using Tactic solveEqs = context.MkTactic("solve-eqs");
         using Tactic simplify = context.MkTactic("simplify");
@@ -97,11 +66,11 @@ public sealed class Z3Backend : IVerificationBackend
         return solver;
     }
 
-    private static Unknown Timeout(Solver solver, VerificationOptions options) =>
-        new(UnknownReason.Timeout, $"solver returned unknown ({solver.ReasonUnknown}) with a {options.TimeoutMs.ToString(CultureInfo.InvariantCulture)} ms timeout");
+    internal static string Timeout(Solver solver, VerificationOptions options) =>
+        $"solver returned unknown ({solver.ReasonUnknown}) with a {options.TimeoutMs.ToString(CultureInfo.InvariantCulture)} ms timeout";
 
     /// <summary>The opaque nodes the model reaches, as <c>side: reason at path line:column</c>.</summary>
-    private static string OpaqueReasons(Model model, ProductEncoding encoding) =>
+    internal static string OpaqueReasons(Model model, ProductEncoding encoding) =>
         string.Join(
             "; ",
             encoding.Opaques

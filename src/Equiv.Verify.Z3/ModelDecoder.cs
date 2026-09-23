@@ -51,6 +51,23 @@ internal sealed class ModelDecoder
         return new Counterexample(inputs, oldRun, newRun);
     }
 
+    /// <summary>
+    /// Replays <paramref name="old"/> and <paramref name="new"/>, whose parameters are those of the fragments the model
+    /// satisfies, from the decoded inputs (ticket M3-002). A model of a loop obligation is a real counterexample only
+    /// when this replay completes on both sides within <paramref name="stepBudget"/> steps without reaching an
+    /// <see cref="IrOpaque"/> and diverges; otherwise it returns null.
+    /// </summary>
+    public static Counterexample? TryReplay(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new, int stepBudget)
+    {
+        ModelDecoder decoder = new(context, model, encoding);
+        IrInputs inputs = decoder.Inputs();
+        ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
+        IrRun oldRun = IrInterpreter.Run(old, Bind(old, shared, inputs, static s => s.Old), decoder.Oracle(Side.Old), stepBudget);
+        IrRun newRun = IrInterpreter.Run(@new, Bind(@new, shared, inputs, static s => s.New), decoder.Oracle(Side.New), stepBudget);
+        bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
+        return complete && Diverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls) ? new Counterexample(inputs, oldRun, newRun) : null;
+    }
+
     /// <summary>A model whose replay does not diverge is an encoder bug: fail loudly, never report it as Divergent.</summary>
     public static void EnsureDiverges(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
     {

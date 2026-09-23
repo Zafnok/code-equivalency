@@ -79,7 +79,10 @@
             procedureIdentity/v1: Samples.Math::Add(int32,int32),
             resultFingerprint/v1: 5b0ab88112ba696ff46de6b588f72bcc9aa91c7987fc09a6f99892adc050b823
           },
-          baselineState: new
+          baselineState: new,
+          properties: {
+            unknownReason: timeout
+          }
         }
       ],
       columnKind: utf16CodeUnits

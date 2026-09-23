@@ -98,6 +98,13 @@ dotnet_diagnostic.MA0076.severity = error
 # so the build catches a regression.
 dotnet_diagnostic.MA0089.severity = error
 
+# MA0038/MA0041 ("make method/property static") are deprecated upstream in favour of CA1822, which
+# AnalysisLevel=latest-all already enforces as an error. They misfire on members that only read a
+# primary-constructor parameter (PR #121: LoopLadder.Options, LoopLadder.Session, KInduction.Prove),
+# where CA1822 correctly stays silent. Off, so CA1822 is the one rule that decides.
+dotnet_diagnostic.MA0038.severity = none
+dotnet_diagnostic.MA0041.severity = none
+
 # M1-005: test methods are named Scenario_ExpectedOutcome (e.g. Compare_Exits1OnDivergent),
 # an underscore-as-separator convention that is idiomatic xUnit test naming, not an identifier
 # hygiene problem. CA1707 ("remove underscores from member names") has no test-specific carve-out,

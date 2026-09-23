@@ -16,5 +16,16 @@ namespace Equiv.Samples.Identical
 
             return b;
         }
+
+        public int SumTo(int n)
+        {
+            int sum = 0;
+            for (int i = 0; i < n; i++)
+            {
+                sum += i;
+            }
+
+            return sum;
+        }
     }
 }

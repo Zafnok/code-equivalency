@@ -1,6 +1,6 @@
 namespace Equiv.Core.Verdicts;
 
-/// <summary>Why a verdict could not be reached (VERIFICATION-MODEL.md sections 1 and 6, EQ003).</summary>
+/// <summary>Why a verdict could not be reached (VERIFICATION-MODEL.md sections 1, 5.1 and 6, EQ003).</summary>
 public enum UnknownReason
 {
     /// <summary>The solver did not finish within the configured timeout.</summary>
@@ -12,6 +12,12 @@ public enum UnknownReason
     /// <summary>Matching could not choose among several equally-normalised overloads.</summary>
     UnmatchedOverload,
 
-    /// <summary>A procedure has a back edge and no loop rung is wired yet (ticket M3-001; the M3-002 ladder replaces this).</summary>
-    Loop,
+    /// <summary>
+    /// Loops the ladder's rungs 1 to 3 could not decide: they do not align (loop count, nesting or header state
+    /// differs), or they align and neither induction rung proved them (ticket M3-002; rung 4 is P1-001).
+    /// </summary>
+    UnalignedLoop,
+
+    /// <summary>A self-recursive procedure the ladder could not decide (ticket M3-002).</summary>
+    Recursion,
 }

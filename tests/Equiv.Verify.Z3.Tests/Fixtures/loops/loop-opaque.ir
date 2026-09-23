@@ -1,0 +1,45 @@
+# Unknown(Opaque)
+# An opaque statement in the iteration with i == 5: out of rung 1's reach, and the step obligation reaches it.
+proc "T::Log(int)" (%n "n": bv32) -> bv32 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  %five: bv32 = const bv32 5
+  goto B1
+B1:
+  %i "i": bv32 = phi [B0: %z, B4: %i1]
+  %c: bool = slt %i, %n
+  br %c, B2, B5
+B2:
+  %late: bool = eq %i, %five
+  br %late, B3, B4
+B3:
+  opaque "LateEffect" at "T.cs" 7:13-7:40
+  goto B4
+B4:
+  %i1 "i": bv32 = add %i, %one
+  goto B1
+B5:
+  ret %i
+---
+proc "T::Log(int)" (%n "n": bv32) -> bv32 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  %five: bv32 = const bv32 5
+  goto B1
+B1:
+  %i "i": bv32 = phi [B0: %z, B4: %i1]
+  %c: bool = slt %i, %n
+  br %c, B2, B5
+B2:
+  %late: bool = eq %i, %five
+  br %late, B3, B4
+B3:
+  opaque "LateEffect" at "T.cs" 7:13-7:40
+  goto B4
+B4:
+  %i1 "i": bv32 = add %i, %one
+  goto B1
+B5:
+  ret %i
