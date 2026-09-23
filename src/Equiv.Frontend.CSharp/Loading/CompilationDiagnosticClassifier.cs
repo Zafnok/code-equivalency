@@ -1,9 +1,13 @@
 using System.Collections.Frozen;
+using System.Text.RegularExpressions;
 
 namespace Equiv.Frontend.CSharp.Loading;
 
-/// <summary>Sorts compiler errors into "references did not resolve" (abort) and everything else (keep).</summary>
-internal static class CompilationDiagnosticClassifier
+/// <summary>
+/// Sorts compiler errors into "references did not resolve" (skip the project) and everything else (keep), and
+/// workspace failures into real failures and MSBuild warnings that the workspace reports as failures.
+/// </summary>
+internal static partial class CompilationDiagnosticClassifier
 {
     private static readonly FrozenSet<string> UnresolvedReferenceIds = FrozenSet.Create(
         StringComparer.Ordinal,
@@ -16,6 +20,23 @@ internal static class CompilationDiagnosticClassifier
         "CS1705", // referenced assembly has a higher version
         "CS8032"); // analyzer instance could not be created
 
+    /// <summary>
+    /// MSBuild warning codes that MSBuildWorkspace has been seen to report as a <c>WorkspaceDiagnosticKind.Failure</c>.
+    /// They skip nothing (M3-024 acceptance criterion 9).
+    /// </summary>
+    private static readonly FrozenSet<string> MsBuildWarningCodes = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "MSB3270"); // processor-architecture mismatch between the project and a reference
+
     public static LoadDiagnosticKind Classify(string errorId) =>
         UnresolvedReferenceIds.Contains(errorId) ? LoadDiagnosticKind.UnresolvedReference : LoadDiagnosticKind.CompilerError;
+
+    /// <summary>A failure event is a warning when its message carries a code from the MSBuild warning table.</summary>
+    public static LoadDiagnosticKind ClassifyWorkspaceFailure(string message) =>
+        MsBuildCode.Matches(message).Any(static m => MsBuildWarningCodes.Contains(m.Value))
+            ? LoadDiagnosticKind.WorkspaceWarning
+            : LoadDiagnosticKind.WorkspaceFailure;
+
+    [GeneratedRegex(@"\bMSB\d{4}\b", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex MsBuildCode { get; }
 }

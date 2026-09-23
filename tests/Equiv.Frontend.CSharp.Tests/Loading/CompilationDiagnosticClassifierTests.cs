@@ -51,4 +51,21 @@ public sealed class CompilationDiagnosticClassifierTests
     {
         Assert.Equal(LoadDiagnosticKind.CompilerError, CompilationDiagnosticClassifier.Classify("cs0246"));
     }
+
+    [Fact]
+    public void ClassifyWorkspaceFailure_ProcessorArchitectureMismatchIsAWarning()
+    {
+        Assert.Equal(
+            LoadDiagnosticKind.WorkspaceWarning,
+            CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(@"C:\x\A.csproj : warning MSB3270: There was a mismatch between the processor architecture"));
+    }
+
+    [Theory]
+    [InlineData("error MSB4019: The imported project was not found")]
+    [InlineData("warning MSB32701: not the same code")]
+    [InlineData("project file could not be evaluated")]
+    public void ClassifyWorkspaceFailure_AnythingElseIsAFailure(string message)
+    {
+        Assert.Equal(LoadDiagnosticKind.WorkspaceFailure, CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(message));
+    }
 }

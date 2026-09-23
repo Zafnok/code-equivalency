@@ -55,14 +55,18 @@ public sealed class CSharpFrontend : ILanguageFrontend
             [.. legacy.Compilations.SelectMany(static compilation => EndpointDiscovery.Discover(compilation))],
             [.. modern.Compilations.SelectMany(static compilation => EndpointDiscovery.Discover(compilation))]);
 
-        (ImmutableArray<SideProcedure> legacyProcedures, ImmutableArray<ProcedureIdentity> legacyAmbiguous) = Procedures(legacy, config.Renames, overrides);
-        (ImmutableArray<SideProcedure> modernProcedures, ImmutableArray<ProcedureIdentity> modernAmbiguous) = Procedures(modern, config.Renames, overrides);
+        (ImmutableArray<SideProcedure> legacyProcedures, ImmutableArray<ProcedureIdentity> legacyAmbiguous) = Procedures(legacy.Compilations, config.Renames, overrides);
+        (ImmutableArray<SideProcedure> modernProcedures, ImmutableArray<ProcedureIdentity> modernAmbiguous) = Procedures(modern.Compilations, config.Renames, overrides);
 
         MatchResult match = _matcher.Match(
             [.. legacyProcedures.Select(static p => p.Identity)],
             [.. modernProcedures.Select(static p => p.Identity)]);
         Dictionary<ProcedureIdentity, SideProcedure> legacyByIdentity = ByIdentity(legacyProcedures);
         Dictionary<ProcedureIdentity, SideProcedure> modernByIdentity = ByIdentity(modernProcedures);
+
+        // ADR 0029: a procedure whose counterpart project, by assembly name, was skipped on the other side is unverified, not Added or Removed.
+        (ImmutableArray<ProcedureIdentity> added, ImmutableArray<UnverifiedProject> legacySkipped) = Unverified(legacy.Skipped, match.Added, modernByIdentity, config.Renames);
+        (ImmutableArray<ProcedureIdentity> removed, ImmutableArray<UnverifiedProject> modernSkipped) = Unverified(modern.Skipped, match.Removed, legacyByIdentity, config.Renames);
 
         return match with
         {
@@ -71,8 +75,46 @@ public sealed class CSharpFrontend : ILanguageFrontend
                 OldBody = legacyByIdentity[pair.Old].Lower(config),
                 NewBody = modernByIdentity[pair.New].Lower(config),
             })],
+            Added = added,
+            Removed = removed,
             Ambiguous = [.. match.Ambiguous, .. legacyAmbiguous, .. modernAmbiguous],
+            LegacySkipped = legacySkipped,
+            ModernSkipped = modernSkipped,
         };
+    }
+
+    /// <summary>
+    /// <paramref name="skipped"/> (one side's skipped projects) as Core data. Each C# project's procedures are its own,
+    /// when it has a compilation to enumerate, plus the <paramref name="unmatched"/> identities from the other side whose
+    /// assembly has its assembly name; those are taken out of <paramref name="unmatched"/>, which is returned as the remainder.
+    /// </summary>
+    private static (ImmutableArray<ProcedureIdentity> Remaining, ImmutableArray<UnverifiedProject> Skipped) Unverified(
+        ImmutableArray<SkippedProject> skipped,
+        ImmutableArray<ProcedureIdentity> unmatched,
+        Dictionary<ProcedureIdentity, SideProcedure> otherSide,
+        RenameMap renames)
+    {
+        HashSet<ProcedureIdentity> taken = [];
+        ImmutableArray<UnverifiedProject>.Builder projects = ImmutableArray.CreateBuilder<UnverifiedProject>(skipped.Length);
+        foreach (SkippedProject project in skipped)
+        {
+            IEnumerable<ProcedureIdentity> own = project.Compilation is { } compilation
+                ? Procedures([compilation], renames, EndpointOverrides.None).Procedures.Select(static p => p.Identity)
+                : [];
+            IEnumerable<ProcedureIdentity> counterparts = project.IsCSharp
+                ? unmatched.Where(identity => string.Equals(otherSide[identity].Compilation.AssemblyName, project.AssemblyName, StringComparison.Ordinal))
+                : [];
+            ImmutableArray<ProcedureIdentity> counterpartList = [.. counterparts];
+            taken.UnionWith(counterpartList);
+            projects.Add(new UnverifiedProject(
+                project.Name,
+                project.AssemblyName,
+                project.IsCSharp,
+                [.. project.Diagnostics.Select(static d => d.Id.Length > 0 ? $"{d.Id}: {d.Message}" : d.Message)],
+                [.. own.Concat(counterpartList).Distinct()]));
+        }
+
+        return ([.. unmatched.Where(identity => !taken.Contains(identity))], projects.MoveToImmutable());
     }
 
     private LoadedSolution LoadOrThrow(string path, CancellationToken ct)
@@ -98,12 +140,12 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// <see cref="MatchResult.Ambiguous"/> instead of matching it by plain identity.
     /// </summary>
     private static (ImmutableArray<SideProcedure> Procedures, ImmutableArray<ProcedureIdentity> ForcedAmbiguous) Procedures(
-        LoadedSolution solution, RenameMap renames, EndpointOverrides overrides)
+        ImmutableArray<Compilation> compilations, RenameMap renames, EndpointOverrides overrides)
     {
         ImmutableArray<SideProcedure>.Builder procedures = ImmutableArray.CreateBuilder<SideProcedure>();
         ImmutableArray<ProcedureIdentity>.Builder forcedAmbiguous = ImmutableArray.CreateBuilder<ProcedureIdentity>();
 
-        foreach (Compilation compilation in solution.Compilations)
+        foreach (Compilation compilation in compilations)
         {
             foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))
             {
@@ -142,6 +184,9 @@ public sealed class CSharpFrontend : ILanguageFrontend
         ImmutableDictionary<ProcedureIdentity, ProcedureIdentity> RenameTo,
         ImmutableHashSet<ProcedureIdentity> ForcedAmbiguous)
     {
+        /// <summary>No endpoint overrides: for a skipped project, whose procedures are only listed.</summary>
+        public static readonly EndpointOverrides None = new(ImmutableDictionary<ProcedureIdentity, ProcedureIdentity>.Empty, []);
+
         public static EndpointOverrides Build(ImmutableArray<Endpoint> legacyEndpoints, ImmutableArray<Endpoint> modernEndpoints)
         {
             ILookup<(string Verb, string Template), Endpoint> legacyByKey = legacyEndpoints.ToLookup(static e => (e.Verb, e.Template));

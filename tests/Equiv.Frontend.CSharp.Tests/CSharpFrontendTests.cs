@@ -53,8 +53,8 @@ public sealed class CSharpFrontendTests
         EquivConfig config = EquivConfig.Default with { Renames = renames };
 
         StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
-            ? new LoadedSolution(null!, [legacyCompilation], [])
-            : new LoadedSolution(null!, [modernCompilation], []));
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
 
         CSharpFrontend frontend = new(loader, new StableIdentityMatcher());
         MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", config, CancellationToken.None);
@@ -72,8 +72,8 @@ public sealed class CSharpFrontendTests
 
         RenameMap renames = RenameMap.Empty with { Namespaces = RenameMap.Empty.Namespaces.Add("Old.Ns", "New.Ns") };
         StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
-            ? new LoadedSolution(null!, [legacyCompilation], [])
-            : new LoadedSolution(null!, [modernCompilation], []));
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
             .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, CancellationToken.None);
@@ -93,8 +93,8 @@ public sealed class CSharpFrontendTests
         Compilation modernCompilation = RoslynTestCompilations.Compile("namespace N { public class C { public void OnlyModern() {} } }");
 
         StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
-            ? new LoadedSolution(null!, [legacyCompilation], [])
-            : new LoadedSolution(null!, [modernCompilation], []));
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
 
         CSharpFrontend frontend = new(loader, new StableIdentityMatcher());
         MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
@@ -201,8 +201,8 @@ public sealed class CSharpFrontendTests
             [ModernRouteAttributes]);
 
         StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
-            ? new LoadedSolution(null!, [legacyCompilation], [])
-            : new LoadedSolution(null!, [modernCompilation], []));
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
             .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
@@ -257,8 +257,8 @@ public sealed class CSharpFrontendTests
             [ModernRouteAttributes]);
 
         StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
-            ? new LoadedSolution(null!, [legacyCompilation], [])
-            : new LoadedSolution(null!, [modernCompilation], []));
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
 
         RenameMap renames = RenameMap.Empty with { Namespaces = RenameMap.Empty.Namespaces.Add("Old.Ns", "Different.Ns") };
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
@@ -311,8 +311,8 @@ public sealed class CSharpFrontendTests
             [ModernRouteAttributes]);
 
         StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
-            ? new LoadedSolution(null!, [legacyCompilation], [])
-            : new LoadedSolution(null!, [modernCompilation], []));
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
             .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
@@ -360,8 +360,8 @@ public sealed class CSharpFrontendTests
             [ModernRouteAttributes]);
 
         StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
-            ? new LoadedSolution(null!, [legacyCompilation], [])
-            : new LoadedSolution(null!, [modernCompilation], []));
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
             .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
@@ -370,5 +370,47 @@ public sealed class CSharpFrontendTests
         Assert.Empty(result.Added);
         Assert.Empty(result.Removed);
         Assert.Equal(3, result.Ambiguous.Length);
+    }
+
+    [Fact]
+    public void SkippedProjectProceduresAreUnverifiedNotAddedOrRemoved()
+    {
+        Compilation shared = RoslynTestCompilations.Compile("namespace S { public class C { public void M() {} } }", "Shared");
+        Compilation legacyLib = RoslynTestCompilations.Compile("namespace L { public class D { public void X() {} Missing f; } }", "Lib");
+        Compilation modernLib = RoslynTestCompilations.Compile("namespace L { public class D { public void X() {} public void Y() {} } }", "Lib");
+        Compilation modernOther = RoslynTestCompilations.Compile("namespace O { public class E { public void Z() {} } }", "Other");
+        Compilation legacyTool = RoslynTestCompilations.Compile("namespace T { public class F { public void W() {} } }", "Tool");
+        LoadDiagnostic unresolved = new(LoadDiagnosticKind.UnresolvedReference, "CS0246", "Lib", "The type or namespace name 'Missing' could not be found");
+        LoadDiagnostic workspace = new(LoadDiagnosticKind.UnsupportedProject, string.Empty, "Native", "Cannot open project 'Native.vcxproj'");
+
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [shared, legacyTool], [], [
+                new SkippedProject("Lib", "Lib", IsCSharp: true, [unresolved], legacyLib),
+                new SkippedProject("Native", "Native", IsCSharp: false, [workspace], Compilation: null)])
+            : new LoadedSolution(null!, [shared, modernLib, modernOther], [], [
+                new SkippedProject("Tool", "Tool", IsCSharp: true, [], Compilation: null)]));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
+
+        Assert.Equal(["S.C::M()"], result.Pairs.Select(static p => p.New.Value), StringComparer.Ordinal);
+
+        // O.E::Z() is in an assembly no skipped project names, so it is still Added.
+        Assert.Equal(["O.E::Z()"], result.Added.Select(static i => i.Value), StringComparer.Ordinal);
+        Assert.Empty(result.Removed);
+
+        Assert.Equal(2, result.LegacySkipped.Length);
+        UnverifiedProject lib = result.LegacySkipped[0];
+        Assert.Equal(("Lib", "Lib", true), (lib.Name, lib.AssemblyName, lib.IsCSharp));
+        Assert.Equal(["CS0246: The type or namespace name 'Missing' could not be found"], lib.Diagnostics, StringComparer.Ordinal);
+        Assert.Equal(["L.D::X()", "L.D::Y()"], lib.Procedures.Select(static i => i.Value), StringComparer.Ordinal);
+
+        UnverifiedProject native = result.LegacySkipped[1];
+        Assert.False(native.IsCSharp);
+        Assert.Equal(["Cannot open project 'Native.vcxproj'"], native.Diagnostics, StringComparer.Ordinal);
+        Assert.Empty(native.Procedures);
+
+        UnverifiedProject tool = Assert.Single(result.ModernSkipped);
+        Assert.Equal(["T.F::W()"], tool.Procedures.Select(static i => i.Value), StringComparer.Ordinal);
     }
 }
