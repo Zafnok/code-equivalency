@@ -1,11 +1,8 @@
 # Quality gates
 
-All gates can run locally via `./build.ps1` (M0-002), and run in GitHub Actions on every
-PR (`.github/workflows/ci.yml`, `mutation.yml`) exercising the identical commands.
-A PR cannot merge unless every gate is green. Default to trusting the CI run rather than
-also running the full gate locally before every commit — see
-`.claude/skills/equiv-quality-gates` for when a local run is actually worth it. Versions
-are pinned in `Directory.Packages.props` (Central Package Management) and listed in
+All gates run locally via `./build.ps1` (M0-002) and in GitHub Actions on every PR.
+A PR cannot merge unless every gate is green. Versions are pinned in
+`Directory.Packages.props` (Central Package Management) and listed in
 [adr/0002-dependencies.md](adr/0002-dependencies.md).
 
 | Gate | Tool | Setting | Blocking |
