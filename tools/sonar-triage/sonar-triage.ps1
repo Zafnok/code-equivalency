@@ -637,6 +637,22 @@ function Close-StaleIssue {
     return $closed
 }
 
+# Links one part to its parent unless it is already linked. Returns 1 if it linked (or would
+# link) the part, 0 if the link already existed.
+function Sync-PartLink {
+    param([object]$Part, [int]$ParentNumber, [string[]]$CurrentChildren, [int]$ChildNumber)
+    if ($ChildNumber -gt 0 -and $CurrentChildren -contains [string]$ChildNumber) { return 0 }
+    $parentLabel = if ($ParentNumber -gt 0) { "#$ParentNumber" } else { 'new parent' }
+    Write-Host "  link    $($Part.Title) -> $parentLabel" -ForegroundColor Magenta
+    if ($Apply) {
+        # The sub-issues API takes the issue's database id, not its number.
+        $id = ([string](Invoke-Gh @('api', "repos/{owner}/{repo}/issues/$ChildNumber", '--jq', '.id'))).Trim()
+        Invoke-Gh @('api', '--method', 'POST', "repos/{owner}/{repo}/issues/$ParentNumber/sub_issues",
+            '-F', "sub_issue_id=$id", '-F', 'replace_parent=true') | Out-Null
+    }
+    return 1
+}
+
 # Makes every part a GitHub sub-issue of its parent. Linking is idempotent: existing links are
 # read first, so a settled run links nothing. Returns how many links it made (or would make).
 function Sync-SubIssue {
@@ -650,17 +666,7 @@ function Sync-SubIssue {
                     '--paginate', '--jq', '.[].number') | ForEach-Object { ([string]$_).Trim() })
         }
         foreach ($part in $parent.Parts) {
-            $childNumber = $Numbers[$part.Key]
-            if ($childNumber -gt 0 -and $current -contains [string]$childNumber) { continue }
-            $parentLabel = if ($parentNumber -gt 0) { "#$parentNumber" } else { 'new parent' }
-            Write-Host "  link    $($part.Title) -> $parentLabel" -ForegroundColor Magenta
-            if ($Apply) {
-                # The sub-issues API takes the issue's database id, not its number.
-                $id = ([string](Invoke-Gh @('api', "repos/{owner}/{repo}/issues/$childNumber", '--jq', '.id'))).Trim()
-                Invoke-Gh @('api', '--method', 'POST', "repos/{owner}/{repo}/issues/$parentNumber/sub_issues",
-                    '-F', "sub_issue_id=$id", '-F', 'replace_parent=true') | Out-Null
-            }
-            $linked++
+            $linked += Sync-PartLink $part $parentNumber $current $Numbers[$part.Key]
         }
     }
     return $linked
@@ -721,17 +727,13 @@ function Push-Resolution {
 
 # ---------------------------------------------------------------- main
 
-function Invoke-Triage {
-    Write-Host "Reading $HostUrl for $ProjectKey ..." -ForegroundColor Cyan
-    $issues = @(Get-SonarIssue | ForEach-Object { ConvertTo-Finding $_ })
-    $hotspots = @(Get-SonarHotspot | ForEach-Object { ConvertTo-Finding $_ -IsHotspot })
-    $all = @($issues) + @($hotspots)
-
-    $policy = Import-Policy
+# Splits every finding into kept (to batch) and suppressed (accepted/deferred by policy).
+function Split-FindingByPolicy {
+    param([object[]]$All, [object]$Policy)
     $kept = [System.Collections.Generic.List[object]]::new()
     $suppressed = [System.Collections.Generic.List[object]]::new()
-    foreach ($finding in $all) {
-        $entry = Get-PolicyVerdict $finding $policy
+    foreach ($finding in $All) {
+        $entry = Get-PolicyVerdict $finding $Policy
         if ($null -ne $entry -and $entry.Verdict -ne 'fix') {
             $suppressed.Add([pscustomobject]@{
                     Finding = $finding; Verdict = $entry.Verdict; Reason = [string](Get-Prop $entry 'reason' '')
@@ -739,32 +741,49 @@ function Invoke-Triage {
         }
         else { $kept.Add($finding) }
     }
+    return [pscustomobject]@{ Kept = $kept.ToArray(); Suppressed = $suppressed.ToArray() }
+}
 
-    $topLevel = @(Group-Finding -Findings $kept.ToArray() | Sort-Object { -$_.Findings.Count })
+# Prints the fetched/suppressed/batch counts and one line per batch and suppressed rule.
+function Write-TriageSummary {
+    param([int]$AllCount, [int]$HotspotCount, [object[]]$TopLevel, [object[]]$Batches, [object[]]$Suppressed)
+    Write-Host ''
+    Write-Host "fetched $AllCount / suppressed $($Suppressed.Count) / batches $($TopLevel.Count) / issues $($Batches.Count)"
+    if ($HotspotCount -gt 0) {
+        Write-Host "  (includes $HotspotCount security hotspots awaiting review)" -ForegroundColor Yellow
+    }
+    Write-Host ''
+    foreach ($batch in $Batches) {
+        $fileCount = @($batch.Findings | Select-Object -ExpandProperty Path -Unique).Count
+        $indent = if (Get-Prop $batch 'ParentKey') { '    ' } else { '' }
+        Write-Host ('{0,5} in {1,3}   {2}{3}' -f (Format-Count $batch.Findings.Count 'finding'), (Format-Count $fileCount 'file'), $indent, $batch.Key)
+    }
+    if ($Suppressed.Count -gt 0) {
+        Write-Host ''
+        Write-Host 'Suppressed by policy:' -ForegroundColor DarkGray
+        foreach ($group in ($Suppressed | Group-Object { $_.Finding.Rule })) {
+            Write-Host ('{0,5}  {1}  ({2})' -f $group.Count, $group.Name, @($group.Group)[0].Verdict) -ForegroundColor DarkGray
+        }
+    }
+}
+
+function Invoke-Triage {
+    Write-Host "Reading $HostUrl for $ProjectKey ..." -ForegroundColor Cyan
+    $issues = @(Get-SonarIssue | ForEach-Object { ConvertTo-Finding $_ })
+    $hotspots = @(Get-SonarHotspot | ForEach-Object { ConvertTo-Finding $_ -IsHotspot })
+    $all = @($issues) + @($hotspots)
+
+    $policy = Import-Policy
+    $split = Split-FindingByPolicy $all $policy
+
+    $topLevel = @(Group-Finding -Findings $split.Kept | Sort-Object { -$_.Findings.Count })
     # A parent is synced before its parts, so it exists by the time they are linked to it.
     $batches = @(foreach ($batch in $topLevel) {
             $batch
             if ($batch.Kind -eq 'umbrella') { $batch.Parts }
         })
 
-    Write-Host ''
-    Write-Host "fetched $($all.Count) / suppressed $($suppressed.Count) / batches $($topLevel.Count) / issues $($batches.Count)"
-    if ($hotspots.Count -gt 0) {
-        Write-Host "  (includes $($hotspots.Count) security hotspots awaiting review)" -ForegroundColor Yellow
-    }
-    Write-Host ''
-    foreach ($batch in $batches) {
-        $fileCount = @($batch.Findings | Select-Object -ExpandProperty Path -Unique).Count
-        $indent = if (Get-Prop $batch 'ParentKey') { '    ' } else { '' }
-        Write-Host ('{0,5} in {1,3}   {2}{3}' -f (Format-Count $batch.Findings.Count 'finding'), (Format-Count $fileCount 'file'), $indent, $batch.Key)
-    }
-    if ($suppressed.Count -gt 0) {
-        Write-Host ''
-        Write-Host 'Suppressed by policy:' -ForegroundColor DarkGray
-        foreach ($group in ($suppressed | Group-Object { $_.Finding.Rule })) {
-            Write-Host ('{0,5}  {1}  ({2})' -f $group.Count, $group.Name, @($group.Group)[0].Verdict) -ForegroundColor DarkGray
-        }
-    }
+    Write-TriageSummary $all.Count $hotspots.Count $topLevel $batches $split.Suppressed
 
     Write-Host ''
     if ($Apply) {
@@ -778,7 +797,7 @@ function Invoke-Triage {
     Write-Host ''
     Write-Host "created $($result.Created) / edited $($result.Edited) / linked $($result.Linked) / closed $($result.Closed) / unchanged $($result.Unchanged)"
 
-    if ($PushResolutions) { Push-Resolution -Suppressed $suppressed.ToArray() }
+    if ($PushResolutions) { Push-Resolution -Suppressed $split.Suppressed }
 }
 
 Invoke-Triage
