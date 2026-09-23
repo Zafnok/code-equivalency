@@ -143,7 +143,8 @@ M3 grew from six tickets to twenty-two through three reviews (below). On 2026-09
 consolidated. The precision tickets moved to M4 and were renumbered (M3-011, M3-018, M3-019,
 M3-017, M3-020, M3-021 and M3-005 became M4-001 to M4-007). Four pairs merged: M3-006 into M3-014,
 M3-008 into M3-015, M3-012 into M3-007, and M3-023 into M3-016. On 2026-09-23 ADR 0029 added
-M3-024 and M3-025. Thirteen tickets remain open, plus the three promoted P1 tickets.
+M3-024 and M3-025, and M3-014's review found the IR007 lowering bug M3-026 fixes. Fourteen tickets
+remain open, plus the three promoted P1 tickets.
 
 - M3-001 (L) done, PR #78. Product-program encoder + Z3 driver + counterexample decoding.
   Soundness property harness from VERIFICATION-MODEL §7.
@@ -183,6 +184,10 @@ M3-024 and M3-025. Thirteen tickets remain open, plus the three promoted P1 tick
 - M3-025 (M) Every Unknown carries `scope` (`line` or `method`), and a `line` one carries the residual
   claim ADR 0014's first query already proves. Whole-body opaques point at their construct, not the
   method (ADR 0029).
+- M3-026 (S) An `async` method (`Task`, `Task<T>`, or `void`) lowers to one whole-body opaque instead
+  of the ill-typed IR an `async Task<T>` produces today (IR007, found during M3-014). Needs M3-022,
+  so the census measures real opaque reasons before this collapses them into one; must land before
+  M3-013 and before any full verifying run on real code.
 - P1-003, P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
   and arrays are keyed by value. P1-003 comes with them as their shared prerequisite.
 
@@ -198,7 +203,11 @@ Order:
 1. **Measure first, in parallel with M3-002:** M3-014 and M3-024 (independent), then M3-022 on the
    public corpus. This needs no Z3 and answers "is the Unknown rate survivable" before any more
    engine work. If M3-022's verdict is re-scope or stop, everything below waits for a new ADR.
-2. **Soundness:** M3-002; M3-007 → P1-003 → P1-006 → P1-005; M3-010 → M3-009; M3-013.
+   M3-026 comes right after M3-022: running the census first keeps today's real per-reason opaque
+   counts (`Await`, `PropertyReference`, ...) instead of collapsing them into one `async` reason.
+2. **Soundness:** M3-002; M3-007 → P1-003 → P1-006 → P1-005; M3-010 → M3-009; M3-026 → M3-013 (an
+   `async Task<T>` pair must stop being ill-typed IR before a pair can throw its way into M3-013's
+   exit-5 path, and before any full verifying corpus run).
 3. **Blast radius, before any snapshot is taken:** M3-015 (needs M3-014, M3-009, M3-024); M3-016
    (needs M3-014); M3-025 (needs M3-016, M3-024).
 4. M3-003 (needs M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, M3-024, M3-025, P1-005,
