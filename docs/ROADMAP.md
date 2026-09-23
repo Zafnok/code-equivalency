@@ -17,6 +17,7 @@ S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it 
 | M3 Z3 backend and shipping | days 5–7 | M3-001 PR #78 | next: M3-014 and M3-024, in parallel with M3-002 |
 | M4 Precision and first corpus run | after M3 | | order set by M3-022's corpus census |
 | M5 Agent surface (MCP) | after M3-004, parallel with M4 | | M5-001 written |
+| M6 Hosted tier on Container Apps | after M3-004, parallel with M4 and M5 | | M6-001 written |
 
 M0 and M1 landed in one calendar day and M2 in three, still ahead of the five days planned.
 `main` is green in CI on Windows and Ubuntu with 100% line and branch coverage on every `src/`
@@ -161,6 +162,8 @@ tickets.
   drops the PyPI `libz3.so` workaround (ADR 0030).
 - M3-028 (M) Spike: which loader reaches Linux parity on the samples and one corpus pair; writes
   M3-029, the loader itself, and the Windows/Ubuntu SARIF parity job (ADR 0031).
+- M3-029 (M or L, sized by M3-028) The Linux loader M3-028 chooses, plus the parity job. Written
+  by M3-028, not before: its design depends on the spike's result.
 - M3-007 (L) Synthesised inputs: field and array maps are `Ref` parameters, so the final heap is
   observable (ADR 0018). The naming rule ADR 0021 relies on is enforced over `samples/`, and a C#
   parameter named `@this` no longer collides with the receiver input.
@@ -217,9 +220,9 @@ Order:
    exit-5 path, and before any full verifying corpus run).
 3. **Blast radius, before any snapshot is taken:** M3-015 (needs M3-014, M3-009, M3-024); M3-016
    (needs M3-014); M3-025 (needs M3-016, M3-024).
-4. M3-003 (needs M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, M3-024, M3-025, P1-005,
-   P1-006). M3-004 needs M3-003, M3-027 and M3-029.
-5. **Linux parity:** M3-028 (needs M3-024) → M3-029.
+4. **Linux parity, in parallel with 2 and 3:** M3-028 (needs M3-024) → M3-029.
+5. M3-003 (needs M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, M3-024, M3-025, P1-005,
+   P1-006) → M3-004 (also needs M3-027 and M3-029). M3-004 is the gate for M4-007, M5 and M6.
 
 ## M4 — Precision and the first corpus run
 
@@ -251,6 +254,18 @@ needs only a shippable binary, so it can run alongside M4.
   `compare` and `lower_only` tools that return the SARIF log. Needs M3-004. A remote (HTTP)
   transport waits for the hosted tier.
 
+## M6 — Hosted tier on Container Apps
+
+The hosted tier runs the release image as Azure Container Apps Jobs (ADR 0032). M6 proves the
+shape on a real subscription inside the Consumption plan's monthly free grant, before any API,
+keys or quotas exist. It can run alongside M4 and M5.
+
+- M6-001 (M) Bicep deployment of a Container Apps environment and a manually started job that
+  runs `equiv compare` on the samples from an Azure Files share, a $5 budget alert, and a teardown
+  script. Needs M3-004 (which needs M3-029, so the Linux image can load solutions).
+- Later, unwritten until M6-001 lands: queue-triggered executions, blob inputs, an HTTP API with
+  keys and quotas, and `equiv mcp` over Streamable HTTP (ADR 0033).
+
 ## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
 
 - P1-001 (L) Constrained Horn clause encoding solved by Z3 Spacer for non-aligned loops.
@@ -276,6 +291,4 @@ over IR and does not cover them.
 - Boogie backend behind `IVerificationBackend` for invariant-driven unbounded loops.
 - Java frontend (Eclipse JDT sidecar) reusing Core, Verify, Cli unchanged.
 - Web UI: SARIF viewer + CFG split pane (React Flow). Only after users ask.
-- Hosted tier: the same image as Azure Container Apps Jobs, queue-triggered, per-key quotas (ADR
-  0032); `equiv mcp` over Streamable HTTP with auth (ADR 0033).
 - SonarQube: confirm `sonar.sarifReportPaths` ingestion of EQ* rules; GitHub Code Scanning upload step in `action.yml`.

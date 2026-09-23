@@ -31,7 +31,14 @@ the image stays a plain OCI image that runs unchanged on AKS or any Kubernetes.
   hosting. If M3-028 forces ADR 0031's Windows-worker fallback, that worker cannot run here; it
   would need a Windows host outside Container Apps (AKS Windows node pool or a Windows VM pool)
   and a new ADR.
-- The consumption profile caps a container at 4 vCPU / 8 GiB; large solutions need a dedicated
-  workload profile. The first corpus run (M4-007) should record peak memory per pair.
-- The hosted tier is still post-MVP and unticketed; the ROADMAP backlog line changes from AKS to
-  Container Apps Jobs. An MCP endpoint for hosted use is ADR 0033's HTTP follow-up.
+- The Consumption profile caps a replica at 4 vCPU / 8 GiB (2 / 4 GiB in a Consumption-only
+  environment, so use the default workload-profiles environment), images at 8 GB, and runs
+  linux/amd64 only. Large solutions need a Dedicated workload profile, which is billed outside the
+  free grant. The first corpus run (M4-007) should record peak memory per pair.
+- It can be tested for about $0. The Consumption plan's monthly free grant is 180,000 vCPU-seconds
+  and 360,000 GiB-seconds per subscription and covers jobs; jobs pay no request charges. The
+  image comes from public GHCR, not Azure Container Registry, which has no free tier.
+- Infrastructure is Bicep: Azure's first-party IaC, with no state backend to host. Terraform was
+  rejected because it adds a state store for a single-cloud deployment.
+- Milestone M6: M6-001 deploys a manually started job in the free grant. Queue triggers, the API,
+  keys and quotas, and ADR 0033's HTTP transport follow it.
