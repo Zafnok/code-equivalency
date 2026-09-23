@@ -2,7 +2,7 @@
 Status: todo
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: M3-004, M3-022, M4-001, M4-002, M4-003, M4-004, M4-005, M4-006, M4-008
+Depends on: M3-004, M3-022, M4-001, M4-004, M4-008
 (without them the run is mostly `Unknown(opaque)` and says little; M3-022's census may drop
 precision tickets that its histogram shows are not worth their effort, and edits this line)
 

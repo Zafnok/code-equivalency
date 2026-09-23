@@ -231,19 +231,40 @@ M3-022's census reorders this list by pairs unlocked per effort point (S=1, M=2,
 under ADR 0028's bar (5% of matched pairs on the corpus) moves to the post-MVP backlog. Soundness
 dependencies still win. Each precision ticket updates the `business-layer` snapshot.
 
+Ordered by M3-022's census on 2026-09-23 (`docs/runs/2026-09-23-census-verdict.md`): median share
+of matched pairs unlocked over the agent pairs, per effort point. M4-002, M4-003, M4-005 and M4-006
+fell under the 5% bar and moved to the post-MVP backlog.
+
 - M4-001 (L) `foreach`, `using` and constructors lowered through the CFG instead of whole-body
-  opaque. Needs M3-007, M3-010.
-- M4-002 (L) `IrPure` for float, decimal and user-defined operators (ADR 0025). Needs M3-015,
-  M3-016.
-- M4-003 (M) `ref`/`out` call arguments and `lock`. Needs P1-005.
-- M4-004 (L) Fragments on both sides are shared calls (ADR 0024). Needs M3-015, M3-016, P1-005.
-- M4-005 (M) Type tests and downcasts. Needs M3-010.
-- M4-006 (M) `await` as a call. Needs M4-001.
+  opaque. Needs M3-007, M3-010. Census: 19.1% of matched pairs, 4.8 per point.
 - M4-008 (M) The remaining whole-body opaques: arrow-bodied and auto-property accessors, `catch`
-  filters and bare `catch` (ADR 0029). Needs P1-003, M3-010, M3-025.
+  filters and bare `catch` (ADR 0029). Needs P1-003, M3-010, M3-025. Census: 9.3%, 4.7 per point.
+- M4-004 (L) Fragments on both sides are shared calls (ADR 0024). Needs M3-015, M3-016, P1-005.
+  Census: 7.4%, 1.9 per point.
 - M4-007 (S) First full corpus run in the skill's `full` and `seeded` modes. It scores all five ADR
   0028 criteria, including 100% recall on seeded behaviour changes. Findings become tickets, not
   fixes. Needs M3-004, M3-022 and the M4 tickets M3-022 kept.
+
+## P2 — Census findings (M3-022, unordered until scheduled)
+
+Opaque reasons in a pair's top fifteen that no ticket owned, and the census run's other findings.
+P2-010 and P2-011 block a Git Extensions census, so they come before M4-007 runs on that pair.
+
+- P2-001 (M) `new T[n]` and array initialisers lowered (reason `ArrayCreation`).
+- P2-002 (S) `typeof(T)` as a shared synthesised input (reason `TypeOf`).
+- P2-003 (S) `default(T)` lowered (reason `DefaultValue`).
+- P2-004 (M) Event reads and event invocation (reason `EventReference`).
+- P2-005 (M) Event `+=` and `-=` as calls to the accessors (reason `EventAssignment`).
+- P2-006 (M) Assignment through a flow capture with no registered target (reason `FlowCaptureReference`).
+- P2-007 (S) Find and lower the field assignments that stay opaque (reason `FieldReference`).
+- P2-008 (M) `IIsNullOperation` from `?.` and `??` lowered through the null shadow (reason `IsNull`).
+- P2-009 (S) A local written only by an opaque has a defined value (reason `undefined`).
+- P2-010 (S) `IrLowerer.Destination` throws `KeyNotFoundException` on Git Extensions.
+- P2-011 (M) A procedure whose lowering throws is reported and skipped, not the run.
+- P2-012 (S) NuGet warnings NU1701, NU1702 and NU1903 are not project load failures.
+- P2-013 (S) Projects outside the solution's build configuration are not loaded or counted.
+- P2-014 (M) `corpus.ps1` prepares a box: long paths, submodules, isolation from this repo's
+  MSBuild files, reference assemblies and the SDK resolver.
 
 ## M5 — Agent surface (MCP)
 
@@ -286,6 +307,14 @@ array parameters, rests on an assumption no gate can see; M3-001's soundness har
 over IR and does not cover them.
 
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
+
+- M4-002 (L) `IrPure` for float, decimal and user-defined operators (ADR 0025). Census: 2.9% of
+  matched pairs, under the 5% bar. It owns part of the unattributed `Conversion` count, so it
+  returns to M4 if a census after M3-010 puts it over the bar.
+- M4-003 (M) `ref`/`out` call arguments and `lock`. Census: 2.2%, under the bar.
+- M4-005 (M) Type tests and downcasts. Census: 0.3%, under the bar. It also owns part of
+  `Conversion` and returns under the same condition as M4-002.
+- M4-006 (M) `await` as a call. Census: 0%, under the bar (async code in one pair out of three).
 
 - Floating point as IEEE sorts; `decimal`; string theory for common `string` ops.
 - Boogie backend behind `IVerificationBackend` for invariant-driven unbounded loops.
