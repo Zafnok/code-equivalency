@@ -89,7 +89,7 @@ internal sealed class SwitchChains
         // Only a block with nothing of its own and no other way in can be absorbed: its test is the
         // whole block, so moving it into the head changes nothing that any other edge could observe.
         for (BasicBlock next = head.Otherwise.Destination!;
-            next.Operations.IsEmpty && next.Predecessors.Length == 1 && Read(next) is { } step && step.Key.Equals(head.Key);
+            next.Operations.IsEmpty && next.Predecessors.Length == 1 && Read(next) is { } step && step.ScrutineeKey.Equals(head.ScrutineeKey);
             next = step.Otherwise.Destination!)
         {
             tests.Add(step);
@@ -118,5 +118,5 @@ internal sealed class SwitchChains
         ImmutableArray<(object Constant, ITypeSymbol ConstantType, ControlFlowBranch Target)> Cases,
         ControlFlowBranch Default);
 
-    private sealed record Test(object Key, IOperation Scrutinee, object Constant, ITypeSymbol ConstantType, ControlFlowBranch Match, ControlFlowBranch Otherwise);
+    private sealed record Test(object ScrutineeKey, IOperation Scrutinee, object Constant, ITypeSymbol ConstantType, ControlFlowBranch Match, ControlFlowBranch Otherwise);
 }
