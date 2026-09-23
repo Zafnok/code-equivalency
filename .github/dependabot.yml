@@ -1,11 +1,28 @@
 version: 2
 updates:
+  # One grouped PR per ecosystem per week, so the default cap of 5 open PRs can no longer
+  # starve an ecosystem (on 2026-09-18 the first run opened exactly 5 github-actions PRs and
+  # left actions/checkout three majors behind). Majors stay in their own group so a breaking
+  # bump can be reviewed or reverted without holding back the patch/minor batch.
+  # To run a check on demand: repo Insights > Dependency graph > Dependabot > "Check for updates".
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      nuget-minor-patch:
+        update-types: ["minor", "patch"]
+      nuget-major:
+        update-types: ["major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      actions-minor-patch:
+        update-types: ["minor", "patch"]
+      actions-major:
+        update-types: ["major"]
