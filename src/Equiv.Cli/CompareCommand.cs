@@ -32,10 +32,10 @@ internal static class CompareCommand
         Option<string> outOption = new("--out") { DefaultValueFactory = _ => "equiv.sarif" };
         Option<string?> baselineOption = new("--baseline");
         Option<string?> configOption = new("--config");
-        Option<string?> failOnOption = new("--fail-on") { Description = "divergent (the default) or unknown." };
+        Option<string?> failOnOption = new("--fail-on");
         failOnOption.AcceptOnlyFromAmong("divergent", "unknown");
         Option<bool> dryRunOption = new("--dry-run");
-        Option<bool> lowerOnlyOption = new("--lower-only") { Description = "Load, match and lower only: write the lowering census, never verify." };
+        Option<bool> lowerOnlyOption = new("--lower-only");
 
         Command command = new("compare")
         {
