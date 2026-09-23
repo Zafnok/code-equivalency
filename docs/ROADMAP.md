@@ -137,7 +137,7 @@ the three promoted P1 tickets.
 
 - M3-001 (L) done, PR #78. Product-program encoder + Z3 driver + counterexample decoding.
   Soundness property harness from VERIFICATION-MODEL §7.
-- M3-002 (L) Loop ladder rungs 1 to 3: bounded unrolling, lockstep relational
+- M3-002 (L) done, PR #121. Loop ladder rungs 1 to 3: bounded unrolling, lockstep relational
   induction (unbounded Equivalent for aligned loops), k-induction; timeouts, `Unknown`
   reasons, `proofMethod` and `boundedBy` properties.
 - M3-003 (M) End to end on all samples; snapshots checked in; exit codes verified;
