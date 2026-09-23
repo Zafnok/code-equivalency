@@ -133,7 +133,7 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
         }
 
         string path = ProjectPath(diagnostic.Message);
-        string name = Path.GetFileNameWithoutExtension(path);
+        string name = Stem(path);
         LoadDiagnostic attributed = path.Length == 0 || path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
             ? diagnostic with { Project = name }
             : diagnostic with { Kind = LoadDiagnosticKind.UnsupportedProject, Project = name };
@@ -149,7 +149,13 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
     /// <summary>The first quoted <c>*.??proj</c> path in a workspace message, or empty.</summary>
     internal static string ProjectPath(string message) => ProjectFile.Match(message) is { Success: true } match ? match.Groups["path"].Value : string.Empty;
 
-    private static string FileStem(Project project) => Path.GetFileNameWithoutExtension(project.FilePath) is { Length: > 0 } stem ? stem : project.Name;
+    private static string FileStem(Project project) => Stem(project.FilePath ?? string.Empty) is { Length: > 0 } stem ? stem : project.Name;
+
+    /// <summary>
+    /// A project file's name without its extension. Both separators count, because MSBuild messages quote Windows
+    /// paths and <see cref="Path"/> only splits on the running platform's separator.
+    /// </summary>
+    internal static string Stem(string path) => Path.GetFileNameWithoutExtension(path[(path.LastIndexOfAny(['/', '\\']) + 1)..]);
 
     private static bool IsCSharp(Project project) => string.Equals(project.Language, LanguageNames.CSharp, StringComparison.Ordinal);
 

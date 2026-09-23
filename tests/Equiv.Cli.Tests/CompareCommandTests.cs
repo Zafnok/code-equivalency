@@ -18,11 +18,11 @@ namespace Equiv.Cli.Tests;
 
 /// <summary>
 /// <see cref="CompareCommand.Run"/> against fakes: routing (ARCHITECTURE.md's router bullet),
-/// dry-run, the pipeline that turns a <see cref="MatchResult"/> into a SARIF log, and the exit
-/// codes VERIFICATION-MODEL.md section 6 documents. Every test in this class either avoids the
-/// console entirely or redirects it and restores it in a `finally`; xUnit runs the [Fact]s in one
-/// class sequentially, so the ones that do redirect it (dry-run, config warnings) never race
-/// each other. The "Console" collection also serializes this class against
+/// dry-run, <c>--lower-only</c>, the pipeline that turns a <see cref="MatchResult"/> into a SARIF log, the
+/// run properties (lowering census, analysed line counts; ticket M3-014), and the exit codes
+/// VERIFICATION-MODEL.md section 6 documents. A test that asserts on console output redirects it and
+/// restores it in a `finally`; xUnit runs the [Fact]s in one class sequentially, so the ones that do
+/// redirect it never race each other. The "Console" collection also serializes this class against
 /// <see cref="ProgramTests"/>, which redirects the console too.
 /// </summary>
 [Collection("Console")]
@@ -52,14 +52,25 @@ public sealed class CompareCommandTests
         Assert.Contains(parseResult.Errors, e => e.Message.Contains("--modern", StringComparison.Ordinal));
     }
 
+    /// <summary><c>--fail-on</c> has no parsed default, so <c>--lower-only</c> can tell an explicit one apart; unset means divergent.</summary>
     [Fact]
-    public void Create_DefaultsOutAndFailOn()
+    public void Create_DefaultsOutAndLeavesFailOnAndLowerOnlyUnset()
     {
         ParseResult parseResult = CompareCommand.Create([], new FakeBackend(NoVerdicts)).Parse(["--legacy", "a.sln", "--modern", "b.sln"]);
 
         Assert.Empty(parseResult.Errors);
         Assert.Equal("equiv.sarif", parseResult.GetValue<string>("--out"));
-        Assert.Equal("divergent", parseResult.GetValue<string>("--fail-on"));
+        Assert.Null(parseResult.GetValue<string?>("--fail-on"));
+        Assert.False(parseResult.GetValue<bool>("--lower-only"));
+    }
+
+    [Fact]
+    public void Create_ParsesLowerOnly()
+    {
+        ParseResult parseResult = CompareCommand.Create([], new FakeBackend(NoVerdicts)).Parse(["--legacy", "a.sln", "--modern", "b.sln", "--lower-only"]);
+
+        Assert.Empty(parseResult.Errors);
+        Assert.True(parseResult.GetValue<bool>("--lower-only"));
     }
 
     [Theory]
@@ -120,7 +131,7 @@ public sealed class CompareCommandTests
             Assert.Equal(ExitCodes.Success, exitCode);
         });
 
-        Assert.Equal($"route: both legacy={legacy.Path} modern={modern.Path} out=out.sarif{Environment.NewLine}", output, StringComparer.Ordinal);
+        Assert.StartsWith($"route: both legacy={legacy.Path} modern={modern.Path} out=out.sarif{Environment.NewLine}", output, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -183,23 +194,135 @@ public sealed class CompareCommandTests
         Assert.Equal(0, frontend.AnalyzeCallCount);
     }
 
+    /// <summary>Ticket M3-014 acceptance criterion 10: a dry run loads both sides to count their lines, then stops before verifying or writing.</summary>
     [Fact]
-    public void Compare_DryRunPrintsRouteAndExits0()
+    public void Compare_DryRunPrintsRouteAndLineCountsAndExits0()
     {
         using TempFile legacy = new();
         using TempFile modern = new();
-        FakeFrontend frontend = new("csharp", _ => true);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), lines: new AnalysedLines(1200, 1300));
+        FakeBackend backend = new(NoVerdicts);
+        InMemoryReportSink sink = new();
 
         string output = CaptureStdOut(() =>
         {
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: true),
-                [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink());
+                [frontend], backend, sink);
             Assert.Equal(ExitCodes.Success, exitCode);
         });
 
-        Assert.Equal($"route: csharp legacy={legacy.Path} modern={modern.Path} out=equiv.sarif{Environment.NewLine}", output, StringComparer.Ordinal);
+        Assert.Equal(
+            $"route: csharp legacy={legacy.Path} modern={modern.Path} out=equiv.sarif{Environment.NewLine}analysed lines of code: legacy=1200 modern=1300{Environment.NewLine}",
+            output,
+            StringComparer.Ordinal);
+        Assert.Equal(1, frontend.AnalyzeCallCount);
+        Assert.Empty(backend.Calls);
+        Assert.Null(sink.Log);
+    }
+
+    /// <summary>Ticket M3-014 acceptance criteria 7, 8 and 11: two counts, printed and in the run properties, never summed, even with no verdicts.</summary>
+    [Fact]
+    public void Compare_ReportsEachSidesLineCountIndependentlyEvenWithNoResults()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, lines: new AnalysedLines(49_000, 52_000));
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.UsageError;
+
+        string output = CaptureStdOut(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [frontend], new FakeBackend(NoVerdicts), sink));
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Equal($"analysed lines of code: legacy=49000 modern=52000{Environment.NewLine}", output, StringComparer.Ordinal);
+        Assert.DoesNotContain("101000", output, StringComparison.Ordinal);
+        Run run = sink.Log!.Runs[0];
+        Assert.Empty(run.Results);
+        Assert.True(run.TryGetSerializedPropertyValue("analysedLinesOfCode", out string? counts));
+        Assert.Equal("""{"legacy":49000,"modern":52000}""", counts);
+        Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? _));
+    }
+
+    [Fact]
+    public void LowerOnlyNeverCallsTheBackend()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity added = new("T::Added()");
+        ProcedureIdentity removed = new("T::Removed()");
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [added], [removed], []), lines: new AnalysedLines(10, 20));
+        FakeBackend backend = new(NoVerdicts);
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.UsageError;
+
+        string output = CaptureStdOut(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: true),
+            [frontend], backend, sink));
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Empty(backend.Calls);
+        Assert.Equal($"analysed lines of code: legacy=10 modern=20{Environment.NewLine}", output, StringComparer.Ordinal);
+        Run run = sink.Log!.Runs[0];
+        Assert.Equal(["EQ004", "EQ005"], run.Results.Select(static r => r.RuleId), StringComparer.Ordinal);
+        Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
+        Assert.Equal(
+            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":1,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{}}""",
+            census);
+        Assert.True(run.TryGetSerializedPropertyValue("analysedLinesOfCode", out string? _));
+    }
+
+    [Fact]
+    public void LowerOnlyExits0EvenWhenARegularRunWouldFail()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Divergent(Counterexample()) });
+
+        CompareOptions regular = new(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false);
+        Assert.Equal(ExitCodes.Divergent, CompareCommand.Run(regular, [frontend], backend, new InMemoryReportSink()));
+        Assert.Equal(ExitCodes.Success, CompareCommand.Run(regular with { LowerOnly = true }, [frontend], backend, new InMemoryReportSink()));
+    }
+
+    [Fact]
+    public void LowerOnlyStillExits4WhenLoadingFails()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, throwOnAnalyze: new FrontendLoadException(legacy.Path, "workspace failed to open"));
+        int exitCode = ExitCodes.Success;
+
+        CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: true),
+            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+
+        Assert.Equal(ExitCodes.LoadFailure, exitCode);
+    }
+
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(false, "divergent")]
+    [InlineData(false, "unknown")]
+    [InlineData(true, "unknown")]
+    public void LowerOnlyRejectsBaselineAndFailOn(bool withBaseline, string? failOn)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using TempFile baseline = new();
+        FakeFrontend frontend = new("csharp", _ => true);
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.Success;
+
+        string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", withBaseline ? baseline.Path : null, ConfigPath: null, failOn, DryRun: false, LowerOnly: true),
+            [frontend], new FakeBackend(NoVerdicts), sink));
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Equal($"error: --lower-only cannot be combined with --baseline or --fail-on{Environment.NewLine}", errorOutput, StringComparer.Ordinal);
         Assert.Equal(0, frontend.AnalyzeCallCount);
+        Assert.Null(sink.Log);
     }
 
     [Fact]
@@ -216,7 +339,7 @@ public sealed class CompareCommandTests
             [added],
             [removed],
             []);
-        FakeFrontend frontend = new("csharp", _ => true, matchResult);
+        FakeFrontend frontend = new("csharp", _ => true, matchResult, lines: new AnalysedLines(120, 135));
         FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
         {
             [pairA.Value] = new Equivalent(ProofMethod.Bounded),
@@ -626,6 +749,9 @@ public sealed class CompareCommandTests
                 (FailureLevel.Error, "a modern project the workspace did not name was skipped: project file could not be evaluated"),
             ],
             invocation.ToolExecutionNotifications.Select(static n => (n.Level, n.Message.Text)));
+        Assert.Equal(
+            """{"legacy":1,"modern":2}""",
+            Newtonsoft.Json.JsonConvert.SerializeObject(run.GetProperty<Dictionary<string, object>>("loweringCensus")["projectsSkipped"]));
         Assert.Contains("error: legacy project 'Lib'", errorOutput, StringComparison.Ordinal);
         Assert.Contains("warning: modern project 'Native'", errorOutput, StringComparison.Ordinal);
     }
@@ -671,6 +797,26 @@ public sealed class CompareCommandTests
             [new FakeFrontend("csharp", _ => true, matchResult)], backend, new InMemoryReportSink()));
 
         Assert.Equal(ExitCodes.LoadFailure, exitCode);
+    }
+
+    [Fact]
+    public void LowerOnlyExits4WhenACSharpProjectWasSkipped()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        MatchResult matchResult = new MatchResult([Pair(PairIdentity)], [], [], []) with
+        {
+            LegacySkipped = [new UnverifiedProject("Lib", "Lib", IsCSharp: true, ["CS0246: missing"], [])],
+        };
+        FakeBackend backend = new(NoVerdicts);
+        int exitCode = -1;
+
+        CaptureStdErr(() => CaptureStdOut(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: true),
+            [new FakeFrontend("csharp", _ => true, matchResult)], backend, new InMemoryReportSink())));
+
+        Assert.Equal(ExitCodes.LoadFailure, exitCode);
+        Assert.Empty(backend.Calls);
     }
 
     [Fact]

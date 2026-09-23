@@ -15,6 +15,7 @@ namespace Equiv.Tests.Integration;
 /// Added/Removed identity carries a <c>physicalLocation</c>.
 /// </summary>
 [Trait("Category", "Integration")]
+[Collection("Console")]
 public sealed class ComparePipelineTests
 {
     private static string SamplesRoot =>

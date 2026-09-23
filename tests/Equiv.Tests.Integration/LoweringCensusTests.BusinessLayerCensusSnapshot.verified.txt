@@ -1,0 +1,72 @@
+﻿{
+  procedures: {
+    legacy: 28,
+    modern: 28
+  },
+  matchedPairs: 28,
+  pairsWithoutOpaque: 2,
+  pairsWholeBodyOpaque: 18,
+  pairsCongruent: 0,
+  projectsSkipped: {
+    legacy: 0,
+    modern: 0
+  },
+  opaqueByReason: {
+    Await: {
+      legacy: 1,
+      modern: 1
+    },
+    Binary: {
+      legacy: 1,
+      modern: 1
+    },
+    Conversion: {
+      legacy: 3,
+      modern: 3
+    },
+    DelegateCreation: {
+      legacy: 1,
+      modern: 1
+    },
+    InterpolatedString: {
+      legacy: 1,
+      modern: 1
+    },
+    PropertyReference: {
+      legacy: 4,
+      modern: 4
+    },
+    foreach-enumerator: {
+      legacy: 2,
+      modern: 2
+    },
+    lock: {
+      legacy: 1,
+      modern: 1
+    },
+    missing-return: {
+      legacy: 1,
+      modern: 1
+    },
+    no-body: {
+      legacy: 14,
+      modern: 14
+    },
+    ref-argument: {
+      legacy: 1,
+      modern: 1
+    },
+    switch-pattern: {
+      legacy: 1,
+      modern: 1
+    },
+    undefined: {
+      legacy: 1,
+      modern: 1
+    },
+    using: {
+      legacy: 1,
+      modern: 1
+    }
+  }
+}

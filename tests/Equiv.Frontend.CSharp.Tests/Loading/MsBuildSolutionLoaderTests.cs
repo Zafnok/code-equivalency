@@ -262,6 +262,14 @@ public sealed class MsBuildSolutionLoaderTests
     }
 
     [Theory]
+    [InlineData(@"C:\src\A\A.csproj", "A")]
+    [InlineData("/src/A/A.csproj", "A")]
+    [InlineData("A.csproj", "A")]
+    [InlineData("", "")]
+    public void Stem_SplitsOnEitherSeparator(string path, string stem) =>
+        Assert.Equal(stem, MsBuildSolutionLoader.Stem(path));
+
+    [Theory]
     [InlineData(@"Cannot open project 'C:\a b\N.vcxproj' because ...", @"C:\a b\N.vcxproj")]
     [InlineData("processing the file 'A.csproj' with message: 'x'", "A.csproj")]
     [InlineData("no project here", "")]

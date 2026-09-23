@@ -163,7 +163,27 @@
           baselineState: new
         }
       ],
-      columnKind: utf16CodeUnits
+      columnKind: utf16CodeUnits,
+      properties: {
+        loweringCensus: {
+          procedures: {
+            legacy: 2,
+            modern: 2
+          },
+          matchedPairs: 1,
+          pairsWithoutOpaque: 1,
+          pairsWholeBodyOpaque: 0,
+          pairsCongruent: 0,
+          projectsSkipped: {
+            legacy: 0,
+            modern: 0
+          }
+        },
+        analysedLinesOfCode: {
+          legacy: 31,
+          modern: 24
+        }
+      }
     }
   ]
 }

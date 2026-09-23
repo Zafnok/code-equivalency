@@ -26,7 +26,7 @@ public sealed class EndpointDiscoverySampleTests
         string legacy = Directory.GetFiles(Path.Combine(SamplesRoot, "webapi-basic", "legacy"), "*.sln").Single();
         string modern = Directory.GetFiles(Path.Combine(SamplesRoot, "webapi-basic", "modern"), "*.slnx").Single();
 
-        MatchResult result = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, TestContext.Current.CancellationToken);
+        MatchResult result = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, TestContext.Current.CancellationToken).Match;
 
         ProcedurePair pair = Assert.Single(result.Pairs);
         Assert.Equal("GET /api/orders/{id}", pair.Old.Value);
@@ -44,7 +44,7 @@ public sealed class EndpointDiscoverySampleTests
         string legacy = Directory.GetFiles(Path.Combine(SamplesRoot, "webapi-basic", "legacy"), "*.sln").Single();
         string modern = Directory.GetFiles(Path.Combine(SamplesRoot, "webapi-basic", "modern"), "*.slnx").Single();
 
-        MatchResult result = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, TestContext.Current.CancellationToken);
+        MatchResult result = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, TestContext.Current.CancellationToken).Match;
         ProcedurePair pair = Assert.Single(result.Pairs);
 
         string dump = $"""

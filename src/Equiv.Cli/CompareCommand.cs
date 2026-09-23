@@ -32,13 +32,14 @@ internal static class CompareCommand
         Option<string> outOption = new("--out") { DefaultValueFactory = _ => "equiv.sarif" };
         Option<string?> baselineOption = new("--baseline");
         Option<string?> configOption = new("--config");
-        Option<string> failOnOption = new("--fail-on") { DefaultValueFactory = _ => "divergent" };
+        Option<string?> failOnOption = new("--fail-on");
         failOnOption.AcceptOnlyFromAmong("divergent", "unknown");
         Option<bool> dryRunOption = new("--dry-run");
+        Option<bool> lowerOnlyOption = new("--lower-only");
 
         Command command = new("compare")
         {
-            legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption,
+            legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption,
         };
 
         command.SetAction(parseResult => Run(
@@ -48,8 +49,9 @@ internal static class CompareCommand
                 parseResult.GetValue(outOption)!,
                 parseResult.GetValue(baselineOption),
                 parseResult.GetValue(configOption),
-                parseResult.GetValue(failOnOption)!,
-                parseResult.GetValue(dryRunOption)),
+                parseResult.GetValue(failOnOption),
+                parseResult.GetValue(dryRunOption),
+                parseResult.GetValue(lowerOnlyOption)),
             frontends,
             backend,
             new FileReportSink(parseResult.GetValue(outOption)!)));
@@ -74,6 +76,12 @@ internal static class CompareCommand
             return ExitCodes.UsageError;
         }
 
+        if (options.LowerOnly && (options.BaselinePath is not null || options.FailOn is not null))
+        {
+            Console.Error.WriteLine("error: --lower-only cannot be combined with --baseline or --fail-on");
+            return ExitCodes.UsageError;
+        }
+
         ILanguageFrontend? frontend = FrontendRouter.Route(frontends, options.LegacyPath, options.ModernPath);
         if (frontend is null)
         {
@@ -84,7 +92,6 @@ internal static class CompareCommand
         if (options.DryRun)
         {
             Console.WriteLine($"route: {frontend.Language} legacy={options.LegacyPath} modern={options.ModernPath} out={options.OutPath}");
-            return ExitCodes.Success;
         }
 
         if (!TryLoadInputs(options.BaselinePath, options.ConfigPath, out EquivConfig config, out SarifLog? baseline, out int inputErrorExitCode))
@@ -92,10 +99,10 @@ internal static class CompareCommand
             return inputErrorExitCode;
         }
 
-        MatchResult matchResult;
+        FrontendAnalysis analysis;
         try
         {
-            matchResult = frontend.Analyze(options.LegacyPath, options.ModernPath, config, CancellationToken.None);
+            analysis = frontend.Analyze(options.LegacyPath, options.ModernPath, config, CancellationToken.None);
         }
         catch (FrontendLoadException exception)
         {
@@ -103,19 +110,58 @@ internal static class CompareCommand
             return ExitCodes.LoadFailure;
         }
 
-        List<VerificationResult> results = BuildResults(matchResult, backend, config);
+        // Two numbers, never a total: the licence measures each codebase on its own (ticket M3-014).
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"analysed lines of code: legacy={analysis.Lines.Legacy} modern={analysis.Lines.Modern}"));
+        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, sink);
+    }
+
+    /// <summary>
+    /// The lowering census and the analysed line counts go into the run's property bag on every run (ADR 0027;
+    /// ticket M3-014), and every skipped project is a notification (ADR 0029). <c>--lower-only</c> stops there: the
+    /// Added and Removed results, no backend call, exit 0 unless a C# project was skipped.
+    /// </summary>
+    private static int Report(
+        CompareOptions options, FrontendAnalysis analysis, EquivConfig config, IVerificationBackend backend, SarifLog? baseline, IReportSink sink)
+    {
+        MatchResult matchResult = analysis.Match;
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered = Lowered(matchResult);
+        LoweringCensus census = LoweringCensus.Compute(
+            [.. lowered.Select(static p => (p.Old, p.New))],
+            removed: matchResult.Removed.Length,
+            added: matchResult.Added.Length,
+            projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length));
+
+        List<VerificationResult> results = options.LowerOnly ? [] : Verified(lowered, backend, config);
+        results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));
+        results.AddRange(matchResult.Removed.Select(static identity => new VerificationResult(identity, new Removed())));
+
         (List<Notification> notifications, List<ProcedureIdentity> unverified) = SkippedProjects(matchResult);
-        SarifLog log = SarifReportWriter.Write(results, baseline, notifications, unverified);
+        SarifLog log = SarifReportWriter.Write(
+            results,
+            baseline,
+            new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["loweringCensus"] = census.ToProperty(),
+                ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
+            },
+            notifications,
+            unverified);
         sink.Write(log);
 
         bool incomplete = notifications.Exists(static n => n.Level == FailureLevel.Error);
-        return DecideExitCode(results, log, options.FailOn, incomplete);
+        return (incomplete, options.LowerOnly) switch
+        {
+            (true, _) => ExitCodes.LoadFailure,
+            (false, true) => ExitCodes.Success,
+            _ => DecideExitCode(results, log, options.FailOn),
+        };
     }
 
     /// <summary>
     /// ADR 0029 decision 1: one tool-execution notification per project the frontend skipped, on stderr as well as in
     /// the SARIF, and every procedure that is unverified because of it. A skipped C# project is an <c>error</c>, which
-    /// makes the run incomplete; a project in another language is a <c>warning</c>.
+    /// makes the run incomplete and outranks any verdict (<see cref="ExitCodes"/>); a project in another language is a
+    /// <c>warning</c>.
     /// </summary>
     private static (List<Notification> Notifications, List<ProcedureIdentity> Unverified) SkippedProjects(MatchResult matchResult)
     {
@@ -208,33 +254,23 @@ internal static class CompareCommand
     }
 
     /// <summary>
-    /// Every matched pair goes to <paramref name="backend"/> with both lowered bodies. A frontend must
-    /// attach them (ticket M2-003); a pair without one is a frontend bug, not an input problem. So is a
-    /// backend failure (M3-001 fails loudly on an encoder bug); it is rethrown naming the pair.
+    /// Both lowered bodies of every matched pair. A frontend must attach them (ticket M2-003); a pair without
+    /// one is a frontend bug, not an input problem.
     /// </summary>
-    private static List<VerificationResult> BuildResults(MatchResult matchResult, IVerificationBackend backend, EquivConfig config)
+    private static List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> Lowered(MatchResult matchResult) =>
+        [.. matchResult.Pairs.Select(static pair => (
+            pair,
+            pair.OldBody ?? throw new InvalidOperationException($"The frontend matched {pair.Old.Value} without lowering its legacy body."),
+            pair.NewBody ?? throw new InvalidOperationException($"The frontend matched {pair.New.Value} without lowering its modern body.")))];
+
+    /// <summary>
+    /// Every matched pair goes to <paramref name="backend"/> with both lowered bodies. A backend failure is a bug
+    /// too (M3-001 fails loudly on an encoder bug); it is rethrown naming the pair.
+    /// </summary>
+    private static List<VerificationResult> Verified(List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config)
     {
         VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames);
-
-        List<VerificationResult> results = new(matchResult.Pairs.Length + matchResult.Added.Length + matchResult.Removed.Length);
-        foreach (ProcedurePair pair in matchResult.Pairs)
-        {
-            IrProcedure old = pair.OldBody ?? throw new InvalidOperationException($"The frontend matched {pair.Old.Value} without lowering its legacy body.");
-            IrProcedure @new = pair.NewBody ?? throw new InvalidOperationException($"The frontend matched {pair.New.Value} without lowering its modern body.");
-            results.Add(new VerificationResult(pair.New, Verify(backend, pair, old, @new, options)));
-        }
-
-        foreach (ProcedureIdentity identity in matchResult.Added)
-        {
-            results.Add(new VerificationResult(identity, new Added()));
-        }
-
-        foreach (ProcedureIdentity identity in matchResult.Removed)
-        {
-            results.Add(new VerificationResult(identity, new Removed()));
-        }
-
-        return results;
+        return [.. lowered.Select(p => new VerificationResult(p.Pair.New, Verify(backend, p.Pair, p.Old, p.New, options)))];
     }
 
     private static Verdict Verify(IVerificationBackend backend, ProcedurePair pair, IrProcedure old, IrProcedure @new, VerificationOptions options)
@@ -264,17 +300,8 @@ internal static class CompareCommand
             .Where(static o => string.Equals(o.Reason, Unknown.UnboundOpaqueReason, StringComparison.Ordinal))
             .Select(o => string.Create(CultureInfo.InvariantCulture, $"{side}: unbound at {o.Span.Path} {o.Span.StartLine}:{o.Span.StartColumn}"));
 
-    /// <summary>
-    /// The exit code, by <see cref="ExitCodes"/>' precedence: a tool fault that left the result set
-    /// <paramref name="incomplete"/> (a skipped C# project) is <see cref="ExitCodes.LoadFailure"/>, ahead of any verdict.
-    /// </summary>
-    private static int DecideExitCode(List<VerificationResult> results, SarifLog log, string failOn, bool incomplete)
+    private static int DecideExitCode(List<VerificationResult> results, SarifLog log, string? failOn)
     {
-        if (incomplete)
-        {
-            return ExitCodes.LoadFailure;
-        }
-
         IList<Result> sarifResults = log.Runs[0].Results;
 
         bool anyNewDivergent = false;

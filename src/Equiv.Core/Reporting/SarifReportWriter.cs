@@ -25,6 +25,11 @@ public static class SarifReportWriter
 
     /// <param name="results">One SARIF result each, in order, ahead of any baseline carry-overs.</param>
     /// <param name="baseline">The previous log <c>baselineState</c> is computed against.</param>
+    /// <param name="runProperties">
+    /// Go into the run's property bag in the order given, each value serialised as JSON (ADR 0006: extra data travels
+    /// in SARIF <c>properties</c>, never in a parallel schema). The CLI puts the lowering census and the analysed line
+    /// counts there (ticket M3-014).
+    /// </param>
     /// <param name="notifications">
     /// Tool-execution notifications, such as a skipped project (ADR 0029). Given any, the run has one invocation,
     /// and <c>executionSuccessful</c> is false when one of them is an <c>error</c>.
@@ -36,6 +41,7 @@ public static class SarifReportWriter
     public static SarifLog Write(
         IReadOnlyList<VerificationResult> results,
         SarifLog? baseline = null,
+        IReadOnlyDictionary<string, object>? runProperties = null,
         IReadOnlyList<Notification>? notifications = null,
         IReadOnlyList<ProcedureIdentity>? unverified = null)
     {
@@ -58,6 +64,11 @@ public static class SarifReportWriter
             Tool = new Tool { Driver = Driver() },
             Results = sarifResults,
         };
+
+        foreach ((string name, object value) in runProperties ?? new Dictionary<string, object>(StringComparer.Ordinal))
+        {
+            run.SetProperty(name, value);
+        }
 
         if (notifications.Count > 0)
         {

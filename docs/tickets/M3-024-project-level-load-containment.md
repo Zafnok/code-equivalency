@@ -98,7 +98,9 @@ Dependencies not yet landed, and what that meant here:
   carry-over) for M3-013 to reuse. There is no exit 5 yet: the precedence test is
   `ExitCodePrecedenceIsFourThenVerdicts` (4 over 1 and 2), and M3-013 extends it with 5. `ExitCodes` documents
   the full order.
-- M3-014 (census) is `todo`: criterion 6 is left to M3-014, as the criterion says.
+- M3-014 (census) merged while this PR was open, so criterion 6 is done here after all:
+  `loweringCensus.projectsSkipped` counts every skipped project per side, in any language. `--lower-only` also
+  exits 4 when a C# project was skipped, as ARCHITECTURE.md already said.
 - M3-015 (congruence) is `todo`: `AnUnboundMethodIsNeverCongruent` is left to M3-015.
 - M3-016 (causes) is `todo`: the unbound procedure carries one `IrOpaque` per diagnostic span, and the Unknown's
   detail lists them, so M3-016 can turn them into causes.
@@ -129,3 +131,6 @@ README's exit-code row for 4 was updated too (it said "failed to load a solution
 
 Observed with the real build host (PartialLoadTests): a `.vcxproj` entry in a `.sln` arrives as a
 `WorkspaceDiagnosticKind.Failure` event quoting the project path, and the loader classifies it as a non-C# skip.
+
+The first CI run failed on Linux: `Path.GetFileNameWithoutExtension` does not split on `\` there, and MSBuild
+messages quote Windows paths. `MsBuildSolutionLoader.Stem` splits on both separators.
