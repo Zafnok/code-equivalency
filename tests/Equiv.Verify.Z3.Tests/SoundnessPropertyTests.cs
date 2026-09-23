@@ -65,17 +65,29 @@ public sealed class SoundnessPropertyTests
             print: static m => $"{m!.Description}\n{IrText.Dump(m.Original)}\n{IrText.Dump(m.Mutant)}");
     }
 
+    /// <summary>
+    /// Every mutation kind is generated on acyclic procedures. It draws until every kind has been seen, up to
+    /// <see cref="MaxMutationDraws"/> draws. Over 20,000 measured draws the rarest kinds, drop map and change map,
+    /// were each about 0.8% of draws, so a correct generator misses one within the bound with probability about
+    /// 2e-14. A fixed 600-draw sample missed one about 1.5% of the time.
+    /// </summary>
     [Fact]
     public void EveryMutationKindIsGeneratedOnAcyclicProcedures()
     {
-        IrMutant?[] sample = IrGen.AcyclicProcedure.SelectMany(IrGen.Mutation).Array[600].Single();
+        HashSet<string> expected = new(["swap parameters", "swap operands", "flip branch", "change constant", "insert opaque", "drop map", "change map", "duplicate call"], StringComparer.Ordinal);
+        HashSet<string> kinds = new(StringComparer.Ordinal);
+        Gen<IrMutant?> mutants = IrGen.AcyclicProcedure.SelectMany(IrGen.Mutation);
 
-        HashSet<string> kinds = new(
-            sample.OfType<IrMutant>().Select(static m => string.Join(' ', m.Description.Split(' ').Take(2))),
-            StringComparer.Ordinal);
+        for (int draw = 0; draw < MaxMutationDraws && !kinds.IsSupersetOf(expected); draw++)
+        {
+            if (mutants.Single() is { } mutant)
+            {
+                kinds.Add(string.Join(' ', mutant.Description.Split(' ').Take(2)));
+            }
+        }
 
-        Assert.Superset(
-            new HashSet<string>(["swap parameters", "swap operands", "flip branch", "change constant", "insert opaque", "drop map", "change map", "duplicate call"], StringComparer.Ordinal),
-            kinds);
+        Assert.Superset(expected, kinds);
     }
+
+    private const int MaxMutationDraws = 4000;
 }
