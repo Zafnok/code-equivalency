@@ -367,7 +367,7 @@ internal static class ProductEncoder
             List<Expr> blockEvents = [];
             foreach (IrInstruction instruction in block.Instructions)
             {
-                Encode(instruction, predecessors, reached, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)), blockEvents);
+                EncodeInstruction(instruction, predecessors, reached, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)), blockEvents);
             }
 
             events.Add((reached, blockEvents));
@@ -382,7 +382,7 @@ internal static class ProductEncoder
                 .Reverse()
                 .Aggregate(value(predecessors[^1]), (rest, p) => context.MkITE(p.Taken, value(p), rest));
 
-        private void Encode(IrInstruction instruction, List<(IrBlockId From, BoolExpr Taken)> predecessors, BoolExpr reached, BitVecExpr position, List<Expr> blockEvents)
+        private void EncodeInstruction(IrInstruction instruction, List<(IrBlockId From, BoolExpr Taken)> predecessors, BoolExpr reached, BitVecExpr position, List<Expr> blockEvents)
         {
             switch (instruction)
             {

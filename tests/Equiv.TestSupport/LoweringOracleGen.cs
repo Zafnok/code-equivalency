@@ -37,7 +37,7 @@ public static class LoweringOracleGen
             {
                 StringBuilder text = new();
                 int loops = 0;
-                Render(body, text, 1, ref loops);
+                RenderBlock(body, text, 1, ref loops);
                 text.Append("    return ").Append(result.Render()).Append(";\n");
                 return new OracleMethod(type, text.ToString());
             }));
@@ -55,13 +55,13 @@ public static class LoweringOracleGen
     private static Gen<Stmt> StmtGen(Type returnType, int depth)
     {
         Gen<Stmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>
-            ExprGen(type, Depth).Select(value => (Stmt)new Assign(Local(type), value)));
+            ExprGen(type, Depth).Select(value => (Stmt)new Assign(LocalName(type), value)));
         Gen<Stmt> exit = ExprGen(returnType, Depth).Select(static value => (Stmt)new Return(value));
         Gen<Stmt> update = Gen.OneOfConst(typeof(int), typeof(long)).SelectMany(static type =>
             Gen.Select(Gen.OneOfConst(Arithmetic), Gen.Bool, ExprGen(type == typeof(int) ? typeof(int) : typeof(long), Depth - 1), (op, isChecked, value) =>
-                (Stmt)new Compound(Local(type), op, ShiftCount(op, value, type), isChecked)));
+                (Stmt)new Compound(LocalName(type), op, ShiftCount(op, value, type), isChecked)));
         Gen<Stmt> step = Gen.Select(Gen.OneOfConst(typeof(int), typeof(long)), Gen.OneOfConst("++", "--"), Gen.Bool, static (type, op, isChecked) =>
-            (Stmt)new Step(Local(type), op, isChecked));
+            (Stmt)new Step(LocalName(type), op, isChecked));
         if (depth == 0)
         {
             return Gen.Frequency((4, assign), (2, update), (1, step), (1, exit));
@@ -78,7 +78,7 @@ public static class LoweringOracleGen
     private static Expr ShiftCount(string op, Expr value, Type type) =>
         op is "<<" or ">>" && type == typeof(long) ? new Conversion(typeof(int), value, IsChecked: false) : value;
 
-    private static string Local(Type type) => type switch
+    private static string LocalName(Type type) => type switch
     {
         _ when type == typeof(int) => "x",
         _ when type == typeof(long) => "y",
@@ -137,7 +137,7 @@ public static class LoweringOracleGen
         return Gen.Frequency((2, leaf), (3, relation), (2, logic), (1, not), (2, nullTest));
     }
 
-    private static void Render(ImmutableArray<Stmt> block, StringBuilder text, int indent, ref int loops)
+    private static void RenderBlock(ImmutableArray<Stmt> block, StringBuilder text, int indent, ref int loops)
     {
         string pad = new(' ', indent * 4);
         foreach (Stmt statement in block)
@@ -160,9 +160,9 @@ public static class LoweringOracleGen
                     return; // anything after it would be unreachable
                 case If branch:
                     text.Append(pad).Append("if (").Append(branch.Condition.Render()).Append(")\n").Append(pad).Append("{\n");
-                    Render(branch.Then, text, indent + 1, ref loops);
+                    RenderBlock(branch.Then, text, indent + 1, ref loops);
                     text.Append(pad).Append("}\n").Append(pad).Append("else\n").Append(pad).Append("{\n");
-                    Render(branch.Else, text, indent + 1, ref loops);
+                    RenderBlock(branch.Else, text, indent + 1, ref loops);
                     text.Append(pad).Append("}\n");
                     break;
                 case While loop:
@@ -171,7 +171,7 @@ public static class LoweringOracleGen
                     text.Append(pad).Append("int ").Append(counter).Append(" = 0;\n")
                         .Append(pad).Append("while ((").Append(loop.Condition.Render()).Append(") && ").Append(counter)
                         .Append(" < ").Append(loop.Bound.ToString(CultureInfo.InvariantCulture)).Append(")\n").Append(pad).Append("{\n");
-                    Render(loop.Body, text, indent + 1, ref loops);
+                    RenderBlock(loop.Body, text, indent + 1, ref loops);
                     text.Append(pad).Append("    ").Append(counter).Append("++;\n").Append(pad).Append("}\n");
                     break;
             }
