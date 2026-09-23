@@ -7,15 +7,15 @@ a milestone list their own dependencies. Ticket files: `docs/tickets/M<n>-<nnn>-
 Effort labels are for a Sonnet/Opus-class agent driving, with a human reviewing PRs:
 S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it is.
 
-## Status (2026-09-21)
+## Status (2026-09-23)
 
 | Milestone | Planned | Actual | State |
 |---|---|---|---|
 | M0 Skeleton and gates | day 1 | 2026-09-18 to 2026-09-21, PRs 1 to 4, 12, 17, 18, 32, 68, 73, 76 | done |
 | M1 Core IR, samples, SARIF | days 2–3 | 2026-09-18, PRs 13, 15, 19, 20, 22 | done |
 | M2 C# frontend | days 3–5 | 2026-09-18 to 2026-09-20, PRs 24, 25, 27, 30, 59, 67 | done |
-| M3 Z3 backend and shipping | days 5–7 | M3-001 PR #78 | next: M3-014 and M3-002 in parallel |
-| M4 Precision and first real run | after M3 | | order set by M3-022 |
+| M3 Z3 backend and shipping | days 5–7 | M3-001 PR #78 | next: M3-014 and M3-024, in parallel with M3-002 |
+| M4 Precision and first corpus run | after M3 | | order set by M3-022's corpus census |
 
 M0 and M1 landed in one calendar day and M2 in three, still ahead of the five days planned.
 `main` is green in CI on Windows and Ubuntu with 100% line and branch coverage on every `src/`
@@ -23,6 +23,16 @@ project (`Equiv.Verify.Z3` is still an empty shell until M3-001). Three gate tic
 (M0-009 licensing, M0-010 licence gate, M0-011 blocking mutation gate). Mutation scores on
 the 2026-09-20 nightly were Core 96.5%, Frontend.CSharp 96.4%, Cli 69.3% (97.7% after M0-011).
 Reviews of M2-003 and M2-004 produced ADRs 0014 and 0015 and the P1-003 to P1-006 tickets.
+
+The 2026-09-23 feasibility review found three things. The one-week plan is at day 7 with about 21
+tickets left. The census that decides feasibility had no input, because no real pair was ever
+named. And one unloadable project aborts a whole solution. ADR 0028 moves every real-code
+run to a pinned public corpus (`tools/corpus/`, run only through the `equiv-corpus-run` skill) and
+fixes the success thresholds before any data exists. ADR 0029 bounds every failure to a project, a
+method or a line, and makes each Unknown say which (tickets M3-024, M3-025, M4-008). A preview run
+that day on the corpus pair `eshop-upgrade-assistant` aborted with exit 4, as expected before
+M3-024. Sonar issue batches wait until M3-022's verdict, because they polish code whose future the
+census decides.
 
 ### Carried forward from M0 to M2
 
@@ -132,8 +142,8 @@ M3 ships a sound tool that measures its own Unknown rate. Making it precise on r
 M3 grew from six tickets to twenty-two through three reviews (below). On 2026-09-21 it was
 consolidated. The precision tickets moved to M4 and were renumbered (M3-011, M3-018, M3-019,
 M3-017, M3-020, M3-021 and M3-005 became M4-001 to M4-007). Four pairs merged: M3-006 into M3-014,
-M3-008 into M3-015, M3-012 into M3-007, and M3-023 into M3-016. Eleven tickets remain open, plus
-the three promoted P1 tickets.
+M3-008 into M3-015, M3-012 into M3-007, and M3-023 into M3-016. On 2026-09-23 ADR 0029 added
+M3-024 and M3-025. Thirteen tickets remain open, plus the three promoted P1 tickets.
 
 - M3-001 (L) done, PR #78. Product-program encoder + Z3 driver + counterexample decoding.
   Soundness property harness from VERIFICATION-MODEL §7.
@@ -163,32 +173,42 @@ the three promoted P1 tickets.
 - M3-016 (L) Replay taint: a divergence that depends on an abstraction is Unknown(Abstraction)
   with a candidate counterexample, never EQ002 (ADR 0026). Unknown results point at the opaque
   or abstract lines, not the method (ADR 0027).
-- M3-022 (S) Census of the user's real 4.8/10 pair. Its histogram orders M4 (ADR 0027). No engine
+- M3-022 (S) Census of the public corpus (ADR 0028): the Git Extensions 4.8-to-.NET 5 pair and three
+  Poly-MigrationBench repos migrated by an agent, run in the skill's `census` mode. It scores ADR
+  0028's criteria (continue, re-scope or stop), and its histogram orders M4 (ADR 0027). No engine
   changes.
+- M3-024 (M) A project that fails to load, or is not C#, is skipped instead of aborting the solution.
+  A method whose bound body is erroneous is `Unknown(Unbound)` and never congruent (ADR 0029). Needed
+  before M3-022, because the first corpus solution holds `.vcxproj` and `.wixproj` projects.
+- M3-025 (M) Every Unknown carries `scope` (`line` or `method`), and a `line` one carries the residual
+  claim ADR 0014's first query already proves. Whole-body opaques point at their construct, not the
+  method (ADR 0029).
 - P1-003, P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
   and arrays are keyed by value. P1-003 comes with them as their shared prerequisite.
 
 Where the tickets came from: the pre-M3 architecture review (ADRs 0018 to 0020) found three
-silent false-Equivalent paths in the spec and a precision gap. The M3-001 review added ADR 0021,
+silent false-Equivalent paths in the spec and a precision gap. The 2026-09-23 feasibility review
+added ADRs 0028 and 0029 and tickets M3-024, M3-025 and M4-008. The M3-001 review added ADR 0021,
 and ADR 0023 added M3-013. The Unknown-rate review (ADRs 0024 to 0027) found that the plan would
 ship a sound tool whose Unknown rate grows with codebase size, and that it measured that rate
 last. So measuring comes first, unchanged code is free, and EQ002 stays exact while the engine
 abstracts more.
 
 Order:
-1. **Measure first, in parallel with M3-002:** M3-014 → M3-022. This needs no Z3 and answers
-   "is the Unknown rate survivable" before any more engine work.
+1. **Measure first, in parallel with M3-002:** M3-014 and M3-024 (independent), then M3-022 on the
+   public corpus. This needs no Z3 and answers "is the Unknown rate survivable" before any more
+   engine work. If M3-022's verdict is re-scope or stop, everything below waits for a new ADR.
 2. **Soundness:** M3-002; M3-007 → P1-003 → P1-006 → P1-005; M3-010 → M3-009; M3-013.
-3. **Blast radius, before any snapshot is taken:** M3-015 (needs M3-014, M3-009); M3-016 (needs
-   M3-014).
-4. M3-003 (needs M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, P1-005, P1-006)
-   → M3-004.
+3. **Blast radius, before any snapshot is taken:** M3-015 (needs M3-014, M3-009, M3-024); M3-016
+   (needs M3-014); M3-025 (needs M3-016, M3-024).
+4. M3-003 (needs M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, M3-024, M3-025, P1-005,
+   P1-006) → M3-004.
 
-## M4 — Precision and the first real run
+## M4 — Precision and the first corpus run
 
 M4 makes the first real run say something. Without these tickets it is mostly `Unknown(opaque)`.
-M3-022's census reorders this list by pairs unlocked per effort point (S=1, M=2, L=4). It may
-also drop a ticket that unlocks nothing on the real pair to the post-MVP backlog. Soundness
+M3-022's census reorders this list by pairs unlocked per effort point (S=1, M=2, L=4). A ticket
+under ADR 0028's bar (5% of matched pairs on the corpus) moves to the post-MVP backlog. Soundness
 dependencies still win. Each precision ticket updates the `business-layer` snapshot.
 
 - M4-001 (L) `foreach`, `using` and constructors lowered through the CFG instead of whole-body
@@ -199,8 +219,11 @@ dependencies still win. Each precision ticket updates the `business-layer` snaps
 - M4-004 (L) Fragments on both sides are shared calls (ADR 0024). Needs M3-015, M3-016, P1-005.
 - M4-005 (M) Type tests and downcasts. Needs M3-010.
 - M4-006 (M) `await` as a call. Needs M4-001.
-- M4-007 (S) First real run against the user's 4.8/10 pair. Record findings as new tickets,
-  not fixes. Needs M3-004, M3-022 and the M4 tickets M3-022 kept.
+- M4-008 (M) The remaining whole-body opaques: arrow-bodied and auto-property accessors, `catch`
+  filters and bare `catch` (ADR 0029). Needs P1-003, M3-010, M3-025.
+- M4-007 (S) First full corpus run in the skill's `full` and `seeded` modes. It scores all five ADR
+  0028 criteria, including 100% recall on seeded behaviour changes. Findings become tickets, not
+  fixes. Needs M3-004, M3-022 and the M4 tickets M3-022 kept.
 
 ## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
 

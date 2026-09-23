@@ -6,9 +6,9 @@ Depends on: M2-006
 
 ## Goal
 Measure the Unknown rate before optimising it (ADR 0027). Every run writes a lowering census into
-the SARIF, and `--lower-only` produces that census without a backend. With it, the real pair can be
-measured in M3-022 while M3-002 is still in progress. A new sample of typical service-layer code
-gives every later precision ticket a checked-in ratchet.
+the SARIF, and `--lower-only` produces that census without a backend. With it, the public corpus
+can be measured in M3-022 while M3-002 is still in progress. A new sample of typical service-layer
+code gives every later precision ticket a checked-in ratchet.
 
 The same run-level report carries the analysed line count of each codebase. The BUSL free tier in
 `LICENSE` permits production use only while no analysed codebase exceeds 50,000 lines, measured
@@ -94,7 +94,7 @@ line counts) for criterion 7. If the census wants any other frontend change, sto
 touches the IR or the matcher, it has drifted.
 
 ## Out of scope
-- Fingerprints (M3-015). Locations of Unknown results (M3-016). Running on the user's pair (M3-022).
+- Fingerprints (M3-015). Locations of Unknown results (M3-016). Running the corpus (M3-022).
 - Enforcing the line limit, gating on it, phoning home, or printing a licence warning. The tool
   reports a fact; compliance is the user's obligation under `LICENSE`.
 - Counting seats. The three-individual cap is not observable from inside the tool and must not

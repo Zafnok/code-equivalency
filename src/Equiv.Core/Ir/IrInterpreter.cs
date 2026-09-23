@@ -26,7 +26,7 @@ public static class IrInterpreter
         {
             { IsEmpty: false } => throw new ArgumentException($"Procedure is not valid IR: {diagnostics[0].Id} {diagnostics[0].Message}", nameof(procedure)),
             _ when !typesMatch => throw new ArgumentException("Inputs do not match the procedure's parameter types.", nameof(inputs)),
-            _ => new IrMachine(oracle).Run(procedure, inputs, stepBudget),
+            _ => new IrMachine(oracle).Execute(procedure, inputs, stepBudget),
         };
     }
 
@@ -37,7 +37,7 @@ public static class IrInterpreter
         private readonly Dictionary<string, IrValue> values = new(StringComparer.Ordinal);
         private readonly ImmutableArray<IrCallRecord>.Builder trace = ImmutableArray.CreateBuilder<IrCallRecord>();
 
-        public IrRun Run(IrProcedure procedure, IrInputs inputs, int stepBudget)
+        public IrRun Execute(IrProcedure procedure, IrInputs inputs, int stepBudget)
         {
             Dictionary<IrBlockId, IrBlock> blocks = procedure.Blocks.ToDictionary(static b => b.Id);
             for (int i = 0; i < inputs.Arguments.Length; i++)

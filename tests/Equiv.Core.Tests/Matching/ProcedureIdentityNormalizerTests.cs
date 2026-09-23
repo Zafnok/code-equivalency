@@ -105,4 +105,51 @@ public sealed class ProcedureIdentityNormalizerTests
         ProcedureIdentity identity = ProcedureIdentityNormalizer.Endpoint("get", "/api/orders/{id}");
         Assert.Equal("GET /api/orders/{id}", identity.Value);
     }
+
+    [Fact]
+    public void ALeadingDotNormalisesLikeAnEmptyNamespace()
+    {
+        ProcedureIdentity identity = ProcedureIdentityNormalizer.Member("Ns", "Type", "Method", 0, [".Foo"], RenameMap.Empty);
+        Assert.Equal("Ns.Type::Method(Foo)", identity.Value);
+    }
+
+    [Theory]
+    [InlineData(null, "Type", "Method")]
+    [InlineData("Ns", null, "Method")]
+    [InlineData("Ns", "Type", null)]
+    public void MemberRejectsANullNamespaceTypeOrMember(string? @namespace, string? type, string? member)
+    {
+        Assert.Throws<ArgumentNullException>(() => ProcedureIdentityNormalizer.Member(@namespace!, type!, member!, 0, [], RenameMap.Empty));
+    }
+
+    [Fact]
+    public void MemberRejectsNullRenames()
+    {
+        Assert.Throws<ArgumentNullException>(() => ProcedureIdentityNormalizer.Member("Ns", "Type", "Method", 0, [], null!));
+    }
+
+    [Theory]
+    [InlineData(null, "/api")]
+    [InlineData("GET", null)]
+    public void EndpointRejectsANullVerbOrRoute(string? verb, string? route)
+    {
+        Assert.Throws<ArgumentNullException>(() => ProcedureIdentityNormalizer.Endpoint(verb!, route!));
+    }
+
+    [Fact]
+    public void IsEndpointRejectsNull()
+    {
+        Assert.Throws<ArgumentNullException>(() => ProcedureIdentityNormalizer.IsEndpoint(null!));
+    }
+
+    [Theory]
+    [InlineData("GET /api/orders/{id}", true)]
+    [InlineData("Ns.Type::Method()", false)]
+    [InlineData("GET xfoo", false)]
+    [InlineData("/no-verb-before-slash", false)]
+    [InlineData("GET ", false)]
+    public void IsEndpointRecognisesOnlyItsOwnFormat(string identityValue, bool expected)
+    {
+        Assert.Equal(expected, ProcedureIdentityNormalizer.IsEndpoint(identityValue));
+    }
 }

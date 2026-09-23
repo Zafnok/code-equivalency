@@ -25,8 +25,9 @@ Examples that are details: enum vs flag, record shape, which of two equivalent Z
 calls, file and class names, dump-format spelling, generator strategy, test fixture
 layout, where a helper lives inside a project, exception type for an internal error.
 
-If any bullet fails, it is not a detail: write an ADR proposal with the `equiv-adr`
-skill and stop.
+If any bullet fails, it is not a detail. Run the bar test in the `equiv-adr` skill: it
+says whether that needs a new ADR, a clarification on an existing one, or a `Deviation:`
+line. Stop only if it needs a new ADR.
 
 ## How to choose (first rule that discriminates wins)
 

@@ -224,11 +224,13 @@ internal static class ProductEncoder
                 .Reverse()
                 .Aggregate((IntExpr)context.MkInt(0), (rest, e) => (IntExpr)context.MkITE(reach[e.Block], context.MkInt(Intern(exceptionTypes, ((IrThrow)e.Exit).ExceptionType)), rest));
             Trace = calls.Trace(events);
-            Opaque = context.MkOr([context.MkFalse(), .. opaques.Select(static o => o.Reach).Distinct()]);
+            BoolExpr[] opaqueDisjuncts = [context.MkFalse(), .. opaques.Select(static o => o.Reach).Distinct()];
+            Opaque = context.MkOr(opaqueDisjuncts);
+            BoolExpr[] unreachableDisjuncts = [context.MkFalse(), .. unreachable];
             Terms = new SideTerms(
                 inputs.Concat(constants).ToDictionary(static t => t.Key, static t => t.Value, StringComparer.Ordinal),
                 reach,
-                context.MkOr([context.MkFalse(), .. unreachable]));
+                context.MkOr(unreachableDisjuncts));
         }
 
         public IrProcedure Procedure { get; }
@@ -283,8 +285,11 @@ internal static class ProductEncoder
             return id;
         }
 
-        private BoolExpr Any(IEnumerable<(IrBlockId Block, IrTerminator Exit)> blocks) =>
-            context.MkOr([context.MkFalse(), .. blocks.Select(e => reach[e.Block])]);
+        private BoolExpr Any(IEnumerable<(IrBlockId Block, IrTerminator Exit)> blocks)
+        {
+            BoolExpr[] disjuncts = [context.MkFalse(), .. blocks.Select(e => reach[e.Block])];
+            return context.MkOr(disjuncts);
+        }
 
         private string Name(string suffix) => Prefix(side) + "." + suffix;
 
@@ -328,7 +333,7 @@ internal static class ProductEncoder
             List<Expr> blockEvents = [];
             foreach (IrInstruction instruction in block.Instructions)
             {
-                Encode(instruction, predecessors, reached, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)), blockEvents);
+                EncodeInstruction(instruction, predecessors, reached, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)), blockEvents);
             }
 
             events.Add((reached, blockEvents));
@@ -343,7 +348,7 @@ internal static class ProductEncoder
                 .Reverse()
                 .Aggregate(value(predecessors[^1]), (rest, p) => context.MkITE(p.Taken, value(p), rest));
 
-        private void Encode(IrInstruction instruction, List<(IrBlockId From, BoolExpr Taken)> predecessors, BoolExpr reached, BitVecExpr position, List<Expr> blockEvents)
+        private void EncodeInstruction(IrInstruction instruction, List<(IrBlockId From, BoolExpr Taken)> predecessors, BoolExpr reached, BitVecExpr position, List<Expr> blockEvents)
         {
             switch (instruction)
             {
@@ -445,11 +450,13 @@ internal static class ProductEncoder
                         foreach ((IrValue value, IrBlockId target) in choice.Cases)
                         {
                             BoolExpr matches = context.MkEq(scrutinee, sorts.Literal(value));
-                            edges.Add((target, context.MkAnd([matches, .. earlier.Select(context.MkNot)])));
+                            BoolExpr[] caseConjuncts = [matches, .. earlier.Select(context.MkNot)];
+                            edges.Add((target, context.MkAnd(caseConjuncts)));
                             earlier.Add(matches);
                         }
 
-                        edges.Add((choice.Default, context.MkAnd([context.MkTrue(), .. earlier.Select(context.MkNot)])));
+                        BoolExpr[] defaultConjuncts = [context.MkTrue(), .. earlier.Select(context.MkNot)];
+                        edges.Add((choice.Default, context.MkAnd(defaultConjuncts)));
                         break;
                     }
 

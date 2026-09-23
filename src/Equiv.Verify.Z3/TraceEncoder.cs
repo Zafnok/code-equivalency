@@ -126,7 +126,7 @@ internal sealed class TraceEncoder
     private FuncDecl Function(string kind, Side side, CallIdentity callee, ImmutableArray<IrType> argumentTypes, Sort range, string suffix)
     {
         string owner = callee.RuntimeChanged ? ":" + ProductEncoder.Prefix(side) : string.Empty;
-        string name = $"{kind}:{Canonical(side, callee)}({string.Join(",", argumentTypes.Select(SortMapper.Name))}){suffix}{owner}";
+        string name = $"{kind}:{Canonical(side, callee)}({string.Join(',', argumentTypes.Select(SortMapper.Name))}){suffix}{owner}";
         if (!functions.TryGetValue(name, out FuncDecl? function))
         {
             function = context.MkFuncDecl(name, [.. argumentTypes.Select(sorts.Sort), context.MkBitVecSort(32)], range);

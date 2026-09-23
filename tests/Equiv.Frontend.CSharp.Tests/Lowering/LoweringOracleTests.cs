@@ -55,7 +55,7 @@ public sealed class LoweringOracleTests
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         using MemoryStream image = new();
         EmitResult emitted = compilation.Emit(image, cancellationToken: TestContext.Current.CancellationToken);
-        Assert.True(emitted.Success, string.Join("\n", emitted.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error)));
+        Assert.True(emitted.Success, string.Join('\n', emitted.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error)));
         image.Position = 0;
 
         AssemblyLoadContext context = new("lowering-oracle", isCollectible: true);

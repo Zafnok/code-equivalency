@@ -1,7 +1,9 @@
 # Architecture Decision Records
 
-Short, numbered, immutable once accepted. To change a decision, write a new ADR that
-supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.md`.
+Short, numbered, immutable once accepted, except for dated `## Clarifications` bullets
+that apply a decision to a case it did not spell out. To change a decision, write a new
+ADR that supersedes the old one. Whether something needs an ADR at all is the bar test in
+the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.md`.
 
 | ADR | Decision |
 |---|---|
@@ -32,3 +34,5 @@ supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.
 | 0025 | Floating-point, decimal and user-defined operators are shared pure functions |
 | 0026 | A Divergent must not depend on an abstraction; otherwise it is Unknown(Abstraction) |
 | 0027 | The Unknown rate is measured before it is optimised, and every Unknown points at lines |
+| 0028 | Success is measured on a pinned public corpus, against criteria fixed before the first run |
+| 0029 | A failure's blast radius is the smallest unit it touches (project, method, line), and every Unknown says which |
