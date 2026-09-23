@@ -130,17 +130,14 @@ public static class IrText
         _ => Definition(parameter.Var),
     };
 
-    private static string Assigned(IrVar? target) => target is null ? string.Empty : Definition(target) + " = ";
-
-    /// <summary>A callee's quoted identity, with a <c>!</c> suffix when <see cref="CallIdentity.RuntimeChanged"/> (ticket M2-006).</summary>
-    private static string Callee(CallIdentity callee) => Quote(callee.Value) + (callee.RuntimeChanged ? "!" : string.Empty);
-
-    private static string Outs(ImmutableArray<IrOut> outs) =>
-        outs.IsEmpty ? string.Empty : $" outs({string.Join(", ", outs.Select(static o => $"{Use(o.Param)} = {Use(o.Final)}"))})";
-
     private sealed class IrInstructionWriter : IrInstructionVisitor<string>
     {
         public static readonly IrInstructionWriter Instance = new();
+
+        private static string Assigned(IrVar? target) => target is null ? string.Empty : Definition(target) + " = ";
+
+        /// <summary>A callee's quoted identity, with a <c>!</c> suffix when <see cref="CallIdentity.RuntimeChanged"/> (ticket M2-006).</summary>
+        private static string Callee(CallIdentity callee) => Quote(callee.Value) + (callee.RuntimeChanged ? "!" : string.Empty);
 
         public override string Visit(IrConst instruction) => $"{Definition(instruction.Target)} = const {Value(instruction.Value)}";
 
@@ -176,6 +173,9 @@ public static class IrText
     private sealed class IrTerminatorWriter : IrTerminatorVisitor<string>
     {
         public static readonly IrTerminatorWriter Instance = new();
+
+        private static string Outs(ImmutableArray<IrOut> outs) =>
+            outs.IsEmpty ? string.Empty : $" outs({string.Join(", ", outs.Select(static o => $"{Use(o.Param)} = {Use(o.Final)}"))})";
 
         public override string Visit(IrGoto terminator) => "goto " + Block(terminator.Target);
 
