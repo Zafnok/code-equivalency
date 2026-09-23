@@ -49,6 +49,9 @@ Not yet owned by any ticket (schedule when a milestone touches the area):
   needs an ADR 0002 row.
 - Verify's `SmallRevenue` sponsorship exemption in `Directory.Build.props` expires
   2027-09; re-evaluate on monetisation.
+- Copilot Autofix is off in repo Settings (ADR 0028, no licensed seat). Re-enable the
+  same toggle once a Copilot seat exists, most likely on monetisation. `codeql.yml`'s
+  `analyze` check is unaffected and stays required.
 - M3-004 carries the rest of the licensing work as its criteria 7 to 9: notices in the artifacts,
   a per-release Change Date, and the MSBuild redistribution question (VS Build Tools is not
   freely redistributable in a container image).

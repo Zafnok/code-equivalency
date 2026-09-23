@@ -32,3 +32,4 @@ supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.
 | 0025 | Floating-point, decimal and user-defined operators are shared pure functions |
 | 0026 | A Divergent must not depend on an abstraction; otherwise it is Unknown(Abstraction) |
 | 0027 | The Unknown rate is measured before it is optimised, and every Unknown points at lines |
+| 0028 | Copilot Autofix off (no licensed seat); `codeql.yml`/`analyze` unaffected |
