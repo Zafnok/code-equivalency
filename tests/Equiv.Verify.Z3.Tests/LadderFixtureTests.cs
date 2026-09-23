@@ -107,6 +107,31 @@ public sealed class LadderFixtureTests
             unknown.Ladder.Select(static s => s.Outcome));
     }
 
+    [Fact]
+    public void ABoundOnlyAHardConditionReachesTimesOutInRungOnesLastQuery()
+    {
+        // Identical sides and no opaque make rung 1's first two queries trivial; whether any input takes the back
+        // edge (the hard, always-false condition) is the query that runs out of time.
+        IrProcedure procedure = IrText.Parse("""
+            proc "T::Rebuild(ulong, ulong)" (%a: bv64, %b: bv64) entry B0
+            B0:
+              goto B1
+            B1:
+              %q: bv64 = udiv %a, %b
+              %m: bv64 = mul %q, %b
+              %r: bv64 = urem %a, %b
+              %s: bv64 = add %m, %r
+              %broken: bool = ne %s, %a
+              br %broken, B1, B2
+            B2:
+              ret
+            """);
+
+        Verdict verdict = new Z3Backend().Verify(procedure, procedure, new VerificationOptions(3, 50, []));
+
+        Assert.Equal((ProofMethod.Bounded, RungOutcome.Timeout), (verdict.Ladder[0].Rung, verdict.Ladder[0].Outcome));
+    }
+
     /// <summary>A fixture that expects a timeout gets 50 ms; every other one gets ten seconds.</summary>
     private static Verdict Verify(Fixture fixture) =>
         new Z3Backend().Verify(fixture.Old, fixture.New, new VerificationOptions(3, string.Equals(fixture.Expected, "Unknown(Timeout)", StringComparison.Ordinal) ? 50 : 10_000, []));
