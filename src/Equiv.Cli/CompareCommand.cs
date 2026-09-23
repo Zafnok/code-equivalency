@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Globalization;
 
 using Equiv.Core;
 using Equiv.Core.Configuration;
@@ -103,10 +104,37 @@ internal static class CompareCommand
         }
 
         List<VerificationResult> results = BuildResults(matchResult, backend, config);
-        SarifLog log = SarifReportWriter.Write(results, baseline);
+        (List<Notification> notifications, List<ProcedureIdentity> unverified) = SkippedProjects(matchResult);
+        SarifLog log = SarifReportWriter.Write(results, baseline, notifications, unverified);
         sink.Write(log);
 
-        return DecideExitCode(results, log, options.FailOn);
+        bool incomplete = notifications.Exists(static n => n.Level == FailureLevel.Error);
+        return DecideExitCode(results, log, options.FailOn, incomplete);
+    }
+
+    /// <summary>
+    /// ADR 0029 decision 1: one tool-execution notification per project the frontend skipped, on stderr as well as in
+    /// the SARIF, and every procedure that is unverified because of it. A skipped C# project is an <c>error</c>, which
+    /// makes the run incomplete; a project in another language is a <c>warning</c>.
+    /// </summary>
+    private static (List<Notification> Notifications, List<ProcedureIdentity> Unverified) SkippedProjects(MatchResult matchResult)
+    {
+        List<Notification> notifications = [];
+        List<ProcedureIdentity> unverified = [];
+        foreach ((string side, UnverifiedProject project) in matchResult.LegacySkipped.Select(static p => ("legacy", p))
+            .Concat(matchResult.ModernSkipped.Select(static p => ("modern", p))))
+        {
+            FailureLevel level = project.IsCSharp ? FailureLevel.Error : FailureLevel.Warning;
+            string subject = project.Name.Length > 0
+                ? $"{side} project '{project.Name}' (assembly '{project.AssemblyName}')"
+                : $"a {side} project the workspace did not name";
+            string text = $"{subject} was skipped: {string.Join("; ", project.Diagnostics)}";
+            Console.Error.WriteLine($"{(project.IsCSharp ? "error" : "warning")}: {text}");
+            notifications.Add(new Notification { Level = level, Message = new Message { Text = text } });
+            unverified.AddRange(project.Procedures);
+        }
+
+        return (notifications, unverified);
     }
 
     /// <summary>
@@ -211,6 +239,13 @@ internal static class CompareCommand
 
     private static Verdict Verify(IVerificationBackend backend, ProcedurePair pair, IrProcedure old, IrProcedure @new, VerificationOptions options)
     {
+        // ADR 0029 decision 2: erroneous code is Unknown(Unbound) without asking the solver; it is never evidence of equivalence.
+        string unbound = string.Join("; ", UnboundCauses("legacy", old).Concat(UnboundCauses("modern", @new)));
+        if (unbound.Length > 0)
+        {
+            return new Unknown(UnknownReason.Unbound, unbound);
+        }
+
         try
         {
             return backend.Verify(old, @new, options);
@@ -221,8 +256,25 @@ internal static class CompareCommand
         }
     }
 
-    private static int DecideExitCode(List<VerificationResult> results, SarifLog log, string failOn)
+    /// <summary>Each <see cref="Unknown.UnboundOpaqueReason"/> opaque in <paramref name="body"/>, as <c>side: unbound at path line:column</c>.</summary>
+    private static IEnumerable<string> UnboundCauses(string side, IrProcedure body) =>
+        body.Blocks
+            .SelectMany(static b => b.Instructions)
+            .OfType<IrOpaque>()
+            .Where(static o => string.Equals(o.Reason, Unknown.UnboundOpaqueReason, StringComparison.Ordinal))
+            .Select(o => string.Create(CultureInfo.InvariantCulture, $"{side}: unbound at {o.Span.Path} {o.Span.StartLine}:{o.Span.StartColumn}"));
+
+    /// <summary>
+    /// The exit code, by <see cref="ExitCodes"/>' precedence: a tool fault that left the result set
+    /// <paramref name="incomplete"/> (a skipped C# project) is <see cref="ExitCodes.LoadFailure"/>, ahead of any verdict.
+    /// </summary>
+    private static int DecideExitCode(List<VerificationResult> results, SarifLog log, string failOn, bool incomplete)
     {
+        if (incomplete)
+        {
+            return ExitCodes.LoadFailure;
+        }
+
         IList<Result> sarifResults = log.Runs[0].Results;
 
         bool anyNewDivergent = false;

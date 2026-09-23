@@ -92,3 +92,40 @@ Loading without MSBuild (post-MVP bare loader). Retrying a failed project with o
 Lowering more constructs. Running the corpus (M3-022).
 
 ## Notes
+Dependencies not yet landed, and what that meant here:
+- M3-013 (exit 5, pair failures) is `todo`, so this ticket writes the notification and `unverified` path
+  (`SarifReportWriter.Write`'s optional `notifications` and `unverified`, and `BaselineComputer`'s unverified
+  carry-over) for M3-013 to reuse. There is no exit 5 yet: the precedence test is
+  `ExitCodePrecedenceIsFourThenVerdicts` (4 over 1 and 2), and M3-013 extends it with 5. `ExitCodes` documents
+  the full order.
+- M3-014 (census) is `todo`: criterion 6 is left to M3-014, as the criterion says.
+- M3-015 (congruence) is `todo`: `AnUnboundMethodIsNeverCongruent` is left to M3-015.
+- M3-016 (causes) is `todo`: the unbound procedure carries one `IrOpaque` per diagnostic span, and the Unknown's
+  detail lists them, so M3-016 can turn them into causes.
+
+Decision: Core's plain-data record is `UnverifiedProject` (name, assembly name, `IsCSharp`, diagnostic strings,
+unverified identities), not `SkippedProject`, which would clash with the loader's record in `CSharpFrontend`.
+Decision: the loader's `SkippedProject` also carries `IsCSharp` (a non-C# skip is a warning) and the skipped C#
+project's `Compilation`, when one exists, so its procedures can be listed as unverified. It is never lowered.
+Decision: a workspace failure is attributed to the project whose `*.??proj` path it quotes. A path that is not
+`.csproj` is a non-C# skip. A failure quoting no path, raised while a project compiles, belongs to that project.
+One raised while the solution opens is a C# skip with an empty name ("a project the workspace did not name"):
+an error and exit 4, but it filters no Added or Removed result.
+Decision: `Unknown(Unbound)` is decided in `CompareCommand` before the backend is called, when either body holds
+an `IrOpaque` whose reason is `Unknown.UnboundOpaqueReason` (`"unbound"`, a constant on `Unknown` so that the
+frontend and the CLI share one spelling). Neither the IR records nor the encoder change.
+Decision: the unbound check is at `IrLowerer.Lower(IMethodSymbol, ...)`, the frontend's entry point. The
+`IMethodBodyOperation` overload still lowers erroneous code as it is bound, so the `Invalid`, `rethrow`,
+`undefined` and `missing-return` paths keep their tests (`Lowered.ErroneousBody`).
+Decision: a method is unbound on any error diagnostic in its declaration's span, not only in its body, so an
+unresolved parameter type also counts. When there is none, the causes are the `IInvalidOperation`s and
+error-typed operations (e.g. reading a field whose type did not resolve, whose diagnostic is on the field).
+
+Size guard: 15 production files, not 12. Of these, `Unknown.cs` (a constant), `UnknownReason.cs` (one member),
+`LoadDiagnosticKind.cs` (one member and doc comments) and `LoadedSolution.cs` (one field) are one-line changes,
+and two are new records the Design asks for. No IR record or encoder changed.
+
+README's exit-code row for 4 was updated too (it said "failed to load a solution"), because the meaning changed.
+
+Observed with the real build host (PartialLoadTests): a `.vcxproj` entry in a `.sln` arrives as a
+`WorkspaceDiagnosticKind.Failure` event quoting the project path, and the loader classifies it as a non-C# skip.

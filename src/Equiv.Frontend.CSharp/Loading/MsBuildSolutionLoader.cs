@@ -76,14 +76,11 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
 
         skipped.AddRange(NeverOpened(failuresByProject));
 
-        if (compilations.Count == 0)
-        {
-            throw new SolutionLoadException(
+        return compilations.Count > 0
+            ? new LoadedSolution(solution, compilations.ToImmutable(), [.. kept], skipped.ToImmutable())
+            : throw new SolutionLoadException(
                 solutionPath,
                 [new LoadDiagnostic(LoadDiagnosticKind.UnsupportedSolution, string.Empty, string.Empty, "the solution contains no C# project that loads"), .. skipped.SelectMany(static s => s.Diagnostics)]);
-        }
-
-        return new LoadedSolution(solution, compilations.ToImmutable(), [.. kept], skipped.ToImmutable());
     }
 
     /// <summary>

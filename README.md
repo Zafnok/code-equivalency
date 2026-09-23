@@ -84,7 +84,7 @@ equiv compare --legacy <path> --modern <path>
 | 1 | At least one `Divergent` result that is `new` relative to `--baseline` |
 | 2 | `--fail-on unknown` and at least one new `Unknown` result |
 | 3 | Usage error: bad arguments, missing or unparseable file, no frontend for the paths |
-| 4 | A frontend failed to load a solution |
+| 4 | A C# project was skipped because it failed to load (the SARIF lists it and is still written), or a side had no C# project that loaded (no SARIF). Outranks 1 and 2 |
 
 Output is always SARIF 2.1.0 (rules EQ001 to EQ006); the exact meaning of each verdict
 and of `baselineState` is in [docs/VERIFICATION-MODEL.md](docs/VERIFICATION-MODEL.md).

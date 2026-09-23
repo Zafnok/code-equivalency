@@ -185,7 +185,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
         ImmutableHashSet<ProcedureIdentity> ForcedAmbiguous)
     {
         /// <summary>No endpoint overrides: for a skipped project, whose procedures are only listed.</summary>
-        public static readonly EndpointOverrides None = new(ImmutableDictionary<ProcedureIdentity, ProcedureIdentity>.Empty, []);
+        public static readonly EndpointOverrides None = new([], []);
 
         public static EndpointOverrides Build(ImmutableArray<Endpoint> legacyEndpoints, ImmutableArray<Endpoint> modernEndpoints)
         {

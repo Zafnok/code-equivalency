@@ -73,14 +73,12 @@ internal sealed class IrLowerer
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
         ImmutableArray<SourceSpan> unbound = UnboundCauses(syntax, model, operation);
-        if (!unbound.IsEmpty)
+        return (unbound.IsEmpty, operation) switch
         {
-            return Opaque(method, renames, Unknown.UnboundOpaqueReason, unbound);
-        }
-
-        return operation is IMethodBodyOperation body
-            ? Lower(body, model, renames, suppressedRuntimeChanges)
-            : Opaque(method, renames, operation?.Kind.ToString() ?? "no-body", [Span(syntax)]);
+            (false, _) => Opaque(method, renames, Unknown.UnboundOpaqueReason, unbound),
+            (true, IMethodBodyOperation body) => Lower(body, model, renames, suppressedRuntimeChanges),
+            _ => Opaque(method, renames, operation?.Kind.ToString() ?? "no-body", [Span(syntax)]),
+        };
     }
 
     /// <summary>
