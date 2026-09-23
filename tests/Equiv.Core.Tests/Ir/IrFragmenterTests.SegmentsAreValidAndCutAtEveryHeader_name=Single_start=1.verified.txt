@@ -1,0 +1,13 @@
+﻿proc "T::Sum(int)" (%$s0 "i": bv32, %$s1 "s": bv32, %$s2 "n": bv32, %$s3: bv32, %n "n": bv32) -> bv32 entry B1
+B1:
+  %c: bool = slt %$s0, %$s2
+  br %c, B2, B3
+B2:
+  %s1 "s": bv32 = add %$s1, %$s0
+  %i1 "i": bv32 = add %$s0, %$s3
+  goto B4
+B3:
+  ret %$s1
+B4:
+  call "equiv:cut:0"(%i1, %s1, %$s2, %$s3)
+  throw "equiv:cut"

@@ -1,0 +1,9 @@
+﻿proc "T::Nested(int)" (%$s0 "i": bv32, %$s1 "s": bv32, %$s2 "n": bv32, %$s3: bv32, %$s4: bv32, %n "n": bv32) -> bv32 entry B1
+B1:
+  %c: bool = slt %$s0, %$s2
+  br %c, B6, B5
+B5:
+  ret %$s1
+B6:
+  call "equiv:cut:1"(%$s3, %$s1, %$s2, %$s3, %$s4, %$s0)
+  throw "equiv:cut"

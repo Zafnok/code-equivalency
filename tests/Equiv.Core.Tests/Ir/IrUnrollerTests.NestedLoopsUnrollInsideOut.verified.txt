@@ -1,0 +1,64 @@
+﻿proc "T::Nested(int)" (%n "n": bv32) -> bv32 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  goto B1
+B1:
+  %i "i": bv32 = phi [B0: %z]
+  %s "s": bv32 = phi [B0: %z]
+  %c: bool = slt %i, %n
+  br %c, B2, B5
+B2:
+  %j "j": bv32 = phi [B1: %z]
+  %t "s": bv32 = phi [B1: %s]
+  %d: bool = slt %j, %i
+  br %d, B3, B4
+B3:
+  %t1 "s": bv32 = add %t, %one
+  %j1 "j": bv32 = add %j, %one
+  goto B6
+B4:
+  %t$phi "s": bv32 = phi [B2: %t, B6: %t$2]
+  %i1 "i": bv32 = add %i, %one
+  goto B9
+B5:
+  %s$phi "s": bv32 = phi [B1: %s, B9: %s$2]
+  ret %s$phi
+B6:
+  %j$2 "j": bv32 = phi [B3: %j1]
+  %t$2 "s": bv32 = phi [B3: %t1]
+  %d$2: bool = slt %j$2, %i
+  br %d$2, B7, B4
+B7:
+  %t$2$phi "s": bv32 = phi [B6: %t$2, B12: %t$2$2]
+  %j$2$phi "j": bv32 = phi [B6: %j$2, B12: %j$2$2]
+  %t1$2 "s": bv32 = add %t$2$phi, %one
+  %j1$2 "j": bv32 = add %j$2$phi, %one
+  goto B8
+B8:
+  unreachable
+B9:
+  %i$2 "i": bv32 = phi [B4: %i1]
+  %s$2 "s": bv32 = phi [B4: %t$phi]
+  %c$2: bool = slt %i$2, %n
+  br %c$2, B10, B5
+B10:
+  %j$2$ "j": bv32 = phi [B9: %z]
+  %t$2$ "s": bv32 = phi [B9: %s$2]
+  %d$2$: bool = slt %j$2$, %i$2
+  br %d$2$, B11, B13
+B11:
+  %t1$2$ "s": bv32 = add %t$2$, %one
+  %j1$2$ "j": bv32 = add %j$2$, %one
+  goto B12
+B12:
+  %j$2$2 "j": bv32 = phi [B11: %j1$2$]
+  %t$2$2 "s": bv32 = phi [B11: %t1$2$]
+  %d$2$2: bool = slt %j$2$2, %i$2
+  br %d$2$2, B7, B13
+B13:
+  %t$phi$2 "s": bv32 = phi [B10: %t$2$, B12: %t$2$2]
+  %i1$2 "i": bv32 = add %i$2, %one
+  goto B14
+B14:
+  unreachable
