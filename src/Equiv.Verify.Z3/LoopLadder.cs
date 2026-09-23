@@ -121,20 +121,14 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     }
 
     /// <summary>The first that applies: an opaque node reached, a self-call, loops no rung aligned or proved, else a timeout.</summary>
-    private static UnknownReason UndecidedReason(List<Rung> rungs, bool recursive)
-    {
-        if (rungs.Exists(static r => r.Cause == UnknownReason.Opaque))
+    private static UnknownReason UndecidedReason(List<Rung> rungs, bool recursive) =>
+        (rungs.Exists(static r => r.Cause == UnknownReason.Opaque), recursive, rungs.Exists(static r => r.Cause == UnknownReason.UnalignedLoop)) switch
         {
-            return UnknownReason.Opaque;
-        }
-
-        if (recursive)
-        {
-            return UnknownReason.Recursion;
-        }
-
-        return rungs.Exists(static r => r.Cause == UnknownReason.UnalignedLoop) ? UnknownReason.UnalignedLoop : UnknownReason.Timeout;
-    }
+            (true, _, _) => UnknownReason.Opaque,
+            (_, true, _) => UnknownReason.Recursion,
+            (_, _, true) => UnknownReason.UnalignedLoop,
+            _ => UnknownReason.Timeout,
+        };
 
     private T Session<T>(IrProcedure old, IrProcedure @new, Func<Context, ProductEncoding, T> body)
     {

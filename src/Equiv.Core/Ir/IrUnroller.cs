@@ -484,15 +484,10 @@ public static class IrUnroller
 
         private IrVar Var(int c, IrVar var) => vars[c].GetValueOrDefault(var.Name, var);
 
-        private IrBlockId BackEdge(int c)
-        {
-            if (c < copies)
-            {
-                return ids[c + 1][loop.Header];
-            }
+        private IrBlockId BackEdge(int c) => c < copies ? ids[c + 1][loop.Header] : LastBackEdge;
 
-            return Unreachable ?? ids[last == IrLastCopy.First ? 1 : copies][loop.Header];
-        }
+        /// <summary>Where the last copy's back edges go: the unreachable block when there is one, else the header <c>last</c> names.</summary>
+        private IrBlockId LastBackEdge => Unreachable ?? ids[last == IrLastCopy.First ? 1 : copies][loop.Header];
 
         /// <summary>
         /// A header phi's operands in copy <paramref name="c"/>: the edges from outside the loop in copy 1, the
