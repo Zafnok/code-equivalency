@@ -1,8 +1,9 @@
 # CLAUDE.md — rules for working in this repo
 
 You are implementing a plan that has already been decided. Do not re-architect. If a
-decision looks wrong, write a short ADR proposing the change (see `.claude/skills/equiv-adr`)
-and stop; do not silently deviate.
+decision looks wrong, do not silently deviate: route it through `.claude/skills/equiv-adr`,
+whose bar test says whether it needs a new ADR, a clarification on an existing one, or
+only a `Deviation:` line in the ticket. Most things are not a new ADR.
 
 ## How work is picked up
 
@@ -61,7 +62,7 @@ and stop; do not silently deviate.
 Do not ask the user about implementation details (representation, naming, API shape,
 encoding, test strategy). Decide with `.claude/skills/equiv-decide/SKILL.md`, log one
 `Decision:` line in the ticket's Notes, and continue. Ask only for the things that
-skill says are not details, and ask by proposing an ADR.
+skill says are not details, through the `equiv-adr` bar test.
 
 ## When stuck
 
