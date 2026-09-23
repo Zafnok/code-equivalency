@@ -55,7 +55,11 @@ internal sealed class SortMapper(Context context)
             .GroupBy(static l => l.Key.Sort, StringComparer.Ordinal)
             .Where(static g => g.Skip(1).Any())
             .OrderBy(static g => g.Key, StringComparer.Ordinal)
-            .Select(g => context.MkDistinct([.. g.OrderBy(static l => l.Key.Id).Select(static l => l.Value)])),
+            .Select(g =>
+            {
+                Expr[] members = [.. g.OrderBy(static l => l.Key.Id).Select(static l => l.Value)];
+                return context.MkDistinct(members);
+            }),
     ];
 
     private UninterpretedSort Uninterpreted(string name)
