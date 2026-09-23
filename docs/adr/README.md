@@ -1,7 +1,9 @@
 # Architecture Decision Records
 
-Short, numbered, immutable once accepted. To change a decision, write a new ADR that
-supersedes the old one. Template and procedure: `.claude/skills/equiv-adr/SKILL.md`.
+Short, numbered, immutable once accepted, except for dated `## Clarifications` bullets
+that apply a decision to a case it did not spell out. To change a decision, write a new
+ADR that supersedes the old one. Whether something needs an ADR at all is the bar test in
+the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.md`.
 
 | ADR | Decision |
 |---|---|
