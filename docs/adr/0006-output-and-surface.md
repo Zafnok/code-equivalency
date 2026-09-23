@@ -18,3 +18,8 @@ React Flow suggestions were premature and are parked.
 - Blazor / React Native desktop app; React Flow CFG viewer. Post-MVP, after real usage.
 - Custom diff schema. Extra data goes in SARIF `properties` bags.
 - Hosted tier / AKS / API keys. The container is the free tier; hosting wraps it later.
+
+## Clarifications
+- 2026-09-23 (ADRs 0032, 0033). The parked hosted tier targets Azure Container Apps Jobs, not AKS
+  (ADR 0032). `equiv mcp` is a headless transport whose tool results are the same SARIF log, so it
+  is within this ADR (ADR 0033).

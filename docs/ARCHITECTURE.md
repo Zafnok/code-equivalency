@@ -104,7 +104,7 @@ paths -> router -> loader(legacy) -> symbols --+
 
 | Interface | MVP implementation | Planned |
 |---|---|---|
-| `ISolutionLoader` | MSBuildWorkspace | "bare" loader (parse csproj XML + reference-assembly NuGet) for Linux |
+| `ISolutionLoader` | MSBuildWorkspace | "bare" loader (parse csproj XML + reference-assembly NuGet) for Linux; a release requirement since ADR 0031 (mechanism chosen by M3-028) |
 | `ILanguageFrontend` | C# | Java (Eclipse JDT sidecar) reusing everything else |
 | `IVerificationBackend` | Z3 direct encoding | Boogie IVL (SymDiff-style) when loop invariants are needed |
 | `IReportSink` | SARIF file | SARIF upload to GitHub Code Scanning / SonarQube |

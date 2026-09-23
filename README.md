@@ -166,5 +166,5 @@ docs/       everything above; docs/runs/ holds corpus-run summaries
 - Git, Docker Desktop (for the container packaging milestone), GitHub CLI.
 
 The engine itself is cross-platform; only loading legacy `.csproj` files needs Windows
-until the bare loader (post-MVP) exists. CI runs the full pipeline on `windows-latest`
+until the Linux loader exists (ADR 0031, tickets M3-028 and M3-029). CI runs the full pipeline on `windows-latest`
 and everything except the integration tests on `ubuntu-latest`.
