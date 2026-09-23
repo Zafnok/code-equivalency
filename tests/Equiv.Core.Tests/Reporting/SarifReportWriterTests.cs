@@ -220,6 +220,23 @@ public sealed class SarifReportWriterTests
     }
 
     [Fact]
+    public void RunPropertiesGoIntoTheRunPropertyBagInOrder()
+    {
+        Dictionary<string, object> nested = new(StringComparer.Ordinal) { ["legacy"] = 3, ["modern"] = 4 };
+        SarifLog log = SarifReportWriter.Write([], runProperties: new Dictionary<string, object>(StringComparer.Ordinal) { ["b"] = nested, ["a"] = 1 });
+
+        Run run = log.Runs[0];
+        Assert.Equal(["b", "a"], run.PropertyNames);
+        Assert.True(run.TryGetSerializedPropertyValue("b", out string? serialized));
+        Assert.Equal("""{"legacy":3,"modern":4}""", serialized);
+        Assert.Equal(1, run.GetProperty<int>("a"));
+    }
+
+    [Fact]
+    public void WithoutRunPropertiesTheRunHasNoPropertyBag() =>
+        Assert.Empty(SarifReportWriter.Write([]).Runs[0].PropertyNames);
+
+    [Fact]
     public void WrittenLogDeclaresSarif210AndRoundTripsThroughTheSdk()
     {
         SarifLog log = SarifReportWriter.Write(

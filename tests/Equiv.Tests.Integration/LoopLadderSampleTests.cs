@@ -45,7 +45,7 @@ public sealed class LoopLadderSampleTests
 
     private static Verdict Verify(string sample, string member)
     {
-        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, TestContext.Current.CancellationToken);
+        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, TestContext.Current.CancellationToken).Match;
         ProcedurePair pair = result.Pairs.Single(p => p.New.Value.Contains(member, StringComparison.Ordinal));
         VerificationOptions options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, EquivConfig.Default.CallIdentityRenames);
         return new Z3Backend().Verify(pair.OldBody!, pair.NewBody!, options);

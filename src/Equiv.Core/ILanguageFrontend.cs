@@ -1,5 +1,4 @@
 using Equiv.Core.Configuration;
-using Equiv.Core.Matching;
 
 namespace Equiv.Core;
 
@@ -18,8 +17,8 @@ public interface ILanguageFrontend
     bool Supports(string path);
 
     /// <summary>
-    /// Loads both sides, lowers them to IR, and matches procedures across them. Throws
-    /// <see cref="FrontendLoadException"/> when a path cannot be loaded enough to attempt lowering.
+    /// Loads both sides, lowers them to IR, matches procedures across them, and counts each side's analysed
+    /// lines. Throws <see cref="FrontendLoadException"/> when a path cannot be loaded enough to attempt lowering.
     /// </summary>
-    MatchResult Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct);
+    FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct);
 }

@@ -4,8 +4,16 @@ using Equiv.Core.Matching;
 
 namespace Equiv.Cli.Tests;
 
-/// <summary>A frontend with a configurable <see cref="Supports"/> predicate and a canned <see cref="Analyze"/> result or exception.</summary>
-internal sealed class FakeFrontend(string language, Func<string, bool> supports, MatchResult? matchResult = null, FrontendLoadException? throwOnAnalyze = null) : ILanguageFrontend
+/// <summary>
+/// A frontend with a configurable <see cref="Supports"/> predicate and a canned <see cref="Analyze"/> result or exception.
+/// Without a canned <see cref="MatchResult"/> it matches nothing; without canned <see cref="AnalysedLines"/> it counts 0 on both sides.
+/// </summary>
+internal sealed class FakeFrontend(
+    string language,
+    Func<string, bool> supports,
+    MatchResult? matchResult = null,
+    FrontendLoadException? throwOnAnalyze = null,
+    AnalysedLines? lines = null) : ILanguageFrontend
 {
     public int AnalyzeCallCount { get; private set; }
 
@@ -13,9 +21,11 @@ internal sealed class FakeFrontend(string language, Func<string, bool> supports,
 
     public bool Supports(string path) => supports(path);
 
-    public MatchResult Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct)
+    public FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct)
     {
         AnalyzeCallCount++;
-        return throwOnAnalyze is not null ? throw throwOnAnalyze : matchResult!;
+        return throwOnAnalyze is not null
+            ? throw throwOnAnalyze
+            : new FrontendAnalysis(matchResult ?? new MatchResult([], [], [], []), lines ?? new AnalysedLines(0, 0));
     }
 }

@@ -57,7 +57,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], []));
 
         CSharpFrontend frontend = new(loader, new StableIdentityMatcher());
-        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", config, CancellationToken.None);
+        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", config, CancellationToken.None).Match;
 
         Assert.Single(result.Pairs);
         Assert.Empty(result.Added);
@@ -76,7 +76,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, CancellationToken.None);
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, CancellationToken.None).Match;
 
         ProcedurePair pair = Assert.Single(result.Pairs);
         Assert.Equal(pair.Old, pair.OldBody!.Identity);
@@ -97,7 +97,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], []));
 
         CSharpFrontend frontend = new(loader, new StableIdentityMatcher());
-        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
+        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
 
         ProcedureIdentity removed = Assert.Single(result.Removed);
         ProcedureIdentity added = Assert.Single(result.Added);
@@ -205,7 +205,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
 
         ProcedurePair pair = Assert.Single(result.Pairs);
         Assert.Equal("GET /api/orders/{id}", pair.Old.Value);
@@ -262,7 +262,7 @@ public sealed class CSharpFrontendTests
 
         RenameMap renames = RenameMap.Empty with { Namespaces = RenameMap.Empty.Namespaces.Add("Old.Ns", "Different.Ns") };
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, CancellationToken.None);
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, CancellationToken.None).Match;
 
         Assert.Empty(result.Pairs);
         Assert.Empty(result.Ambiguous);
@@ -315,7 +315,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
 
         Assert.Empty(result.Pairs);
         Assert.Empty(result.Added);
@@ -364,7 +364,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
 
         Assert.Empty(result.Pairs);
         Assert.Empty(result.Added);

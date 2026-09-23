@@ -38,7 +38,7 @@ public sealed partial class SampleLoweringTests
     [MemberData(nameof(SampleNames))]
     public void EveryMatchedPairLowersToValidIr(string sample)
     {
-        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, TestContext.Current.CancellationToken);
+        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, TestContext.Current.CancellationToken).Match;
 
         Assert.NotEmpty(result.Pairs);
         foreach (ProcedurePair pair in result.Pairs)
@@ -56,7 +56,7 @@ public sealed partial class SampleLoweringTests
     [MemberData(nameof(LoweredSampleNames))]
     public void EveryMatchedPairLowersWithoutOpaqueNodes(string sample)
     {
-        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, TestContext.Current.CancellationToken);
+        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, TestContext.Current.CancellationToken).Match;
 
         Assert.NotEmpty(result.Pairs);
         foreach (IrProcedure body in result.Pairs.SelectMany(static p => new[] { p.OldBody!, p.NewBody! }))
