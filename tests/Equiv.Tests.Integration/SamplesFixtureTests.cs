@@ -17,6 +17,7 @@ public sealed class SamplesFixtureTests
             ["removed-null-check"] = ["Divergent"],
             ["loop-bound-change"] = ["Divergent"],
             ["added-removed"] = ["Added", "Removed"],
+            ["business-layer"] = ["Equivalent", "Divergent", "Unknown"],
         };
 
     private static string SamplesRoot =>
