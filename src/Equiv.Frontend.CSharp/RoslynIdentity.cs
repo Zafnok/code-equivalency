@@ -50,7 +50,7 @@ internal static class RoslynIdentity
             segments.Insert(0, current.Name + arity);
         }
 
-        return string.Join(".", segments);
+        return string.Join('.', segments);
     }
 
     private static string ParameterTypeName(IParameterSymbol parameter)

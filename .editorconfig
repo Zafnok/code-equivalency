@@ -93,6 +93,11 @@ dotnet_diagnostic.MA0029.severity = error
 # Pinned to error so the build catches a regression.
 dotnet_diagnostic.MA0076.severity = error
 
+# GH-47: string.Join/etc with a single-character string argument sat below warning level,
+# which is how the whole rule-wide batch went unfixed until Sonar filed it. Pinned to error
+# so the build catches a regression.
+dotnet_diagnostic.MA0089.severity = error
+
 # M1-005: test methods are named Scenario_ExpectedOutcome (e.g. Compare_Exits1OnDivergent),
 # an underscore-as-separator convention that is idiomatic xUnit test naming, not an identifier
 # hygiene problem. CA1707 ("remove underscores from member names") has no test-specific carve-out,
