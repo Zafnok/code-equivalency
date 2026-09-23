@@ -40,8 +40,9 @@ Default is `fix`. A finding is `accept` only if one of these is true:
 - Fixing it would **weaken a gate** — most often the 100% branch-coverage gate, which is why
   `S2178` is accepted for `Equiv.Core`'s record equality.
 - Fixing it would **contradict an accepted ADR**.
-- Fixing it would **break a documented repo pattern** whose reason is written down — e.g. the
-  empty `AssemblyMarker.cs` types that exist for ArchUnitNET assembly discovery.
+- Fixing it would **break a documented repo pattern** whose reason is written down. Check
+  the written reason against the code before relying on it: a pattern can outlive its
+  purpose, and an `accept` built on a stale reason hides dead code.
 
 `defer` is for a finding that is real and should be fixed but is blocked on a ticket that has
 not landed. Name that ticket in the reason.

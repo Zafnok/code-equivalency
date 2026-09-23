@@ -87,3 +87,11 @@ acceptance criteria, so it *is* the ticket.
 - Sonar issue keys are not stable across re-analysis; batches are identified by rule or path,
   never by issue key, and a fix session re-verifies every finding against `HEAD` before acting.
 - If the backlog is ever drained, this tooling becomes a no-op rather than something to remove.
+
+## Clarifications
+- 2026-09-23 (GH-91, GH-92). The Context's `S2094` example is wrong. The empty
+  `AssemblyMarker.cs` types were never used for ArchUnitNET assembly discovery:
+  `tests/Equiv.Tests.Architecture` loads each assembly by name (`Assembly.Load`). They were
+  M0-002's namespace placeholders, left behind once real types landed. Both remaining ones are
+  deleted, the `S2094` accept entry is removed from `policy.jsonc`, and `MA0182`/`MA0206` are
+  pinned to error. The Decision is unchanged. The `S2178` example still stands.

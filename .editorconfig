@@ -98,6 +98,12 @@ dotnet_diagnostic.MA0076.severity = error
 # so the build catches a regression.
 dotnet_diagnostic.MA0089.severity = error
 
+# GH-91, GH-92: an unused internal type (MA0182) and braces on an empty type declaration
+# (MA0206) sat below warning level, which is how two placeholder types outlived their purpose
+# until Sonar filed them. Pinned to error so the build catches a regression.
+dotnet_diagnostic.MA0182.severity = error
+dotnet_diagnostic.MA0206.severity = error
+
 # MA0038/MA0041 ("make method/property static") are deprecated upstream in favour of CA1822, which
 # AnalysisLevel=latest-all already enforces as an error. They misfire on members that only read a
 # primary-constructor parameter (PR #121: LoopLadder.Options, LoopLadder.Session, KInduction.Prove),
