@@ -23,12 +23,6 @@
       "reason": "Non-short-circuit & on bools is deliberate here: it keeps each field to one branch, which the 100% branch-coverage gate requires. Rewriting to && doubles the branches per field and the gate then cannot be met. Rationale and the original Sonar report: src/Equiv.Core/Ir/IrEquality.cs and docs/tickets/M1-003-verdicts-matching-config.md."
     },
     {
-      "rule": "csharpsquid:S2094",
-      "verdict": "accept",
-      "paths": ["**/AssemblyMarker.cs"],
-      "reason": "These types are empty on purpose: they exist only so the ArchUnitNET rules in tests/Equiv.Tests.Architecture can resolve each src/ assembly (M0-003). Giving them members or turning them into interfaces would defeat the point."
-    },
-    {
       "rule": "csharpsquid:S8969",
       "verdict": "accept",
       "paths": ["src/Equiv.Frontend.CSharp/Lowering/IrLowerer.cs"],
