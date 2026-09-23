@@ -231,6 +231,11 @@ M3-022's census reorders this list by pairs unlocked per effort point (S=1, M=2,
 under ADR 0028's bar (5% of matched pairs on the corpus) moves to the post-MVP backlog. Soundness
 dependencies still win. Each precision ticket updates the `business-layer` snapshot.
 
+The 2026-09-23 census did not reorder this list. Its verdict is incomplete because the human pair
+is still pending (`docs/runs/2026-09-23-census-verdict.md`): Git Extensions crashed, and the three
+agent pairs are pure retargets with no changed `.cs` file. The reorder waits for a Git Extensions
+census after P2-011, P2-010 and P2-012.
+
 - M4-001 (L) `foreach`, `using` and constructors lowered through the CFG instead of whole-body
   opaque. Needs M3-007, M3-010.
 - M4-002 (L) `IrPure` for float, decimal and user-defined operators (ADR 0025). Needs M3-015,
@@ -244,6 +249,28 @@ dependencies still win. Each precision ticket updates the `business-layer` snaps
 - M4-007 (S) First full corpus run in the skill's `full` and `seeded` modes. It scores all five ADR
   0028 criteria, including 100% recall on seeded behaviour changes. Findings become tickets, not
   fixes. Needs M3-004, M3-022 and the M4 tickets M3-022 kept.
+
+## P2 — Census findings (M3-022)
+
+Before the Git Extensions census is rerun: P2-011, then P2-010 and P2-012. P2-013 and P2-014
+follow. P2-001 to P2-009 are opaque reasons found in 1 to 10 bodies each. They are an unscheduled
+backlog: nothing schedules them until a census on changed code shows they matter.
+
+- P2-001 (M) `new T[n]` and array initialisers lowered (reason `ArrayCreation`).
+- P2-002 (S) `typeof(T)` as a shared synthesised input (reason `TypeOf`).
+- P2-003 (S) `default(T)` lowered (reason `DefaultValue`).
+- P2-004 (M) Event reads and event invocation (reason `EventReference`).
+- P2-005 (M) Event `+=` and `-=` as calls to the accessors (reason `EventAssignment`).
+- P2-006 (M) Assignment through a flow capture with no registered target (reason `FlowCaptureReference`).
+- P2-007 (S) Find and lower the field assignments that stay opaque (reason `FieldReference`).
+- P2-008 (M) `IIsNullOperation` from `?.` and `??` lowered through the null shadow (reason `IsNull`).
+- P2-009 (S) A local written only by an opaque has a defined value (reason `undefined`).
+- P2-010 (S) `IrLowerer.Destination` throws `KeyNotFoundException` on Git Extensions.
+- P2-011 (M) A procedure whose lowering throws is reported and skipped, not the run.
+- P2-012 (S) NuGet warnings NU1701, NU1702 and NU1903 are not project load failures.
+- P2-013 (S) Projects outside the solution's build configuration are not loaded or counted.
+- P2-014 (M) `corpus.ps1` prepares a box: long paths, submodules, isolation from this repo's
+  MSBuild files, reference assemblies and the SDK resolver.
 
 ## M5 — Agent surface (MCP)
 
