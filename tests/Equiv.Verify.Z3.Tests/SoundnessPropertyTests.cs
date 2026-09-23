@@ -19,6 +19,10 @@ public sealed class SoundnessPropertyTests
 {
     private static readonly VerificationOptions Options = new(3, 10_000, []);
 
+    private static readonly HashSet<string> MutationKinds = new(
+        ["swap parameters", "swap operands", "flip branch", "change constant", "insert opaque", "drop map", "change map", "duplicate call"],
+        StringComparer.Ordinal);
+
     /// <summary><c>Verify(P, P)</c> is Equivalent for 200 generated acyclic procedures.</summary>
     [Fact]
     public void AProcedureIsEquivalentToItself()
@@ -65,17 +69,23 @@ public sealed class SoundnessPropertyTests
             print: static m => $"{m!.Description}\n{IrText.Dump(m.Original)}\n{IrText.Dump(m.Mutant)}");
     }
 
+    /// <summary>
+    /// A 600-mutant sample contains every mutation kind. The sample is pinned to a seed: a random 600
+    /// occasionally misses the rarest kind, which failed unrelated PRs. If a generator change makes the
+    /// seed stop satisfying the predicate, <see cref="Check.Single{T}(Gen{T}, Func{T, bool}, string)"/>
+    /// throws; re-find a seed with the two-argument overload.
+    /// </summary>
     [Fact]
     public void EveryMutationKindIsGeneratedOnAcyclicProcedures()
     {
-        IrMutant?[] sample = IrGen.AcyclicProcedure.SelectMany(IrGen.Mutation).Array[600].Single();
+        IrMutant?[] sample = IrGen.AcyclicProcedure.SelectMany(IrGen.Mutation).Array[600].Single(
+            static s => Kinds(s).IsSupersetOf(MutationKinds),
+            "00005Hd1YRV1");
 
-        HashSet<string> kinds = new(
-            sample.OfType<IrMutant>().Select(static m => string.Join(' ', m.Description.Split(' ').Take(2))),
-            StringComparer.Ordinal);
-
-        Assert.Superset(
-            new HashSet<string>(["swap parameters", "swap operands", "flip branch", "change constant", "insert opaque", "drop map", "change map", "duplicate call"], StringComparer.Ordinal),
-            kinds);
+        Assert.Superset(MutationKinds, Kinds(sample));
     }
+
+    private static HashSet<string> Kinds(IrMutant?[] sample) => new(
+        sample.OfType<IrMutant>().Select(static m => string.Join(' ', m.Description.Split(' ').Take(2))),
+        StringComparer.Ordinal);
 }
