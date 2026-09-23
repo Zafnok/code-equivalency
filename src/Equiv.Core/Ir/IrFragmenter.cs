@@ -105,7 +105,8 @@ public static class IrFragmenter
     private static HashSet<IrBlockId> Region(Dictionary<IrBlockId, IrBlock> blocks, IrBlockId root, Dictionary<IrBlockId, int> cuts)
     {
         HashSet<IrBlockId> region = [root];
-        Stack<IrBlockId> pending = new([root]);
+        Stack<IrBlockId> pending = new();
+        pending.Push(root);
         while (pending.TryPop(out IrBlockId? block))
         {
             foreach (IrBlockId successor in blocks[block].Terminator.Successors().Where(s => !cuts.ContainsKey(s) && region.Add(s)))

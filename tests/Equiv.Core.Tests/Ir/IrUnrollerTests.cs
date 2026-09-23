@@ -44,6 +44,7 @@ public sealed class IrUnrollerTests
         { nameof(LoopFixtures.Nested), 3 },
         { nameof(LoopFixtures.EarlyReturn), 2 },
         { nameof(LoopFixtures.Throws), 3 },
+        { nameof(LoopFixtures.ExitPhi), 3 },
     };
 
     [Theory]
@@ -87,6 +88,7 @@ public sealed class IrUnrollerTests
     [InlineData(nameof(LoopFixtures.Single), 3)]
     [InlineData(nameof(LoopFixtures.EarlyReturn), 2)]
     [InlineData(nameof(LoopFixtures.Throws), 3)]
+    [InlineData(nameof(LoopFixtures.ExitPhi), 2)]
     public void UnrollingInPlaceKeepsTheLoopAndTheSemantics(string name, int copies)
     {
         IrProcedure original = Load(name);
@@ -106,6 +108,7 @@ public sealed class IrUnrollerTests
     [InlineData(nameof(LoopFixtures.Single), 3)]
     [InlineData(nameof(LoopFixtures.EarlyReturn), 2)]
     [InlineData(nameof(LoopFixtures.Throws), 3)]
+    [InlineData(nameof(LoopFixtures.ExitPhi), 2)]
     public void PeelingKeepsTheSemanticsAndTheLastCopyLoops(string name, int copies)
     {
         IrProcedure original = Load(name);
@@ -171,6 +174,41 @@ public sealed class IrUnrollerTests
     }
 
     [Fact]
+    public Task InlinedCopiesGetFreshNamesPerInstance() => Verify(IrText.Dump(IrUnroller.Unroll(IrText.Parse(Recursive), 2)));
+
+    [Fact]
+    public void InliningBindsTheReceiverToThisAndEachArgumentToItsParameter()
+    {
+        IrProcedure unrolled = IrUnroller.Unroll(IrText.Parse("""
+            proc "T::G(int,int,T)" (%a: bv32, %b: bv32, %other: sort "T", %field.T.x: map<sort "T", bv32>, %this: sort "T") -> bv32 entry B0
+            B0:
+              %z: bv32 = const bv32 0
+              %c: bool = eq %a, %z
+              br %c, B1, B2
+            B1:
+              %v: bv32 = mapread %field.T.x, %this
+              %r0: bv32 = sub %v, %b
+              ret %r0
+            B2:
+              %one: bv32 = const bv32 1
+              %m: bv32 = sub %a, %one
+              %r: bv32 = call "T::G(int,int,T)"(%other, %m, %b, %this) threw %t: bool
+              br %t, B3, B4
+            B3:
+              throw "System.Exception"
+            B4:
+              ret %r
+            """), 2);
+        IrMap fields = new(new IrSort("T"), new IrBitVec(32));
+        IrMapValue x = new(fields, Bits(0), ImmutableDictionary<IrValue, IrValue>.Empty.Add(new IrSortValue("T", 0), Bits(10)).Add(new IrSortValue("T", 1), Bits(20)));
+
+        IrRun run = IrGen.Run(unrolled, new IrInputs([Bits(1), Bits(5), new IrSortValue("T", 1), x, new IrSortValue("T", 0)]));
+
+        Assert.Empty(IrValidator.Validate(unrolled));
+        Assert.Equal(new IrReturned(Bits(15)), run.Outcome);
+    }
+
+    [Fact]
     public void AnInlinedThrowSetsTheThrewFlagAndAReceiverBindsThis()
     {
         IrProcedure unrolled = IrUnroller.Unroll(IrText.Parse("""
@@ -224,6 +262,7 @@ public sealed class IrUnrollerTests
     [InlineData("%n: bv32, %array.a: map<bv32, bv32>", "%n", "", "an input is keyed by an array variable")]
     [InlineData("%n: bv32, %this: sort \"T\"", "%n", "", "a self-call has no threw flag or its arguments do not match the parameters")]
     [InlineData("%n: bv32", "%n, %n, %n", "", "a self-call has no threw flag or its arguments do not match the parameters")]
+    [InlineData("%n: bv32, ref %m: bv32", "%n, %m", " outs(%m = %m)", "it has a by-ref parameter")]
     public void SomeSelfRecursionCannotBeInlined(string parameters, string arguments, string outs, string obstacle)
     {
         IrProcedure procedure = IrText.Parse($$"""
@@ -240,6 +279,7 @@ public sealed class IrUnrollerTests
 
     [Theory]
     [InlineData("call \"T::F(int)\"(%n)", "a self-call has no threw flag or its arguments do not match the parameters")]
+    [InlineData("call \"T::F(int)\"(%n) threw %t: bool\n  call \"T::F(int)\"(%n)", "a self-call has no threw flag or its arguments do not match the parameters")]
     [InlineData("%w: map<bv32, bv32> = mapwrite %field.T.x, %n, %n\n  call \"T::F(int)\"(%n) threw %t: bool", "it writes the heap")]
     [InlineData("call \"T::G(int)\"(%n) threw %t: bool", null)]
     public void InliningObstaclesLookAtTheBody(string body, string? obstacle)
@@ -315,6 +355,7 @@ public sealed class IrUnrollerTests
         nameof(LoopFixtures.Single) => LoopFixtures.Single,
         nameof(LoopFixtures.Nested) => LoopFixtures.Nested,
         nameof(LoopFixtures.EarlyReturn) => LoopFixtures.EarlyReturn,
+        nameof(LoopFixtures.ExitPhi) => LoopFixtures.ExitPhi,
         _ => LoopFixtures.Throws,
     });
 

@@ -51,12 +51,12 @@ public sealed class IrLoopAnalysis
 
         List<IrLoop> loops = [.. natural.Select(loop => new IrLoop(
             loop.Header,
-            [.. loop.Body.OrderBy(b => position[b])],
-            [.. loop.Latches.OrderBy(b => position[b])],
-            [.. loop.Body.OrderBy(b => position[b]).SelectMany(b => blocks[b].Terminator.Successors().Distinct().Where(s => !loop.Body.Contains(s)).Select(s => (b, s)))],
+            [.. loop.Body.OrderBy<IrBlockId, int>(b => position[b])],
+            [.. loop.Latches.OrderBy<IrBlockId, int>(b => position[b])],
+            [.. loop.Body.OrderBy<IrBlockId, int>(b => position[b]).SelectMany(b => blocks[b].Terminator.Successors().Distinct().Where(s => !loop.Body.Contains(s)).Select(s => (b, s)))],
             natural
                 .Where(outer => outer.Header != loop.Header && outer.Body.Contains(loop.Header))
-                .OrderBy(static outer => outer.Body.Count)
+                .OrderBy<(IrBlockId Header, HashSet<IrBlockId> Body, List<IrBlockId> Latches), int>(static outer => outer.Body.Count)
                 .Select(static outer => outer.Header)
                 .FirstOrDefault()))];
         Loops = [.. PreOrder(loops, parent: null, position)];
@@ -86,7 +86,7 @@ public sealed class IrLoopAnalysis
     private static IEnumerable<IrLoop> PreOrder(List<IrLoop> loops, IrBlockId? parent, Dictionary<IrBlockId, int> position) =>
         loops
             .Where(l => l.Parent == parent)
-            .OrderBy(l => position[l.Header])
+            .OrderBy<IrLoop, int>(l => position[l.Header])
             .SelectMany(l => PreOrder(loops, l.Header, position).Prepend(l));
 
     /// <summary>Iterative depth-first search: the reachable blocks in reverse postorder, and every edge into a block still on the stack.</summary>
@@ -95,7 +95,8 @@ public sealed class IrLoopAnalysis
         Dictionary<IrBlockId, bool> onStack = new() { [entry] = true };
         List<IrBlock> postorder = [];
         List<(IrBlockId, IrBlockId)> backEdges = [];
-        Stack<(IrBlock Block, int Next)> stack = new([(blocks[entry], 0)]);
+        Stack<(IrBlock Block, int Next)> stack = new();
+        stack.Push((blocks[entry], 0));
         while (stack.TryPop(out (IrBlock Block, int Next) frame))
         {
             ImmutableArray<IrBlockId> successors = frame.Block.Terminator.Successors();

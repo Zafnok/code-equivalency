@@ -103,4 +103,26 @@ internal static class LoopFixtures
         B5:
           ret outs(%r = %r1)
         """;
+
+    /// <summary><c>for (i = 0; i &lt; n; i++) { if (i == k) break; } return i;</c> with the exit merged by a phi.</summary>
+    public const string ExitPhi = """
+        proc "T::Stop(int,int)" (%n "n": bv32, %k "k": bv32) -> bv32 entry B0
+        B0:
+          %z: bv32 = const bv32 0
+          %one: bv32 = const bv32 1
+          goto B1
+        B1:
+          %i "i": bv32 = phi [B0: %z, B2: %i1]
+          %c: bool = slt %i, %n
+          br %c, B3, B4
+        B3:
+          %hit: bool = eq %i, %k
+          %i1 "i": bv32 = add %i, %one
+          br %hit, B4, B2
+        B2:
+          goto B1
+        B4:
+          %r "i": bv32 = phi [B1: %i, B3: %i1]
+          ret %r
+        """;
 }
