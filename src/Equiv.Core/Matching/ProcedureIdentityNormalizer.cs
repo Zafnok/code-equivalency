@@ -23,7 +23,7 @@ public static class ProcedureIdentityNormalizer
 
         string qualifiedType = Rename(Qualify(@namespace, type), renames);
         string arity = genericArity > 0 ? $"`{genericArity.ToString(CultureInfo.InvariantCulture)}" : string.Empty;
-        string parameters = string.Join(",", parameterTypes.Select(p => Rename(p, renames)));
+        string parameters = string.Join(',', parameterTypes.Select(p => Rename(p, renames)));
         return new ProcedureIdentity($"{qualifiedType}::{member}{arity}({parameters})");
     }
 

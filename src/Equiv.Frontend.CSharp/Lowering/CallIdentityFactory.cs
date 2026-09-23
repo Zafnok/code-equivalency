@@ -26,7 +26,7 @@ internal static class CallIdentityFactory
         ImmutableArray<ITypeSymbol> typeArguments = [.. TypeArguments(method.ContainingType), .. method.TypeArguments];
         string value = typeArguments.IsEmpty
             ? identity
-            : $"{identity}<{string.Join(",", typeArguments.Select(static t => t.ToDisplayString()))}>";
+            : $"{identity}<{string.Join(',', typeArguments.Select(static t => t.ToDisplayString()))}>";
         CallIdentity callee = new(value);
         return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, suppressedRuntimeChanges, out _) };
     }
