@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -54,10 +54,7 @@ public sealed class EncoderSnapshotTests
               ret
             """);
 
-        (System.Collections.Immutable.ImmutableArray<IrBlock> order, bool hasBackEdge) = ProductEncoder.Analyze(old);
-
-        Assert.Equal([new IrBlockId(0)], order.Select(static b => b.Id));
-        Assert.False(hasBackEdge);
+        Assert.Equal([new IrBlockId(0)], IrLoopAnalysis.Of(old).ReversePostorder.Select(static b => b.Id));
         Assert.DoesNotContain("old.x", Dump(old, old), StringComparison.Ordinal);
     }
 
@@ -74,6 +71,8 @@ public sealed class EncoderSnapshotTests
         return text.Append("differs: ").Append(encoding.Differs).Append('\n')
             .Append("opaque.old: ").Append(encoding.OpaqueOld).Append('\n')
             .Append("opaque.new: ").Append(encoding.OpaqueNew).Append('\n')
+            .Append("unreachable.old: ").Append(encoding.Old.Unreachable).Append('\n')
+            .Append("unreachable.new: ").Append(encoding.New.Unreachable).Append('\n')
             .ToString();
     }
 }

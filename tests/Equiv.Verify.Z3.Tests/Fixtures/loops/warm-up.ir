@@ -1,0 +1,44 @@
+# Equivalent(k-induction)
+# x and y are equal on every run, but the old side adds x and the new side adds y: from equal states with
+# x != y one step disagrees (rung 2 fails), while after one agreeing step x == y (rung 3 proves it).
+proc "T::Warm(int)" (%n "n": bv32) -> bv32 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  goto B1
+B1:
+  %i "i": bv32 = phi [B0: %z, B2: %i1]
+  %x "x": bv32 = phi [B0: %z, B2: %x1]
+  %y "y": bv32 = phi [B0: %z, B2: %y1]
+  %s "s": bv32 = phi [B0: %z, B2: %s1]
+  %c: bool = slt %i, %n
+  br %c, B2, B3
+B2:
+  %s1 "s": bv32 = add %s, %x
+  %x1 "x": bv32 = add %x, %one
+  %y1 "y": bv32 = add %y, %one
+  %i1 "i": bv32 = add %i, %one
+  goto B1
+B3:
+  ret %s
+---
+proc "T::Warm(int)" (%n "n": bv32) -> bv32 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  goto B1
+B1:
+  %i "i": bv32 = phi [B0: %z, B2: %i1]
+  %x "x": bv32 = phi [B0: %z, B2: %x1]
+  %y "y": bv32 = phi [B0: %z, B2: %y1]
+  %s "s": bv32 = phi [B0: %z, B2: %s1]
+  %c: bool = slt %i, %n
+  br %c, B2, B3
+B2:
+  %s1 "s": bv32 = add %s, %y
+  %x1 "x": bv32 = add %x, %one
+  %y1 "y": bv32 = add %y, %one
+  %i1 "i": bv32 = add %i, %one
+  goto B1
+B3:
+  ret %s

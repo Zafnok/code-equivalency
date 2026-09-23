@@ -15,7 +15,7 @@ public sealed class VerdictTests
     [Fact]
     public void EquivalentIsAVerdict()
     {
-        Assert.IsType<Verdict>(new Equivalent(), exactMatch: false);
+        Assert.IsType<Verdict>(new Equivalent(ProofMethod.Bounded), exactMatch: false);
     }
 
     [Fact]
@@ -48,9 +48,42 @@ public sealed class VerdictTests
     [InlineData(UnknownReason.Timeout)]
     [InlineData(UnknownReason.Opaque)]
     [InlineData(UnknownReason.UnmatchedOverload)]
+    [InlineData(UnknownReason.UnalignedLoop)]
+    [InlineData(UnknownReason.Recursion)]
     public void EveryUnknownReasonRoundTripsThroughTheRecord(UnknownReason reason)
     {
         Assert.Equal(reason, new Unknown(reason, "detail").Reason);
+    }
+
+    [Fact]
+    public void EquivalentNamesItsProofMethodAndBound()
+    {
+        Equivalent bounded = new(ProofMethod.Bounded, BoundedBy: 3);
+
+        Assert.Equal(ProofMethod.Bounded, bounded.Method);
+        Assert.Equal(3, bounded.BoundedBy);
+        Assert.Null(new Equivalent(ProofMethod.LockstepInduction).BoundedBy);
+        Assert.NotEqual(new Equivalent(ProofMethod.LockstepInduction), new Equivalent(ProofMethod.KInduction));
+    }
+
+    [Fact]
+    public void AVerdictHasNoLadderUnlessABackendRecordsOne()
+    {
+        Assert.Empty(new Added().Ladder);
+    }
+
+    [Fact]
+    public void VerdictsCompareTheirLadderStructurally()
+    {
+        LadderStep step = new(ProofMethod.Bounded, RungOutcome.Inconclusive, "bound reachable");
+        Unknown first = new Unknown(UnknownReason.UnalignedLoop, "d") with { Ladder = [step] };
+        Unknown second = new Unknown(UnknownReason.UnalignedLoop, "d") with { Ladder = [step with { }] };
+
+        Assert.Equal(first, second);
+        Assert.Equal(first.GetHashCode(), second.GetHashCode());
+        Assert.NotEqual(first, second with { Ladder = [] });
+        Assert.NotEqual<Verdict>(new Added(), new Removed());
+        Assert.False(first.Equals(Null.Of<Verdict>()));
     }
 
     [Fact]

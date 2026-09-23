@@ -14,6 +14,7 @@ namespace Equiv.Verify.Z3;
 /// of <see cref="Pair"/>. Every other SSA variable is a constant <c>old.&lt;name&gt;</c> or
 /// <c>new.&lt;name&gt;</c> fixed by a definitional equality; SSA makes that sound even for blocks no input
 /// reaches. Control flow is a Bool <c>reach</c> per block, and the call position a bv32 <c>cnt</c> per block.
+/// The ladder of ticket M3-002 encodes unrolled procedures and loop fragments with it; each is acyclic.
 /// </summary>
 internal static class ProductEncoder
 {
@@ -65,47 +66,6 @@ internal static class ProductEncoder
         }.ToFrozenDictionary();
 
     public static string Prefix(Side side) => side == Side.Old ? "old" : "new";
-
-    /// <summary>
-    /// Reverse postorder of the blocks reachable from the entry, and whether any edge closes a cycle
-    /// (a back edge). Iterative, so a long procedure cannot overflow the stack. M3-002 reuses it.
-    /// </summary>
-    public static (ImmutableArray<IrBlock> ReversePostorder, bool HasBackEdge) Analyze(IrProcedure procedure)
-    {
-        Dictionary<IrBlockId, IrBlock> blocks = procedure.Blocks.ToDictionary(static b => b.Id);
-        Dictionary<IrBlockId, bool> onStack = [];
-        List<IrBlock> postorder = [];
-        Stack<(IrBlock Block, int Next)> stack = new();
-        bool backEdge = false;
-        stack.Push((blocks[procedure.Entry], 0));
-        onStack[procedure.Entry] = true;
-        while (stack.Count > 0)
-        {
-            (IrBlock block, int next) = stack.Pop();
-            ImmutableArray<IrBlockId> successors = Successors(block.Terminator);
-            if (next == successors.Length)
-            {
-                onStack[block.Id] = false;
-                postorder.Add(block);
-                continue;
-            }
-
-            stack.Push((block, next + 1));
-            IrBlockId successor = successors[next];
-            if (!onStack.TryGetValue(successor, out bool active))
-            {
-                onStack[successor] = true;
-                stack.Push((blocks[successor], 0));
-            }
-            else
-            {
-                backEdge |= active;
-            }
-        }
-
-        postorder.Reverse();
-        return ([.. postorder], backEdge);
-    }
 
     /// <summary>
     /// Pairs the parameters of both sides into shared inputs (ADR 0021). A caller binds the source-language
@@ -186,7 +146,9 @@ internal static class ProductEncoder
             inputs,
             [.. oldSide.Opaques, .. newSide.Opaques],
             sorts,
-            calls);
+            calls,
+            oldSide.Terms,
+            newSide.Terms);
     }
 
     /// <summary>One side's parameter names and the input term each is bound to.</summary>
@@ -217,14 +179,6 @@ internal static class ProductEncoder
         return context.MkEq(old.ReturnValue(none), @new.ReturnValue(none));
     }
 
-    private static ImmutableArray<IrBlockId> Successors(IrTerminator terminator) => terminator switch
-    {
-        IrGoto jump => [jump.Target],
-        IrBranch branch => [branch.Then, branch.Else],
-        IrSwitch choice => [.. choice.Cases.Select(static c => c.Target), choice.Default],
-        _ => [],
-    };
-
     /// <summary>Encodes one side's blocks into assertions and exposes its observables.</summary>
     private sealed class SideEncoder
     {
@@ -241,6 +195,7 @@ internal static class ProductEncoder
         private readonly List<(BoolExpr Reach, IReadOnlyList<Expr> Events)> events = [];
         private readonly List<BoolExpr> assertions = [];
         private readonly List<(Side Side, IrOpaque Node, BoolExpr Reach)> opaques = [];
+        private readonly List<BoolExpr> unreachable = [];
 
         public SideEncoder(
             Side side,
@@ -257,7 +212,7 @@ internal static class ProductEncoder
             Procedure = procedure;
             context = sorts.Context;
 
-            foreach (IrBlock block in Analyze(procedure).ReversePostorder)
+            foreach (IrBlock block in IrLoopAnalysis.Of(procedure).ReversePostorder)
             {
                 EncodeBlock(block, block.Id == procedure.Entry);
             }
@@ -270,6 +225,10 @@ internal static class ProductEncoder
                 .Aggregate((IntExpr)context.MkInt(0), (rest, e) => (IntExpr)context.MkITE(reach[e.Block], context.MkInt(Intern(exceptionTypes, ((IrThrow)e.Exit).ExceptionType)), rest));
             Trace = calls.Trace(events);
             Opaque = context.MkOr([context.MkFalse(), .. opaques.Select(static o => o.Reach).Distinct()]);
+            Terms = new SideTerms(
+                inputs.Concat(constants).ToDictionary(static t => t.Key, static t => t.Value, StringComparer.Ordinal),
+                reach,
+                context.MkOr([context.MkFalse(), .. unreachable]));
         }
 
         public IrProcedure Procedure { get; }
@@ -287,6 +246,8 @@ internal static class ProductEncoder
         public SeqExpr Trace { get; }
 
         public BoolExpr Opaque { get; }
+
+        public SideTerms Terms { get; }
 
         /// <summary>The value returned, or <paramref name="none"/> (shared by both sides) when no return is reached.</summary>
         public Expr ReturnValue(Expr none) =>
@@ -493,7 +454,7 @@ internal static class ProductEncoder
                     }
 
                 case IrUnreachable:
-                    Assert(context.MkNot(reached));
+                    unreachable.Add(reached);
                     break;
                 default:
                     exits.Add((block.Id, block.Terminator));
@@ -539,10 +500,18 @@ internal static class ProductEncoder
     }
 
     /// <summary>
+    /// One side's terms, for queries beyond the product's own (ticket M3-002): every variable's Z3 term by name,
+    /// every block's <c>reach</c>, and whether the side reaches an <see cref="IrUnreachable"/>. An unreachable block
+    /// is an assumption, not an assertion, so that rung 1 can ask whether any input reaches its bound.
+    /// </summary>
+    public sealed record SideTerms(IReadOnlyDictionary<string, Expr> Vars, IReadOnlyDictionary<IrBlockId, BoolExpr> Reach, BoolExpr Unreachable);
+
+    /// <summary>
     /// The product query for one pair: <see cref="Assertions"/> hold on every input, <see cref="Differs"/>
     /// says some observable differs, and <see cref="OpaqueOld"/>/<see cref="OpaqueNew"/> say that side
     /// reaches an <see cref="IrOpaque"/> (ADR 0014). <see cref="Inputs"/> lists the shared inputs in
-    /// <see cref="Pair"/> order with their Z3 constants.
+    /// <see cref="Pair"/> order with their Z3 constants. A query assumes <c>not Old.Unreachable</c> and
+    /// <c>not New.Unreachable</c> unless it asks about them.
     /// </summary>
     public sealed record ProductEncoding(
         ImmutableArray<BoolExpr> Assertions,
@@ -552,5 +521,7 @@ internal static class ProductEncoder
         ImmutableArray<(SharedParameter Shared, Expr Term)> Inputs,
         ImmutableArray<(Side Side, IrOpaque Node, BoolExpr Reach)> Opaques,
         SortMapper Sorts,
-        TraceEncoder Calls);
+        TraceEncoder Calls,
+        SideTerms Old,
+        SideTerms New);
 }

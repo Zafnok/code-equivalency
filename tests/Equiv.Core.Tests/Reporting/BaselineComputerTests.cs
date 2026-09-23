@@ -21,7 +21,7 @@ public sealed class BaselineComputerTests
 {
     private static readonly ImmutableArray<Verdict> VerdictPool =
     [
-        new Equivalent(),
+        new Equivalent(ProofMethod.Bounded),
         new Added(),
         new Removed(),
         new Unknown(UnknownReason.Timeout, "d1"),
@@ -40,15 +40,15 @@ public sealed class BaselineComputerTests
     [Fact]
     public void WithNoBaselineEveryResultIsNew()
     {
-        SarifLog log = SarifReportWriter.Write([Fixtures.Result(new Equivalent())]);
+        SarifLog log = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Bounded))]);
         Assert.Equal(BaselineState.New, log.Runs[0].Results[0].BaselineState);
     }
 
     [Fact]
     public void AnIdentityNotInThePreviousLogIsNew()
     {
-        SarifLog previous = SarifReportWriter.Write([Fixtures.Result(new Equivalent(), "A")]);
-        SarifLog current = SarifReportWriter.Write([Fixtures.Result(new Equivalent(), "B")], previous);
+        SarifLog previous = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Bounded), "A")]);
+        SarifLog current = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Bounded), "B")], previous);
 
         Result result = Assert.Single(current.Runs[0].Results, static r => r.BaselineState != BaselineState.Absent);
         Assert.Equal(BaselineState.New, result.BaselineState);
@@ -57,7 +57,7 @@ public sealed class BaselineComputerTests
     [Fact]
     public void TheSameIdentityAndVerdictIsUnchanged()
     {
-        VerificationResult result = Fixtures.Result(new Equivalent());
+        VerificationResult result = Fixtures.Result(new Equivalent(ProofMethod.Bounded));
         SarifLog previous = SarifReportWriter.Write([result]);
         SarifLog current = SarifReportWriter.Write([result], previous);
 
@@ -71,7 +71,7 @@ public sealed class BaselineComputerTests
         // Equivalent -> Divergent and must never be hidden from the exit code as "updated" —
         // see BaselineComputer's remarks.
         ProcedureIdentity identity = new("A");
-        SarifLog previous = SarifReportWriter.Write([new VerificationResult(identity, new Equivalent())]);
+        SarifLog previous = SarifReportWriter.Write([new VerificationResult(identity, new Equivalent(ProofMethod.Bounded))]);
         SarifLog current = SarifReportWriter.Write([new VerificationResult(identity, new Added())], previous);
 
         Assert.Equal(BaselineState.New, current.Runs[0].Results[0].BaselineState);
@@ -92,7 +92,7 @@ public sealed class BaselineComputerTests
     [Fact]
     public void AnIdentityMissingFromTheCurrentRunBecomesAnAbsentCarryOver()
     {
-        VerificationResult result = Fixtures.Result(new Equivalent(), "A");
+        VerificationResult result = Fixtures.Result(new Equivalent(ProofMethod.Bounded), "A");
         SarifLog previous = SarifReportWriter.Write([result]);
         SarifLog current = SarifReportWriter.Write([], previous);
 

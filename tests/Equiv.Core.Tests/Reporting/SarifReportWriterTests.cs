@@ -20,7 +20,7 @@ namespace Equiv.Core.Tests.Reporting;
 public sealed class SarifReportWriterTests
 {
     [Fact]
-    public Task Equivalent() => VerifyJson(Serialize(Fixtures.Result(new Equivalent())));
+    public Task Equivalent() => VerifyJson(Serialize(Fixtures.Result(new Equivalent(ProofMethod.Bounded))));
 
     [Fact]
     public Task Divergent() => VerifyJson(Serialize(Fixtures.Result(new Divergent(Fixtures.Counterexample()))));
@@ -54,7 +54,7 @@ public sealed class SarifReportWriterTests
     [Fact]
     public void ResultWithoutALocationHasNoLocations()
     {
-        SarifLog log = SarifReportWriter.Write([Fixtures.Result(new Equivalent())]);
+        SarifLog log = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Bounded))]);
         Assert.Null(log.Runs[0].Results[0].Locations);
     }
 
@@ -62,7 +62,7 @@ public sealed class SarifReportWriterTests
     public void EndpointMatchedResultCarriesAnEndpointLogicalLocation()
     {
         ProcedureIdentity identity = new("GET /api/orders/{id}", new SourceSpan(@"C:\src\OrdersController.cs", 10, 5, 10, 8));
-        SarifLog log = SarifReportWriter.Write([new VerificationResult(identity, new Equivalent())]);
+        SarifLog log = SarifReportWriter.Write([new VerificationResult(identity, new Equivalent(ProofMethod.Bounded))]);
         Location location = Assert.Single(log.Runs[0].Results[0].Locations);
         LogicalLocation logicalLocation = Assert.Single(location.LogicalLocations);
 
@@ -75,7 +75,7 @@ public sealed class SarifReportWriterTests
     public void EndpointMatchedResultWithoutAPhysicalLocationStillCarriesALogicalLocation()
     {
         ProcedureIdentity identity = new("GET /api/orders/{id}");
-        SarifLog log = SarifReportWriter.Write([new VerificationResult(identity, new Equivalent())]);
+        SarifLog log = SarifReportWriter.Write([new VerificationResult(identity, new Equivalent(ProofMethod.Bounded))]);
         Location location = Assert.Single(log.Runs[0].Results[0].Locations);
         LogicalLocation logicalLocation = Assert.Single(location.LogicalLocations);
 
@@ -107,7 +107,7 @@ public sealed class SarifReportWriterTests
     [Fact]
     public void WithoutABaselineEveryResultIsNew()
     {
-        SarifLog log = SarifReportWriter.Write([Fixtures.Result(new Equivalent())]);
+        SarifLog log = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Bounded))]);
         Assert.Equal(BaselineState.New, log.Runs[0].Results[0].BaselineState);
     }
 
@@ -137,6 +137,70 @@ public sealed class SarifReportWriterTests
         Assert.Contains("randomized", result.Message.Text, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(ProofMethod.Bounded, "bounded")]
+    [InlineData(ProofMethod.LockstepInduction, "lockstep-induction")]
+    [InlineData(ProofMethod.KInduction, "k-induction")]
+    public void EquivalentResultCarriesItsProofMethodAndNoBoundUnlessBounded(ProofMethod method, string name)
+    {
+        Result result = SarifReportWriter.Write([Fixtures.Result(new Equivalent(method))]).Runs[0].Results[0];
+
+        Assert.Equal(name, result.GetProperty<string>("proofMethod"));
+        Assert.False(result.TryGetProperty("boundedBy", out int _));
+    }
+
+    [Fact]
+    public void BoundedEquivalentOverALoopCarriesBoundedBy()
+    {
+        Result result = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Bounded, BoundedBy: 3))]).Runs[0].Results[0];
+
+        Assert.Equal(3, result.GetProperty<int>("boundedBy"));
+    }
+
+    [Theory]
+    [InlineData(UnknownReason.Timeout, "timeout")]
+    [InlineData(UnknownReason.Opaque, "opaque")]
+    [InlineData(UnknownReason.UnmatchedOverload, "unmatched-overload")]
+    [InlineData(UnknownReason.UnalignedLoop, "unaligned-loop")]
+    [InlineData(UnknownReason.Recursion, "recursion")]
+    public void UnknownResultCarriesItsReason(UnknownReason reason, string name)
+    {
+        Result result = SarifReportWriter.Write([Fixtures.Result(new Unknown(reason, "detail"))]).Runs[0].Results[0];
+
+        Assert.Equal(name, result.GetProperty<string>("unknownReason"));
+    }
+
+    [Fact]
+    public void ResultListsEveryLadderRungWithItsOutcome()
+    {
+        Verdict verdict = new Unknown(UnknownReason.UnalignedLoop, "detail")
+        {
+            Ladder =
+            [
+                new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, "no divergence up to 3"),
+                new LadderStep(ProofMethod.LockstepInduction, RungOutcome.NotApplicable, "loop counts differ"),
+                new LadderStep(ProofMethod.KInduction, RungOutcome.Timeout, "solver unknown"),
+                new LadderStep(ProofMethod.KInduction, RungOutcome.Proved, "p"),
+                new LadderStep(ProofMethod.Bounded, RungOutcome.Refuted, "r"),
+            ],
+        };
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(verdict)]).Runs[0].Results[0];
+
+        List<Dictionary<string, string>> trace = result.GetProperty<List<Dictionary<string, string>>>("ladderTrace");
+        Assert.Equal(["bounded", "lockstep-induction", "k-induction", "k-induction", "bounded"], trace.Select(static s => s["rung"]), StringComparer.Ordinal);
+        Assert.Equal(["inconclusive", "not-applicable", "timeout", "proved", "refuted"], trace.Select(static s => s["outcome"]), StringComparer.Ordinal);
+        Assert.Equal("loop counts differ", trace[1]["detail"]);
+    }
+
+    [Fact]
+    public void ResultWithoutALadderHasNoLadderTrace()
+    {
+        Result result = SarifReportWriter.Write([Fixtures.Result(new Added())]).Runs[0].Results[0];
+
+        Assert.False(result.TryGetProperty("ladderTrace", out List<Dictionary<string, string>> _));
+    }
+
     private static Counterexample RuntimeChangedCounterexample()
     {
         CallIdentity flagged = new("System.String::GetHashCode()", RuntimeChanged: true);
@@ -147,7 +211,7 @@ public sealed class SarifReportWriterTests
     [Fact]
     public void EveryResultCarriesItsProcedureIdentityAndFingerprintAsPartialFingerprints()
     {
-        VerificationResult result = Fixtures.Result(new Equivalent());
+        VerificationResult result = Fixtures.Result(new Equivalent(ProofMethod.Bounded));
         SarifLog log = SarifReportWriter.Write([result]);
         Result sarifResult = log.Runs[0].Results[0];
 
@@ -160,7 +224,7 @@ public sealed class SarifReportWriterTests
     {
         SarifLog log = SarifReportWriter.Write(
         [
-            Fixtures.Result(new Equivalent(), "A"),
+            Fixtures.Result(new Equivalent(ProofMethod.Bounded), "A"),
             Fixtures.Result(new Divergent(Fixtures.Counterexample()), "B"),
             Fixtures.Result(new Unknown(UnknownReason.Opaque, "detail"), "C"),
             Fixtures.Result(new Added(), "D"),

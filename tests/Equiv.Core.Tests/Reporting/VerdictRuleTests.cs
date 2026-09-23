@@ -15,7 +15,7 @@ public sealed class VerdictRuleTests
     [Fact]
     public void EquivalentIsEQ001()
     {
-        (string ruleId, FailureLevel level, ResultKind kind, RuntimeChange? runtimeChange) = VerdictRule.Describe(new Equivalent());
+        (string ruleId, FailureLevel level, ResultKind kind, RuntimeChange? runtimeChange) = VerdictRule.Describe(new Equivalent(ProofMethod.Bounded));
         Assert.Equal("EQ001", ruleId);
         Assert.Equal(FailureLevel.None, level);
         Assert.Equal(ResultKind.Pass, kind);

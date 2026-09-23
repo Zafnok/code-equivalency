@@ -15,7 +15,7 @@ public sealed class FileReportSinkTests
         string path = Path.GetTempFileName();
         try
         {
-            SarifLog log = SarifReportWriter.Write([Fixtures.Result(new Equivalent())]);
+            SarifLog log = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Bounded))]);
             FileReportSink sink = new(path);
 
             sink.Write(log);

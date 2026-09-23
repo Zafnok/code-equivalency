@@ -219,8 +219,8 @@ public sealed class CompareCommandTests
         FakeFrontend frontend = new("csharp", _ => true, matchResult);
         FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
         {
-            [pairA.Value] = new Equivalent(),
-            [pairB.Value] = new Equivalent(),
+            [pairA.Value] = new Equivalent(ProofMethod.Bounded),
+            [pairB.Value] = new Equivalent(ProofMethod.Bounded),
         });
         InMemoryReportSink sink = new();
 
@@ -295,7 +295,7 @@ public sealed class CompareCommandTests
         using TempFile legacy = new();
         using TempFile modern = new();
         ProcedurePair lowered = Pair(PairIdentity);
-        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
 
         foreach (ProcedurePair pair in new[] { lowered with { OldBody = null }, lowered with { NewBody = null } })
         {
@@ -392,7 +392,7 @@ public sealed class CompareCommandTests
             // Divergent counts, and this one is now Equivalent.
             MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
             FakeFrontend frontend = new("csharp", _ => true, matchResult);
-            FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
+            FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
 
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", baselinePath, ConfigPath: null, "divergent", DryRun: false),
@@ -417,7 +417,7 @@ public sealed class CompareCommandTests
             File.WriteAllText(configPath, """{ "bound": 7, "timeoutMs": 12000, "callIdentityRenames": { "Old::M": "New::M" } }""");
             MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
             FakeFrontend frontend = new("csharp", _ => true, matchResult);
-            FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
+            FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
 
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, configPath, "divergent", DryRun: false),
@@ -538,7 +538,7 @@ public sealed class CompareCommandTests
             File.WriteAllText(configPath, """{ "bound": 0 }""");
             MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
             FakeFrontend frontend = new("csharp", _ => true, matchResult);
-            FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent() });
+            FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
             int exitCode = ExitCodes.Success;
 
             string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
