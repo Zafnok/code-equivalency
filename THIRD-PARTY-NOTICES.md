@@ -83,7 +83,7 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 | DiffEngine | 20.3.1 | MIT |
 | EmptyFiles | 8.18.2 | MIT |
 | JetBrains.Annotations | 2026.2.0 | MIT |
-| Meziantou.Analyzer | 3.0.259 | MIT |
+| Meziantou.Analyzer | 3.0.290 | MIT |
 | Microsoft.ApplicationInsights | 2.23.0 | MIT |
 | Microsoft.Bcl.AsyncInterfaces | 6.0.0 | MIT |
 | Microsoft.Bcl.AsyncInterfaces | 10.0.12 | MIT |
@@ -106,12 +106,12 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 | System.ValueTuple | 4.6.2 | MIT |
 | TngTech.ArchUnitNET | 0.13.4 | Apache-2.0 |
 | TngTech.ArchUnitNET.xUnitV3 | 0.13.4 | Apache-2.0 |
-| Verify | 33.0.2 | MIT |
-| Verify.XunitV3 | 33.0.2 | MIT |
+| Verify | 33.1.1 | MIT |
+| Verify.XunitV3 | 33.1.1 | MIT |
 | coverlet.MTP | 10.0.1 | MIT |
 | dotnet-sonarscanner | 11.3.0 | LGPL-3.0 |
 | dotnet-stryker | 5.0.0 | Apache-2.0 |
-| nuget-license | 4.0.17 | Apache-2.0 |
+| nuget-license | 4.0.18 | Apache-2.0 |
 | xunit.analyzers | 2.1.0 | Apache-2.0 |
 | xunit.v3 | 4.0.1 | Apache-2.0 |
 | xunit.v3.assert | 4.0.1 | Apache-2.0 |
