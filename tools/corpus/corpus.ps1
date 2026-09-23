@@ -61,6 +61,10 @@ $Upstream = 'amazon-science/Poly-MigrationBench'
 $PmbPath = Join-Path $PSScriptRoot 'poly-migrationbench-dotnet.csv'
 $PairsPath = Join-Path $PSScriptRoot 'pairs.csv'
 
+# Status lines are for the operator, not the pipeline: Get-Checkout returns a path, so they must
+# stay off the output stream. One Show- helper keeps that intent explicit (Sonar S8677).
+function Show-Step([string]$Message) { Write-Host $Message }
+
 function Invoke-Git {
     param([string[]]$GitArgs)
     & git @GitArgs | Out-Host
@@ -87,11 +91,11 @@ function Get-Checkout {
     param([string]$Repo, [string]$Commit)
     $dir = Join-Path (Join-Path $CorpusRoot 'repos') ('{0}@{1}' -f (Get-SafeName $Repo), $Commit.Substring(0, 12))
     if (Test-Path -LiteralPath (Join-Path $dir '.git')) {
-        Write-Host "reuse   $dir"
+        Show-Step "reuse   $dir"
         return $dir
     }
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    Write-Host "fetch   $Repo@$Commit -> $dir"
+    Show-Step "fetch   $Repo@$Commit -> $dir"
     Invoke-Git @('-C', $dir, 'init', '-q')
     Invoke-Git @('-C', $dir, 'remote', 'add', 'origin', "https://github.com/$Repo.git")
     Invoke-Git @('-C', $dir, 'fetch', '-q', '--depth', '1', 'origin', $Commit)
@@ -107,7 +111,7 @@ function Write-PairJson {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $path = Join-Path $dir 'pair.json'
     [IO.File]::WriteAllText($path, ($Data | ConvertTo-Json -Depth 4), (New-Object Text.UTF8Encoding $false))
-    Write-Host "wrote   $path"
+    Show-Step "wrote   $path"
 }
 
 function Read-PairJson([string]$Slug) {
@@ -134,10 +138,10 @@ function Select-PmbRoot([string]$Roots) {
 
 switch ($PSCmdlet.ParameterSetName) {
     'List' {
-        Write-Host "pairs.csv"
+        Show-Step "pairs.csv"
         Get-Pairs | Select-Object slug, kind, repo, license | Format-Table -AutoSize | Out-Host
         $pmb = @(Get-Pmb)
-        Write-Host ("poly-migrationbench-dotnet.csv: {0} repos (use -Select to choose agent pairs)" -f $pmb.Count)
+        Show-Step ("poly-migrationbench-dotnet.csv: {0} repos (use -Select to choose agent pairs)" -f $pmb.Count)
     }
 
     'Select' {
@@ -184,7 +188,7 @@ switch ($PSCmdlet.ParameterSetName) {
                 modernSolution = $null
                 verifyCommand = $row.verify_command
             }
-            Write-Host "next    -PrepareAgent $Fetch, then migrate the copy as the skill says"
+            Show-Step "next    -PrepareAgent $Fetch, then migrate the copy as the skill says"
         }
     }
 
@@ -196,7 +200,7 @@ switch ($PSCmdlet.ParameterSetName) {
         $legacyRoot = (& git -C (Split-Path -Parent $pair.legacySolution) rev-parse --show-toplevel).Trim()
         $modernRoot = Join-Path (Get-PairDir $slug) 'modern'
         if (Test-Path -LiteralPath $modernRoot) { throw "$modernRoot exists. Use -Clean $PrepareAgent to start over." }
-        Write-Host "copy    $legacyRoot -> $modernRoot"
+        Show-Step "copy    $legacyRoot -> $modernRoot"
         Copy-Item -LiteralPath $legacyRoot -Destination $modernRoot -Recurse
         $relative = $pair.legacySolution.Substring($legacyRoot.Length).TrimStart('\', '/')
         $data = @{}
@@ -244,46 +248,46 @@ switch ($PSCmdlet.ParameterSetName) {
             return $p.Value
         }
         $census = Get-Bag (Get-Bag $run 'properties') 'loweringCensus'
-        Write-Host "== census"
-        if ($null -eq $census) { Write-Host "n/a (no run.properties.loweringCensus; needs M3-014)" }
+        Show-Step "== census"
+        if ($null -eq $census) { Show-Step "n/a (no run.properties.loweringCensus; needs M3-014)" }
         else { $census | ConvertTo-Json -Depth 6 | Out-Host }
         $unverified = Get-Bag (Get-Bag $run 'properties') 'unverified'
-        Write-Host ("== unverified procedures: {0}" -f @($unverified | Where-Object { $_ }).Count)
+        Show-Step ("== unverified procedures: {0}" -f @($unverified | Where-Object { $_ }).Count)
         $invocations = @(Get-Bag $run 'invocations' | Where-Object { $_ })
         $notes = @()
         if ($invocations.Count -gt 0) { $notes = @(Get-Bag $invocations[0] 'toolExecutionNotifications' | Where-Object { $_ }) }
-        Write-Host ("== tool execution notifications: {0}" -f $notes.Count)
-        $notes | ForEach-Object { Write-Host ("  {0}: {1}" -f $_.level, $_.message.text) }
+        Show-Step ("== tool execution notifications: {0}" -f $notes.Count)
+        $notes | ForEach-Object { Show-Step ("  {0}: {1}" -f $_.level, $_.message.text) }
         $results = @(Get-Bag $run 'results' | Where-Object { $_ })
-        Write-Host ("== results: {0}" -f $results.Count)
-        $results | Group-Object ruleId | Sort-Object Name | ForEach-Object { Write-Host ("  {0} {1}" -f $_.Name, $_.Count) }
+        Show-Step ("== results: {0}" -f $results.Count)
+        $results | Group-Object ruleId | Sort-Object Name | ForEach-Object { Show-Step ("  {0} {1}" -f $_.Name, $_.Count) }
         foreach ($prop in 'proofMethod', 'scope') {
-            Write-Host "== by $prop"
+            Show-Step "== by $prop"
             $results | ForEach-Object {
                 $value = Get-Bag (Get-Bag $_ 'properties') $prop
                 if ($null -eq $value) { 'n/a' } else { [string]$value }
-            } | Group-Object | Sort-Object Name | ForEach-Object { Write-Host ("  {0} {1}" -f $_.Name, $_.Count) }
+            } | Group-Object | Sort-Object Name | ForEach-Object { Show-Step ("  {0} {1}" -f $_.Name, $_.Count) }
         }
-        Write-Host "== Unknown (EQ003) by reason (first word of the message until a reason property exists)"
+        Show-Step "== Unknown (EQ003) by reason (first word of the message until a reason property exists)"
         $results | Where-Object { $_.ruleId -eq 'EQ003' } | ForEach-Object {
             $reason = Get-Bag (Get-Bag $_ 'properties') 'reason'
             if ($null -eq $reason) { $reason = ($_.message.text -split '[\s:(]')[0] }
             [string]$reason
-        } | Group-Object | Sort-Object Count -Descending | ForEach-Object { Write-Host ("  {0} {1}" -f $_.Name, $_.Count) }
+        } | Group-Object | Sort-Object Count -Descending | ForEach-Object { Show-Step ("  {0} {1}" -f $_.Name, $_.Count) }
     }
 
     'Clean' {
         $slug = Resolve-Slug $Clean
         $dir = Get-PairDir $slug
-        if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force; Write-Host "removed $dir" }
-        Write-Host "note    shared checkouts under .corpus/repos are kept; delete them by hand if needed"
+        if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force; Show-Step "removed $dir" }
+        Show-Step "note    shared checkouts under .corpus/repos are kept; delete them by hand if needed"
     }
 
     'Refresh' {
         $url = "https://raw.githubusercontent.com/$Upstream/$UpstreamRef/Poly-MigrationBench-dotnet.csv"
         $resolved = ((& git ls-remote "https://github.com/$Upstream.git" $UpstreamRef) -split '\s+')[0]
         if (-not $resolved) { $resolved = $UpstreamRef }
-        Write-Host "upstream $Upstream@$UpstreamRef ($resolved)"
+        Show-Step "upstream $Upstream@$UpstreamRef ($resolved)"
         $content = (Invoke-WebRequest -UseBasicParsing -Uri $url).Content
         $new = @($content -split "`r?`n" | Where-Object { $_ } | ConvertFrom-Csv)
         $old = @(Get-Pmb)
@@ -292,17 +296,17 @@ switch ($PSCmdlet.ParameterSetName) {
         $added = @($new | Where-Object { -not $oldByRepo.ContainsKey($_.repo) })
         $removed = @($old | Where-Object { -not $newByRepo.ContainsKey($_.repo) })
         $moved = @($new | Where-Object { $oldByRepo.ContainsKey($_.repo) -and $oldByRepo[$_.repo].base_commit -ne $_.base_commit })
-        Write-Host ("repos {0} -> {1}; added {2}, removed {3}, base_commit changed {4}" -f $old.Count, $new.Count, $added.Count, $removed.Count, $moved.Count)
-        $added | ForEach-Object { Write-Host "  + $($_.repo)" }
-        $removed | ForEach-Object { Write-Host "  - $($_.repo)" }
-        $moved | ForEach-Object { Write-Host "  ~ $($_.repo)" }
+        Show-Step ("repos {0} -> {1}; added {2}, removed {3}, base_commit changed {4}" -f $old.Count, $new.Count, $added.Count, $removed.Count, $moved.Count)
+        $added | ForEach-Object { Show-Step "  + $($_.repo)" }
+        $removed | ForEach-Object { Show-Step "  - $($_.repo)" }
+        $moved | ForEach-Object { Show-Step "  ~ $($_.repo)" }
         if ($Apply) {
             [IO.File]::WriteAllText($PmbPath, $content, (New-Object Text.UTF8Encoding $false))
-            Write-Host "wrote   $PmbPath"
-            Write-Host "now     record '$resolved' as the pinned upstream commit in tools/corpus/README.md"
+            Show-Step "wrote   $PmbPath"
+            Show-Step "now     record '$resolved' as the pinned upstream commit in tools/corpus/README.md"
         }
         else {
-            Write-Host "dry run: nothing written (pass -Apply)"
+            Show-Step "dry run: nothing written (pass -Apply)"
         }
     }
 }
