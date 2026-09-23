@@ -13,7 +13,7 @@ public sealed class IVerificationBackendTests
 {
     private sealed class AlwaysEquivalent : IVerificationBackend
     {
-        public Verdict Verify(IrProcedure oldBody, IrProcedure newBody, VerificationOptions options) => new Equivalent();
+        public Verdict Verify(IrProcedure oldBody, IrProcedure newBody, VerificationOptions options) => new Equivalent(ProofMethod.Bounded);
     }
 
     [Fact]

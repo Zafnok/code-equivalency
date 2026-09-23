@@ -1,0 +1,17 @@
+﻿proc "T::Check(int,int,ref int)" (%$s0 "i": bv32, %$s1 "r": bv32, %$s2 "n": bv32, %$s3 "k": bv32, %$s4: bv32, %n "n": bv32, %k "k": bv32, ref %r "r": bv32) entry B1
+B1:
+  %c: bool = slt %$s0, %$s2
+  br %c, B2, B5
+B2:
+  %e: bool = eq %$s0, %$s3
+  br %e, B3, B4
+B3:
+  throw "System.InvalidOperationException" outs(%r = %$s1)
+B4:
+  %i1 "i": bv32 = add %$s0, %$s4
+  goto B6
+B5:
+  ret outs(%r = %$s1)
+B6:
+  call "equiv:cut:0"(%i1, %$s0, %$s2, %$s3, %$s4)
+  throw "equiv:cut" outs(%r = %r)

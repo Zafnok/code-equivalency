@@ -1,0 +1,36 @@
+# Unknown(Timeout)
+# After a loop, the 64-bit division identity of hard-multiplication.ir: every query times out at 50 ms.
+proc "T::Rebuild(ulong,ulong,int)" (%a: bv64, %b: bv64, %n: bv32) -> bv64 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  goto B1
+B1:
+  %i: bv32 = phi [B0: %z, B2: %i1]
+  %c: bool = slt %i, %n
+  br %c, B2, B3
+B2:
+  %i1: bv32 = add %i, %one
+  goto B1
+B3:
+  %q: bv64 = udiv %a, %b
+  %m: bv64 = mul %q, %b
+  %r: bv64 = urem %a, %b
+  %s: bv64 = add %m, %r
+  ret %s
+---
+proc "T::Rebuild(ulong,ulong,int)" (%a: bv64, %b: bv64, %n: bv32) -> bv64 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  goto B1
+B1:
+  %i: bv32 = phi [B0: %z, B2: %i1]
+  %c: bool = slt %i, %n
+  br %c, B2, B3
+B2:
+  %i1: bv32 = add %i, %one
+  goto B1
+B3:
+  %q: bv64 = udiv %a, %b
+  ret %a

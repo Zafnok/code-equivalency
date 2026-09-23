@@ -1,4 +1,4 @@
-using Equiv.Core.Matching;
+﻿using Equiv.Core.Matching;
 using Equiv.Core.RuntimeChanges;
 using Equiv.Core.Verdicts;
 
@@ -76,10 +76,7 @@ public static class SarifReportWriter
             },
         };
 
-        if (result.Verdict is Divergent divergent)
-        {
-            sarifResult.SetProperty("model", CounterexampleText.Dump(divergent.Counterexample));
-        }
+        SetVerdictProperties(sarifResult, result.Verdict);
 
         // Sarif.Sdk's Result has no per-result help-link property (only ReportingDescriptor.HelpUri,
         // one fixed value per rule); EQ006's url is specific to the matched member, so it travels as
@@ -107,6 +104,69 @@ public static class SarifReportWriter
 
         return sarifResult;
     }
+
+    /// <summary>
+    /// The verdict's payload as result properties: a Divergent's counterexample (<c>model</c>), an Equivalent's
+    /// <c>proofMethod</c> and, for a bounded proof over a loop, <c>boundedBy</c>, an Unknown's <c>unknownReason</c>,
+    /// and the <c>ladderTrace</c> of every rung the backend attempted (VERIFICATION-MODEL.md sections 1 and 5.1;
+    /// ticket M3-002).
+    /// </summary>
+    private static void SetVerdictProperties(Result sarifResult, Verdict verdict)
+    {
+        switch (verdict)
+        {
+            case Divergent divergent:
+                sarifResult.SetProperty("model", CounterexampleText.Dump(divergent.Counterexample));
+                break;
+            case Equivalent equivalent:
+                sarifResult.SetProperty("proofMethod", Name(equivalent.Method));
+                if (equivalent.BoundedBy is { } bound)
+                {
+                    sarifResult.SetProperty("boundedBy", bound);
+                }
+
+                break;
+            case Unknown unknown:
+                sarifResult.SetProperty("unknownReason", Name(unknown.Reason));
+                break;
+        }
+
+        if (!verdict.Ladder.IsEmpty)
+        {
+            sarifResult.SetProperty("ladderTrace", verdict.Ladder.Select(static s => new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["rung"] = Name(s.Rung),
+                ["outcome"] = Name(s.Outcome),
+                ["detail"] = s.Detail,
+            }).ToList());
+        }
+    }
+
+    /// <summary>The spelling VERIFICATION-MODEL.md section 5.1 uses for a rung: <c>bounded</c>, <c>lockstep-induction</c>, <c>k-induction</c>.</summary>
+    internal static string Name(ProofMethod method) => method switch
+    {
+        ProofMethod.Bounded => "bounded",
+        ProofMethod.LockstepInduction => "lockstep-induction",
+        _ => "k-induction",
+    };
+
+    internal static string Name(UnknownReason reason) => reason switch
+    {
+        UnknownReason.Timeout => "timeout",
+        UnknownReason.Opaque => "opaque",
+        UnknownReason.UnmatchedOverload => "unmatched-overload",
+        UnknownReason.UnalignedLoop => "unaligned-loop",
+        _ => "recursion",
+    };
+
+    internal static string Name(RungOutcome outcome) => outcome switch
+    {
+        RungOutcome.Proved => "proved",
+        RungOutcome.Refuted => "refuted",
+        RungOutcome.Inconclusive => "inconclusive",
+        RungOutcome.Timeout => "timeout",
+        _ => "not-applicable",
+    };
 
     /// <summary>
     /// M2-005 acceptance criterion 4: an endpoint-matched procedure's result carries a

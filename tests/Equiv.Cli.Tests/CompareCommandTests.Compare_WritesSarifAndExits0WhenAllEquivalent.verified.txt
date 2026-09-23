@@ -79,7 +79,10 @@
             procedureIdentity/v1: T::A(),
             resultFingerprint/v1: a3eadbc917958316d0a6054d009da0913e993153302dfbaeb4b4d49f322aafef
           },
-          baselineState: new
+          baselineState: new,
+          properties: {
+            proofMethod: bounded
+          }
         },
         {
           ruleId: EQ001,
@@ -92,7 +95,10 @@
             procedureIdentity/v1: T::B(),
             resultFingerprint/v1: b68f19e583445d0a0fe006061da72ff054ec88a523fc97e2c99d61ef6901570d
           },
-          baselineState: new
+          baselineState: new,
+          properties: {
+            proofMethod: bounded
+          }
         },
         {
           ruleId: EQ004,

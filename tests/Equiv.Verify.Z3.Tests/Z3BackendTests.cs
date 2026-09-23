@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Globalization;
 
 using Equiv.Core;
@@ -50,7 +50,7 @@ public sealed class Z3BackendTests
     private static readonly VerificationOptions Options = new(3, 10_000, []);
 
     [Fact]
-    public void ABackEdgeOnEitherSideIsUnknownLoopBeforeAnyZ3Call()
+    public void ALoopOnOneSideOnlyClimbsTheLadderAndIsUnaligned()
     {
         List<CountingContext> contexts = [];
         Z3Backend backend = new(() => Track(contexts));
@@ -58,9 +58,18 @@ public sealed class Z3BackendTests
         Verdict oldLoops = backend.Verify(IrText.Parse(Loop), IrText.Parse(Straight), Options);
         Verdict newLoops = backend.Verify(IrText.Parse(Straight), IrText.Parse(Loop), Options);
 
-        Assert.Equal(new Unknown(UnknownReason.Loop, "T::Spin(int) has a loop; loops need the M3-002 ladder."), oldLoops);
-        Assert.Equal(UnknownReason.Loop, Assert.IsType<Unknown>(newLoops).Reason);
-        Assert.Empty(contexts);
+        Unknown unknown = Assert.IsType<Unknown>(oldLoops);
+        Assert.Equal(UnknownReason.UnalignedLoop, unknown.Reason);
+        Assert.Equal("the loops do not align: the old side has 1 loops and the new side 0", unknown.Detail);
+        Assert.Equal(
+            [
+                (ProofMethod.Bounded, RungOutcome.Inconclusive),
+                (ProofMethod.LockstepInduction, RungOutcome.NotApplicable),
+                (ProofMethod.KInduction, RungOutcome.NotApplicable),
+            ],
+            unknown.Ladder.Select(static s => (s.Rung, s.Outcome)));
+        Assert.Equal(UnknownReason.UnalignedLoop, Assert.IsType<Unknown>(newLoops).Reason);
+        Assert.All(contexts, static c => Assert.Equal(1, c.Disposals));
     }
 
     [Fact]
@@ -68,7 +77,7 @@ public sealed class Z3BackendTests
     {
         Verdict verdict = new Z3Backend().Verify(IrText.Parse(Diamond), IrText.Parse(Diamond), Options);
 
-        Assert.IsType<Equivalent>(verdict);
+        Assert.Equal(new Equivalent(ProofMethod.Bounded) { Ladder = [new LadderStep(ProofMethod.Bounded, RungOutcome.Proved, "no loop or self-call; every input checked")] }, verdict);
     }
 
     [Theory]

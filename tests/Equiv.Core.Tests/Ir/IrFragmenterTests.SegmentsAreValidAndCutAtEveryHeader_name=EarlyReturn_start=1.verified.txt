@@ -1,0 +1,17 @@
+﻿proc "T::Find(int,int)" (%$s0 "i": bv32, %$s1 "n": bv32, %$s2 "k": bv32, %$s3: bv32, %n "n": bv32, %k "k": bv32) -> bv32 entry B1
+B1:
+  %c: bool = slt %$s0, %$s1
+  br %c, B2, B5
+B2:
+  %e: bool = eq %$s0, %$s2
+  br %e, B3, B4
+B3:
+  ret %$s0
+B4:
+  %i1 "i": bv32 = add %$s0, %$s3
+  goto B6
+B5:
+  ret %$s1
+B6:
+  call "equiv:cut:0"(%i1, %$s1, %$s2, %$s3)
+  throw "equiv:cut"

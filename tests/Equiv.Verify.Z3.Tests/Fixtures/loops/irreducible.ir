@@ -1,0 +1,23 @@
+# Unknown(UnalignedLoop)
+# A cycle with two entries (never produced by the Roslyn CFG): the loops cannot be cut at a header.
+proc "T::Tangle(bool,int)" (%c: bool, %n: bv32) -> bv32 entry B0
+B0:
+  br %c, B1, B2
+B1:
+  %d: bool = eq %n, %n
+  br %d, B2, B3
+B2:
+  goto B1
+B3:
+  ret %n
+---
+proc "T::Tangle(bool,int)" (%c: bool, %n: bv32) -> bv32 entry B0
+B0:
+  br %c, B1, B2
+B1:
+  %d: bool = eq %n, %n
+  br %d, B2, B3
+B2:
+  goto B1
+B3:
+  ret %n

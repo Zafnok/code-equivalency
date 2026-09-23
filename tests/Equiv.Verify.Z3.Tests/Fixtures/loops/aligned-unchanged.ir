@@ -1,0 +1,36 @@
+# Equivalent(lockstep-induction)
+# An unchanged loop, s = 0; for (i = 0; i < n; i++) s += i; return s;, renamed on the new side
+# (SSA names, and the local s -> total, which pairs by position).
+proc "T::Sum(int)" (%n "n": bv32) -> bv32 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  goto B1
+B1:
+  %i "i": bv32 = phi [B0: %z, B2: %i1]
+  %s "s": bv32 = phi [B0: %z, B2: %s1]
+  %c: bool = slt %i, %n
+  br %c, B2, B3
+B2:
+  %s1 "s": bv32 = add %s, %i
+  %i1 "i": bv32 = add %i, %one
+  goto B1
+B3:
+  ret %s
+---
+proc "T::Sum(int)" (%count "n": bv32) -> bv32 entry B0
+B0:
+  %zero: bv32 = const bv32 0
+  %step: bv32 = const bv32 1
+  goto B1
+B1:
+  %k "i": bv32 = phi [B0: %zero, B2: %k2]
+  %total "total": bv32 = phi [B0: %zero, B2: %total2]
+  %more: bool = slt %k, %count
+  br %more, B2, B3
+B2:
+  %total2 "total": bv32 = add %total, %k
+  %k2 "i": bv32 = add %k, %step
+  goto B1
+B3:
+  ret %total

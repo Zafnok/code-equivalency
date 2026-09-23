@@ -94,7 +94,17 @@
             procedureIdentity/v1: Equiv.Samples.AddedRemoved.Calculator::Add(int,int),
             resultFingerprint/v1: 22e4fa9e30f899e218cdeb9a75b2be5062adce24c0596dd1228b50271d9a0841
           },
-          baselineState: new
+          baselineState: new,
+          properties: {
+            proofMethod: bounded,
+            ladderTrace: [
+              {
+                rung: bounded,
+                outcome: proved,
+                detail: no loop or self-call; every input checked
+              }
+            ]
+          }
         },
         {
           ruleId: EQ004,

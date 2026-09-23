@@ -10,23 +10,23 @@ public sealed class ResultFingerprintTests
     [Fact]
     public void SameIdentityAndVerdictProduceTheSameFingerprint()
     {
-        string a = ResultFingerprint.Compute(Fixtures.Result(new Equivalent()));
-        string b = ResultFingerprint.Compute(Fixtures.Result(new Equivalent()));
+        string a = ResultFingerprint.Compute(Fixtures.Result(new Equivalent(ProofMethod.Bounded)));
+        string b = ResultFingerprint.Compute(Fixtures.Result(new Equivalent(ProofMethod.Bounded)));
         Assert.Equal(a, b);
     }
 
     [Fact]
     public void DifferentIdentityProducesADifferentFingerprint()
     {
-        string a = ResultFingerprint.Compute(Fixtures.Result(new Equivalent(), "A"));
-        string b = ResultFingerprint.Compute(Fixtures.Result(new Equivalent(), "B"));
+        string a = ResultFingerprint.Compute(Fixtures.Result(new Equivalent(ProofMethod.Bounded), "A"));
+        string b = ResultFingerprint.Compute(Fixtures.Result(new Equivalent(ProofMethod.Bounded), "B"));
         Assert.NotEqual(a, b, StringComparer.Ordinal);
     }
 
     [Fact]
     public void DifferentVerdictKindForTheSameIdentityProducesADifferentFingerprint()
     {
-        string equivalent = ResultFingerprint.Compute(Fixtures.Result(new Equivalent()));
+        string equivalent = ResultFingerprint.Compute(Fixtures.Result(new Equivalent(ProofMethod.Bounded)));
         string added = ResultFingerprint.Compute(Fixtures.Result(new Added()));
         Assert.NotEqual(equivalent, added, StringComparer.Ordinal);
     }
@@ -58,7 +58,7 @@ public sealed class ResultFingerprintTests
     [Fact]
     public void FingerprintIsALowercaseHexSha256Digest()
     {
-        string fingerprint = ResultFingerprint.Compute(Fixtures.Result(new Equivalent()));
+        string fingerprint = ResultFingerprint.Compute(Fixtures.Result(new Equivalent(ProofMethod.Bounded)));
         Assert.Equal(64, fingerprint.Length);
         Assert.Matches("^[0-9a-f]{64}$", fingerprint);
     }
