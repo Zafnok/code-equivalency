@@ -33,20 +33,14 @@ public static class IrValidator
 
     private sealed record IrDefinition(IrVar Var, IrBlockId? Block, int Index);
 
-    private sealed class IrChecker
+    private sealed class IrChecker(IrProcedure procedure)
     {
-        private readonly IrProcedure procedure;
         private readonly ImmutableArray<IrDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<IrDiagnostic>();
         private readonly Dictionary<IrBlockId, IrBlock> blocks = [];
         private readonly Dictionary<IrBlockId, HashSet<IrBlockId>> predecessors = [];
         private readonly Dictionary<string, IrDefinition> definitions = new(StringComparer.Ordinal);
         private readonly Dictionary<IrBlockId, int> reversePostorder = [];
         private readonly Dictionary<IrBlockId, IrBlockId> immediateDominator = [];
-
-        public IrChecker(IrProcedure procedure)
-        {
-            this.procedure = procedure;
-        }
 
         public ImmutableArray<IrDiagnostic> Run()
         {

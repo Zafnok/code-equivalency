@@ -71,6 +71,11 @@ dotnet_diagnostic.IDE0046.severity = error
 # build catches a regression instead of relying on the next Sonar analysis of main.
 dotnet_diagnostic.IDE0028.severity = error
 
+# GH-112: primary constructors sat below warning level, which is how a constructor that just
+# assigns a field went unfixed until Sonar filed it. Pinned to error so the build catches a
+# regression.
+dotnet_diagnostic.IDE0290.severity = error
+
 # GH-57: List<T>.Exists() over Enumerable.Any() on a List<T> avoids the LINQ enumerator
 # allocation. Sonar filed this as a silent suggestion; pinning it to error means the build
 # now catches a regression instead of relying on the next Sonar analysis of main.
