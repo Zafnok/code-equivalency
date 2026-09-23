@@ -1,6 +1,6 @@
 # ADR 0028: Success is measured on a public corpus, against criteria fixed before the first run
 
-Status: accepted (2026-09-23)
+Status: accepted (2026-09-23); superseded in part by 0034 (the lowerable-share row is evaluated on changed pairs)
 
 ## Context
 M3-022 and M4-007 were written to run on an unnamed "real 4.8/10 pair". No such pair was

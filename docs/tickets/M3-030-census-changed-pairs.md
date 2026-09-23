@@ -2,7 +2,7 @@
 Status: todo
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: M3-014, ADR 0034 accepted
+Depends on: M3-014
 
 ## Goal
 ADR 0034. Today the census counts every matched pair, including byte-identical ones the solver
@@ -18,9 +18,10 @@ ADR 0034; ADR 0028 decision 5; ADR 0027; VERIFICATION-MODEL.md census paragraph;
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. A matched pair is *changed* unless its two bodies' syntax token sequences are equal once
-   trivia is ignored. `run.properties.loweringCensus` gains `changedPairs`,
-   `changedPairsWithoutOpaque` and `changedPairsWholeBodyOpaque`, unit-tested on a pair set that
-   has both identical and changed bodies.
+   trivia is ignored and neither lowered body has an `IrCall` that `RuntimeChangeTable.TryMatch`
+   matches. `run.properties.loweringCensus` gains `changedPairs`, `changedPairsWithoutOpaque` and
+   `changedPairsWholeBodyOpaque`, unit-tested on a pair set that has identical bodies, changed
+   bodies, and identical bodies calling a runtime-changes member (counted as changed).
 2. `loweringCensus.changedReasonSets` maps the sorted, `+`-joined union of both sides' opaque
    reasons to a count of changed pairs, with `""` for no opaque. The counts sum to `changedPairs`.
    Unit-tested.
@@ -33,8 +34,9 @@ ADR 0034; ADR 0028 decision 5; ADR 0027; VERIFICATION-MODEL.md census paragraph;
    prints source text. `corpus.ps1 -Metrics` prints the new census keys.
 6. The skill's SUMMARY.md template gains a `## Changed code` section (changed pairs, lowerable
    share over them, the top reason sets, runtime-change calls, package changes). Its verdict step
-   applies ADR 0034's evaluation paragraph. VERIFICATION-MODEL's census paragraph defines the
-   new keys.
+   applies ADR 0034's evaluation paragraph and reports `1 - changedPairs / matchedPairs` next to
+   ADR 0028's unchanged share, labelled as the pair-level figure. VERIFICATION-MODEL's census
+   paragraph defines the new keys.
 
 ## Size guard
 Census counting in `Equiv.Cli` plus the token comparison in the frontend, and `corpus.ps1`. If this
