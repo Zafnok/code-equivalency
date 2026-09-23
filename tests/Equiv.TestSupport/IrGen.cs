@@ -261,75 +261,75 @@ public static class IrGen
         return ReplaceBlock(procedure, index, block with { Terminator = terminator });
     }
 
-    private static Gen<Expr> Expression(int depth)
+    private static Gen<IExpr> Expression(int depth)
     {
-        Gen<Expr> leaf = Gen.Frequency(
-            (3, Gen.Int[0, SlotCount - 1].Select(static i => (Expr)new Slot(i))),
-            (1, Word.Select(static w => (Expr)new Literal(w))));
+        Gen<IExpr> leaf = Gen.Frequency(
+            (3, Gen.Int[0, SlotCount - 1].Select(static i => (IExpr)new Slot(i))),
+            (1, Word.Select(static w => (IExpr)new Literal(w))));
         if (depth == 0)
         {
             return leaf;
         }
 
-        Gen<Expr> smaller = Expression(depth - 1);
+        Gen<IExpr> smaller = Expression(depth - 1);
         return Gen.Frequency(
             (3, leaf),
-            (3, Gen.Select(Gen.OneOfConst(Arithmetic), smaller, smaller, static (op, l, r) => (Expr)new Binary(op, l, r))),
-            (1, Gen.Select(Gen.OneOfConst(IrUnaryOp.Neg, IrUnaryOp.Not), smaller, static (op, e) => (Expr)new Unary(op, e))),
-            (1, Gen.Select(Gen.Bool, smaller, static (signed, e) => (Expr)new Narrow(signed, e))),
-            (1, smaller.Select(static k => (Expr)new Load(k))));
+            (3, Gen.Select(Gen.OneOfConst(Arithmetic), smaller, smaller, static (op, l, r) => (IExpr)new Binary(op, l, r))),
+            (1, Gen.Select(Gen.OneOfConst(IrUnaryOp.Neg, IrUnaryOp.Not), smaller, static (op, e) => (IExpr)new Unary(op, e))),
+            (1, Gen.Select(Gen.Bool, smaller, static (signed, e) => (IExpr)new Narrow(signed, e))),
+            (1, smaller.Select(static k => (IExpr)new Load(k))));
     }
 
-    private static Gen<Cond> Condition(int depth)
+    private static Gen<ICond> Condition(int depth)
     {
-        Gen<Cond> compare = Gen.Select(Gen.OneOfConst(ComparisonOps), Expression(1), Expression(1), static (op, l, r) => (Cond)new Compare(op, l, r));
+        Gen<ICond> compare = Gen.Select(Gen.OneOfConst(ComparisonOps), Expression(1), Expression(1), static (op, l, r) => (ICond)new Compare(op, l, r));
         if (depth == 0)
         {
             return compare;
         }
 
-        Gen<Cond> smaller = Condition(depth - 1);
+        Gen<ICond> smaller = Condition(depth - 1);
         return Gen.Frequency(
             (4, compare),
-            (1, Gen.Select(Gen.OneOfConst(IrBinaryOp.And, IrBinaryOp.Or, IrBinaryOp.Xor, IrBinaryOp.Eq, IrBinaryOp.Ne), smaller, smaller, static (op, l, r) => (Cond)new Logic(op, l, r))),
-            (1, smaller.Select(static c => (Cond)new Negate(c))));
+            (1, Gen.Select(Gen.OneOfConst(IrBinaryOp.And, IrBinaryOp.Or, IrBinaryOp.Xor, IrBinaryOp.Eq, IrBinaryOp.Ne), smaller, smaller, static (op, l, r) => (ICond)new Logic(op, l, r))),
+            (1, smaller.Select(static c => (ICond)new Negate(c))));
     }
 
-    private static Gen<ImmutableArray<Stmt>> Statements(int depth, bool loops) =>
+    private static Gen<ImmutableArray<IStmt>> Statements(int depth, bool loops) =>
         Statement(depth, loops).Array[0, 3].Select(static s => s.ToImmutableArray());
 
-    private static Gen<Stmt> Statement(int depth, bool loops)
+    private static Gen<IStmt> Statement(int depth, bool loops)
     {
         Gen<int> slot = Gen.Int[0, SlotCount - 1];
-        Gen<Stmt> assign = Gen.Select(slot, Expression(2), static (s, e) => (Stmt)new Assign(s, e));
-        Gen<Stmt> check = Gen.Select(
+        Gen<IStmt> assign = Gen.Select(slot, Expression(2), static (s, e) => (IStmt)new Assign(s, e));
+        Gen<IStmt> check = Gen.Select(
             slot,
             Gen.OneOfConst(IrOverflowOp.SAdd, IrOverflowOp.UAdd, IrOverflowOp.SSub, IrOverflowOp.USub, IrOverflowOp.SMul, IrOverflowOp.UMul, IrOverflowOp.SDiv),
             Expression(1),
             Expression(1),
-            static (s, op, l, r) => (Stmt)new Checked(s, op, l, r));
-        Gen<Stmt> call = Gen.Select(
+            static (s, op, l, r) => (IStmt)new Checked(s, op, l, r));
+        Gen<IStmt> call = Gen.Select(
             Gen.Frequency((3, slot.Select(static s => (int?)s)), (1, Gen.Const((int?)null))),
             Gen.OneOfConst("Svc::F", "Svc::G"),
             Expression(1).Array[0, 2],
             Gen.Bool,
-            static (s, callee, args, mayThrow) => (Stmt)new Call(s, callee, [.. args], mayThrow));
-        Gen<Stmt> store = Gen.Select(Expression(1), Expression(1), static (k, v) => (Stmt)new Store(k, v));
+            static (s, callee, args, mayThrow) => (IStmt)new Call(s, callee, [.. args], mayThrow));
+        Gen<IStmt> store = Gen.Select(Expression(1), Expression(1), static (k, v) => (IStmt)new Store(k, v));
         if (depth == 0)
         {
             return Gen.Frequency((4, assign), (1, check), (1, call), (1, store));
         }
 
-        Gen<ImmutableArray<Stmt>> body = Statements(depth - 1, loops);
-        Gen<ImmutableArray<Stmt>> maybeThrowing = Gen.Select(body, Gen.Int[0, 3], static (s, k) =>
+        Gen<ImmutableArray<IStmt>> body = Statements(depth - 1, loops);
+        Gen<ImmutableArray<IStmt>> maybeThrowing = Gen.Select(body, Gen.Int[0, 3], static (s, k) =>
             k == 0 ? s.Add(new Throw("System.InvalidOperationException")) : s);
-        Gen<Stmt> branch = Gen.Select(Condition(1), maybeThrowing, body, static (c, t, e) => (Stmt)new If(c, t, e));
-        Gen<Stmt> choice = Gen.Select(
+        Gen<IStmt> branch = Gen.Select(Condition(1), maybeThrowing, body, static (c, t, e) => (IStmt)new If(c, t, e));
+        Gen<IStmt> choice = Gen.Select(
             Expression(1),
             Gen.Select(Word, body, static (v, b) => (v, b)).Array[0, 3],
             body,
-            static (e, cases, fallback) => (Stmt)new Switch(e, [.. cases], fallback));
-        Gen<Stmt> loop = Gen.Select(Gen.Int[0, 3], body, static (n, b) => (Stmt)new Loop(n, b));
+            static (e, cases, fallback) => (IStmt)new Switch(e, [.. cases], fallback));
+        Gen<IStmt> loop = Gen.Select(Gen.Int[0, 3], body, static (n, b) => (IStmt)new Loop(n, b));
         return Gen.Frequency((4, assign), (1, check), (1, call), (1, store), (2, branch), (1, choice), (loops ? 1 : 0, loop));
     }
 }

@@ -116,7 +116,7 @@ internal sealed class IrGenLowering
         return lowering.Run(program);
     }
 
-    private IrVar Lower(Expr expr)
+    private IrVar Lower(IExpr expr)
     {
         switch (expr)
         {
@@ -166,7 +166,7 @@ internal sealed class IrGenLowering
         }
     }
 
-    private IrVar Lower(Cond cond)
+    private IrVar Lower(ICond cond)
     {
         switch (cond)
         {
@@ -201,7 +201,7 @@ internal sealed class IrGenLowering
         }
     }
 
-    private void Lower(Stmt statement)
+    private void Lower(IStmt statement)
     {
         switch (statement)
         {
@@ -242,9 +242,9 @@ internal sealed class IrGenLowering
         }
     }
 
-    private void LowerAll(ImmutableArray<Stmt> statements)
+    private void LowerAll(ImmutableArray<IStmt> statements)
     {
-        foreach (Stmt statement in statements)
+        foreach (IStmt statement in statements)
         {
             if (current is null)
             {
@@ -326,7 +326,7 @@ internal sealed class IrGenLowering
         Join(arms);
     }
 
-    private (Pending? End, IrVar[] Env) Arm(Pending start, ImmutableArray<Stmt> body, IrVar[] before)
+    private (Pending? End, IrVar[] Env) Arm(Pending start, ImmutableArray<IStmt> body, IrVar[] before)
     {
         env = [.. before];
         Enter(start);

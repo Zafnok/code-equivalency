@@ -49,28 +49,28 @@ public static class LoweringOracleGen
 
     private static Gen<long> Long => Gen.Frequency((3, Gen.OneOfConst(LongEdges)), (1, Gen.Long[-16, 16]), (1, Gen.Long));
 
-    private static Gen<ImmutableArray<Stmt>> Block(Type returnType, int depth) =>
+    private static Gen<ImmutableArray<IStmt>> Block(Type returnType, int depth) =>
         StmtGen(returnType, depth).Array[0, 3].Select(static s => ImmutableArray.Create(s));
 
-    private static Gen<Stmt> StmtGen(Type returnType, int depth)
+    private static Gen<IStmt> StmtGen(Type returnType, int depth)
     {
-        Gen<Stmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>
-            ExprGen(type, Depth).Select(value => (Stmt)new Assign(LocalName(type), value)));
-        Gen<Stmt> exit = ExprGen(returnType, Depth).Select(static value => (Stmt)new Return(value));
-        Gen<Stmt> update = Gen.OneOfConst(typeof(int), typeof(long)).SelectMany(static type =>
+        Gen<IStmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>
+            ExprGen(type, Depth).Select(value => (IStmt)new Assign(LocalName(type), value)));
+        Gen<IStmt> exit = ExprGen(returnType, Depth).Select(static value => (IStmt)new Return(value));
+        Gen<IStmt> update = Gen.OneOfConst(typeof(int), typeof(long)).SelectMany(static type =>
             Gen.Select(Gen.OneOfConst(Arithmetic), Gen.Bool, ExprGen(type == typeof(int) ? typeof(int) : typeof(long), Depth - 1), (op, isChecked, value) =>
-                (Stmt)new Compound(LocalName(type), op, ShiftCount(op, value, type), isChecked)));
-        Gen<Stmt> step = Gen.Select(Gen.OneOfConst(typeof(int), typeof(long)), Gen.OneOfConst("++", "--"), Gen.Bool, static (type, op, isChecked) =>
-            (Stmt)new Step(LocalName(type), op, isChecked));
+                (IStmt)new Compound(LocalName(type), op, ShiftCount(op, value, type), isChecked)));
+        Gen<IStmt> step = Gen.Select(Gen.OneOfConst(typeof(int), typeof(long)), Gen.OneOfConst("++", "--"), Gen.Bool, static (type, op, isChecked) =>
+            (IStmt)new Step(LocalName(type), op, isChecked));
         if (depth == 0)
         {
             return Gen.Frequency((4, assign), (2, update), (1, step), (1, exit));
         }
 
-        Gen<Stmt> branch = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Block(returnType, depth - 1), static (condition, then, otherwise) =>
-            (Stmt)new If(condition, then, otherwise));
-        Gen<Stmt> loop = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Gen.Int[1, 3], static (condition, body, bound) =>
-            (Stmt)new While(condition, body, bound));
+        Gen<IStmt> branch = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Block(returnType, depth - 1), static (condition, then, otherwise) =>
+            (IStmt)new If(condition, then, otherwise));
+        Gen<IStmt> loop = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Gen.Int[1, 3], static (condition, body, bound) =>
+            (IStmt)new While(condition, body, bound));
         return Gen.Frequency((3, assign), (2, update), (1, step), (2, branch), (2, loop), (1, exit));
     }
 
@@ -137,10 +137,10 @@ public static class LoweringOracleGen
         return Gen.Frequency((2, leaf), (3, relation), (2, logic), (1, not), (2, nullTest));
     }
 
-    private static void RenderBlock(ImmutableArray<Stmt> block, StringBuilder text, int indent, ref int loops)
+    private static void RenderBlock(ImmutableArray<IStmt> block, StringBuilder text, int indent, ref int loops)
     {
         string pad = new(' ', indent * 4);
-        foreach (Stmt statement in block)
+        foreach (IStmt statement in block)
         {
             switch (statement)
             {
@@ -223,19 +223,19 @@ public static class LoweringOracleGen
         public override string Render() => $"({Left.Render()} {Op} {Right.Render()})";
     }
 
-    internal abstract record Stmt;
+    internal interface IStmt;
 
-    internal sealed record Assign(string Local, Expr Value) : Stmt;
+    internal sealed record Assign(string Local, Expr Value) : IStmt;
 
-    internal sealed record Compound(string Local, string Op, Expr Value, bool IsChecked) : Stmt;
+    internal sealed record Compound(string Local, string Op, Expr Value, bool IsChecked) : IStmt;
 
-    internal sealed record Step(string Local, string Op, bool IsChecked) : Stmt;
+    internal sealed record Step(string Local, string Op, bool IsChecked) : IStmt;
 
-    internal sealed record While(Expr Condition, ImmutableArray<Stmt> Body, int Bound) : Stmt;
+    internal sealed record While(Expr Condition, ImmutableArray<IStmt> Body, int Bound) : IStmt;
 
-    internal sealed record Return(Expr Value) : Stmt;
+    internal sealed record Return(Expr Value) : IStmt;
 
-    internal sealed record If(Expr Condition, ImmutableArray<Stmt> Then, ImmutableArray<Stmt> Else) : Stmt;
+    internal sealed record If(Expr Condition, ImmutableArray<IStmt> Then, ImmutableArray<IStmt> Else) : IStmt;
 
     private static string Context(bool isChecked) => isChecked ? "checked" : "unchecked";
 }
