@@ -45,7 +45,9 @@ and stop; do not silently deviate.
 - Windows dev box. Legacy `.csproj` loading needs VS 2026 Build Tools + .NET Framework 4.8
   targeting pack (see README). The engine itself is cross-platform.
 - The git default branch is `main` (renamed from `master` in M0-001). One branch per ticket, merged by PR.
-- Never commit `samples/**/bin`, `obj`, `TestResults`, `StrykerOutput`.
+- Never commit `samples/**/bin`, `obj`, `TestResults`, `StrykerOutput`, or anything under
+  `.corpus/` (third-party checkouts; ADR 0028). Real-code runs use only the public corpus in
+  `tools/corpus/`, via `.claude/skills/equiv-corpus-run`.
 - Never filesystem-search for `Sarif.Sdk` (`find`, `Get-ChildItem -Recurse`). It ships as
   `Sarif.dll`/`Sarif.xml` in namespace `Microsoft.CodeAnalysis.Sarif` — nothing on disk is
   called `Sarif.Sdk.dll`, so the search scans the whole drive and returns nothing, every

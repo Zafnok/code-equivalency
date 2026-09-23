@@ -22,8 +22,10 @@ No single algorithm decides equivalence for every program pair, but this sub-pro
 (regression verification: same language family, mostly identical code) is tractable in
 practice. Loops are handled by the ladder in section 5.1; a procedure gets **Unknown**
 only when every rung fails, the solver times out, some input reaches an `IrOpaque` node
-that is not shared by both sides (ADRs 0014 and 0024), or every divergence found depends on
-an abstraction (ADR 0026). A pair whose bound bodies fingerprint equal and are not
+that is not shared by both sides (ADRs 0014 and 0024), every divergence found depends on
+an abstraction (ADR 0026), or the method's bound body is erroneous (`Unbound`, ADR 0029). Every
+Unknown states its scope. A `line` Unknown is still a proof about every input that reaches none
+of the lines it lists; a `method` Unknown claims nothing (ADR 0029). A pair whose bound bodies fingerprint equal and are not
 runtime-sensitive is Equivalent by congruence, without the solver (`proofMethod:
 congruence`, ADR 0024): identical bound code makes the same claim a shared call does. Every result carries `properties.proofMethod` (which rung proved it),
 `properties.boundedBy` when the claim is bounded, and `properties.opaqueNodes`, so a
@@ -194,7 +196,7 @@ have a syntactic termination argument (bounded counters), otherwise not claimed.
 |---|---|---|---|
 | Equivalent | none | `pass` | EQ001 |
 | Divergent | `error` | `fail` | EQ002 (counterexample in `properties.model` and in `message`) |
-| Unknown | none (rule default `warning`) | `open` | EQ003 (reason: timeout, opaque, unmatched overload, abstraction, loop until the M3-002 ladder) |
+| Unknown | none (rule default `warning`) | `open` | EQ003 (reason: timeout, opaque, unmatched overload, abstraction, unbound, loop until the M3-002 ladder) |
 | Added | none (rule default `note`) | `informational` | EQ004 |
 | Removed | none (rule default `note`) | `informational` | EQ005 |
 | Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link in `message`) |
@@ -214,9 +216,23 @@ An Unknown result lists every reached opaque node and every abstraction it depen
 `relatedLocation` whose message is the reason. Its primary location is the first of them on
 the modern side, else the procedure (ADR 0027). `partialFingerprints` do not change with it.
 
+Every Unknown carries `properties.scope` (ADR 0029):
+- `line`: every cause is a span inside the method, and the first query of ADR 0014 was
+  unsatisfiable. The result also carries `properties.residualClaim: "equivalent unless a
+  relatedLocation is reached"`, and its message says so.
+- `method`: a whole-body opaque, a timeout, an exhausted loop ladder, an unmatched overload, or
+  `Unbound` code.
+
+A whole-body opaque's span is the construct that caused it (the `foreach`, the `lock`, the filtered
+`catch`), not the method body. A method whose bound body holds a compiler error, an
+`IInvalidOperation` or an error-type symbol is `Unknown(Unbound)`, with the diagnostics as its
+causes, and is never Equivalent by congruence. Neither scope nor causes is part of the
+fingerprint.
+
 Every run writes `run.properties.loweringCensus`: procedures per side, matched pairs, pairs
 without `IrOpaque`, whole-body opaque pairs, congruent pairs, and `IrOpaque` counts by reason
-per side (ADR 0027).
+per side (ADR 0027). It also records skipped projects per side, and, when the run produced
+verdicts, Unknown counts by scope (ADR 0029).
 
 A pair whose verification throws (an encoder bug, a `Z3Exception`) has no result: a crash is
 a fact about the tool, not a verdict about the code (ADR 0023). It is recorded as an `error`
@@ -225,6 +241,14 @@ has `executionSuccessful: false`, the run's `properties.unverified` lists the pa
 and the other pairs are reported as usual. Its baseline result, if any, is carried through as
 `unchanged` with `properties.unverified: true`, never as `absent`, so a crash cannot make a
 known divergence look fixed.
+
+A project that cannot be loaded is contained the same way, one level up (ADR 0029). A C# project
+that fails to load or has unresolved references, and any project that is not C#, is skipped. It
+gets a tool-execution notification (`error` for C#, `warning` otherwise), and its procedures are
+listed in `properties.unverified`. Their baseline results are carried as `unchanged` with
+`properties.unverified: true`. No Added or Removed result is reported for a procedure whose
+counterpart project, matched by assembly name, was skipped on the other side. Every other project
+is analysed and reported as usual.
 
 Baseline: SARIF `baselineState` (`new`, `unchanged`, `updated`, `absent`) computed from
 a result fingerprint (procedure identity + verdict + model hash). The exit code considers
@@ -266,4 +290,8 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
 - Congruence (property test, ADR 0024): whenever congruence reports Equivalent on a
   generated or sample pair, the solver on the same pair never reports Divergent.
 - Taint (ADR 0026): no Divergent result's differing observable is tainted.
+- Containment (ADR 0029): a solution with one unloadable project reports every other project's
+  results, and an unbound method is Unknown(Unbound), never congruent. Residual claim (property
+  test): for a `line`-scoped Unknown, every generated input on which neither side reaches a listed
+  cause gives equal observables in `IrInterpreter`.
 - Every row in the tables above has at least one unit test named after it.

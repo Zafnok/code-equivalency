@@ -2,7 +2,7 @@
 Status: todo
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
-Depends on: M3-014, M3-001, M3-009
+Depends on: M3-014, M3-001, M3-009, M3-024
 
 ## Goal
 Most bodies in a migration, and on any PR, are unchanged. After this ticket a matched pair whose
@@ -39,7 +39,9 @@ lists (criteria 9 to 14), which apply to congruence and solver results alike.
    `Prefer32Bit=true`).
 5. In `CompareCommand`, a pair with equal, non-runtime-sensitive fingerprints produces
    `Equivalent` with `proofMethod: congruence`, and the backend is not called. Every other pair
-   goes to the backend as before.
+   goes to the backend as before. A body that M3-024 marks unbound (a compiler error, an
+   `IInvalidOperation` or an error-type symbol) is never congruent (ADR 0029 decision 2): two error
+   symbols with the same name are no evidence of the same behaviour.
 6. `loweringCensus.pairsCongruent` is filled in.
 7. **Soundness property.** Over `LoweringOracleGen` programs, and over every sample pair, when
    congruence says Equivalent, the Z3 backend on the same pair never says Divergent.
@@ -74,7 +76,7 @@ assumptions must travel on `VerificationResult`), `samples/business-layer/README
   `ParameterRenameKeepsTheFingerprint`, `OverloadDriftChangesTheFingerprint`,
   `InterpolatedStringHandlerChangesTheFingerprint`, `CheckedContextChangesTheFingerprint`,
   `RuntimeChangedMemberIsRuntimeSensitive`, `FloatToIntConversionIsRuntimeSensitive`,
-  `X87LegacyFloatIsRuntimeSensitive`, `CongruentPairSkipsTheBackend`,
+  `X87LegacyFloatIsRuntimeSensitive`, `CongruentPairSkipsTheBackend`, `AnUnboundMethodIsNeverCongruent`,
   `CongruenceNeverContradictsTheSolver` (property), and snapshots of three canonical serialisations.
 - `Assumptions_ListMatchedCalleesOnly`, `Assumptions_ExcludeSelfRecursion`,
   `UnprovenAssumptions_AreCalleesNotEquivalent`, `EquivalentWithUnprovenAssumption_MessageNamesThem`,
