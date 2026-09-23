@@ -35,7 +35,7 @@ public sealed class LoopTransformPropertyTests
                 Assert.True(run.Outcome is IrInfeasible || run == IrGen.Run(procedure, input));
             },
             iter: 200,
-            print: static s => IrText.Dump(s.Item1));
+            print: static s => IrText.Dump(s.Procedure));
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed class LoopTransformPropertyTests
                 }
             },
             iter: 200,
-            print: static s => IrText.Dump(s.Item1));
+            print: static s => IrText.Dump(s.Procedure));
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public sealed class LoopTransformPropertyTests
         Looping.Sample(
             static s =>
             {
-                IrProcedure procedure = s.Item1;
+                IrProcedure procedure = s.Procedure;
                 ImmutableArray<(IrBlockId Header, ImmutableArray<IrVar> State)> cuts =
                     [.. IrLoopAnalysis.Of(procedure).Loops.Select(l => (l.Header, IrFragmenter.State(procedure, l.Header)))];
                 foreach (IrBlockId? start in cuts.Select(static c => (IrBlockId?)c.Header).Prepend(element: null))
@@ -76,6 +76,6 @@ public sealed class LoopTransformPropertyTests
                 }
             },
             iter: 200,
-            print: static s => IrText.Dump(s.Item1));
+            print: static s => IrText.Dump(s.Procedure));
     }
 }

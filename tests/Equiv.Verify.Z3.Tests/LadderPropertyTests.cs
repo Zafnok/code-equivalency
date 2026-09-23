@@ -89,6 +89,6 @@ public sealed class LadderPropertyTests
     private static void AssertReplays(Divergent divergent)
     {
         Assert.NotEqual(divergent.Counterexample.Old, divergent.Counterexample.New);
-        Assert.All(new[] { divergent.Counterexample.Old.Outcome, divergent.Counterexample.New.Outcome }, static o => Assert.True(o is IrReturned or IrThrew, o.ToString()));
+        Assert.All([divergent.Counterexample.Old.Outcome, divergent.Counterexample.New.Outcome], static o => Assert.True(o is IrReturned or IrThrew, o.ToString()));
     }
 }

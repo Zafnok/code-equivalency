@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 
 namespace Equiv.Core.Ir;
 
@@ -244,30 +245,23 @@ public static class IrUnroller
         return (Prune(editor.Build()), headers);
     }
 
-    /// <summary>Replaces every phi operand of <paramref name="block"/> through <paramref name="incoming"/>.</summary>
-    private static IrBlock MapPhis(IrBlock block, Func<(IrBlockId From, IrVar Value), IEnumerable<(IrBlockId, IrVar)>> incoming) =>
-        block with { Instructions = [.. block.Instructions.Select(i => i is IrPhi phi ? phi with { Incoming = [.. phi.Incoming.SelectMany(incoming)] } : i)] };
-
     /// <summary>A procedure under edit: its blocks in order, the names in use, and the next free block id.</summary>
-    private sealed class IrEditor
+    private sealed class IrEditor(IrProcedure procedure)
     {
-        private readonly IrProcedure procedure;
-        private readonly List<IrBlock> blocks;
-        private readonly HashSet<string> names;
-        private int nextBlock;
+        private readonly IrProcedure procedure = procedure;
+        private readonly List<IrBlock> blocks = [.. procedure.Blocks];
+        private readonly HashSet<string> names = new(
+            procedure.Parameters.Select(static p => p.Var.Name)
+                .Concat(procedure.Blocks.SelectMany(static b => b.Instructions).SelectMany(static i => i.Definitions()).Select(static v => v.Name)),
+            StringComparer.Ordinal);
 
-        public IrEditor(IrProcedure procedure)
-        {
-            this.procedure = procedure;
-            blocks = [.. procedure.Blocks];
-            names = new HashSet<string>(
-                procedure.Parameters.Select(static p => p.Var.Name)
-                    .Concat(procedure.Blocks.SelectMany(static b => b.Instructions).SelectMany(static i => i.Definitions()).Select(static v => v.Name)),
-                StringComparer.Ordinal);
-            nextBlock = procedure.Blocks.Select(static b => b.Id.Value).DefaultIfEmpty(-1).Max() + 1;
-        }
+        private int nextBlock = procedure.Blocks.Select(static b => b.Id.Value).DefaultIfEmpty(-1).Max() + 1;
 
         public IReadOnlyList<IrBlock> Blocks => blocks;
+
+        /// <summary>Replaces every phi operand of <paramref name="block"/> through <paramref name="incoming"/>.</summary>
+        public static IrBlock MapPhis(IrBlock block, Func<(IrBlockId From, IrVar Value), IEnumerable<(IrBlockId, IrVar)>> incoming) =>
+            block with { Instructions = [.. block.Instructions.Select(i => i is IrPhi phi ? phi with { Incoming = [.. phi.Incoming.SelectMany(incoming)] } : i)] };
 
         public IrProcedure Build() => procedure with { Blocks = [.. blocks] };
 
@@ -281,13 +275,13 @@ public static class IrUnroller
 
         public IrVar Fresh(IrVar var, string suffix)
         {
-            string name = var.Name + suffix;
-            while (!names.Add(name))
+            StringBuilder name = new(var.Name + suffix);
+            while (!names.Add(name.ToString()))
             {
-                name += "$";
+                name.Append('$');
             }
 
-            return var with { Name = name };
+            return var with { Name = name.ToString() };
         }
 
         public (IrBlock Block, int Index)? FindSelfCall() =>
@@ -314,20 +308,17 @@ public static class IrUnroller
             foreach (IrBlock original in callee.Blocks)
             {
                 IrBlock copy = MapPhis(original with { Id = ids[original.Id], Instructions = [.. original.Instructions.Select(i => Rewrite(i, Var))] }, e => [(ids[e.From], e.Value)]);
-                if (original.Terminator is IrReturn or IrThrow)
+                switch (original.Terminator)
                 {
-                    bool threw = original.Terminator is IrThrow;
-                    IrVar flag = Fresh(new IrVar("threw", new IrBool()), suffix);
-                    IrVar? result = call.Target is null ? null : threw ? Fresh(call.Target, suffix) : Var(((IrReturn)original.Terminator).Value!);
-                    IrInstruction[] tail = threw && result is not null
-                        ? [new IrConst(flag, new IrBoolValue(threw)), new IrConst(result, Default(result.Type))]
-                        : [new IrConst(flag, new IrBoolValue(threw))];
-                    exits.Add((copy.Id, result, flag));
-                    Add(copy with { Instructions = [.. copy.Instructions, .. tail], Terminator = new IrGoto(join) });
-                }
-                else
-                {
-                    Add(copy with { Terminator = Rewrite(original.Terminator, Var, b => ids[b]) });
+                    case IrReturn returned:
+                        exits.Add(InlineExit(copy, call.Target, returned, Var, suffix, join));
+                        break;
+                    case IrThrow:
+                        exits.Add(InlineExit(copy, call.Target, returned: null, Var, suffix, join));
+                        break;
+                    default:
+                        Add(copy with { Terminator = Rewrite(original.Terminator, Var, b => ids[b]) });
+                        break;
                 }
             }
 
@@ -342,6 +333,28 @@ public static class IrUnroller
             }
 
             return ([.. ids.Values], join);
+        }
+
+        /// <summary>
+        /// Adds <paramref name="copy"/>, an exit of an inlined body (a return when <paramref name="returned"/> is set,
+        /// else a throw), ending in a jump to <paramref name="join"/> after setting its <c>threw</c> flag, plus a default
+        /// result for a throw into a <paramref name="target"/>. Returns the exit's operands for the join's phis.
+        /// </summary>
+        private (IrBlockId From, IrVar? Result, IrVar Threw) InlineExit(IrBlock copy, IrVar? target, IrReturn? returned, Func<IrVar, IrVar> map, string suffix, IrBlockId join)
+        {
+            bool threw = returned is null;
+            IrVar flag = Fresh(new IrVar("threw", new IrBool()), suffix);
+            IrVar? result = (target, returned) switch
+            {
+                ({ } t, null) => Fresh(t, suffix),
+                ({ }, { } r) => map(r.Value!),
+                _ => null,
+            };
+            IrInstruction[] tail = threw && result is not null
+                ? [new IrConst(flag, new IrBoolValue(threw)), new IrConst(result, Default(result.Type))]
+                : [new IrConst(flag, new IrBoolValue(threw))];
+            Add(copy with { Instructions = [.. copy.Instructions, .. tail], Terminator = new IrGoto(join) });
+            return (copy.Id, result, flag);
         }
 
         /// <summary>
@@ -471,9 +484,15 @@ public static class IrUnroller
 
         private IrVar Var(int c, IrVar var) => vars[c].GetValueOrDefault(var.Name, var);
 
-        private IrBlockId BackEdge(int c) => c < copies
-            ? ids[c + 1][loop.Header]
-            : Unreachable ?? ids[last == IrLastCopy.First ? 1 : copies][loop.Header];
+        private IrBlockId BackEdge(int c)
+        {
+            if (c < copies)
+            {
+                return ids[c + 1][loop.Header];
+            }
+
+            return Unreachable ?? ids[last == IrLastCopy.First ? 1 : copies][loop.Header];
+        }
 
         /// <summary>
         /// A header phi's operands in copy <paramref name="c"/>: the edges from outside the loop in copy 1, the

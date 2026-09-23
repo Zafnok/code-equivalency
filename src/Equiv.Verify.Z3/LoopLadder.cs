@@ -115,12 +115,25 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
 
     private static Unknown Undecided(List<Rung> rungs, bool recursive)
     {
-        UnknownReason reason = rungs.Exists(static r => r.Cause == UnknownReason.Opaque) ? UnknownReason.Opaque
-            : recursive ? UnknownReason.Recursion
-            : rungs.Exists(static r => r.Cause == UnknownReason.UnalignedLoop) ? UnknownReason.UnalignedLoop
-            : UnknownReason.Timeout;
+        UnknownReason reason = UndecidedReason(rungs, recursive);
         Rung cause = rungs.LastOrDefault(r => r.Cause == reason) ?? rungs[^1];
         return new Unknown(reason, cause.Step.Detail);
+    }
+
+    /// <summary>The first that applies: an opaque node reached, a self-call, loops no rung aligned or proved, else a timeout.</summary>
+    private static UnknownReason UndecidedReason(List<Rung> rungs, bool recursive)
+    {
+        if (rungs.Exists(static r => r.Cause == UnknownReason.Opaque))
+        {
+            return UnknownReason.Opaque;
+        }
+
+        if (recursive)
+        {
+            return UnknownReason.Recursion;
+        }
+
+        return rungs.Exists(static r => r.Cause == UnknownReason.UnalignedLoop) ? UnknownReason.UnalignedLoop : UnknownReason.Timeout;
     }
 
     private T Session<T>(IrProcedure old, IrProcedure @new, Func<Context, ProductEncoding, T> body)
@@ -176,19 +189,22 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
                 return new Rung(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"an input reaches an opaque node: {reasons}"), new Unknown(UnknownReason.Opaque, reasons));
             }
 
-            if (!looping)
-            {
-                return Proved(ProofMethod.Bounded, "no loop or self-call; every input checked", new Equivalent(ProofMethod.Bounded));
-            }
-
-            using Solver cut = Z3Backend.Query(context, encoding, options, context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable));
-            return cut.Check() switch
-            {
-                Status.UNSATISFIABLE => Proved(ProofMethod.Bounded, $"no input goes past the bound {bound}", new Equivalent(ProofMethod.Bounded, k)),
-                Status.SATISFIABLE => new Rung(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"no divergence within the bound {bound}, and some input goes past it")),
-                _ => TimedOut(Z3Backend.Timeout(cut, options)),
-            };
+            return looping
+                ? WithinBound(context, encoding, k, bound)
+                : Proved(ProofMethod.Bounded, "no loop or self-call; every input checked", new Equivalent(ProofMethod.Bounded));
         });
+    }
+
+    /// <summary>Rung 1's last query: the unrolled pair agrees, so it is a proof exactly when no input reaches the bound.</summary>
+    private Rung WithinBound(Context context, ProductEncoding encoding, int k, string bound)
+    {
+        using Solver cut = Z3Backend.Query(context, encoding, options, context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable));
+        return cut.Check() switch
+        {
+            Status.UNSATISFIABLE => Proved(ProofMethod.Bounded, $"no input goes past the bound {bound}", new Equivalent(ProofMethod.Bounded, k)),
+            Status.SATISFIABLE => new Rung(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"no divergence within the bound {bound}, and some input goes past it")),
+            _ => TimedOut(Z3Backend.Timeout(cut, options)),
+        };
     }
 
     private static Rung TimedOut(string detail) =>

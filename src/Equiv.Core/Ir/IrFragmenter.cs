@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Text;
 
 namespace Equiv.Core.Ir;
 
@@ -127,13 +128,13 @@ public static class IrFragmenter
         Dictionary<string, IrVar> slots = new(StringComparer.Ordinal);
         foreach ((IrVar var, int index) in state.Select(static (v, i) => (v, i)))
         {
-            string name = "$s" + index.ToString(CultureInfo.InvariantCulture);
-            while (!names.Add(name))
+            StringBuilder name = new("$s" + index.ToString(CultureInfo.InvariantCulture));
+            while (!names.Add(name.ToString()))
             {
-                name += "$";
+                name.Append('$');
             }
 
-            slots.Add(var.Name, var with { Name = name });
+            slots.Add(var.Name, var with { Name = name.ToString() });
         }
 
         return slots;

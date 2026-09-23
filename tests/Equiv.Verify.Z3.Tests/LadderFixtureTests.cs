@@ -36,8 +36,8 @@ public sealed class LadderFixtureTests
         if (verdict is Divergent divergent)
         {
             Assert.NotEqual(divergent.Counterexample.Old, divergent.Counterexample.New);
-            Assert.All(new[] { divergent.Counterexample.Old, divergent.Counterexample.New }, static r => Assert.IsType<IrOutcome>(r.Outcome, exactMatch: false));
-            Assert.All(new[] { divergent.Counterexample.Old.Outcome, divergent.Counterexample.New.Outcome }, static o => Assert.True(o is IrReturned or IrThrew, o.ToString()));
+            Assert.All([divergent.Counterexample.Old, divergent.Counterexample.New], static r => Assert.IsType<IrOutcome>(r.Outcome, exactMatch: false));
+            Assert.All([divergent.Counterexample.Old.Outcome, divergent.Counterexample.New.Outcome], static o => Assert.True(o is IrReturned or IrThrew, o.ToString()));
         }
     }
 

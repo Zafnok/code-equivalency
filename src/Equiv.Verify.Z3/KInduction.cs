@@ -29,9 +29,12 @@ internal sealed class KInduction(LoopLadder ladder, LockstepInduction lockstep)
         bool applies = force || lockstep.StepFailed;
         if (!applies || lockstep.Misalignment is not null || lockstep.Loops.Length != 1)
         {
-            string reason = lockstep.Misalignment is { } misalignment
-                ? $"the loops do not align: {misalignment}"
-                : applies ? "k-induction takes exactly one loop per side" : "lockstep induction did not fail on a step obligation";
+            string reason = (lockstep.Misalignment, applies) switch
+            {
+                ({ } misalignment, _) => $"the loops do not align: {misalignment}",
+                (_, true) => "k-induction takes exactly one loop per side",
+                _ => "lockstep induction did not fail on a step obligation",
+            };
             return LoopLadder.NotApplicable(ProofMethod.KInduction, reason, lockstep.Misalignment is null ? null : UnknownReason.UnalignedLoop);
         }
 
@@ -74,20 +77,30 @@ internal sealed class KInduction(LoopLadder ladder, LockstepInduction lockstep)
     private static IEnumerable<(BoolExpr Reached, BoolExpr Equal)> Arrivals(Context context, ProductEncoding encoding, Window old, Window @new, LockstepInduction.Coupling coupling, Range copies)
     {
         (int offset, int length) = copies.GetOffsetAndLength(old.Headers.Length);
-        return Enumerable.Range(offset, length).Select(j => (
-            context.MkAnd(
-                encoding.Old.Reach.GetValueOrDefault(old.Headers[j], context.MkFalse()),
-                encoding.New.Reach.GetValueOrDefault(@new.Headers[j], context.MkFalse())),
-            context.MkAnd([context.MkTrue(), .. coupling.Phis.Select(p => context.MkEq(encoding.Old.Vars[old.Phis(j)[p.Old].Name], encoding.New.Vars[@new.Phis(j)[p.New].Name]))])));
+        return Enumerable.Range(offset, length).Select(j =>
+        {
+            BoolExpr[] equalities = [context.MkTrue(), .. coupling.Phis.Select(p => context.MkEq(encoding.Old.Vars[old.Phis(j)[p.Old].Name], encoding.New.Vars[@new.Phis(j)[p.New].Name]))];
+            return (
+                context.MkAnd(
+                    encoding.Old.Reach.GetValueOrDefault(old.Headers[j], context.MkFalse()),
+                    encoding.New.Reach.GetValueOrDefault(@new.Headers[j], context.MkFalse())),
+                context.MkAnd(equalities));
+        });
     }
 
     /// <summary>The base's violation: some peeled header copy both sides reach with unequal coupled phis.</summary>
-    private static BoolExpr Disagree(Context context, IEnumerable<(BoolExpr Reached, BoolExpr Equal)> arrivals) =>
-        context.MkOr([context.MkFalse(), .. arrivals.Select(a => context.MkAnd(a.Reached, context.MkNot(a.Equal)))]);
+    private static BoolExpr Disagree(Context context, IEnumerable<(BoolExpr Reached, BoolExpr Equal)> arrivals)
+    {
+        BoolExpr[] disagreements = [context.MkFalse(), .. arrivals.Select(a => context.MkAnd(a.Reached, context.MkNot(a.Equal)))];
+        return context.MkOr(disagreements);
+    }
 
     /// <summary>The step's premise: both sides reach every header copy after the first with equal coupled phis.</summary>
-    private static BoolExpr Agree(Context context, IEnumerable<(BoolExpr Reached, BoolExpr Equal)> arrivals) =>
-        context.MkAnd([context.MkTrue(), .. arrivals.Select(a => context.MkAnd(a.Reached, a.Equal))]);
+    private static BoolExpr Agree(Context context, IEnumerable<(BoolExpr Reached, BoolExpr Equal)> arrivals)
+    {
+        BoolExpr[] agreements = [context.MkTrue(), .. arrivals.Select(a => context.MkAnd(a.Reached, a.Equal))];
+        return context.MkAnd(agreements);
+    }
 
     /// <summary>A transformed procedure, its header copies in order, and the header its segment is cut at.</summary>
     private sealed record Window(IrProcedure Procedure, ImmutableArray<IrBlockId> Headers, IrBlockId Cut)
