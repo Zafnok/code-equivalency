@@ -1,5 +1,5 @@
 # M3-022 Census of the public corpus, and ordering the precision work by it
-Status: in-progress
+Status: done (PR #139)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-014, M3-024
