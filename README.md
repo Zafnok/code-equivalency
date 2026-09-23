@@ -62,6 +62,21 @@ In plain terms, production use is free while **both** of the following hold:
   separately, so 49k against 49k is fine and 49k against 52k is not).
 
 Using `equiv` in CI counts as production use. Non-production evaluation is free and uncapped.
+
+**How `equiv` counts lines for the 50,000 limit.** Every `equiv compare` prints the analysed
+line count of each codebase, and writes it to the SARIF run's `properties.analysedLinesOfCode`
+as `legacy` and `modern`. They are two numbers, never a total, because the licence measures each
+codebase on its own. The same rule applies to both sides:
+
+- **Files:** every C# file the loaded projects compile, which is your source files plus what the
+  build generates (such as `obj/**/AssemblyInfo.cs` and source-generator output). A file that
+  more than one project compiles counts once.
+- **Lines:** a line counts when it holds C# code. Blank lines, comment-only lines, preprocessor
+  directive lines (`#if`, `#region`) and code that an inactive `#if` excludes do not count.
+
+`equiv compare --dry-run` reports the two counts without verifying anything, so you can check
+where you stand first. `equiv` only reports the numbers. It enforces nothing and sends nothing
+anywhere.
 Offering `equiv` as a hosted or embedded service, using it to run migrations or reviews for
 third parties, or reselling it, is never permitted under this licence at any size.
 
@@ -76,7 +91,14 @@ commercial licence, open an issue. Reasoning and the dependency licence policy a
 equiv compare --legacy <path> --modern <path>
               [--out equiv.sarif] [--baseline <previous.sarif>]
               [--config equiv.config.json] [--fail-on divergent|unknown] [--dry-run]
+              [--lower-only]
 ```
+
+`--dry-run` routes and loads both sides, prints the analysed line counts, and stops without
+writing SARIF. `--lower-only` loads, matches and lowers, then writes a SARIF log with the
+lowering census (`run.properties.loweringCensus`) and the Added and Removed results. It never
+runs the solver and exits 0 unless loading fails. It cannot be combined with `--baseline` or
+`--fail-on`.
 
 | Exit code | Meaning |
 |---|---|

@@ -107,3 +107,34 @@ whether "lines of code" means physical lines in the files the frontend loaded, o
 non-comment lines. Pick one, state it in `README.md` next to the licence summary, and use the same
 rule on both sides. The figure only has to be honest and reproducible; it does not have to match
 any other tool's definition.
+
+Decision: "lines of code" means lines that hold part of a C# token, so blank lines, comment-only
+lines, preprocessor directive lines and code an inactive `#if` excludes do not count. The files are
+every syntax tree in the loaded compilations, generated ones included, and each file path counts
+once. This is the usual meaning of the licence's term, Roslyn's tokens make it exact and
+reproducible, and counting generated files errs toward the larger number. The rule is implemented
+once, in `Equiv.Frontend.CSharp/CodeLines.cs`, and stated in README "Licence".
+Decision: the counts leave the frontend through `ILanguageFrontend.Analyze`, which now returns
+`FrontendAnalysis(Match, Lines)` (`AnalysedLines` has no total). A separate count method would load
+each solution twice. `SarifReportWriter.Write` gains an optional `runProperties` bag, which is the
+only Reporting change.
+Decision: `--dry-run` now goes through `Analyze` to report the counts (criterion 10). It still writes
+no SARIF and never calls the backend. Like a normal run, it now exits 3 on a missing `--config` or
+`--baseline` file.
+Decision: `--fail-on` has no parsed default any more. Null means `divergent`, so `--lower-only`
+rejects only an explicit `--fail-on`.
+Decision: census `procedures` is matched pairs plus removed (legacy) or added (modern) procedures.
+Ambiguous identities are counted on neither side, because `MatchResult` does not say which side they
+come from or how many there are, and the CLI reports no result for them either. `opaqueByReason`
+counts bodies, not nodes. A body is whole-body opaque when it is one block whose only instruction is
+an `IrOpaque`, which is the shape the lowerer gives it, and a pair counts when either side is.
+Note: the sample's async method is `async Task ConfirmAsync`, not `async Task<T>`. An `async Task<T>`
+method lowers to ill-typed IR: IR007, `ret` of the result type in a procedure typed as the task
+sort. That trips `IrLowerer`'s `Debug.Assert` (Debug builds fail fast) and hands invalid IR to the
+backend in Release. The size guard rules out lowering changes here, so this is filed separately. An
+`async Task` body also gets a spurious `missing-return` opaque.
+Note: `business-layer` is not in `SampleLoweringTests`' OperationKind coverage list. It holds kinds
+that have no row in IOPERATION-COVERAGE.md yet (`Await`, `DelegateCreation`, `InterpolatedString`
+and others), and adding those rows is outside this ticket.
+Note: running `Equiv.Tests.Integration` locally without `build.ps1` fails the webapi-basic tests,
+because its legacy side needs the MSBuild sample restore that `build.ps1` and CI do.

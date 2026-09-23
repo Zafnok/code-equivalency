@@ -60,7 +60,11 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 
 - `equiv compare --legacy <path.sln> --modern <path.sln> [--baseline prev.sarif]
   [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
-  [--lower-only]`.
+  [--dry-run] [--lower-only]`.
+- Every run prints the analysed line count of each codebase and writes both to
+  `run.properties.analysedLinesOfCode`: two numbers, never a total (README "Licence"). The frontend
+  counts them from the files it loaded. `--dry-run` loads both sides, prints the route and the
+  counts, and stops before verifying or writing SARIF.
 - `--lower-only` loads, matches and lowers, writes the lowering census and the Added and
   Removed results, never calls the backend, and exits 0 unless a project was skipped (exit 4)
   (ADR 0027). It cannot be combined with `--baseline` or `--fail-on` (exit 3).
