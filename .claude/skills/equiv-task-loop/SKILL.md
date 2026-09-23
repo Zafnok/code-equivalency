@@ -21,14 +21,19 @@ description: The only way to implement a ticket in this repo. Use whenever asked
    small no matter how the topic sounds.
 4. Branch: `git switch -c <ticket-id>-<slug>` from `main`. Set `Status: in-progress`.
 5. Test first, per deliverable: write the failing test (unit, and property/snapshot if
-   the ticket says so), then the smallest code that passes, then run `./build.ps1`.
+   the ticket says so), then the smallest code that passes, then run the targeted
+   `dotnet test <project>` for the project you touched (fast, not the full gate).
    Never write more than one deliverable ahead of green.
    When a choice comes up that the ticket does not settle, do not ask: apply
    `equiv-decide`, log a `Decision:` line in the ticket's Notes, and keep going.
-6. Gates: `./build.ps1` must be fully green before every commit: build with warnings as
-   errors, format, tests, 100% line+branch coverage on `src/`, architecture tests. Do not
-   lower a gate, add an exclusion, or disable an analyzer to get green. If a gate is
-   wrong, stop and report; do not work around it.
+6. Gates: `./build.ps1` (build with warnings as errors, format, tests, 100% line+branch
+   coverage on `src/`, architecture tests) must be green before the PR merges. CI runs
+   this identically on every PR (`.claude/skills/equiv-quality-gates`), so do not run the
+   full `./build.ps1` locally before committing or pushing — trust the CI gate. Only run
+   it locally if CI has already failed on the same issue more than once and a local
+   debug-mode run is cheaper than another CI round-trip. Do not lower a gate, add an
+   exclusion, or disable an analyzer to get green. If a gate is wrong, stop and report;
+   do not work around it.
 7. Commit small, Conventional Commits, footer `Ticket: <id>`. Snapshot files
    (`*.verified.*`) are committed and described in the PR.
 8. Finish: confirm every acceptance criterion holds (quote each with the test or
