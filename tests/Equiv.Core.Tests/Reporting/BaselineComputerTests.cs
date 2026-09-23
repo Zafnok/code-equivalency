@@ -103,6 +103,41 @@ public sealed class BaselineComputerTests
     }
 
     [Fact]
+    public void ABaselineResultInASkippedProjectIsCarriedUnchanged()
+    {
+        SarifLog previous = SarifReportWriter.Write([new VerificationResult(new ProcedureIdentity("A"), new Divergent(Fixtures.Counterexample()))]);
+        SarifLog current = SarifReportWriter.Write([], previous, unverified: [new ProcedureIdentity("A")]);
+
+        Result carried = Assert.Single(current.Runs[0].Results);
+        Assert.Equal(BaselineState.Unchanged, carried.BaselineState);
+        Assert.Equal("EQ002", carried.RuleId);
+        Assert.True(carried.GetProperty<bool>("unverified"));
+    }
+
+    [Fact]
+    public void AnUnverifiedIdentityWithoutABaselineResultAddsNoResult()
+    {
+        SarifLog previous = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Bounded), "A")]);
+        SarifLog current = SarifReportWriter.Write([], previous, unverified: [new ProcedureIdentity("B")]);
+
+        Result absent = Assert.Single(current.Runs[0].Results);
+        Assert.Equal(BaselineState.Absent, absent.BaselineState);
+        Assert.False(absent.TryGetProperty("unverified", out bool _));
+    }
+
+    [Fact]
+    public void AnUnverifiedIdentityWithACurrentResultKeepsItsOwnState()
+    {
+        VerificationResult result = Fixtures.Result(new Equivalent(ProofMethod.Bounded), "A");
+        SarifLog previous = SarifReportWriter.Write([result]);
+        SarifLog current = SarifReportWriter.Write([result], previous, unverified: [new ProcedureIdentity("A")]);
+
+        Result only = Assert.Single(current.Runs[0].Results);
+        Assert.Equal(BaselineState.Unchanged, only.BaselineState);
+        Assert.False(only.TryGetProperty("unverified", out bool _));
+    }
+
+    [Fact]
     public void BaselineAgainstItselfIsAllUnchanged()
     {
         ResultSet.Sample(static results =>

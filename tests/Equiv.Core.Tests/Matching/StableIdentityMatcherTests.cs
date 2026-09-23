@@ -90,6 +90,37 @@ public sealed class StableIdentityMatcherTests
     }
 
     [Fact]
+    public void MatchResultsDifferingInSkippedProjectsAreUnequal()
+    {
+        MatchResult plain = Matcher.Match([Id("A")], [Id("A")]);
+        MatchResult legacySkipped = plain with { LegacySkipped = [Skipped("P")] };
+        MatchResult modernSkipped = plain with { ModernSkipped = [Skipped("P")] };
+
+        Assert.Empty(plain.LegacySkipped);
+        Assert.Empty(plain.ModernSkipped);
+        Assert.NotEqual(plain, legacySkipped);
+        Assert.NotEqual(plain, modernSkipped);
+        Assert.NotEqual(legacySkipped, modernSkipped);
+        Assert.Equal(legacySkipped, plain with { LegacySkipped = [Skipped("P")] });
+        Assert.Equal(legacySkipped.GetHashCode(), (plain with { LegacySkipped = [Skipped("P")] }).GetHashCode());
+    }
+
+    [Fact]
+    public void UnverifiedProjectsCompareByValue()
+    {
+        UnverifiedProject project = Skipped("P");
+
+        Assert.Equal(project, Skipped("P"));
+        Assert.Equal(project.GetHashCode(), Skipped("P").GetHashCode());
+        Assert.False(project.Equals(other: null));
+        Assert.NotEqual(project, project with { Name = "Q" });
+        Assert.NotEqual(project, project with { AssemblyName = "Q" });
+        Assert.NotEqual(project, project with { IsCSharp = false });
+        Assert.NotEqual(project, project with { Diagnostics = ["CS0012: other"] });
+        Assert.NotEqual(project, project with { Procedures = [] });
+    }
+
+    [Fact]
     public void DifferentMatchResultsAreUnequal()
     {
         MatchResult a = Matcher.Match([Id("A")], [Id("A")]);
@@ -138,4 +169,7 @@ public sealed class StableIdentityMatcherTests
             Assert.True(new HashSet<ProcedureIdentity>(forward.Ambiguous).SetEquals(swapped.Ambiguous));
         }, iter: 500);
     }
+
+    private static UnverifiedProject Skipped(string name) =>
+        new(name, name + ".dll", IsCSharp: true, ["CS0246: The type or namespace name 'Missing' could not be found"], [new ProcedureIdentity("A")]);
 }

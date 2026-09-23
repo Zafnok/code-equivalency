@@ -50,6 +50,7 @@ public sealed class VerdictTests
     [InlineData(UnknownReason.UnmatchedOverload)]
     [InlineData(UnknownReason.UnalignedLoop)]
     [InlineData(UnknownReason.Recursion)]
+    [InlineData(UnknownReason.Unbound)]
     public void EveryUnknownReasonRoundTripsThroughTheRecord(UnknownReason reason)
     {
         Assert.Equal(reason, new Unknown(reason, "detail").Reason);
