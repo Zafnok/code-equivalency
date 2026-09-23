@@ -1,4 +1,4 @@
-# ADR 0028: Mutual recursion is verified modularly; Unknown(Recursion) is for self-recursion the ladder cannot decide
+# ADR 0030: Mutual recursion is verified modularly; Unknown(Recursion) is for self-recursion the ladder cannot decide
 
 Status: proposed (2026-09-23)
 
