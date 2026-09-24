@@ -12,8 +12,10 @@ description: The only way to implement a ticket in this repo. Use whenever asked
    any ticket.
 1. Read, in order: `CLAUDE.md`, the ticket file in `docs/tickets/`, every spec section it
    references, `docs/QUALITY-GATES.md`. Do not read the whole repo; read what the ticket names.
-2. Check dependencies: every ticket in "Depends on" must be `Status: done`. If not, stop
-   and say which one is missing.
+2. Check dependencies: every ticket in "Depends on" must be in `docs/tickets/done/` (and
+   say `Status: done`). If one is still directly in `docs/tickets/`, stop and say which
+   one is missing. Open tickets are exactly the files directly in `docs/tickets/` (not
+   `README.md`, not `IOPERATION-COVERAGE.md`); `docs/ROADMAP.md` gives their order.
 3. Do not plan. The ticket's Acceptance criteria, Files and Tests sections are the
    plan. Copy the criteria into a checklist in your first message and work them in
    order. If the Size guard trips, stop and re-read Out of scope before writing more.
@@ -39,8 +41,12 @@ description: The only way to implement a ticket in this repo. Use whenever asked
 8. Finish: confirm every acceptance criterion holds (quote each with the test or
    command that proves it in the PR body), fill Notes with anything surprising (toolchain quirks,
    spec ambiguities), open the PR with `gh pr create` using the ticket title; body = the
-   Deliverables list with results, plus the attribution line from the session. Then set
-   `Status: done (PR #n)` in a final commit.
+   Deliverables list with results, plus the attribution line from the session. Then, in
+   one final commit on the same branch (`chore(tickets): file <id> as done`, footer
+   `Ticket: <id>`): set `Status: done (PR #n)` and `git mv` the ticket file into
+   `docs/tickets/done/`. Fix any live path to it (`grep -rn "tickets/<id>" .` outside
+   `docs/tickets/done/`; done tickets' Notes are history and stay as written). Push. The
+   move merges with the PR, so `main`'s `docs/tickets/` only ever lists unfinished work.
 9. Stop after the PR. Do not start the next ticket in the same session.
 
 ## Rules that trip agents up

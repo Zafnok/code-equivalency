@@ -7,6 +7,11 @@ labelled `sonar`, whose body carries the goal, findings and acceptance criteria.
 One file per ticket, named `M<n>-<nnn>-<slug>.md`. Status is the first line after the
 title: `Status: todo | in-progress | done (PR #n)`. Agents update it in the PR.
 
+Open tickets live directly in this folder. When a ticket's PR is opened, its last commit
+sets `Status: done (PR #n)` and moves the file to `done/` (step 8 of
+`.claude/skills/equiv-task-loop`), so on `main` this folder lists only unfinished work and
+`done/` is the archive. A dependency is met when its file is in `done/`.
+
 Template:
 
 ```

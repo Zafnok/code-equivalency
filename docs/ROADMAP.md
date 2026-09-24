@@ -2,7 +2,8 @@
 
 Goal: a working `equiv compare` on real 4.8 → 10 solutions in one week, with the
 quality gates on from the first commit. Milestones are strictly ordered; tickets inside
-a milestone list their own dependencies. Ticket files: `docs/tickets/M<n>-<nnn>-<slug>.md`.
+a milestone list their own dependencies. Ticket files: `docs/tickets/M<n>-<nnn>-<slug>.md`
+(open) and `docs/tickets/done/` (finished).
 
 Effort labels are for a Sonnet/Opus-class agent driving, with a human reviewing PRs:
 S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it is.

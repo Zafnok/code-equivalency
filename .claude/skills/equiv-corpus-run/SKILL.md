@@ -28,7 +28,8 @@ skill is the judgement part. Windows only: legacy projects load through MSBuildW
 
 ## 1. Which modes are available
 
-Read the `Status:` lines. A mode is available only when every ticket it needs says `done`:
+Read the `Status:` lines (finished tickets are in `docs/tickets/done/`). A mode is available
+only when every ticket it needs says `done`:
 
 | Mode | Needs | Runs |
 |---|---|---|
@@ -37,7 +38,7 @@ Read the `Status:` lines. A mode is available only when every ticket it needs sa
 | `seeded` | same as `full` | `full` on a copy of the modern side with seeds from `tools/corpus/seeds.md` |
 
 ```powershell
-Select-String -Path docs/tickets/M3-014-*.md, docs/tickets/M3-024-*.md -Pattern '^Status:'
+Select-String -Path docs/tickets/M3-014-*.md, docs/tickets/M3-024-*.md, docs/tickets/done/M3-014-*.md, docs/tickets/done/M3-024-*.md -Pattern '^Status:'
 ```
 
 If the mode asked for is not available, say which tickets are missing and stop. A run before

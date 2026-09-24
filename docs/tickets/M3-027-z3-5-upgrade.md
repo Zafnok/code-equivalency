@@ -41,7 +41,7 @@ ADR 0030; ADR 0002 (Microsoft.Z3 row); ADR 0005; M3-001 Notes (Linux native gap)
 `tools/z3-feed/fetch.ps1`, `tools/z3-feed/Microsoft.Z3.5.1.0.nupkg.sha256`, `NuGet.config`,
 `.gitignore`, `Directory.Packages.props`, `build.ps1`, `.github/workflows/{ci,mutation,sonar,codeql}.yml`,
 `.github/dependabot.yml`, `docs/adr/0002-dependencies.md`, `README.md`,
-`docs/tickets/M3-001-z3-product-encoder.md`, `docs/tickets/M3-004-packaging.md`.
+`docs/tickets/done/M3-001-z3-product-encoder.md`, `docs/tickets/M3-004-packaging.md`.
 
 ## Tests
 No new tests; the existing `Equiv.Verify.Z3.Tests`, integration and property suites on both CI
