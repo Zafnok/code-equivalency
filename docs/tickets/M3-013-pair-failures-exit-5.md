@@ -1,5 +1,5 @@
 # M3-013 A pair whose verification throws is reported and skipped, and the run exits 5
-Status: in-progress
+Status: done (PR #144)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-001
