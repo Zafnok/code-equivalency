@@ -129,10 +129,16 @@ internal static class CompareCommand
             [.. lowered.Select(static p => (p.Old, p.New))],
             removed: matchResult.Removed.Length,
             added: matchResult.Added.Length,
-            projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length));
+            projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length),
+            unlowered: matchResult.LoweringFailures.Length);
 
-        (List<VerificationResult> verified, List<Notification> pairFailures, List<ProcedureIdentity> unverifiedPairs) =
+        // P2-011: a pair the frontend could not lower takes the same path as a pair whose verification throws (ADR 0023).
+        List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(static f => PairFailure("Lowering", f.Old, f.New, f.Exception))];
+        List<ProcedureIdentity> unverifiedPairs = [.. matchResult.LoweringFailures.Select(static f => f.New)];
+        (List<VerificationResult> verified, List<Notification> verifyFailures, List<ProcedureIdentity> unverifiedVerified) =
             options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config);
+        pairFailures.AddRange(verifyFailures);
+        unverifiedPairs.AddRange(unverifiedVerified);
         List<VerificationResult> results = verified;
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));
         results.AddRange(matchResult.Removed.Select(static identity => new VerificationResult(identity, new Removed())));
@@ -302,24 +308,33 @@ internal static class CompareCommand
             }
             catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
             {
-                string text = $"Verifying {pair.Old.Value} against {pair.New.Value} failed: {exception.Message}";
-                Console.Error.WriteLine($"error: {text}");
-                failures.Add(new Notification
-                {
-                    Level = FailureLevel.Error,
-                    Message = new Message { Text = text },
-                    Exception = new ExceptionData
-                    {
-                        Kind = exception.GetType().FullName,
-                        Message = exception.Message,
-                        Stack = Stack.CreateStacks(exception).FirstOrDefault(),
-                    },
-                });
+                failures.Add(PairFailure("Verifying", pair.Old, pair.New, exception));
                 unverified.Add(pair.New);
             }
         }
 
         return (results, failures, unverified);
+    }
+
+    /// <summary>
+    /// ADR 0023's record of a pair the tool failed on: an <c>error</c> notification naming both identities and carrying
+    /// the exception, also written to stderr. <paramref name="stage"/> says what failed (<c>Lowering</c>, <c>Verifying</c>).
+    /// </summary>
+    private static Notification PairFailure(string stage, ProcedureIdentity old, ProcedureIdentity @new, Exception exception)
+    {
+        string text = $"{stage} {old.Value} against {@new.Value} failed: {exception.Message}";
+        Console.Error.WriteLine($"error: {text}");
+        return new Notification
+        {
+            Level = FailureLevel.Error,
+            Message = new Message { Text = text },
+            Exception = new ExceptionData
+            {
+                Kind = exception.GetType().FullName,
+                Message = exception.Message,
+                Stack = Stack.CreateStacks(exception).FirstOrDefault(),
+            },
+        };
     }
 
     /// <summary>Each <see cref="Unknown.UnboundOpaqueReason"/> opaque in <paramref name="body"/>, as <c>side: unbound at path line:column</c>.</summary>

@@ -470,6 +470,50 @@ public sealed class CompareCommandTests
         Assert.Contains($"error: Verifying {throwing.Value} against {throwing.Value} failed: encoder bug", errorOutput, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// P2-011: a pair the frontend could not lower takes M3-013's failure path, in <c>--lower-only</c> and full runs
+    /// alike. It is matched, so <c>matchedPairs</c> counts it, but it has no lowered body for <c>pairsWithoutOpaque</c>
+    /// or <c>pairsWholeBodyOpaque</c> to count; the other pair is counted and verified as usual.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Compare_PairThatFailedToLower_IsReportedAsNotificationAndOtherPairsCounted(bool lowerOnly)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity ok = new("T::Ok()");
+        ProcedureIdentity throwing = new("T::Throws()");
+        MatchResult matchResult = new MatchResult([Pair(ok)], [], [], [])
+        {
+            LoweringFailures = [new LoweringFailure(throwing, throwing, new KeyNotFoundException("lowering bug"))],
+        };
+        FakeFrontend frontend = new("csharp", _ => true, matchResult);
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [ok.Value] = new Equivalent(ProofMethod.Bounded) });
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.Success;
+
+        string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: lowerOnly),
+            [frontend], backend, sink));
+
+        Assert.Equal(ExitCodes.InternalError, exitCode);
+        Run run = sink.Log!.Runs[0];
+        Assert.Equal(lowerOnly ? 0 : 1, run.Results.Count);
+        Assert.Equal([throwing.Value], run.GetProperty<List<string>>("unverified"), StringComparer.Ordinal);
+        Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
+        Assert.Equal(
+            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":2,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{}}""",
+            census);
+        Invocation invocation = Assert.Single(run.Invocations);
+        Assert.False(invocation.ExecutionSuccessful);
+        Notification notification = Assert.Single(invocation.ToolExecutionNotifications);
+        Assert.Equal(FailureLevel.Error, notification.Level);
+        Assert.Equal($"Lowering {throwing.Value} against {throwing.Value} failed: lowering bug", notification.Message.Text);
+        Assert.Equal(typeof(KeyNotFoundException).FullName, notification.Exception.Kind);
+        Assert.Contains($"error: Lowering {throwing.Value} against {throwing.Value} failed: lowering bug", errorOutput, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Compare_PairThatThrows_OutranksNewDivergent()
     {

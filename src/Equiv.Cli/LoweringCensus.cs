@@ -12,7 +12,8 @@ namespace Equiv.Cli;
 /// <see cref="OpaqueByReason"/> counts, per side, the bodies holding at least one <see cref="IrOpaque"/> with that
 /// reason, so a whole-body opaque counts once under its reason. <see cref="PairsCongruent"/> stays 0 until
 /// ticket M3-015. <see cref="ProjectsSkipped"/> counts the projects each side's frontend skipped, in any language
-/// (ADR 0029; ticket M3-024).
+/// (ADR 0029; ticket M3-024). A matched pair the frontend could not lower (ticket P2-011) counts in
+/// <see cref="Procedures"/> and <see cref="MatchedPairs"/>, but has no body for any per-body count.
 /// </summary>
 internal sealed record LoweringCensus(
     SideCounts Procedures,
@@ -23,7 +24,7 @@ internal sealed record LoweringCensus(
     SideCounts ProjectsSkipped,
     ImmutableSortedDictionary<string, SideCounts> OpaqueByReason)
 {
-    public static LoweringCensus Compute(IReadOnlyList<(IrProcedure Old, IrProcedure New)> pairs, int removed, int added, SideCounts? projectsSkipped = null)
+    public static LoweringCensus Compute(IReadOnlyList<(IrProcedure Old, IrProcedure New)> pairs, int removed, int added, SideCounts? projectsSkipped = null, int unlowered = 0)
     {
         ArgumentNullException.ThrowIfNull(pairs);
 
@@ -47,8 +48,8 @@ internal sealed record LoweringCensus(
         }
 
         return new LoweringCensus(
-            new SideCounts(pairs.Count + removed, pairs.Count + added),
-            pairs.Count,
+            new SideCounts(pairs.Count + unlowered + removed, pairs.Count + unlowered + added),
+            pairs.Count + unlowered,
             withoutOpaque,
             wholeBodyOpaque,
             PairsCongruent: 0,
