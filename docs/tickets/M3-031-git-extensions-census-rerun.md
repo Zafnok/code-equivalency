@@ -33,6 +33,9 @@ ADR 0034; ADR 0028 decision 5; ADR 0027 decision 3; `docs/runs/2026-09-23-census
    `Depends on:` line drops it. A P2 ticket from M3-022 that clears the bar is scheduled into M4.
 5. `M3-022`'s Notes gain one line pointing at this verdict.
 6. No changes under `src/` or `tests/`.
+7. The `gitextensions-8522` census completes (writes its SARIF, not exit 1), and the SARIF has no
+   lowering-exception result from `IrLowerer.Destination` (P2-010 criterion 3, moved here). If one
+   remains, record it in the SUMMARY's Findings and file a P2 ticket. Do not fix it here.
 
 ## Size guard
 If you are editing engine code or `corpus.ps1`, stop; that is a new ticket.
@@ -42,3 +45,11 @@ Verification (`full` and `seeded` modes are M4-007). New agent migrations. Fixes
 run finds: those become P2 tickets, as the skill requires.
 
 ## Notes
+- Criterion 7 is carried over from P2-010 (PR #155). That fix could not be checked on the corpus
+  because the loader is Windows-only and P2-010 was done on Linux. P2-010's unit tests pin the
+  cause: a `try` whose `finally` never completes (always throws, or loops forever).
+- 2026-09-24, PR #155: with P2-010's two fixes the Git Extensions census exits 0 on Windows, with no
+  tool-execution notifications (P2-010 Notes). That run reused the corpus from M3-022's worktree, whose
+  reference assemblies are under `.corpus/refasm/root` while the current `-Env` points at `.corpus/refasm`.
+  Without overriding `TargetFrameworkRootPath`, the legacy side fails to load (exit 4). Run `-Prepare` in a
+  fresh worktree.

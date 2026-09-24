@@ -205,7 +205,8 @@ tickets.
   (ADR 0034).
 - M3-031 (S) Census rerun on the Git Extensions human pair, scored under ADR 0034. It is the
   feasibility test M3-022 could not complete, and it orders M4 by exact pairs unlocked. Needs
-  M3-030, P2-010, P2-011, P2-012.
+  M3-030, P2-010, P2-011, P2-012. It also carries P2-010's corpus check (its criterion 7): P2-010
+  was fixed and unit-tested on Linux, where the census cannot run.
 - P1-003, P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
   and arrays are keyed by value. P1-003 comes with them as their shared prerequisite.
 
@@ -276,7 +277,8 @@ backlog: nothing schedules them until a census on changed code shows they matter
 - P2-007 (S) Find and lower the field assignments that stay opaque (reason `FieldReference`).
 - P2-008 (M) `IIsNullOperation` from `?.` and `??` lowered through the null shadow (reason `IsNull`).
 - P2-009 (S) A local written only by an opaque has a defined value (reason `undefined`).
-- P2-010 (S) `IrLowerer.Destination` throws `KeyNotFoundException` on Git Extensions.
+- P2-010 (S) `IrLowerer.Destination` throws `KeyNotFoundException` on Git Extensions. Fixed; its corpus
+  check moved to M3-031 criterion 7.
 - P2-011 (M) A procedure whose lowering throws is reported and skipped, not the run.
 - P2-012 (S) NuGet warnings NU1701, NU1702 and NU1903 are not project load failures.
 - P2-013 (S) Projects outside the solution's build configuration are not loaded or counted.
