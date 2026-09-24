@@ -1,0 +1,15 @@
+﻿proc "C::M(C,int)" (%c "c": sort "C", %i "i": bv32, %null.C: map<sort "C", bool>) -> bv32 entry B0
+B0:
+  %c.isNull.7 "c": bool = mapread %null.C, %c
+  goto B1
+B1:
+  br %c.isNull.7, B3, B4
+B3:
+  throw "System.NullReferenceException"
+B4:
+  %$4: bv32 = call "C::get_Item(int)"(%c, %i) threw %$5: bool
+  br %$5, B5, B6
+B5:
+  throw "System.Exception"
+B6:
+  ret %$4

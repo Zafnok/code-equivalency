@@ -1,5 +1,5 @@
 # M3-030 Census reports changed pairs, their reason sets, runtime-change calls and package drift
-Status: todo
+Status: done (PR #156)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-014
@@ -47,3 +47,24 @@ M3-015's bound fingerprints (they replace the token proxy when they land). Repor
 as a SARIF result. Rerunning the census; that is its own run.
 
 ## Notes
+- Decision: the token proxy compares the tokens (kind and text) of every declaring syntax reference of the
+  two method symbols, so a signature change counts too, and it is computed in `CSharpFrontend` onto a new
+  `ProcedurePair.TokensEqual` (default false: a frontend that does not compute it reports every pair changed,
+  the conservative direction). An implicit member (no declaration) has no tokens on either side.
+- Decision: `runtimeChangeCalls` is `{callSites, distinctMembers, pairsWithAny}`, each `{legacy, modern}`,
+  matching the census's other per-side leaves. `distinctMembers` counts distinct callee `CallIdentity.Value`s,
+  not table rows. The match uses the unsuppressed `TryMatch`, so the census measures exposure whatever
+  `suppressRuntimeChanges` says.
+- Decision: `changedReasonSets` is left out of Verify snapshots when it is empty (Verify drops empty
+  dictionaries), as `opaqueByReason` already is.
+- The `""` key of `changedReasonSets` is not a valid property name for `ConvertFrom-Json` without
+  `-AsHashtable`, which Windows PowerShell 5.1 lacks. `-Metrics` rewrites that one key to `(no opaque)`
+  before parsing.
+- `Format-Table | Out-Host` printed nothing under pwsh on Linux with stdout redirected; `-Packages` uses
+  `Out-String` through `Show-Step` instead. The other switches' `Out-Host` tables were left alone (out of scope).
+- Linux dev box: the business-layer legacy sample loads only with net48 reference assemblies on
+  `TargetFrameworkRootPath` (restored `Microsoft.NETFramework.ReferenceAssemblies.net48` 1.0.3, as `-Prepare`
+  does). `ComparePipelineTests.AddedAndRemovedHaveLocations` then also differs in `file:///` URI prefixes on
+  Linux; only the census hunk of its snapshot was taken.
+- Business-layer census: 4 of 28 matched pairs changed, 1 of them without opaque (lowerable share 25%), no
+  runtime-change calls.

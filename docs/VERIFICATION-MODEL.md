@@ -80,13 +80,18 @@ variable. A dereference lowers to a conditional `IrThrow(NullReferenceException)
 Heap and nullness are inputs (M2-004). A procedure's parameter list is its C# parameters
 followed by the synthesised inputs its body needs, ordered by name: the receiver `this`,
 one `null.<Sort>` map from a reference sort to Bool, one `field.<Type>.<Field>` map per
-field touched, and `array.<v>` plus `length.<v>` per array variable indexed. The product
+field touched, `array.<v>` plus `length.<v>` per array variable indexed, and one
+`cast.<From>.<To>` map from `<From>`'s IR type to `<To>`'s sort per implicit reference or boxing
+conversion between different IR types (M3-010). A cast map is an uninterpreted function with no
+trace event: the same operand always converts to the same value. The converted value's nullness is
+read from `null.<To>` like any value's, not tied to the operand's, which over-approximates (a real
+upcast of a non-null value is never null). The product
 encoding (M3-001, ADR 0021) shares the C# parameters by position, because that is how a caller
 binds them, and the synthesised inputs by name; two parameters of different types are never
 shared, each is then an input of its own side. A synthesised input's name is `this` or contains
 a dot, and a C# parameter's never does: that is how the encoder tells them apart. A value's shadow is a `mapread` of `null.<Sort>`,
 so equal references are equally null; `new` sets the shadow to false instead. `this`,
-`null.*` and `length.*` are `In`, because nothing changes them. `field.*` and `array.*` are
+`null.*`, `cast.*` and `length.*` are `In`, because nothing changes them. `field.*` and `array.*` are
 `Ref` (ADR 0018, ticket M3-007), so every exit names their final version in `outs` and the
 final heap is an observable like any `ref` parameter. When only one side of a pair has a given
 `Ref` map, the other side never touches that slice, and the encoder compares the first side's
@@ -246,6 +251,14 @@ without `IrOpaque`, whole-body opaque pairs, congruent pairs, and `IrOpaque` cou
 per side (ADR 0027). It also records skipped projects per side, and, when the run produced
 verdicts, Unknown counts by scope (ADR 0029).
 
+Only the projects a solution builds are part of the product. For a `.sln`, those are the projects
+with a `Build.0` entry for its default configuration (`Debug|Any CPU`, else the first one it
+lists); a `.slnx`, or a `.sln` that lists no configuration, builds all of them. The others are
+never opened, so they are neither loaded nor skipped, and every run names them once per side in
+`run.properties.projectsNotBuilt` (`legacy`, `modern`). The project load rate (ADR 0028) is C#
+projects loaded over C# projects built: skipped projects count against it, projects not built do
+not (ticket P2-013).
+
 Counts in the census are per lowered body of a matched pair. `procedures` counts, per side, the
 matched pairs plus the removed (legacy) or added (modern) procedures. `opaqueByReason` counts the
 bodies on each side that hold at least one `IrOpaque` with that reason, sorted by reason. A body is
@@ -253,6 +266,20 @@ whole-body opaque when it is one block whose only instruction is an `IrOpaque`, 
 under `pairsWholeBodyOpaque` when either side is (ticket M3-014). A matched pair whose lowering threw has
 no lowered body, so it counts in `procedures` and `matchedPairs` but in neither
 `pairsWithoutOpaque` nor `pairsWholeBodyOpaque`, nor in `opaqueByReason` (ticket P2-011).
+
+The census also counts what the solver will see (ADR 0034; ticket M3-030). A lowered matched pair
+is *changed* unless it is congruent. Until M3-015, congruent means the two declarations' syntax
+token sequences are equal once trivia is ignored, and neither lowered body has an `IrCall` that
+`RuntimeChangeTable.TryMatch` matches. `changedPairs`, `changedPairsWithoutOpaque` and
+`changedPairsWholeBodyOpaque` are `matchedPairs`, `pairsWithoutOpaque` and `pairsWholeBodyOpaque`
+restricted to changed pairs; lowerable share is `changedPairsWithoutOpaque / changedPairs`.
+`changedReasonSets` maps the sorted, `+`-joined union of both sides' opaque reasons to its number
+of changed pairs, with `""` for a pair without opaque, so its counts sum to `changedPairs`.
+`runtimeChangeCalls` has `callSites`, `distinctMembers` and `pairsWithAny`, each per side and over
+every lowered matched pair, congruent ones included: the `IrCall`s whose callee identity the table
+matches, the distinct callee identities among them, and the pairs whose body on that side has at
+least one. Package version changes are not in the census; `tools/corpus/corpus.ps1 -Packages`
+computes them from each side's restore output.
 
 Every run also writes `run.properties.analysedLinesOfCode`: `legacy` and `modern`, one count per
 codebase and never a total (ticket M3-014). The rule is the one in README's "Licence" section,

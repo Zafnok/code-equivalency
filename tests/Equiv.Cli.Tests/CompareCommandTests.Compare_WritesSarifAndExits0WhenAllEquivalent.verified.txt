@@ -141,12 +141,33 @@
           projectsSkipped: {
             legacy: 0,
             modern: 0
+          },
+          changedPairs: 2,
+          changedPairsWithoutOpaque: 2,
+          changedPairsWholeBodyOpaque: 0,
+          changedReasonSets: {
+            : 2
+          },
+          runtimeChangeCalls: {
+            callSites: {
+              legacy: 0,
+              modern: 0
+            },
+            distinctMembers: {
+              legacy: 0,
+              modern: 0
+            },
+            pairsWithAny: {
+              legacy: 0,
+              modern: 0
+            }
           }
         },
         analysedLinesOfCode: {
           legacy: 120,
           modern: 135
-        }
+        },
+        projectsNotBuilt: {}
       }
     }
   ]

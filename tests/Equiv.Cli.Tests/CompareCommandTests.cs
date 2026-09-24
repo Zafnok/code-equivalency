@@ -246,6 +246,27 @@ public sealed class CompareCommandTests
     }
 
     [Fact]
+    public void Compare_ListsEachSidesProjectsNotBuiltOnceInARunProperty()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, legacyNotBuilt: ["Example.Site", "_build"]);
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.UsageError;
+
+        _ = CaptureStdOut(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [frontend], new FakeBackend(NoVerdicts), sink));
+
+        // P2-013: a project the solution does not build is neither loaded nor skipped, so it does not fail the run.
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Run run = sink.Log!.Runs[0];
+        Assert.Empty(run.Invocations?.SelectMany(static i => i.ToolExecutionNotifications ?? []) ?? []);
+        Assert.True(run.TryGetSerializedPropertyValue("projectsNotBuilt", out string? notBuilt));
+        Assert.Equal("""{"legacy":["Example.Site","_build"],"modern":[]}""", notBuilt);
+    }
+
+    [Fact]
     public void LowerOnlyNeverCallsTheBackend()
     {
         using TempFile legacy = new();
@@ -268,7 +289,7 @@ public sealed class CompareCommandTests
         Assert.Equal(["EQ004", "EQ005"], run.Results.Select(static r => r.RuleId), StringComparer.Ordinal);
         Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Equal(
-            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":1,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{}}""",
+            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":1,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}}}""",
             census);
         Assert.True(run.TryGetSerializedPropertyValue("analysedLinesOfCode", out string? _));
     }
@@ -503,7 +524,7 @@ public sealed class CompareCommandTests
         Assert.Equal([throwing.Value], run.GetProperty<List<string>>("unverified"), StringComparer.Ordinal);
         Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Equal(
-            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":2,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{}}""",
+            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":2,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}}}""",
             census);
         Invocation invocation = Assert.Single(run.Invocations);
         Assert.False(invocation.ExecutionSuccessful);
