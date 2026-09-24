@@ -29,6 +29,14 @@ internal sealed class HeapLowerer(
     public HeapInputs Inputs { get; } = new();
 
     /// <summary>
+    /// The outs of every <c>Ref</c> heap map. A heap map exists only once the body touches it, so these are taken after
+    /// the whole body is lowered; SSA completes every exit in Build, and an exit that never writes the map names the map's
+    /// input (ticket M3-007).
+    /// </summary>
+    public IEnumerable<(SsaBuilder.Variable Variable, IrVar Out)> Outs() =>
+        Inputs.Parameters.Where(static p => p.Kind == IrParameterKind.Ref).Select(p => (slices[p.Var.Name], p.Var));
+
+    /// <summary>
     /// The heap slice an assignment target names, or null when it is not a field or a single-dimensional
     /// array element of a variable.
     /// </summary>

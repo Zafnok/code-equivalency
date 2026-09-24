@@ -97,6 +97,15 @@ section 2).
   to the three new files, and `IrLowerer.cs`'s size is flagged under "Needs your decision" in the
   PR description -- if it should shrink further, that is its own ticket with its own seam, not a
   line-count patch to this one.
+- Resolved (review of PR #162): the AC5 deviation is accepted and no follow-up split ticket is filed.
+  The 500-line cap was a proxy for the ticket's real goal, which is met: no method swaps and restores
+  per-region state, so the `Copy`/`blockIds` class of bug is now a compile error. A further split with no
+  defect behind it would put a pure refactor on the soundness path (P1-006 -> P1-005 -> M3-003 -> M3-004
+  -> M4-007) ahead of the first real run. The next real seam is call lowering (`Operands`/`Arguments`/
+  `Call`), and P1-005 rewrites that path anyway; if it needs its own type there, that is P1-005's
+  size-guard call, made against the code as it then is.
+- Merge with main (M3-007): M3-007's `Ref` heap-map outs read `slices`, which now lives in
+  `HeapLowerer`, so they are `HeapLowerer.Outs()` rather than `IrLowerer` reaching into the dictionary.
 - Decision: how `HeapLowerer`/`ExceptionLowerer` reach the lowering they do not own (an operand's
   value, a null-check-and-throw on a dereferenced receiver, resolving an lvalue to its SSA variable,
   re-lowering a `finally` copy's blocks) -> constructor-injected `Func`/`Action` delegates bound to
