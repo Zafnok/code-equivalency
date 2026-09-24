@@ -1,5 +1,5 @@
 # M3-030 Census reports changed pairs, their reason sets, runtime-change calls and package drift
-Status: in-progress
+Status: done (PR #156)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-014
