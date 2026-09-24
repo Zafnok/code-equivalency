@@ -60,10 +60,44 @@ public sealed class CompilationDiagnosticClassifierTests
             CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(@"C:\x\A.csproj : warning MSB3270: There was a mismatch between the processor architecture"));
     }
 
+    [Fact]
+    public void ClassifyWorkspaceFailure_PackageRestoredForTheWrongFrameworkIsAWarning()
+    {
+        // NU1701: a package with no net10.0-compatible asset restored against a .NET Framework fallback.
+        // MSBuildWorkspace wraps the bare NuGet log message and drops its "NU1701:" code (verified against a
+        // real restore), so this is matched by shape, not by code.
+        Assert.Equal(
+            LoadDiagnosticKind.WorkspaceWarning,
+            CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(
+                @"Msbuild failed when processing the file 'C:\x\A.csproj' with message: Package 'Old.Widgets 2.1.0' was restored using '.NETFramework,Version=v4.8' instead of the project target framework 'net10.0'. It may not work."));
+    }
+
+    [Fact]
+    public void ClassifyWorkspaceFailure_KnownVulnerablePackageIsAWarning()
+    {
+        // NU1903: a NuGet audit finding, not a load problem. Also carries no code in the wrapped message.
+        Assert.Equal(
+            LoadDiagnosticKind.WorkspaceWarning,
+            CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(
+                @"Msbuild failed when processing the file 'C:\x\A.csproj' with message: Package 'Old.Widgets' 2.1.0 has a known moderate severity vulnerability, https://example.invalid/advisories/GHSA-0000-0000-0000"));
+    }
+
+    [Fact]
+    public void ClassifyWorkspaceFailure_ProjectReferenceResolvedForTheWrongFrameworkIsAWarning()
+    {
+        // NU1702: the same fallback shape as NU1701, but for a ProjectReference instead of a package.
+        Assert.Equal(
+            LoadDiagnosticKind.WorkspaceWarning,
+            CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(
+                @"Msbuild failed when processing the file 'C:\x\Modern.csproj' with message: ProjectReference 'C:\x\Adapters.csproj' was resolved using '.NETFramework,Version=v4.8' instead of the project target framework 'netstandard2.0'. Compilation may fail."));
+    }
+
     [Theory]
     [InlineData("error MSB4019: The imported project was not found")]
     [InlineData("warning MSB32701: not the same code")]
     [InlineData("project file could not be evaluated")]
+    [InlineData("Package 'Old.Widgets' 2.1.0 has a known vulnerability, but not the exact wording")]
+    [InlineData("a ProjectReference was resolved, but not against a target framework at all")]
     public void ClassifyWorkspaceFailure_AnythingElseIsAFailure(string message)
     {
         Assert.Equal(LoadDiagnosticKind.WorkspaceFailure, CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(message));

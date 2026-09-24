@@ -5,7 +5,8 @@ namespace Equiv.Frontend.CSharp.Loading;
 
 /// <summary>
 /// Sorts compiler errors into "references did not resolve" (skip the project) and everything else (keep), and
-/// workspace failures into real failures and MSBuild warnings that the workspace reports as failures.
+/// workspace failures into real failures and MSBuild or NuGet warnings that the workspace reports as failures
+/// (<see cref="MsBuildWarningCodes"/> and <see cref="ClassifyWorkspaceFailure"/>).
 /// </summary>
 internal static partial class CompilationDiagnosticClassifier
 {
@@ -31,12 +32,49 @@ internal static partial class CompilationDiagnosticClassifier
     public static LoadDiagnosticKind Classify(string errorId) =>
         UnresolvedReferenceIds.Contains(errorId) ? LoadDiagnosticKind.UnresolvedReference : LoadDiagnosticKind.CompilerError;
 
-    /// <summary>A failure event is a warning when its message carries a code from the MSBuild warning table.</summary>
+    /// <summary>
+    /// A failure event is a warning when its message carries a code from <see cref="MsBuildWarningCodes"/>, or
+    /// matches the shape of one of three NuGet restore compatibility warnings (P2-012). Unlike MSB3270, none of
+    /// these carry their code in the text the workspace passes on (confirmed against a real restore: the
+    /// workspace wraps the bare NuGet log message, dropping the "NUxxxx:" prefix a console logger would add), so
+    /// each is matched by message shape instead of by code:
+    /// <list type="bullet">
+    /// <item><description><c>NU1701</c>: a package restored using a fallback framework (typically .NET Framework)
+    /// because it has no asset for the project's target framework; common when a .NET Framework-only package is
+    /// still referenced after a migration (<see cref="PackageRestoredForAFallbackFramework"/>).</description></item>
+    /// <item><description><c>NU1702</c>: a <c>ProjectReference</c> resolved using a fallback framework, the same
+    /// shape as NU1701 but for a project instead of a package
+    /// (<see cref="ProjectReferenceResolvedForAFallbackFramework"/>).</description></item>
+    /// <item><description><c>NU1903</c>: a NuGet audit finding (a package with a known vulnerability), not a load
+    /// problem (<see cref="PackageHasAKnownVulnerability"/>).</description></item>
+    /// </list>
+    /// </summary>
     public static LoadDiagnosticKind ClassifyWorkspaceFailure(string message) =>
         MsBuildCode.Matches(message).Any(static m => MsBuildWarningCodes.Contains(m.Value))
+        || PackageRestoredForAFallbackFramework.IsMatch(message)
+        || ProjectReferenceResolvedForAFallbackFramework.IsMatch(message)
+        || PackageHasAKnownVulnerability.IsMatch(message)
             ? LoadDiagnosticKind.WorkspaceWarning
             : LoadDiagnosticKind.WorkspaceFailure;
 
     [GeneratedRegex(@"\bMSB\d{4}\b", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex MsBuildCode { get; }
+
+    [GeneratedRegex(
+        @"\bPackage '[^']*' was restored using '[^']*' instead of the project target framework '[^']*'",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PackageRestoredForAFallbackFramework { get; }
+
+    [GeneratedRegex(
+        @"\bProjectReference '[^']*' was resolved using '[^']*' instead of the project target framework '[^']*'",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ProjectReferenceResolvedForAFallbackFramework { get; }
+
+    [GeneratedRegex(
+        @"\bPackage '[^']*' \S+ has a known \w+ severity vulnerability\b",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PackageHasAKnownVulnerability { get; }
 }

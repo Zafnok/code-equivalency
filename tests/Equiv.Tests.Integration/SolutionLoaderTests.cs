@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Globalization;
+
 using Equiv.Frontend.CSharp.Loading;
 
 using Xunit;
@@ -63,6 +66,34 @@ public sealed class SolutionLoaderTests
     }
 
     /// <summary>
+    /// P2-012: a net10.0 project referencing a .NET Framework-only package restores with NU1701, which
+    /// MSBuildWorkspace reports as a <c>WorkspaceDiagnosticKind.Failure</c>; the project must still load.
+    /// </summary>
+    [Fact]
+    public async Task ModernCopyReferencingAFrameworkOnlyPackageLoadsWithNoSkippedProject()
+    {
+        string copyDir = Path.Combine(Path.GetTempPath(), "equiv-P2-012-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string solutionPath = CreateModernCopyWithAFrameworkOnlyPackage(copyDir);
+            Restore(Path.Combine(copyDir, "Equiv.Samples.Identical.Modern.csproj"));
+
+            LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(solutionPath, TestContext.Current.CancellationToken);
+
+            Assert.Single(loaded.Compilations);
+            Assert.Empty(loaded.Skipped);
+            Assert.Contains(
+                loaded.Diagnostics,
+                static d => d.Kind == LoadDiagnosticKind.WorkspaceWarning && d.Message.Contains("was restored using", StringComparison.Ordinal));
+            Assert.DoesNotContain(loaded.Diagnostics, static d => d.Kind is not LoadDiagnosticKind.WorkspaceWarning);
+        }
+        finally
+        {
+            DeleteBestEffort(copyDir);
+        }
+    }
+
+    /// <summary>
     /// The build host can still hold files under the copy's <c>obj/</c>; a failed cleanup must not
     /// replace the test's own result, and the OS temp folder is reclaimed anyway.
     /// </summary>
@@ -111,5 +142,50 @@ public sealed class SolutionLoaderTests
             "using System; namespace Equiv.Samples.Identical { public class UsesSystem { public Uri Address; } }");
 
         return Path.Combine(copyDir, "Equiv.Samples.Identical.Legacy.sln");
+    }
+
+    /// <summary>
+    /// Copies <c>samples/identical/modern</c> and adds a <c>PackageReference</c> to a .NET Framework-only package
+    /// (already restored by <c>samples/webapi-basic/legacy</c>, so it is known to be available to this repo's feeds).
+    /// </summary>
+    private static string CreateModernCopyWithAFrameworkOnlyPackage(string copyDir)
+    {
+        string sourceDir = Path.Combine(SamplesRoot, "identical", "modern");
+        Directory.CreateDirectory(copyDir);
+
+        foreach (string file in new[] { "Calculator.cs", "Equiv.Samples.Identical.Modern.slnx" })
+        {
+            File.Copy(Path.Combine(sourceDir, file), Path.Combine(copyDir, file));
+        }
+
+        string csproj = File.ReadAllText(Path.Combine(sourceDir, "Equiv.Samples.Identical.Modern.csproj"));
+        const string CloseProject = "</Project>";
+        Assert.Contains(CloseProject, csproj, StringComparison.Ordinal);
+        csproj = csproj.Replace(
+            CloseProject,
+            "  <ItemGroup>\r\n    <PackageReference Include=\"Microsoft.AspNet.WebApi.Core\" Version=\"5.3.0\" />\r\n  </ItemGroup>\r\n\r\n" + CloseProject,
+            StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(copyDir, "Equiv.Samples.Identical.Modern.csproj"), csproj);
+
+        return Path.Combine(copyDir, "Equiv.Samples.Identical.Modern.slnx");
+    }
+
+    /// <summary>
+    /// MSBuildWorkspace's design-time build does not itself restore an SDK-style project (build.ps1's
+    /// "restore samples" step does this for <c>samples/**</c>; a copy under the OS temp folder needs its own).
+    /// </summary>
+    private static void Restore(string csprojPath)
+    {
+        using Process restore = Process.Start(new ProcessStartInfo("dotnet", ["restore", csprojPath])
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        })!;
+        string output = restore.StandardOutput.ReadToEnd();
+        string error = restore.StandardError.ReadToEnd();
+        restore.WaitForExit();
+        int exitCode = restore.ExitCode;
+        Assert.True(exitCode == 0, string.Create(CultureInfo.InvariantCulture, $"dotnet restore failed ({exitCode}):\n{output}\n{error}"));
     }
 }
