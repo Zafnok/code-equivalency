@@ -227,6 +227,9 @@ internal sealed class IrLowerer
             Fill(block, span);
         }
 
+        // A heap map exists only once the body touches it, so its outs are added after the whole body is lowered; SSA
+        // completes every exit in Build, and an exit that never writes the map names the map's input (ticket M3-007).
+        outs.AddRange(heap.Parameters.Where(static p => p.Kind == IrParameterKind.Ref).Select(p => (slices[p.Var.Name], p.Var)));
         return ssa.Build(new IrBlockId(0), outs.ToImmutable(), span);
     }
 

@@ -11,7 +11,8 @@ namespace Equiv.TestSupport;
 /// straight-line code plus <c>if</c>/<c>else</c>, early returns, compound assignment, <c>++</c>/<c>--</c>
 /// and counter-bounded <c>while</c> loops over <c>int</c>/<c>long</c>/<c>bool</c>, and <c>null</c> tests on
 /// the reference parameter <c>s</c>, and reads and writes of the class's static <c>int</c> auto-property <c>P</c>
-/// (ticket M3-010); built as a small AST and rendered to C#. Every expression reads a
+/// (ticket M3-010), and reads and writes of its static <c>int</c> field <c>F</c>, including <c>void</c> methods that end by
+/// writing it (ticket M3-007); built as a small AST and rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
 /// loop counts to a literal bound, so every generated method terminates.
@@ -32,17 +33,23 @@ public static class LoweringOracleGen
 
     private static readonly Type[] Types = [typeof(int), typeof(long), typeof(bool)];
 
+    private static readonly Type[] ReturnTypes = [.. Types, typeof(void)];
+
     /// <summary>The static <c>int</c> auto-property of the class the generated methods are compiled into.</summary>
     public const string Property = "P";
 
+    /// <summary>The static <c>int</c> field of the class the generated methods are compiled into.</summary>
+    public const string Field = "F";
+
     public static Gen<OracleMethod> Method { get; } =
-        Gen.OneOfConst(Types).SelectMany(static type =>
-            Gen.Select(Block(type, 2), ExprGen(type, Depth), (body, result) =>
+        Gen.OneOfConst(ReturnTypes).SelectMany(static type =>
+            Gen.Select(Block(type, 2), type == typeof(void) ? FieldValue : ExprGen(type, Depth), (body, result) =>
             {
                 StringBuilder text = new();
                 int loops = 0;
                 RenderBlock(body, text, 1, ref loops);
-                text.Append("    return ").Append(result.Render()).Append(";\n");
+                // A void method ends by writing the field, so its only observable is the final heap.
+                text.Append(type == typeof(void) ? $"    {Field} = " : "    return ").Append(result.Render()).Append(";\n");
                 return new OracleMethod(type, text.ToString());
             }));
 
@@ -60,24 +67,35 @@ public static class LoweringOracleGen
     {
         Gen<IStmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>
             ExprGen(type, Depth).Select(value => (IStmt)new Assign(LocalName(type), value)));
-        Gen<IStmt> exit = ExprGen(returnType, Depth).Select(static value => (IStmt)new Return(value));
+        Gen<IStmt> exit = returnType == typeof(void)
+            ? Gen.Const<IStmt>(new Return(Value: null))
+            : ExprGen(returnType, Depth).Select(static value => (IStmt)new Return(value));
         Gen<IStmt> update = Gen.OneOfConst(typeof(int), typeof(long)).SelectMany(static type =>
             Gen.Select(Gen.OneOfConst(Arithmetic), Gen.Bool, ExprGen(type == typeof(int) ? typeof(int) : typeof(long), Depth - 1), (op, isChecked, value) =>
                 (IStmt)new Compound(LocalName(type), op, ShiftCount(op, value, type), isChecked)));
         Gen<IStmt> property = ExprGen(typeof(int), Depth).Select(static value => (IStmt)new Assign(Property, value));
+        Gen<IStmt> field = FieldValue.Select(static value => (IStmt)new Assign(Field, value));
         Gen<IStmt> step = Gen.Select(Gen.OneOfConst(typeof(int), typeof(long)), Gen.OneOfConst("++", "--"), Gen.Bool, static (type, op, isChecked) =>
             (IStmt)new Step(LocalName(type), op, isChecked));
         if (depth == 0)
         {
-            return Gen.Frequency((4, assign), (1, property), (2, update), (1, step), (1, exit));
+            return Gen.Frequency((4, assign), (1, property), (1, field), (2, update), (1, step), (1, exit));
         }
 
         Gen<IStmt> branch = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Block(returnType, depth - 1), static (condition, then, otherwise) =>
             (IStmt)new If(condition, then, otherwise));
         Gen<IStmt> loop = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Gen.Int[1, 3], static (condition, body, bound) =>
             (IStmt)new While(condition, body, bound));
-        return Gen.Frequency((3, assign), (1, property), (2, update), (1, step), (2, branch), (2, loop), (1, exit));
+        return Gen.Frequency((3, assign), (1, property), (1, field), (2, update), (1, step), (2, branch), (2, loop), (1, exit));
     }
+
+    /// <summary>
+    /// A field write's value: one variable and a literal, so it never branches. A value that branches makes the CFG
+    /// capture the field reference first, and assigning through that capture is opaque until ticket P2-006.
+    /// </summary>
+    private static Gen<IExpr> FieldValue =>
+        Gen.Select(Gen.OneOfConst(Arithmetic), Gen.Bool, ExprGen(typeof(int), 0), static (op, isChecked, left) => (op, isChecked, left))
+            .SelectMany(static t => RightOperand(typeof(int), t.op, literal: true, 1).Select(right => (IExpr)new Binary(t.op, t.left, right, t.isChecked)));
 
     /// <summary>A shift count is an <c>int</c>; a <c>long</c> target shifted by a <c>long</c> would not compile.</summary>
     private static IExpr ShiftCount(string op, IExpr value, Type type) =>
@@ -103,7 +121,7 @@ public static class LoweringOracleGen
 
     private static string[] Names(Type type) => type switch
     {
-        _ when type == typeof(int) => ["a", "b", "x", Property],
+        _ when type == typeof(int) => ["a", "b", "x", Property, Field],
         _ when type == typeof(long) => ["c", "d", "y"],
         _ => ["e", "z"],
     };
@@ -161,7 +179,7 @@ public static class LoweringOracleGen
                     text.Append(pad).Append(Open(step.IsChecked, pad)).Append(step.Local).Append(step.Op).Append(";\n").Append(Close(step.IsChecked, pad));
                     break;
                 case Return exit:
-                    text.Append(pad).Append("return ").Append(exit.Value.Render()).Append(";\n");
+                    text.Append(pad).Append(exit.Value is null ? "return" : "return ").Append(exit.Value?.Render()).Append(";\n");
                     return; // anything after it would be unreachable
                 case If branch:
                     text.Append(pad).Append("if (").Append(branch.Condition.Render()).Append(")\n").Append(pad).Append("{\n");
@@ -238,7 +256,7 @@ public static class LoweringOracleGen
 
     internal sealed record While(IExpr Condition, ImmutableArray<IStmt> Body, int Bound) : IStmt;
 
-    internal sealed record Return(IExpr Value) : IStmt;
+    internal sealed record Return(IExpr? Value) : IStmt;
 
     internal sealed record If(IExpr Condition, ImmutableArray<IStmt> Then, ImmutableArray<IStmt> Else) : IStmt;
 

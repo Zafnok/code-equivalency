@@ -1,5 +1,5 @@
 # M3-007 Synthesised inputs: heap maps are `Ref`, and the naming rule is enforced
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004, M3-001
