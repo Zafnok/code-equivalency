@@ -1,5 +1,5 @@
 # P2-014 `corpus.ps1` prepares a box: long paths, submodules, isolation, reference assemblies, SDK resolver
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-022
@@ -53,3 +53,33 @@ After this ticket, a `-Prepare` switch does 3 and 4 once per box, `-Fetch` does 
 Installing Visual Studio components.
 
 ## Notes
+- Decision: `-Prepare` writes only `Directory.Build.props`, `Directory.Build.targets`,
+  `Directory.Packages.props` and `.editorconfig` sentinels under `.corpus/`, no `global.json`
+  sentinel, per item 3's note that one was tried and removed. `-Fetch` still patches a checkout's
+  *own* `global.json` (item 6, e.g. Git Extensions' modern side) — a different file, same ticket.
+- Decision: reference assemblies (item 4) come from the `Microsoft.NETFramework.ReferenceAssemblies.*`
+  NuGet packages (net20 through net481, 1.0.3), restored once via a throwaway SDK-style csproj and
+  copied from each package's `build/.NETFramework/v<X>/` into `.corpus/refasm/.NETFramework/v<X>/`,
+  which is exactly the layout `TargetFrameworkRootPath` (`-Env`) expects. Idempotent: `-Prepare`
+  checks all 14 folders exist before restoring again.
+- Decision: `core.longpaths=true` is passed via `-c` on every git invocation (not set once via
+  `git config`), because `-c` propagates to the child git processes `submodule update` spawns, so
+  submodules on a >100-char path get it too without a second mechanism.
+- Toolchain: patching a checkout's `global.json` (item 6) leaves it `git status`-dirty, which broke
+  acceptance criterion 1 during testing (the modern Git Extensions checkout showed `M global.json`
+  after `-Fetch`). Fixed by `git update-index --skip-worktree global.json` right after the patch.
+- Toolchain: `git submodule update --init`'s stderr chatter ("Submodule '...' registered for
+  path...") intermittently made Windows PowerShell 5.1 promote it to a terminating
+  `NativeCommandError` under this script's `$ErrorActionPreference = 'Stop'`, even though git's own
+  exit code was 0 — reproduced only on some runs, not every one. Fixed by routing `Invoke-Git`'s
+  git call through `2>&1 | ForEach-Object { "$_" }` with `$ErrorActionPreference = 'Continue'` for
+  the duration of the call, so stderr lines become plain text instead of error records; the real
+  success/failure signal stays `$LASTEXITCODE`.
+- Verified against the real corpus on this box (not just parsed): fresh `-Prepare` restored the 14
+  reference-assembly packages and was a no-op reuse on a second run; `-Fetch gitextensions-8522`
+  left both checkouts (`.corpus/repos/gitextensions__gitextensions@3f4ed21998af` and `@5190ba5c1a5f`,
+  under this worktree's path, over 100 characters) with `git status --porcelain` empty and
+  `Externals/` submodules populated; a checkout dirtied by hand was refused with a clear error and
+  reused cleanly once restored; `-Unchanged pmb-shiningrush__serviceant` (the exact slug `-Fetch`
+  and `pair.json` print) resolved and ran, alongside the pre-existing `-Unchanged ShiningRush/ServiceAnt`
+  form. All corpus artifacts from this testing were deleted afterwards (`.corpus/` stays untracked).
