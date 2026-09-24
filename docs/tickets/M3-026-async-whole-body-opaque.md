@@ -1,5 +1,5 @@
 # M3-026 An `async` method is a whole-body opaque instead of ill-typed IR
-Status: in-progress
+Status: done (PR #141)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-022
