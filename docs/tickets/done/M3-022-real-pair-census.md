@@ -80,3 +80,6 @@ Verification. Fixes. Any code not listed in `tools/corpus/`.
 - Deviation: the skill says to ask before installing a targeting pack. The user approved it, the
   installer rejected the component (exit 87), and the run used the reference-assembly NuGet
   packages instead.
+- 2026-09-24, M3-031: this ticket's "incomplete: human pair pending" verdict is superseded by
+  `docs/runs/2026-09-24-census-verdict.md` (**continue**), which reruns the census on the same
+  pairs under ADR 0034 and reorders `docs/ROADMAP.md`'s M4 list.
