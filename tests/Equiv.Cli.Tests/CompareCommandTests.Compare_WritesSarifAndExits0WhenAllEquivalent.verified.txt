@@ -166,7 +166,8 @@
         analysedLinesOfCode: {
           legacy: 120,
           modern: 135
-        }
+        },
+        projectsNotBuilt: {}
       }
     }
   ]

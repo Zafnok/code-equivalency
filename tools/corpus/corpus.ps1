@@ -502,6 +502,15 @@ switch ($PSCmdlet.ParameterSetName) {
                 Show-Step ("  runtimeChangeCalls.{0}: legacy {1}, modern {2}" -f $key, (Get-Bag $side 'legacy'), (Get-Bag $side 'modern'))
             }
         }
+        $notBuilt = Get-Bag (Get-Bag $run 'properties') 'projectsNotBuilt'
+        Show-Step "== projectsNotBuilt (outside the solution's build configuration; neither loaded nor skipped)"
+        if ($null -eq $notBuilt) { Show-Step "n/a (no run.properties.projectsNotBuilt; needs P2-013)" }
+        else {
+            foreach ($side in 'legacy', 'modern') {
+                $names = @(Get-Bag $notBuilt $side | Where-Object { $_ })
+                Show-Step ("  {0} {1}: {2}" -f $side, $names.Count, ($names -join ', '))
+            }
+        }
         $unverified = Get-Bag (Get-Bag $run 'properties') 'unverified'
         Show-Step ("== unverified procedures: {0}" -f @($unverified | Where-Object { $_ }).Count)
         $invocations = @(Get-Bag $run 'invocations' | Where-Object { $_ })

@@ -86,3 +86,9 @@ exist:
   MSBuildWorkspace (ADR 0004). Some corpus repos will not restore. The skill skips them and
   records the reason.
 - The first census may stop the project (unchanged share below 40%). That outcome is the point of measuring first.
+
+## Clarifications
+- 2026-09-24 (P2-013). "C# projects in the solution" means the projects the solution's default
+  configuration builds (a `Build.0` entry for `Debug|Any CPU`, else the first configuration
+  listed). A project the solution does not build is not part of the product: it is neither loaded
+  nor skipped, and is listed in `run.properties.projectsNotBuilt` instead (VERIFICATION-MODEL.md).

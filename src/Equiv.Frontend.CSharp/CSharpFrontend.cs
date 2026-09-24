@@ -90,7 +90,11 @@ public sealed class CSharpFrontend : ILanguageFrontend
             LegacySkipped = legacySkipped,
             ModernSkipped = modernSkipped,
         };
-        return new FrontendAnalysis(lowered, new AnalysedLines(CodeLines.Count(legacy.Compilations), CodeLines.Count(modern.Compilations)));
+        return new FrontendAnalysis(lowered, new AnalysedLines(CodeLines.Count(legacy.Compilations), CodeLines.Count(modern.Compilations)))
+        {
+            LegacyNotBuilt = legacy.NotBuilt,
+            ModernNotBuilt = modern.NotBuilt,
+        };
     }
 
     /// <summary>

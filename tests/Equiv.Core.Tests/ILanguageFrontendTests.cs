@@ -29,4 +29,17 @@ public sealed class ILanguageFrontendTests
             new FrontendAnalysis(new MatchResult([], [], [], []), new AnalysedLines(1, 2)),
             frontend.Analyze("a", "b", EquivConfig.Default, CancellationToken.None));
     }
+
+    [Fact]
+    public void ProjectsNotBuiltDefaultToNoneAndCanBeSet()
+    {
+        FrontendAnalysis analysis = new(new MatchResult([], [], [], []), new AnalysedLines(1, 2));
+
+        Assert.Empty(analysis.LegacyNotBuilt);
+        Assert.Empty(analysis.ModernNotBuilt);
+
+        FrontendAnalysis withNotBuilt = analysis with { LegacyNotBuilt = ["Site"], ModernNotBuilt = ["_build"] };
+        Assert.Equal(["Site"], withNotBuilt.LegacyNotBuilt);
+        Assert.Equal(["_build"], withNotBuilt.ModernNotBuilt);
+    }
 }

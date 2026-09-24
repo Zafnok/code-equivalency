@@ -116,8 +116,8 @@ internal static class CompareCommand
     }
 
     /// <summary>
-    /// The lowering census and the analysed line counts go into the run's property bag on every run (ADR 0027;
-    /// ticket M3-014), and every skipped project is a notification (ADR 0029). <c>--lower-only</c> stops there: the
+    /// The lowering census, the analysed line counts and the projects each solution does not build go into the run's
+    /// property bag on every run (ADR 0027; tickets M3-014, P2-013), and every skipped project is a notification (ADR 0029). <c>--lower-only</c> stops there: the
     /// Added and Removed results, no backend call, exit 0 unless a C# project was skipped.
     /// </summary>
     private static int Report(
@@ -153,6 +153,11 @@ internal static class CompareCommand
             {
                 ["loweringCensus"] = census.ToProperty(),
                 ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
+                ["projectsNotBuilt"] = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["legacy"] = (List<string>)[.. analysis.LegacyNotBuilt],
+                    ["modern"] = (List<string>)[.. analysis.ModernNotBuilt],
+                },
             },
             notifications,
             unverified);

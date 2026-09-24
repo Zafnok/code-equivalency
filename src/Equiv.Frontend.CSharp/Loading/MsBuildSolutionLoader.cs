@@ -10,12 +10,14 @@ namespace Equiv.Frontend.CSharp.Loading;
 /// <summary>
 /// Loads a solution through MSBuildWorkspace (ADR 0004), containing each fault to its project (ADR 0029 decision 1).
 /// A C# project with a workspace failure or an unresolved reference is skipped, and so is a project in another
-/// language. Only a side with no C# project left aborts, with <see cref="SolutionLoadException"/>.
+/// language. Only a side with no C# project left aborts, with <see cref="SolutionLoadException"/>. A project the
+/// solution's default configuration does not build is never opened (<see cref="SolutionBuildConfiguration"/>, P2-013).
 /// </summary>
 internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
 {
     private readonly Func<Workspace> _createWorkspace;
     private readonly Func<Workspace, string, CancellationToken, Task<Solution>> _openSolution;
+    private readonly Func<string, string?> _readSolution;
 
     public MsBuildSolutionLoader()
         : this(MsBuildWorkspaceFactory.Create, MsBuildWorkspaceFactory.OpenSolutionAsync)
@@ -26,9 +28,19 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
     internal MsBuildSolutionLoader(
         Func<Workspace> createWorkspace,
         Func<Workspace, string, CancellationToken, Task<Solution>> openSolution)
+        : this(createWorkspace, openSolution, ReadSolution)
+    {
+    }
+
+    /// <summary>Seam for unit tests: <paramref name="readSolution"/> supplies the <c>.sln</c> text for a path that does not exist.</summary>
+    internal MsBuildSolutionLoader(
+        Func<Workspace> createWorkspace,
+        Func<Workspace, string, CancellationToken, Task<Solution>> openSolution,
+        Func<string, string?> readSolution)
     {
         _createWorkspace = createWorkspace;
         _openSolution = openSolution;
+        _readSolution = readSolution;
     }
 
     public async Task<LoadedSolution> LoadAsync(string solutionPath, CancellationToken ct)
@@ -40,7 +52,7 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
         using Workspace workspace = _createWorkspace();
         using IDisposable subscription = workspace.RegisterWorkspaceFailedHandler(e => workspaceEvents.Enqueue(e.Diagnostic));
 
-        Solution solution = await _openSolution(workspace, solutionPath, ct).ConfigureAwait(false);
+        (Solution solution, SolutionFilter? filter) = await OpenAsync(workspace, solutionPath, ct).ConfigureAwait(false);
 
         // Opening events name their project in the message, if at all; "" collects the ones that name none.
         List<LoadDiagnostic> kept = [];
@@ -77,11 +89,38 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
         skipped.AddRange(NeverOpened(failuresByProject));
 
         return compilations.Count > 0
-            ? new LoadedSolution(solution, compilations.ToImmutable(), [.. kept], skipped.ToImmutable())
+            ? new LoadedSolution(solution, compilations.ToImmutable(), [.. kept], skipped.ToImmutable()) { NotBuilt = filter?.NotBuilt ?? [] }
             : throw new SolutionLoadException(
                 solutionPath,
                 [new LoadDiagnostic(LoadDiagnosticKind.UnsupportedSolution, string.Empty, string.Empty, "the solution contains no C# project that loads"), .. skipped.SelectMany(static s => s.Diagnostics)]);
     }
+
+    /// <summary>
+    /// Opens the solution, through a temporary <c>.slnf</c> when its default configuration leaves projects unbuilt
+    /// (P2-013), and returns the filter used, if any.
+    /// </summary>
+    private async Task<(Solution Solution, SolutionFilter? Filter)> OpenAsync(Workspace workspace, string solutionPath, CancellationToken ct)
+    {
+        SolutionFilter? filter = SolutionBuildConfiguration.Filter(solutionPath, _readSolution(solutionPath));
+        string filterPath = Path.Combine(Path.GetTempPath(), $"equiv-{Guid.NewGuid():N}.slnf");
+        try
+        {
+            if (filter is not null)
+            {
+                await File.WriteAllTextAsync(filterPath, filter.Json, ct).ConfigureAwait(false);
+            }
+
+            return (await _openSolution(workspace, filter is null ? solutionPath : filterPath, ct).ConfigureAwait(false), filter);
+        }
+        finally
+        {
+            File.Delete(filterPath);
+        }
+    }
+
+    /// <summary>The text of a <c>.sln</c> that exists, else null: a <c>.slnx</c> is always opened whole (P2-013).</summary>
+    internal static string? ReadSolution(string solutionPath) =>
+        solutionPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) && File.Exists(solutionPath) ? File.ReadAllText(solutionPath) : null;
 
     /// <summary>
     /// Failures naming a project the workspace never added: it did not open at all, so its name stands in for its
