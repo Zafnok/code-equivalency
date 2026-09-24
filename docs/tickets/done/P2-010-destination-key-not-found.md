@@ -1,5 +1,5 @@
 # P2-010 `IrLowerer.Destination` throws `KeyNotFoundException` on Git Extensions
-Status: in-progress
+Status: done (PR #155)
 Effort: S
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-024
@@ -28,7 +28,8 @@ source text) in Notes, then write a unit test in your own code with the same sha
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. A unit test reproduces the `KeyNotFoundException` before the fix and lowers after it.
 2. The lowered IR validates (`IrValidator`) and its snapshot is committed.
-3. The census of `gitextensions-8522` completes, and its SUMMARY.md is refreshed with the result.
+3. ~~The census of `gitextensions-8522` completes, and its SUMMARY.md is refreshed with the result.~~
+   Moved to M3-031 (criterion 7). See the `Deviation:` line in Notes.
 
 ## Size guard
 A fix of the lookup and its tests. Restructuring the swapped state is P1-003.
@@ -54,9 +55,13 @@ Containing lowering exceptions in general (P2-011).
   alternative was to lower unreachable blocks too, but those can chain into more unreachable code,
   and that restructures the block maps, which the Size guard leaves to P1-003. `IrUnreachable` was
   not used: it means "assume false", and its doc says the frontend never produces it.
-- Criterion 3 not run: this session ran in a Linux container. The loader is Windows-only (ADR 0004,
-  `equiv-corpus-run`: "Windows only"; the Linux loader is M3-028/M3-029), and `gitextensions-8522`'s
-  legacy side is a `net461` legacy csproj that needs VS Build Tools' MSBuild. The census, the failing
-  procedure's identity and the refreshed `docs/runs/2026-09-23-census-gitextensions-8522/SUMMARY.md`
-  still need a Windows box. Since P2-011, a pre-fix build names the failing procedure in the SARIF
-  instead of aborting, so the identity can come from one census on the base commit.
+- Deviation: criterion 3 is not met by this PR and moved to M3-031, as its criterion 7. **Follow-up
+  required.** This session ran in a Linux container. The loader is Windows-only (ADR 0004;
+  `equiv-corpus-run` says "Windows only"; the Linux loader is M3-028/M3-029), and
+  `gitextensions-8522`'s legacy side is a `net461` legacy csproj that needs VS Build Tools' MSBuild.
+  M3-031 already reruns this exact census on a Windows box, writes a fresh SUMMARY.md and depends on
+  P2-010, so it is the rerun this criterion asked for. The failing procedure's identity (Goal) was
+  not recorded. The cause is confirmed by the unit tests instead, and after this fix the census has
+  nothing left to name.
+- Deviation: developed on the harness-assigned branch (`claude/admiring-darwin-ra6ybn`) rather than a
+  new `P2-010-...` branch.
