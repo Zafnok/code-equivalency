@@ -1,5 +1,5 @@
 # P2-013 Projects outside the solution's build configuration are not loaded or counted
-Status: in-progress
+Status: done (PR #158)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-024
