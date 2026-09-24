@@ -289,7 +289,7 @@ public sealed class CompareCommandTests
         Assert.Equal(["EQ004", "EQ005"], run.Results.Select(static r => r.RuleId), StringComparer.Ordinal);
         Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Equal(
-            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":1,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{}}""",
+            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":1,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}}}""",
             census);
         Assert.True(run.TryGetSerializedPropertyValue("analysedLinesOfCode", out string? _));
     }
@@ -524,7 +524,7 @@ public sealed class CompareCommandTests
         Assert.Equal([throwing.Value], run.GetProperty<List<string>>("unverified"), StringComparer.Ordinal);
         Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Equal(
-            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":2,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{}}""",
+            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":2,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}}}""",
             census);
         Invocation invocation = Assert.Single(run.Invocations);
         Assert.False(invocation.ExecutionSuccessful);

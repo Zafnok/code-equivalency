@@ -134,6 +134,7 @@ $t = Measure-Command {
 "exit=$LASTEXITCODE seconds=$([int]$t.TotalSeconds)" | Set-Content "$run/exit.txt"
 ./tools/corpus/corpus.ps1 -Metrics "$run/equiv.sarif"
 ./tools/corpus/corpus.ps1 -Unchanged <slug>     # unchanged share until M3-015 fills pairsCongruent
+./tools/corpus/corpus.ps1 -Packages <slug>      # package version changes; needs both sides restored
 ```
 
 - `full`: drop `--lower-only`. Run once with defaults and once with `--fail-on unknown` into a
@@ -169,9 +170,24 @@ where the SARIF has no value yet; `-Metrics` prints `n/a` for those.
 
 - Matched pairs <n>; without opaque <n> (<%>); whole-body opaque <n> (<%>); congruent <n or n/a> (<%>)
 - Unchanged share: <%> (<"unchanged files" proxy | pairsCongruent>)
-- Lowerable share: <%>
+- Pair-level unchanged share (1 - changedPairs / matchedPairs): <%>. Not the row above; ADR 0034.
 
 Top opaque reasons (up to 15): | reason | legacy | modern | owning ticket or "none" |
+
+## Changed code
+- Changed pairs <n> of <matched>; without opaque <n>; whole-body opaque <n>
+- Lowerable share (changedPairsWithoutOpaque / changedPairs): <% or "n/a: no changed pairs">
+
+Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | owning tickets or "none" |
+
+| runtime-change calls | legacy | modern |
+|---|---|---|
+| call sites | | |
+| distinct members | | |
+| pairs with any | | |
+
+- Package changes: <n> version changed, <n> legacy only, <n> modern only; the version-changed
+  ones as `id old -> new`, up to 15 (`-Packages`)
 
 ## Verdicts (full and seeded only)
 - By rule: EQ001 <n>, EQ002 <n>, EQ003 <n>, EQ004 <n>, EQ005 <n>, EQ006 <n>
@@ -195,8 +211,15 @@ One line each, with the ticket it became (`P2-nnn`, or an existing ticket id).
 
 Write `docs/runs/<yyyy-mm-dd>-<mode>-verdict.md`:
 - one table row per pair with the five ADR 0028 metrics (unchanged share, lowerable share,
-  project load rate, line-scoped Unknown share, seeded recall);
-- the medians over the agent pairs;
+  project load rate, line-scoped Unknown share, seeded recall), plus, next to the unchanged
+  share, the pair-level figure `1 - changedPairs / matchedPairs`, labelled as the pair-level
+  figure so the two are never read as one number;
+- lowerable share is ADR 0034's: `changedPairsWithoutOpaque / changedPairs`, over changed pairs
+  only. The 15% and 5% thresholds are ADR 0028's, unchanged;
+- the medians over the agent pairs. An agent pair with zero changed pairs is left out of the
+  lowerable-share median. If fewer than three agent pairs remain, apply the lowerable-share rules
+  to Git Extensions alone and say so in the verdict file. The unchanged-share rule still uses the
+  agent median;
 - the outcome of each ADR 0028 rule for the Git Extensions pair and for the agent median;
 - one line: **continue**, **re-scope** or **stop**.
 
