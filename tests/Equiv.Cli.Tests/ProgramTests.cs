@@ -1,3 +1,8 @@
+using Equiv.Core;
+using Equiv.Core.Ir;
+using Equiv.Core.Matching;
+using Equiv.Core.Verdicts;
+
 using Xunit;
 
 namespace Equiv.Cli.Tests;
@@ -33,6 +38,31 @@ public sealed class ProgramTests
         int exitCode = Program.Main(["compare", "--legacy", legacy.Path, "--modern", modern.Path]);
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
+    }
+
+    /// <summary>
+    /// Ticket M3-013 acceptance criterion 6 (ADR 0023): any exception that escapes the command, here the
+    /// missing-body <see cref="InvalidOperationException"/> a frontend bug produces, is exit 5 with the message on
+    /// stderr, not System.CommandLine's own exit 1 for an unhandled exception.
+    /// </summary>
+    [Fact]
+    public void Main_UnhandledException_Exits5()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity identity = new("T::Pair()");
+        IrProcedure body = IrText.Parse($"proc \"{identity.Value}\" () entry B0 B0: ret");
+        ProcedurePair pair = new(identity, identity, body, NewBody: null);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([pair], [], [], []));
+        int exitCode = ExitCodes.Success;
+
+        string errorOutput = CaptureStdErr(() => exitCode = Program.Run(
+            ["compare", "--legacy", legacy.Path, "--modern", modern.Path],
+            [frontend],
+            new FakeBackend(new Dictionary<string, Verdict>(StringComparer.Ordinal))));
+
+        Assert.Equal(ExitCodes.InternalError, exitCode);
+        Assert.Contains(identity.Value, errorOutput, StringComparison.Ordinal);
     }
 
     [Fact]

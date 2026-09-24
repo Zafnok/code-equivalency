@@ -131,11 +131,17 @@ internal static class CompareCommand
             added: matchResult.Added.Length,
             projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length));
 
-        List<VerificationResult> results = options.LowerOnly ? [] : Verified(lowered, backend, config);
+        (List<VerificationResult> verified, List<Notification> pairFailures, List<ProcedureIdentity> unverifiedPairs) =
+            options.LowerOnly
+                ? (new List<VerificationResult>(), new List<Notification>(), new List<ProcedureIdentity>())
+                : Verified(lowered, backend, config);
+        List<VerificationResult> results = verified;
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));
         results.AddRange(matchResult.Removed.Select(static identity => new VerificationResult(identity, new Removed())));
 
-        (List<Notification> notifications, List<ProcedureIdentity> unverified) = SkippedProjects(matchResult);
+        (List<Notification> skippedProjectNotifications, List<ProcedureIdentity> skippedProjectProcedures) = SkippedProjects(matchResult);
+        List<Notification> notifications = [.. pairFailures, .. skippedProjectNotifications];
+        List<ProcedureIdentity> unverified = [.. unverifiedPairs, .. skippedProjectProcedures];
         SarifLog log = SarifReportWriter.Write(
             results,
             baseline,
@@ -148,11 +154,15 @@ internal static class CompareCommand
             unverified);
         sink.Write(log);
 
-        bool incomplete = notifications.Exists(static n => n.Level == FailureLevel.Error);
-        return (incomplete, options.LowerOnly) switch
+        // ADR 0023: a pair that failed to verify outranks a skipped project, which outranks a verdict, because each
+        // makes the result set more incomplete than the last (ARCHITECTURE.md's exit-code precedence).
+        bool anyPairFailed = pairFailures.Count > 0;
+        bool anyProjectSkipped = skippedProjectNotifications.Exists(static n => n.Level == FailureLevel.Error);
+        return (anyPairFailed, anyProjectSkipped, options.LowerOnly) switch
         {
-            (true, _) => ExitCodes.LoadFailure,
-            (false, true) => ExitCodes.Success,
+            (true, _, _) => ExitCodes.InternalError,
+            (false, true, _) => ExitCodes.LoadFailure,
+            (false, false, true) => ExitCodes.Success,
             _ => DecideExitCode(results, log, options.FailOn),
         };
     }
@@ -264,32 +274,54 @@ internal static class CompareCommand
             pair.NewBody ?? throw new InvalidOperationException($"The frontend matched {pair.New.Value} without lowering its modern body.")))];
 
     /// <summary>
-    /// Every matched pair goes to <paramref name="backend"/> with both lowered bodies. A backend failure is a bug
-    /// too (M3-001 fails loudly on an encoder bug); it is rethrown naming the pair.
+    /// Every matched pair goes to <paramref name="backend"/> with both lowered bodies. A crash on one pair (a
+    /// replay mismatch M3-001 treats as an encoder bug, a <c>Z3Exception</c>) does not end the run (ADR 0023): the
+    /// pair gets no <see cref="VerificationResult"/>, an <c>error</c> notification naming both identities and
+    /// carrying the exception, and its identity in the returned unverified list; every other pair is still
+    /// verified. <see cref="OperationCanceledException"/> and <see cref="OutOfMemoryException"/> propagate unchanged.
     /// </summary>
-    private static List<VerificationResult> Verified(List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config)
+    private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) Verified(
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config)
     {
         VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames);
-        return [.. lowered.Select(p => new VerificationResult(p.Pair.New, Verify(backend, p.Pair, p.Old, p.New, options)))];
-    }
+        List<VerificationResult> results = [];
+        List<Notification> failures = [];
+        List<ProcedureIdentity> unverified = [];
 
-    private static Verdict Verify(IVerificationBackend backend, ProcedurePair pair, IrProcedure old, IrProcedure @new, VerificationOptions options)
-    {
-        // ADR 0029 decision 2: erroneous code is Unknown(Unbound) without asking the solver; it is never evidence of equivalence.
-        string unbound = string.Join("; ", UnboundCauses("legacy", old).Concat(UnboundCauses("modern", @new)));
-        if (unbound.Length > 0)
+        foreach ((ProcedurePair pair, IrProcedure old, IrProcedure @new) in lowered)
         {
-            return new Unknown(UnknownReason.Unbound, unbound);
+            // ADR 0029 decision 2: erroneous code is Unknown(Unbound) without asking the solver; it is never evidence of equivalence.
+            string unbound = string.Join("; ", UnboundCauses("legacy", old).Concat(UnboundCauses("modern", @new)));
+            if (unbound.Length > 0)
+            {
+                results.Add(new VerificationResult(pair.New, new Unknown(UnknownReason.Unbound, unbound)));
+                continue;
+            }
+
+            try
+            {
+                results.Add(new VerificationResult(pair.New, backend.Verify(old, @new, options)));
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
+            {
+                string text = $"Verifying {pair.Old.Value} against {pair.New.Value} failed: {exception.Message}";
+                Console.Error.WriteLine($"error: {text}");
+                failures.Add(new Notification
+                {
+                    Level = FailureLevel.Error,
+                    Message = new Message { Text = text },
+                    Exception = new ExceptionData
+                    {
+                        Kind = exception.GetType().FullName,
+                        Message = exception.Message,
+                        Stack = Stack.CreateStacks(exception).FirstOrDefault(),
+                    },
+                });
+                unverified.Add(pair.New);
+            }
         }
 
-        try
-        {
-            return backend.Verify(old, @new, options);
-        }
-        catch (Exception exception)
-        {
-            throw new InvalidOperationException($"Verifying {pair.Old.Value} against {pair.New.Value} failed: {exception.Message}", exception);
-        }
+        return (results, failures, unverified);
     }
 
     /// <summary>Each <see cref="Unknown.UnboundOpaqueReason"/> opaque in <paramref name="body"/>, as <c>side: unbound at path line:column</c>.</summary>

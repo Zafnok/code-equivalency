@@ -1,5 +1,5 @@
 # M3-013 A pair whose verification throws is reported and skipped, and the run exits 5
-Status: todo
+Status: in-progress
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-001
@@ -92,3 +92,41 @@ or the pairing breaks.
 
 Sarif SDK API (`Notification`, `ExceptionData`, `Invocation.ToolExecutionNotifications`,
 `Invocation.ExecutionSuccessful`): read `Sarif.xml` using the `equiv-package-api` skill.
+
+## Notes
+
+Decision: `SarifReportWriter.Write` and `BaselineComputer` already took `notifications`/`unverified`
+generically (ADR 0029, M3-024's project-skip path); neither needed a code change, and neither needed
+a new pair-failure-specific test — the generic ones (`AnErrorNotificationMakesTheInvocationUnsuccessful`,
+`UnverifiedIdentitiesAreListedOnceEachOnTheRun`, `ABaselineResultInASkippedProjectIsCarriedUnchanged`,
+`AnUnverifiedIdentityWithoutABaselineResultAddsNoResult`) already cover criteria 3 and 4 for any
+unverified identity, pair-failure or project-skip alike. `CompareCommand` only had to build a
+`Notification`/`ExceptionData` per failed pair and route it through the same two parameters, so no new
+`src/Equiv.Core/Reporting/` record was needed either.
+
+Decision: `Program.Main`'s pipeline is now `Program.Run(args, frontends, backend)`, an internal seam
+(the pattern every other frontend/loader in this repo already uses) so `Main_UnhandledException_Exits5`
+can inject a `FakeFrontend` that reproduces the missing-body `InvalidOperationException` criterion 6
+names, without needing a real MSBuild/Z3 crash.
+
+Decision: skipped the `SarifReportWriterTests.PairFailure` Verify-snapshot the ticket's Tests section
+names. This dev environment has no `dotnet` (network policy blocks `builds.dotnet.microsoft.com`, see
+below), so a hand-authored `.verified.txt` could not be checked against the Sarif SDK's actual
+serialization and would be a guess. `SarifReportWriter.Write` doesn't build the `Exception` shape
+itself (that's `CompareCommand`'s job, per the decision above) and already passes a `Notification`
+through unchanged (ADR 0029), so `APairFailureNotificationCarriesItsExceptionThroughToTheInvocation`
+(a plain assertion, not a snapshot) covers the one thing that actually changed at that layer: the
+`Exception` property surviving the round trip. If a snapshot is still wanted, it needs a `dotnet test`
+run to generate and approve the `.verified.txt`.
+
+Toolchain: this session's container has no `.NET` SDK installed, and installing one is blocked by the
+environment's network policy (`curl https://dot.net/v1/dotnet-install.sh` and
+`builds.dotnet.microsoft.com` both get a 403 from the egress proxy). No `dotnet build`/`dotnet test`
+could be run locally for this ticket; the code and tests were written against the exact patterns and
+Sarif SDK API already used elsewhere in this repo (`Sarif.xml` for `sarif.sdk` 5.7.0, and the
+`System.CommandLine` 2.0.12 source for `InvocationConfiguration`, both confirmed by fetching the
+package/source directly), and CI is the first real build/test run.
+
+Deviation: developed on the harness-assigned branch (`claude/magical-pasteur-3whfup`) rather than a new
+`m3-013-...` branch off `main`, per this session's Git Development Branch Requirements, which override
+the skill's own branch step for this environment.
