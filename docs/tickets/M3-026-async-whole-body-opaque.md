@@ -1,5 +1,5 @@
 # M3-026 An `async` method is a whole-body opaque instead of ill-typed IR
-Status: todo
+Status: done (PR #141)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-022
@@ -85,8 +85,9 @@ the validator.
   validator directly rather than relying on the assert).
 - `AsyncMethodNeverReportsAwaitOrMissingReturn`: the `async Task` case's only opaque reason is
   `async`, not `Await` or `missing-return`.
-- `WholeBodyOpaqueKeepsByRefParametersAsOuts`-style case for an async method with a `ref`/`out`
-  parameter.
+- ~~`WholeBodyOpaqueKeepsByRefParametersAsOuts`-style case for an async method with a `ref`/`out`
+  parameter.~~ Not possible: C# rejects `ref`/`out`/`in` on an async method's parameter list
+  (CS1988), so no such method can exist to lower. See Notes.
 - `LoweringCensusTests.BusinessLayerCensusSnapshot` re-approved (criterion 6).
 
 ## Size guard
@@ -137,4 +138,37 @@ pending that decision.
 `docs/tickets/M3-014-lowering-census.md` is `Status: done (PR #127)` on branch
 `origin/M3-014-lowering-census`, not yet merged to `main` as of this writing. This ticket's Files
 and Tests sections assume that PR has merged first (`samples/business-layer` and its census
-snapshot must exist to be touched).
+snapshot must exist to be touched). It has since merged (M3-022, #139), so this ticket proceeds.
+
+Deviation (`.claude/skills/equiv-adr` bar test, row 2): the Tests section's
+`WholeBodyOpaqueKeepsByRefParametersAsOuts`-style case for an async method with a `ref`/`out`
+parameter cannot be met — C# rejects `ref`, `out`, and `in` parameters on an async method
+(CS1988), so there is no such method to lower. Criterion 1's by-ref/out claim holds vacuously
+for `async`: `Opaque` derives the outs the same way for every whole-body reason, already proven
+by the non-async `WholeBodyOpaqueKeepsByRefParametersAsOuts` test, and `async` does not special
+-case that path. No new test stands in for the requested one; the ticket text above is struck
+through rather than silently dropped.
+
+Decision (`equiv-decide`): `method.IsAsync` is checked first in the `wholeBody` switch, ahead of
+`foreach`/`using`/`lock`/`catch-filter`, per the ticket's Design section, so an async method's
+body is never inspected for those other constructs.
+
+Toolchain: this session's container has no .NET SDK, and installing one is blocked by the
+egress proxy's organization policy (`builds.dotnet.microsoft.com` denied). `dotnet test`/
+`./build.ps1` could not be run locally; the code and test changes were reviewed by hand against
+`IrLowerer.cs`'s existing `Opaque`/`Signature` calls instead. Criterion 6's
+`LoweringCensusTests.BusinessLayerCensusSnapshot.verified.txt` update is therefore a hand edit,
+not a Verify re-approval as the ticket asks for — computed from `LoweringCensus.Compute`'s logic
+(`src/Equiv.Cli/LoweringCensus.cs`) and `ConfirmAsync`'s current body (`Order order = await
+pending; lastConfirmedId = order.Id;`, one `Await`, one `PropertyReference`, one
+`missing-return` today, becoming one `async` reason). CI (`gates (windows-latest)`, `gates
+(ubuntu-latest)`) is the actual verification; flagged in the PR description for the user to
+re-check its output against this snapshot.
+
+`gates (windows-latest)` (PR #141 first push) failed only on this snapshot: the Verify comparer's
+"Received" and "Verified" text bodies printed identically in the log, but the hand edit had
+dropped the file's UTF-8 BOM and added a trailing newline the original file did not have
+(`.gitattributes` marks `*.verified.*` as `-text`, so git does not normalize this and both bytes
+matter). Fixed by restoring the BOM and removing the trailing newline; `git diff --no-index`
+against the pre-ticket file now shows only the intended content change. No other test failed.
+re-check its output against this snapshot.
