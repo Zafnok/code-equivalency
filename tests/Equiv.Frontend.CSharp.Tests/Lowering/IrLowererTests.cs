@@ -488,6 +488,21 @@ public sealed class IrLowererTests
         Assert.Contains(outs, o => o.Final != map);
     }
 
+    /// <summary>
+    /// Ticket M3-007 acceptance criterion 7: a C# parameter declared <c>@this</c> (Roslyn names it <c>this</c>) does not
+    /// collide with the receiver. <see cref="Lowered.Method"/> asserts that the result validates.
+    /// </summary>
+    [Fact]
+    public void AParameterNamedThisIsNotTheReceiver()
+    {
+        IrProcedure procedure = Method("int f; int M(int @this) => f + @this;");
+
+        Assert.Equal(["$this", "field.C.f", "this"], procedure.Parameters.Select(static p => p.Var.Name), StringComparer.Ordinal);
+        Assert.False(IrParameterNames.IsSynthesised(procedure.Parameters[0].Var.Name));
+        Assert.Equal("this", procedure.Parameters[0].Var.SourceName);
+        Assert.Equal((new IrBitVec(32), new IrSort("C")), (procedure.Parameters[0].Var.Type, procedure.Parameters[^1].Var.Type));
+    }
+
     /// <summary>Ticket M3-007 acceptance criterion 4: the final heap is one of the run's outs, so a write is observable.</summary>
     [Theory]
     [InlineData(1, 0)]

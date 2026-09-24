@@ -89,7 +89,10 @@ upcast of a non-null value is never null). The product
 encoding (M3-001, ADR 0021) shares the C# parameters by position, because that is how a caller
 binds them, and the synthesised inputs by name; two parameters of different types are never
 shared, each is then an input of its own side. A synthesised input's name is `this` or contains
-a dot, and a C# parameter's never does: that is how the encoder tells them apart. A value's shadow is a `mapread` of `null.<Sort>`,
+a dot, and a C# parameter's never does: that is how the encoder tells them apart (`IrParameterNames.IsSynthesised`
+is the one definition). A C# parameter whose name would be synthesised, which can only be one declared `@this`,
+is spelled with a leading `$` in IR (`$this`; its source name stays `this`). No C# identifier contains `$`, so
+that name is never another parameter's (M3-007). A value's shadow is a `mapread` of `null.<Sort>`,
 so equal references are equally null; `new` sets the shadow to false instead. `this`,
 `null.*`, `cast.*` and `length.*` are `In`, because nothing changes them. `field.*` and `array.*` are
 `Ref` (ADR 0018, ticket M3-007), so every exit names their final version in `outs` and the

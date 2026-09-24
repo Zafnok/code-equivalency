@@ -129,9 +129,13 @@ internal sealed class IrLowerer
         return procedure;
     }
 
+    /// <summary>
+    /// The C# parameters. One declared <c>@this</c> has the name <c>this</c>, which is the receiver's (ADR 0021), so it is
+    /// spelled <c>$this</c>; no C# identifier contains <c>$</c>, so that name is never another parameter's (ticket M3-007).
+    /// </summary>
     private static (ImmutableArray<IrParameter> Parameters, IrType? ReturnType) Signature(IMethodSymbol method) => (
         [.. method.Parameters.Select(static p => new IrParameter(
-            new IrVar(p.Name, TypeMapper.Map(p.Type), p.Name),
+            new IrVar(IrParameterNames.IsSynthesised(p.Name) ? "$" + p.Name : p.Name, TypeMapper.Map(p.Type), p.Name),
             p.RefKind switch
             {
                 RefKind.Ref => IrParameterKind.Ref,

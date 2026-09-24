@@ -31,7 +31,7 @@ internal sealed class HeapInputs
         [.. inputs.Values.OrderBy(static v => v.Name, StringComparer.Ordinal).Select(static v => new IrParameter(v, IsWritable(v.Name) ? IrParameterKind.Ref : IrParameterKind.In))];
 
     /// <summary>The receiver of an instance method, as an uninterpreted value of its containing type.</summary>
-    public IrVar This(INamedTypeSymbol type) => Input("this", new IrSort(TypeMapper.MetadataName(type)));
+    public IrVar This(INamedTypeSymbol type) => Input(IrParameterNames.Receiver, new IrSort(TypeMapper.MetadataName(type)));
 
     /// <summary>Whether each value of <paramref name="sort"/> is null; equal references are equally null.</summary>
     public IrVar Nulls(IrSort sort) => Input($"null.{Part(sort.Name)}", new IrMap(sort, Bool));
