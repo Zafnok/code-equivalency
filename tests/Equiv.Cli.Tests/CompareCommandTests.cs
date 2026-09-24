@@ -525,15 +525,20 @@ public sealed class CompareCommandTests
             [frontend], backend, new InMemoryReportSink()));
     }
 
+    /// <summary>
+    /// CA2201 forbids constructing <see cref="OutOfMemoryException"/> directly (it is reserved for the runtime), so
+    /// this uses <see cref="InsufficientMemoryException"/>, a genuine <see cref="OutOfMemoryException"/> subclass the
+    /// BCL provides for exactly this: raising the same family of exception from ordinary code.
+    /// </summary>
     [Fact]
     public void Compare_OutOfMemory_Propagates()
     {
         using TempFile legacy = new();
         using TempFile modern = new();
         FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
-        FakeBackend backend = new(NoVerdicts, new Dictionary<string, Exception>(StringComparer.Ordinal) { [PairIdentity.Value] = new OutOfMemoryException() });
+        FakeBackend backend = new(NoVerdicts, new Dictionary<string, Exception>(StringComparer.Ordinal) { [PairIdentity.Value] = new InsufficientMemoryException() });
 
-        Assert.Throws<OutOfMemoryException>(() => CompareCommand.Run(
+        Assert.Throws<InsufficientMemoryException>(() => CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
             [frontend], backend, new InMemoryReportSink()));
     }
