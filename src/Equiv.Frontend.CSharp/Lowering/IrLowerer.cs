@@ -49,6 +49,7 @@ internal sealed class IrLowerer
     private BasicBlock source = null!;
     private SourceSpan bodySpan = null!;
     private IrBlockId? handlerExit;
+    private IrBlockId? neverReached;
     private IrBlockId current = new(0);
 
     private IrLowerer(RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, IrType? returnType)
@@ -272,9 +273,22 @@ internal sealed class IrLowerer
         return destination;
     }
 
-    /// <summary>The block a CFG branch jumps to, with every <c>finally</c> it leaves copied in front of it.</summary>
+    /// <summary>
+    /// The block a CFG branch jumps to, with every <c>finally</c> it leaves copied in front of it. A branch
+    /// out of a <c>try</c> whose <c>finally</c> never completes (it always throws, or loops forever) still
+    /// names the block after the <c>try</c>, but Roslyn marks that block unreachable, so it was never
+    /// lowered (ticket P2-010). The <c>finally</c> copy never reaches its exit, so nothing jumps to its
+    /// continuation, which is <see cref="NeverReached"/>.
+    /// </summary>
     private IrBlockId Destination(ControlFlowBranch branch) =>
-        Unwind(branch.FinallyRegions, blockIds[branch.Destination!.Ordinal]);
+        Unwind(branch.FinallyRegions, blockIds.TryGetValue(branch.Destination!.Ordinal, out IrBlockId? lowered) ? lowered : NeverReached());
+
+    /// <summary>
+    /// The one continuation for every branch whose destination was not lowered, so that such exits share
+    /// one copy of each <c>finally</c>. No edge reaches it, so <see cref="SsaBuilder.Build"/> drops it
+    /// without reading its terminator, and it gets none.
+    /// </summary>
+    private IrBlockId NeverReached() => neverReached ??= ssa.NewBlock();
 
     /// <summary>
     /// Where an exception of <paramref name="type"/> raised in the block being lowered goes: a matching

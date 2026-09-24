@@ -83,6 +83,16 @@ public sealed class IrLowererSnapshotTests
         """);
 
     [Fact]
+    public Task FinallyThatNeverCompletes() => Dump("""
+        static int M(int k)
+        {
+            try { if (k == 1) goto done; k = 2; }
+            finally { throw new InvalidOperationException(); }
+            done: return k;
+        }
+        """);
+
+    [Fact]
     public Task ConditionalExpression() => Dump("static int M(bool b, int x) => b ? x : -x;");
 
     [Fact]

@@ -1,5 +1,5 @@
 # P2-010 `IrLowerer.Destination` throws `KeyNotFoundException` on Git Extensions
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-024
@@ -37,3 +37,26 @@ A fix of the lookup and its tests. Restructuring the swapped state is P1-003.
 Containing lowering exceptions in general (P2-011).
 
 ## Notes
+- Cause (confirmed in unit tests, not yet on the corpus): neither candidate shape in the Goal
+  throws. The shape that does is a `try` whose `finally` never completes, because it always throws
+  (`try { ... } finally { throw new X(); }`) or loops forever. Roslyn then marks the block after the
+  `try` unreachable, so `LowerBlocks` never gives it an IR block. But the `try`'s fall-through (and
+  any `goto` out of it) is still a Regular branch naming that block with `FinallyRegions = [finally]`.
+  So `Destination` indexed `blockIds` with it. In the smallest shape that block is ordinal 3, which
+  matches the census's "key '3'". Finally inside finally, `goto case` into a folded chain, `goto
+  default`, a switch inside a `finally`, and `lock`/`using`/`foreach`/`while` inside a `finally` all
+  lowered before the fix.
+- Decision: when a branch's destination was not lowered, `Destination` continues at one shared
+  `NeverReached` block instead of indexing `blockIds`. The `finally` copy in front of it never
+  reaches its exit, so no edge jumps to that block and `SsaBuilder.Build` drops it without reading
+  its terminator, so it gets none. An opaque exit there would be code no test can observe, and its
+  mutants would survive. The
+  alternative was to lower unreachable blocks too, but those can chain into more unreachable code,
+  and that restructures the block maps, which the Size guard leaves to P1-003. `IrUnreachable` was
+  not used: it means "assume false", and its doc says the frontend never produces it.
+- Criterion 3 not run: this session ran in a Linux container. The loader is Windows-only (ADR 0004,
+  `equiv-corpus-run`: "Windows only"; the Linux loader is M3-028/M3-029), and `gitextensions-8522`'s
+  legacy side is a `net461` legacy csproj that needs VS Build Tools' MSBuild. The census, the failing
+  procedure's identity and the refreshed `docs/runs/2026-09-23-census-gitextensions-8522/SUMMARY.md`
+  still need a Windows box. Since P2-011, a pre-fix build names the failing procedure in the SARIF
+  instead of aborting, so the identity can come from one census on the base commit.
