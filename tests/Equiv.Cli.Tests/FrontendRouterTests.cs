@@ -10,7 +10,9 @@ public sealed class FrontendRouterTests
     [Fact]
     public void Route_RejectsNullFrontends()
     {
-        Assert.Throws<ArgumentNullException>(static () => FrontendRouter.Route(null!, "a", "b"));
+        ArgumentNullException ex = Assert.Throws<ArgumentNullException>(static () => FrontendRouter.Route(null!, "a", "b"));
+
+        Assert.Equal("frontends", ex.ParamName);
     }
 
     [Fact]
