@@ -34,6 +34,21 @@ are pinned in `Directory.Packages.props` (Central Package Management) and listed
 - `ubuntu-latest`: build, unit/property/snapshot, architecture, coverage, CodeQL. Integration
   tests are skipped until the bare loader exists (post-MVP).
 
+## Reusing a pass on unchanged code
+
+The `gates` legs (ci.yml) and `stryker` legs (mutation.yml) record a passing run under a
+fingerprint of the checked-out code: `.github/scripts/code-fingerprint.sh` hashes every
+tracked file except prose that nothing reads (`docs/**` other than
+`docs/tickets/IOPERATION-COVERAGE.md`, `.claude/**`, and the root `CLAUDE.md`,
+`CONTRIBUTING.md`, `README.md`). A later PR push with the same fingerprint on the same leg
+skips the build, tests and Stryker and reports the earlier pass, so a push that only edits
+a ticket or an ADR comes back green in about a minute. The job still runs, so the required
+check names are unchanged. Gates passes are also recorded on `main` pushes, so a prose-only
+PR on a green `main` skips from its first push; Stryker passes are recorded per PR only, and
+the nightly sweep never reuses one. `vulnerable-packages`, `gitleaks`, CodeQL and Sonar
+always run. If a test starts reading a file under an excluded path, add it to the script's
+keep list in the same PR.
+
 ## Required checks (M0-004)
 
 CI runs in `.github/workflows/`: `ci.yml` (gates on windows-latest + ubuntu-latest, plus

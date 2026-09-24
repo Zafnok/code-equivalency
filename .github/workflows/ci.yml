@@ -20,10 +20,35 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      PASS_KEY_PREFIX: ci-pass-gates-${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # A PR push whose code inputs (everything but prose; see the script) match a run that
+      # already passed on this leg, in this PR or on main, skips the gates and reports that
+      # pass. The job itself still runs, so the required check keeps its name and goes green.
+      - name: Fingerprint code inputs
+        id: fp
+        shell: bash
+        run: echo "hash=$(bash .github/scripts/code-fingerprint.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Look up an earlier pass on the same code
+        id: pass
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ runner.temp }}/ci-pass
+          key: ${{ env.PASS_KEY_PREFIX }}-${{ steps.fp.outputs.hash }}
+          lookup-only: true
+
+      - name: Reuse the earlier pass
+        if: steps.pass.outputs.cache-hit == 'true'
+        shell: bash
+        run: echo "::notice::gates already passed on code fingerprint ${{ steps.fp.outputs.hash }}; this push changed only prose, so the gates are not re-run."
+
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: steps.pass.outputs.cache-hit != 'true'
         with:
           global-json-file: global.json
 
@@ -31,7 +56,7 @@ jobs:
       # z3-solver 4.12.2.0 manylinux wheel on PyPI carries the same version's libz3.so; pip checks
       # it against the hash PyPI publishes, and .NET's dlopen finds it on LD_LIBRARY_PATH.
       - name: Provide libz3 (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.pass.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -45,17 +70,17 @@ jobs:
       # -Integration needs VS Build Tools + the .NET Framework 4.8 targeting pack,
       # which only the windows-latest hosted runner has (see README).
       - name: Run gates (Windows, with integration tests)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && steps.pass.outputs.cache-hit != 'true'
         shell: pwsh
         run: ./build.ps1 -Integration
 
       - name: Run gates
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && steps.pass.outputs.cache-hit != 'true'
         shell: pwsh
         run: ./build.ps1
 
       - name: Upload cobertura reports
-        if: always()
+        if: always() && steps.pass.outputs.cache-hit != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cobertura-${{ matrix.os }}
@@ -63,12 +88,27 @@ jobs:
           if-no-files-found: error
 
       - name: Upload coverage summary
-        if: always()
+        if: always() && steps.pass.outputs.cache-hit != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-summary-${{ matrix.os }}
           path: TestResults/coverage-summary.txt
           if-no-files-found: error
+
+      # Only reached when every step above passed. Saved on main pushes too, so a PR that
+      # changes only prose on top of a green main skips the gates from its first push.
+      - name: Record the pass for this code
+        if: steps.pass.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-pass"
+          echo "${{ github.sha }}" > "$RUNNER_TEMP/ci-pass/marker"
+
+      - uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        if: steps.pass.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/ci-pass
+          key: ${{ env.PASS_KEY_PREFIX }}-${{ steps.fp.outputs.hash }}
 
   vulnerable-packages:
     runs-on: ubuntu-latest
