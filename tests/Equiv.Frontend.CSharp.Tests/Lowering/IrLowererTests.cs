@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 
 using Equiv.Core.Ir;
 
@@ -723,6 +723,34 @@ public sealed class IrLowererTests
 
         IrOpaque opaque = Assert.IsType<IrOpaque>(procedure.Blocks[0].Instructions[0]);
         Assert.Equal("undefined", opaque.Reason);
+    }
+
+    /// <summary>Ticket P2-009: the census's <c>undefined</c> was the read of an <c>out</c> argument of a <c>ref-argument</c> opaque.</summary>
+    [Theory]
+    [InlineData("static int M(string s, int f) => int.TryParse(s, out var n) ? n : f;", 2)]
+    [InlineData("static int M(string s) { int.TryParse(s, out int n); return n; }", 2)]
+    [InlineData("static int M(ref int a) { System.Threading.Interlocked.Exchange(ref a, 1); return a; }", 2)]
+    [InlineData("static string M(System.Collections.Generic.Dictionary<int, string> d) { d.TryGetValue(1, out string v); return v.Trim(); }", 2)]
+    [InlineData("static int M() { int x; P(out x, out x); return x; } static void P(out int a, out int b) => a = b = 0;", 2)]
+    [InlineData("static bool M(string s) => int.TryParse(s, out _);", 1)]
+    [InlineData("static int M(int[] a) { System.Threading.Interlocked.Exchange(ref a[0], 1); return a.Length; }", 1)]
+    [InlineData("static C M() { int b = 0; C c = new C(ref b); return b > 0 ? c : null; } C(ref int x) { }", 2)]
+    public void AVariableWrittenByARefArgumentOpaqueIsDefined(string members, int opaques) =>
+        AssertDefined(Method(members), "ref-argument", opaques);
+
+    [Theory]
+    [InlineData("static int M((int, int) t) { var (a, b) = t; return a + b; }", "DeconstructionAssignment", 3)]
+    [InlineData("static int M((int, (int, int)) t, int[] xs) { int a; (a, (xs[0], _)) = t; return a; }", "DeconstructionAssignment", 2)]
+    [InlineData("static int M(object o) => o is int x ? x : 0;", "switch-pattern", 2)]
+    [InlineData("static int M(object o) => o is int _ ? 1 : 0;", "switch-pattern", 1)]
+    [InlineData("static int M(string s) { double d = (double)P(s, out int n); return n; } static int P(string s, out int n) => n = 0;", "Conversion", 2)]
+    public void AVariableWrittenByAnotherOpaqueIsDefined(string members, string reason, int opaques) =>
+        AssertDefined(Method(members), reason, opaques);
+
+    private static void AssertDefined(IrProcedure procedure, string reason, int opaques)
+    {
+        Assert.DoesNotContain(Opaques(procedure), static o => o.Reason is "undefined");
+        Assert.Equal(opaques, Opaques(procedure).Count(o => string.Equals(o.Reason, reason, StringComparison.Ordinal)));
     }
 
     [Fact]

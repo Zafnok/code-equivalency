@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
@@ -739,12 +739,49 @@ internal sealed class IrLowerer
         return target;
     }
 
+    /// <summary>
+    /// An opaque for <paramref name="operation"/>, followed by one opaque with the same reason per local,
+    /// parameter or capture it writes (ticket P2-009), so a later read sees a value and not <c>undefined</c>.
+    /// </summary>
     private IrVar? Opaque(IOperation operation, string reason)
     {
         IrVar? target = operation.Type is { SpecialType: not SpecialType.System_Void } type ? ssa.Temp(TypeMapper.Map(type)) : null;
-        ssa.Emit(current, new IrOpaque(target, reason, Span(operation.Syntax)));
+        SourceSpan span = Span(operation.Syntax);
+        ssa.Emit(current, new IrOpaque(target, reason, span));
+        foreach (SsaBuilder.Variable written in Written(operation))
+        {
+            IrVar value = ssa.Temp(written.Template.Type);
+            ssa.Emit(current, new IrOpaque(value, reason, span));
+            ssa.Store(current, written, value);
+            if (Shadow(written) is { } shadow)
+            {
+                ssa.Store(current, shadow, MapRead(heap.Nulls((IrSort)value.Type), value));
+            }
+        }
+
         return target;
     }
+
+    /// <summary>The variables an operation writes as a side effect: its <c>ref</c>/<c>out</c> arguments, deconstruction targets and pattern-declared locals.</summary>
+    private IEnumerable<SsaBuilder.Variable> Written(IOperation operation) =>
+        operation.DescendantsAndSelf()
+            .SelectMany(o => o switch
+            {
+                IArgumentOperation argument when argument.Parameter!.RefKind is RefKind.Ref or RefKind.Out => Lvalues(argument.Value).Select(Target),
+                IDeconstructionAssignmentOperation deconstruction => Lvalues(deconstruction.Target).Select(Target),
+                IDeclarationPatternOperation { DeclaredSymbol: ILocalSymbol local } => [Local(local)],
+                _ => [],
+            })
+            .OfType<SsaBuilder.Variable>()
+            .Distinct();
+
+    /// <summary>The lvalues a (possibly declared, possibly tuple) target names.</summary>
+    private static IEnumerable<IOperation> Lvalues(IOperation target) => target switch
+    {
+        IDeclarationExpressionOperation declaration => Lvalues(declaration.Expression),
+        ITupleOperation tuple => tuple.Elements.SelectMany(Lvalues),
+        _ => [target],
+    };
 
     private IrVar Constant(ITypeSymbol type, object? value) => Const(TypeMapper.Constant(type, value));
 

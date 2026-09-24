@@ -1,4 +1,4 @@
-using Equiv.Core.Ir;
+﻿using Equiv.Core.Ir;
 
 using Xunit;
 
@@ -132,6 +132,9 @@ public sealed class IrLowererSnapshotTests
 
     [Fact]
     public Task BoxingAnInt() => Dump("static object M(int a) => a;");
+
+    [Fact]
+    public Task OutArgumentOfAnOpaqueCall() => Dump("static int M(string s, int fallback) => int.TryParse(s, out var n) ? n : fallback;");
 
     private static Task Dump(string members) => Verify(IrText.Dump(Lowered.Method(members)));
 }

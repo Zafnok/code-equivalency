@@ -18,7 +18,8 @@ namespace Equiv.Frontend.CSharp;
 /// <see cref="ISolutionLoader"/> (M2-001), enumerates procedures (M2-002), applies the config's
 /// rename map plus the endpoint rename map <see cref="EndpointDiscovery"/> derives (M2-005), hands the
 /// identity sets to <see cref="IProcedureMatcher"/>, lowers both bodies of every matched pair (M2-003), and counts
-/// each side's analysed lines (<see cref="CodeLines"/>, M3-014). A pair whose lowering throws is a
+/// each side's analysed lines (<see cref="CodeLines"/>, M3-014). Each lowered pair records whether its two declarations
+/// are token-equal (<see cref="SyntaxTokens"/>, M3-030). A pair whose lowering throws is a
 /// <see cref="LoweringFailure"/>, not the end of the run (P2-011).
 /// </summary>
 public sealed class CSharpFrontend : ILanguageFrontend
@@ -116,6 +117,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
                 {
                     OldBody = _lower(legacy.Symbol, legacy.Compilation, config),
                     NewBody = _lower(modern.Symbol, modern.Compilation, config),
+                    TokensEqual = SyntaxTokens.Equal(legacy.Symbol, modern.Symbol),
                 });
             }
             catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)

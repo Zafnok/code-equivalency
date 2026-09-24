@@ -94,9 +94,15 @@ Inlining auto-property bodies as field accesses. Object and collection initializ
   the new census was computed with `compare --lower-only` using the modern solution on both sides
   (on `main` this reproduces the committed snapshot exactly). A direct Roslyn lowering of both
   sides' sources gave the same opaque reasons on each side. Changes: `PropertyReference` 3 → 0,
-  `Conversion` 3 → 1, pairs without opaque 2 → 4, `undefined` 1 → 2. The new `undefined` is
-  `QuantityOf`: it now reads `line.Quantity`, and `line` comes from `item is OrderLine line`, a
-  declaration pattern that is still opaque and never defines `line` (M4-005).
+  `Conversion` 3 → 1, pairs without opaque 2 → 4. Before P2-009 merged, `undefined` also went
+  1 → 2, because `QuantityOf` read `line` from the still-opaque pattern `item is OrderLine line`;
+  P2-009 defines such variables, so no `undefined` remains.
+- Merge with main (P2-009, M3-030): M3-030 added changed-pair keys to the census. A probe that
+  lowers both sides' sample files with Roslyn and pairs methods by identity reproduced main's
+  snapshot exactly, before and after the merge. On the merged code the four changed pairs are
+  RoundTotal and Reserve (no opaque), LineTotal (`Binary+Conversion`) and TotalQuantity
+  (`foreach-enumerator`): `changedPairsWithoutOpaque` 1 → 2, and `changedReasonSets` lose
+  `PropertyReference` and the lone `Conversion`.
 - Observation, not fixed here: an opaque `Conversion` does not lower its operand. So in `LineTotal`,
   `(decimal)line.Quantity` swallows the `get_Quantity` call. The pair is Unknown either way.
 - Observation: `Length` on an array that is not a plain variable (`a[0].Length`), and a setter in an
