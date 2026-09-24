@@ -32,9 +32,9 @@ public static class EquivConfigLoader
         }
 
         ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<EquivConfigDiagnostic>();
-        foreach (JsonProperty property in root.EnumerateObject().Where(property => !KnownProperties.Contains(property.Name)))
+        foreach (string propertyName in root.EnumerateObject().Where(property => !KnownProperties.Contains(property.Name)).Select(property => property.Name))
         {
-            diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.UnknownProperty, property.Name, $"unknown property \"{property.Name}\""));
+            diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.UnknownProperty, propertyName, $"unknown property \"{propertyName}\""));
         }
 
         RenameMap renames = new(
