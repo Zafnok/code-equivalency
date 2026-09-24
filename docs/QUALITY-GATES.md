@@ -17,7 +17,7 @@ are pinned in `Directory.Packages.props` (Central Package Management) and listed
 | Coverage | coverlet.MTP → cobertura → `tools/check-coverage` (M0-003) | 100% line and branch per `src/` project; coverlet.MTP has no threshold flag, so the check is a small script over the cobertura XML | yes |
 | Architecture | ArchUnitNET (xUnit v3 package) | dependency edges from ARCHITECTURE.md, naming rules from CLAUDE.md | yes |
 | Integration | `Equiv.Tests.Integration` runs the CLI on every `samples/*` and compares SARIF snapshot | Windows runner only (needs VS Build Tools) | yes |
-| Mutation | Stryker.NET 5 (`--test-runner mtp`) | `--break-at 90` per `src/` project, raised per milestone; blocking since M0-011. PRs run incrementally (`--since` the base branch, M0-007), so the score a PR is held to is the score of the files it changed; the nightly schedule is a full sweep. A project or PR with no mutants has no score and passes | yes |
+| Mutation | Stryker.NET 5 (`--test-runner mtp`) | `--break-at 90` per `src/` project, raised per milestone; blocking since M0-011. PRs run incrementally (`--since` the base commit the PR's merge ref was built on, M0-007), so the score a PR is held to is the score of the `src/` files it changed, tested against the whole new test suite; test-side changes (`tests/**`) are ignored by the diff (`.github/stryker-pr-config.json`: under the MTP runner Stryker 5.0.0 cannot tell which tests a changed test file holds, so any test edit re-ran every mutant of the project). The nightly schedule is a full sweep and is what catches a test edit that lets a mutant in an unchanged file survive. A project or PR with no mutants has no score and passes; a PR leg whose project has no changed `.cs` file skips Stryker for that reason | yes |
 | Code smells / duplication | SonarQube Cloud | Sonar "Sonar way" Quality Gate on new code (duplication, maintainability/reliability/security ratings); `continue-on-error` until calibrated against a few real PRs, then promoted (ADR 0009) | later |
 | Code smell backlog | `tools/sonar-triage` | Sonar's *overall* findings, which the new-code gate never sees, batched into GitHub issues labelled `sonar` by `sonar-triage.yml` (weekly + manual). Filing only; the fixes are ordinary PRs (ADR 0016) | no (reporting) |
 | Security | GitHub CodeQL (C#), `dotnet list package --vulnerable --include-transitive` fails on any | | yes |
@@ -45,9 +45,11 @@ skips the build, tests and Stryker and reports the earlier pass, so a push that 
 a ticket or an ADR comes back green in about a minute. The job still runs, so the required
 check names are unchanged. Gates passes are also recorded on `main` pushes, so a prose-only
 PR on a green `main` skips from its first push; Stryker passes are recorded per PR only, and
-the nightly sweep never reuses one. `vulnerable-packages`, `gitleaks`, CodeQL and Sonar
-always run. If a test starts reading a file under an excluded path, add it to the script's
-keep list in the same PR.
+the nightly sweep never reuses one. Separately, a PR's `stryker` leg for a project whose
+`src/<project>/**/*.cs` the PR does not change reports a pass without building, because the
+incremental run would have no mutants (see the Mutation row). `vulnerable-packages`,
+`gitleaks`, CodeQL and Sonar always run. If a test starts reading a file under an excluded
+path, add it to the script's keep list in the same PR.
 
 ## Required checks (M0-004)
 
