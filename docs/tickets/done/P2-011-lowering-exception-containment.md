@@ -1,5 +1,5 @@
 # P2-011 A procedure whose lowering throws is reported and skipped, not the run
-Status: in-progress
+Status: done (PR #149)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-013, M3-024
