@@ -36,6 +36,28 @@ public sealed class CSharpFrontendTests
         Assert.Equal(expected, new CSharpFrontend(new StubLoader(_ => throw new InvalidOperationException()), new StableIdentityMatcher()).Supports(path));
 
     [Fact]
+    public void SupportsRejectsANullPath() =>
+        Assert.Throws<ArgumentNullException>("path", () => new CSharpFrontend(new StubLoader(_ => throw new InvalidOperationException()), new StableIdentityMatcher()).Supports(null!));
+
+    [Fact]
+    public void ASkippedProjectInAnotherLanguageLeavesTheOtherSidesSameNamedAssemblyAdded()
+    {
+        Compilation shared = RoslynTestCompilations.Compile("namespace S { public class C { public void M() {} } }", "Shared");
+        Compilation modernOther = RoslynTestCompilations.Compile("namespace O { public class E { public void Z() {} } }", "Other");
+        LoadDiagnostic unsupported = new(LoadDiagnosticKind.UnsupportedProject, string.Empty, "Other", "project language 'Visual Basic' is not supported; only C# is");
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [shared], [], [new SkippedProject("Other", "Other", IsCSharp: false, [unsupported], Compilation: null)])
+            : new LoadedSolution(null!, [shared, modernOther], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+
+        // ADR 0029 exempts only a skipped C# counterpart: a project that was never C# does not make Z() unverified.
+        Assert.Equal(["O.E::Z()"], result.Added.Select(static i => i.Value), StringComparer.Ordinal);
+        Assert.Empty(Assert.Single(result.LegacySkipped).Procedures);
+    }
+
+    [Fact]
     public void PublicConstructorWiresProductionCollaborators() =>
         Assert.Equal("csharp", new CSharpFrontend().Language);
 

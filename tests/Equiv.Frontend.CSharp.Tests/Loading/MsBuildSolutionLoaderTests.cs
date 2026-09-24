@@ -57,9 +57,11 @@ public sealed class MsBuildSolutionLoaderTests
             () => created = new TestWorkspace(),
             (ws, _, _) => Task.FromResult(ws.CurrentSolution));
 
-        await Assert.ThrowsAsync<SolutionLoadException>(() => loader.LoadAsync(SolutionPath, TestContext.Current.CancellationToken));
+        SolutionLoadException exception = await Assert.ThrowsAsync<SolutionLoadException>(() => loader.LoadAsync(SolutionPath, TestContext.Current.CancellationToken));
 
         Assert.True(created!.IsDisposed);
+        LoadDiagnostic diagnostic = Assert.Single(exception.Diagnostics);
+        Assert.Equal((LoadDiagnosticKind.UnsupportedSolution, string.Empty, string.Empty), (diagnostic.Kind, diagnostic.Id, diagnostic.Project));
     }
 
     [Fact]
@@ -111,6 +113,49 @@ public sealed class MsBuildSolutionLoaderTests
         Assert.Equal(("Gone", "Gone", true), (skipped.Name, skipped.AssemblyName, skipped.IsCSharp));
         Assert.Null(skipped.Compilation);
         Assert.Equal(2, skipped.Diagnostics.Length);
+    }
+
+    [Fact]
+    public async Task Load_ProjectsThatNeverOpenedAreSkippedInNameOrder()
+    {
+        LoadedSolution loaded = await LoadAsync(ws =>
+        {
+            ws.AddCSharpProject("A", ValidSource);
+            ws.Raise(WorkspaceDiagnosticKind.Failure, @"Msbuild failed when processing the file 'C:\src\Zed\Zed.csproj' with message: not found");
+            ws.Raise(WorkspaceDiagnosticKind.Failure, @"Msbuild failed when processing the file 'C:\src\Alpha\Alpha.csproj' with message: not found");
+        });
+
+        Assert.Equal(["Alpha", "Zed"], loaded.Skipped.Select(static s => s.Name), StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task Load_AFailureIsMatchedToAProjectByItsFileNameNotItsName()
+    {
+        LoadedSolution loaded = await LoadAsync(ws =>
+        {
+            ws.AddCSharpProject("Display", ValidSource, filePath: @"C:\src\File\File.csproj");
+            ws.AddCSharpProject("B", ValidSource);
+            ws.Raise(WorkspaceDiagnosticKind.Failure, @"Msbuild failed when processing the file 'C:\src\File\File.csproj' with message: evaluation failed");
+        });
+
+        Assert.Equal(["B"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
+        Assert.Equal("Display", Assert.Single(loaded.Skipped).Name);
+    }
+
+    [Fact]
+    public async Task Load_AFailureIsMatchedToAProjectWithoutAFileByItsName()
+    {
+        LoadedSolution loaded = await LoadAsync(ws =>
+        {
+            ws.AddCSharpProject("A", ValidSource);
+            ws.AddCSharpProject("B", ValidSource);
+            ws.Raise(WorkspaceDiagnosticKind.Failure, @"Msbuild failed when processing the file 'C:\src\B\B.csproj' with message: evaluation failed");
+        });
+
+        Assert.Equal(["A"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
+        SkippedProject skipped = Assert.Single(loaded.Skipped);
+        Assert.Equal("B", skipped.Name);
+        Assert.NotNull(skipped.Compilation);
     }
 
     [Theory]
