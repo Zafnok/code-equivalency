@@ -9,5 +9,5 @@ public sealed record IrOverflows(IrVar Target, IrOverflowOp Op, IrVar A, IrVar B
 
     internal override ImmutableArray<IrVar> Uses() => [A, B];
 
-    internal override TResult Accept<TResult>(IrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
 }

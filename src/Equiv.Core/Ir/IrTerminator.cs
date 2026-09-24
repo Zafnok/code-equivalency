@@ -13,5 +13,5 @@ public abstract record IrTerminator
 
     internal abstract ImmutableArray<IrBlockId> Successors();
 
-    internal abstract TResult Accept<TResult>(IrTerminatorVisitor<TResult> visitor);
+    internal abstract TResult Accept<TResult>(IIrTerminatorVisitor<TResult> visitor);
 }

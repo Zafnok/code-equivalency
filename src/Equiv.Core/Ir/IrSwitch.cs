@@ -17,5 +17,5 @@ public sealed record IrSwitch(IrVar Scrutinee, ImmutableArray<(IrValue Value, Ir
 
     internal override ImmutableArray<IrBlockId> Successors() => [.. Cases.Select(static c => c.Target), Default];
 
-    internal override TResult Accept<TResult>(IrTerminatorVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrTerminatorVisitor<TResult> visitor) => visitor.Visit(this);
 }

@@ -16,5 +16,5 @@ public sealed record IrPhi(IrVar Target, ImmutableArray<(IrBlockId From, IrVar V
     /// <summary>None inside the block: each incoming value is used at the end of its predecessor.</summary>
     internal override ImmutableArray<IrVar> Uses() => [];
 
-    internal override TResult Accept<TResult>(IrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
 }

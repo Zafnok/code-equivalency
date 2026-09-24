@@ -8,5 +8,5 @@ public sealed record IrUnary(IrVar Target, IrUnaryOp Op, IrVar A) : IrInstructio
 
     internal override ImmutableArray<IrVar> Uses() => [A];
 
-    internal override TResult Accept<TResult>(IrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
 }

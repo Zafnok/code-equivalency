@@ -8,5 +8,5 @@ public sealed record IrBinary(IrVar Target, IrBinaryOp Op, IrVar A, IrVar B) : I
 
     internal override ImmutableArray<IrVar> Uses() => [A, B];
 
-    internal override TResult Accept<TResult>(IrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
 }

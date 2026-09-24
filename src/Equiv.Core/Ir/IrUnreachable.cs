@@ -9,5 +9,5 @@ public sealed record IrUnreachable : IrTerminator
 
     internal override ImmutableArray<IrBlockId> Successors() => [];
 
-    internal override TResult Accept<TResult>(IrTerminatorVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrTerminatorVisitor<TResult> visitor) => visitor.Visit(this);
 }

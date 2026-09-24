@@ -15,5 +15,5 @@ public abstract record IrInstruction
     /// <summary>Variables this instruction reads at its own position (a phi reads its operands on the incoming edges instead).</summary>
     internal abstract ImmutableArray<IrVar> Uses();
 
-    internal abstract TResult Accept<TResult>(IrInstructionVisitor<TResult> visitor);
+    internal abstract TResult Accept<TResult>(IIrInstructionVisitor<TResult> visitor);
 }

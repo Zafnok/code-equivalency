@@ -75,7 +75,7 @@ public static class LoweringOracleGen
     }
 
     /// <summary>A shift count is an <c>int</c>; a <c>long</c> target shifted by a <c>long</c> would not compile.</summary>
-    private static Expr ShiftCount(string op, Expr value, Type type) =>
+    private static IExpr ShiftCount(string op, IExpr value, Type type) =>
         op is "<<" or ">>" && type == typeof(long) ? new Conversion(typeof(int), value, IsChecked: false) : value;
 
     private static string LocalName(Type type) => type switch
@@ -85,9 +85,9 @@ public static class LoweringOracleGen
         _ => "z",
     };
 
-    private static Gen<Expr> ExprGen(Type type, int depth)
+    private static Gen<IExpr> ExprGen(Type type, int depth)
     {
-        Gen<Expr> leaf = Gen.OneOfConst<Expr>([.. Names(type).Select(static n => new Name(n))]);
+        Gen<IExpr> leaf = Gen.OneOfConst<IExpr>([.. Names(type).Select(static n => new Name(n))]);
         return depth switch
         {
             0 => leaf,
@@ -103,19 +103,19 @@ public static class LoweringOracleGen
         _ => ["e", "z"],
     };
 
-    private static Gen<Expr> Number(Type type, int depth, Gen<Expr> leaf)
+    private static Gen<IExpr> Number(Type type, int depth, Gen<IExpr> leaf)
     {
         Type other = type == typeof(int) ? typeof(long) : typeof(int);
-        Gen<Expr> binary = Gen.Select(Gen.OneOfConst(Arithmetic), Gen.Bool, ExprGen(type, depth - 1), Gen.Bool, static (op, isChecked, left, literal) => (op, isChecked, left, literal))
-            .SelectMany(t => RightOperand(type, t.op, t.literal, depth).Select(right => (Expr)new Binary(t.op, t.left, right, t.isChecked)));
-        Gen<Expr> unary = Gen.Select(Gen.OneOfConst("-", "~"), Gen.Bool, ExprGen(type, depth - 1), static (op, isChecked, operand) => (Expr)new Unary(op, operand, isChecked));
-        Gen<Expr> conversion = Gen.Select(Gen.Bool, ExprGen(other, depth - 1), (isChecked, operand) => (Expr)new Conversion(type, operand, isChecked));
-        Gen<Expr> conditional = Gen.Select(ExprGen(typeof(bool), depth - 1), ExprGen(type, depth - 1), ExprGen(type, depth - 1), static (c, t, f) => (Expr)new Conditional(c, t, f));
+        Gen<IExpr> binary = Gen.Select(Gen.OneOfConst(Arithmetic), Gen.Bool, ExprGen(type, depth - 1), Gen.Bool, static (op, isChecked, left, literal) => (op, isChecked, left, literal))
+            .SelectMany(t => RightOperand(type, t.op, t.literal, depth).Select(right => (IExpr)new Binary(t.op, t.left, right, t.isChecked)));
+        Gen<IExpr> unary = Gen.Select(Gen.OneOfConst("-", "~"), Gen.Bool, ExprGen(type, depth - 1), static (op, isChecked, operand) => (IExpr)new Unary(op, operand, isChecked));
+        Gen<IExpr> conversion = Gen.Select(Gen.Bool, ExprGen(other, depth - 1), (isChecked, operand) => (IExpr)new Conversion(type, operand, isChecked));
+        Gen<IExpr> conditional = Gen.Select(ExprGen(typeof(bool), depth - 1), ExprGen(type, depth - 1), ExprGen(type, depth - 1), static (c, t, f) => (IExpr)new Conditional(c, t, f));
         return Gen.Frequency((2, leaf), (5, binary), (1, unary), (1, conversion), (1, conditional));
     }
 
     /// <summary>Shift counts are <c>int</c>; a literal divisor is never zero.</summary>
-    private static Gen<Expr> RightOperand(Type type, string op, bool literal, int depth)
+    private static Gen<IExpr> RightOperand(Type type, string op, bool literal, int depth)
     {
         Type operandType = op is "<<" or ">>" ? typeof(int) : type;
         if (!literal)
@@ -124,16 +124,16 @@ public static class LoweringOracleGen
         }
 
         Gen<long> values = operandType == typeof(int) ? Int.Select(static v => (long)v) : Long;
-        return values.Where(v => v != 0 || op is not ("/" or "%")).Select(v => (Expr)new Literal(operandType, v));
+        return values.Where(v => v != 0 || op is not ("/" or "%")).Select(v => (IExpr)new Literal(operandType, v));
     }
 
-    private static Gen<Expr> Bool(int depth, Gen<Expr> leaf)
+    private static Gen<IExpr> Bool(int depth, Gen<IExpr> leaf)
     {
-        Gen<Expr> nullTest = Gen.OneOfConst<Expr>(new Name("(s == null)"), new Name("(s != null)"));
-        Gen<Expr> relation = Gen.Select(Gen.OneOfConst(Relations), Gen.OneOfConst(typeof(int), typeof(long)), static (op, type) => (op, type))
-            .SelectMany(t => Gen.Select(ExprGen(t.type, depth - 1), ExprGen(t.type, depth - 1), (l, r) => (Expr)new Relation(t.op, l, r)));
-        Gen<Expr> logic = Gen.Select(Gen.OneOfConst(Logic), ExprGen(typeof(bool), depth - 1), ExprGen(typeof(bool), depth - 1), static (op, l, r) => (Expr)new Relation(op, l, r));
-        Gen<Expr> not = ExprGen(typeof(bool), depth - 1).Select(static operand => (Expr)new Unary("!", operand, IsChecked: false));
+        Gen<IExpr> nullTest = Gen.OneOfConst<IExpr>(new Name("(s == null)"), new Name("(s != null)"));
+        Gen<IExpr> relation = Gen.Select(Gen.OneOfConst(Relations), Gen.OneOfConst(typeof(int), typeof(long)), static (op, type) => (op, type))
+            .SelectMany(t => Gen.Select(ExprGen(t.type, depth - 1), ExprGen(t.type, depth - 1), (l, r) => (IExpr)new Relation(t.op, l, r)));
+        Gen<IExpr> logic = Gen.Select(Gen.OneOfConst(Logic), ExprGen(typeof(bool), depth - 1), ExprGen(typeof(bool), depth - 1), static (op, l, r) => (IExpr)new Relation(op, l, r));
+        Gen<IExpr> not = ExprGen(typeof(bool), depth - 1).Select(static operand => (IExpr)new Unary("!", operand, IsChecked: false));
         return Gen.Frequency((2, leaf), (3, relation), (2, logic), (1, not), (2, nullTest));
     }
 
@@ -183,59 +183,59 @@ public static class LoweringOracleGen
 
     private static string Close(bool isChecked, string pad) => isChecked ? $"{pad}}}\n" : string.Empty;
 
-    internal abstract record Expr
+    internal interface IExpr
     {
-        public abstract string Render();
+        string Render();
     }
 
-    internal sealed record Name(string Id) : Expr
+    internal sealed record Name(string Id) : IExpr
     {
-        public override string Render() => Id;
+        public string Render() => Id;
     }
 
-    internal sealed record Literal(Type Type, long Value) : Expr
+    internal sealed record Literal(Type Type, long Value) : IExpr
     {
-        public override string Render() => $"({Value.ToString(CultureInfo.InvariantCulture)}{(Type == typeof(long) ? "L" : string.Empty)})";
+        public string Render() => $"({Value.ToString(CultureInfo.InvariantCulture)}{(Type == typeof(long) ? "L" : string.Empty)})";
     }
 
-    internal sealed record Binary(string Op, Expr Left, Expr Right, bool IsChecked) : Expr
+    internal sealed record Binary(string Op, IExpr Left, IExpr Right, bool IsChecked) : IExpr
     {
-        public override string Render() => $"{Context(IsChecked)}({Left.Render()} {Op} {Right.Render()})";
+        public string Render() => $"{Context(IsChecked)}({Left.Render()} {Op} {Right.Render()})";
     }
 
-    internal sealed record Unary(string Op, Expr Operand, bool IsChecked) : Expr
+    internal sealed record Unary(string Op, IExpr Operand, bool IsChecked) : IExpr
     {
-        public override string Render() => string.Equals(Op, "-", StringComparison.Ordinal) ? $"{Context(IsChecked)}(-{Operand.Render()})" : $"({Op}{Operand.Render()})";
+        public string Render() => string.Equals(Op, "-", StringComparison.Ordinal) ? $"{Context(IsChecked)}(-{Operand.Render()})" : $"({Op}{Operand.Render()})";
     }
 
-    internal sealed record Conversion(Type Type, Expr Operand, bool IsChecked) : Expr
+    internal sealed record Conversion(Type Type, IExpr Operand, bool IsChecked) : IExpr
     {
-        public override string Render() => $"{Context(IsChecked)}(({OracleMethod.Keyword(Type)}){Operand.Render()})";
+        public string Render() => $"{Context(IsChecked)}(({OracleMethod.Keyword(Type)}){Operand.Render()})";
     }
 
-    internal sealed record Conditional(Expr Condition, Expr Then, Expr Else) : Expr
+    internal sealed record Conditional(IExpr Condition, IExpr Then, IExpr Else) : IExpr
     {
-        public override string Render() => $"({Condition.Render()} ? {Then.Render()} : {Else.Render()})";
+        public string Render() => $"({Condition.Render()} ? {Then.Render()} : {Else.Render()})";
     }
 
-    internal sealed record Relation(string Op, Expr Left, Expr Right) : Expr
+    internal sealed record Relation(string Op, IExpr Left, IExpr Right) : IExpr
     {
-        public override string Render() => $"({Left.Render()} {Op} {Right.Render()})";
+        public string Render() => $"({Left.Render()} {Op} {Right.Render()})";
     }
 
     internal interface IStmt;
 
-    internal sealed record Assign(string Local, Expr Value) : IStmt;
+    internal sealed record Assign(string Local, IExpr Value) : IStmt;
 
-    internal sealed record Compound(string Local, string Op, Expr Value, bool IsChecked) : IStmt;
+    internal sealed record Compound(string Local, string Op, IExpr Value, bool IsChecked) : IStmt;
 
     internal sealed record Step(string Local, string Op, bool IsChecked) : IStmt;
 
-    internal sealed record While(Expr Condition, ImmutableArray<IStmt> Body, int Bound) : IStmt;
+    internal sealed record While(IExpr Condition, ImmutableArray<IStmt> Body, int Bound) : IStmt;
 
-    internal sealed record Return(Expr Value) : IStmt;
+    internal sealed record Return(IExpr Value) : IStmt;
 
-    internal sealed record If(Expr Condition, ImmutableArray<IStmt> Then, ImmutableArray<IStmt> Else) : IStmt;
+    internal sealed record If(IExpr Condition, ImmutableArray<IStmt> Then, ImmutableArray<IStmt> Else) : IStmt;
 
     private static string Context(bool isChecked) => isChecked ? "checked" : "unchecked";
 }

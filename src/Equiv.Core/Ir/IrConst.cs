@@ -8,5 +8,5 @@ public sealed record IrConst(IrVar Target, IrValue Value) : IrInstruction
 
     internal override ImmutableArray<IrVar> Uses() => [];
 
-    internal override TResult Accept<TResult>(IrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
 }
