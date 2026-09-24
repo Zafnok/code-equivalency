@@ -8,9 +8,12 @@ only a `Deviation:` line in the ticket. Most things are not a new ADR.
 ## How work is picked up
 
 - Work is defined in `docs/tickets/`. One ticket = one PR. Do the ticket, nothing more.
+  Open tickets sit directly in `docs/tickets/`; finished ones are in `docs/tickets/done/`.
+  The PR's last commit marks the ticket `Status: done (PR #n)` and `git mv`s it into
+  `done/` (task-loop step 8).
 - Follow `.claude/skills/equiv-task-loop/SKILL.md` for every ticket. It is the definition of done.
 - Milestones and ordering are in `docs/ROADMAP.md`. Do not start a ticket whose
-  dependencies are not merged.
+  dependencies are not in `docs/tickets/done/`.
 - One exception: SonarQube debt is tracked as GitHub issues labelled `sonar`, not as ticket
   files. The issue body is the ticket; fix one with `.claude/skills/equiv-sonar-fix` (ADR 0016).
 

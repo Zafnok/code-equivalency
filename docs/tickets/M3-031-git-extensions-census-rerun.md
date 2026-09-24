@@ -12,7 +12,7 @@ and uses the exact reason-set counts to order M4. Fix nothing.
 
 ## Spec references
 ADR 0034; ADR 0028 decision 5; ADR 0027 decision 3; `docs/runs/2026-09-23-census-verdict.md`;
-`.claude/skills/equiv-corpus-run/SKILL.md`; `docs/tickets/M3-022-real-pair-census.md`.
+`.claude/skills/equiv-corpus-run/SKILL.md`; `docs/tickets/done/M3-022-real-pair-census.md`.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. Run the `equiv-corpus-run` skill in `census` mode on `gitextensions-8522`, and rerun

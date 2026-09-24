@@ -20,7 +20,7 @@
       "rule": "csharpsquid:S2178",
       "verdict": "accept",
       "paths": ["src/Equiv.Core/**"],
-      "reason": "Non-short-circuit & on bools is deliberate here: it keeps each field to one branch, which the 100% branch-coverage gate requires. Rewriting to && doubles the branches per field and the gate then cannot be met. Rationale and the original Sonar report: src/Equiv.Core/Ir/IrEquality.cs and docs/tickets/M1-003-verdicts-matching-config.md."
+      "reason": "Non-short-circuit & on bools is deliberate here: it keeps each field to one branch, which the 100% branch-coverage gate requires. Rewriting to && doubles the branches per field and the gate then cannot be met. Rationale and the original Sonar report: src/Equiv.Core/Ir/IrEquality.cs and docs/tickets/done/M1-003-verdicts-matching-config.md."
     },
     {
       "rule": "csharpsquid:S8969",
