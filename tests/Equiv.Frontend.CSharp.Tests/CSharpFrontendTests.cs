@@ -120,6 +120,53 @@ public sealed class CSharpFrontendTests
         Assert.Equal("legacy.sln", exception.Path);
     }
 
+    /// <summary>P2-011: a lowering fault in one of two pairs costs only that pair; the other is still lowered.</summary>
+    [Fact]
+    public void Analyze_LoweringFaultInOnePair_RecordsItAndLowersTheOther()
+    {
+        const string Source = "namespace N { public class C { public int Good(int a) => a + 1; public int Bad(int a) => a - 1; } }";
+        StubLoader loader = new(_ => new LoadedSolution(null!, [RoslynTestCompilations.Compile(Source)], [], []));
+        InvalidOperationException fault = new("injected lowering fault");
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher(), FaultOn("Bad", fault))
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+
+        ProcedurePair pair = Assert.Single(result.Pairs);
+        Assert.Equal("N.C::Good(int)", pair.New.Value);
+        Assert.NotNull(pair.OldBody);
+        Assert.NotNull(pair.NewBody);
+        LoweringFailure failure = Assert.Single(result.LoweringFailures);
+        Assert.Equal("N.C::Bad(int)", failure.Old.Value);
+        Assert.Equal("N.C::Bad(int)", failure.New.Value);
+        Assert.Same(fault, failure.Exception);
+    }
+
+    /// <summary>P2-011, as ADR 0023 does for verification: cancellation and out-of-memory are not a pair's fault.</summary>
+    [Fact]
+    public void Analyze_LoweringCancelled_Propagates()
+    {
+        StubLoader loader = new(_ => new LoadedSolution(null!, [RoslynTestCompilations.Compile("namespace N { public class C { public int Bad(int a) => a; } }")], [], []));
+        CSharpFrontend frontend = new(loader, new StableIdentityMatcher(), FaultOn("Bad", new OperationCanceledException()));
+
+        Assert.Throws<OperationCanceledException>(() => frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None));
+    }
+
+    /// <summary>CA2201 reserves <see cref="OutOfMemoryException"/> for the runtime; <see cref="InsufficientMemoryException"/> is its BCL subclass.</summary>
+    [Fact]
+    public void Analyze_LoweringOutOfMemory_Propagates()
+    {
+        StubLoader loader = new(_ => new LoadedSolution(null!, [RoslynTestCompilations.Compile("namespace N { public class C { public int Bad(int a) => a; } }")], [], []));
+        CSharpFrontend frontend = new(loader, new StableIdentityMatcher(), FaultOn("Bad", new InsufficientMemoryException()));
+
+        Assert.Throws<InsufficientMemoryException>(() => frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None));
+    }
+
+    /// <summary>The production lowering, except that a method named <paramref name="name"/> throws <paramref name="fault"/>.</summary>
+    private static Func<IMethodSymbol, Compilation, EquivConfig, IrProcedure> FaultOn(string name, Exception fault) =>
+        (symbol, compilation, config) => string.Equals(symbol.Name, name, StringComparison.Ordinal)
+            ? throw fault
+            : CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config);
+
     [Fact]
     public void NullConfigThrows()
     {

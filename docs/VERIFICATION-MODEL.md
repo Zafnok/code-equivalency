@@ -250,7 +250,9 @@ Counts in the census are per lowered body of a matched pair. `procedures` counts
 matched pairs plus the removed (legacy) or added (modern) procedures. `opaqueByReason` counts the
 bodies on each side that hold at least one `IrOpaque` with that reason, sorted by reason. A body is
 whole-body opaque when it is one block whose only instruction is an `IrOpaque`, and a pair counts
-under `pairsWholeBodyOpaque` when either side is (ticket M3-014).
+under `pairsWholeBodyOpaque` when either side is (ticket M3-014). A matched pair whose lowering threw has
+no lowered body, so it counts in `procedures` and `matchedPairs` but in neither
+`pairsWithoutOpaque` nor `pairsWholeBodyOpaque`, nor in `opaqueByReason` (ticket P2-011).
 
 Every run also writes `run.properties.analysedLinesOfCode`: `legacy` and `modern`, one count per
 codebase and never a total (ticket M3-014). The rule is the one in README's "Licence" section,
@@ -258,7 +260,8 @@ applied identically to both sides. It counts the lines that hold part of a C# to
 file the loaded projects compile (generated files included), and a file compiled by more than one
 project once. `--dry-run` prints the same two numbers without verifying.
 
-A pair whose verification throws (an encoder bug, a `Z3Exception`) has no result: a crash is
+A pair whose verification throws (an encoder bug, a `Z3Exception`), or whose lowering throws
+(ticket P2-011), has no result: a crash is
 a fact about the tool, not a verdict about the code (ADR 0023). It is recorded as an `error`
 entry in `invocations[0].toolExecutionNotifications` naming both identities, the invocation
 has `executionSuccessful: false`, the run's `properties.unverified` lists the pair's identity,

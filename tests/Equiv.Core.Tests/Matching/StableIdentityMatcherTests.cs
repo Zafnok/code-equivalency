@@ -106,6 +106,19 @@ public sealed class StableIdentityMatcherTests
     }
 
     [Fact]
+    public void MatchResultsDifferingInLoweringFailuresAreUnequal()
+    {
+        MatchResult plain = Matcher.Match([Id("A")], [Id("A")]);
+        InvalidOperationException exception = new("boom");
+        MatchResult failed = plain with { LoweringFailures = [new LoweringFailure(Id("A"), Id("A"), exception)] };
+
+        Assert.Empty(plain.LoweringFailures);
+        Assert.NotEqual(plain, failed);
+        Assert.Equal(failed, plain with { LoweringFailures = [new LoweringFailure(Id("A"), Id("A"), exception)] });
+        Assert.Equal(failed.GetHashCode(), (plain with { LoweringFailures = [new LoweringFailure(Id("A"), Id("A"), exception)] }).GetHashCode());
+    }
+
+    [Fact]
     public void UnverifiedProjectsCompareByValue()
     {
         UnverifiedProject project = Skipped("P");

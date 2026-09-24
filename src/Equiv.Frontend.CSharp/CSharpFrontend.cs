@@ -18,12 +18,14 @@ namespace Equiv.Frontend.CSharp;
 /// <see cref="ISolutionLoader"/> (M2-001), enumerates procedures (M2-002), applies the config's
 /// rename map plus the endpoint rename map <see cref="EndpointDiscovery"/> derives (M2-005), hands the
 /// identity sets to <see cref="IProcedureMatcher"/>, lowers both bodies of every matched pair (M2-003), and counts
-/// each side's analysed lines (<see cref="CodeLines"/>, M3-014).
+/// each side's analysed lines (<see cref="CodeLines"/>, M3-014). A pair whose lowering throws is a
+/// <see cref="LoweringFailure"/>, not the end of the run (P2-011).
 /// </summary>
 public sealed class CSharpFrontend : ILanguageFrontend
 {
     private readonly ISolutionLoader _loader;
     private readonly IProcedureMatcher _matcher;
+    private readonly Func<IMethodSymbol, Compilation, EquivConfig, IrProcedure> _lower;
 
     public CSharpFrontend()
         : this(new MsBuildSolutionLoader(), new StableIdentityMatcher())
@@ -32,9 +34,16 @@ public sealed class CSharpFrontend : ILanguageFrontend
 
     /// <summary>Seam for unit tests: an <c>AdhocWorkspace</c>-backed <see cref="ISolutionLoader"/>.</summary>
     internal CSharpFrontend(ISolutionLoader loader, IProcedureMatcher matcher)
+        : this(loader, matcher, LowerWithIrLowerer)
+    {
+    }
+
+    /// <summary>Seam for unit tests: a <paramref name="lower"/> that can fault on a chosen procedure (P2-011).</summary>
+    internal CSharpFrontend(ISolutionLoader loader, IProcedureMatcher matcher, Func<IMethodSymbol, Compilation, EquivConfig, IrProcedure> lower)
     {
         _loader = loader;
         _matcher = matcher;
+        _lower = lower;
     }
 
     public string Language => "csharp";
@@ -69,13 +78,11 @@ public sealed class CSharpFrontend : ILanguageFrontend
         (ImmutableArray<ProcedureIdentity> added, ImmutableArray<UnverifiedProject> legacySkipped) = Unverified(legacy.Skipped, match.Added, modernByIdentity, config.Renames);
         (ImmutableArray<ProcedureIdentity> removed, ImmutableArray<UnverifiedProject> modernSkipped) = Unverified(modern.Skipped, match.Removed, legacyByIdentity, config.Renames);
 
+        (ImmutableArray<ProcedurePair> pairs, ImmutableArray<LoweringFailure> loweringFailures) = Lowered(match.Pairs, legacyByIdentity, modernByIdentity, config);
         MatchResult lowered = match with
         {
-            Pairs = [.. match.Pairs.Select(pair => pair with
-            {
-                OldBody = legacyByIdentity[pair.Old].Lower(config),
-                NewBody = modernByIdentity[pair.New].Lower(config),
-            })],
+            Pairs = pairs,
+            LoweringFailures = loweringFailures,
             Added = added,
             Removed = removed,
             Ambiguous = [.. match.Ambiguous, .. legacyAmbiguous, .. modernAmbiguous],
@@ -84,6 +91,45 @@ public sealed class CSharpFrontend : ILanguageFrontend
         };
         return new FrontendAnalysis(lowered, new AnalysedLines(CodeLines.Count(legacy.Compilations), CodeLines.Count(modern.Compilations)));
     }
+
+    /// <summary>
+    /// Both bodies of every pair in <paramref name="pairs"/>, lowered. A pair whose lowering throws is left out and
+    /// returned as a <see cref="LoweringFailure"/> instead, so one bad body costs one pair (P2-011, ADR 0029's method
+    /// level). <see cref="OperationCanceledException"/> and <see cref="OutOfMemoryException"/> propagate unchanged,
+    /// as they do for verification (ADR 0023).
+    /// </summary>
+    private (ImmutableArray<ProcedurePair> Pairs, ImmutableArray<LoweringFailure> Failures) Lowered(
+        ImmutableArray<ProcedurePair> pairs,
+        Dictionary<ProcedureIdentity, SideProcedure> legacyByIdentity,
+        Dictionary<ProcedureIdentity, SideProcedure> modernByIdentity,
+        EquivConfig config)
+    {
+        ImmutableArray<ProcedurePair>.Builder lowered = ImmutableArray.CreateBuilder<ProcedurePair>(pairs.Length);
+        ImmutableArray<LoweringFailure>.Builder failures = ImmutableArray.CreateBuilder<LoweringFailure>();
+        foreach (ProcedurePair pair in pairs)
+        {
+            SideProcedure legacy = legacyByIdentity[pair.Old];
+            SideProcedure modern = modernByIdentity[pair.New];
+            try
+            {
+                lowered.Add(pair with
+                {
+                    OldBody = _lower(legacy.Symbol, legacy.Compilation, config),
+                    NewBody = _lower(modern.Symbol, modern.Compilation, config),
+                });
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
+            {
+                failures.Add(new LoweringFailure(pair.Old, pair.New, exception));
+            }
+        }
+
+        return (lowered.ToImmutable(), failures.ToImmutable());
+    }
+
+    /// <summary>The production lowering (M2-003).</summary>
+    internal static IrProcedure LowerWithIrLowerer(IMethodSymbol symbol, Compilation compilation, EquivConfig config) =>
+        IrLowerer.Lower(symbol, compilation, config.Renames, config.SuppressRuntimeChanges);
 
     /// <summary>
     /// <paramref name="skipped"/> (one side's skipped projects) as Core data. Each C# project's procedures are its own,
@@ -250,8 +296,5 @@ public sealed class CSharpFrontend : ILanguageFrontend
             span.EndLinePosition.Character + 1);
     }
 
-    private sealed record SideProcedure(ProcedureIdentity Identity, IMethodSymbol Symbol, Compilation Compilation)
-    {
-        public IrProcedure Lower(EquivConfig config) => IrLowerer.Lower(Symbol, Compilation, config.Renames, config.SuppressRuntimeChanges);
-    }
+    private sealed record SideProcedure(ProcedureIdentity Identity, IMethodSymbol Symbol, Compilation Compilation);
 }
