@@ -93,6 +93,16 @@ public sealed class IrLowererSnapshotTests
         """);
 
     [Fact]
+    public Task ConditionalRethrow() => Dump("""
+        static int M(int a, int b)
+        {
+            try { return a / b; }
+            catch (DivideByZeroException) { if (a > 5) throw; }
+            return -1;
+        }
+        """);
+
+    [Fact]
     public Task ConditionalExpression() => Dump("static int M(bool b, int x) => b ? x : -x;");
 
     [Fact]

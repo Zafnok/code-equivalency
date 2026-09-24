@@ -63,5 +63,22 @@ Containing lowering exceptions in general (P2-011).
   P2-010, so it is the rerun this criterion asked for. The failing procedure's identity (Goal) was
   not recorded. The cause is confirmed by the unit tests instead, and after this fix the census has
   nothing left to name.
+- Second cause, found by running the census on Windows on 2026-09-24 with the fix above: with
+  `KeyNotFoundException` gone, lowering stopped at
+  `ICSharpCode.TextEditor.TextAreaClipboardHandler::Paste(object,System.EventArgs)` with a
+  `NullReferenceException` in `Destination`. That was already on `main`; the first crash had hidden it.
+  The shape is a conditional rethrow in a `catch` (`catch (X) { if (c) throw; }`). Roslyn makes it one
+  block whose condition jumps past the rethrow and whose fall-through is the rethrow itself: Rethrow
+  semantics, `Destination == null`. `Terminate`'s conditional case passed that fall-through to
+  `Destination`. An unconditional `throw;` was already opaque ("rethrow"). Tests:
+  `IrLowererTests.AConditionalRethrowInsideACatchLowers` and
+  `IrLowererSnapshotTests.ConditionalRethrow`, which failed with the census's `NullReferenceException`
+  before the fix.
+- Decision: a conditional block whose fall-through is not Regular gets a fresh block for the
+  fall-through, lowered as the same `rethrow` opaque exit as an unconditional `throw;`. The conditional
+  case moved into `Branch` to keep `Terminate` under MA0051's 60 lines.
+- Criterion 3, partly checked: after both fixes the `gitextensions-8522` census (`--lower-only`, Windows,
+  Release) exits 0, with 0 tool-execution notifications and 0 unverified procedures: 13541 matched
+  pairs, 315 changed, 24.4% of those without opaque. SUMMARY.md is still M3-031's to write.
 - Deviation: developed on the harness-assigned branch (`claude/admiring-darwin-ra6ybn`) rather than a
   new `P2-010-...` branch.

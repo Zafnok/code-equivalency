@@ -48,3 +48,8 @@ run finds: those become P2 tickets, as the skill requires.
 - Criterion 7 is carried over from P2-010 (PR #155). That fix could not be checked on the corpus
   because the loader is Windows-only and P2-010 was done on Linux. P2-010's unit tests pin the
   cause: a `try` whose `finally` never completes (always throws, or loops forever).
+- 2026-09-24, PR #155: with P2-010's two fixes the Git Extensions census exits 0 on Windows, with no
+  tool-execution notifications (P2-010 Notes). That run reused the corpus from M3-022's worktree, whose
+  reference assemblies are under `.corpus/refasm/root` while the current `-Env` points at `.corpus/refasm`.
+  Without overriding `TargetFrameworkRootPath`, the legacy side fails to load (exit 4). Run `-Prepare` in a
+  fresh worktree.

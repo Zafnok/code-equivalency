@@ -705,6 +705,22 @@ public sealed class IrLowererTests
         Assert.Equal(new IrThrew("System.InvalidOperationException"), Run(procedure, Bits(32, k)));
     }
 
+    /// <summary>
+    /// A conditional `throw;` in a `catch` is one CFG block: its condition branches past the rethrow, and its
+    /// fall-through is the rethrow itself, which names no block (found by the `gitextensions-8522` census,
+    /// ticket P2-010). The rethrow is opaque as usual; the path that skips it still runs.
+    /// </summary>
+    [Theory]
+    [InlineData(6, 2, 3)]
+    [InlineData(1, 0, -1)]
+    public void AConditionalRethrowInsideACatchLowers(int a, int b, int expected)
+    {
+        IrProcedure procedure = Method("static int M(int a, int b) { try { return a / b; } catch (DivideByZeroException) { if (a > 5) throw; } return -1; }");
+
+        Assert.Equal("rethrow", Assert.Single(Opaques(procedure)).Reason);
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
+    }
+
     [Fact]
     public void RethrowIsOpaqueInsideACatch() =>
         Assert.Equal(

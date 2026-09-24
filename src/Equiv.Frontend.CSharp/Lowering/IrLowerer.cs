@@ -369,12 +369,7 @@ internal sealed class IrLowerer
         ControlFlowBranch fallThrough = block.FallThroughSuccessor!;
         if (block.ConditionalSuccessor is { } conditional)
         {
-            IrVar condition = Value(block.BranchValue!);
-            IrBlockId jump = Destination(conditional);
-            IrBlockId next = Destination(fallThrough);
-            ssa.Terminate(current, block.ConditionKind == ControlFlowConditionKind.WhenTrue
-                ? new IrBranch(condition, jump, next)
-                : new IrBranch(condition, next, jump));
+            Branch(block, conditional, fallThrough, span);
             return;
         }
 
@@ -396,6 +391,26 @@ internal sealed class IrLowerer
                 // `throw;`: the exception in flight is not modelled. Also the edge erroneous code produces.
                 OpaqueExit("rethrow", span);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// A two-way branch. <c>if (c) throw;</c> is one block whose fall-through is the rethrow, which names no
+    /// block (ticket P2-010), so the rethrow gets a block of its own and is opaque as it is anywhere else.
+    /// </summary>
+    private void Branch(BasicBlock block, ControlFlowBranch conditional, ControlFlowBranch fallThrough, SourceSpan span)
+    {
+        IrVar condition = Value(block.BranchValue!);
+        IrBlockId jump = Destination(conditional);
+        IrBlockId? rethrow = fallThrough.Semantics == ControlFlowBranchSemantics.Regular ? null : ssa.NewBlock();
+        IrBlockId next = rethrow ?? Destination(fallThrough);
+        ssa.Terminate(current, block.ConditionKind == ControlFlowConditionKind.WhenTrue
+            ? new IrBranch(condition, jump, next)
+            : new IrBranch(condition, next, jump));
+        if (rethrow is not null)
+        {
+            current = rethrow;
+            OpaqueExit("rethrow", span);
         }
     }
 
