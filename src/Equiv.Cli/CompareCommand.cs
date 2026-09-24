@@ -126,7 +126,7 @@ internal static class CompareCommand
         MatchResult matchResult = analysis.Match;
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered = Lowered(matchResult);
         LoweringCensus census = LoweringCensus.Compute(
-            [.. lowered.Select(static p => (p.Old, p.New))],
+            [.. lowered.Select(static p => (p.Old, p.New, p.Pair.TokensEqual))],
             removed: matchResult.Removed.Length,
             added: matchResult.Added.Length,
             projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length),

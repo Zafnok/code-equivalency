@@ -254,6 +254,20 @@ under `pairsWholeBodyOpaque` when either side is (ticket M3-014). A matched pair
 no lowered body, so it counts in `procedures` and `matchedPairs` but in neither
 `pairsWithoutOpaque` nor `pairsWholeBodyOpaque`, nor in `opaqueByReason` (ticket P2-011).
 
+The census also counts what the solver will see (ADR 0034; ticket M3-030). A lowered matched pair
+is *changed* unless it is congruent. Until M3-015, congruent means the two declarations' syntax
+token sequences are equal once trivia is ignored, and neither lowered body has an `IrCall` that
+`RuntimeChangeTable.TryMatch` matches. `changedPairs`, `changedPairsWithoutOpaque` and
+`changedPairsWholeBodyOpaque` are `matchedPairs`, `pairsWithoutOpaque` and `pairsWholeBodyOpaque`
+restricted to changed pairs; lowerable share is `changedPairsWithoutOpaque / changedPairs`.
+`changedReasonSets` maps the sorted, `+`-joined union of both sides' opaque reasons to its number
+of changed pairs, with `""` for a pair without opaque, so its counts sum to `changedPairs`.
+`runtimeChangeCalls` has `callSites`, `distinctMembers` and `pairsWithAny`, each per side and over
+every lowered matched pair, congruent ones included: the `IrCall`s whose callee identity the table
+matches, the distinct callee identities among them, and the pairs whose body on that side has at
+least one. Package version changes are not in the census; `tools/corpus/corpus.ps1 -Packages`
+computes them from each side's restore output.
+
 Every run also writes `run.properties.analysedLinesOfCode`: `legacy` and `modern`, one count per
 codebase and never a total (ticket M3-014). The rule is the one in README's "Licence" section,
 applied identically to both sides. It counts the lines that hold part of a C# token, in every C#
