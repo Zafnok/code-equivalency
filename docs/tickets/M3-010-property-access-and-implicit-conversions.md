@@ -1,5 +1,5 @@
 # M3-010 Property access as accessor calls; implicit reference and boxing conversions
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004
@@ -67,3 +67,38 @@ Inlining auto-property bodies as field accesses. Object and collection initializ
 `using` and constructors (M4-001).
 
 ## Notes
+- Decision: accessor calls share one path, `IrLowerer.Accessor` over `Operands` (receiver, null check,
+  arguments), which `Invoke` now uses too. A compound assignment, `++` or `--` on a property evaluates
+  the receiver and index arguments once and passes them to both accessors.
+- Decision: a compound assignment now evaluates its right operand after reading the target, which is
+  C#'s order. For locals this only renumbers temps in four existing snapshots (`CompoundAssignment`,
+  `IncrementAndDecrement`, `ForLoop`, `DoWhileLoop`). For a property it puts the getter call before
+  any call in the right operand.
+- Decision: when the value branches, the CFG captures an assigned property before the value. Such a
+  capture (found by scanning the CFG for assignments whose target is a capture reference) evaluates
+  only the receiver and index arguments; the accessor runs at the assignment. Without this the
+  capture called the getter and the assignment was opaque. The oracle found it on `P = c ? a : b`.
+- Decision: the oracle's call oracle (`LoweringOracleTests.AutoPropertyOracle`) answers `get_P` and
+  `set_P` the way `P`'s backing field would. Both runs start `P` from the input's `B`. The compiled
+  run resets `P` by reflection before each call.
+- Observation (criterion 3): code that writes an init-only setter outside an initializer does not
+  compile, and Roslyn binds that access, like a read of a property with no getter, as `Invalid`. The
+  cases that bind are an init-only setter in an object initializer and a write, `++` or `+=` to a
+  ref-returning property, which has no setter. `InitOnlySetterOutsideInitializerIsOpaque` uses those.
+  So a no-getter read cannot occur in bound code, and `Accessor` takes the no-accessor branch only
+  for setters.
+- Observation: the null literal's conversion is a reference conversion with no source type, so
+  `IsCast` checks the operand's type.
+- Observation: `LoweringCensusTests.BusinessLayerCensusSnapshot` (Windows-only) changes. The legacy
+  side needs the .NET Framework 4.8 reference assemblies, which the Linux dev box does not have, so
+  the new census was computed with `compare --lower-only` using the modern solution on both sides
+  (on `main` this reproduces the committed snapshot exactly). A direct Roslyn lowering of both
+  sides' sources gave the same opaque reasons on each side. Changes: `PropertyReference` 3 → 0,
+  `Conversion` 3 → 1, pairs without opaque 2 → 4, `undefined` 1 → 2. The new `undefined` is
+  `QuantityOf`: it now reads `line.Quantity`, and `line` comes from `item is OrderLine line`, a
+  declaration pattern that is still opaque and never defines `line` (M4-005).
+- Observation, not fixed here: an opaque `Conversion` does not lower its operand. So in `LineTotal`,
+  `(decimal)line.Quantity` swallows the `get_Quantity` call. The pair is Unknown either way.
+- Observation: `Length` on an array that is not a plain variable (`a[0].Length`), and a setter in an
+  object initializer, are now accessor calls. The initializer's implicit receiver is still an opaque
+  `InstanceReference`; object initializers are out of scope.

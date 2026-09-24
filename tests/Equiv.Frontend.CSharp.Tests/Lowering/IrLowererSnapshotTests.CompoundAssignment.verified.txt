@@ -2,9 +2,9 @@
 B0:
   goto B1
 B1:
-  %$0: bv32 = const bv32 1
+  %$1: bv32 = const bv32 1
   %$2: bv32 = zext %b
-  %$3: bv32 = add %$2, %$0
+  %$3: bv32 = add %$2, %$1
   %b.21 "b": bv8 = trunc %$3
   %a.22 "a": bv32 = mul %a, %a
   %$10: bv32 = const bv32 31

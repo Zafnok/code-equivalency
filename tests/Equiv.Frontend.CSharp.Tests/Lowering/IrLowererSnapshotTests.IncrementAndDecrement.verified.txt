@@ -2,13 +2,13 @@
 B0:
   goto B1
 B1:
-  %$0: bv32 = const bv32 1
-  %a.16 "a": bv32 = add %a, %$0
-  %$3: bv32 = const bv32 1
-  %a.17 "a": bv32 = sub %a.16, %$3
-  %$6: bv32 = const bv32 1
+  %$1: bv32 = const bv32 1
+  %a.16 "a": bv32 = add %a, %$1
+  %$4: bv32 = const bv32 1
+  %a.17 "a": bv32 = sub %a.16, %$4
+  %$7: bv32 = const bv32 1
   %$8: bv32 = zext %c
-  %$9: bv32 = sub %$8, %$6
+  %$9: bv32 = sub %$8, %$7
   %c.18 "c": bv16 = trunc %$9
   %$13: bv32 = zext %c.18
   %$14: bv32 = add %a.17, %$13

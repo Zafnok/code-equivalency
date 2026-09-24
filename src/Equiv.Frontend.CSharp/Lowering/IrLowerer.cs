@@ -36,6 +36,8 @@ internal sealed class IrLowerer
     private readonly Dictionary<ISymbol, SsaBuilder.Variable> variables = new(SymbolEqualityComparer.Default);
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captures = [];
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captureTargets = [];
+    private readonly Dictionary<CaptureId, PropertyAccess> propertyTargets = [];
+    private HashSet<CaptureId> assignedCaptures = [];
     private readonly Dictionary<string, IrBlockId> throwBlocks = new(StringComparer.Ordinal);
     private readonly Dictionary<(int Region, IrBlockId Continuation), IrBlockId> copies = [];
     private Dictionary<int, IrBlockId> blockIds = [];
@@ -182,6 +184,17 @@ internal sealed class IrLowerer
     {
         bodySpan = span;
         chains = SwitchChains.Find(cfg);
+        assignedCaptures =
+        [
+            .. cfg.Blocks
+                .SelectMany(static b => b.Operations.Append(b.BranchValue))
+                .OfType<IOperation>()
+                .SelectMany(static o => o.DescendantsAndSelf())
+                .OfType<IAssignmentOperation>()
+                .Select(static a => a.Target)
+                .OfType<IFlowCaptureReferenceOperation>()
+                .Select(static r => r.Id),
+        ];
         // A `finally` is never lowered in place: it is copied onto each path that leaves its `try`.
         ImmutableArray<BasicBlock> reachable =
             [.. cfg.Blocks.Where(b => b.IsReachable && !chains.IsAbsorbed(b.Ordinal) && ExceptionRegions.EnclosingFinally(b) is null)];
@@ -443,6 +456,14 @@ internal sealed class IrLowerer
 
     private void Statement(IOperation operation)
     {
+        if (operation is IFlowCaptureOperation { Value: IPropertyReferenceOperation property } assigned && assignedCaptures.Contains(assigned.Id))
+        {
+            // The CFG captures a property an assignment writes when the value branches: its receiver and index
+            // arguments are evaluated here, and its accessors run at the assignment (ticket M3-010).
+            propertyTargets[assigned.Id] = new PropertyAccess(property, Operands(property.Instance, property.Arguments));
+            return;
+        }
+
         if (operation is IFlowCaptureOperation capture)
         {
             // A captured local or parameter may later be an assignment target (the CFG captures the
@@ -491,6 +512,8 @@ internal sealed class IrLowerer
                 return Element(element) is { } read ? ReadSlice(read) : Opaque(element, element.Kind.ToString());
             case IPropertyReferenceOperation property when ArrayLength(property) is { } length:
                 return length;
+            case IPropertyReferenceOperation property:
+                return Accessor(property, property.Property.GetMethod, Operands(property.Instance, property.Arguments), value: null);
             case IConversionOperation conversion:
                 return Convert(conversion);
             case IBinaryOperation binary:
@@ -561,7 +584,13 @@ internal sealed class IrLowerer
     /// </summary>
     private IrVar? Nullness(IOperation source, IrVar value)
     {
-        IOperation unwrapped = Unwrap(source);
+        // A cast-map conversion's result is a value of its own, whose nullness is not tied to the operand's.
+        IOperation unwrapped = source;
+        while (unwrapped is IConversionOperation conversion && !IsCast(conversion))
+        {
+            unwrapped = conversion.Operand;
+        }
+
         return unwrapped switch
         {
             IObjectCreationOperation or IInstanceReferenceOperation => null,
@@ -767,6 +796,13 @@ internal sealed class IrLowerer
             return written;
         }
 
+        if (PropertyTarget(assignment.Target) is { } property)
+        {
+            IrVar assigned = Value(assignment.Value);
+            Accessor(property.Reference, Setter(property.Reference.Property), property.Operands, assigned);
+            return assigned;
+        }
+
         if (Target(assignment.Target) is not { } target)
         {
             return Opaque(assignment, assignment.Target.Kind.ToString());
@@ -787,9 +823,18 @@ internal sealed class IrLowerer
         _ => null,
     };
 
-    /// <summary>Integral to integral only: extension follows the source's signedness; a checked narrowing throws when the value does not fit.</summary>
+    /// <summary>
+    /// An implicit reference or boxing conversion between different IR types is a read of its <c>cast.&lt;From&gt;.&lt;To&gt;</c>
+    /// map (ticket M3-010). Otherwise integral to integral only: extension follows the source's signedness; a checked
+    /// narrowing throws when the value does not fit.
+    /// </summary>
     private IrVar? Convert(IConversionOperation conversion)
     {
+        if (IsCast(conversion))
+        {
+            return MapRead(heap.Cast(conversion.Operand.Type!, conversion.Type!), Value(conversion.Operand));
+        }
+
         if (conversion.OperatorMethod is not null
             || conversion.Operand.Type is not { } from
             || TypeMapper.Map(from) is not IrBitVec
@@ -809,6 +854,13 @@ internal sealed class IrLowerer
 
         return result;
     }
+
+    /// <summary>Whether <paramref name="conversion"/> is an implicit reference or boxing conversion that changes the IR type.</summary>
+    private static bool IsCast(IConversionOperation conversion) =>
+        conversion.GetConversion() is { IsImplicit: true } kind
+        && (kind.IsReference || kind.IsBoxing)
+        && conversion.Operand.Type is { } from // the null literal's reference conversion has no source type
+        && TypeMapper.Map(from) != TypeMapper.Map(conversion.Type!);
 
     /// <summary>Throws when <paramref name="result"/> does not round-trip to <paramref name="value"/>, or when the signed side of a signedness change is negative.</summary>
     private void ThrowIfItDoesNotFit(IrVar value, IrVar result, bool fromSigned, bool toSigned)
@@ -930,7 +982,7 @@ internal sealed class IrLowerer
             ? TypeMapper.Promote(compound.Target.Type!)
             : mappedRight;
         return compound.OperatorMethod is null && operands is { } promoted
-            ? Update(compound, compound.Target, compound.OperatorKind, Value(compound.Value), promoted, compound.IsChecked, isPostfix: false)
+            ? Update(compound, compound.Target, compound.OperatorKind, () => Value(compound.Value), promoted, compound.IsChecked, isPostfix: false)
             : Opaque(compound, compound.Kind.ToString());
     }
 
@@ -942,23 +994,29 @@ internal sealed class IrLowerer
             return Opaque(step, step.Kind.ToString());
         }
 
-        IrVar one = Const(new IrBitVecValue(promoted.Type.Width, 1));
         BinaryOperatorKind kind = step.Kind == OperationKind.Increment ? BinaryOperatorKind.Add : BinaryOperatorKind.Subtract;
-        return Update(step, step.Target, kind, one, promoted, step.IsChecked, step.IsPostfix);
+        return Update(step, step.Target, kind, () => Const(new IrBitVecValue(promoted.Type.Width, 1)), promoted, step.IsChecked, step.IsPostfix);
     }
 
-    private IrVar? Update(IOperation node, IOperation lvalue, BinaryOperatorKind kind, IrVar right, (IrBitVec Type, bool Signed) promoted, bool isChecked, bool isPostfix)
+    /// <summary>
+    /// Reads the target, evaluates <paramref name="operand"/> (C# reads a compound assignment's target first), operates
+    /// and writes back. The target is a local or parameter, or a property with a getter and a non-init setter, whose
+    /// receiver and index arguments are evaluated once for both accessor calls (ticket M3-010 acceptance criterion 2).
+    /// </summary>
+    private IrVar? Update(IOperation node, IOperation lvalue, BinaryOperatorKind kind, Func<IrVar> operand, (IrBitVec Type, bool Signed) promoted, bool isChecked, bool isPostfix)
     {
-        if (Target(lvalue) is not { } target || TypeMapper.Map(lvalue.Type!) is not IrBitVec narrow)
+        if (TypeMapper.Map(lvalue.Type!) is not IrBitVec narrow || Place(lvalue) is not { } place)
         {
             return Opaque(node, lvalue.Kind.ToString());
         }
 
+        (Func<IrVar> read, Action<IrVar> write) = place;
+        IrVar old = read();
+        IrVar right = operand();
         // Never null here: a shift takes operands of any two widths, and every other compound operator
         // was given the right operand's own bitvector type.
         IrBinaryOp op = OperatorMapper.Binary(kind, promoted.Signed, promoted.Type, right.Type)!.Value;
         bool targetSigned = TypeMapper.IsSigned(lvalue.Type!);
-        IrVar old = ssa.Load(current, target);
         IrVar wide = Resize(old, promoted.Type, targetSigned);
         IrVar computed = OperatorMapper.IsShift(op)
             ? Shift(op, wide, right, promoted.Type)
@@ -969,9 +1027,37 @@ internal sealed class IrLowerer
             ThrowIfItDoesNotFit(computed, result, promoted.Signed, targetSigned);
         }
 
-        ssa.Store(current, target, result);
+        write(result);
         return isPostfix ? old : result;
     }
+
+    /// <summary>
+    /// How to read and write an lvalue that is both read and written, or null, with nothing emitted, when it is neither
+    /// a variable nor a property. A property's receiver and index arguments are evaluated here, once, for both accessors.
+    /// </summary>
+    private (Func<IrVar> Read, Action<IrVar> Write)? Place(IOperation lvalue)
+    {
+        if (Target(lvalue) is { } target)
+        {
+            return (() => ssa.Load(current, target), value => ssa.Store(current, target, value));
+        }
+
+        return PropertyTarget(lvalue) is { } property
+            ? (() => Accessor(property.Reference, property.Reference.Property.GetMethod, property.Operands, value: null)!,
+                value => Accessor(property.Reference, Setter(property.Reference.Property), property.Operands, value))
+            : null;
+    }
+
+    /// <summary>
+    /// The property an lvalue writes, with its receiver and index arguments evaluated now, or, for a captured one, when
+    /// it was captured; null, with nothing emitted, when the lvalue is not a property.
+    /// </summary>
+    private PropertyAccess? PropertyTarget(IOperation lvalue) => lvalue switch
+    {
+        IPropertyReferenceOperation property => new PropertyAccess(property, Operands(property.Instance, property.Arguments)),
+        IFlowCaptureReferenceOperation reference when propertyTargets.TryGetValue(reference.Id, out PropertyAccess? captured) => captured,
+        _ => null,
+    };
 
     private IrVar? Unary(IUnaryOperation unary)
     {
@@ -1007,18 +1093,37 @@ internal sealed class IrLowerer
     private IrVar? Create(IObjectCreationOperation creation) =>
         creation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out)
             ? Opaque(creation, "ref-argument")
-            : Call(CallIdentityFactory.Of(creation.Constructor!, renames, suppressedRuntimeChanges), [.. Arguments([], creation.Arguments)], TypeMapper.Map(creation.Type!));
+            : Call(Identity(creation.Constructor!), [.. Arguments([], creation.Arguments)], TypeMapper.Map(creation.Type!));
 
     /// <summary>An opaque call (receiver first, then arguments in parameter order) that may throw System.Exception.</summary>
-    private IrVar? Invoke(IInvocationOperation invocation)
-    {
-        if (invocation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out))
-        {
-            return Opaque(invocation, "ref-argument");
-        }
+    private IrVar? Invoke(IInvocationOperation invocation) =>
+        invocation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out)
+            ? Opaque(invocation, "ref-argument")
+            : Call(
+                Identity(invocation.TargetMethod),
+                Operands(invocation.Instance, invocation.Arguments),
+                invocation.TargetMethod.ReturnsVoid ? null : TypeMapper.Map(invocation.Type!));
 
+    /// <summary>
+    /// A property access is a call to its accessor, lowered as an invocation of it is (ticket M3-010 acceptance criteria
+    /// 1 to 3): the getter with the receiver and index arguments, or, given <paramref name="value"/>, the setter with the
+    /// value last and no result. A property with no accessor for the access stays opaque.
+    /// </summary>
+    private IrVar? Accessor(IPropertyReferenceOperation property, IMethodSymbol? accessor, ImmutableArray<IrVar> operands, IrVar? value) =>
+        accessor is null
+            ? Opaque(property, property.Kind.ToString())
+            : Call(Identity(accessor), value is null ? operands : [.. operands, value], value is null ? TypeMapper.Map(property.Type!) : null);
+
+    /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
+    private static IMethodSymbol? Setter(IPropertySymbol property) => property.SetMethod is { IsInitOnly: false } setter ? setter : null;
+
+    private CallIdentity Identity(IMethodSymbol method) => CallIdentityFactory.Of(method, renames, suppressedRuntimeChanges);
+
+    /// <summary>A member access's call operands: the receiver, null-checked unless it is a value type, then the arguments.</summary>
+    private ImmutableArray<IrVar> Operands(IOperation? instance, ImmutableArray<IArgumentOperation> arguments)
+    {
         List<IrVar> receiver = [];
-        if (invocation.Instance is { } instance)
+        if (instance is not null)
         {
             IrVar value = Value(instance);
             receiver.Add(value);
@@ -1028,10 +1133,7 @@ internal sealed class IrLowerer
             }
         }
 
-        return Call(
-            CallIdentityFactory.Of(invocation.TargetMethod, renames, suppressedRuntimeChanges),
-            [.. Arguments(receiver, invocation.Arguments)],
-            invocation.TargetMethod.ReturnsVoid ? null : TypeMapper.Map(invocation.Type!));
+        return [.. Arguments(receiver, arguments)];
     }
 
     /// <summary>The receiver, then the arguments in parameter order; each is evaluated in source order first.</summary>
@@ -1055,4 +1157,7 @@ internal sealed class IrLowerer
     /// bound the key must be under (an array variable's length var; null for a field).
     /// </summary>
     private readonly record struct Access(SsaBuilder.Variable Map, IrVar Key, IrVar? Length);
+
+    /// <summary>A property an assignment writes, and its receiver and index arguments, evaluated once.</summary>
+    private sealed record PropertyAccess(IPropertyReferenceOperation Reference, ImmutableArray<IrVar> Operands);
 }

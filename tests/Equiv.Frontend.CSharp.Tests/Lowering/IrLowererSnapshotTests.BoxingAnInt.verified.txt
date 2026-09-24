@@ -1,0 +1,6 @@
+﻿proc "C::M(int)" (%a "a": bv32, %cast.System.Int32.System.Object: map<bv32, sort "System.Object">) -> sort "System.Object" entry B0
+B0:
+  goto B1
+B1:
+  %$1: sort "System.Object" = mapread %cast.System.Int32.System.Object, %a
+  ret %$1

@@ -18,8 +18,8 @@ B4:
   br %$7, B6, B5
 B5:
   %s.21 "s": bv32 = add %s.20, %i.18
-  %$11: bv32 = const bv32 1
-  %i.22 "i": bv32 = add %i.18, %$11
+  %$12: bv32 = const bv32 1
+  %i.22 "i": bv32 = add %i.18, %$12
   goto B3
 B6:
   ret %s.20
