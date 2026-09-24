@@ -309,4 +309,72 @@ public sealed class MsBuildSolutionLoaderTests
 
         return loader.LoadAsync(SolutionPath, TestContext.Current.CancellationToken);
     }
+
+    [Fact]
+    public async Task Load_OpensOnlyTheBuiltProjectsThroughATemporaryFilterAndNamesTheRest()
+    {
+        string? openedPath = null;
+        string? filterJson = null;
+        MsBuildSolutionLoader loader = new(
+            () => new TestWorkspace(),
+            async (ws, path, ct) =>
+            {
+                openedPath = path;
+                filterJson = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
+                ((TestWorkspace)ws).AddCSharpProject("Lib", ValidSource);
+                return ws.CurrentSolution;
+            },
+            _ => SolutionBuildConfigurationTests.Solution(built: ["Lib"], notBuilt: ["Site"]));
+
+        LoadedSolution loaded = await loader.LoadAsync(SolutionPath, TestContext.Current.CancellationToken);
+
+        Assert.EndsWith(".slnf", openedPath, StringComparison.Ordinal);
+        Assert.False(File.Exists(openedPath));
+        Assert.Contains("Lib.csproj", filterJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("Site.csproj", filterJson, StringComparison.Ordinal);
+        Assert.Equal(["Site"], loaded.NotBuilt);
+        Assert.Empty(loaded.Skipped);
+    }
+
+    [Fact]
+    public async Task Load_OpensASolutionWhoseProjectsAreAllBuiltAsItIs()
+    {
+        string? openedPath = null;
+        MsBuildSolutionLoader loader = new(
+            () => new TestWorkspace(),
+            (ws, path, _) =>
+            {
+                openedPath = path;
+                ((TestWorkspace)ws).AddCSharpProject("Lib", ValidSource);
+                return Task.FromResult(ws.CurrentSolution);
+            },
+            _ => SolutionBuildConfigurationTests.Solution(built: ["Lib"], notBuilt: []));
+
+        LoadedSolution loaded = await loader.LoadAsync(SolutionPath, TestContext.Current.CancellationToken);
+
+        Assert.Equal(SolutionPath, openedPath);
+        Assert.Empty(loaded.NotBuilt);
+    }
+
+    [Fact]
+    public void ReadSolution_ReadsAnExistingSlnOnly()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "equiv-P2-013-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string sln = Path.Combine(directory, "a.sln");
+            string slnx = Path.Combine(directory, "a.slnx");
+            File.WriteAllText(sln, "text");
+            File.WriteAllText(slnx, "<Solution />");
+
+            Assert.Equal("text", MsBuildSolutionLoader.ReadSolution(sln));
+            Assert.Null(MsBuildSolutionLoader.ReadSolution(slnx));
+            Assert.Null(MsBuildSolutionLoader.ReadSolution(Path.Combine(directory, "missing.sln")));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }

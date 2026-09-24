@@ -246,6 +246,27 @@ public sealed class CompareCommandTests
     }
 
     [Fact]
+    public void Compare_ListsEachSidesProjectsNotBuiltOnceInARunProperty()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, legacyNotBuilt: ["Example.Site", "_build"]);
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.UsageError;
+
+        _ = CaptureStdOut(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [frontend], new FakeBackend(NoVerdicts), sink));
+
+        // P2-013: a project the solution does not build is neither loaded nor skipped, so it does not fail the run.
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Run run = sink.Log!.Runs[0];
+        Assert.Empty(run.Invocations?.SelectMany(static i => i.ToolExecutionNotifications ?? []) ?? []);
+        Assert.True(run.TryGetSerializedPropertyValue("projectsNotBuilt", out string? notBuilt));
+        Assert.Equal("""{"legacy":["Example.Site","_build"],"modern":[]}""", notBuilt);
+    }
+
+    [Fact]
     public void LowerOnlyNeverCallsTheBackend()
     {
         using TempFile legacy = new();

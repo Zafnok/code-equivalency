@@ -65,6 +65,20 @@ public sealed class CSharpFrontendTests
     }
 
     [Fact]
+    public void PassesEachSidesProjectsNotBuiltThrough()
+    {
+        Compilation compilation = RoslynTestCompilations.Compile("namespace N { public class C { public void M() {} } }");
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [compilation], [], []) { NotBuilt = ["Example.Site", "_build"] }
+            : new LoadedSolution(null!, [compilation], [], []));
+
+        FrontendAnalysis analysis = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
+
+        Assert.Equal(["Example.Site", "_build"], analysis.LegacyNotBuilt);
+        Assert.Empty(analysis.ModernNotBuilt);
+    }
+
+    [Fact]
     public void LowersBothBodiesOfEveryMatchedPair()
     {
         Compilation legacyCompilation = RoslynTestCompilations.Compile("namespace Old.Ns { public class C { public int M(int a) => a + 1; public void F(int a) {} public void F(long a) {} } }");

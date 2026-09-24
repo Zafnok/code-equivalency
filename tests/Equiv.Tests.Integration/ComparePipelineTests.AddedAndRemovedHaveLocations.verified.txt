@@ -182,7 +182,8 @@
         analysedLinesOfCode: {
           legacy: 31,
           modern: 24
-        }
+        },
+        projectsNotBuilt: {}
       }
     }
   ]

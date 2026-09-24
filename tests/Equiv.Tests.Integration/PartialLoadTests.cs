@@ -93,10 +93,19 @@ public sealed class PartialLoadTests
             $"Project(\"{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}\") = \"{BrokenProject}\", \"Broken\\{BrokenProject}.csproj\", \"{{A1000001-0000-0000-0000-0000000000B1}}\"\r\nEndProject\r\n" +
             "Project(\"{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}\") = \"Native\", \"Native\\Native.vcxproj\", \"{A1000001-0000-0000-0000-0000000000C1}\"\r\nEndProject\r\n";
         int global = sln.IndexOf(Global, StringComparison.Ordinal);
+
+        // Both are in the build configuration, so the loader opens them (P2-013).
+        const string EndSection = "\tEndGlobalSection";
+        string builds = Build("{A1000001-0000-0000-0000-0000000000B1}") + Build("{A1000001-0000-0000-0000-0000000000C1}");
+        int endSection = sln.LastIndexOf(EndSection, StringComparison.Ordinal);
+        Assert.True(endSection > global);
         string solutionPath = Path.Combine(copyDir, "Equiv.Samples.Identical.Legacy.sln");
-        File.WriteAllText(solutionPath, sln[..global] + extraProjects + sln[global..]);
+        File.WriteAllText(solutionPath, sln[..global] + extraProjects + sln[global..endSection] + builds + sln[endSection..]);
         return solutionPath;
     }
+
+    private static string Build(string guid) =>
+        $"\t\t{guid}.Debug|Any CPU.ActiveCfg = Debug|Any CPU\r\n\t\t{guid}.Debug|Any CPU.Build.0 = Debug|Any CPU\r\n";
 
     /// <summary>The build host can still hold files under the copy's <c>obj/</c>; the OS temp folder is reclaimed anyway.</summary>
     private static void DeleteBestEffort(string directory)

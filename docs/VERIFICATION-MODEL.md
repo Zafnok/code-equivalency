@@ -246,6 +246,14 @@ without `IrOpaque`, whole-body opaque pairs, congruent pairs, and `IrOpaque` cou
 per side (ADR 0027). It also records skipped projects per side, and, when the run produced
 verdicts, Unknown counts by scope (ADR 0029).
 
+Only the projects a solution builds are part of the product. For a `.sln`, those are the projects
+with a `Build.0` entry for its default configuration (`Debug|Any CPU`, else the first one it
+lists); a `.slnx`, or a `.sln` that lists no configuration, builds all of them. The others are
+never opened, so they are neither loaded nor skipped, and every run names them once per side in
+`run.properties.projectsNotBuilt` (`legacy`, `modern`). The project load rate (ADR 0028) is C#
+projects loaded over C# projects built: skipped projects count against it, projects not built do
+not (ticket P2-013).
+
 Counts in the census are per lowered body of a matched pair. `procedures` counts, per side, the
 matched pairs plus the removed (legacy) or added (modern) procedures. `opaqueByReason` counts the
 bodies on each side that hold at least one `IrOpaque` with that reason, sorted by reason. A body is
