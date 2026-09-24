@@ -528,3 +528,10 @@ dotnet_diagnostic.CA1032.severity = none
 # MA0185 wants to drop is load-bearing here, not redundant.
 [src/Equiv.Frontend.CSharp/Lowering/TypeMapper.cs]
 dotnet_diagnostic.MA0185.severity = none
+
+# M3-013: Program.Run's outermost catch is ADR 0023's process-level boundary — it must map *any*
+# exception that escapes the command to exit 5, not just a chosen subset, so CA1031's "catch a more
+# specific type" advice does not apply to this one catch site. It does not swallow silently: the
+# message goes to stderr before the process exits non-zero.
+[src/Equiv.Cli/Program.cs]
+dotnet_diagnostic.CA1031.severity = none
