@@ -18,5 +18,5 @@ public sealed record IrCall(IrVar? Target, IrVar? Threw, CallIdentity Callee, Im
 
     internal override ImmutableArray<IrVar> Uses() => Args;
 
-    internal override TResult Accept<TResult>(IrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
 }

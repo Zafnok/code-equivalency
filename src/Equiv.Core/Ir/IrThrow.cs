@@ -15,5 +15,5 @@ public sealed record IrThrow(string ExceptionType, ImmutableArray<IrOut> Outs) :
 
     internal override ImmutableArray<IrBlockId> Successors() => [];
 
-    internal override TResult Accept<TResult>(IrTerminatorVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrTerminatorVisitor<TResult> visitor) => visitor.Visit(this);
 }

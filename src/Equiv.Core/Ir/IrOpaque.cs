@@ -9,5 +9,5 @@ public sealed record IrOpaque(IrVar? Target, string Reason, SourceSpan Span) : I
 
     internal override ImmutableArray<IrVar> Uses() => [];
 
-    internal override TResult Accept<TResult>(IrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
 }

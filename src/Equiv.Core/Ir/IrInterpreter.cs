@@ -32,7 +32,7 @@ public static class IrInterpreter
 
     private readonly record struct IrJump(IrBlockId? Next, IrOutcome? Outcome, ImmutableArray<IrOut> Outs);
 
-    private sealed class IrMachine(ICallOracle oracle) : IrInstructionVisitor<IrOutcome?>
+    private sealed class IrMachine(ICallOracle oracle) : IIrInstructionVisitor<IrOutcome?>
     {
         private readonly Dictionary<string, IrValue> values = new(StringComparer.Ordinal);
         private readonly ImmutableArray<IrCallRecord>.Builder trace = ImmutableArray.CreateBuilder<IrCallRecord>();
@@ -78,23 +78,23 @@ public static class IrInterpreter
             }
         }
 
-        public override IrOutcome? Visit(IrConst instruction) => Set(instruction.Target, instruction.Value);
+        public IrOutcome? Visit(IrConst instruction) => Set(instruction.Target, instruction.Value);
 
-        public override IrOutcome? Visit(IrBinary instruction) =>
+        public IrOutcome? Visit(IrBinary instruction) =>
             Set(instruction.Target, IrBits.Binary(instruction.Op, Get(instruction.A), Get(instruction.B)));
 
-        public override IrOutcome? Visit(IrOverflows instruction) =>
+        public IrOutcome? Visit(IrOverflows instruction) =>
             Set(
                 instruction.Target,
                 new IrBoolValue(IrBits.Overflows(instruction.Op, (IrBitVecValue)Get(instruction.A), (IrBitVecValue)Get(instruction.B))));
 
-        public override IrOutcome? Visit(IrUnary instruction) =>
+        public IrOutcome? Visit(IrUnary instruction) =>
             Set(instruction.Target, IrBits.UnaryOp(instruction.Op, Get(instruction.A), instruction.Target.Type));
 
         /// <summary>Phis were bound on block entry.</summary>
-        public override IrOutcome? Visit(IrPhi instruction) => null;
+        public IrOutcome? Visit(IrPhi instruction) => null;
 
-        public override IrOutcome? Visit(IrCall instruction)
+        public IrOutcome? Visit(IrCall instruction)
         {
             ImmutableArray<IrValue> args = [.. instruction.Args.Select(Get)];
             int position = trace.Count;
@@ -110,13 +110,13 @@ public static class IrInterpreter
             return instruction.Threw is null ? null : Set(instruction.Threw, new IrBoolValue(result.Threw));
         }
 
-        public override IrOutcome? Visit(IrMapRead instruction) =>
+        public IrOutcome? Visit(IrMapRead instruction) =>
             Set(instruction.Target, ((IrMapValue)Get(instruction.Map)).Read(Get(instruction.Key)));
 
-        public override IrOutcome? Visit(IrMapWrite instruction) =>
+        public IrOutcome? Visit(IrMapWrite instruction) =>
             Set(instruction.Target, ((IrMapValue)Get(instruction.Map)).Write(Get(instruction.Key), Get(instruction.Value)));
 
-        public override IrOutcome? Visit(IrOpaque instruction) => new IrOpaqueReached(instruction.Reason, instruction.Span);
+        public IrOutcome? Visit(IrOpaque instruction) => new IrOpaqueReached(instruction.Reason, instruction.Span);
 
         private IrValue Get(IrVar var) => values[var.Name];
 
@@ -126,26 +126,26 @@ public static class IrInterpreter
             return null;
         }
 
-        private sealed class IrStepper(IrMachine machine) : IrTerminatorVisitor<IrJump>
+        private sealed class IrStepper(IrMachine machine) : IIrTerminatorVisitor<IrJump>
         {
-            public override IrJump Visit(IrGoto terminator) => new(terminator.Target, Outcome: null, []);
+            public IrJump Visit(IrGoto terminator) => new(terminator.Target, Outcome: null, []);
 
-            public override IrJump Visit(IrBranch terminator) =>
+            public IrJump Visit(IrBranch terminator) =>
                 new(((IrBoolValue)machine.Get(terminator.Cond)).Value ? terminator.Then : terminator.Else, Outcome: null, []);
 
-            public override IrJump Visit(IrSwitch terminator)
+            public IrJump Visit(IrSwitch terminator)
             {
                 IrValue scrutinee = machine.Get(terminator.Scrutinee);
                 IrBlockId target = terminator.Cases.Where(c => c.Value == scrutinee).Select(static c => c.Target).FirstOrDefault(terminator.Default);
                 return new(target, Outcome: null, []);
             }
 
-            public override IrJump Visit(IrReturn terminator) =>
+            public IrJump Visit(IrReturn terminator) =>
                 new(Next: null, new IrReturned(terminator.Value is null ? null : machine.Get(terminator.Value)), terminator.Outs);
 
-            public override IrJump Visit(IrThrow terminator) => new(Next: null, new IrThrew(terminator.ExceptionType), terminator.Outs);
+            public IrJump Visit(IrThrow terminator) => new(Next: null, new IrThrew(terminator.ExceptionType), terminator.Outs);
 
-            public override IrJump Visit(IrUnreachable terminator) => new(Next: null, new IrInfeasible(), []);
+            public IrJump Visit(IrUnreachable terminator) => new(Next: null, new IrInfeasible(), []);
         }
     }
 }

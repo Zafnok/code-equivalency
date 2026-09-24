@@ -9,5 +9,5 @@ public sealed record IrMapWrite(IrVar Target, IrVar Map, IrVar Key, IrVar Value)
 
     internal override ImmutableArray<IrVar> Uses() => [Map, Key, Value];
 
-    internal override TResult Accept<TResult>(IrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrInstructionVisitor<TResult> visitor) => visitor.Visit(this);
 }

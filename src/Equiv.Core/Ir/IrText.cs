@@ -130,7 +130,7 @@ public static class IrText
         _ => Definition(parameter.Var),
     };
 
-    private sealed class IrInstructionWriter : IrInstructionVisitor<string>
+    private sealed class IrInstructionWriter : IIrInstructionVisitor<string>
     {
         public static readonly IrInstructionWriter Instance = new();
 
@@ -139,30 +139,30 @@ public static class IrText
         /// <summary>A callee's quoted identity, with a <c>!</c> suffix when <see cref="CallIdentity.RuntimeChanged"/> (ticket M2-006).</summary>
         private static string Callee(CallIdentity callee) => Quote(callee.Value) + (callee.RuntimeChanged ? "!" : string.Empty);
 
-        public override string Visit(IrConst instruction) => $"{Definition(instruction.Target)} = const {Value(instruction.Value)}";
+        public string Visit(IrConst instruction) => $"{Definition(instruction.Target)} = const {Value(instruction.Value)}";
 
-        public override string Visit(IrBinary instruction) =>
+        public string Visit(IrBinary instruction) =>
             $"{Definition(instruction.Target)} = {BinaryText[instruction.Op]} {Use(instruction.A)}, {Use(instruction.B)}";
 
-        public override string Visit(IrOverflows instruction) =>
+        public string Visit(IrOverflows instruction) =>
             $"{Definition(instruction.Target)} = overflows {OverflowText[instruction.Op]} {Use(instruction.A)}, {Use(instruction.B)}";
 
-        public override string Visit(IrUnary instruction) => $"{Definition(instruction.Target)} = {UnaryText[instruction.Op]} {Use(instruction.A)}";
+        public string Visit(IrUnary instruction) => $"{Definition(instruction.Target)} = {UnaryText[instruction.Op]} {Use(instruction.A)}";
 
-        public override string Visit(IrPhi instruction) =>
+        public string Visit(IrPhi instruction) =>
             $"{Definition(instruction.Target)} = phi [{string.Join(", ", instruction.Incoming.Select(static i => $"{Block(i.From)}: {Use(i.Value)}"))}]";
 
-        public override string Visit(IrCall instruction) =>
+        public string Visit(IrCall instruction) =>
             $"{Assigned(instruction.Target)}call {Callee(instruction.Callee)}({string.Join(", ", instruction.Args.Select(Use))})"
             + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw));
 
-        public override string Visit(IrMapRead instruction) =>
+        public string Visit(IrMapRead instruction) =>
             $"{Definition(instruction.Target)} = mapread {Use(instruction.Map)}, {Use(instruction.Key)}";
 
-        public override string Visit(IrMapWrite instruction) =>
+        public string Visit(IrMapWrite instruction) =>
             $"{Definition(instruction.Target)} = mapwrite {Use(instruction.Map)}, {Use(instruction.Key)}, {Use(instruction.Value)}";
 
-        public override string Visit(IrOpaque instruction)
+        public string Visit(IrOpaque instruction)
         {
             SourceSpan span = instruction.Span;
             return $"{Assigned(instruction.Target)}opaque {Quote(instruction.Reason)} at {Quote(span.Path)} "
@@ -170,26 +170,26 @@ public static class IrText
         }
     }
 
-    private sealed class IrTerminatorWriter : IrTerminatorVisitor<string>
+    private sealed class IrTerminatorWriter : IIrTerminatorVisitor<string>
     {
         public static readonly IrTerminatorWriter Instance = new();
 
         private static string Outs(ImmutableArray<IrOut> outs) =>
             outs.IsEmpty ? string.Empty : $" outs({string.Join(", ", outs.Select(static o => $"{Use(o.Param)} = {Use(o.Final)}"))})";
 
-        public override string Visit(IrGoto terminator) => "goto " + Block(terminator.Target);
+        public string Visit(IrGoto terminator) => "goto " + Block(terminator.Target);
 
-        public override string Visit(IrBranch terminator) =>
+        public string Visit(IrBranch terminator) =>
             $"br {Use(terminator.Cond)}, {Block(terminator.Then)}, {Block(terminator.Else)}";
 
-        public override string Visit(IrSwitch terminator) =>
+        public string Visit(IrSwitch terminator) =>
             $"switch {Use(terminator.Scrutinee)} [{string.Join(", ", terminator.Cases.Select(static c => $"{Value(c.Value)} -> {Block(c.Target)}"))}] default {Block(terminator.Default)}";
 
-        public override string Visit(IrReturn terminator) =>
+        public string Visit(IrReturn terminator) =>
             (terminator.Value is null ? "ret" : "ret " + Use(terminator.Value)) + Outs(terminator.Outs);
 
-        public override string Visit(IrThrow terminator) => "throw " + Quote(terminator.ExceptionType) + Outs(terminator.Outs);
+        public string Visit(IrThrow terminator) => "throw " + Quote(terminator.ExceptionType) + Outs(terminator.Outs);
 
-        public override string Visit(IrUnreachable terminator) => "unreachable";
+        public string Visit(IrUnreachable terminator) => "unreachable";
     }
 }

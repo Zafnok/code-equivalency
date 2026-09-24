@@ -307,13 +307,13 @@ public static class IrValidator
     }
 
     /// <summary>Returns the violated rule id (<see cref="IrDiagnosticIds.OperandTypes"/> or <see cref="IrDiagnosticIds.MapTypes"/>), or null.</summary>
-    private sealed class IrTypeChecker(IrType? returnType) : IrInstructionVisitor<string?>
+    private sealed class IrTypeChecker(IrType? returnType) : IIrInstructionVisitor<string?>
     {
         public IrTerminatorTypeChecker Terminators { get; } = new(returnType);
 
-        public override string? Visit(IrConst instruction) => Operands(instruction.Value.Type == instruction.Target.Type);
+        public string? Visit(IrConst instruction) => Operands(instruction.Value.Type == instruction.Target.Type);
 
-        public override string? Visit(IrBinary instruction)
+        public string? Visit(IrBinary instruction)
         {
             IrType operand = instruction.A.Type;
             IrType? result = operand switch
@@ -327,10 +327,10 @@ public static class IrValidator
             return Operands((operand == instruction.B.Type) & (result == instruction.Target.Type));
         }
 
-        public override string? Visit(IrOverflows instruction) =>
+        public string? Visit(IrOverflows instruction) =>
             Operands((instruction.A.Type is IrBitVec) & (instruction.A.Type == instruction.B.Type) & (instruction.Target.Type is IrBool));
 
-        public override string? Visit(IrUnary instruction)
+        public string? Visit(IrUnary instruction)
         {
             return instruction.Op == IrUnaryOp.BoolNot
                 ? Operands((instruction.A.Type is IrBool) && (instruction.Target.Type is IrBool))
@@ -339,37 +339,37 @@ public static class IrValidator
                 && Math.Sign(target.Width - operand.Width) == WidthChange[instruction.Op]);
         }
 
-        public override string? Visit(IrPhi instruction) => Operands(instruction.Incoming.All(i => i.Value.Type == instruction.Target.Type));
+        public string? Visit(IrPhi instruction) => Operands(instruction.Incoming.All(i => i.Value.Type == instruction.Target.Type));
 
-        public override string? Visit(IrCall instruction) => Operands(instruction.Threw is null || instruction.Threw.Type is IrBool);
+        public string? Visit(IrCall instruction) => Operands(instruction.Threw is null || instruction.Threw.Type is IrBool);
 
-        public override string? Visit(IrMapRead instruction) =>
+        public string? Visit(IrMapRead instruction) =>
             Maps(instruction.Map.Type is IrMap map && (map.Key == instruction.Key.Type) & (map.Value == instruction.Target.Type));
 
-        public override string? Visit(IrMapWrite instruction) =>
+        public string? Visit(IrMapWrite instruction) =>
             Maps(instruction.Map.Type is IrMap map
                 && (map.Key == instruction.Key.Type) & (map.Value == instruction.Value.Type) & (map == instruction.Target.Type));
 
-        public override string? Visit(IrOpaque instruction) => null;
+        public string? Visit(IrOpaque instruction) => null;
 
         internal static string? Operands(bool ok) => ok ? null : IrDiagnosticIds.OperandTypes;
 
         private static string? Maps(bool ok) => ok ? null : IrDiagnosticIds.MapTypes;
     }
 
-    private sealed class IrTerminatorTypeChecker(IrType? returnType) : IrTerminatorVisitor<string?>
+    private sealed class IrTerminatorTypeChecker(IrType? returnType) : IIrTerminatorVisitor<string?>
     {
-        public override string? Visit(IrGoto terminator) => null;
+        public string? Visit(IrGoto terminator) => null;
 
-        public override string? Visit(IrBranch terminator) => IrTypeChecker.Operands(terminator.Cond.Type is IrBool);
+        public string? Visit(IrBranch terminator) => IrTypeChecker.Operands(terminator.Cond.Type is IrBool);
 
-        public override string? Visit(IrSwitch terminator) =>
+        public string? Visit(IrSwitch terminator) =>
             IrTypeChecker.Operands(terminator.Cases.All(c => c.Value.Type == terminator.Scrutinee.Type));
 
-        public override string? Visit(IrReturn terminator) => IrTypeChecker.Operands(terminator.Value?.Type == returnType);
+        public string? Visit(IrReturn terminator) => IrTypeChecker.Operands(terminator.Value?.Type == returnType);
 
-        public override string? Visit(IrThrow terminator) => null;
+        public string? Visit(IrThrow terminator) => null;
 
-        public override string? Visit(IrUnreachable terminator) => null;
+        public string? Visit(IrUnreachable terminator) => null;
     }
 }

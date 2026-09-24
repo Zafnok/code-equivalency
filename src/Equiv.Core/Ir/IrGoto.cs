@@ -8,5 +8,5 @@ public sealed record IrGoto(IrBlockId Target) : IrTerminator
 
     internal override ImmutableArray<IrBlockId> Successors() => [Target];
 
-    internal override TResult Accept<TResult>(IrTerminatorVisitor<TResult> visitor) => visitor.Visit(this);
+    internal override TResult Accept<TResult>(IIrTerminatorVisitor<TResult> visitor) => visitor.Visit(this);
 }
