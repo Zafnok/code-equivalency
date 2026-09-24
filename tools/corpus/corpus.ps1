@@ -31,6 +31,7 @@
     ./tools/corpus/corpus.ps1 -Fetch madelson/DistributedLock
     ./tools/corpus/corpus.ps1 -PrepareAgent madelson/DistributedLock
     ./tools/corpus/corpus.ps1 -Unchanged gitextensions-8522
+    ./tools/corpus/corpus.ps1 -Packages gitextensions-8522    # after both sides are restored
     ./tools/corpus/corpus.ps1 -Env | Invoke-Expression     # before any restore or run of equiv
     ./tools/corpus/corpus.ps1 -Refresh                     # dry run against upstream main
     ./tools/corpus/corpus.ps1 -Refresh -Apply -UpstreamRef <sha>
@@ -51,6 +52,10 @@ param(
     [Parameter(ParameterSetName = 'Fetch', Mandatory)] [string]$Fetch,
     [Parameter(ParameterSetName = 'PrepareAgent', Mandatory)] [string]$PrepareAgent,
     [Parameter(ParameterSetName = 'Unchanged', Mandatory)] [string]$Unchanged,
+
+    # ADR 0034's packageVersionChanges: NuGet packages whose resolved version differs between the
+    # sides, and those on one side only, from each side's restore output (never source text).
+    [Parameter(ParameterSetName = 'Packages', Mandatory)] [string]$Packages,
     [Parameter(ParameterSetName = 'Clean', Mandatory)] [string]$Clean,
 
     # Prints the environment block (SDK resolver, reference assemblies, restore warnings) that a
@@ -278,6 +283,36 @@ function Resolve-Slug([string]$Id) {
     throw "'$Id' is neither a pairs.csv slug nor a Poly-MigrationBench repo (owner/name)."
 }
 
+# Package id -> sorted, distinct resolved versions, over every project.assets.json (PackageReference
+# restore output, any TFM) and packages.config under $Dir. A package can resolve to more than one
+# version across projects; the set is compared as a whole.
+function Get-ResolvedPackages([string]$Dir) {
+    $versions = @{}
+    $add = {
+        param([string]$Id, [string]$Version)
+        $key = $Id.ToLowerInvariant()
+        if (-not $versions.ContainsKey($key)) { $versions[$key] = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::OrdinalIgnoreCase) }
+        [void]$versions[$key].Add($Version)
+    }
+    $files = @(Get-ChildItem -LiteralPath $Dir -Recurse -File -Include 'project.assets.json', 'packages.config' -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' })
+    foreach ($file in $files) {
+        if ($file.Name -eq 'packages.config') {
+            ([xml](Get-Content -LiteralPath $file.FullName -Raw)).packages.package | Where-Object { $_ } |
+                ForEach-Object { & $add $_.id $_.version }
+        }
+        else {
+            $libraries = (Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json).libraries
+            if ($null -eq $libraries) { continue }
+            $libraries.PSObject.Properties | Where-Object { $_.Value.type -eq 'package' } | ForEach-Object {
+                $parts = $_.Name -split '/', 2
+                & $add $parts[0] $parts[1]
+            }
+        }
+    }
+    return [pscustomobject]@{ Files = $files.Count; Versions = $versions }
+}
+
 function Select-PmbRoot([string]$Roots) {
     # root_sln_or_csproj_files is ';'-separated; prefer a solution.
     $items = @($Roots -split ';' | Where-Object { $_ })
@@ -398,10 +433,38 @@ switch ($PSCmdlet.ParameterSetName) {
             Format-List | Out-Host
     }
 
+    'Packages' {
+        $slug = Resolve-Slug $Packages
+        $pair = Read-PairJson $slug
+        if (-not $pair.modernSolution) { throw "'$Packages' has no modern side yet." }
+        $legacy = Get-ResolvedPackages (Split-Path -Parent $pair.legacySolution)
+        $modern = Get-ResolvedPackages (Split-Path -Parent $pair.modernSolution)
+        Show-Step ("restore outputs read: legacy {0}, modern {1} (project.assets.json + packages.config)" -f $legacy.Files, $modern.Files)
+        if ($legacy.Files -eq 0 -or $modern.Files -eq 0) { Show-Step "warning: a side has no restore output; restore both sides first (-Env, then dotnet restore)" }
+        $ids = @($legacy.Versions.Keys + $modern.Versions.Keys | Sort-Object -Unique)
+        $rows = foreach ($id in $ids) {
+            $old = if ($legacy.Versions.ContainsKey($id)) { @($legacy.Versions[$id]) -join ', ' } else { '' }
+            $new = if ($modern.Versions.ContainsKey($id)) { @($modern.Versions[$id]) -join ', ' } else { '' }
+            $change = if (-not $old) { 'modern only' } elseif (-not $new) { 'legacy only' } elseif ($old -ne $new) { 'version changed' } else { $null }
+            if ($change) { [pscustomobject]@{ Package = $id; Change = $change; Legacy = $old; Modern = $new } }
+        }
+        $rows = @($rows)
+        Show-Step ("== package version changes: {0} changed, {1} legacy only, {2} modern only" -f
+            @($rows | Where-Object Change -eq 'version changed').Count,
+            @($rows | Where-Object Change -eq 'legacy only').Count,
+            @($rows | Where-Object Change -eq 'modern only').Count)
+        # Out-String, not Out-Host: a table sent to Out-Host is dropped when stdout is redirected to a log.
+        if ($rows.Count -gt 0) { Show-Step ($rows | Sort-Object Change, Package | Format-Table -AutoSize | Out-String -Width 400).TrimEnd() }
+    }
+
     'Metrics' {
         # Defensive by design: properties appear as M3 tickets land (census M3-014, proofMethod
         # M3-002, scope M3-025), so anything absent prints as n/a instead of failing.
-        $log = Get-Content -LiteralPath $Metrics -Raw | ConvertFrom-Json
+        # changedReasonSets keys "no opaque" as "" (ADR 0034), which ConvertFrom-Json rejects as a property name
+        # without -AsHashtable (absent in Windows PowerShell 5.1). Outside a string a quote is never escaped, so a
+        # "" directly after { or , followed by : is always that key.
+        $text = (Get-Content -LiteralPath $Metrics -Raw) -replace '([{,]\s*)""(\s*:)', '$1"(no opaque)"$2'
+        $log = $text | ConvertFrom-Json
         $run = $log.runs[0]
         function Get-Bag($Object, [string]$Name) {
             if ($null -eq $Object) { return $null }
@@ -413,6 +476,32 @@ switch ($PSCmdlet.ParameterSetName) {
         Show-Step "== census"
         if ($null -eq $census) { Show-Step "n/a (no run.properties.loweringCensus; needs M3-014)" }
         else { $census | ConvertTo-Json -Depth 6 | Out-Host }
+        # ADR 0034: lowerable share is over changed pairs; the pair-level unchanged figure sits next
+        # to ADR 0028's byte-identical-files proxy (-Unchanged), never in its place.
+        $changed = Get-Bag $census 'changedPairs'
+        Show-Step "== changed code (ADR 0034)"
+        if ($null -eq $changed) { Show-Step "n/a (no changedPairs; needs M3-030)" }
+        else {
+            $matched = [int](Get-Bag $census 'matchedPairs')
+            $lowerable = 'n/a (no changed pairs)'
+            if ($changed -gt 0) { $lowerable = '{0}%' -f [Math]::Round(100.0 * (Get-Bag $census 'changedPairsWithoutOpaque') / $changed, 1) }
+            $pairLevel = 'n/a'
+            if ($matched -gt 0) { $pairLevel = '{0}%' -f [Math]::Round(100.0 * (1 - $changed / $matched), 1) }
+            Show-Step ("  changedPairs {0} of matchedPairs {1}; withoutOpaque {2}; wholeBodyOpaque {3}" -f $changed, $matched, (Get-Bag $census 'changedPairsWithoutOpaque'), (Get-Bag $census 'changedPairsWholeBodyOpaque'))
+            Show-Step "  lowerable share (changedPairsWithoutOpaque / changedPairs): $lowerable"
+            Show-Step "  pair-level unchanged share (1 - changedPairs / matchedPairs): $pairLevel"
+            Show-Step "  changedReasonSets, largest first:"
+            $sets = Get-Bag $census 'changedReasonSets'
+            if ($null -ne $sets) {
+                $sets.PSObject.Properties | Sort-Object { [int]$_.Value } -Descending |
+                    ForEach-Object { Show-Step ("    {0} `"{1}`"" -f $_.Value, $_.Name) }
+            }
+            $calls = Get-Bag $census 'runtimeChangeCalls'
+            foreach ($key in 'callSites', 'distinctMembers', 'pairsWithAny') {
+                $side = Get-Bag $calls $key
+                Show-Step ("  runtimeChangeCalls.{0}: legacy {1}, modern {2}" -f $key, (Get-Bag $side 'legacy'), (Get-Bag $side 'modern'))
+            }
+        }
         $unverified = Get-Bag (Get-Bag $run 'properties') 'unverified'
         Show-Step ("== unverified procedures: {0}" -f @($unverified | Where-Object { $_ }).Count)
         $invocations = @(Get-Bag $run 'invocations' | Where-Object { $_ })
