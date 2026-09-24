@@ -1,4 +1,6 @@
-namespace Equiv.Core.Ir;
+using Equiv.Core.Ir;
+
+namespace Equiv.Core;
 
 /// <summary>Exhaustive dispatch over <see cref="IrTerminator"/>.</summary>
 internal interface IIrTerminatorVisitor<out TResult>

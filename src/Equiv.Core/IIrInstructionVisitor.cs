@@ -1,4 +1,6 @@
-namespace Equiv.Core.Ir;
+using Equiv.Core.Ir;
+
+namespace Equiv.Core;
 
 /// <summary>Exhaustive dispatch over <see cref="IrInstruction"/>; adding a kind breaks every visitor at compile time.</summary>
 internal interface IIrInstructionVisitor<out TResult>
