@@ -434,20 +434,143 @@ public sealed class CompareCommandTests
         Assert.Empty(backend.Calls);
     }
 
+    /// <summary>
+    /// Ticket M3-013 acceptance criteria 2, 3 and 5 (ADR 0023): a crash on one pair does not end the run.
+    /// </summary>
     [Fact]
-    public void Compare_BackendFailureIsRethrownNamingThePair()
+    public void Compare_PairThatThrows_IsReportedAsNotificationAndOtherPairsVerified()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity ok = new("T::Ok()");
+        ProcedureIdentity throwing = new("T::Throws()");
+        MatchResult matchResult = new([Pair(ok), Pair(throwing)], [], [], []);
+        FakeFrontend frontend = new("csharp", _ => true, matchResult);
+        InvalidOperationException exception = new("encoder bug");
+        FakeBackend backend = new(
+            new Dictionary<string, Verdict>(StringComparer.Ordinal) { [ok.Value] = new Equivalent(ProofMethod.Bounded) },
+            new Dictionary<string, Exception>(StringComparer.Ordinal) { [throwing.Value] = exception });
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.Success;
+
+        string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [frontend], backend, sink));
+
+        Assert.Equal(ExitCodes.InternalError, exitCode);
+        Run run = sink.Log!.Runs[0];
+        Assert.Equal("EQ001", Assert.Single(run.Results).RuleId);
+        Assert.Equal([throwing.Value], run.GetProperty<List<string>>("unverified"), StringComparer.Ordinal);
+        Invocation invocation = Assert.Single(run.Invocations);
+        Assert.False(invocation.ExecutionSuccessful);
+        Notification notification = Assert.Single(invocation.ToolExecutionNotifications);
+        Assert.Equal(FailureLevel.Error, notification.Level);
+        Assert.Equal($"Verifying {throwing.Value} against {throwing.Value} failed: encoder bug", notification.Message.Text);
+        Assert.Equal("encoder bug", notification.Exception.Message);
+        Assert.Contains($"error: Verifying {throwing.Value} against {throwing.Value} failed: encoder bug", errorOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compare_PairThatThrows_OutranksNewDivergent()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity divergent = new("T::Divergent()");
+        ProcedureIdentity throwing = new("T::Throws()");
+        MatchResult matchResult = new([Pair(divergent), Pair(throwing)], [], [], []);
+        FakeFrontend frontend = new("csharp", _ => true, matchResult);
+        FakeBackend backend = new(
+            new Dictionary<string, Verdict>(StringComparer.Ordinal) { [divergent.Value] = new Divergent(Counterexample()) },
+            new Dictionary<string, Exception>(StringComparer.Ordinal) { [throwing.Value] = new InvalidOperationException("boom") });
+
+        int exitCode = ExitCodes.Success;
+        CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [frontend], backend, new InMemoryReportSink()));
+
+        Assert.Equal(ExitCodes.InternalError, exitCode);
+    }
+
+    [Fact]
+    public void Compare_PairThatThrows_OutranksNewUnknownWithFailOnUnknown()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity unknown = new("T::Unknown()");
+        ProcedureIdentity throwing = new("T::Throws()");
+        MatchResult matchResult = new([Pair(unknown), Pair(throwing)], [], [], []);
+        FakeFrontend frontend = new("csharp", _ => true, matchResult);
+        FakeBackend backend = new(
+            new Dictionary<string, Verdict>(StringComparer.Ordinal) { [unknown.Value] = new Unknown(UnknownReason.Timeout, "gave up") },
+            new Dictionary<string, Exception>(StringComparer.Ordinal) { [throwing.Value] = new InvalidOperationException("boom") });
+        int exitCode = ExitCodes.Success;
+
+        CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
+            [frontend], backend, new InMemoryReportSink()));
+
+        Assert.Equal(ExitCodes.InternalError, exitCode);
+    }
+
+    [Fact]
+    public void Compare_OperationCanceled_Propagates()
     {
         using TempFile legacy = new();
         using TempFile modern = new();
         FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        FakeBackend backend = new(NoVerdicts, new Dictionary<string, Exception>(StringComparer.Ordinal) { [PairIdentity.Value] = new OperationCanceledException() });
 
-        // No canned verdict for the pair, so the fake backend throws KeyNotFoundException.
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => CompareCommand.Run(
+        Assert.Throws<OperationCanceledException>(() => CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+            [frontend], backend, new InMemoryReportSink()));
+    }
 
-        Assert.StartsWith($"Verifying {PairIdentity.Value} against {PairIdentity.Value} failed: ", exception.Message, StringComparison.Ordinal);
-        Assert.IsType<KeyNotFoundException>(exception.InnerException);
+    /// <summary>
+    /// CA2201 forbids constructing <see cref="OutOfMemoryException"/> directly (it is reserved for the runtime), so
+    /// this uses <see cref="InsufficientMemoryException"/>, a genuine <see cref="OutOfMemoryException"/> subclass the
+    /// BCL provides for exactly this: raising the same family of exception from ordinary code.
+    /// </summary>
+    [Fact]
+    public void Compare_OutOfMemory_Propagates()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        FakeBackend backend = new(NoVerdicts, new Dictionary<string, Exception>(StringComparer.Ordinal) { [PairIdentity.Value] = new InsufficientMemoryException() });
+
+        Assert.Throws<InsufficientMemoryException>(() => CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [frontend], backend, new InMemoryReportSink()));
+    }
+
+    [Fact]
+    public void Compare_PairThatThrows_KeepsBaselineDivergentAsUnchanged()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        string baselinePath = Path.GetTempFileName();
+        try
+        {
+            SarifReportWriter.Write([new VerificationResult(PairIdentity, new Divergent(Counterexample()))]).Save(baselinePath);
+            MatchResult matchResult = new([Pair(PairIdentity)], [], [], []);
+            FakeFrontend frontend = new("csharp", _ => true, matchResult);
+            FakeBackend backend = new(NoVerdicts, new Dictionary<string, Exception>(StringComparer.Ordinal) { [PairIdentity.Value] = new InvalidOperationException("boom") });
+            InMemoryReportSink sink = new();
+
+            int exitCode = CompareCommand.Run(
+                new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", baselinePath, ConfigPath: null, "divergent", DryRun: false),
+                [frontend], backend, sink);
+
+            Assert.Equal(ExitCodes.InternalError, exitCode);
+            Result carried = Assert.Single(sink.Log!.Runs[0].Results);
+            Assert.Equal(BaselineState.Unchanged, carried.BaselineState);
+            Assert.Equal("EQ002", carried.RuleId);
+            Assert.True(carried.GetProperty<bool>("unverified"));
+        }
+        finally
+        {
+            File.Delete(baselinePath);
+        }
     }
 
     [Fact]

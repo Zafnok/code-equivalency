@@ -58,6 +58,27 @@ public sealed class SarifReportWriterTests
         Assert.Equal(["project B skipped", "project A skipped"], invocation.ToolExecutionNotifications.Select(static n => n.Message.Text), StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket M3-013 acceptance criterion 3 (ADR 0023): a pair-failure notification's <see cref="Notification.Exception"/>
+    /// is not a shape <see cref="SarifReportWriter.Write"/> builds itself (that is <c>CompareCommand</c>'s job); it only
+    /// has to thread it through unchanged, the same way it already threads a skipped-project notification (ADR 0029).
+    /// </summary>
+    [Fact]
+    public void APairFailureNotificationCarriesItsExceptionThroughToTheInvocation()
+    {
+        ExceptionData exceptionData = new() { Kind = "System.InvalidOperationException", Message = "boom" };
+        Notification failure = new()
+        {
+            Level = FailureLevel.Error,
+            Message = new Message { Text = "Verifying T::Pair() against T::Pair() failed: boom" },
+            Exception = exceptionData,
+        };
+
+        Invocation invocation = Assert.Single(SarifReportWriter.Write([], notifications: [failure], unverified: [new ProcedureIdentity("T::Pair()")]).Runs[0].Invocations);
+
+        Assert.Same(exceptionData, Assert.Single(invocation.ToolExecutionNotifications).Exception);
+    }
+
     [Fact]
     public void WarningNotificationsAloneLeaveTheInvocationSuccessful()
     {

@@ -13,4 +13,5 @@ internal static class ExitCodes
     public const int UnknownPresent = 2;
     public const int UsageError = 3;
     public const int LoadFailure = 4;
+    public const int InternalError = 5;
 }
