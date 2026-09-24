@@ -57,27 +57,44 @@ pairs are optional extras. Run `./tools/corpus/corpus.ps1 -List` to see them.
 
 ## 3. Fetch and prepare
 
+Once per box: `./tools/corpus/corpus.ps1 -Prepare`. It writes sentinel `Directory.Build.props`,
+`Directory.Build.targets`, `Directory.Packages.props` and `.editorconfig` under `.corpus/` (so this
+repo's own MSBuild, central-package-management and format settings stop there instead of reaching
+corpus checkouts) and restores reference assemblies net20 through net481 under `.corpus/refasm/`
+(VS Build Tools ships targeting packs only for 4.7.2 and 4.8, and its installer rejects some older
+components, e.g. `Microsoft.Net.Component.4.6.1.TargetingPack`, exit 87). Safe to re-run; it skips
+work already done.
+
 ```powershell
 ./tools/corpus/corpus.ps1 -Fetch gitextensions-8522
 ./tools/corpus/corpus.ps1 -Fetch <owner/name>          # each agent pair
 ./tools/corpus/corpus.ps1 -PrepareAgent <owner/name>   # copies legacy to .corpus/pairs/<slug>/modern
 ```
 
+`-Fetch` sets `core.longpaths` on the checkout, runs `git submodule update --init` and, if a
+checkout's own `global.json` pins an SDK with no `rollForward`, patches that copy to
+`latestMajor` (never this repo's `global.json`). It refuses to reuse a checkout whose `HEAD` does
+not resolve or whose `git status --porcelain` is not empty — delete the directory and run `-Fetch`
+again rather than trusting a half-fetched checkout.
+
 `.corpus/pairs/<slug>/pair.json` now holds `legacySolution`, `modernSolution` and, for agent
 pairs, `verifyCommand`.
 
 Restore both sides before `equiv` sees them. MSBuildWorkspace does not restore, and a legacy
-`packages.config` project fails with "references NuGet package(s) that are missing":
+`packages.config` project fails with "references NuGet package(s) that are missing". Load
+`-Env`'s block first (see section 5) so restore sees the reference assemblies, SDK resolver and
+warning suppressions `-Prepare` set up:
 
 ```powershell
+./tools/corpus/corpus.ps1 -Env | Invoke-Expression
 $msbuild = 'C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
-& $msbuild <legacySolution> -t:restore -p:RestorePackagesConfig=true -v:m
-dotnet restore <modernSolution>
+& $msbuild <legacySolution> -t:restore -p:RestorePackagesConfig=true -p:RestoreForce=true -v:m
+dotnet restore <modernSolution> --force
 ```
 
-"The reference assemblies for .NETFramework,Version=vX were not found" means a targeting pack is
-missing, even when a `vX` folder exists under `Reference Assemblies`. Installing one changes the
-machine, so ask the user. Name the Build Tools component, e.g.
+"The reference assemblies for .NETFramework,Version=vX were not found" now means a TFM outside
+net20-net481, which `-Prepare` does not cover. Installing a targeting pack changes the machine, so
+ask the user first. Name the Build Tools component, e.g.
 `Microsoft.Net.Component.4.6.1.TargetingPack`, and the README's `winget ... --add` form. If they
 decline, skip the repo.
 
@@ -94,6 +111,13 @@ instead. Afterwards:
   which is ground truth for M4-007 criterion 4.
 
 ## 5. Run equiv
+
+Load the environment `-Prepare` set up once per session, before building or running anything:
+`./tools/corpus/corpus.ps1 -Env | Invoke-Expression`. It sets `MSBuildSDKsPath` (Build Tools'
+MSBuild has no .NET SDK resolver of its own), `MSBuildEnableWorkloadResolver=false`,
+`TargetFrameworkRootPath` (the `-Prepare` reference assemblies), `NuGetAudit=false` and
+`NoWarn=NU1701;NU1702;NU1903` (until P2-012 lands). No other step from section 3 needs doing by
+hand.
 
 Build once: `dotnet build src/Equiv.Cli -c Release`. Each run gets its own directory,
 `.corpus/pairs/<slug>/runs/<yyyymmdd-hhmm>-<mode>/`. After M3-004, use the published `equiv` if
