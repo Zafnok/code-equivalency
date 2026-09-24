@@ -34,7 +34,12 @@ public sealed class LoweringOracleTests
     private const int InputsPerCase = 20;
     private const string Seed = "000000000000";
 
+    private const string FieldMap = $"field.Oracle.{LoweringOracleGen.Field}";
+
     private static readonly IrSortValue Reference = new("System.String", 1);
+
+    /// <summary>The key a static field's map is read at: element 0 of its declaring type's sort.</summary>
+    private static readonly IrSortValue Token = new("Oracle", 0);
 
     [Fact]
     public void LoweredIrAgreesWithCompiledCSharp() =>
@@ -43,9 +48,9 @@ public sealed class LoweringOracleTests
 
     private static void Check((OracleMethod Method, OracleInput[] Inputs)[] cases)
     {
-        string source = $"public static class Oracle\n{{\n    public static int {LoweringOracleGen.Property} {{ get; set; }}\n{string.Concat(cases.Select(static (c, i) => c.Method.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n";
-        // Acceptance criterion 7: the run must actually reach the constructs M2-004 added.
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = "])
+        string source = $"public static class Oracle\n{{\n    public static int {LoweringOracleGen.Property} {{ get; set; }}\n    public static int {LoweringOracleGen.Field};\n{string.Concat(cases.Select(static (c, i) => c.Method.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n";
+        // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.Field} = ", "public static void "])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
@@ -65,6 +70,7 @@ public sealed class LoweringOracleTests
         {
             Type oracle = context.LoadFromStream(image).GetType("Oracle")!;
             PropertyInfo property = oracle.GetProperty(LoweringOracleGen.Property)!;
+            FieldInfo field = oracle.GetField(LoweringOracleGen.Field)!;
             int getterCalls = 0;
             SyntaxTree tree = compilation.SyntaxTrees[0];
             SemanticModel model = compilation.GetSemanticModel(tree);
@@ -80,7 +86,9 @@ public sealed class LoweringOracleTests
                 foreach (OracleInput input in cases[i].Inputs)
                 {
                     property.SetValue(null, input.B);
-                    string expected = Compiled(method, input);
+                    field.SetValue(null, input.A);
+                    string compiled = Compiled(method, input);
+                    string expected = string.Create(CultureInfo.InvariantCulture, $"{compiled} {LoweringOracleGen.Field}={(int)field.GetValue(null)!}");
                     string actual = Interpreted(procedure, input);
                     Assert.True(
                         string.Equals(expected, actual, StringComparison.Ordinal),
@@ -101,7 +109,7 @@ public sealed class LoweringOracleTests
     {
         try
         {
-            object result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s"])!;
+            object? result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s"]);
             return $"return {result}";
         }
         catch (TargetInvocationException exception)
@@ -118,6 +126,10 @@ public sealed class LoweringOracleTests
         "d" => IrBitVecValue.FromSigned(64, input.D),
         "e" => new IrBoolValue(input.E),
         "s" => Reference,
+        FieldMap => new IrMapValue(
+            (IrMap)parameter.Type,
+            IrBitVecValue.FromSigned(32, 0),
+            ImmutableDictionary<IrValue, IrValue>.Empty.Add(Token, IrBitVecValue.FromSigned(32, input.A))),
         _ => new IrMapValue(
             (IrMap)parameter.Type,
             new IrBoolValue(input.SIsNull),
@@ -128,13 +140,25 @@ public sealed class LoweringOracleTests
     {
         // By name, because the synthesised heap inputs (M2-004) are only there when the body needs them.
         IrInputs arguments = new([.. procedure.Parameters.Select(p => Argument(p.Var, input))]);
-        return IrInterpreter.Run(procedure, arguments, new AutoPropertyOracle(input.B), IrGen.StepBudget).Outcome switch
+        IrRun run = IrInterpreter.Run(procedure, arguments, new AutoPropertyOracle(input.B), IrGen.StepBudget);
+        string outcome = run.Outcome switch
         {
             IrReturned { Value: IrBitVecValue bits } => string.Create(CultureInfo.InvariantCulture, $"return {bits.TwosComplement}"),
             IrReturned { Value: IrBoolValue flag } => $"return {flag.Value}",
+            IrReturned { Value: null } => "return ",
             IrThrew thrown => $"throw {thrown.ExceptionType}",
             var other => other.ToString(),
         };
+
+        // Ticket M3-007: the field map is the only by-ref parameter, so when the body touches the field its final
+        // version is the run's one out; a body that never touches it leaves it at its initial value.
+        string final = (procedure.Parameters.Any(static p => p.Var.Name is FieldMap), run.Outs) switch
+        {
+            (false, _) => input.A.ToString(CultureInfo.InvariantCulture),
+            (true, [IrMapValue map]) => ((IrBitVecValue)map.Read(Token)).TwosComplement.ToString(CultureInfo.InvariantCulture),
+            _ => $"outs {run.Outs.Length}",
+        };
+        return $"{outcome} {LoweringOracleGen.Field}={final}";
     }
 
     /// <summary>

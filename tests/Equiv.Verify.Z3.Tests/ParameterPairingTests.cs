@@ -18,18 +18,6 @@ public sealed class ParameterPairingTests
 {
     private static readonly VerificationOptions Options = new(3, 10_000, []);
 
-    [Theory]
-    [InlineData("a", false)]
-    [InlineData("this", true)]
-    [InlineData("field.C.x", true)]
-    [InlineData("null.S", true)]
-    [InlineData("array.xs", true)]
-    [InlineData("length.xs", true)]
-    public void SynthesisedInputsAreTheReceiverAndTheDottedNames(string name, bool synthesised)
-    {
-        Assert.Equal(synthesised, ProductEncoder.IsSynthesised(name));
-    }
-
     [Fact]
     public void SourceParametersPairByPositionAndSynthesisedOnesByName()
     {

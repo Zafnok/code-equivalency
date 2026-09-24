@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 
 using Equiv.Core.Ir;
 
@@ -450,6 +450,75 @@ public sealed class IrLowererTests
         Assert.Single(procedure.Parameters, static p => p.Var.Name is "length.a" && p.Var.Type is IrBitVec { Width: 32 });
         Assert.Contains(procedure.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.IndexOutOfRangeException" });
         Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket M3-007 acceptance criterion 1: the maps a body writes are by-ref, the rest are inputs, all ordered by name.</summary>
+    [Fact]
+    public void HeapMapsAreRefAndNullAndLengthAreIn()
+    {
+        IrProcedure procedure = Method("int f; int M(int[] a, string s) { a[0] = f; return s == null ? a.Length : 0; }");
+
+        Assert.Equal(
+            [
+                ("a", IrParameterKind.In),
+                ("s", IrParameterKind.In),
+                ("array.a", IrParameterKind.Ref),
+                ("field.C.f", IrParameterKind.Ref),
+                ("length.a", IrParameterKind.In),
+                ("null.System.String", IrParameterKind.In),
+                ("null.int__", IrParameterKind.In),
+                ("this", IrParameterKind.In),
+            ],
+            procedure.Parameters.Select(static p => (p.Var.Name, p.Kind)));
+    }
+
+    /// <summary>
+    /// Ticket M3-007 acceptance criterion 3: the early <c>return</c> is lowered before the field map exists, and still
+    /// names the map's input, which is its final version on that path.
+    /// </summary>
+    [Fact]
+    public void ExitsLoweredBeforeAFieldIsTouchedStillNameItsFinalVersion()
+    {
+        IrProcedure procedure = Method("static int f; static int M(int n) { if (n > 0) { return 0; } f = n; return 1; }");
+
+        IrVar map = Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.C.f").Var;
+        ImmutableArray<IrOut> outs = [.. procedure.Blocks.Select(static b => b.Terminator).OfType<IrReturn>().Select(static r => Assert.Single(r.Outs))];
+        Assert.All(outs, o => Assert.Equal(map, o.Param));
+        Assert.Contains(outs, o => o.Final == map);
+        Assert.Contains(outs, o => o.Final != map);
+    }
+
+    /// <summary>
+    /// Ticket M3-007 acceptance criterion 7: a C# parameter declared <c>@this</c> (Roslyn names it <c>this</c>) does not
+    /// collide with the receiver. <see cref="Lowered.Method"/> asserts that the result validates.
+    /// </summary>
+    [Fact]
+    public void AParameterNamedThisIsNotTheReceiver()
+    {
+        IrProcedure procedure = Method("int f; int M(int @this) => f + @this;");
+
+        Assert.Equal(["$this", "field.C.f", "this"], procedure.Parameters.Select(static p => p.Var.Name), StringComparer.Ordinal);
+        Assert.False(IrParameterNames.IsSynthesised(procedure.Parameters[0].Var.Name));
+        Assert.Equal("this", procedure.Parameters[0].Var.SourceName);
+        Assert.Equal((new IrBitVec(32), new IrSort("C")), (procedure.Parameters[0].Var.Type, procedure.Parameters[^1].Var.Type));
+    }
+
+    /// <summary>Ticket M3-007 acceptance criterion 4: the final heap is one of the run's outs, so a write is observable.</summary>
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(-3, -3)]
+    public void AFieldWriteIsInTheRunsOuts(int n, int expected)
+    {
+        IrProcedure procedure = Method("static int f; static int M(int n) { if (n > 0) { return 0; } f = n; return 1; }");
+
+        IrRun run = IrInterpreter.Run(
+            procedure,
+            new IrInputs([Bits(32, n), Fields("C", new IrBitVec(32))]),
+            Equiv.TestSupport.IrGenOracle.Instance,
+            Equiv.TestSupport.IrGen.StepBudget);
+
+        IrMapValue final = Assert.IsType<IrMapValue>(Assert.Single(run.Outs));
+        Assert.Equal(Bits(32, expected), final.Read(new IrSortValue("C", 0)));
     }
 
     [Theory]

@@ -87,7 +87,7 @@ public static class IrUnroller
             return null;
         }
 
-        int sourceParameters = procedure.Parameters.Count(static p => !IsSynthesised(p.Var.Name));
+        int sourceParameters = procedure.Parameters.Count(static p => !IrParameterNames.IsSynthesised(p.Var.Name));
         bool hasThis = procedure.Parameters.Any(static p => string.Equals(p.Var.Name, "this", StringComparison.Ordinal));
         IEnumerable<IrInstruction> instructions = analysis.ReversePostorder.SelectMany(static b => b.Instructions);
         return procedure switch
@@ -101,9 +101,6 @@ public static class IrUnroller
             _ => null,
         };
     }
-
-    /// <summary>Whether a parameter is synthesised (VERIFICATION-MODEL.md section 2): <c>this</c>, or a name with a dot.</summary>
-    internal static bool IsSynthesised(string name) => string.Equals(name, "this", StringComparison.Ordinal) || name.Contains('.', StringComparison.Ordinal);
 
     /// <summary>Renames every variable <paramref name="instruction"/> defines or reads (a phi's predecessors are the caller's).</summary>
     internal static IrInstruction Rewrite(IrInstruction instruction, Func<IrVar, IrVar> var) => instruction switch
@@ -396,7 +393,7 @@ public static class IrUnroller
         /// <summary>The callee's source-language parameters bound to the call's arguments, <c>this</c> to its receiver, and every variable it defines renamed.</summary>
         private Dictionary<string, IrVar> Bindings(IrProcedure callee, IrCall call, string suffix)
         {
-            IrParameter[] source = [.. callee.Parameters.Where(static p => !IsSynthesised(p.Var.Name))];
+            IrParameter[] source = [.. callee.Parameters.Where(static p => !IrParameterNames.IsSynthesised(p.Var.Name))];
             int receivers = call.Args.Length - source.Length;
             Dictionary<string, IrVar> bound = source
                 .Select((p, i) => (p.Var.Name, Arg: call.Args[receivers + i]))

@@ -1,5 +1,5 @@
 # M3-007 Synthesised inputs: heap maps are `Ref`, and the naming rule is enforced
-Status: todo
+Status: done (PR #161)
 Effort: L
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004, M3-001
@@ -96,3 +96,10 @@ the encoder's pairing logic, it has drifted: ADR 0021 already decided that.
 - A Java frontend.
 
 ## Notes
+- Decision: a C# parameter whose name would be synthesised (only `@this`, which Roslyn names `this`) is spelled `$this` in IR, with source name `this`. No C# identifier contains `$`, and the frontend's temporaries are `$<digits>`, so the name is never another variable's. Alternatives: `this_` (a real parameter can have that name), `@this` (`@` is not an IR name character). Rule: 4.
+- Decision: the predicate moves to a new `Equiv.Core.Ir.IrParameterNames` (public, with the `Receiver` constant), and `IrUnroller`'s private copy of it is removed too, since criterion 8 asks for one definition and that copy was the second. `ProductEncoder.IsSynthesised`'s theory test moves to `Equiv.Core.Tests`. Alternatives: keep `ProductEncoder.IsSynthesised` as a forwarder (two names for one rule). Rule: 4.
+- Decision: the criterion 7 Equivalent test and the criterion 9 samples-wide test live in `Equiv.Tests.Integration` (`SynthesisedInputNamingTests`), not `Equiv.Frontend.CSharp.Tests`: the first needs `Z3Backend`, the second needs the MSBuild loader over `samples/`, and only the integration project references both (it already has `InternalsVisibleTo` on the frontend). The `@this` validate-and-distinct unit test is in `IrLowererTests`. Rule: 1.
+- Decision: the oracle's static field `F` starts each run at input `A`, and every run (not only void methods) compares `F`'s final value, read from the run's one out when the body touches the field. A field write's value is one variable and a literal, so it never branches: a branching value makes the CFG capture the field reference, and assigning through that capture is opaque (`FlowCaptureReference`, ticket P2-006). The first oracle run found this. `OracleMethod.Keyword` gains `void`. Rule: 3.
+- Note: exit completion needed no new machinery. `SsaBuilder.Build` already fills every exit's outs after the whole body is lowered, and a lazily created slice is stored in the entry block, so the heap outs are appended to the list passed to `Build`.
+- Note: the `ArrayElements` snapshot also gains two phis. The throw blocks there are reached both before and after the element write, so the version their outs name is a merge. That is the added outs' SSA, not a behaviour change.
+- Note: locally, `samples/webapi-basic/legacy` does not load in this worktree (its Web API packages are not restored), so `EveryProcedureOfEverySampleKeepsTheNamingRule(webapi-basic)` fails here in the same way `EndpointDiscoverySampleTests` does on `main`. CI restores the packages.

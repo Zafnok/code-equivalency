@@ -129,9 +129,13 @@ internal sealed class IrLowerer
         return procedure;
     }
 
+    /// <summary>
+    /// The C# parameters. One declared <c>@this</c> has the name <c>this</c>, which is the receiver's (ADR 0021), so it is
+    /// spelled <c>$this</c>; no C# identifier contains <c>$</c>, so that name is never another parameter's (ticket M3-007).
+    /// </summary>
     private static (ImmutableArray<IrParameter> Parameters, IrType? ReturnType) Signature(IMethodSymbol method) => (
         [.. method.Parameters.Select(static p => new IrParameter(
-            new IrVar(p.Name, TypeMapper.Map(p.Type), p.Name),
+            new IrVar(IrParameterNames.IsSynthesised(p.Name) ? "$" + p.Name : p.Name, TypeMapper.Map(p.Type), p.Name),
             p.RefKind switch
             {
                 RefKind.Ref => IrParameterKind.Ref,
@@ -227,6 +231,9 @@ internal sealed class IrLowerer
             Fill(block, span);
         }
 
+        // A heap map exists only once the body touches it, so its outs are added after the whole body is lowered; SSA
+        // completes every exit in Build, and an exit that never writes the map names the map's input (ticket M3-007).
+        outs.AddRange(heap.Parameters.Where(static p => p.Kind == IrParameterKind.Ref).Select(p => (slices[p.Var.Name], p.Var)));
         return ssa.Build(new IrBlockId(0), outs.ToImmutable(), span);
     }
 

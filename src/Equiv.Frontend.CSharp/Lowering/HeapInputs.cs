@@ -13,9 +13,12 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// sort whose nullness is read, one <c>field.&lt;Type&gt;.&lt;Field&gt;</c> map per field touched, and
 /// <c>array.&lt;v&gt;</c> plus <c>length.&lt;v&gt;</c> per array variable indexed, and one <c>cast.&lt;From&gt;.&lt;To&gt;</c> map per implicit
 /// reference or boxing conversion (ticket M3-010), whose result's nullness is over-approximated: it is read from
-/// <c>null.&lt;To&gt;</c>, not tied to the operand's. Each is created once, on first use, and they become <see cref="IrParameterKind.In"/> parameters ordered by name, so both
+/// <c>null.&lt;To&gt;</c>, not tied to the operand's. Each is created once, on first use, and they become parameters ordered by name, so both
 /// sides of a pair share them by name, while the C# parameters, which a caller binds by position, are shared by position (ADR 0021). IR variable names take
 /// only letters, digits, <c>_</c>, <c>.</c> and <c>$</c>, so every part of a name is spelled with dots.
+/// <c>field.*</c> and <c>array.*</c> are <see cref="IrParameterKind.Ref"/>: the body writes them and the final heap is an
+/// observable (ADR 0018, ticket M3-007), so every exit names their final version in its outs. <c>this</c>, <c>null.*</c>,
+/// <c>cast.*</c> and <c>length.*</c> are <see cref="IrParameterKind.In"/>, because nothing the body does changes them.
 /// </summary>
 internal sealed class HeapInputs
 {
@@ -25,10 +28,10 @@ internal sealed class HeapInputs
 
     /// <summary>The synthesised parameters, ordered by name.</summary>
     public ImmutableArray<IrParameter> Parameters =>
-        [.. inputs.Values.OrderBy(static v => v.Name, StringComparer.Ordinal).Select(static v => new IrParameter(v, IrParameterKind.In))];
+        [.. inputs.Values.OrderBy(static v => v.Name, StringComparer.Ordinal).Select(static v => new IrParameter(v, IsWritable(v.Name) ? IrParameterKind.Ref : IrParameterKind.In))];
 
     /// <summary>The receiver of an instance method, as an uninterpreted value of its containing type.</summary>
-    public IrVar This(INamedTypeSymbol type) => Input("this", new IrSort(TypeMapper.MetadataName(type)));
+    public IrVar This(INamedTypeSymbol type) => Input(IrParameterNames.Receiver, new IrSort(TypeMapper.MetadataName(type)));
 
     /// <summary>Whether each value of <paramref name="sort"/> is null; equal references are equally null.</summary>
     public IrVar Nulls(IrSort sort) => Input($"null.{Part(sort.Name)}", new IrMap(sort, Bool));
@@ -59,6 +62,8 @@ internal sealed class HeapInputs
 
     /// <summary>A field map's key type. A field of a value type is keyed by the value, which is what value semantics mean.</summary>
     private static IrSort Receiver(IFieldSymbol field) => new(TypeMapper.MetadataName(field.ContainingType));
+
+    private static bool IsWritable(string name) => name.StartsWith("field.", StringComparison.Ordinal) || name.StartsWith("array.", StringComparison.Ordinal);
 
     private static string Part(string name) =>
         string.Concat(name.Select(static c => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' ? c : '_'));

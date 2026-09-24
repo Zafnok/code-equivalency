@@ -70,22 +70,22 @@ internal static class ProductEncoder
     /// <summary>
     /// Pairs the parameters of both sides into shared inputs (ADR 0021). A caller binds the source-language
     /// parameters by position, so those pair by position, whatever their names; the synthesised inputs
-    /// (<see cref="IsSynthesised"/>) pair by name. Two parameters pair only when their types are equal:
+    /// (<see cref="IrParameterNames.IsSynthesised"/>) pair by name. Two parameters pair only when their types are equal:
     /// any other parameter is an input of its own side alone, which can cost precision (a false Divergent)
     /// but never shares a value that a caller does not. The old side's parameters come first, in order.
     /// </summary>
     public static ImmutableArray<SharedParameter> Pair(IrProcedure old, IrProcedure @new)
     {
-        IrParameter[] positional = [.. @new.Parameters.Where(static p => !IsSynthesised(p.Var.Name))];
+        IrParameter[] positional = [.. @new.Parameters.Where(static p => !IrParameterNames.IsSynthesised(p.Var.Name))];
         Dictionary<string, IrParameter> synthesised = @new.Parameters
-            .Where(static p => IsSynthesised(p.Var.Name))
+            .Where(static p => IrParameterNames.IsSynthesised(p.Var.Name))
             .ToDictionary(static p => p.Var.Name, StringComparer.Ordinal);
         HashSet<string> paired = new(StringComparer.Ordinal);
         List<SharedParameter> shared = [];
         int position = 0;
         foreach (IrParameter parameter in old.Parameters)
         {
-            IrParameter? counterpart = IsSynthesised(parameter.Var.Name)
+            IrParameter? counterpart = IrParameterNames.IsSynthesised(parameter.Var.Name)
                 ? synthesised.GetValueOrDefault(parameter.Var.Name)
                 : positional.ElementAtOrDefault(position++);
             if (counterpart is not null && counterpart.Var.Type == parameter.Var.Type)
@@ -102,13 +102,6 @@ internal static class ProductEncoder
         shared.AddRange(@new.Parameters.Where(p => !paired.Contains(p.Var.Name)).Select(static p => new SharedParameter(Old: null, p)));
         return [.. shared];
     }
-
-    /// <summary>
-    /// Whether a parameter is one the frontend synthesised (VERIFICATION-MODEL.md section 2): the receiver
-    /// <c>this</c>, or a heap or nullness input, whose name is spelled with dots. No source-language
-    /// parameter name contains a dot.
-    /// </summary>
-    public static bool IsSynthesised(string name) => string.Equals(name, "this", StringComparison.Ordinal) || name.Contains('.', StringComparison.Ordinal);
 
     public static ProductEncoding Encode(Context context, IrProcedure old, IrProcedure @new, ImmutableDictionary<string, string> callIdentityMap)
     {
