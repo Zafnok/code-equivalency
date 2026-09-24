@@ -1,5 +1,5 @@
 # P2-012 NuGet warnings NU1701, NU1702 and NU1903 are not project load failures
-Status: in-progress
+Status: done (PR #151)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-024
