@@ -198,6 +198,13 @@ tickets.
   of the ill-typed IR an `async Task<T>` produces today (IR007, found during M3-014). Needs M3-022,
   so the census measures real opaque reasons before this collapses them into one; must land before
   M3-013 and before any full verifying run on real code.
+- M3-030 (M) The census reports changed pairs (not congruent, by a token-identical proxy until
+  M3-015), exact opaque reason sets per changed pair, runtime-changes call exposure and, in
+  `corpus.ps1`, NuGet package drift. The lowerable-share rules are evaluated on changed pairs
+  (ADR 0034).
+- M3-031 (S) Census rerun on the Git Extensions human pair, scored under ADR 0034. It is the
+  feasibility test M3-022 could not complete, and it orders M4 by exact pairs unlocked. Needs
+  M3-030, P2-010, P2-011, P2-012.
 - P1-003, P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
   and arrays are keyed by value. P1-003 comes with them as their shared prerequisite.
 
@@ -215,6 +222,9 @@ Order:
    engine work. If M3-022's verdict is re-scope or stop, everything below waits for a new ADR.
    M3-026 comes right after M3-022: running the census first keeps today's real per-reason opaque
    counts (`Await`, `PropertyReference`, ...) instead of collapsing them into one `async` reason.
+   M3-022 ended "incomplete: human pair pending", so ADR 0034 adds M3-030, then M3-031 (after
+   P2-011, P2-010 and P2-012). M3-031's verdict takes the place M3-022's had: re-scope or stop
+   there also waits for a new ADR.
 2. **Soundness:** M3-002 → M3-027; M3-007 → P1-003 → P1-006 → P1-005; M3-010 → M3-009; M3-026 → M3-013 (an
    `async Task<T>` pair must stop being ill-typed IR before a pair can throw its way into M3-013's
    exit-5 path, and before any full verifying corpus run).
