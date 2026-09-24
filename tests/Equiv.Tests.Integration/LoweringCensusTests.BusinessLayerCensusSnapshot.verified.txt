@@ -4,7 +4,7 @@
     modern: 28
   },
   matchedPairs: 28,
-  pairsWithoutOpaque: 2,
+  pairsWithoutOpaque: 4,
   pairsWholeBodyOpaque: 19,
   pairsCongruent: 0,
   projectsSkipped: {
@@ -17,8 +17,8 @@
       modern: 1
     },
     Conversion: {
-      legacy: 3,
-      modern: 3
+      legacy: 1,
+      modern: 1
     },
     DelegateCreation: {
       legacy: 1,
@@ -27,10 +27,6 @@
     InterpolatedString: {
       legacy: 1,
       modern: 1
-    },
-    PropertyReference: {
-      legacy: 3,
-      modern: 3
     },
     async: {
       legacy: 1,
@@ -62,12 +58,11 @@
     }
   },
   changedPairs: 4,
-  changedPairsWithoutOpaque: 1,
+  changedPairsWithoutOpaque: 2,
   changedPairsWholeBodyOpaque: 1,
   changedReasonSets: {
-    : 1,
-    Binary+Conversion+PropertyReference: 1,
-    Conversion: 1,
+    : 2,
+    Binary+Conversion: 1,
     foreach-enumerator: 1
   },
   runtimeChangeCalls: {

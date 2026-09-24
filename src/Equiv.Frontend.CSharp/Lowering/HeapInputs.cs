@@ -11,7 +11,9 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// The synthesised inputs a lowered body needs beyond its C# parameters (VERIFICATION-MODEL.md
 /// section 2; ticket M2-004): the receiver <c>this</c>, one <c>null.&lt;Sort&gt;</c> map per reference
 /// sort whose nullness is read, one <c>field.&lt;Type&gt;.&lt;Field&gt;</c> map per field touched, and
-/// <c>array.&lt;v&gt;</c> plus <c>length.&lt;v&gt;</c> per array variable indexed. Each is created once, on first use, and they become <see cref="IrParameterKind.In"/> parameters ordered by name, so both
+/// <c>array.&lt;v&gt;</c> plus <c>length.&lt;v&gt;</c> per array variable indexed, and one <c>cast.&lt;From&gt;.&lt;To&gt;</c> map per implicit
+/// reference or boxing conversion (ticket M3-010), whose result's nullness is over-approximated: it is read from
+/// <c>null.&lt;To&gt;</c>, not tied to the operand's. Each is created once, on first use, and they become <see cref="IrParameterKind.In"/> parameters ordered by name, so both
 /// sides of a pair share them by name, while the C# parameters, which a caller binds by position, are shared by position (ADR 0021). IR variable names take
 /// only letters, digits, <c>_</c>, <c>.</c> and <c>$</c>, so every part of a name is spelled with dots.
 /// </summary>
@@ -39,6 +41,15 @@ internal sealed class HeapInputs
 
     /// <summary>The token a static field's map is keyed by: element 0 of its declaring type's sort.</summary>
     public static IrSortValue Token(IFieldSymbol field) => new(Receiver(field).Name, 0);
+
+    /// <summary>
+    /// An implicit reference or boxing conversion from <paramref name="from"/> to <paramref name="to"/>, as an
+    /// uninterpreted function (ticket M3-010): no trace event, the same operand always yields the same result. The
+    /// result's nullness is read from <c>null.&lt;To&gt;</c> like any value's, not tied to the operand's; that
+    /// over-approximates, since a real upcast or box of a non-null value is never null.
+    /// </summary>
+    public IrVar Cast(ITypeSymbol from, ITypeSymbol to) =>
+        Input($"cast.{Part(TypeMapper.MetadataName(from))}.{Part(TypeMapper.MetadataName(to))}", new IrMap(TypeMapper.Map(from), TypeMapper.Map(to)));
 
     /// <summary>The elements of the array a variable holds, by bv32 index.</summary>
     public IrVar Elements(string variable, IrType element) => Input($"array.{Part(variable)}", new IrMap(new IrBitVec(32), element));

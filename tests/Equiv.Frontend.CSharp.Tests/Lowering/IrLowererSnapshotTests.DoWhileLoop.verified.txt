@@ -5,11 +5,11 @@ B1:
   %s.12 "s": bv32 = const bv32 0
   goto B2
 B2:
-  %n.13 "n": bv32 = phi [B1: %n, B2: %n.16]
-  %s.14 "s": bv32 = phi [B1: %s.12, B2: %s.15]
-  %s.15 "s": bv32 = add %s.14, %n.13
-  %$4: bv32 = const bv32 1
-  %n.16 "n": bv32 = sub %n.13, %$4
+  %s.13 "s": bv32 = phi [B1: %s.12, B2: %s.15]
+  %n.14 "n": bv32 = phi [B1: %n, B2: %n.16]
+  %s.15 "s": bv32 = add %s.13, %n.14
+  %$5: bv32 = const bv32 1
+  %n.16 "n": bv32 = sub %n.14, %$5
   %$8: bv32 = const bv32 0
   %$9: bool = sgt %n.16, %$8
   br %$9, B2, B3

@@ -119,6 +119,21 @@ public sealed class IrLowererSnapshotTests
     public Task DoWhileLoop() => Dump("static int M(int n) { int s = 0; do { s += n; n--; } while (n > 0); return s; }");
 
     [Fact]
+    public Task InstancePropertyRead() => Dump("int P { get; set; } static int M(C c) => c.P;");
+
+    [Fact]
+    public Task StaticPropertyWrite() => Dump("static int P { get; set; } static void M(int a) { P = a; }");
+
+    [Fact]
+    public Task IndexerRead() => Dump("int this[int i] => i; static int M(C c, int i) => c[i];");
+
+    [Fact]
+    public Task CompoundAssignmentToAProperty() => Dump("int P { get; set; } static int M(C c, int a) => checked(c.P += a);");
+
+    [Fact]
+    public Task BoxingAnInt() => Dump("static object M(int a) => a;");
+
+    [Fact]
     public Task OutArgumentOfAnOpaqueCall() => Dump("static int M(string s, int fallback) => int.TryParse(s, out var n) ? n : fallback;");
 
     private static Task Dump(string members) => Verify(IrText.Dump(Lowered.Method(members)));

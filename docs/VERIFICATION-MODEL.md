@@ -80,13 +80,18 @@ variable. A dereference lowers to a conditional `IrThrow(NullReferenceException)
 Heap and nullness are inputs (M2-004). A procedure's parameter list is its C# parameters
 followed by the synthesised inputs its body needs, ordered by name: the receiver `this`,
 one `null.<Sort>` map from a reference sort to Bool, one `field.<Type>.<Field>` map per
-field touched, and `array.<v>` plus `length.<v>` per array variable indexed. The product
+field touched, `array.<v>` plus `length.<v>` per array variable indexed, and one
+`cast.<From>.<To>` map from `<From>`'s IR type to `<To>`'s sort per implicit reference or boxing
+conversion between different IR types (M3-010). A cast map is an uninterpreted function with no
+trace event: the same operand always converts to the same value. The converted value's nullness is
+read from `null.<To>` like any value's, not tied to the operand's, which over-approximates (a real
+upcast of a non-null value is never null). The product
 encoding (M3-001, ADR 0021) shares the C# parameters by position, because that is how a caller
 binds them, and the synthesised inputs by name; two parameters of different types are never
 shared, each is then an input of its own side. A synthesised input's name is `this` or contains
 a dot, and a C# parameter's never does: that is how the encoder tells them apart. A value's shadow is a `mapread` of `null.<Sort>`,
 so equal references are equally null; `new` sets the shadow to false instead. `this`,
-`null.*` and `length.*` are `In`, because nothing changes them. `field.*` and `array.*` are
+`null.*`, `cast.*` and `length.*` are `In`, because nothing changes them. `field.*` and `array.*` are
 `Ref` (ADR 0018, ticket M3-007), so every exit names their final version in `outs` and the
 final heap is an observable like any `ref` parameter. When only one side of a pair has a given
 `Ref` map, the other side never touches that slice, and the encoder compares the first side's

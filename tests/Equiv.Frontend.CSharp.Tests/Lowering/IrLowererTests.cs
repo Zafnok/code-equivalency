@@ -63,11 +63,9 @@ public sealed class IrLowererTests
     }
 
     [Theory]
-    [InlineData("static int M(string s) => s.Length;", "PropertyReference")]
     [InlineData("static int M(int[,] a) => a[0, 1];", "ArrayElementReference")]
     [InlineData("static int M(int[][] a) => a[0][1];", "ArrayElementReference")]
     [InlineData("static int M(int[] a, long i) => a[i];", "ArrayElementReference")]
-    [InlineData("static int M(int[][] a) => a[0].Length;", "PropertyReference")]
     [InlineData("static bool M(string s) => int.TryParse(s, out _);", "ref-argument")]
     [InlineData("static void M(ref int a) { System.Threading.Interlocked.Increment(ref a); }", "ref-argument")]
     [InlineData("static void M(int a, Exception e) { if (a < 0) throw e; }", "Throw")]
@@ -76,7 +74,9 @@ public sealed class IrLowererTests
     [InlineData("static void M(int a) { ref int r = ref a; r = 1; }", "SimpleAssignment")]
     [InlineData("static int M(double d) => (int)d;", "Conversion")]
     [InlineData("static double M(int i) => i;", "Conversion")]
-    [InlineData("static object M(string s) => s;", "Conversion")]
+    [InlineData("static string M(object o) => (string)o;", "Conversion")]
+    [InlineData("static int M(object o) => (int)o;", "Conversion")]
+    [InlineData("static System.Collections.Generic.IEnumerable<object> M(System.Collections.Generic.IEnumerable<string> s) => s;", "Conversion")]
     [InlineData("struct S { public static implicit operator int(S s) => 0; } static int M(S s) => s;", "Conversion")]
     [InlineData("static bool M(string a, string b) => a == b;", "Binary")]
     [InlineData("static double M(double a, double b) => a * b;", "Binary")]
@@ -875,4 +875,131 @@ public sealed class IrLowererTests
     [Fact]
     public void DivisionByZeroThrows() =>
         Assert.Equal(new IrThrew("System.DivideByZeroException"), Run(Method("static uint M(uint a, uint b) => a / b;"), Bits(32, 1), Zero32));
+
+    /// <summary>Ticket M3-010 acceptance criterion 1: a property read is the getter call, receiver null check included.</summary>
+    [Fact]
+    public void PropertyReadIsACallToTheGetter()
+    {
+        IrProcedure procedure = Method("int P { get; set; } static int M(C c) => c.P;");
+
+        IrCall call = Assert.Single(Calls(procedure));
+        Assert.Equal("C::get_P()", call.Callee.Value);
+        Assert.Equal(["c"], call.Args.Select(static a => a.Name), StringComparer.Ordinal);
+        Assert.Equal(new IrThrew("System.NullReferenceException"), Run(procedure, Reference(0, "C"), Nulls("C", 0, isNull: true)));
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket M3-010 acceptance criterion 2: a write is the setter call with the value last and no target.</summary>
+    [Fact]
+    public void PropertyWriteIsACallToTheSetter()
+    {
+        IrProcedure procedure = Method("static int P { get; set; } static void M(int a) { P = a; }");
+
+        IrCall call = Assert.Single(Calls(procedure));
+        Assert.Equal("C::set_P(int)", call.Callee.Value);
+        Assert.Null(call.Target);
+        Assert.Equal(["a"], call.Args.Select(static a => a.Name), StringComparer.Ordinal);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket M3-010 acceptance criterion 2: the receiver is evaluated once and passed to both accessors.</summary>
+    [Theory]
+    [InlineData("void M(C c, int a) { c.P += a; }", false)]
+    [InlineData("void M(C c, int a) { c.P++; }", false)]
+    [InlineData("void M(C c, int a) { checked { --c.P; } }", true)]
+    [InlineData("void M(C c, int a) { c.P <<= a; }", false)]
+    public void CompoundAssignmentToAPropertyGetsOperatesAndSets(string member, bool isChecked)
+    {
+        IrProcedure procedure = Method($"int P {{ get; set; }} {member}");
+
+        ImmutableArray<IrCall> calls = Calls(procedure);
+        Assert.Equal(["C::get_P()", "C::set_P(int)"], calls.Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        Assert.Equal(calls[0].Args, calls[1].Args[..1]);
+        Assert.Equal(2, calls[1].Args.Length);
+        Assert.Equal(isChecked, procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrOverflows>().Any());
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>The CFG captures the written property before a branching value; the capture calls no getter.</summary>
+    [Theory]
+    [InlineData("void M(C c, bool b, int a) { c.P = b ? a : 0; }", "C::set_P(int)")]
+    [InlineData("void M(C c, bool b, int a) { c.P += b ? a : 0; }", "C::get_P(),C::set_P(int)")]
+    public void APropertyCapturedAsAnAssignmentTargetIsWrittenByItsAccessors(string member, string callees)
+    {
+        IrProcedure procedure = Method($"int P {{ get; set; }} {member}");
+
+        ImmutableArray<IrCall> calls = Calls(procedure);
+        Assert.Equal(callees, string.Join(',', calls.Select(static c => c.Callee.Value)));
+        Assert.All(calls, static c => Assert.Equal("c", c.Args[0].Name));
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Fact]
+    public void IndexerReadPassesTheIndex()
+    {
+        IrProcedure procedure = Method("int this[int i] => i; static int M(C c, int i) => c[i];");
+
+        IrCall call = Assert.Single(Calls(procedure));
+        Assert.Equal("C::get_Item(int)", call.Callee.Value);
+        Assert.Equal(["c", "i"], call.Args.Select(static a => a.Name), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket M3-010 acceptance criterion 3: an access with no accessor for it stays opaque and calls no setter. Code
+    /// that writes an init-only setter outside an initializer does not compile (and erroneous code is one whole-body
+    /// opaque), so the init-only case that binds is the initializer itself, which is out of this ticket's scope.
+    /// </summary>
+    [Theory]
+    [InlineData("class D { public int P { get; init; } } static D M() => new D { P = 1 };")]
+    [InlineData("static int f; static ref int P => ref f; static void M() { P = 1; }")]
+    [InlineData("static int f; static ref int P => ref f; static void M() { P++; }")]
+    [InlineData("static int f; static ref int P => ref f; static void M(int a) { P += a; }")]
+    public void InitOnlySetterOutsideInitializerIsOpaque(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Contains(Opaques(procedure), static o => o.Reason is "PropertyReference");
+        Assert.DoesNotContain(Calls(procedure), static c => c.Callee.Value.Contains("set_P", StringComparison.Ordinal));
+    }
+
+    /// <summary>Ticket M3-010 acceptance criterion 4: an upcast reads <c>cast.&lt;From&gt;.&lt;To&gt;</c> at the operand.</summary>
+    [Theory]
+    [InlineData("static object M(string s) => s;", "cast.System.String.System.Object", "System.Object")]
+    [InlineData("static IComparable M(string s) => s;", "cast.System.String.System.IComparable", "System.IComparable")]
+    public void UpcastIsAReadOfTheCastMap(string members, string name, string to)
+    {
+        IrProcedure procedure = Method(members);
+
+        IrParameter cast = Assert.Single(procedure.Parameters, p => string.Equals(p.Var.Name, name, StringComparison.Ordinal));
+        Assert.Equal(IrParameterKind.In, cast.Kind);
+        Assert.Equal(new IrMap(new IrSort("System.String"), new IrSort(to)), cast.Var.Type);
+        IrMapRead read = Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>(), r => r.Map == cast.Var);
+        Assert.Equal((cast.Var, "s"), (read.Map, read.Key.Name));
+        Assert.Empty(Opaques(procedure));
+    }
+
+    [Fact]
+    public void BoxingIsAReadOfTheCastMap()
+    {
+        IrProcedure procedure = Method("static object M(int a) => a;");
+
+        IrParameter cast = Assert.Single(procedure.Parameters, static p => p.Var.Name is "cast.System.Int32.System.Object");
+        Assert.Equal(new IrMap(new IrBitVec(32), new IrSort("System.Object")), cast.Var.Type);
+        IrMapValue map = new(
+            (IrMap)cast.Var.Type,
+            new IrSortValue("System.Object", 1),
+            ImmutableDictionary<IrValue, IrValue>.Empty.Add(Bits(32, 7), new IrSortValue("System.Object", 9)));
+        Assert.Equal(new IrReturned(new IrSortValue("System.Object", 9)), Run(procedure, Bits(32, 7), map));
+    }
+
+    /// <summary>A cast is a trace-free function, and its result's nullness comes from the target sort's map, not the operand's shadow.</summary>
+    [Fact]
+    public void CastMapAddsNoTraceEvent()
+    {
+        IrProcedure procedure = Method("static bool M(string s) { if (s == null) return false; object o = s; return o == null; }");
+
+        Assert.Empty(Calls(procedure));
+        Assert.Empty(Opaques(procedure));
+        Assert.Contains(procedure.Parameters, static p => p.Var.Name is "null.System.Object");
+    }
 }
