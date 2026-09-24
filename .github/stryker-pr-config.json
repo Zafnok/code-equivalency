@@ -1,0 +1,19 @@
+// Stryker config for PR runs only (mutation.yml passes it with --config-file; the nightly
+// full sweep does not, because a "since" object here turns incremental mode on).
+//
+// ignore-changes-in drops test-side paths from the --since diff. Stryker 5.0.0's MTP runner
+// registers every test with an empty file path (MtpTestDescription), and SinceMutantFilter
+// treats an empty path as "this test changed" whenever any test .cs file is in the diff, so a
+// PR that touched one test re-ran every covered mutant of the project: a full sweep of
+// Equiv.Core (1251 mutants, 92 min on M3-013). A changed non-.cs file under the test project
+// (a *.verified.txt snapshot, the .csproj) re-ran every mutant outright. With test paths
+// ignored, a PR is held to the mutants in the src files it changed, tested against the full
+// new test suite (QUALITY-GATES.md, Mutation row); the nightly sweep catches a test edit that
+// lets a mutant in an unchanged file survive.
+{
+  "stryker-config": {
+    "since": {
+      "ignore-changes-in": ["**/tests/**"]
+    }
+  }
+}

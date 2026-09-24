@@ -30,7 +30,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # --since diffs against the base branch, so it must be in the clone.
+          # --since diffs against the base commit (the merge ref's first parent), so it must be in
+          # the clone.
           fetch-depth: 0
 
       # A PR push whose code inputs (everything but prose; see the script) match an earlier
@@ -54,21 +55,46 @@ jobs:
         if: steps.pass.outputs.cache-hit == 'true'
         run: echo "::notice::Stryker (${{ matrix.project.src }}) already passed on code fingerprint ${{ steps.fp.outputs.hash }}; this push changed only prose, so it is not re-run."
 
+      # A PR run diffs against the merge commit's first parent: the base this run's merge ref
+      # was built on. origin/<base> at job time is wrong whenever the base has moved since
+      # (another PR merged while this one queued, or a re-run), because Stryker diffs that
+      # commit's tree against the working tree, so the base's own new changes count as this
+      # PR's: an M3-013 re-run mutated 25 IR files the PR never touched. Stryker only mutates
+      # changed .cs files of the leg's own project (test paths are ignored, see
+      # .github/stryker-pr-config.json), so a PR that changes none has no mutants, and the
+      # leg reports a pass without paying for the build, the initial test run and coverage.
+      - name: Scope the incremental run
+        id: scope
+        if: github.event_name == 'pull_request' && steps.pass.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse --verify --quiet HEAD^2 > /dev/null || { echo "::error::HEAD is not the PR merge commit"; exit 1; }
+          base=$(git rev-parse HEAD^1)
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          if git diff --quiet "$base" HEAD -- 'src/${{ matrix.project.src }}/*.cs'; then
+            echo "mutants=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::This PR changes no .cs file in src/${{ matrix.project.src }}, so Stryker has no mutants to test on this leg; it passes without running."
+          else
+            echo "mutants=true" >> "$GITHUB_OUTPUT"
+            git diff --name-only "$base" HEAD -- 'src/${{ matrix.project.src }}/*.cs'
+          fi
+
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        if: steps.pass.outputs.cache-hit != 'true'
+        if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
         with:
           global-json-file: global.json
 
-      - if: steps.pass.outputs.cache-hit != 'true'
+      - if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
         run: dotnet restore --locked-mode
-      - if: steps.pass.outputs.cache-hit != 'true'
+      - if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
         run: dotnet tool restore
 
       # Microsoft.Z3 4.12.2 ships libz3 for win-x64 and osx-x64 only (ticket M3-001 Notes). The
       # z3-solver 4.12.2.0 manylinux wheel on PyPI carries the same version's libz3.so; pip checks
       # it against the hash PyPI publishes, and .NET's dlopen finds it on LD_LIBRARY_PATH.
       - name: Provide libz3 (Linux)
-        if: runner.os == 'Linux' && steps.pass.outputs.cache-hit != 'true'
+        if: runner.os == 'Linux' && steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
         shell: bash
         run: |
           set -euo pipefail
@@ -79,10 +105,17 @@ jobs:
           test -f "$RUNNER_TEMP/z3/wheel/z3/lib/libz3.so"
           echo "LD_LIBRARY_PATH=$RUNNER_TEMP/z3/wheel/z3/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
 
-      # PRs mutate only files changed against the base branch; the nightly run is a full sweep.
+      # PRs mutate only the src files they changed (diff target and ignored test paths: see the
+      # scope step and .github/stryker-pr-config.json); the nightly run is a full sweep.
+      # CsCheck_Threads=1: CsCheck samples on every core by default, so four Stryker workers
+      # each running a property test on four threads oversubscribe the 4-vCPU runner, and a
+      # starved run can be cut off as a Timeout, which costs a full timeout plus a test-server
+      # restart on the MTP runner.
       - name: Run Stryker (${{ matrix.project.src }})
-        if: steps.pass.outputs.cache-hit != 'true'
+        if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
         working-directory: tests/${{ matrix.project.test }}
+        env:
+          CsCheck_Threads: 1
         run: >
           dotnet stryker
           --test-runner mtp
@@ -90,13 +123,14 @@ jobs:
           --target-framework net10.0
           --concurrency 4
           --break-at 90
-          ${{ github.event_name == 'pull_request' && format('--since:origin/{0}', github.base_ref) || '' }}
+          ${{ github.event_name == 'pull_request' && format('--config-file {0}/.github/stryker-pr-config.json --since:{1}', github.workspace, steps.scope.outputs.base) || '' }}
+          --skip-version-check
           --reporter html
           --reporter progress
           --output ${{ github.workspace }}/StrykerOutput/${{ matrix.project.src }}
 
       - name: Upload mutation report (${{ matrix.project.src }})
-        if: always() && steps.pass.outputs.cache-hit != 'true'
+        if: always() && steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: stryker-report-${{ matrix.project.src }}
