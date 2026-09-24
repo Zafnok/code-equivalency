@@ -24,6 +24,8 @@ public sealed class IrLowererTests
     [InlineData("static int M(IDisposable d) { using (d) { return 1; } }", "M", "using")]
     [InlineData("static int M(IDisposable d, int n) { if (n > 0) { using IDisposable e = d; return 1; } return n; }", "M", "using")]
     [InlineData("static void M(object o) { lock (o) { } }", "M", "lock")]
+    [InlineData("static async System.Threading.Tasks.Task<int> M() { await System.Threading.Tasks.Task.Delay(0); return 1; }", "M", "async")]
+    [InlineData("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }", "M", "async")]
     public void WholeBodyIsOneOpaque(string members, string name, string reason)
     {
         IrProcedure procedure = Method(members, name);
@@ -41,6 +43,23 @@ public sealed class IrLowererTests
         IrReturn exit = Assert.IsType<IrReturn>(Assert.Single(procedure.Blocks).Terminator);
         Assert.Null(exit.Value);
         Assert.Equal(["a", "b"], exit.Outs.Select(static o => o.Final.Name), StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void AsyncTaskOfTValidates()
+    {
+        IrProcedure procedure = Method(
+            "static async System.Threading.Tasks.Task<int> M() { await System.Threading.Tasks.Task.Delay(0); return 1; }");
+
+        Assert.Empty(IrValidator.Validate(procedure));
+    }
+
+    [Fact]
+    public void AsyncMethodNeverReportsAwaitOrMissingReturn()
+    {
+        IrProcedure procedure = Method("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }");
+
+        Assert.Equal("async", Assert.Single(Opaques(procedure)).Reason);
     }
 
     [Theory]

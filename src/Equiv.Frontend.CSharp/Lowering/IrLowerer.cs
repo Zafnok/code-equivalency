@@ -92,12 +92,16 @@ internal sealed class IrLowerer
         IMethodSymbol method = (IMethodSymbol)model.GetDeclaredSymbol(body.Syntax)!;
         ControlFlowGraph graph = ControlFlowGraph.Create(body);
         SourceSpan span = Span(body.Syntax);
+        // `async` is checked first: an `await`'s state machine is not modelled (ticket M4-006), and
+        // checking it ahead of the other whole-body cases keeps an async method from being classified
+        // by whichever of those constructs its body happens to also contain.
         // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles; only
         // `foreach` is left, because the CFG desugars every one of them -- arrays included -- into the
         // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-004). `using`
         // and `lock` are out of this ticket's scope even though the CFG gives them ordinary regions.
         string? wholeBody = body switch
         {
+            _ when method.IsAsync => "async",
             _ when body.Descendants().Any(static o => o is IForEachLoopOperation) => "foreach-enumerator",
             _ when body.Descendants().Any(static o => o is IUsingOperation or IUsingDeclarationOperation) => "using",
             _ when body.Descendants().Any(static o => o is ILockOperation) => "lock",
