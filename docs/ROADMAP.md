@@ -239,36 +239,38 @@ Order:
 ## M4 — Precision and the first corpus run
 
 M4 makes the first real run say something. Without these tickets it is mostly `Unknown(opaque)`.
-M3-022's census reorders this list by pairs unlocked per effort point (S=1, M=2, L=4). A ticket
-under ADR 0028's bar (5% of matched pairs on the corpus) moves to the post-MVP backlog. Soundness
-dependencies still win. Each precision ticket updates the `business-layer` snapshot.
+Reordered by pairs unlocked per effort point (S=1, M=2, L=4), from the Git Extensions census
+(`docs/runs/2026-09-24-census-verdict.md`, ADR 0034: pairs unlocked is exact over changed pairs,
+not an upper bound over matched pairs). A ticket under ADR 0028's bar, now 5% of changed pairs
+(16 of 315), moved to the Post-MVP backlog below: M4-003, M4-005, M4-006, M4-008. P2-001 cleared
+the bar and is scheduled in below, keeping its ticket id. Soundness dependencies still win; none
+of the tickets below depend on each other, so the order is exactly the pairs-unlocked ranking.
+Each precision ticket updates the `business-layer` snapshot.
 
-The 2026-09-23 census did not reorder this list. Its verdict is incomplete because the human pair
-is still pending (`docs/runs/2026-09-23-census-verdict.md`): Git Extensions crashed, and the three
-agent pairs are pure retargets with no changed `.cs` file. The reorder waits for a Git Extensions
-census after P2-011, P2-010 and P2-012.
+The 2026-09-23 census (`docs/runs/2026-09-23-census-verdict.md`) could not reorder this list:
+Git Extensions crashed, and the three agent pairs are pure retargets with no changed `.cs` file.
+M3-031 reran the census after P2-011, P2-010 and P2-012 fixed the crash and produced the first
+changed-pair data, which is what reorders this list.
 
 - M4-001 (L) `foreach`, `using` and constructors lowered through the CFG instead of whole-body
-  opaque. Needs M3-007, M3-010.
-- M4-002 (L) `IrPure` for float, decimal and user-defined operators (ADR 0025). Needs M3-015,
-  M3-016.
-- M4-003 (M) `ref`/`out` call arguments and `lock`. Needs P1-005.
+  opaque. Needs M3-007, M3-010. Unlocks 54 changed pairs (17.1%).
+- P2-001 (M) `new T[n]` and array initialisers lowered (reason `ArrayCreation`). Needs P1-006.
+  Unlocks 18 changed pairs (5.7%); promoted from P2 into M4 by the 2026-09-24 census.
 - M4-004 (L) Fragments on both sides are shared calls (ADR 0024). Needs M3-015, M3-016, P1-005.
-- M4-005 (M) Type tests and downcasts. Needs M3-010.
-- M4-006 (M) `await` as a call. Needs M4-001.
-- M4-008 (M) The remaining whole-body opaques: arrow-bodied and auto-property accessors, `catch`
-  filters and bare `catch` (ADR 0029). Needs P1-003, M3-010, M3-025.
+  Unlocks 25 changed pairs (7.9%).
+- M4-002 (L) `IrPure` for float, decimal and user-defined operators (ADR 0025). Needs M3-015,
+  M3-016. Unlocks 19 changed pairs (6.0%).
 - M4-007 (S) First full corpus run in the skill's `full` and `seeded` modes. It scores all five ADR
   0028 criteria, including 100% recall on seeded behaviour changes. Findings become tickets, not
-  fixes. Needs M3-004, M3-022 and the M4 tickets M3-022 kept.
+  fixes. Needs M3-004, M3-022, M4-001, M4-002, M4-004, P2-001.
 
-## P2 — Census findings (M3-022)
+## P2 — Census findings (M3-022, M3-031)
 
 Before the Git Extensions census is rerun: P2-011, then P2-010 and P2-012. P2-013 and P2-014
-follow. P2-001 to P2-009 are opaque reasons found in 1 to 10 bodies each. They are an unscheduled
-backlog: nothing schedules them until a census on changed code shows they matter.
+follow. P2-002 to P2-009 stay an unscheduled backlog: each unlocks under 5% of changed pairs in
+the 2026-09-24 census. P2-001 cleared the bar and moved into the M4 list above, keeping its
+ticket id (not listed again here). P2-015 is a `corpus.ps1` finding from the same run.
 
-- P2-001 (M) `new T[n]` and array initialisers lowered (reason `ArrayCreation`).
 - P2-002 (S) `typeof(T)` as a shared synthesised input (reason `TypeOf`).
 - P2-003 (S) `default(T)` lowered (reason `DefaultValue`).
 - P2-004 (M) Event reads and event invocation (reason `EventReference`).
@@ -284,6 +286,16 @@ backlog: nothing schedules them until a census on changed code shows they matter
 - P2-013 (S) Projects outside the solution's build configuration are not loaded or counted.
 - P2-014 (M) `corpus.ps1` prepares a box: long paths, submodules, isolation from this repo's
   MSBuild files, reference assemblies and the SDK resolver.
+- P2-015 (S) `corpus.ps1 -Packages`'s `Get-ResolvedPackages` uses `Get-ChildItem -Recurse -Include
+  'project.assets.json','packages.config'` on Windows PowerShell 5.1, where `-Include` without a
+  wildcard `-Path` is not applied to the recursive walk: it visits every file (observed 3271 files
+  under one repo against 48 real matches) and throws parsing a non-JSON one. Found in M3-031
+  (2026-09-24); `-Packages` produced no data for any of the four pairs.
+- P2-016 (M) `pmb-tomasjohansson__adapters-shortest-paths-dotnet`'s modern side loads 0 procedures
+  (320 unverified) and the legacy side loads only 5, although `projectsSkipped` is legacy 6 /
+  modern 0; the 6 legacy test projects fail restore with "doesn't list 'win' as a
+  RuntimeIdentifier". Found in M3-031 (2026-09-24); M3-022 reported 100% load rate and 312
+  matched pairs for the same repo.
 
 ## M5 — Agent surface (MCP)
 
@@ -326,6 +338,16 @@ array parameters, rests on an assumption no gate can see; M3-001's soundness har
 over IR and does not cover them.
 
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
+
+Moved from M4 by the 2026-09-24 census (`docs/runs/2026-09-24-census-verdict.md`): each unlocks
+under ADR 0028's 5% bar (now 5% of Git Extensions' 315 changed pairs = 16). Ticket files and ids
+are unchanged; a later census that shows more changed pairs can move any of these back into M4.
+
+- M4-003 (M) `ref`/`out` call arguments and `lock`. 8 changed pairs (2.5%). Needs P1-005.
+- M4-005 (M) Type tests and downcasts. 13 changed pairs (4.1%). Needs M3-010.
+- M4-006 (M) `await` as a call. 9 changed pairs (2.9%). Needs M4-001.
+- M4-008 (M) The remaining whole-body opaques: arrow-bodied and auto-property accessors, `catch`
+  filters and bare `catch` (ADR 0029). 3 changed pairs (1.0%). Needs P1-003, M3-010, M3-025.
 
 - Floating point as IEEE sorts; `decimal`; string theory for common `string` ops.
 - Boogie backend behind `IVerificationBackend` for invariant-driven unbounded loops.

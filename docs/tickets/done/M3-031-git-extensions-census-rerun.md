@@ -1,5 +1,5 @@
 # M3-031 Census rerun on Git Extensions, scored under ADR 0034
-Status: todo
+Status: in-progress
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-030, P2-010, P2-011, P2-012
@@ -53,3 +53,22 @@ run finds: those become P2 tickets, as the skill requires.
   reference assemblies are under `.corpus/refasm/root` while the current `-Env` points at `.corpus/refasm`.
   Without overriding `TargetFrameworkRootPath`, the legacy side fails to load (exit 4). Run `-Prepare` in a
   fresh worktree.
+- 2026-09-24: ran `-Prepare` fresh in this worktree, then copied `.corpus/repos` and `.corpus/pairs`
+  (checkouts and the three agent pairs' existing `modern/` migrations) from M3-022's worktree
+  (`real-pair-census-e1bae3`) rather than re-cloning or re-migrating, per criterion 1. Each
+  `pair.json`'s absolute paths pointed at that worktree; rewrote them to this one before restoring.
+  Decision: this counts as "reusing their existing modern sides in `.corpus/`", not a new fetch, so
+  `-Fetch`'s own checks (clean `git status --porcelain`, resolvable `HEAD`) were not re-run; `HEAD`
+  was verified to match `pairs.csv`/the Poly-MigrationBench manifest for all five checkouts instead.
+- 2026-09-24: **result — continue.** Git Extensions: 315 changed pairs, lowerable share 24.4%
+  (≥ 15% bar), no `IrLowerer.Destination` crash (0 tool execution notifications). Full verdict and
+  the M4 reorder are in `docs/runs/2026-09-24-census-verdict.md`.
+- 2026-09-24: `corpus.ps1 -Packages` is broken on this PowerShell version (`-Include` is not
+  applied to a `-Recurse` walk without a wildcard `-Path`, so it scans every file and throws on
+  the first non-JSON one). Per the size guard, not fixed here; filed as P2-015.
+  `packageVersionChanges` (ADR 0034 item 4) is still uncomputed for all four pairs.
+- 2026-09-24: `pmb-tomasjohansson__adapters-shortest-paths-dotnet` no longer loads the way M3-022
+  saw it (0 modern procedures, 5 legacy, against 312 matched pairs on 2026-09-23 for the same
+  commit), on top of 6 legacy test projects failing restore with a `RuntimeIdentifier` error.
+  Recorded per criterion 1 ("recorded with the reason, not replaced"), not replaced or debugged;
+  filed as P2-016. It contributes zero changed pairs either way, so it does not affect the verdict.
