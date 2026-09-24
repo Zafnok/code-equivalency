@@ -164,3 +164,11 @@ pending; lastConfirmedId = order.Id;`, one `Await`, one `PropertyReference`, one
 `missing-return` today, becoming one `async` reason). CI (`gates (windows-latest)`, `gates
 (ubuntu-latest)`) is the actual verification; flagged in the PR description for the user to
 re-check its output against this snapshot.
+
+`gates (windows-latest)` (PR #141 first push) failed only on this snapshot: the Verify comparer's
+"Received" and "Verified" text bodies printed identically in the log, but the hand edit had
+dropped the file's UTF-8 BOM and added a trailing newline the original file did not have
+(`.gitattributes` marks `*.verified.*` as `-text`, so git does not normalize this and both bytes
+matter). Fixed by restoring the BOM and removing the trailing newline; `git diff --no-index`
+against the pre-ticket file now shows only the intended content change. No other test failed.
+re-check its output against this snapshot.
