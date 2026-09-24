@@ -1,5 +1,5 @@
 # P2-009 A local written only by an opaque has a defined value
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004
@@ -36,3 +36,24 @@ If the fix needs changes in `SsaBuilder` beyond defining the written variables, 
 Lowering `ref`/`out` for real (M4-003).
 
 ## Notes
+- Construct (criterion 1): an `out` argument of a call lowered as a `ref-argument` opaque, read
+  afterwards. `int.TryParse(s, out var n) ? n : fallback` reproduces it; it is verbatim
+  `ParseQuantity` in `samples/business-layer`, which is where the census's one `undefined` body came
+  from. `IrLowererTests.AVariableWrittenByARefArgumentOpaqueIsDefined` pins it (failed with
+  `undefined` before the fix). A reference-typed `out` (`TryGetValue(k, out string v); v.Trim()`)
+  also left the `isNull` shadow undefined.
+- Criterion 2: snapshot `IrLowererSnapshotTests.OutArgumentOfAnOpaqueCall`: one `ref-argument`
+  opaque for the call, one for `n`, no `undefined`.
+- Criterion 3: no `IrLowererSnapshotTests` snapshot changed. The Windows-only
+  `LoweringCensusTests.BusinessLayerCensusSnapshot` loses its `undefined` row (1/1 to gone); every
+  other count is unchanged, since census counts bodies per reason and the new opaques reuse reasons
+  those bodies already had.
+- Decision: the write happens in `IrLowerer.Opaque(IOperation, string)` for every opaque, not only
+  `ref-argument`, by scanning the opaque operation's subtree for `ref`/`out` arguments,
+  deconstruction targets and pattern-declared locals, as the Goal lists. `SsaBuilder` is unchanged.
+- Decision: a reference-typed written variable's `isNull` shadow is set from the
+  `null.<Sort>` map at the fresh value (like any other unknown reference), not given a second
+  opaque, so the count stays one `IrOpaque` per written variable.
+- Decision: an opaque whose operands were already lowered (e.g. `Binary` over a `ref-argument`
+  call) writes the variable a second time, with the outer reason. Harmless (the later value wins)
+  and rare; not worth tracking which children were lowered.

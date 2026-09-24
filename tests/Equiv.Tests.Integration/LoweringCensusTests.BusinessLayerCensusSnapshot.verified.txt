@@ -56,10 +56,6 @@
       legacy: 1,
       modern: 1
     },
-    undefined: {
-      legacy: 1,
-      modern: 1
-    },
     using: {
       legacy: 1,
       modern: 1
