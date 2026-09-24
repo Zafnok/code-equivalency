@@ -85,25 +85,14 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Fetch Microsoft.Z3 (ADR 0030)
+        if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
+        shell: pwsh
+        run: ./tools/z3-feed/fetch.ps1
       - if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
         run: dotnet restore --locked-mode
       - if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
         run: dotnet tool restore
-
-      # Microsoft.Z3 4.12.2 ships libz3 for win-x64 and osx-x64 only (ticket M3-001 Notes). The
-      # z3-solver 4.12.2.0 manylinux wheel on PyPI carries the same version's libz3.so; pip checks
-      # it against the hash PyPI publishes, and .NET's dlopen finds it on LD_LIBRARY_PATH.
-      - name: Provide libz3 (Linux)
-        if: runner.os == 'Linux' && steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "z3-solver==4.12.2.0 --hash=sha256:03921d3021cb6e5dbeaeb94634132a5fbf5403748aa21774efac4047e633af1e" > "$RUNNER_TEMP/z3-requirements.txt"
-          python3 -m pip download --no-deps --only-binary=:all: --platform manylinux2014_x86_64 --python-version 3.12 \
-            --require-hashes -r "$RUNNER_TEMP/z3-requirements.txt" -d "$RUNNER_TEMP/z3"
-          python3 -m zipfile -e "$RUNNER_TEMP"/z3/z3_solver-4.12.2.0-*.whl "$RUNNER_TEMP/z3/wheel"
-          test -f "$RUNNER_TEMP/z3/wheel/z3/lib/libz3.so"
-          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/z3/wheel/z3/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
 
       # PRs mutate only the src files they changed (diff target and ignored test paths: see the
       # scope step and .github/stryker-pr-config.json); the nightly run is a full sweep.

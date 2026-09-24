@@ -35,6 +35,7 @@ function Invoke-Step {
     }
 }
 
+Invoke-Step "fetch Microsoft.Z3" { & (Join-Path $repoRoot "tools/z3-feed/fetch.ps1") }
 Invoke-Step "restore" { dotnet restore --locked-mode }
 Invoke-Step "restore tools" { dotnet tool restore }
 
