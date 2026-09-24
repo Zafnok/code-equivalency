@@ -132,9 +132,7 @@ internal static class CompareCommand
             projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length));
 
         (List<VerificationResult> verified, List<Notification> pairFailures, List<ProcedureIdentity> unverifiedPairs) =
-            options.LowerOnly
-                ? (new List<VerificationResult>(), new List<Notification>(), new List<ProcedureIdentity>())
-                : Verified(lowered, backend, config);
+            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config);
         List<VerificationResult> results = verified;
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));
         results.AddRange(matchResult.Removed.Select(static identity => new VerificationResult(identity, new Removed())));

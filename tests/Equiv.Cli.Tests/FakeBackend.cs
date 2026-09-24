@@ -18,11 +18,8 @@ internal sealed class FakeBackend(IReadOnlyDictionary<string, Verdict> verdictBy
     public Verdict Verify(IrProcedure oldBody, IrProcedure newBody, VerificationOptions options)
     {
         Calls.Add(options);
-        if (throwByIdentity is not null && throwByIdentity.TryGetValue(newBody.Identity.Value, out Exception? exception))
-        {
-            throw exception;
-        }
-
-        return verdictByIdentity[newBody.Identity.Value];
+        return throwByIdentity is not null && throwByIdentity.TryGetValue(newBody.Identity.Value, out Exception? exception)
+            ? throw exception
+            : verdictByIdentity[newBody.Identity.Value];
     }
 }
