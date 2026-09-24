@@ -222,6 +222,10 @@ The engine itself is cross-platform; only loading legacy `.csproj` files needs W
 until the Linux loader exists (ADR 0031, tickets M3-028 and M3-029). CI runs the full pipeline on `windows-latest`
 and everything except the integration tests on `ubuntu-latest`.
 
+Linux hosts need **glibc 2.38 or newer** (Ubuntu 24.04+): the `Microsoft.Z3` 5.1.0 native
+(from the official Z3Prover/z3 GitHub release, ADR 0030) is built against it. Debian 12,
+Ubuntu 22.04 and Alpine are unsupported for the linux-x64 build.
+
 ## Star history
 
 <a href="https://star-history.com/#Zafnok/code-equivalency&Date">
