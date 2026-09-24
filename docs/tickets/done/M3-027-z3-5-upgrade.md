@@ -1,5 +1,5 @@
 # M3-027 Z3 5.1.0 from the official GitHub release, on every platform
-Status: in-progress
+Status: done (PR #163)
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-002
