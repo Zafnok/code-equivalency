@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 
 using Equiv.Core.Ir;
 
@@ -132,6 +132,16 @@ public sealed class IrLowererTests
         IrVar receiver = Assert.Single(procedure.Parameters, static p => string.Equals(p.Var.Name, "this", StringComparison.Ordinal)).Var;
         Assert.Equal(new IrSort("C"), receiver.Type);
         Assert.Equal(receiver, Assert.Single(Assert.Single(Calls(procedure)).Args));
+    }
+
+    /// <summary>Out of scope for ticket M4-001: Roslyn binds a primary constructor with base arguments to its type declaration.</summary>
+    [Fact]
+    public void APrimaryConstructorWithBaseArgumentsIsOneOpaque()
+    {
+        IrProcedure procedure = Source("class B(int n) { } class C(int p) : B(p) { }", ".ctor", parameters: 1);
+
+        Assert.Single(procedure.Blocks);
+        Assert.Equal("ConstructorBodyOperation", Assert.Single(Opaques(procedure)).Reason);
     }
 
     [Fact]

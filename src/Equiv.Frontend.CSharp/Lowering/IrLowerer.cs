@@ -61,8 +61,8 @@ internal sealed class IrLowerer
     /// <summary>
     /// Lowers <paramref name="method"/>'s first declaration. An instance constructor is lowered like a method, its base or
     /// <c>this</c> initializer first, unless it leaves out the field initializers C# runs ahead of it (reason
-    /// <c>field-initializer</c>, ticket M4-001). Any other body that is not an <see cref="IMethodBodyOperation"/> (a static
-    /// constructor, an arrow-bodied property, an auto-accessor) is one whole-body <see cref="IrOpaque"/>.
+    /// <c>field-initializer</c>, ticket M4-001). Any other body that is not an <see cref="IMethodBodyOperation"/> (a static or
+    /// primary constructor, an arrow-bodied property, an auto-accessor) is one whole-body <see cref="IrOpaque"/>.
     /// A call to a member listed in <paramref name="suppressedRuntimeChanges"/> is not flagged runtime-changed. A method
     /// whose bound code is erroneous is one whole-body <see cref="IrOpaque"/> per cause, with reason
     /// <see cref="Unknown.UnboundOpaqueReason"/> (ADR 0029 decision 2), and is not lowered further.
@@ -79,9 +79,10 @@ internal sealed class IrLowerer
         {
             (false, _) => Opaque(method, renames, Unknown.UnboundOpaqueReason, unbound),
             (true, IMethodBodyOperation body) => Lower(body, model, renames, suppressedRuntimeChanges),
-            (true, IConstructorBodyOperation) when method.MethodKind == MethodKind.Constructor && OmitsFieldInitializers(method, syntax) =>
-                Opaque(method, renames, "field-initializer", [Span(syntax)]),
-            (true, IConstructorBodyOperation body) when method.MethodKind == MethodKind.Constructor => Lower(body, model, renames, suppressedRuntimeChanges),
+            (true, IConstructorBodyOperation body) when method.MethodKind == MethodKind.Constructor && syntax is ConstructorDeclarationSyntax declaration =>
+                OmitsFieldInitializers(method, declaration)
+                    ? Opaque(method, renames, "field-initializer", [Span(syntax)])
+                    : Lower(body, model, renames, suppressedRuntimeChanges),
             _ => Opaque(method, renames, operation?.Kind.ToString() ?? "no-body", [Span(syntax)]),
         };
     }
@@ -90,8 +91,8 @@ internal sealed class IrLowerer
     /// Whether <paramref name="constructor"/>'s operation tree leaves out instance field or property initializers C# runs
     /// ahead of its body: it does not chain to <c>this(...)</c>, which runs them itself, and its type declares one.
     /// </summary>
-    private static bool OmitsFieldInitializers(IMethodSymbol constructor, SyntaxNode syntax) =>
-        !(syntax is ConstructorDeclarationSyntax { Initializer: { } initializer } && initializer.IsKind(SyntaxKind.ThisConstructorInitializer))
+    private static bool OmitsFieldInitializers(IMethodSymbol constructor, ConstructorDeclarationSyntax declaration) =>
+        declaration.Initializer is not { RawKind: (int)SyntaxKind.ThisConstructorInitializer }
         && constructor.ContainingType.GetMembers()
             .Where(static m => !m.IsStatic)
             .SelectMany(static m => m.DeclaringSyntaxReferences)
