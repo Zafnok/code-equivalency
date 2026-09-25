@@ -13,8 +13,15 @@ public static class IrInterpreter
     /// Runs <paramref name="procedure"/>. Each executed instruction or terminator costs one step;
     /// when <paramref name="stepBudget"/> steps are spent the run ends with <see cref="IrBudgetExhausted"/>.
     /// </summary>
+    /// <param name="taint">
+    /// Marks the calls whose result and <c>threw</c> flag are abstractions (ADR 0026), which <c>IrPure</c> results will
+    /// also be once that instruction exists. Taint then flows through every instruction and phi, a tainted call's event
+    /// is tainted, and after a branch or switch on a tainted condition every later definition, trace event, final by-ref
+    /// value and the outcome are. <see cref="IrRun.Taint"/> records it; without a predicate it is
+    /// <see cref="IrTaint.None"/>. Taint never changes a value.
+    /// </param>
     /// <exception cref="ArgumentException">The procedure does not validate, or the inputs do not match its parameters.</exception>
-    public static IrRun Run(IrProcedure procedure, IrInputs inputs, ICallOracle oracle, int stepBudget)
+    public static IrRun Run(IrProcedure procedure, IrInputs inputs, ICallOracle oracle, int stepBudget, Func<CallIdentity, bool>? taint = null)
     {
         ArgumentNullException.ThrowIfNull(procedure);
         ArgumentNullException.ThrowIfNull(inputs);
@@ -26,16 +33,25 @@ public static class IrInterpreter
         {
             { IsEmpty: false } => throw new ArgumentException($"Procedure is not valid IR: {diagnostics[0].Id} {diagnostics[0].Message}", nameof(procedure)),
             _ when !typesMatch => throw new ArgumentException("Inputs do not match the procedure's parameter types.", nameof(inputs)),
-            _ => new IrMachine(oracle).Execute(procedure, inputs, stepBudget),
+            _ => new IrMachine(oracle, taint ?? (static _ => false)).Execute(procedure, inputs, stepBudget),
         };
     }
 
     private readonly record struct IrJump(IrBlockId? Next, IrOutcome? Outcome, ImmutableArray<IrOut> Outs);
 
-    private sealed class IrMachine(ICallOracle oracle) : IIrInstructionVisitor<IrOutcome?>
+    private sealed class IrMachine(ICallOracle oracle, Func<CallIdentity, bool> abstraction) : IIrInstructionVisitor<IrOutcome?>
     {
         private readonly Dictionary<string, IrValue> values = new(StringComparer.Ordinal);
         private readonly ImmutableArray<IrCallRecord>.Builder trace = ImmutableArray.CreateBuilder<IrCallRecord>();
+        private readonly HashSet<string> tainted = new(StringComparer.Ordinal);
+        private readonly ImmutableArray<int>.Builder taintedEvents = ImmutableArray.CreateBuilder<int>();
+        private readonly ImmutableArray<CallIdentity>.Builder sources = ImmutableArray.CreateBuilder<CallIdentity>();
+
+        /// <summary>The run branched on a tainted condition, so everything it does from here on is tainted.</summary>
+        private bool control;
+
+        /// <summary>The instruction being executed reads a tainted value, or is a tainting call.</summary>
+        private bool data;
 
         public IrRun Execute(IrProcedure procedure, IrInputs inputs, int stepBudget)
         {
@@ -51,26 +67,28 @@ public static class IrInterpreter
             int steps = 0;
             while (true)
             {
-                List<(IrVar Target, IrValue Value)> phis =
-                    [.. block.Instructions.OfType<IrPhi>().Select(phi => (phi.Target, Get(phi.Incoming.First(i => i.From == previous).Value)))];
-                foreach ((IrVar target, IrValue value) in phis)
+                List<(IrVar Target, IrVar From)> phis =
+                    [.. block.Instructions.OfType<IrPhi>().Select(phi => (phi.Target, phi.Incoming.First(i => i.From == previous).Value))];
+                List<(IrVar Target, IrValue Value, bool Tainted)> bound = [.. phis.Select(p => (p.Target, Get(p.From), IsTainted(p.From)))];
+                foreach ((IrVar target, IrValue value, bool isTainted) in bound)
                 {
-                    values[target.Name] = value;
+                    Bind(target, value, isTainted);
                 }
 
                 foreach (IrInstruction instruction in block.Instructions)
                 {
+                    data = instruction.Uses().Any(IsTainted);
                     IrOutcome? stop = steps++ == stepBudget ? new IrBudgetExhausted() : instruction.Accept(this);
                     if (stop is not null)
                     {
-                        return new IrRun(stop, [], trace.ToImmutable());
+                        return Finish(stop, [], returned: null);
                     }
                 }
 
                 IrJump jump = steps++ == stepBudget ? new IrJump(Next: null, new IrBudgetExhausted(), []) : block.Terminator.Accept(terminators);
                 if (jump.Outcome is not null)
                 {
-                    return new IrRun(jump.Outcome, ImmutableArray.CreateRange(jump.Outs, static (o, values) => values[o.Final.Name], values), trace.ToImmutable());
+                    return Finish(jump.Outcome, jump.Outs, (block.Terminator as IrReturn)?.Value);
                 }
 
                 previous = block.Id;
@@ -99,6 +117,19 @@ public static class IrInterpreter
             ImmutableArray<IrValue> args = [.. instruction.Args.Select(Get)];
             int position = trace.Count;
             trace.Add(new IrCallRecord(instruction.Callee, args));
+            if (abstraction(instruction.Callee))
+            {
+                data = true;
+                if (!sources.Contains(instruction.Callee))
+                {
+                    sources.Add(instruction.Callee);
+                }
+            }
+
+            if (data || control)
+            {
+                taintedEvents.Add(position);
+            }
             IrCallResult result = oracle.Answer(instruction.Callee, args, instruction.Target?.Type, position);
             if (instruction.Target is not null)
             {
@@ -120,21 +151,54 @@ public static class IrInterpreter
 
         private IrValue Get(IrVar var) => values[var.Name];
 
+        private bool IsTainted(IrVar var) => tainted.Contains(var.Name);
+
         private IrOutcome? Set(IrVar var, IrValue value)
         {
-            values[var.Name] = value;
+            Bind(var, value, data);
             return null;
         }
+
+        private void Bind(IrVar var, IrValue value, bool isTainted)
+        {
+            values[var.Name] = value;
+            if (isTainted || control)
+            {
+                tainted.Add(var.Name);
+            }
+            else
+            {
+                tainted.Remove(var.Name);
+            }
+        }
+
+        /// <summary>A branch or switch on a tainted <paramref name="condition"/> taints the rest of the run.</summary>
+        private void Branch(IrVar condition) => control |= IsTainted(condition);
+
+        private IrRun Finish(IrOutcome outcome, ImmutableArray<IrOut> outs, IrVar? returned) =>
+            new(outcome, ImmutableArray.CreateRange(outs, static (o, values) => values[o.Final.Name], values), trace.ToImmutable())
+            {
+                Taint = new IrTaint(
+                    control,
+                    control || (returned is not null && IsTainted(returned)),
+                    [.. Enumerable.Range(0, outs.Length).Where(i => control || IsTainted(outs[i].Final))],
+                    taintedEvents.ToImmutable(),
+                    sources.ToImmutable()),
+            };
 
         private sealed class IrStepper(IrMachine machine) : IIrTerminatorVisitor<IrJump>
         {
             public IrJump Visit(IrGoto terminator) => new(terminator.Target, Outcome: null, []);
 
-            public IrJump Visit(IrBranch terminator) =>
-                new(((IrBoolValue)machine.Get(terminator.Cond)).Value ? terminator.Then : terminator.Else, Outcome: null, []);
+            public IrJump Visit(IrBranch terminator)
+            {
+                machine.Branch(terminator.Cond);
+                return new(((IrBoolValue)machine.Get(terminator.Cond)).Value ? terminator.Then : terminator.Else, Outcome: null, []);
+            }
 
             public IrJump Visit(IrSwitch terminator)
             {
+                machine.Branch(terminator.Scrutinee);
                 IrValue scrutinee = machine.Get(terminator.Scrutinee);
                 IrBlockId target = terminator.Cases.Where(c => c.Value == scrutinee).Select(static c => c.Target).FirstOrDefault(terminator.Default);
                 return new(target, Outcome: null, []);

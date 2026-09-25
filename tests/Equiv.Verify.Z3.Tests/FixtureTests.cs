@@ -101,7 +101,8 @@ public sealed class FixtureTests
         Unknown unknown = Assert.IsType<Unknown>(Verify(Fixture.Load("opaque-void-effect")));
 
         Assert.Equal(UnknownReason.Opaque, unknown.Reason);
-        Assert.Equal("old: CompoundAssignment at T.cs 3:9", unknown.Detail);
+        Assert.Equal("old: CompoundAssignment", unknown.Detail);
+        Assert.Equal(new SourceSpan("T.cs", 3, 9, 3, 15), Assert.Single(unknown.Causes).Span);
     }
 
     /// <summary>A fixture that expects a timeout gets 50 ms; every other one gets ten seconds.</summary>

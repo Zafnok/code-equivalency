@@ -137,8 +137,18 @@ public static class SarifReportWriter
         SetListProperty(sarifResult, "assumedCallees", result.AssumedCallees);
         SetListProperty(sarifResult, "unprovenAssumptions", result.UnprovenAssumptions);
 
+        SetLocations(sarifResult, result);
+        return sarifResult;
+    }
+
+    /// <summary>
+    /// The result's location, with the route it was matched on for an endpoint (M2-005), and an Unknown's causes as
+    /// related locations (ADR 0027 decision 4).
+    /// </summary>
+    private static void SetLocations(Result sarifResult, VerificationResult result)
+    {
         bool isEndpoint = ProcedureIdentityNormalizer.IsEndpoint(result.Identity.Value);
-        if (result.Identity.Location is { } location)
+        if (PrimaryLocation(result) is { } location)
         {
             Location sarifLocation = ToSarifLocation(location);
             if (isEndpoint)
@@ -153,8 +163,18 @@ public static class SarifReportWriter
             sarifResult.Locations = [new Location { LogicalLocations = [EndpointLogicalLocation(result.Identity.Value)] }];
         }
 
-        return sarifResult;
+        if (result.Verdict is Unknown { Causes.IsEmpty: false } unknown)
+        {
+            sarifResult.RelatedLocations = [.. unknown.Causes.Select(static c => ToSarifLocation(c.Span, c.Reason))];
+        }
     }
+
+    /// <summary>
+    /// Where the result points (ADR 0027 decision 4): an Unknown's first modern-side cause, so a reviewer reads the line
+    /// that caused it, else the procedure. The fingerprints do not depend on it.
+    /// </summary>
+    private static SourceSpan? PrimaryLocation(VerificationResult result) =>
+        (result.Verdict as Unknown)?.Causes.FirstOrDefault(static c => c.Side == Codebase.Modern)?.Span ?? result.Identity.Location;
 
     /// <summary>A string-array result property, left out when <paramref name="values"/> is empty.</summary>
     private static void SetListProperty(Result sarifResult, string name, ImmutableArray<string> values)
@@ -188,6 +208,7 @@ public static class SarifReportWriter
                 break;
             case Unknown unknown:
                 sarifResult.SetProperty("unknownReason", Name(unknown.Reason));
+                SetAbstractionProperties(sarifResult, unknown);
                 break;
         }
 
@@ -201,6 +222,49 @@ public static class SarifReportWriter
             }).ToList());
         }
     }
+
+    /// <summary>
+    /// An <see cref="UnknownReason.Abstraction"/> result's candidate counterexample, rendered as a Divergent's
+    /// <c>model</c> is, and the abstractions it depends on, each with its identity, side and, when known, source span
+    /// (ADR 0026). Both are left out when absent.
+    /// </summary>
+    private static void SetAbstractionProperties(Result sarifResult, Unknown unknown)
+    {
+        if (unknown.Candidate is { } candidate)
+        {
+            sarifResult.SetProperty("candidateCounterexample", CounterexampleText.Dump(candidate));
+        }
+
+        if (!unknown.Abstractions.IsEmpty)
+        {
+            sarifResult.SetProperty("abstractions", unknown.Abstractions.Select(static a => Describe(a)).ToList());
+        }
+    }
+
+    private static Dictionary<string, object> Describe(Abstraction abstraction)
+    {
+        Dictionary<string, object> described = new(StringComparer.Ordinal)
+        {
+            ["identity"] = abstraction.Identity.Value,
+            ["side"] = Name(abstraction.Side),
+        };
+        if (abstraction.Span is { } span)
+        {
+            described["span"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["path"] = span.Path,
+                ["startLine"] = span.StartLine,
+                ["startColumn"] = span.StartColumn,
+                ["endLine"] = span.EndLine,
+                ["endColumn"] = span.EndColumn,
+            };
+        }
+
+        return described;
+    }
+
+    /// <summary>The spelling the census uses for a side: <c>legacy</c>, <c>modern</c>.</summary>
+    internal static string Name(Codebase side) => side == Codebase.Legacy ? "legacy" : "modern";
 
     /// <summary>
     /// The spelling VERIFICATION-MODEL.md sections 1 and 5.1 use for a proof: <c>bounded</c>, <c>lockstep-induction</c>,
@@ -221,6 +285,7 @@ public static class SarifReportWriter
         UnknownReason.UnmatchedOverload => "unmatched-overload",
         UnknownReason.UnalignedLoop => "unaligned-loop",
         UnknownReason.Recursion => "recursion",
+        UnknownReason.Abstraction => "abstraction",
         _ => "unbound",
     };
 
@@ -242,10 +307,12 @@ public static class SarifReportWriter
 
     /// <summary>
     /// A <see cref="SourceSpan"/> (1-based, ticket M2-002) as a SARIF <see cref="Location"/>: the
-    /// declaring file plus the identifier's line/column region.
+    /// declaring file plus the identifier's line/column region, and for a related location the <paramref name="message"/>
+    /// saying why it is related.
     /// </summary>
-    private static Location ToSarifLocation(SourceSpan span) => new()
+    private static Location ToSarifLocation(SourceSpan span, string? message = null) => new()
     {
+        Message = message is null ? null : new Message { Text = message },
         PhysicalLocation = new PhysicalLocation
         {
             ArtifactLocation = new ArtifactLocation { Uri = new Uri(span.Path.Replace('\\', '/'), UriKind.RelativeOrAbsolute) },

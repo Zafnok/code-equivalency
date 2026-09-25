@@ -14,8 +14,8 @@ real divergence: `Math.Round(total, 2)` rounds half to even, while
 "Today" is the verdict on `main` when M3-015 merged. "Unlocked by" is the ticket that moved, or is
 expected to move, the method to its target verdict. Since M3-015 an unchanged method is Equivalent
 by congruence (`proofMethod: congruence`) before the solver can prove it, so the last column names
-the ticket that lowers its construct. Every Unknown points at the whole method until M3-016, which
-points it at the construct.
+the ticket that lowers its construct. Since M3-016 every Unknown points at the construct that caused it: its
+primary location is that line on the modern side, and every cause is a `relatedLocation`.
 
 `Describe` is unchanged in source but not in binding: its interpolated string binds `string.Format`
 on .NET Framework 4.8 and `DefaultInterpolatedStringHandler` on .NET 10. Its bound fingerprints

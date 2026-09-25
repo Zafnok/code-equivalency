@@ -26,4 +26,10 @@ public enum UnknownReason
     /// decision 2). The frontend lowers it to an <c>IrOpaque</c> with reason <see cref="Unknown.UnboundOpaqueReason"/>.
     /// </summary>
     Unbound,
+
+    /// <summary>
+    /// The solver found a divergence, but its replay differs only in observables that depend on an abstraction, which
+    /// the solver may interpret in a way no real run does (ADR 0026). The result carries the candidate counterexample.
+    /// </summary>
+    Abstraction,
 }

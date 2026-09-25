@@ -1,0 +1,142 @@
+﻿{
+  $schema: https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json,
+  version: 2.1.0,
+  runs: [
+    {
+      tool: {
+        driver: {
+          name: Equiv,
+          rules: [
+            {
+              id: EQ001,
+              name: Equivalent,
+              shortDescription: {
+                text: The two procedures are observably equivalent.
+              },
+              defaultConfiguration: {
+                level: none
+              }
+            },
+            {
+              id: EQ002,
+              name: Divergent,
+              shortDescription: {
+                text: The two procedures disagree on some observable.
+              },
+              defaultConfiguration: {
+                level: error
+              }
+            },
+            {
+              id: EQ003,
+              name: Unknown,
+              shortDescription: {
+                text: Equivalence could not be decided for this procedure pair.
+              }
+            },
+            {
+              id: EQ004,
+              name: Added,
+              shortDescription: {
+                text: The procedure is present on the modern side only.
+              },
+              defaultConfiguration: {
+                level: note
+              }
+            },
+            {
+              id: EQ005,
+              name: Removed,
+              shortDescription: {
+                text: The procedure is present on the legacy side only.
+              },
+              defaultConfiguration: {
+                level: note
+              }
+            },
+            {
+              id: EQ006,
+              name: RuntimeChangedDivergence,
+              shortDescription: {
+                text: The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET.
+              },
+              defaultConfiguration: {
+                level: error
+              }
+            }
+          ]
+        }
+      },
+      results: [
+        {
+          ruleId: EQ003,
+          kind: open,
+          level: none,
+          message: {
+            text: Samples.Math::Add(int32,int32) is unknown (Abstraction): the divergence depends on opaque:a, opaque:b
+          },
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: {
+                  uri: New.cs
+                },
+                region: {
+                  startLine: 4,
+                  startColumn: 9,
+                  endLine: 4,
+                  endColumn: 20
+                }
+              }
+            }
+          ],
+          partialFingerprints: {
+            procedureIdentity/v1: Samples.Math::Add(int32,int32),
+            resultFingerprint/v1: 40500733f96f514a135272f5a857143b7c59b8d56924167abce91405886d2304
+          },
+          relatedLocations: [
+            {
+              physicalLocation: {
+                artifactLocation: {
+                  uri: New.cs
+                },
+                region: {
+                  startLine: 4,
+                  startColumn: 9,
+                  endLine: 4,
+                  endColumn: 20
+                }
+              },
+              message: {
+                text: abstraction opaque:b
+              }
+            }
+          ],
+          baselineState: new,
+          properties: {
+            unknownReason: abstraction,
+            candidateCounterexample: inputs(bv32 0) old(returned bv32 1 outs() trace()) new(returned bv32 2 outs() trace()),
+            abstractions: [
+              {
+                identity: opaque:a,
+                side: legacy
+              },
+              {
+                identity: opaque:b,
+                side: modern,
+                span: {
+                  path: New.cs,
+                  startLine: 4,
+                  startColumn: 9,
+                  endLine: 4,
+                  endColumn: 20
+                }
+              }
+            ]
+          }
+        }
+      ],
+      columnKind: utf16CodeUnits
+    }
+  ]
+}

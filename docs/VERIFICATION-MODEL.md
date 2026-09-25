@@ -236,15 +236,16 @@ Every verdict on a matched pair with bodies also carries `properties.assumedCall
 catalogue entry fired (ADR 0020).
 
 A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
-and of `opaque:` calls are tainted, taint follows data, and a branch on a tainted value taints
-the rest of that side. The result is Divergent only when a compared observable differs and is
+and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the
+fragment's calls. Taint follows data, and a branch on a tainted value taints the rest of that side. The result is Divergent only when a compared observable differs and is
 untainted on both sides. Otherwise it is Unknown with reason `Abstraction`, carrying the model
 as `properties.candidateCounterexample` and the abstractions it depends on as
 `properties.abstractions`.
 
 An Unknown result lists every reached opaque node and every abstraction it depends on as a
-`relatedLocation` whose message is the reason. Its primary location is the first of them on
-the modern side, else the procedure (ADR 0027). `partialFingerprints` do not change with it.
+`relatedLocation` whose message is the reason, each line once, legacy side first and then in source order. Its
+primary location is the first of them on the modern side, else the procedure (ADR 0027). `partialFingerprints` do
+not change with it: an opaque Unknown's detail names each `side: reason` once, without lines.
 
 Every Unknown carries `properties.scope` (ADR 0029):
 - `line`: every cause is a span inside the method, and the first query of ADR 0014 was
