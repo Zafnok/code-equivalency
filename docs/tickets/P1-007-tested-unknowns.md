@@ -23,16 +23,20 @@ ADR 0035 decision 3; ADR 0029 (scope: a `line` Unknown's residual claim is alrea
 reported next to the testing figure, not replaced by it); VERIFICATION-MODEL.md sections 1 and 6.
 
 ## Design
-- **Species.** For each input, the species is the triple (legacy outcome class, modern outcome
-  class, IR path signature):
+- **Species.** For each input, the species is the tuple (legacy outcome class, modern outcome
+  class, outcomes equal, IR path signature):
   - an outcome class is the exception type, or `returned` plus a hash bucket of the canonical
     return value (16 buckets);
+  - outcomes equal is whether the two canonical outcomes are equal. Without it a divergent input
+    can fall into a species already seen (two values in one hash bucket, one path prefix), and the
+    estimate would no longer bound the chance of the next input diverging. With it, while no
+    divergence has been seen, any divergent input is a new species;
   - the IR path signature is the sequence of block ids `IrInterpreter` visits on each side, up to
     the first opaque node or abstraction.
 
   This needs no instrumentation of user assemblies. The report names this definition
-  (`species: outcome+irPrefix`), so a later coverage-guided definition is a different, comparable
-  label.
+  (`species: outcome+equal+irPrefix`), so a later coverage-guided definition is a different,
+  comparable label.
 - **Estimate.** After n inputs, with f1 the number of species seen exactly once, the discovery
   probability is estimated as f1 / n. Report it with the adaptive-bias caveat from the paper: the
   generator is not adaptive here, so plain Good-Turing applies. Stop when the estimate is below

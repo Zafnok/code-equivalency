@@ -1,6 +1,6 @@
 # ADR 0036: A proposed invariant, contract or table row is a hypothesis until a checker admits it; callee contracts replace unproven assumptions
 
-Status: proposed (2026-09-24)
+Status: accepted (2026-09-24)
 
 ## Context
 Several planned sources produce facts that the engine would like to use. P1-002 has a model
@@ -31,13 +31,17 @@ inferred, caller-sufficient contracts. Separately, ADR 0019 leaves a caller Equi
    the checker (`proofMethod`). No proposer output is ever evidence by itself.
 2. **Caller-sufficient callee contracts.** When a matched callee pair (f, f') is not
    Equivalent, a proposer may offer a *relational* contract K. K ranges over the shared
-   arguments, the heap at the call, and each side's own result and heap effect: for example
-   `(r > 0) == (r' > 0)`. If the solver proves that the product program of f and f' satisfies K,
+   arguments, the heap at the call, and each side's own outcome and heap effect: for example
+   `(r > 0) == (r' > 0)`. A side's outcome is its return value together with its `threw` flag and
+   exception type. If the solver proves that the product program of f and f' satisfies K,
    the caller pair is re-verified with K in place of the shared uninterpreted function. Each
-   side's call gets its own fresh result and heap, constrained jointly only by K. If the caller is
+   side's call gets its own fresh outcome and heap, constrained jointly only by K. If the caller is
    then Equivalent, `proofMethod` is suffixed `+contract`, and the callee moves from
-   `unprovenAssumptions` to `properties.contractsUsed`. This is sound: the caller agrees on every
-   pair of callee behaviours that satisfy K, and the real pair satisfies K.
+   `unprovenAssumptions` to `properties.contractsUsed`. The proof of K is itself modular (ADR
+   0019): it assumes f's own matched callees equivalent. So the caller inherits f's
+   `unprovenAssumptions`, and those of every callee whose contract it uses. This is sound: the
+   caller agrees on every pair of callee behaviours that satisfy K, and the real pair satisfies K
+   whenever the assumptions the caller still lists hold.
 
 ## Why
 - One rule covers every current and future proposer: P1-002, trace mining, contracts, and model
@@ -63,6 +67,7 @@ inferred, caller-sufficient contracts. Separately, ADR 0019 leaves a caller Equi
   (contracts).
 - VERIFICATION-MODEL.md section 1 (modular verdicts) and section 6 (`proposedBy`, `contractsUsed`,
   the `+contract` suffix) change once this ADR is accepted.
-- The contract encoding must give each side its own call result and heap. Reusing the shared
-  function would silently turn the contract into an equality assumption. P1-009's soundness
+- The contract encoding must give each side its own call result, `threw` flag and heap. Reusing
+  any shared function, the shared `threw` included, would silently turn the contract into an
+  equality assumption. P1-009's soundness
   property targets exactly that mistake.

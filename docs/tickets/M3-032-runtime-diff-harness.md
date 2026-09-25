@@ -35,9 +35,12 @@ VERIFICATION-MODEL.md section 3 (runtime-changed APIs); ARCHITECTURE.md (compone
   - writes one canonical JSON line per case on stdout.
 
   Compile with Roslyn: `OutputKind.ConsoleApplication`, one compilation per runtime. The .NET
-  Framework 4.8 compilation uses the reference assemblies under `.corpus/refasm` or the
-  targeting pack, and gets an `app.config` with `supportedRuntime v4.0`. Canonical form:
-  primitives in invariant format; strings as JSON; `char` as a code point; arrays and `List<T>`
+  Framework 4.8 compilation uses the installed .NET Framework 4.8 targeting pack (never
+  `.corpus/`, which holds only third-party checkouts), and gets an `app.config` with
+  `supportedRuntime v4.0`. Canonical form, written by the driver's own code and never by a
+  runtime's `ToString` (ADR 0035): integers in decimal; `float` and `double` as their IEEE bit
+  pattern in hex (.NET Core 3.0 changed default `double` formatting); `decimal` as its four
+  `GetBits` integers; strings as JSON; `char` as a code point; arrays and `List<T>`
   of those element-wise; `null`; an exception as its type's full name only. Anything else is
   `NotComparable`.
 - **Runner** (`src/Equiv.Execute/`): starts each driver as a child process (the `net48` exe

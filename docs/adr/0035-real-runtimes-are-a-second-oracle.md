@@ -1,6 +1,6 @@
 # ADR 0035: The real runtimes are a second oracle: execution measures, confirms and bounds, and never proves
 
-Status: proposed (2026-09-24)
+Status: accepted (2026-09-24); supersedes 0031 in part (runs with `--execute` are Windows-only)
 
 ## Context
 The 2026-09-24 census (`docs/runs/2026-09-24-census-verdict.md`) found that Z3 sees little of the
@@ -63,11 +63,18 @@ There is no reflection anywhere: the driver is generated source.
   probability shows a plateau.
 
 ## Consequences
-- `--execute` runs the user's code: static constructors, file I/O, network. It is opt-in, printed
-  on stderr when on, and never on by default.
+- `--execute` runs the user's code: static constructors, file I/O, network. It is opt-in on every
+  surface, printed on stderr when on, and never on by default. That includes `equiv mcp`: a tool
+  that executes code is registered only when the server is started with `--execute`, so an agent
+  cannot turn execution on by itself.
 - It needs Windows with .NET Framework 4.8. On Linux it exits 3 with a message. The hosted tier
-  (ADR 0032, Linux Container Apps) cannot offer it. ADR 0031's parity requirement covers runs
-  without `--execute`; runs with it are Windows-only by design.
+  (ADR 0032, Linux Container Apps) cannot offer it. This supersedes ADR 0031 in part: its parity
+  requirement covers every run without `--execute`, and runs with it are Windows-only by design.
+  Anyone with a .NET Framework 4.8 side to execute already has Windows.
+- Canonical outcomes never go through a runtime's own formatting. .NET Core 3.0 changed the
+  default `double` formatting (`0.1 + 0.2` prints `0.3` on .NET Framework and
+  `0.30000000000000004` on .NET 10), so a `ToString`-based canonical form would report a harness
+  artefact as a divergence. Floating-point values are canonicalised by their bit pattern.
 - `runtime-changes.json` rows gain `source` (`curated`, `documented`, `measured`) and an optional
   `witness` (M2-007 adds `source`; M3-033 adds the first `measured` rows).
 - New project `src/Equiv.Execute` and one new architecture rule: it references `Equiv.Core` only.

@@ -26,12 +26,14 @@ VERIFICATION-MODEL.md sections 1 and 6.
   verifies that pair. Replace its "outputs differ" goal with "not K(args, heapIn, r, h, r', h')".
   `unsat` means K is admitted. This reuses the ladder, so loops in f are handled as they are for
   any pair.
-- **Using K.** In the caller's product program, each side's call to f gets its own fresh result
-  and post-call heap (r, h for the legacy side, r', h' for the modern side), constrained by
+- **Using K.** In the caller's product program, each side's call to f gets its own fresh result,
+  `threw` flag and post-call heap (r, h for the legacy side, r', h' for the modern side; K may
+  mention either `threw`), constrained by
   K(args, heapIn, r, h, r', h') when the two calls are aligned with equal arguments and heap. If
   the calls are not aligned, or their arguments may differ, fall back to today's encoding for that
-  call. Do **not** use the shared uninterpreted function under K: that would assert r = r', the
-  assumption being removed. The call itself stays in section 1's call-sequence observable.
+  call. Do **not** use the shared uninterpreted function, or the shared `threw`, under K: that
+  would assert r = r' (or equal throwing), the assumption being removed. The call itself stays in
+  section 1's call-sequence observable.
 - **Candidates**, cheapest first:
   1. **Observed predicates.** Collect every predicate the caller applies to the call's result or
      to a heap cell the call wrote: branch conditions, comparisons, and `== null`. The candidate
@@ -55,7 +57,9 @@ VERIFICATION-MODEL.md sections 1 and 6.
 4. A successful caller result has `proofMethod` suffixed `+contract` (for example
    `lockstep+contract`) and
    `properties.contractsUsed: [{ callee, contract (SMT-LIB), proposedBy }]`, and the callee is
-   removed from `unprovenAssumptions`.
+   removed from `unprovenAssumptions`. The callee's own `unprovenAssumptions` are added to the
+   caller's (ADR 0036: K's proof assumes f's matched callees equivalent). A test chains
+   C → f → g with g Divergent and asserts g appears in C's `unprovenAssumptions`.
 5. New sample `callee-changed-invisible`: `Classify(int a) => Score(a) > 0 ? "pos" : "neg"`,
    where `Score` changes only for inputs whose score was already above 10. `Score` is Divergent,
    and `Classify` is Equivalent `+contract` with an empty `unprovenAssumptions`. Its README states
@@ -72,6 +76,7 @@ VERIFICATION-MODEL.md sections 1 and 6.
 `ContractVerifier_AdmitsWhenProductSatisfiesK`, `ContractVerifier_RejectsWithModel`,
 `ObservedPredicates_DropFalsifiedConjuncts`, `ContractNeverHidesAnObservedDivergence` (property),
 `SharedFunctionUnderContractWouldBeUnsound` (property),
+`ContractCallee_UnprovenAssumptionsAreInherited`,
 `CalleeChangedInvisible_EquivalentPlusContract` (snapshot), `CalleeChanged_Unaffected` (snapshot).
 
 ## Size guard

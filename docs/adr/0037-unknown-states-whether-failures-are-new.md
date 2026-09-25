@@ -1,6 +1,6 @@
 # ADR 0037: An Unknown says whether the modern side can fail where the legacy side does not
 
-Status: proposed (2026-09-24)
+Status: accepted (2026-09-24)
 
 ## Context
 An Unknown pair claims nothing beyond its residual claim (ADR 0029). The regression migrations
@@ -12,12 +12,20 @@ equivalence is out of reach. Alive2 (PLDI 2021) uses the matching idea of refine
 version may be more defined than the old one.
 
 ## Decision
-When a matched pair ends Unknown for any reason other than `unbound`, the backend runs two more
-queries over the same product program. Each one keeps only the throw observables and drops the
-return value and the heap from the comparison:
+When a matched pair ends Unknown for any reason other than `unbound` or `timeout`, the backend
+runs two more queries over the same product program. Each one keeps only the throw observables
+and drops the return value and the heap from the comparison:
 - **no new failures:** every input on which the legacy side returns normally also returns
   normally on the modern side;
 - **no removed failures:** the same with the sides swapped.
+
+Execution past an `IrOpaque` is not modelled (ADR 0014). So on an input where a side reaches an
+unshared opaque node, that side's outcome is unknown: it may return normally or fail.
+`none-proved` must hold for every such resolution, and `found` needs a model on which neither
+side reaches one, mirroring ADR 0014's two queries. An opaque node that occurs on both sides is a
+shared call (ADR 0024), and its `threw` flag is shared like any other call's. `none-proved`
+therefore never rests on an input the encoding did not model. A `timeout` pair is not queried:
+the weaker query seldom finishes where the full one did not, and it would triple that pair's cost.
 
 The results go in `properties.failureRefinement`. Each of `newFailures` and `removedFailures` is
 `none-proved`, `found` (with a model) or `unknown`. The verdict stays EQ003. The rule id, the
@@ -27,7 +35,9 @@ check, and only an untainted one is reported with its model.
 
 ## Why
 - The property is weaker, so fewer inputs reach an opaque node that matters. A throw is decided by
-  guards, which are usually lowerable even when the value computations are not.
+  guards, which are usually lowerable even when the value computations are not. This pays off
+  where the guards run before the first unshared opaque node. An unshared opaque node ahead of
+  the guard still makes the answer `unknown`.
 - It answers the question reviewers ask first about an Unknown: can this now blow up where it
   did not before?
 - Keeping the verdict EQ003 keeps every existing verdict rule and exit code intact.
@@ -43,6 +53,6 @@ check, and only an untainted one is reported with its model.
 
 ## Consequences
 - VERIFICATION-MODEL.md section 6 gains `properties.failureRefinement` once this ADR is accepted.
-- Unknown pairs cost two more solver queries each. Each gets the pair's timeout, and the
-  census reports the time spent on them.
+- Unknown pairs other than `unbound` and `timeout` cost two more solver queries each. Each gets
+  the pair's timeout, and the census reports the time spent on them.
 - Ticket P1-012.

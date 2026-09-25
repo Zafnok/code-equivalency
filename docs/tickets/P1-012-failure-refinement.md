@@ -5,8 +5,8 @@ Model: Opus, medium effort. If you are a weaker model family than named, or the 
 Depends on: M3-016, M3-025; ADR 0037 accepted
 
 ## Goal
-For every Unknown pair except `unbound`, run ADR 0037's two extra queries over the same product
-program:
+For every Unknown pair except `unbound` and `timeout`, run ADR 0037's two extra queries over the
+same product program:
 - **no new failures:** legacy returns normally ⇒ modern returns normally;
 - **no removed failures:** the same with the sides swapped.
 
@@ -19,12 +19,15 @@ ADR 0037; ADR 0026 (taint on any model); ADR 0029 (scope); VERIFICATION-MODEL.md
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. `FailureRefinementQuery` in `Equiv.Verify.Z3` builds each query from the pair's existing
    product encoding. Only the throw observables are compared, and the return value and final heap
-   are dropped.
+   are dropped. As in ADR 0014, a side that reaches an unshared `IrOpaque` has an unknown outcome
+   (it may return or throw): first ask for a new failure on which neither side reaches one
+   (`found` if sat); only if that is unsat, ask again letting an opaque-reaching side take either
+   outcome (`none-proved` if unsat, else `unknown`). The same for `removedFailures`.
 2. Each query's outcome is:
    - `none-proved` (unsat);
    - `found` (sat, and the model replays untainted in `IrInterpreter` per ADR 0026: it carries
      the model);
-   - `unknown` (timeout, or a tainted model).
+   - `unknown` (timeout, a tainted model, or a failure possible only through an opaque node).
 
    `properties.failureRefinement = { newFailures, removedFailures }`, each with its outcome and
    an optional `model`.
@@ -32,8 +35,9 @@ ADR 0037; ADR 0026 (taint on any model); ADR 0029 (scope); VERIFICATION-MODEL.md
    already carries timing) reports the total time spent on these queries.
 4. Verdict, rule id, exit code and result fingerprint are unchanged. A test asserts this over
    every sample.
-5. New sample `samples/unknown-new-throw`. Its Unknown comes from an opaque value computation,
-   while the modern side's new `throw` depends only on a lowered guard. Expected:
+5. New sample `samples/unknown-new-throw`. The legacy side lowers fully and always returns. The
+   modern side adds a lowered guard that throws, and after the guard an unshared opaque value
+   computation, which makes the pair Unknown. Expected:
    `newFailures: found`, `removedFailures: none-proved`. Its README states this, and the snapshot
    is checked in.
 6. VERIFICATION-MODEL.md section 6 documents `failureRefinement`, citing ADR 0037.
@@ -45,8 +49,8 @@ ADR 0037; ADR 0026 (taint on any model); ADR 0029 (scope); VERIFICATION-MODEL.md
 
 ## Tests
 `NewFailure_Found_WhenGuardRemoved`, `NoNewFailure_Proved_WhenOnlyValuesDiffer`,
-`TaintedFailureModel_IsUnknown`, `Refinement_NeverChangesVerdictOrFingerprint`,
-`UnboundPairs_AreNotQueried`.
+`TaintedFailureModel_IsUnknown`, `ModernReachesOpaque_IsNotNoneProved`,
+`Refinement_NeverChangesVerdictOrFingerprint`, `UnboundAndTimeoutPairs_AreNotQueried`.
 
 ## Size guard
 New rule ids, or exit code changes, are ADR 0037's rejected alternatives. Stop.
