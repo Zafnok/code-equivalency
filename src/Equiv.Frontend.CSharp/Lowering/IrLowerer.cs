@@ -479,9 +479,9 @@ internal sealed class IrLowerer
                 return Create(creation, context);
             case IIsPatternOperation pattern:
                 return Match(pattern, context);
-            case IIsNullOperation { Operand.Type.IsReferenceType: true } test:
+            case IIsNullOperation test when test.Operand.Type!.IsReferenceType:
                 // The null test the CFG makes of a `using` resource or a `foreach` enumerator before disposing it.
-                return Nullness(test.Operand, Value(test.Operand, context), context) ?? Const(new IrBoolValue(Value: false), context);
+                return NullFlag(test.Operand, Value(test.Operand, context), context);
             case IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance } when !receiver.IsValueType:
                 // Of the containing type even where the reference is typed as the base, as in a `base(...)` initializer.
                 return heap.Inputs.This(receiver);
@@ -553,12 +553,16 @@ internal sealed class IrLowerer
         };
     }
 
+    /// <summary>Whether <paramref name="source"/> is null, as a value: <see cref="Nullness"/>, or false when it provably is not.</summary>
+    private IrVar NullFlag(IOperation source, IrVar value, LoweringContext context) =>
+        Nullness(source, value, context) ?? Const(new IrBoolValue(Value: false), context);
+
     /// <summary>Records the nullness of a value stored into a reference-typed variable.</summary>
     private void StoreShadow(SsaBuilder.Variable target, IOperation source, IrVar value, LoweringContext context)
     {
         if (Shadow(target) is { } shadow)
         {
-            ssa.Store(context.Current, shadow, Nullness(source, value, context) ?? Const(new IrBoolValue(Value: false), context));
+            ssa.Store(context.Current, shadow, NullFlag(source, value, context));
         }
     }
 
@@ -821,7 +825,7 @@ internal sealed class IrLowerer
             return null;
         }
 
-        IrVar isNull = Nullness(other, Value(other, context), context) ?? Const(new IrBoolValue(Value: false), context);
+        IrVar isNull = NullFlag(other, Value(other, context), context);
         return binary.OperatorKind == BinaryOperatorKind.Equals ? isNull : EmitUnary(IrUnaryOp.BoolNot, isNull, context);
     }
 
