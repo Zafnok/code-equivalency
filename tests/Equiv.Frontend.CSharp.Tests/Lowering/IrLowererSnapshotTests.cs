@@ -171,5 +171,17 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task UsingDeclaration() => Dump("static int M(System.IO.Stream s) { using System.IO.Stream t = s; return t.ReadByte(); }");
 
+    /// <summary>Ticket P1-005: a call with one field map live, first touched after it; the read takes the call's new version.</summary>
+    [Fact]
+    public Task CallWithOneHeapMap() => Dump("int f; void Foo() { } int M() { Foo(); return f; }");
+
+    /// <summary>Ticket P1-005: a call with a field map and an array map live, each paired, in name order.</summary>
+    [Fact]
+    public Task CallWithTwoHeapMaps() => Dump("int f; void Foo() { } int M(int[] a) { a[0] = f; Foo(); return a[0] + f; }");
+
+    /// <summary>Ticket P1-005: a call in a body with no field or array access has no heap pairs, so its dump is unchanged.</summary>
+    [Fact]
+    public Task CallWithNoHeapMap() => Dump("static int Foo(int a) => a; static int M(int a) { int b = Foo(a); return Foo(b); }");
+
     private static Task Dump(string members) => Verify(IrText.Dump(Lowered.Method(members)));
 }

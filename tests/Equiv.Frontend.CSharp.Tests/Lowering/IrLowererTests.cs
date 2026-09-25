@@ -682,6 +682,57 @@ public sealed class IrLowererTests
         Assert.Equal(Bits(32, expected), final.Read(new IrSortValue("C", 0)));
     }
 
+    /// <summary>
+    /// Ticket P1-005 acceptance criterion 5: a call reads and writes every field map the body touches, so the callee sees
+    /// the field written before it and the read after it sees the callee's write. Before the fix this returned 1.
+    /// </summary>
+    [Fact]
+    public void Call_HavocsFieldsWrittenByCallee()
+    {
+        IrProcedure procedure = Method("int g; void Bump(int k) { g = unchecked(g + k); } static int M(C o) { o.g = 1; o.Bump(2); return o.g; }");
+        IrSortValue o = Reference(1, "C");
+        IrInputs inputs = new([.. procedure.Parameters.Select(p => p.Var.Name switch
+        {
+            "o" => o,
+            "field.C.g" => Fields("C", new IrBitVec(32)),
+            _ => (IrValue)Nulls("C", 1, isNull: false),
+        })]);
+
+        IrRun run = IrInterpreter.Run(procedure, inputs, new BumpOracle(), Equiv.TestSupport.IrGen.StepBudget);
+
+        Assert.Equal(new IrReturned(Bits(32, 3)), run.Outcome);
+        Assert.Equal(Bits(32, 3), Assert.IsType<IrMapValue>(Assert.Single(run.Outs)).Read(o));
+    }
+
+    /// <summary>A call first lowered before the body touches a field still pairs that field, so the later read sees its write.</summary>
+    [Fact]
+    public void ACallBeforeTheFirstTouchOfAFieldStillWritesIt()
+    {
+        IrProcedure procedure = Method("int g; void Bump(int k) { g = unchecked(g + k); } static int M(C o) { o.Bump(2); return o.g; }");
+        IrSortValue o = Reference(1, "C");
+        IrInputs inputs = new([.. procedure.Parameters.Select(p => p.Var.Name switch
+        {
+            "o" => o,
+            "field.C.g" => Fields("C", new IrBitVec(32)),
+            _ => (IrValue)Nulls("C", 1, isNull: false),
+        })]);
+
+        IrCall call = Assert.Single(Calls(procedure));
+        Assert.Equal("field.C.g", Assert.Single(call.Heap).Map);
+        Assert.Equal(new IrReturned(Bits(32, 2)), IrInterpreter.Run(procedure, inputs, new BumpOracle(), Equiv.TestSupport.IrGen.StepBudget).Outcome);
+    }
+
+    /// <summary>A body with no field or array access pairs nothing at its calls, and nullness and length maps are never paired.</summary>
+    [Fact]
+    public void OnlyFieldAndArrayMapsArePaired()
+    {
+        Assert.All(Calls(Method("static int M(string s) => s == null ? 0 : Math.Abs(s.Length);")), static c => Assert.Empty(c.Heap));
+        Assert.Equal(
+            ["array.int__", "field.C.g"],
+            Assert.Single(Calls(Method("int g; static int M(C o, int[] a) { int n = a[0] + a.Length + o.g; return Math.Abs(n); }"))).Heap.Select(static h => h.Map),
+            StringComparer.Ordinal);
+    }
+
     [Theory]
     [InlineData(0, false)]
     [InlineData(4, true)]
@@ -1332,5 +1383,21 @@ public sealed class IrLowererTests
         IrProcedure procedure = Method("static bool M() => typeof(string) == null;");
 
         Assert.Equal(new IrReturned(new IrBoolValue(Value: false)), Run(procedure, new IrSortValue("System.Type", 1)));
+    }
+
+    /// <summary>Answers <c>C::Bump(int)</c> as the compiled method does: it adds its argument to the receiver's <c>g</c>.</summary>
+    private sealed class BumpOracle : Equiv.Core.ICallOracle
+    {
+        public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
+        {
+            Assert.Equal("C::Bump(int)", callee.Value);
+            return new IrCallResult(Value: null, Threw: false) { Heap = [.. heap.Select(h => h.Map is "field.C.g" ? Bumped((IrMapValue)h.Value, arguments) : h.Value)] };
+        }
+
+        private static IrMapValue Bumped(IrMapValue g, ImmutableArray<IrValue> arguments)
+        {
+            long sum = ((IrBitVecValue)g.Read(arguments[0])).TwosComplement + ((IrBitVecValue)arguments[1]).TwosComplement;
+            return g.Write(arguments[0], Bits(32, sum));
+        }
     }
 }

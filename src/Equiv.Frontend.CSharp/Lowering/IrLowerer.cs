@@ -273,8 +273,10 @@ internal sealed class IrLowerer
             Fill(block, context);
         }
 
-        outs.AddRange(heap.Outs());
-        return ssa.Build(new IrBlockId(0), outs.ToImmutable(), bodySpan);
+        // Every call reads and writes every heap slice the body touches, including one first touched after it (ticket P1-005).
+        ImmutableArray<(SsaBuilder.Variable Variable, IrVar Out)> slices = [.. heap.Outs()];
+        outs.AddRange(slices);
+        return ssa.Build(new IrBlockId(0), outs.ToImmutable(), [.. slices.Select(static s => s.Variable)], bodySpan);
     }
 
     private void Fill(BasicBlock block, LoweringContext context)

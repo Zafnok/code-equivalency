@@ -1,0 +1,41 @@
+﻿proc "C::M(int[])" (%a "a": sort "int[]", ref %array.int__: map<sort "int[]", map<bv32, bv32>>, ref %field.C.f: map<sort "C", bv32>, %length.int__: map<sort "int[]", bv32>, %null.int__: map<sort "int[]", bool>, %this: sort "C") -> bv32 entry B0
+B0:
+  %a.isNull.25 "a": bool = mapread %null.int__, %a
+  goto B1
+B1:
+  %$2: bv32 = const bv32 0
+  %$4: bv32 = mapread %field.C.f, %this
+  br %a.isNull.25, B3, B4
+B3:
+  %array.int__.31: map<sort "int[]", map<bv32, bv32>> = phi [B1: %array.int__, B8: %array.int__.27]
+  %field.C.f.32: map<sort "C", bv32> = phi [B1: %field.C.f, B8: %field.C.f.28]
+  throw "System.NullReferenceException" outs(%array.int__ = %array.int__.31, %field.C.f = %field.C.f.32)
+B4:
+  %$6: bv32 = mapread %length.int__, %a
+  %$7: bool = uge %$2, %$6
+  br %$7, B5, B6
+B5:
+  %array.int__.29: map<sort "int[]", map<bv32, bv32>> = phi [B4: %array.int__, B9: %array.int__.27]
+  %field.C.f.30: map<sort "C", bv32> = phi [B4: %field.C.f, B9: %field.C.f.28]
+  throw "System.IndexOutOfRangeException" outs(%array.int__ = %array.int__.29, %field.C.f = %field.C.f.30)
+B6:
+  %$9: map<bv32, bv32> = mapread %array.int__, %a
+  %$10: map<bv32, bv32> = mapwrite %$9, %$2, %$4
+  %array.int__.26: map<sort "int[]", map<bv32, bv32>> = mapwrite %array.int__, %a, %$10
+  call "C::Foo()"(%this) threw %$12: bool heap("array.int__" %array.int__.26 -> %array.int__.27: map<sort "int[]", map<bv32, bv32>>, "field.C.f" %field.C.f -> %field.C.f.28: map<sort "C", bv32>)
+  br %$12, B7, B8
+B7:
+  throw "System.Exception" outs(%array.int__ = %array.int__.27, %field.C.f = %field.C.f.28)
+B8:
+  %$14: bv32 = const bv32 0
+  br %a.isNull.25, B3, B9
+B9:
+  %$16: bv32 = mapread %length.int__, %a
+  %$17: bool = uge %$14, %$16
+  br %$17, B5, B10
+B10:
+  %$19: map<bv32, bv32> = mapread %array.int__.27, %a
+  %$20: bv32 = mapread %$19, %$14
+  %$22: bv32 = mapread %field.C.f.28, %this
+  %$23: bv32 = add %$20, %$22
+  ret %$23 outs(%array.int__ = %array.int__.27, %field.C.f = %field.C.f.28)

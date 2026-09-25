@@ -124,14 +124,17 @@ internal sealed class HeapLowerer(
         return target;
     }
 
-    /// <summary>The SSA variable holding the current version of a heap slice, starting at its input.</summary>
+    /// <summary>
+    /// The SSA variable holding the current version of a heap slice, starting at its input. The input is stored ahead of
+    /// everything else in the entry, so a call lowered before the body first touches the slice still reads it (ticket P1-005).
+    /// </summary>
     private SsaBuilder.Variable Versioned(IrVar input)
     {
         if (!slices.TryGetValue(input.Name, out SsaBuilder.Variable? variable))
         {
             variable = new SsaBuilder.Variable(input);
             slices[input.Name] = variable;
-            ssa.Store(new IrBlockId(0), variable, input);
+            ssa.StoreFirst(new IrBlockId(0), variable, input);
         }
 
         return variable;

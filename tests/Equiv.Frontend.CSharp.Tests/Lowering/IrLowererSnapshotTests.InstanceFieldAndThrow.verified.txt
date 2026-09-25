@@ -6,15 +6,15 @@ B1:
   %$2: bool = slt %a, %$1
   br %$2, B2, B3
 B2:
-  %$3: sort "System.ArgumentException" = call "System.ArgumentException::.ctor()"() threw %$4: bool
+  %$3: sort "System.ArgumentException" = call "System.ArgumentException::.ctor()"() threw %$4: bool heap("field.C.f" %field.C.f -> %field.C.f.10: map<sort "C", bv32>)
   br %$4, B5, B6
 B3:
   %$6: bv32 = mapread %field.C.f, %this
   %$8: bv32 = add %$6, %a
   ret %$8 outs(%field.C.f = %field.C.f)
 B5:
-  throw "System.Exception" outs(%field.C.f = %field.C.f)
+  throw "System.Exception" outs(%field.C.f = %field.C.f.10)
 B6:
   goto B7
 B7:
-  throw "System.ArgumentException" outs(%field.C.f = %field.C.f)
+  throw "System.ArgumentException" outs(%field.C.f = %field.C.f.10)

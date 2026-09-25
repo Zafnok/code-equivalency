@@ -32,7 +32,7 @@ public sealed class SsaBuilderTests
         IrVar result = ssa.Load(join, x);
         ssa.Terminate(join, new IrReturn(result, []));
 
-        ImmutableArray<IrBlock> blocks = ssa.Build(entry, [], Span);
+        ImmutableArray<IrBlock> blocks = ssa.Build(entry, [], [], Span);
 
         IrPhi phi = Assert.IsType<IrPhi>(Assert.Single(blocks[3].Instructions));
         Assert.Equal("x", phi.Target.SourceName);
@@ -60,7 +60,7 @@ public sealed class SsaBuilderTests
         ssa.Terminate(body, new IrGoto(header));
         ssa.Terminate(exit, new IrReturn(ssa.Load(exit, x), []));
 
-        ImmutableArray<IrBlock> blocks = ssa.Build(entry, [], Span);
+        ImmutableArray<IrBlock> blocks = ssa.Build(entry, [], [], Span);
 
         IrPhi phi = Assert.IsType<IrPhi>(Assert.Single(blocks[1].Instructions));
         Assert.Equal("x", phi.Target.SourceName);
@@ -84,7 +84,7 @@ public sealed class SsaBuilderTests
         ssa.Terminate(entry, new IrThrow("E", []));
         ssa.Terminate(dead, new IrReturn(Value: null, []));
 
-        ImmutableArray<IrBlock> blocks = ssa.Build(entry, [(variable, r)], Span);
+        ImmutableArray<IrBlock> blocks = ssa.Build(entry, [(variable, r)], [], Span);
 
         IrBlock block = Assert.Single(blocks);
         IrOut @out = Assert.Single(Assert.IsType<IrThrow>(block.Terminator).Outs);

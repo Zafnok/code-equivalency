@@ -14,7 +14,9 @@ namespace Equiv.TestSupport;
 /// (ticket M3-010), and reads and writes of its static <c>int</c> field <c>F</c>, including <c>void</c> methods that end by
 /// writing it (ticket M3-007), and reads and writes of the elements of the <c>int[]</c> parameters <c>u</c> and <c>v</c>,
 /// which an input may bind to one array (ticket P1-006) or bind <c>v</c> to <c>null</c> (ticket P2-017), and <c>foreach</c> loops
-/// that fold each element of the <c>List&lt;int&gt;</c> parameter <c>l</c> into <c>x</c> (ticket M4-001); built as a small AST and
+/// that fold each element of the <c>List&lt;int&gt;</c> parameter <c>l</c> into <c>x</c> (ticket M4-001), and reads and writes of the
+/// instance field <c>G</c> of the <c>Cell</c> parameter <c>o</c> around calls to <c>o.Bump(k)</c>, which adds <c>k</c> to it
+/// (ticket P1-005); built as a small AST and
 /// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
@@ -50,6 +52,23 @@ public static class LoweringOracleGen
     /// <summary>The <c>List&lt;int&gt;</c> parameter a generated <c>foreach</c> enumerates.</summary>
     public const string List = "l";
 
+    /// <summary>The class of <see cref="Cell"/>: an instance <c>int</c> field <see cref="CellField"/> and a method <see cref="Bump"/> that adds its argument to it.</summary>
+    public const string CellType = "Cell";
+
+    /// <summary>The <see cref="CellType"/> parameter, never null.</summary>
+    public const string Cell = "o";
+
+    /// <summary>The instance field of <see cref="CellType"/>.</summary>
+    public const string CellField = "G";
+
+    /// <summary>The method of <see cref="CellType"/> that writes <see cref="CellField"/>.</summary>
+    public const string Bump = "Bump";
+
+    /// <summary>The declaration of <see cref="CellType"/>, to compile next to the generated methods.</summary>
+    public const string CellSource = $"public sealed class {CellType}\n{{\n    public int {CellField};\n    public void {Bump}(int k) {{ {CellField} = unchecked({CellField} + k); }}\n}}\n";
+
+    private const string CellAccess = $"{Cell}.{CellField}";
+
     public static Gen<OracleMethod> Method { get; } =
         Gen.OneOfConst(ReturnTypes).SelectMany(static type =>
             Gen.Select(Block(type, 2), type == typeof(void) ? FieldValue : ExprGen(type, Depth), (body, result) =>
@@ -84,6 +103,9 @@ public static class LoweringOracleGen
                 (IStmt)new Compound(LocalName(type), op, ShiftCount(op, value, type), isChecked)));
         Gen<IStmt> property = ExprGen(typeof(int), Depth).Select(static value => (IStmt)new Assign(Property, value));
         Gen<IStmt> field = FieldValue.Select(static value => (IStmt)new Assign(Field, value));
+        // Ticket P1-005: an instance field written and read around a call that writes it.
+        Gen<IStmt> cell = FieldValue.Select(static value => (IStmt)new Assign(CellAccess, value));
+        Gen<IStmt> bump = FieldValue.Select(static value => (IStmt)new Call($"{Cell}.{Bump}", value));
         // Index 2 is past the end of both arrays; a write's value is a field value for the same reason as a field's.
         Gen<IStmt> element = Gen.Select(Gen.OneOfConst([.. Arrays]), Gen.Int[0, 2], FieldValue, static (array, index, value) =>
             (IStmt)new Assign(Element(array, index), value));
@@ -91,7 +113,7 @@ public static class LoweringOracleGen
             (IStmt)new Step(LocalName(type), op, isChecked));
         if (depth == 0)
         {
-            return Gen.Frequency((4, assign), (1, property), (1, field), (2, element), (2, update), (1, step), (1, exit));
+            return Gen.Frequency((4, assign), (1, property), (1, field), (1, cell), (1, bump), (2, element), (2, update), (1, step), (1, exit));
         }
 
         Gen<IStmt> branch = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Block(returnType, depth - 1), static (condition, then, otherwise) =>
@@ -101,7 +123,7 @@ public static class LoweringOracleGen
         // The element is as often a divisor or shift count, so a loop body also throws out through the `finally`.
         Gen<IStmt> each = Gen.Select(Gen.OneOfConst(Arithmetic), Gen.Bool, Block(returnType, depth - 1), static (op, isChecked, body) =>
             (IStmt)new ForEach(op, isChecked, body));
-        return Gen.Frequency((3, assign), (1, property), (1, field), (2, element), (2, update), (1, step), (2, branch), (2, loop), (2, each), (1, exit));
+        return Gen.Frequency((3, assign), (1, property), (1, field), (1, cell), (1, bump), (2, element), (2, update), (1, step), (2, branch), (2, loop), (2, each), (1, exit));
     }
 
     /// <summary>
@@ -138,7 +160,7 @@ public static class LoweringOracleGen
 
     private static string[] Names(Type type) => type switch
     {
-        _ when type == typeof(int) => ["a", "b", "x", Property, Field, .. Arrays.SelectMany(static a => (string[])[Element(a, 0), Element(a, 1)])],
+        _ when type == typeof(int) => ["a", "b", "x", Property, Field, CellAccess, .. Arrays.SelectMany(static a => (string[])[Element(a, 0), Element(a, 1)])],
         _ when type == typeof(long) => ["c", "d", "y"],
         _ => ["e", "z"],
     };
@@ -191,6 +213,9 @@ public static class LoweringOracleGen
                     text.Append(pad).Append(Open(update.IsChecked, pad))
                         .Append(update.Local).Append(' ').Append(update.Op).Append("= ").Append(update.Value.Render()).Append(";\n")
                         .Append(Close(update.IsChecked, pad));
+                    break;
+                case Call call:
+                    text.Append(pad).Append(call.Method).Append('(').Append(call.Argument.Render()).Append(");\n");
                     break;
                 case Step step:
                     text.Append(pad).Append(Open(step.IsChecked, pad)).Append(step.Local).Append(step.Op).Append(";\n").Append(Close(step.IsChecked, pad));
@@ -279,6 +304,9 @@ public static class LoweringOracleGen
     internal sealed record Compound(string Local, string Op, IExpr Value, bool IsChecked) : IStmt;
 
     internal sealed record Step(string Local, string Op, bool IsChecked) : IStmt;
+
+    /// <summary><c>Method(Argument);</c> as a statement.</summary>
+    internal sealed record Call(string Method, IExpr Argument) : IStmt;
 
     internal sealed record While(IExpr Condition, ImmutableArray<IStmt> Body, int Bound) : IStmt;
 
