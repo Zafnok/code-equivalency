@@ -1,5 +1,5 @@
 # P1-005 An `IrCall` reads and writes the heap
-Status: in-progress
+Status: done (PR #191)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M2-004, M3-001, M3-007, P1-003
