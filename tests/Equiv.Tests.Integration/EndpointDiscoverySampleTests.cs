@@ -15,6 +15,9 @@ namespace Equiv.Tests.Integration;
 /// <see cref="CSharpFrontend.Analyze"/> matches them on that identity alone.
 /// </summary>
 [Trait("Category", "Integration")]
+// Both classes load samples/webapi-basic; MSBuild's design-time build of one sample writes the same obj/ state
+// file, so two concurrent loads collide ("Could not write state file ... AssemblyReference.cache").
+[Collection("WebApiBasicSample")]
 public sealed class EndpointDiscoverySampleTests
 {
     private static string SamplesRoot =>

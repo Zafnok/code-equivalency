@@ -13,6 +13,9 @@ namespace Equiv.Tests.Integration;
 /// side is rewritten by the shipped catalogue, and each pair lists the entries applied to it.
 /// </summary>
 [Trait("Category", "Integration")]
+// Both classes load samples/webapi-basic; MSBuild's design-time build of one sample writes the same obj/ state
+// file, so two concurrent loads collide ("Could not write state file ... AssemblyReference.cache").
+[Collection("WebApiBasicSample")]
 public sealed class ApiEquivalenceSampleTests
 {
     private static string SamplesRoot =>
