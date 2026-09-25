@@ -50,7 +50,7 @@ public sealed class Z3Backend : IVerificationBackend
     /// <c>(not (= x r))</c>, which <c>solve-eqs</c> no longer reads as a definition, and two copies of a
     /// multiplier left behind a <c>reach</c> variable time out. Z3's default solver is worse here: in
     /// incremental mode it skips preprocessing, and its non-incremental default tactic times out on a
-    /// plain diamond.
+    /// plain diamond. The query itself is added with the definitions already <see cref="Inline"/>d.
     /// </summary>
     internal static Solver Query(Context context, ProductEncoding encoding, VerificationOptions options, params BoolExpr[] query)
     {
@@ -62,8 +62,41 @@ public sealed class Z3Backend : IVerificationBackend
         Solver solver = context.MkSolver(pipeline);
         solver.Set("timeout", (uint)options.TimeoutMs);
         solver.Add(encoding.Assertions);
-        solver.Add(query);
+        solver.Add(Inline(context, encoding.Assertions, query));
         return solver;
+    }
+
+    /// <summary>
+    /// <paramref name="query"/> with every definition in <paramref name="assertions"/> substituted in, in
+    /// assertion order: a Bool constant asserted alone is <c>true</c>, and <c>(= c t)</c> with a constant
+    /// <c>c</c> is <c>t</c> with the earlier definitions substituted. The definitions stay asserted, so
+    /// the result is equivalent to the query; what it adds is that both sides' copies of an unchanged
+    /// computation are one term before Z3 sees them. Z3 5.1's <c>solve-eqs</c> can instead invert a
+    /// definition such as <c>t = u + in.b</c> to eliminate the shared input <c>in.b</c>, which leaves
+    /// the two sides as different terms and a self-comparison timing out (ticket M3-027).
+    /// </summary>
+    internal static BoolExpr[] Inline(Context context, IEnumerable<BoolExpr> assertions, BoolExpr[] query)
+    {
+        List<Expr> names = [];
+        List<Expr> values = [];
+        foreach (BoolExpr assertion in assertions)
+        {
+            if (assertion.IsConst)
+            {
+                names.Add(assertion);
+                values.Add(context.MkTrue());
+            }
+            else if (assertion.IsEq && assertion.Args[0].IsConst)
+            {
+                Expr value = assertion.Args[1].Substitute([.. names], [.. values]);
+                names.Add(assertion.Args[0]);
+                values.Add(value);
+            }
+        }
+
+        Expr[] from = [.. names];
+        Expr[] to = [.. values];
+        return [.. query.Select(q => (BoolExpr)q.Substitute(from, to))];
     }
 
     internal static string Timeout(Solver solver, VerificationOptions options) =>

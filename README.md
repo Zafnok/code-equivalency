@@ -171,6 +171,10 @@ and of `baselineState` is in [docs/VERIFICATION-MODEL.md](docs/VERIFICATION-MODE
 ./build.ps1 -Integration  # also runs tests/Equiv.Tests.Integration (needs VS Build Tools)
 ```
 
+`Microsoft.Z3` restores only from the git-ignored local feed `.z3-feed/` (ADR 0030), which
+`build.ps1` fills first. Before any direct `dotnet restore`, `dotnet build` or `dotnet test`
+on a fresh clone (an IDE build included), run `./tools/z3-feed/fetch.ps1` once.
+
 Every gate in [docs/QUALITY-GATES.md](docs/QUALITY-GATES.md) runs locally through this
 script and in GitHub Actions on every PR. Coverage flags for coverlet.MTP go after `--`
 on `dotnet test`; the script already does this.
@@ -221,6 +225,10 @@ docs/       everything above; docs/runs/ holds corpus-run summaries
 The engine itself is cross-platform; only loading legacy `.csproj` files needs Windows
 until the Linux loader exists (ADR 0031, tickets M3-028 and M3-029). CI runs the full pipeline on `windows-latest`
 and everything except the integration tests on `ubuntu-latest`.
+
+Linux hosts need **glibc 2.38 or newer** (Ubuntu 24.04+): the `Microsoft.Z3` 5.1.0 native
+(from the official Z3Prover/z3 GitHub release, ADR 0030) is built against it. Debian 12,
+Ubuntu 22.04 and Alpine are unsupported for the linux-x64 build.
 
 ## Star history
 

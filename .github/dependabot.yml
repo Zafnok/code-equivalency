@@ -10,6 +10,11 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    # Microsoft.Z3 comes from a hash-pinned local feed, not nuget.org (ADR 0030). Dependabot
+    # cannot run tools/z3-feed/fetch.ps1, so it never restores the package and would only ever
+    # open a PR it cannot itself validate; bumps are done by hand against the Z3 releases page.
+    ignore:
+      - dependency-name: "Microsoft.Z3"
     groups:
       nuget-minor-patch:
         update-types: ["minor", "patch"]

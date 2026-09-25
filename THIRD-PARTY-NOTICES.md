@@ -33,7 +33,7 @@ These packages are linked into the `equiv` binaries and container image, so thei
 | Microsoft.Extensions.Primitives | 10.0.1 | MIT |
 | Microsoft.Extensions.Primitives | 10.0.8 | MIT |
 | Microsoft.VisualStudio.SolutionPersistence | 1.0.52 | MIT |
-| Microsoft.Z3 | 4.12.2 | MIT |
+| Microsoft.Z3 | 5.1.0 | MIT |
 | Newtonsoft.Json | 13.0.3 | MIT |
 | Newtonsoft.Json | 13.0.4 | MIT |
 | Sarif.Sdk | 5.7.0 | MIT |

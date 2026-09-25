@@ -52,20 +52,14 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Microsoft.Z3 4.12.2 ships libz3 for win-x64 and osx-x64 only (ticket M3-001 Notes). The
-      # z3-solver 4.12.2.0 manylinux wheel on PyPI carries the same version's libz3.so; pip checks
-      # it against the hash PyPI publishes, and .NET's dlopen finds it on LD_LIBRARY_PATH.
-      - name: Provide libz3 (Linux)
-        if: runner.os == 'Linux' && steps.pass.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "z3-solver==4.12.2.0 --hash=sha256:03921d3021cb6e5dbeaeb94634132a5fbf5403748aa21774efac4047e633af1e" > "$RUNNER_TEMP/z3-requirements.txt"
-          python3 -m pip download --no-deps --only-binary=:all: --platform manylinux2014_x86_64 --python-version 3.12 \
-            --require-hashes -r "$RUNNER_TEMP/z3-requirements.txt" -d "$RUNNER_TEMP/z3"
-          python3 -m zipfile -e "$RUNNER_TEMP"/z3/z3_solver-4.12.2.0-*.whl "$RUNNER_TEMP/z3/wheel"
-          test -f "$RUNNER_TEMP/z3/wheel/z3/lib/libz3.so"
-          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/z3/wheel/z3/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+      # build.ps1 runs tools/z3-feed/fetch.ps1, which is a no-op when the cached nupkg matches its
+      # pinned hash (ADR 0030), so most runs skip the 65 MB release download.
+      - name: Cache the Microsoft.Z3 feed
+        if: steps.pass.outputs.cache-hit != 'true'
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .z3-feed
+          key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
 
       # -Integration needs VS Build Tools + the .NET Framework 4.8 targeting pack,
       # which only the windows-latest hosted runner has (see README).
@@ -120,6 +114,15 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .z3-feed
+          key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
+
+      - name: Fetch Microsoft.Z3 (ADR 0030)
+        shell: pwsh
+        run: ./tools/z3-feed/fetch.ps1
 
       - run: dotnet restore --locked-mode
 

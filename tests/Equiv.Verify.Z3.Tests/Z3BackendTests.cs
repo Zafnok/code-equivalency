@@ -297,6 +297,86 @@ public sealed class Z3BackendTests
         Assert.Equal(2, divergent.Counterexample.Inputs.Arguments.Length);
     }
 
+    /// <summary>
+    /// Definitions are substituted into the query in assertion order; an equality whose left side is not a
+    /// constant, and any other assertion, is not a definition (ticket M3-027).
+    /// </summary>
+    [Fact]
+    public void InliningSubstitutesDefinitionsInOrderAndSkipsEverythingElse()
+    {
+        using Context context = new();
+        BitVecExpr a = context.MkBVConst("a", 8);
+        BitVecExpr b = context.MkBVConst("b", 8);
+        BitVecExpr t = context.MkBVConst("t", 8);
+        BitVecExpr u = context.MkBVConst("u", 8);
+        BoolExpr r = context.MkBoolConst("r");
+        BoolExpr s = context.MkBoolConst("s");
+        BoolExpr[] assertions =
+        [
+            r,
+            context.MkEq(t, context.MkBVAdd(a, b)),
+            context.MkEq(u, context.MkBVMul(t, t)),
+            context.MkEq(context.MkBVAdd(a, b), a),
+            context.MkNot(s),
+        ];
+
+        BoolExpr inlined = Assert.Single(Z3Backend.Inline(context, assertions, [context.MkAnd(r, s, context.MkEq(u, b))]));
+
+        BitVecExpr sum = context.MkBVAdd(a, b);
+        Assert.Equal(context.MkAnd(context.MkTrue(), s, context.MkEq(context.MkBVMul(sum, sum), b)), inlined);
+    }
+
+    /// <summary>
+    /// Z3 5.1's <c>solve-eqs</c> eliminates the shared input <c>b</c> by inverting <c>t25 = t24 + b</c>, which left
+    /// this self-comparison (found by <see cref="SoundnessPropertyTests"/>) timing out; with the definitions inlined
+    /// into the query it folds in preprocessing (ticket M3-027).
+    /// </summary>
+    [Fact]
+    public void ASelfComparisonWhoseInputFeedsAnAdditionIsEquivalent()
+    {
+        IrProcedure p = IrText.Parse("""
+            proc "Gen.Type::M" (%a "a": bv32, %b "b": bv32, ref %field.Gen.x "field.Gen.x": map<bv32, bv32>) -> bv32 entry B0
+            B0:
+              %c.0 "c": bv32 = const bv32 11
+              %v0.1 "v0": bv32 = const bv32 0
+              %v1.2 "v1": bv32 = const bv32 255
+              %v2.3 "v2": bv32 = const bv32 9
+              %t4: bv32 = const bv32 699007234
+              %t5: bv32 = or %v0.1, %t4
+              switch %t5 [] default B1
+            B1:
+              %t6: bv32 = mapread %field.Gen.x, %b
+              %t7: bool = sge %t6, %c.0
+              br %t7, B2, B3
+            B2:
+              goto B4
+            B3:
+              %t11: bv32 = sdiv %v1.2, %b
+              %t12: bv8 = trunc %t11
+              %t13: bv32 = zext %t12
+              %t14: bv32 = neg %a
+              %t15: bv32 = mapread %field.Gen.x, %t14
+              goto B4
+            B4:
+              %c.16 "c": bv32 = phi [B2: %c.0, B3: %t13]
+              %v0.17 "v0": bv32 = phi [B2: %v0.1, B3: %t15]
+              %t18: bv32 = const bv32 2
+              %t19: bv32 = and %v1.2, %t18
+              %field.Gen.x.20 "field.Gen.x": map<bv32, bv32> = mapwrite %field.Gen.x, %v0.17, %t19
+              goto B7
+            B7:
+              %t22: bv32 = sub %v0.17, %c.16
+              %t23: bv32 = mul %v0.17, %t22
+              %t24: bv32 = xor %t23, %a
+              %t25: bv32 = add %t24, %b
+              %t26: bv32 = xor %t25, %c.16
+              %t27: bv32 = add %t26, %v0.17
+              ret %t27 outs(%field.Gen.x = %field.Gen.x.20)
+            """);
+
+        Assert.IsType<Equivalent>(new Z3Backend().Verify(p, p, new VerificationOptions(3, 2_000, [])));
+    }
+
     /// <summary>A procedure returning bitvector 1 of <paramref name="width"/> bits, or returning nothing when the width is 0.</summary>
     private static string Returning(int width) => width == 0
         ? "proc \"T::M()\" () entry B0\nB0:\n  ret\n"

@@ -72,3 +72,7 @@ run finds: those become P2 tickets, as the skill requires.
   commit), on top of 6 legacy test projects failing restore with a `RuntimeIdentifier` error.
   Recorded per criterion 1 ("recorded with the reason, not replaced"), not replaced or debugged;
   filed as P2-016. It contributes zero changed pairs either way, so it does not affect the verdict.
+- Note (M3-027, 2026-09-24): this census ran on `Microsoft.Z3` 4.12.2. M3-027 moved to 5.1.0 and
+  inlines the encoding's definitions into every query, which changes which queries time out. Its
+  verdict and Unknown counts are a 4.12.2 baseline: re-run the census before comparing a later
+  Unknown rate against it.

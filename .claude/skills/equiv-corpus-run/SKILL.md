@@ -119,7 +119,8 @@ MSBuild has no .NET SDK resolver of its own), `MSBuildEnableWorkloadResolver=fal
 `NoWarn=NU1701;NU1702;NU1903` (until P2-012 lands). No other step from section 3 needs doing by
 hand.
 
-Build once: `dotnet build src/Equiv.Cli -c Release`. Each run gets its own directory,
+Build once: `./tools/z3-feed/fetch.ps1`, then `dotnet build src/Equiv.Cli -c Release` (the fetch
+fills the local `Microsoft.Z3` feed restore needs, ADR 0030). Each run gets its own directory,
 `.corpus/pairs/<slug>/runs/<yyyymmdd-hhmm>-<mode>/`. After M3-004, use the published `equiv` if
 it exists.
 

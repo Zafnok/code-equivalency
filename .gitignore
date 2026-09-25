@@ -82,3 +82,6 @@ secrets.json
 # Public migration corpus (ADR 0028): third-party checkouts, agent migrations and raw SARIF.
 # Never commit anything from here; tools/corpus/corpus.ps1 refuses to run unless this is ignored.
 .corpus/
+
+# Local NuGet feed for Microsoft.Z3, filled by tools/z3-feed/fetch.ps1 (ADR 0030).
+.z3-feed/
