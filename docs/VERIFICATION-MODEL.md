@@ -101,7 +101,10 @@ is the one definition). A C# parameter whose name would be synthesised, which ca
 is spelled with a leading `$` in IR (`$this`; its source name stays `this`). No C# identifier contains `$`, so
 that name is never another parameter's (M3-007). A value's shadow is a `mapread` of `null.<Sort>`,
 so equal references are equally null; `new` sets the shadow to false instead. `this`,
-`null.*`, `cast.*`, `length.*` and `typeof.*` are `In`, because nothing changes them. `field.*` and `array.*` are
+`null.*`, `cast.*`, `length.*` and `typeof.*` are `In`, because nothing changes them. No CLR array has a
+negative length, so the encoder assumes every read of a `length.*` input is non-negative, whether or not the read is
+reached (the CLR never reads a null reference's length, so this drops no input a caller can pass), and the model
+decoder gives 0 wherever a model's length map is negative, which can only be at a reference nothing reads (P2-019). `field.*` and `array.*` are
 `Ref` (ADR 0018, ticket M3-007), so every exit names their final version in `outs` and the
 final heap is an observable like any `ref` parameter. When only one side of a pair has a given
 `Ref` map, the other side never touches that slice, and the encoder compares the first side's
