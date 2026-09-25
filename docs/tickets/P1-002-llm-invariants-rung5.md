@@ -9,8 +9,9 @@ When rung 4 times out, ask a model for a candidate coupling invariant and let Z3
 check it. A wrong guess can never produce Equivalent. Off by default.
 
 ## Spec references
-VERIFICATION-MODEL.md section 5.1 rung 5; ADR 0008; P1-001 (`FragmentEncoder`, the
-rung-4 obligation).
+VERIFICATION-MODEL.md section 5.1 rung 5; ADR 0008; ADR 0036 (a proposed invariant is a
+hypothesis until Z3 admits it; results record `properties.proposedBy`); P1-001
+(`FragmentEncoder`, the rung-4 obligation).
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. `IInvariantProposer` in `Equiv.Verify.Z3` with one method:

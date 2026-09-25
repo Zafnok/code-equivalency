@@ -134,9 +134,10 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   `%` also test `IrOverflows sdiv` (`System.OverflowException`) whether or not the code
   is checked, because .NET throws on `MinValue / -1` and `MinValue % -1` in both contexts.
 - A shift count is masked to `width - 1` before the IR shift, as C# does.
-- An opaque call's `threw` flag branches to `IrThrow("System.Exception")`. A `throw`
-  statement is `IrOpaque` in v1, because the thrown object's dynamic type is not known
-  statically.
+- An opaque call's `threw` flag branches to `IrThrow("System.Exception")`. `throw new T(...)`
+  records the constructor call and then lowers to `IrThrow("T")` on T's static type (M2-004).
+  Throwing any other expression is `IrOpaque` with reason `Throw`, because the thrown object's
+  dynamic type is not known statically, and `throw;` is `IrOpaque` with reason `rethrow`.
 
 Migration-specific normalisations (applied to both sides before matching):
 

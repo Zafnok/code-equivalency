@@ -1,6 +1,6 @@
 # ADR 0031: Linux parity is a release requirement; the Windows-only loader is not shippable
 
-Status: accepted (2026-09-23)
+Status: accepted (2026-09-23); superseded in part by 0035 (runs with `--execute` are Windows-only)
 
 ## Context
 ADR 0004 made the MVP loader Windows-only (legacy csproj needs VS Build Tools' MSBuild and the

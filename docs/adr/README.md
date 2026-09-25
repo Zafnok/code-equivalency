@@ -41,3 +41,6 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0032 | The hosted tier runs on Azure Container Apps Jobs, not AKS |
 | 0033 | `equiv mcp` exposes the pipeline to coding agents as an MCP server (stdio, SARIF results) |
 | 0034 | The census measures what the solver will see: changed pairs, their reason sets, and what congruence cannot vouch for |
+| 0035 | The real runtimes are a second oracle: execution measures, confirms and bounds, and never proves |
+| 0036 | A proposed invariant, contract or table row is a hypothesis until a checker admits it; callee contracts replace unproven assumptions |
+| 0037 | An Unknown says whether the modern side can fail where the legacy side does not |
