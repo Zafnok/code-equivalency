@@ -530,4 +530,91 @@ public sealed class CSharpFrontendTests
         UnverifiedProject tool = Assert.Single(result.ModernSkipped);
         Assert.Equal(["T.F::W()"], tool.Procedures.Select(static i => i.Value), StringComparer.Ordinal);
     }
+
+    /// <summary>
+    /// P2-016: a multi-targeted project loads once per target framework, all under one assembly name. Each declaration is
+    /// one procedure, taken from the last flavour that declares it, so it pairs instead of going Ambiguous; a
+    /// declaration only one flavour compiles (an <c>#if</c>) is still that side's own.
+    /// </summary>
+    [Fact]
+    public void Analyze_TargetFrameworkFlavoursOfOneProjectAreOneProcedure()
+    {
+        Compilation net20 = RoslynTestCompilations.Compile("namespace N { public class C { public int M(int a) => a; public void OnlyNet20() {} } }", "Lib");
+        Compilation net40 = RoslynTestCompilations.Compile("namespace N { public class C { public int M(int a) => a + 0; } }", "Lib");
+        Compilation modern = RoslynTestCompilations.Compile("namespace N { public class C { public int M(int a) => a; } }", "Lib");
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [net20, net40], [], [])
+            : new LoadedSolution(null!, [modern], [], []));
+        List<Compilation> lowered = [];
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher(), (symbol, compilation, config, legacy) =>
+            {
+                lowered.Add(compilation);
+                return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy);
+            })
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+
+        Assert.Equal(["N.C::M(int)"], result.Pairs.Select(static p => p.New.Value), StringComparer.Ordinal);
+        Assert.Equal(["N.C::OnlyNet20()"], result.Removed.Select(static i => i.Value), StringComparer.Ordinal);
+        Assert.Empty(result.Ambiguous);
+        Assert.Equal([net40, modern], lowered);
+    }
+
+    /// <summary>P2-016 collapses flavours, not assemblies: one file linked into two projects is still Ambiguous.</summary>
+    [Fact]
+    public void Analyze_OneDeclarationInTwoAssembliesStaysAmbiguous()
+    {
+        const string Source = "namespace N { public class C { public void M() {} } }";
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [RoslynTestCompilations.Compile(Source, "A")], [], [])
+            : new LoadedSolution(null!, [RoslynTestCompilations.Compile(Source, "A"), RoslynTestCompilations.Compile(Source, "B")], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+
+        Assert.Empty(result.Pairs);
+        Assert.Equal(["N.C::M()"], result.Ambiguous.Select(static i => i.Value), StringComparer.Ordinal);
+    }
+
+    /// <summary>P2-016: an action a multi-targeted project compiles once per flavour is one endpoint, not a duplicate route.</summary>
+    [Fact]
+    public void Analyze_TargetFrameworkFlavoursOfOneControllerAreOneEndpoint()
+    {
+        const string Legacy = """
+            namespace N
+            {
+                using System.Web.Http;
+
+                public class OrdersController
+                {
+                    [HttpGet, Route("api/orders/{id}")]
+                    public int Get(int id) => id;
+                }
+            }
+            """;
+        Compilation modernCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace N
+            {
+                using Microsoft.AspNetCore.Mvc;
+
+                public class OrdersController
+                {
+                    [HttpGet("api/orders/{id}")]
+                    public int GetOrder(int id) => id;
+                }
+            }
+            """,
+            [ModernRouteAttributes],
+            "Web");
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [RoslynTestCompilations.Compile(Legacy, [LegacyRouteAttributes], "Web"), RoslynTestCompilations.Compile(Legacy, [LegacyRouteAttributes], "Web")], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+
+        Assert.Equal(["GET /api/orders/{id}"], result.Pairs.Select(static p => p.New.Value), StringComparer.Ordinal);
+        Assert.Empty(result.Ambiguous);
+    }
 }
