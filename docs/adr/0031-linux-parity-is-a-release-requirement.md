@@ -50,3 +50,27 @@ need one versioned IR wire format. Z3 itself has no Windows dependency (ADR 0030
 - The engine-side cost is in `Equiv.Frontend.CSharp` only; Core, Verify and SARIF are already
   cross-platform, and ADR 0030 removes the Z3 Linux gap.
 - ROADMAP: the first corpus run (M4-007) should include a Linux run of the same pair.
+
+## Clarifications
+- 2026-09-25 (M3-028). **Candidate 2 is chosen.** Off Windows, non-SDK (old-style) C# projects
+  load through the bare loader. SDK-style projects load through MSBuildWorkspace on the .NET
+  SDK's MSBuild, so the Linux image and binary need the .NET SDK. Windows keeps the current
+  loader. The spike ran on `ubuntu-latest` over all 10 samples and `eshop-upgrade-assistant`.
+  Candidate 2 was the only one that matched the Windows loader on every project: status, source
+  files, references and errors, compared as sets.
+  - Candidate 1 fails a non-SDK project with `<PackageReference>`. The SDK has no
+    `ResolveNuGetPackageAssets`, which ships in Visual Studio's `Microsoft.NuGet.targets`, so every
+    package reference is lost.
+  - Candidate 3 fails an SDK-style web project. The Razor source generator, `RazorAssemblyInfo.cs`
+    and package conflict resolution are SDK targets a bare loader would have to re-implement, one
+    SDK feature at a time.
+  - `packages.config` restore works without Mono or nuget.exe only when the tool does it itself.
+    `dotnet msbuild -t:restore -p:RestorePackagesConfig=true` restores nothing.
+
+  No project needed the Windows-worker fallback, so it stays unbuilt. Future residue is handled
+  under ADR 0029: a non-SDK project whose MSBuild the bare loader cannot evaluate exactly (for
+  example `<Choose>`, a property function in a property it reads, a target that adds `Compile` or
+  `Reference` items, a COM reference) is skipped with a notification naming the construct. It is
+  never loaded approximately. If the corpus load rate (ADR 0028) shows such skips on a human pair,
+  that is a ticket against the bare loader first and the fallback second. Evidence is in M3-028's
+  Notes. The implementation is M3-029.
