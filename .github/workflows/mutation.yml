@@ -45,7 +45,7 @@ jobs:
       - name: Look up an earlier pass on the same code
         id: pass
         if: github.event_name == 'pull_request'
-        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/ci-pass
           key: ${{ env.PASS_KEY_PREFIX }}-${{ steps.fp.outputs.hash }}
@@ -86,7 +86,7 @@ jobs:
           global-json-file: global.json
 
       - if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .z3-feed
           key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
@@ -137,7 +137,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ci-pass"
           echo "${{ github.sha }}" > "$RUNNER_TEMP/ci-pass/marker"
 
-      - uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: github.event_name == 'pull_request' && steps.pass.outputs.cache-hit != 'true'
         with:
           path: ${{ runner.temp }}/ci-pass
