@@ -30,14 +30,25 @@ internal static class RoslynIdentity
         ArgumentNullException.ThrowIfNull(symbol);
         ArgumentNullException.ThrowIfNull(renames);
 
-        INamedTypeSymbol declaringType = symbol.ContainingType;
+        return Member(symbol.ContainingType, symbol.Name, symbol.Arity, [.. symbol.Parameters.Select(ParameterTypeName)], renames);
+    }
+
+    /// <summary>
+    /// <paramref name="type"/>'s qualified name as the identity of one of its members spells it: renamed, each level's
+    /// generic arity suffixed as <c>`n</c>, with no type arguments (ticket M3-015's bound fingerprint).
+    /// </summary>
+    public static string TypeName(INamedTypeSymbol type, RenameMap renames)
+    {
+        string identity = Member(type, string.Empty, 0, [], renames).Value;
+        return identity[..identity.IndexOf("::", StringComparison.Ordinal)];
+    }
+
+    private static ProcedureIdentity Member(INamedTypeSymbol declaringType, string name, int arity, ImmutableArray<string> parameterTypes, RenameMap renames)
+    {
         string @namespace = declaringType.ContainingNamespace.IsGlobalNamespace
             ? string.Empty
             : StripGlobal(declaringType.ContainingNamespace.ToDisplayString(DisplayFormat));
-        string typeName = TypeNameWithArity(declaringType);
-        ImmutableArray<string> parameterTypes = [.. symbol.Parameters.Select(ParameterTypeName)];
-
-        return ProcedureIdentityNormalizer.Member(@namespace, typeName, symbol.Name, symbol.Arity, parameterTypes, renames);
+        return ProcedureIdentityNormalizer.Member(@namespace, TypeNameWithArity(declaringType), name, arity, parameterTypes, renames);
     }
 
     /// <summary>Dotted nested-type path, each level's own generic arity suffixed as <c>`n</c>.</summary>

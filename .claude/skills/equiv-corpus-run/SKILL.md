@@ -134,7 +134,7 @@ $t = Measure-Command {
 }
 "exit=$LASTEXITCODE seconds=$([int]$t.TotalSeconds)" | Set-Content "$run/exit.txt"
 ./tools/corpus/corpus.ps1 -Metrics "$run/equiv.sarif"
-./tools/corpus/corpus.ps1 -Unchanged <slug>     # unchanged share until M3-015 fills pairsCongruent
+./tools/corpus/corpus.ps1 -Unchanged <slug>     # file-level proxy; the census's pairsCongruent is the measure (M3-015)
 ./tools/corpus/corpus.ps1 -Packages <slug>      # package version changes; needs both sides restored
 ```
 

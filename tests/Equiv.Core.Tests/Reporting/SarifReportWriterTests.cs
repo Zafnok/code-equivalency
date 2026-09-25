@@ -201,6 +201,7 @@ public sealed class SarifReportWriterTests
     [InlineData(ProofMethod.Bounded, "bounded")]
     [InlineData(ProofMethod.LockstepInduction, "lockstep-induction")]
     [InlineData(ProofMethod.KInduction, "k-induction")]
+    [InlineData(ProofMethod.Congruence, "congruence")]
     public void EquivalentResultCarriesItsProofMethodAndNoBoundUnlessBounded(ProofMethod method, string name)
     {
         Result result = SarifReportWriter.Write([Fixtures.Result(new Equivalent(method))]).Runs[0].Results[0];

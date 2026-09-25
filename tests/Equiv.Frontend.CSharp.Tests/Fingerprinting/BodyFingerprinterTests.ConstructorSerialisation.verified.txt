@@ -1,0 +1,22 @@
+﻿Constructor static=False async=False returns=void (None N.R)
+FieldInitializer syntax=EqualsValueClause implicit=False symbols=N.C::seed
+  Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=7
+PropertyInitializer syntax=EqualsValueClause implicit=False symbols=N.C::get_Name()
+  Literal syntax=StringLiteralExpression implicit=False type=System.String const="n"
+ConstructorBodyOperation syntax=ConstructorDeclaration implicit=False
+  ExpressionStatement syntax=ConstructorDeclaration implicit=True
+    Invocation syntax=ConstructorDeclaration implicit=True type=System.Void symbols=System.Object::.ctor()
+      InstanceReference syntax=ConstructorDeclaration implicit=True type=N.C
+  Block syntax=Block implicit=False
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L0:None N.R
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            With syntax=WithExpression implicit=False type=N.R symbols=N.R::<Clone>$()
+              ParameterReference syntax=IdentifierName implicit=False type=N.R symbols=P0
+              ObjectOrCollectionInitializer syntax=WithInitializerExpression implicit=False type=N.R
+                SimpleAssignment syntax=SimpleAssignmentExpression implicit=False type=System.Int32
+                  PropertyReference syntax=IdentifierName implicit=False type=System.Int32 symbols=N.R::get_X()|N.R::set_X(int)
+                    InstanceReference syntax=IdentifierName implicit=True type=N.R
+                  FieldReference syntax=IdentifierName implicit=False type=System.Int32 symbols=N.C::seed
+                    InstanceReference syntax=IdentifierName implicit=True type=N.C

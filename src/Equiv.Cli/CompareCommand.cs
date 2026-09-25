@@ -126,7 +126,7 @@ internal static class CompareCommand
         MatchResult matchResult = analysis.Match;
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered = Lowered(matchResult);
         LoweringCensus census = LoweringCensus.Compute(
-            [.. lowered.Select(static p => (p.Old, p.New, p.Pair.TokensEqual))],
+            [.. lowered.Select(static p => (p.Old, p.New, IsCongruent(p.Pair, p.Old, p.New)))],
             removed: matchResult.Removed.Length,
             added: matchResult.Added.Length,
             projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length),
@@ -283,7 +283,8 @@ internal static class CompareCommand
             pair.NewBody ?? throw new InvalidOperationException($"The frontend matched {pair.New.Value} without lowering its modern body.")))];
 
     /// <summary>
-    /// Every matched pair goes to <paramref name="backend"/> with both lowered bodies. A crash on one pair (a
+    /// Every matched pair that is neither unbound (ADR 0029) nor congruent (ADR 0024) goes to <paramref name="backend"/> with
+    /// both lowered bodies. A crash on one pair (a
     /// replay mismatch M3-001 treats as an encoder bug, a <c>Z3Exception</c>) does not end the run (ADR 0023): the
     /// pair gets no <see cref="VerificationResult"/>, an <c>error</c> notification naming both identities and
     /// carrying the exception, and its identity in the returned unverified list; every other pair is still
@@ -307,6 +308,13 @@ internal static class CompareCommand
                 continue;
             }
 
+            // ADR 0024: identical bound code is Equivalent without the solver.
+            if (IsCongruent(pair, old, @new))
+            {
+                results.Add(new VerificationResult(pair.New, new Equivalent(ProofMethod.Congruence)) { EquivalencesApplied = pair.EquivalencesApplied });
+                continue;
+            }
+
             try
             {
                 results.Add(new VerificationResult(pair.New, backend.Verify(old, @new, options)) { EquivalencesApplied = pair.EquivalencesApplied });
@@ -320,6 +328,16 @@ internal static class CompareCommand
 
         return (results, failures, unverified);
     }
+
+    /// <summary>
+    /// ADR 0024 decision 1: the two bound fingerprints are equal and not runtime-sensitive. A body with erroneous code is
+    /// never congruent, because two error symbols with the same name are no evidence of the same behaviour (ADR 0029 decision 2).
+    /// </summary>
+    internal static bool IsCongruent(ProcedurePair pair, IrProcedure old, IrProcedure @new) =>
+        pair.OldFingerprint is { RuntimeSensitive: false } fingerprint
+        && fingerprint == pair.NewFingerprint
+        && !UnboundCauses("legacy", old).Any()
+        && !UnboundCauses("modern", @new).Any();
 
     /// <summary>
     /// ADR 0023's record of a pair the tool failed on: an <c>error</c> notification naming both identities and carrying

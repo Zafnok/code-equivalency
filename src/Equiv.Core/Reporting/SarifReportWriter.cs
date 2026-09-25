@@ -192,12 +192,16 @@ public static class SarifReportWriter
         }
     }
 
-    /// <summary>The spelling VERIFICATION-MODEL.md section 5.1 uses for a rung: <c>bounded</c>, <c>lockstep-induction</c>, <c>k-induction</c>.</summary>
+    /// <summary>
+    /// The spelling VERIFICATION-MODEL.md sections 1 and 5.1 use for a proof: <c>bounded</c>, <c>lockstep-induction</c>,
+    /// <c>k-induction</c>, <c>congruence</c>.
+    /// </summary>
     internal static string Name(ProofMethod method) => method switch
     {
         ProofMethod.Bounded => "bounded",
         ProofMethod.LockstepInduction => "lockstep-induction",
-        _ => "k-induction",
+        ProofMethod.KInduction => "k-induction",
+        _ => "congruence",
     };
 
     internal static string Name(UnknownReason reason) => reason switch
