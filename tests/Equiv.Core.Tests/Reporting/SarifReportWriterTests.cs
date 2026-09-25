@@ -275,6 +275,53 @@ public sealed class SarifReportWriterTests
         Assert.False(results[1].TryGetProperty("equivalencesApplied", out List<string> _));
     }
 
+    /// <summary>ADR 0019; ticket M3-015 acceptance criterion 11.</summary>
+    [Fact]
+    public void Sarif_ListsAssumptionsAndOmitsEmptyLists()
+    {
+        VerificationResult assuming = Fixtures.Result(new Equivalent(ProofMethod.Congruence)) with { AssumedCallees = ["N.C::Tax(int)", "N.C::Zero()"], UnprovenAssumptions = ["N.C::Tax(int)"] };
+
+        Result[] results = [.. SarifReportWriter.Write([assuming, Fixtures.Result(new Equivalent(ProofMethod.Bounded))]).Runs[0].Results];
+
+        Assert.Equal(["N.C::Tax(int)", "N.C::Zero()"], results[0].GetProperty<List<string>>("assumedCallees"), StringComparer.Ordinal);
+        Assert.Equal(["N.C::Tax(int)"], results[0].GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+        Assert.False(results[1].TryGetProperty("assumedCallees", out List<string> _));
+        Assert.False(results[1].TryGetProperty("unprovenAssumptions", out List<string> _));
+    }
+
+    /// <summary>ADR 0019; ticket M3-015 acceptance criterion 12.</summary>
+    [Fact]
+    public void EquivalentWithUnprovenAssumption_MessageNamesThem()
+    {
+        VerificationResult unproven = Fixtures.Result(new Equivalent(ProofMethod.Congruence), "N.C::Total(int)") with
+        {
+            AssumedCallees = ["N.C::Tax(int)", "N.C::Rate()", "N.C::Zero()"],
+            UnprovenAssumptions = ["N.C::Rate()", "N.C::Tax(int)"],
+        };
+        VerificationResult proven = unproven with { UnprovenAssumptions = [] };
+        VerificationResult divergent = Fixtures.Result(new Divergent(Fixtures.Counterexample()), "N.C::Total(int)") with { UnprovenAssumptions = ["N.C::Tax(int)"] };
+
+        Result[] results = [.. SarifReportWriter.Write([unproven, proven, divergent]).Runs[0].Results];
+
+        Assert.Equal("N.C::Total(int) is equivalent. Assumes callees equivalent; not proved for: N.C::Rate(), N.C::Tax(int).", results[0].Message.Text);
+        Assert.Equal("N.C::Total(int) is equivalent.", results[1].Message.Text);
+        Assert.DoesNotContain("Assumes", results[2].Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket M3-015 acceptance criterion 14: the lists are not part of the result fingerprint, so a baseline stays unchanged.</summary>
+    [Fact]
+    public void Assumptions_DoNotChangeTheFingerprint()
+    {
+        VerificationResult plain = Fixtures.Result(new Equivalent(ProofMethod.Congruence));
+        VerificationResult assuming = plain with { AssumedCallees = ["N.C::Tax(int)"], UnprovenAssumptions = ["N.C::Tax(int)"] };
+        SarifLog baseline = SarifReportWriter.Write([plain]);
+
+        Result result = SarifReportWriter.Write([assuming], baseline).Runs[0].Results[0];
+
+        Assert.Equal(ResultFingerprint.Compute(plain), ResultFingerprint.Compute(assuming));
+        Assert.Equal(BaselineState.Unchanged, result.BaselineState);
+    }
+
     private static Counterexample RuntimeChangedCounterexample()
     {
         CallIdentity flagged = new("System.String::GetHashCode()", RuntimeChanged: true);

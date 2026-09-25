@@ -1,4 +1,6 @@
-﻿using Equiv.Core.Matching;
+﻿using System.Collections.Immutable;
+
+using Equiv.Core.Matching;
 using Equiv.Core.RuntimeChanges;
 using Equiv.Core.Verdicts;
 
@@ -130,11 +132,10 @@ public static class SarifReportWriter
             sarifResult.SetProperty("helpUri", runtimeChange.Url.OriginalString);
         }
 
-        // ADR 0020: an Equivalent says which catalogue entries it rests on.
-        if (!result.EquivalencesApplied.IsEmpty)
-        {
-            sarifResult.SetProperty("equivalencesApplied", result.EquivalencesApplied.ToList());
-        }
+        // ADR 0020: an Equivalent says which catalogue entries it rests on. ADR 0019: and which callee pairs it assumed.
+        SetListProperty(sarifResult, "equivalencesApplied", result.EquivalencesApplied);
+        SetListProperty(sarifResult, "assumedCallees", result.AssumedCallees);
+        SetListProperty(sarifResult, "unprovenAssumptions", result.UnprovenAssumptions);
 
         bool isEndpoint = ProcedureIdentityNormalizer.IsEndpoint(result.Identity.Value);
         if (result.Identity.Location is { } location)
@@ -153,6 +154,15 @@ public static class SarifReportWriter
         }
 
         return sarifResult;
+    }
+
+    /// <summary>A string-array result property, left out when <paramref name="values"/> is empty.</summary>
+    private static void SetListProperty(Result sarifResult, string name, ImmutableArray<string> values)
+    {
+        if (!values.IsEmpty)
+        {
+            sarifResult.SetProperty(name, values.ToList());
+        }
     }
 
     /// <summary>
@@ -252,10 +262,13 @@ public static class SarifReportWriter
     /// <summary>
     /// <see cref="Verdict"/> is a closed hierarchy (private protected constructor) with five
     /// members; the final arm covers <see cref="Removed"/>, mirroring <see cref="VerdictRule.Describe"/>.
-    /// <paramref name="runtimeChange"/> is non-null only for an EQ006 <see cref="Divergent"/>.
+    /// <paramref name="runtimeChange"/> is non-null only for an EQ006 <see cref="Divergent"/>. An Equivalent that assumed a
+    /// callee pair this run did not prove says so in one more sentence (ADR 0019).
     /// </summary>
     private static string MessageText(VerificationResult result, RuntimeChange? runtimeChange) => result.Verdict switch
     {
+        Equivalent when !result.UnprovenAssumptions.IsEmpty =>
+            $"{result.Identity.Value} is equivalent. Assumes callees equivalent; not proved for: {string.Join(", ", result.UnprovenAssumptions)}.",
         Equivalent => $"{result.Identity.Value} is equivalent.",
         Divergent divergent when runtimeChange is not null =>
             $"{result.Identity.Value} diverges via a runtime-changed API ({runtimeChange.Reason} {runtimeChange.Url.OriginalString}): {CounterexampleText.Dump(divergent.Counterexample)}",

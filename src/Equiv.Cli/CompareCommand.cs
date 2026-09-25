@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.CommandLine;
 using System.Globalization;
 
@@ -139,7 +140,7 @@ internal static class CompareCommand
             options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config);
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
-        List<VerificationResult> results = verified;
+        List<VerificationResult> results = WithAssumptions(verified, lowered, matchResult);
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));
         results.AddRange(matchResult.Removed.Select(static identity => new VerificationResult(identity, new Removed())));
 
@@ -338,6 +339,44 @@ internal static class CompareCommand
         && fingerprint == pair.NewFingerprint
         && !UnboundCauses("legacy", old).Any()
         && !UnboundCauses("modern", @new).Any();
+
+    /// <summary>
+    /// ADR 0019, once every verdict is known: each result of a lowered pair lists the matched pairs (lowered or not) that
+    /// either body calls, other than itself, as <see cref="VerificationResult.AssumedCallees"/>, sorted and distinct, and
+    /// those whose own result in this run is not Equivalent as <see cref="VerificationResult.UnprovenAssumptions"/>. No
+    /// verdict changes.
+    /// </summary>
+    private static List<VerificationResult> WithAssumptions(
+        List<VerificationResult> verified, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, MatchResult matchResult)
+    {
+        HashSet<string> matched = new(
+            matchResult.Pairs.Select(static p => p.New.Value).Concat(matchResult.LoweringFailures.Select(static f => f.New.Value)),
+            StringComparer.Ordinal);
+        Dictionary<string, Verdict> verdicts = verified.ToDictionary(static r => r.Identity.Value, static r => r.Verdict, StringComparer.Ordinal);
+        Dictionary<string, (IrProcedure Old, IrProcedure New)> bodies = lowered.ToDictionary(static p => p.Pair.New.Value, static p => (p.Old, p.New), StringComparer.Ordinal);
+        return
+        [
+            .. verified.Select(result =>
+            {
+                (IrProcedure old, IrProcedure @new) = bodies[result.Identity.Value];
+                ImmutableArray<string> assumed =
+                [
+                    .. Callees(old).Concat(Callees(@new))
+                        .Where(callee => matched.Contains(callee) && !string.Equals(callee, result.Identity.Value, StringComparison.Ordinal))
+                        .Distinct(StringComparer.Ordinal)
+                        .Order(StringComparer.Ordinal),
+                ];
+                return result with
+                {
+                    AssumedCallees = assumed,
+                    UnprovenAssumptions = [.. assumed.Where(callee => verdicts.GetValueOrDefault(callee) is not Equivalent)],
+                };
+            }),
+        ];
+    }
+
+    private static IEnumerable<string> Callees(IrProcedure body) =>
+        body.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static call => call.Callee.Value);
 
     /// <summary>
     /// ADR 0023's record of a pair the tool failed on: an <c>error</c> notification naming both identities and carrying

@@ -19,6 +19,7 @@ public sealed class SamplesFixtureTests
             ["added-removed"] = ["Added", "Removed"],
             ["business-layer"] = ["Equivalent", "Divergent", "Unknown"],
             ["api-drift"] = ["Equivalent", "Divergent"],
+            ["callee-changed"] = ["Divergent", "Equivalent"],
         };
 
     private static string SamplesRoot =>
