@@ -42,6 +42,15 @@ public sealed class IrLowererSnapshotTests
     public Task Conversions() => Dump("static long M(byte b, short s, char c, int i, uint u) { long x = b + s + c; int n = (int)u; sbyte t = (sbyte)i; return x + n + t; }");
 
     [Fact]
+    public Task DecimalArithmetic() => Dump("static decimal M(decimal price, int quantity, decimal discount) { try { return price * quantity / discount; } catch (OverflowException) { return 0m; } }");
+
+    [Fact]
+    public Task FloatingPointComparisonAndConversion() => Dump("static int M(double a, float b) => a < b ? checked((int)a) : (int)-b;");
+
+    [Fact]
+    public Task UserDefinedOperatorAndStringEquality() => Dump("struct Money { public static Money operator +(Money a, Money b) => a; } static bool M(Money a, Money b, string s, string t) { Money c = a + b; return s == t; }");
+
+    [Fact]
     public Task CheckedConversion() => Dump("static byte M(int i, long l) => checked((byte)(i + (int)l));");
 
     [Fact]

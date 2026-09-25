@@ -41,6 +41,7 @@ internal sealed class IrLowerer
     private readonly ImmutableArray<string> suppressedRuntimeChanges;
     private readonly Catalogue catalogue;
     private readonly IrType? returnType;
+    private readonly bool x87;
     private readonly Dictionary<ISymbol, SsaBuilder.Variable> variables = new(SymbolEqualityComparer.Default);
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captures = [];
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captureTargets = [];
@@ -55,12 +56,13 @@ internal sealed class IrLowerer
     private SourceSpan bodySpan = null!;
     private INamedTypeSymbol receiver = null!;
 
-    private IrLowerer(RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue, IrType? returnType)
+    private IrLowerer(RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue, IrType? returnType, bool x87)
     {
         this.renames = renames;
         this.suppressedRuntimeChanges = suppressedRuntimeChanges;
         this.catalogue = catalogue;
         this.returnType = returnType;
+        this.x87 = x87;
     }
 
     /// <summary>
@@ -77,14 +79,16 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// As the four-argument overload, applying <paramref name="equivalences"/> (the legacy side's enabled catalogue
-    /// entries, or none for the modern side), and returning the sorted ids of the entries that fired.
+    /// entries, or none for the modern side), and returning the sorted ids of the entries that fired. On the
+    /// <paramref name="legacy"/> side of a project whose floating point runs on x87, every pure function that takes or
+    /// yields floating point is runtime-sensitive (ADR 0025; ticket M4-002).
     /// </summary>
     public static (IrProcedure Body, ImmutableArray<string> EquivalencesApplied) Lower(
-        IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences)
+        IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences, bool legacy = false)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
-        Catalogue entries = new(equivalences);
+        Catalogue entries = new(equivalences) { X87 = legacy && PureCatalogue.IsX87(compilation) };
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
@@ -140,7 +144,7 @@ internal sealed class IrLowerer
         }
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
-        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, catalogue, returnType) { compilation = (CSharpCompilation)model.Compilation, cfg = graph };
+        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, catalogue, returnType, catalogue.X87) { compilation = (CSharpCompilation)model.Compilation, cfg = graph };
         ImmutableArray<IrBlock> blocks = lowerer.LowerBlocks(method, parameters, span);
         IrProcedure procedure = new(
             RoslynIdentity.Of(method, renames),
@@ -739,7 +743,9 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// An implicit reference or boxing conversion between different IR types is a read of its <c>cast.&lt;From&gt;.&lt;To&gt;</c>
-    /// map (ticket M3-010), and an identity conversion is its operand (ticket M4-001). Otherwise integral to integral only: extension follows the source's signedness; a checked
+    /// map (ticket M3-010), and an identity conversion is its operand (ticket M4-001). A numeric conversion to or from
+    /// floating point or <c>decimal</c> is a <c>conv</c> function and a user-defined conversion its <c>op:</c> function
+    /// (ticket M4-002). Otherwise integral to integral only: extension follows the source's signedness; a checked
     /// narrowing throws when the value does not fit.
     /// </summary>
     private IrVar? Convert(IConversionOperation conversion, LoweringContext context)
@@ -755,8 +761,17 @@ internal sealed class IrLowerer
             return Value(conversion.Operand, context);
         }
 
-        if (conversion.OperatorMethod is not null
-            || conversion.Operand.Type is not { } from
+        if (conversion.Operand.Type is { } source && PureCatalogue.Conversion(source, conversion.Type!) is { } entry)
+        {
+            return Apply(entry, conversion.IsChecked, [Value(conversion.Operand, context)], Map(conversion.Type!), context);
+        }
+
+        if (conversion.OperatorMethod is { } method)
+        {
+            return UserDefined(conversion, method, [conversion.Operand], context);
+        }
+
+        if (conversion.Operand.Type is not { } from
             || TypeMapper.Map(from) is not IrBitVec
             || TypeMapper.Map(conversion.Type!) is not IrBitVec target)
         {
@@ -831,6 +846,16 @@ internal sealed class IrLowerer
                 context);
         }
 
+        if (!binary.IsLifted && PureCatalogue.Binary(binary.OperatorKind, binary.LeftOperand.Type!, binary.RightOperand.Type!) is { } entry)
+        {
+            return Apply(entry, binary.IsChecked, [Value(binary.LeftOperand, context), Value(binary.RightOperand, context)], Map(binary.Type!), context);
+        }
+
+        if ((binary.OperatorMethod ?? StringEquality(binary)) is { } method)
+        {
+            return UserDefined(binary, method, [binary.LeftOperand, binary.RightOperand], context);
+        }
+
         bool signed = TypeMapper.IsSigned(binary.LeftOperand.Type!);
         IrVar left = Value(binary.LeftOperand, context);
         IrVar right = Value(binary.RightOperand, context);
@@ -841,6 +866,19 @@ internal sealed class IrLowerer
             { } op => Arithmetic(op, left, right, signed, binary.IsChecked, Map(binary.Type!), context),
         };
     }
+
+    /// <summary>
+    /// The operator method of <c>string == string</c> or <c>string != string</c>, which Roslyn binds as a predefined operator
+    /// with no method, although it is <c>System.String</c>'s user-defined <c>op_Equality</c> or <c>op_Inequality</c> (ticket
+    /// M4-002); null for any other operator.
+    /// </summary>
+    private IMethodSymbol? StringEquality(IBinaryOperation binary) =>
+        binary is { OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals, LeftOperand.Type.SpecialType: SpecialType.System_String, RightOperand.Type.SpecialType: SpecialType.System_String }
+            ? compilation.GetSpecialType(SpecialType.System_String)
+                .GetMembers(binary.OperatorKind == BinaryOperatorKind.Equals ? WellKnownMemberNames.EqualityOperatorName : WellKnownMemberNames.InequalityOperatorName)
+                .OfType<IMethodSymbol>()
+                .FirstOrDefault(static m => m.Parameters is [{ Type.SpecialType: SpecialType.System_String }, { Type.SpecialType: SpecialType.System_String }])
+            : null;
 
     /// <summary><c>x == null</c> and <c>x != null</c> compare the shadow (acceptance criterion 5); null when neither side is <c>null</c>.</summary>
     private IrVar? NullTest(IBinaryOperation binary, LoweringContext context)
@@ -981,8 +1019,23 @@ internal sealed class IrLowerer
         _ => null,
     };
 
+    /// <summary>
+    /// <c>!</c>, <c>~</c>, <c>-</c> and <c>+</c> on integral and Bool operands; <c>-</c> on floating point and <c>decimal</c> is a
+    /// <c>neg</c> function and <c>+</c> its operand; a user-defined operator is its <c>op:</c> function (ticket M4-002).
+    /// </summary>
     private IrVar? Unary(IUnaryOperation unary, LoweringContext context)
     {
+        if (!unary.IsLifted && PureCatalogue.IsCatalogued(unary.Operand.Type!) && unary.OperatorKind is UnaryOperatorKind.Minus or UnaryOperatorKind.Plus)
+        {
+            IrVar value = Value(unary.Operand, context);
+            return unary.OperatorKind == UnaryOperatorKind.Plus ? value : Apply(PureCatalogue.Negation(unary.Operand.Type!)!, unary.IsChecked, [value], value.Type, context);
+        }
+
+        if (unary.OperatorMethod is { } method)
+        {
+            return UserDefined(unary, method, [unary.Operand], context);
+        }
+
         IrVar operand = Value(unary.Operand, context);
         switch (unary.OperatorKind, operand.Type)
         {
@@ -1002,6 +1055,48 @@ internal sealed class IrLowerer
             default:
                 return Opaque(unary, unary.Kind.ToString(), context);
         }
+    }
+
+    /// <summary>
+    /// A user-defined operator or conversion (ticket M4-002): the pure function <c>op:&lt;identity&gt;</c> of its operands,
+    /// which may throw an exception of any type, as an opaque call may. It is runtime-sensitive when a call to the same
+    /// method would be runtime-changed. An operator applied to operands or yielding a value of other types than the
+    /// method's own (a lifted one, or a conversion with a standard conversion folded in) is opaque with the operation's kind.
+    /// </summary>
+    private IrVar? UserDefined(IOperation operation, IMethodSymbol method, ImmutableArray<IOperation> operands, LoweringContext context)
+    {
+        ImmutableArray<IrVar> args = [.. operands.Select(o => Value(o, context))];
+        bool exact = SymbolEqualityComparer.Default.Equals(method.ReturnType, operation.Type)
+            && operands.Select(static o => o.Type).SequenceEqual(method.Parameters.Select(static p => p.Type), SymbolEqualityComparer.Default);
+        if (!exact)
+        {
+            return Opaque(operation, operation.Kind.ToString(), context);
+        }
+
+        CallIdentity identity = Identity(method);
+        return Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, args, Map(method.ReturnType), context);
+    }
+
+    /// <summary>A catalogued function (ticket M4-002), with the exceptions it raises in this context, on this side.</summary>
+    private IrVar Apply(PureCatalogue.Entry entry, bool isChecked, ImmutableArray<IrVar> args, IrType result, LoweringContext context) =>
+        Pure(entry.Function, entry.Raises(isChecked), entry.RuntimeSensitive(x87), args, result, context);
+
+    /// <summary>
+    /// An <see cref="IrPure"/> of <paramref name="function"/>, then, per exception it raises, a branch on its flag to where
+    /// that exception goes. A catalogued exception's type is exact, so a <c>catch</c> of it routes as at run time; a
+    /// user-defined operator's is not known.
+    /// </summary>
+    private IrVar Pure(string function, ImmutableArray<string> throws, bool runtimeSensitive, ImmutableArray<IrVar> args, IrType result, LoweringContext context)
+    {
+        IrVar target = ssa.Temp(result);
+        ImmutableArray<IrPureThrow> flags = [.. throws.Select(t => new IrPureThrow(ssa.Temp(Bool), t))];
+        ssa.Emit(context.Current, new IrPure(target, flags, function, args) { RuntimeSensitive = runtimeSensitive });
+        foreach (IrPureThrow flag in flags)
+        {
+            ThrowIf(flag.Flag, flag.ExceptionType, context, known: !string.Equals(flag.ExceptionType, PureCatalogue.AnyException, StringComparison.Ordinal));
+        }
+
+        return target;
     }
 
     private IrVar EmitUnary(IrUnaryOp op, IrVar operand, LoweringContext context)
@@ -1218,7 +1313,8 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// The API-equivalence entries one body is lowered with (ADR 0020; ticket M3-009): member entries by legacy identity,
-    /// type entries as <see cref="Sorts"/>, and the ids of the entries that fired, sorted.
+    /// type entries as <see cref="Sorts"/>, and the ids of the entries that fired, sorted. It also carries whether the side
+    /// is a legacy one on x87, which, like the entries, only the legacy side has.
     /// </summary>
     private sealed class Catalogue
     {
@@ -1232,6 +1328,9 @@ internal sealed class IrLowerer
         }
 
         public ImmutableDictionary<string, ApiEquivalence> Members { get; }
+
+        /// <summary>Whether this is the legacy side of a project whose floating point runs on x87 (ticket M4-002).</summary>
+        public bool X87 { get; init; }
 
         public SortedSet<string> Applied { get; } = new(StringComparer.Ordinal);
 

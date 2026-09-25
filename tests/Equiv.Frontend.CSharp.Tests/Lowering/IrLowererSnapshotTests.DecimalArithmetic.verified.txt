@@ -1,0 +1,19 @@
+﻿proc "C::M(decimal,int,decimal)" (%price "price": sort "System.Decimal", %quantity "quantity": bv32, %discount "discount": sort "System.Decimal") -> sort "System.Decimal" entry B0
+B0:
+  goto B1
+B1:
+  %$2: sort "System.Decimal" = pure "conv.i32.dec"(%quantity)
+  %$3: sort "System.Decimal" = pure "dec.mul"(%price, %$2) throws(%$4: bool "System.OverflowException")
+  br %$4, B2, B4
+B2:
+  %$9: sort "System.Decimal" = const sort "System.Decimal" 890022063
+  ret %$9
+B4:
+  %$6: sort "System.Decimal" = pure "dec.div"(%$3, %discount) throws(%$7: bool "System.DivideByZeroException", %$8: bool "System.OverflowException")
+  br %$7, B5, B6
+B5:
+  throw "System.DivideByZeroException"
+B6:
+  br %$8, B2, B7
+B7:
+  ret %$6
