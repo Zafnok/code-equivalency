@@ -92,12 +92,24 @@ public sealed class CompilationDiagnosticClassifierTests
                 @"Msbuild failed when processing the file 'C:\x\Modern.csproj' with message: ProjectReference 'C:\x\Adapters.csproj' was resolved using '.NETFramework,Version=v4.8' instead of the project target framework 'netstandard2.0'. Compilation may fail."));
     }
 
+    [Fact]
+    public void ClassifyWorkspaceFailure_RedundantImplicitFrameworkReferenceIsAWarning()
+    {
+        // NETSDK1086: a project lists a FrameworkReference the SDK already adds implicitly. The workspace passes
+        // the SDK message on without its code (seen in M3-028), so this is matched by shape, not by code.
+        Assert.Equal(
+            LoadDiagnosticKind.WorkspaceWarning,
+            CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(
+                @"Msbuild failed when processing the file 'C:\x\Desktop.csproj' with message: A FrameworkReference for 'Microsoft.WindowsDesktop.App' was included in the project. This is implicitly referenced by the .NET SDK and you do not typically need to reference it from your project."));
+    }
+
     [Theory]
     [InlineData("error MSB4019: The imported project was not found")]
     [InlineData("warning MSB32701: not the same code")]
     [InlineData("project file could not be evaluated")]
     [InlineData("Package 'Old.Widgets' 2.1.0 has a known vulnerability, but not the exact wording")]
     [InlineData("a ProjectReference was resolved, but not against a target framework at all")]
+    [InlineData("A FrameworkReference for 'Microsoft.AspNetCore.App' was included in the project, but it could not be resolved")]
     public void ClassifyWorkspaceFailure_AnythingElseIsAFailure(string message)
     {
         Assert.Equal(LoadDiagnosticKind.WorkspaceFailure, CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(message));

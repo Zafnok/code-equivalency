@@ -5,7 +5,7 @@ namespace Equiv.Frontend.CSharp.Loading;
 
 /// <summary>
 /// Sorts compiler errors into "references did not resolve" (skip the project) and everything else (keep), and
-/// workspace failures into real failures and MSBuild or NuGet warnings that the workspace reports as failures
+/// workspace failures into real failures and MSBuild, NuGet or SDK warnings that the workspace reports as failures
 /// (<see cref="MsBuildWarningCodes"/> and <see cref="ClassifyWorkspaceFailure"/>).
 /// </summary>
 internal static partial class CompilationDiagnosticClassifier
@@ -34,10 +34,11 @@ internal static partial class CompilationDiagnosticClassifier
 
     /// <summary>
     /// A failure event is a warning when its message carries a code from <see cref="MsBuildWarningCodes"/>, or
-    /// matches the shape of one of three NuGet restore compatibility warnings (P2-012). Unlike MSB3270, none of
-    /// these carry their code in the text the workspace passes on (confirmed against a real restore: the
-    /// workspace wraps the bare NuGet log message, dropping the "NUxxxx:" prefix a console logger would add), so
-    /// each is matched by message shape instead of by code:
+    /// matches the shape of one of three NuGet restore compatibility warnings (P2-012) or one .NET SDK warning
+    /// (P2-020). Unlike MSB3270, none of these carry their code in the text the workspace passes on (confirmed
+    /// against a real restore: the workspace wraps the bare log message, dropping the "NUxxxx:" prefix a console
+    /// logger would add; M3-028 saw the same for NETSDK1086), so each is matched by message shape instead of by
+    /// code:
     /// <list type="bullet">
     /// <item><description><c>NU1701</c>: a package restored using a fallback framework (typically .NET Framework)
     /// because it has no asset for the project's target framework; common when a .NET Framework-only package is
@@ -47,6 +48,10 @@ internal static partial class CompilationDiagnosticClassifier
     /// (<see cref="ProjectReferenceResolvedForAFallbackFramework"/>).</description></item>
     /// <item><description><c>NU1903</c>: a NuGet audit finding (a package with a known vulnerability), not a load
     /// problem (<see cref="PackageHasAKnownVulnerability"/>).</description></item>
+    /// <item><description><c>NETSDK1086</c>: the project lists a <c>FrameworkReference</c> (such as
+    /// <c>Microsoft.AspNetCore.App</c> in a <c>Microsoft.NET.Sdk.Web</c> project) that the SDK already adds
+    /// implicitly; redundant, not a load problem, and routinely left by upgrade tools
+    /// (<see cref="RedundantImplicitFrameworkReference"/>).</description></item>
     /// </list>
     /// </summary>
     public static LoadDiagnosticKind ClassifyWorkspaceFailure(string message) =>
@@ -54,6 +59,7 @@ internal static partial class CompilationDiagnosticClassifier
         || PackageRestoredForAFallbackFramework.IsMatch(message)
         || ProjectReferenceResolvedForAFallbackFramework.IsMatch(message)
         || PackageHasAKnownVulnerability.IsMatch(message)
+        || RedundantImplicitFrameworkReference.IsMatch(message)
             ? LoadDiagnosticKind.WorkspaceWarning
             : LoadDiagnosticKind.WorkspaceFailure;
 
@@ -77,4 +83,10 @@ internal static partial class CompilationDiagnosticClassifier
         RegexOptions.CultureInvariant,
         matchTimeoutMilliseconds: 1000)]
     private static partial Regex PackageHasAKnownVulnerability { get; }
+
+    [GeneratedRegex(
+        @"\bA FrameworkReference for '[^']*' was included in the project\. This is implicitly referenced by the \.NET SDK\b",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000)]
+    private static partial Regex RedundantImplicitFrameworkReference { get; }
 }

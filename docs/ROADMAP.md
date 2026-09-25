@@ -365,6 +365,9 @@ ticket id (not listed again here). P2-015 is a `corpus.ps1` finding from the sam
 - P2-019 (S) An array's length is never negative in a model. Found by M0-012's gate at the
   nightly budget (a false Divergent, rule 2); the gate skips it until this lands. M3-003 needs
   it (M0-012 criterion 7). Needs M0-012.
+- P2-020 (S) SDK warning NETSDK1086 (an explicit `FrameworkReference` the SDK already implies) is
+  not a project load failure. Found in M3-028 on eshop-upgrade-assistant's modern side; the same
+  class of bug as P2-012. Needs P2-012.
 
 ## M5 — Agent surface (MCP)
 
