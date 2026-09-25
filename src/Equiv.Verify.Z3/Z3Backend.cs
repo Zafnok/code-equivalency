@@ -1,3 +1,4 @@
+﻿using System.Collections.Immutable;
 using System.Globalization;
 
 using Equiv.Core;
@@ -7,6 +8,7 @@ using Equiv.Core.Verdicts;
 using Microsoft.Z3;
 
 using ProductEncoding = Equiv.Verify.Z3.ProductEncoder.ProductEncoding;
+using Side = Equiv.Verify.Z3.ProductEncoder.Side;
 
 namespace Equiv.Verify.Z3;
 
@@ -102,12 +104,52 @@ public sealed class Z3Backend : IVerificationBackend
     internal static string Timeout(Solver solver, VerificationOptions options) =>
         $"solver returned unknown ({solver.ReasonUnknown}) with a {options.TimeoutMs.ToString(CultureInfo.InvariantCulture)} ms timeout";
 
-    /// <summary>The opaque nodes the model reaches, as <c>side: reason at path line:column</c>.</summary>
-    internal static string OpaqueReasons(Model model, ProductEncoding encoding) =>
-        string.Join(
-            "; ",
-            encoding.Opaques
-                .Where(o => model.Eval(o.Reach, completion: true).IsTrue)
-                .Select(static o => $"{ProductEncoder.Prefix(o.Side)}: {o.Node.Reason} at {o.Node.Span.Path} " +
-                    $"{o.Node.Span.StartLine.ToString(CultureInfo.InvariantCulture)}:{o.Node.Span.StartColumn.ToString(CultureInfo.InvariantCulture)}"));
+    /// <summary>
+    /// Every opaque node some input reaches (ADR 0027 decision 4): those <paramref name="model"/> reaches, then, while the
+    /// solver finds an input under <paramref name="constraints"/> that reaches one not listed yet, those that input
+    /// reaches. A query that is unsatisfiable or gives up ends the search with what it has.
+    /// </summary>
+    internal static ImmutableArray<UnknownCause> ReachableOpaques(Context context, ProductEncoding encoding, VerificationOptions options, Model model, BoolExpr[] constraints)
+    {
+        HashSet<int> reached = [.. Reached(model, encoding)];
+        for (BoolExpr[] rest = Unreached(); rest.Length > 0; rest = Unreached())
+        {
+            using Solver solver = Query(context, encoding, options, [context.MkOr(rest), .. constraints]);
+            if (solver.Check() != Status.SATISFIABLE)
+            {
+                break;
+            }
+
+            reached.UnionWith(Reached(solver.Model, encoding));
+        }
+
+        return Causes(encoding, reached);
+
+        BoolExpr[] Unreached() => [.. encoding.Opaques.Where((_, i) => !reached.Contains(i)).Select(static o => o.Reach)];
+    }
+
+    /// <summary>
+    /// The opaque nodes at <paramref name="indices"/> of <see cref="ProductEncoding.Opaques"/> as causes, each line once
+    /// (unrolling copies a node), legacy side first and then by position in the source.
+    /// </summary>
+    internal static ImmutableArray<UnknownCause> Causes(ProductEncoding encoding, IEnumerable<int> indices) =>
+        [.. indices
+            .Select(i => encoding.Opaques[i])
+            .Select(static o => new UnknownCause(o.Side == Side.Old ? Codebase.Legacy : Codebase.Modern, o.Node.Reason, o.Node.Span))
+            .Distinct()
+            .OrderBy(static c => c.Side)
+            .ThenBy(static c => c.Span.Path, StringComparer.Ordinal)
+            .ThenBy(static c => c.Span.StartLine)
+            .ThenBy(static c => c.Span.StartColumn)];
+
+    /// <summary>The indices of the opaque nodes <paramref name="model"/> reaches.</summary>
+    internal static IEnumerable<int> Reached(Model model, ProductEncoding encoding) =>
+        Enumerable.Range(0, encoding.Opaques.Length).Where(i => model.Eval(encoding.Opaques[i].Reach, completion: true).IsTrue);
+
+    /// <summary>
+    /// An opaque Unknown's detail: each <c>side: reason</c> once. The lines are in the causes, so moving an opaque node
+    /// leaves the detail, and with it the result's fingerprint, unchanged (ADR 0027 decision 4).
+    /// </summary>
+    internal static string OpaqueReasons(ImmutableArray<UnknownCause> causes) =>
+        string.Join("; ", causes.Select(static c => $"{(c.Side == Codebase.Legacy ? "old" : "new")}: {c.Reason}").Distinct(StringComparer.Ordinal));
 }

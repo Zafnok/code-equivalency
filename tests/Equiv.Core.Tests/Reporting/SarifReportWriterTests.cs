@@ -111,6 +111,96 @@ public sealed class SarifReportWriterTests
         Assert.Equal(8, location.PhysicalLocation.Region.EndColumn);
     }
 
+    /// <summary>
+    /// Ticket M3-016 criterion 8 (ADR 0027 decision 4): every cause is a related location whose message is its reason,
+    /// and the result points at the first modern-side cause instead of the procedure.
+    /// </summary>
+    [Fact]
+    public void PrimaryLocationIsFirstModernCause()
+    {
+        ProcedureIdentity identity = new("T::M()", new SourceSpan("New.cs", 2, 5, 2, 6));
+        Unknown unknown = new(UnknownReason.Opaque, "old: Lambda; new: Await; new: Lock")
+        {
+            Causes =
+            [
+                new UnknownCause(Codebase.Legacy, "Lambda", new SourceSpan("Old.cs", 3, 9, 3, 20)),
+                new UnknownCause(Codebase.Modern, "Await", new SourceSpan("New.cs", 7, 9, 7, 20)),
+                new UnknownCause(Codebase.Modern, "Lock", new SourceSpan("New.cs", 5, 9, 5, 20)),
+            ],
+        };
+
+        Result result = SarifReportWriter.Write([new VerificationResult(identity, unknown)]).Runs[0].Results[0];
+
+        Region primary = Assert.Single(result.Locations).PhysicalLocation.Region;
+        Assert.Equal((7, 9, 7, 20), (primary.StartLine, primary.StartColumn, primary.EndLine, primary.EndColumn));
+        Assert.Equal("New.cs", result.Locations[0].PhysicalLocation.ArtifactLocation.Uri.OriginalString);
+        Assert.Null(result.Locations[0].Message);
+        Assert.Equal(["Lambda", "Await", "Lock"], result.RelatedLocations.Select(static l => l.Message.Text), StringComparer.Ordinal);
+        Assert.Equal(["Old.cs", "New.cs", "New.cs"], result.RelatedLocations.Select(static l => l.PhysicalLocation.ArtifactLocation.Uri.OriginalString), StringComparer.Ordinal);
+        Assert.Equal([3, 7, 5], result.RelatedLocations.Select(static l => l.PhysicalLocation.Region.StartLine));
+    }
+
+    [Fact]
+    public void NoModernCauseKeepsTheProcedureLocation()
+    {
+        ProcedureIdentity identity = new("T::M()", new SourceSpan("New.cs", 2, 5, 2, 6));
+        Unknown unknown = new(UnknownReason.Opaque, "old: Lambda")
+        {
+            Causes = [new UnknownCause(Codebase.Legacy, "Lambda", new SourceSpan("Old.cs", 3, 9, 3, 20))],
+        };
+
+        Result result = SarifReportWriter.Write([new VerificationResult(identity, unknown)]).Runs[0].Results[0];
+
+        Assert.Equal(2, Assert.Single(result.Locations).PhysicalLocation.Region.StartLine);
+        Assert.Equal("Lambda", Assert.Single(result.RelatedLocations).Message.Text);
+    }
+
+    [Fact]
+    public void AModernCauseLocatesAResultWhoseProcedureHasNoLocation()
+    {
+        Unknown unknown = new(UnknownReason.Opaque, "new: Await")
+        {
+            Causes = [new UnknownCause(Codebase.Modern, "Await", new SourceSpan("New.cs", 7, 9, 7, 20))],
+        };
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(unknown)]).Runs[0].Results[0];
+
+        Assert.Equal(7, Assert.Single(result.Locations).PhysicalLocation.Region.StartLine);
+    }
+
+    [Fact]
+    public void AResultWithoutCausesHasNoRelatedLocations()
+    {
+        ProcedureIdentity identity = new("T::M()", new SourceSpan("New.cs", 2, 5, 2, 6));
+
+        Result unknown = SarifReportWriter.Write([new VerificationResult(identity, new Unknown(UnknownReason.Timeout, "d"))]).Runs[0].Results[0];
+        Result divergent = SarifReportWriter.Write([new VerificationResult(identity, new Divergent(Fixtures.Counterexample()))]).Runs[0].Results[0];
+
+        Assert.Null(unknown.RelatedLocations);
+        Assert.Equal(2, Assert.Single(unknown.Locations).PhysicalLocation.Region.StartLine);
+        Assert.Null(divergent.RelatedLocations);
+    }
+
+    /// <summary>
+    /// Ticket M3-016 criterion 9 (ADR 0027 decision 4): causes are not part of the fingerprint, so a baseline round trip
+    /// in which only the cause moves keeps the result <c>unchanged</c> with the same partial fingerprints.
+    /// </summary>
+    [Fact]
+    public void MovingACauseKeepsTheBaselineUnchanged()
+    {
+        ProcedureIdentity identity = new("T::M()", new SourceSpan("New.cs", 2, 5, 2, 6));
+        SarifLog baseline = SarifReportWriter.Write([new VerificationResult(identity, OpaqueAtLine(7))]);
+
+        Result moved = SarifReportWriter.Write([new VerificationResult(identity, OpaqueAtLine(12))], baseline).Runs[0].Results[0];
+
+        Assert.Equal(BaselineState.Unchanged, moved.BaselineState);
+        Assert.Equal(baseline.Runs[0].Results[0].PartialFingerprints, moved.PartialFingerprints);
+        Assert.Equal(12, moved.Locations[0].PhysicalLocation.Region.StartLine);
+    }
+
+    private static Unknown OpaqueAtLine(int line) =>
+        new(UnknownReason.Opaque, "new: Await") { Causes = [new UnknownCause(Codebase.Modern, "Await", new SourceSpan("New.cs", line, 9, line, 20))] };
+
     [Fact]
     public void ResultWithoutALocationHasNoLocations()
     {

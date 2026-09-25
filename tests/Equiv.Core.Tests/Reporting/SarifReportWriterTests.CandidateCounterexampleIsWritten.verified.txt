@@ -75,10 +75,43 @@
           message: {
             text: Samples.Math::Add(int32,int32) is unknown (Abstraction): the divergence depends on opaque:a, opaque:b
           },
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: {
+                  uri: New.cs
+                },
+                region: {
+                  startLine: 4,
+                  startColumn: 9,
+                  endLine: 4,
+                  endColumn: 20
+                }
+              }
+            }
+          ],
           partialFingerprints: {
             procedureIdentity/v1: Samples.Math::Add(int32,int32),
             resultFingerprint/v1: 40500733f96f514a135272f5a857143b7c59b8d56924167abce91405886d2304
           },
+          relatedLocations: [
+            {
+              physicalLocation: {
+                artifactLocation: {
+                  uri: New.cs
+                },
+                region: {
+                  startLine: 4,
+                  startColumn: 9,
+                  endLine: 4,
+                  endColumn: 20
+                }
+              },
+              message: {
+                text: abstraction opaque:b
+              }
+            }
+          ],
           baselineState: new,
           properties: {
             unknownReason: abstraction,

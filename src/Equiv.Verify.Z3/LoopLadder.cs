@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Collections.Immutable;
+using System.Globalization;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -86,7 +87,10 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
                 Status.SATISFIABLE => new Obligation(
                     status,
                     replay is { } originals ? ModelDecoder.TryReplay(context, solver.Model, encoding, originals.Old, originals.New, ReplayBudget) : null,
-                    solver.Model.Eval(opaque, completion: true).IsTrue),
+                    solver.Model.Eval(opaque, completion: true).IsTrue)
+                {
+                    Causes = Z3Backend.Causes(encoding, Z3Backend.Reached(solver.Model, encoding)),
+                },
                 Status.UNSATISFIABLE => new Obligation(status),
                 _ => new Obligation(status, Detail: Z3Backend.Timeout(solver, options)),
             };
@@ -95,7 +99,8 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// <summary>The result of an obligation the rung failed: an inconclusive or timed-out step and the cause of the eventual Unknown.</summary>
     public static Rung Failed(ProofMethod rung, Obligation obligation, string what) => obligation.Status switch
     {
-        Status.SATISFIABLE when obligation.Opaque => new Rung(new LadderStep(rung, RungOutcome.Inconclusive, $"{what} reaches an opaque node"), Cause: UnknownReason.Opaque),
+        Status.SATISFIABLE when obligation.Opaque =>
+            new Rung(new LadderStep(rung, RungOutcome.Inconclusive, $"{what} reaches an opaque node"), Cause: UnknownReason.Opaque) { Causes = obligation.Causes },
         Status.SATISFIABLE => new Rung(new LadderStep(rung, RungOutcome.Inconclusive, $"{what} fails"), Cause: UnknownReason.UnalignedLoop),
         _ => new Rung(new LadderStep(rung, RungOutcome.Timeout, $"{what}: {obligation.Detail}"), Cause: UnknownReason.Timeout),
     };
@@ -117,7 +122,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     {
         UnknownReason reason = UndecidedReason(rungs, recursive);
         Rung cause = rungs.LastOrDefault(r => r.Cause == reason) ?? rungs[^1];
-        return new Unknown(reason, cause.Step.Detail);
+        return new Unknown(reason, cause.Step.Detail) { Causes = cause.Causes };
     }
 
     /// <summary>The first that applies: an opaque node reached, a self-call, loops no rung aligned or proved, else a timeout.</summary>
@@ -179,8 +184,11 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
                     return TimedOut(Z3Backend.Timeout(opaque, options));
                 }
 
-                string reasons = Z3Backend.OpaqueReasons(opaque.Model, encoding);
-                return new Rung(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"an input reaches an opaque node: {reasons}"), new Unknown(UnknownReason.Opaque, reasons));
+                ImmutableArray<UnknownCause> causes = Z3Backend.ReachableOpaques(context, encoding, options, opaque.Model, reachable);
+                string reasons = Z3Backend.OpaqueReasons(causes);
+                return new Rung(
+                    new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"an input reaches an opaque node: {reasons}"),
+                    new Unknown(UnknownReason.Opaque, reasons) { Causes = causes });
             }
 
             return looping
@@ -211,9 +219,21 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     private static Rung TimedOut(string detail) =>
         new(new LadderStep(ProofMethod.Bounded, RungOutcome.Timeout, detail), Cause: UnknownReason.Timeout);
 
-    /// <summary>What one rung did: its ladder step, the verdict when it decided the pair, and otherwise why it did not.</summary>
-    public sealed record Rung(LadderStep Step, Verdict? Verdict = null, UnknownReason? Cause = null);
+    /// <summary>
+    /// What one rung did: its ladder step, the verdict when it decided the pair, and otherwise why it did not, with the
+    /// opaque nodes that made it fail as <see cref="Causes"/>.
+    /// </summary>
+    public sealed record Rung(LadderStep Step, Verdict? Verdict = null, UnknownReason? Cause = null)
+    {
+        public ImmutableArray<UnknownCause> Causes { get; init; } = [];
+    }
 
-    /// <summary>An obligation's solver status, and for a model, its replayed counterexample (if real) and whether it reaches an opaque.</summary>
-    public sealed record Obligation(Status Status, Counterexample? Counterexample = null, bool Opaque = false, string Detail = "");
+    /// <summary>
+    /// An obligation's solver status, and for a model, its replayed counterexample (if real), whether it reaches an
+    /// opaque, and the opaque nodes it reaches as <see cref="Causes"/>.
+    /// </summary>
+    public sealed record Obligation(Status Status, Counterexample? Counterexample = null, bool Opaque = false, string Detail = "")
+    {
+        public ImmutableArray<UnknownCause> Causes { get; init; } = [];
+    }
 }

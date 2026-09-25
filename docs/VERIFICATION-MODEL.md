@@ -243,8 +243,9 @@ as `properties.candidateCounterexample` and the abstractions it depends on as
 `properties.abstractions`.
 
 An Unknown result lists every reached opaque node and every abstraction it depends on as a
-`relatedLocation` whose message is the reason. Its primary location is the first of them on
-the modern side, else the procedure (ADR 0027). `partialFingerprints` do not change with it.
+`relatedLocation` whose message is the reason, each line once, legacy side first and then in source order. Its
+primary location is the first of them on the modern side, else the procedure (ADR 0027). `partialFingerprints` do
+not change with it: an opaque Unknown's detail names each `side: reason` once, without lines.
 
 Every Unknown carries `properties.scope` (ADR 0029):
 - `line`: every cause is a span inside the method, and the first query of ADR 0014 was
