@@ -1,0 +1,23 @@
+# Equivalent
+# P1-005: the same field write, the same call and the same read after it on both sides; the call's heap effect is one shared function.
+proc "C::M(int)" (%v: bv32, ref %field.C.f: map<sort "C", bv32>, %this: sort "C") -> bv32 entry B0
+B0:
+  %f1: map<sort "C", bv32> = mapwrite %field.C.f, %this, %v
+  call "C::Foo()"(%this) threw %t: bool heap("field.C.f" %f1 -> %f2: map<sort "C", bv32>)
+  br %t, B1, B2
+B1:
+  throw "System.Exception" outs(%field.C.f = %f2)
+B2:
+  %x: bv32 = mapread %f2, %this
+  ret %x outs(%field.C.f = %f2)
+---
+proc "C::M(int)" (%w: bv32, ref %field.C.f: map<sort "C", bv32>, %this: sort "C") -> bv32 entry B0
+B0:
+  %g1: map<sort "C", bv32> = mapwrite %field.C.f, %this, %w
+  call "C::Foo()"(%this) threw %u: bool heap("field.C.f" %g1 -> %g2: map<sort "C", bv32>)
+  br %u, B1, B2
+B1:
+  throw "System.Exception" outs(%field.C.f = %g2)
+B2:
+  %y: bv32 = mapread %g2, %this
+  ret %y outs(%field.C.f = %g2)

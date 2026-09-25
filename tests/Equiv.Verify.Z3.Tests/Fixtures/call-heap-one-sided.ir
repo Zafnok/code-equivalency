@@ -1,0 +1,13 @@
+# Equivalent
+# P1-005: only the old side names field.C.f; it reads the field after a call both sides make and writes the read value back. The encoder threads the new side's version of field.C.f through its call, so both final heaps are the call's result.
+proc "C::M()" (ref %field.C.f: map<sort "C", bv32>, %this: sort "C") entry B0
+B0:
+  call "C::Foo()"(%this) heap("field.C.f" %field.C.f -> %f1: map<sort "C", bv32>)
+  %v: bv32 = mapread %f1, %this
+  %f2: map<sort "C", bv32> = mapwrite %f1, %this, %v
+  ret outs(%field.C.f = %f2)
+---
+proc "C::M()" (%this: sort "C") entry B0
+B0:
+  call "C::Foo()"(%this)
+  ret

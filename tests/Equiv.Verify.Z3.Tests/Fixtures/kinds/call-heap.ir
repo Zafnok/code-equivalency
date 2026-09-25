@@ -1,0 +1,11 @@
+# Equivalent
+# P1-005: a call that pairs field.C.f on the old side; the new side does not name the map, so the encoder threads it through the new side's call.
+proc "T::M()" (ref %field.C.f: map<sort "C", bv32>, %this: sort "C") entry B0
+B0:
+  call "Svc::F(C)"(%this) heap("field.C.f" %field.C.f -> %f1: map<sort "C", bv32>)
+  ret outs(%field.C.f = %f1)
+---
+proc "T::M()" (%this: sort "C") entry B0
+B0:
+  call "Svc::F(C)"(%this)
+  ret

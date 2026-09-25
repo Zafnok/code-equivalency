@@ -12,11 +12,14 @@ namespace Equiv.Verify.Z3;
 
 /// <summary>
 /// Calls and the call trace (VERIFICATION-MODEL.md section 5; ADR 0018; ticket M3-001). A call's result and
-/// <c>threw</c> flag are uninterpreted functions of its arguments and its position, one pair per callee
-/// identity and signature, shared by both sides, except that a <see cref="CallIdentity.RuntimeChanged"/>
-/// callee gets one pair per side. A legacy identity in the config's call-identity map is renamed to its
-/// modern counterpart first. A trace is a <c>Seq</c> of <c>event(callee, args)</c>, the arguments boxed in
-/// a <c>Value</c> datatype with one injective constructor per IR type in use.
+/// <c>threw</c> flag are uninterpreted functions of its arguments, its position and the heap at the call, one pair per
+/// callee identity and signature, shared by both sides, except that a <see cref="CallIdentity.RuntimeChanged"/>
+/// callee gets one pair per side. So is the new version of each heap map, one <c>heap:</c> function per callee, signature
+/// and map (ticket P1-005). The heap at a call is one value per <see cref="Heap"/> map, in that order. A legacy identity
+/// in the config's call-identity map is renamed to its modern counterpart first. A trace is a <c>Seq</c> of
+/// <c>event(callee, args)</c>, whose <c>args</c> are the arguments followed by the heap at the call (as long on both
+/// sides, so the concatenation is injective), boxed in a <c>Value</c> datatype with one injective constructor per IR
+/// type in use.
 /// </summary>
 internal sealed class TraceEncoder
 {
@@ -30,14 +33,15 @@ internal sealed class TraceEncoder
     private readonly FuncDecl eventConstructor;
     private readonly SeqSort trace;
 
-    public TraceEncoder(SortMapper sorts, IEnumerable<IrType> argumentTypes, ImmutableDictionary<string, string> callIdentityMap)
+    public TraceEncoder(SortMapper sorts, IEnumerable<IrType> argumentTypes, ImmutableDictionary<string, string> callIdentityMap, ImmutableArray<HeapMap> heap)
     {
         this.sorts = sorts;
         this.callIdentityMap = callIdentityMap;
+        Heap = heap;
         context = sorts.Context;
 
         // Bool is always a constructor, so the datatype is never empty when no call has arguments.
-        IrType[] boxed = [.. argumentTypes.Append(new IrBool()).DistinctBy(SortMapper.Name, StringComparer.Ordinal).OrderBy(SortMapper.Name, StringComparer.Ordinal)];
+        IrType[] boxed = [.. argumentTypes.Concat(heap.Select(static h => h.Type)).Append(new IrBool()).DistinctBy(SortMapper.Name, StringComparer.Ordinal).OrderBy(SortMapper.Name, StringComparer.Ordinal)];
         DatatypeSort value = Datatype("Value", [.. boxed.Select(t => ("of:" + SortMapper.Name(t), "un:" + SortMapper.Name(t), sorts.Sort(t)))]);
         for (int i = 0; i < boxed.Length; i++)
         {
@@ -50,16 +54,24 @@ internal sealed class TraceEncoder
         trace = context.MkSeqSort(@event);
     }
 
-    /// <summary>The result, <c>threw</c> flag and trace event of <paramref name="call"/> on <paramref name="side"/> at <paramref name="position"/>.</summary>
-    public (Expr? Result, BoolExpr Threw, Expr Event) Call(Side side, IrCall call, ImmutableArray<(IrType Type, Expr Term)> args, BitVecExpr position)
+    /// <summary>The maps the heap at a call ranges over: every map a heap pair names on either side, in name order (ticket P1-005).</summary>
+    public ImmutableArray<HeapMap> Heap { get; }
+
+    /// <summary>
+    /// The result, <c>threw</c> flag, trace event and new heap (one term per <see cref="Heap"/> map) of <paramref name="call"/>
+    /// on <paramref name="side"/> at <paramref name="position"/>, given the heap <paramref name="heap"/> at the call.
+    /// </summary>
+    public (Expr? Result, BoolExpr Threw, Expr Event, ImmutableArray<Expr> Heap) Call(
+        Side side, IrCall call, ImmutableArray<(IrType Type, Expr Term)> args, BitVecExpr position, ImmutableArray<Expr> heap)
     {
         ImmutableArray<IrType> types = [.. args.Select(static a => a.Type)];
-        Expr[] applied = [.. args.Select(static a => a.Term), position];
+        Expr[] applied = [.. args.Select(static a => a.Term), position, .. heap];
         Expr? result = call.Target is null ? null : context.MkApp(ResultFunction(side, call.Callee, types, call.Target.Type), applied);
         BoolExpr threw = (BoolExpr)context.MkApp(ThrewFunction(side, call.Callee, types), applied);
-        SeqExpr boxed = context.MkConcat([context.MkEmptySeq(values), .. args.Select(a => context.MkUnit(context.MkApp(boxes[SortMapper.Name(a.Type)], a.Term)))]);
+        IEnumerable<(IrType Type, Expr Term)> read = args.Concat(Heap.Zip(heap, static (m, term) => (m.Type, term)));
+        SeqExpr boxed = context.MkConcat([context.MkEmptySeq(values), .. read.Select(a => context.MkUnit(context.MkApp(boxes[SortMapper.Name(a.Type)], a.Term)))]);
         Expr @event = context.MkApp(eventConstructor, context.MkInt(Callee(Canonical(side, call.Callee))), boxed);
-        return (result, threw, @event);
+        return (result, threw, @event, [.. Heap.Select((_, i) => context.MkApp(HeapFunction(side, call.Callee, types, i), applied))]);
     }
 
     /// <summary>The trace of one side: its blocks' events in reverse postorder, each block's only when it is reached.</summary>
@@ -82,6 +94,10 @@ internal sealed class TraceEncoder
     /// <summary>The <c>threw</c> function for a callee and argument types, created on first use.</summary>
     public FuncDecl ThrewFunction(Side side, CallIdentity callee, ImmutableArray<IrType> argumentTypes) =>
         Function("threw", side, callee, argumentTypes, context.BoolSort, string.Empty);
+
+    /// <summary>The function giving the new version of <see cref="Heap"/> map <paramref name="map"/> after a call, created on first use.</summary>
+    public FuncDecl HeapFunction(Side side, CallIdentity callee, ImmutableArray<IrType> argumentTypes, int map) =>
+        Function("heap", side, callee, argumentTypes, sorts.Sort(Heap[map].Type), "$" + Heap[map].Name + ":" + SortMapper.Name(Heap[map].Type));
 
     /// <summary>The identity both sides' traces use for <paramref name="callee"/>: a legacy identity is renamed through the call-identity map.</summary>
     public string Canonical(Side side, CallIdentity callee) =>
@@ -129,10 +145,13 @@ internal sealed class TraceEncoder
         string name = $"{kind}:{Canonical(side, callee)}({string.Join(',', argumentTypes.Select(SortMapper.Name))}){suffix}{owner}";
         if (!functions.TryGetValue(name, out FuncDecl? function))
         {
-            function = context.MkFuncDecl(name, [.. argumentTypes.Select(sorts.Sort), context.MkBitVecSort(32)], range);
+            function = context.MkFuncDecl(name, [.. argumentTypes.Select(sorts.Sort), context.MkBitVecSort(32), .. Heap.Select(h => sorts.Sort(h.Type))], range);
             functions.Add(name, function);
         }
 
         return function;
     }
+
+    /// <summary>One map the heap at a call ranges over: a heap pair's map name and type (ticket P1-005).</summary>
+    public sealed record HeapMap(string Name, IrType Type);
 }

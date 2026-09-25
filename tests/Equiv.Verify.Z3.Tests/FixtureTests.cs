@@ -21,6 +21,7 @@ public sealed class FixtureTests
         "parameters-swapped", "parameter-renamed", "heap-type-changed",
         "hard-multiplication",
         "array-alias",
+        "call-heap-order", "call-heap-order-array", "call-heap-same", "call-reads-heap", "call-heap-one-sided",
     ];
 
     [Theory]
@@ -46,6 +47,46 @@ public sealed class FixtureTests
         IEnumerable<string> files = Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Fixtures"), "*.ir").Select(Path.GetFileNameWithoutExtension)!;
 
         Assert.Equal(files.Order(StringComparer.Ordinal), Names.Select(static row => row.Data).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Ticket P1-005 acceptance criterion 6: <c>x = 1; Save(this); x = 0;</c> against <c>x = 2; ...</c> diverges at the call,
+    /// whose event carries the heap it reads: same callee, same arguments, a different heap.
+    /// </summary>
+    [Fact]
+    public void CallReadsHeapDivergesInTheHeapAtTheCall()
+    {
+        Divergent divergent = Assert.IsType<Divergent>(Verify(Fixture.Load("call-reads-heap")));
+
+        IrCallRecord old = Assert.Single(divergent.Counterexample.Old.Trace);
+        IrCallRecord @new = Assert.Single(divergent.Counterexample.New.Trace);
+        Assert.Equal(old.Callee, @new.Callee);
+        Assert.Equal(old.Arguments, @new.Arguments);
+        Assert.NotEqual(old.Heap, @new.Heap);
+    }
+
+    /// <summary>Ticket P1-005: a side that does not name a map the other side's call writes reports the version the replay threaded through its own call.</summary>
+    [Fact]
+    public void AOneSidedHeapDivergenceReplaysThroughTheThreadedVersion()
+    {
+        (IrProcedure old, IrProcedure @new) = Fixture.Pair("""
+            proc "C::M()" (ref %field.C.f: map<sort "C", bv32>, %this: sort "C") entry B0
+            B0:
+              call "C::Foo()"(%this) heap("field.C.f" %field.C.f -> %f1: map<sort "C", bv32>)
+              %one: bv32 = const bv32 1
+              %f2: map<sort "C", bv32> = mapwrite %f1, %this, %one
+              ret outs(%field.C.f = %f2)
+            ---
+            proc "C::M()" (%this: sort "C") entry B0
+            B0:
+              call "C::Foo()"(%this)
+              ret
+            """);
+
+        Divergent divergent = Assert.IsType<Divergent>(new Z3Backend().Verify(old, @new, new VerificationOptions(3, 10_000, [])));
+
+        Assert.Equal(divergent.Counterexample.Old.Trace, divergent.Counterexample.New.Trace);
+        Assert.Equal(divergent.Counterexample.Old.Outcome, divergent.Counterexample.New.Outcome);
     }
 
     [Fact]

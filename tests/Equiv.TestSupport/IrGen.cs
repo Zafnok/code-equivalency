@@ -166,9 +166,9 @@ public static class IrGen
                 {
                     case IrMapWrite write:
                         {
-                            IrVar kept = new(write.Target.Name + ".kept", write.Value.Type);
-                            IrVar one = new(write.Target.Name + ".one", write.Value.Type);
-                            IrVar changed = new(write.Target.Name + ".changed", write.Value.Type);
+                            IrVar kept = Fresh(procedure, write.Target.Name + ".kept", write.Value.Type);
+                            IrVar one = Fresh(procedure, write.Target.Name + ".one", write.Value.Type);
+                            IrVar changed = Fresh(procedure, write.Target.Name + ".changed", write.Value.Type);
                             edits.Add(($"drop map write {write.Target.Name}", () =>
                                 InsertInstructions(ReplaceInstruction(procedure, blockIndex, index, write with { Value = kept }), blockIndex, index, new IrMapRead(kept, write.Map, write.Key))));
                             edits.Add(($"change map write {write.Target.Name}", () =>
@@ -183,7 +183,7 @@ public static class IrGen
 
                     case IrCall call:
                         edits.Add(($"duplicate call {index.ToString(CultureInfo.InvariantCulture)} in {block.Id}", () =>
-                            InsertInstructions(procedure, blockIndex, index, Duplicate(call))));
+                            InsertInstructions(procedure, blockIndex, index, Duplicate(procedure, call))));
                         break;
                     case IrBinary binary when !Commutative.Contains(binary.Op) && binary.A != binary.B:
                         edits.Add(($"swap operands of {binary.Target.Name}", () =>
@@ -219,15 +219,30 @@ public static class IrGen
         return ReplaceBlock(procedure, blockIndex, block with { Instructions = block.Instructions.InsertRange(index, instructions) });
     }
 
-    /// <summary>A copy of <paramref name="call"/> that defines fresh names; its heap versions are left unused.</summary>
-    private static IrCall Duplicate(IrCall call) => call with
+    /// <summary>
+    /// A variable named <paramref name="name"/>, with <c>$</c> appended until no definition in <paramref name="procedure"/> has
+    /// the name (a stacked mutant re-edits a mutant). A definition is dumped as <c>%name:</c> or <c>%name "source":</c>.
+    /// </summary>
+    private static IrVar Fresh(IrProcedure procedure, string name, IrType type)
     {
-        Target = Renamed(call.Target, ".dup"),
-        Threw = Renamed(call.Threw, ".dup"),
-        Heap = [.. call.Heap.Select(static h => h with { After = Renamed(h.After, ".dup")! })],
+        string text = IrText.Dump(procedure);
+        while (text.Contains($"%{name}:", StringComparison.Ordinal) || text.Contains($"%{name} \"", StringComparison.Ordinal))
+        {
+            name += "$";
+        }
+
+        return new IrVar(name, type);
+    }
+
+    /// <summary>A copy of <paramref name="call"/> that defines fresh names; its heap versions are left unused.</summary>
+    private static IrCall Duplicate(IrProcedure procedure, IrCall call) => call with
+    {
+        Target = Renamed(procedure, call.Target),
+        Threw = Renamed(procedure, call.Threw),
+        Heap = [.. call.Heap.Select(h => h with { After = Renamed(procedure, h.After)! })],
     };
 
-    private static IrVar? Renamed(IrVar? var, string suffix) => var is null ? null : var with { Name = var.Name + suffix };
+    private static IrVar? Renamed(IrProcedure procedure, IrVar? var) => var is null ? null : Fresh(procedure, var.Name + ".dup", var.Type) with { SourceName = var.SourceName };
 
     private static IrProcedure ReplaceBlock(IrProcedure procedure, int blockIndex, IrBlock block) =>
         procedure with { Blocks = procedure.Blocks.SetItem(blockIndex, block) };
