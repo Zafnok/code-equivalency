@@ -165,4 +165,58 @@ public sealed class EquivConfigLoaderTests
         Assert.Equal([EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry], result.Diagnostics.Select(static d => d.Id), StringComparer.Ordinal);
         Assert.Equal(["System.String::IndexOf("], result.Config.SuppressRuntimeChanges);
     }
+
+    [Fact]
+    public void Config_SuppressApiEquivalences_IsParsed()
+    {
+        EquivConfigResult result = EquivConfigLoader.Load("""{ "suppressApiEquivalences": ["webapi.", "bcl.string-split-one-char"] }""");
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["webapi.", "bcl.string-split-one-char"], result.Config.SuppressApiEquivalences);
+    }
+
+    [Fact]
+    public void Config_SuppressApiEquivalences_DefaultsToEmpty()
+    {
+        EquivConfigResult result = EquivConfigLoader.Load("{}");
+        Assert.Empty(result.Config.SuppressApiEquivalences);
+    }
+
+    [Theory]
+    [InlineData("""{ "suppressApiEquivalences": "nope" }""")]
+    [InlineData("""{ "suppressApiEquivalences": [""] }""")]
+    [InlineData("""{ "suppressApiEquivalences": ["   "] }""")]
+    [InlineData("""{ "suppressApiEquivalences": [5] }""")]
+    public void Config_SuppressApiEquivalences_InvalidEntryFallsBackToEmptyAndIsReported(string json)
+    {
+        EquivConfigResult result = EquivConfigLoader.Load(json);
+        Assert.Equal([EquivConfigDiagnosticIds.InvalidSuppressApiEquivalencesEntry], result.Diagnostics.Select(static d => d.Id), StringComparer.Ordinal);
+        Assert.Empty(result.Config.SuppressApiEquivalences);
+    }
+
+    [Fact]
+    public void Config_SuppressApiEquivalences_KeepsAValidEntryWhenAnotherIsInvalid()
+    {
+        EquivConfigResult result = EquivConfigLoader.Load("""{ "suppressApiEquivalences": ["webapi.", ""] }""");
+
+        Assert.Equal([EquivConfigDiagnosticIds.InvalidSuppressApiEquivalencesEntry], result.Diagnostics.Select(static d => d.Id), StringComparer.Ordinal);
+        Assert.Equal(["webapi."], result.Config.SuppressApiEquivalences);
+    }
+
+    /// <summary>Every diagnostic's exact id, JSON-pointer path and message, so a report names the offending entry.</summary>
+    [Theory]
+    [InlineData("""[]""", "CFG001", "/", "equiv.config.json must contain a JSON object")]
+    [InlineData("""{ "bogus": 1 }""", "CFG005", "/bogus", "unknown property \"bogus\"")]
+    [InlineData("""{ "typeRenames": 1 }""", "CFG004", "/typeRenames", "\"typeRenames\" must be an object of string to string")]
+    [InlineData("""{ "typeRenames": { "A": 1 } }""", "CFG004", "/typeRenames/A", "value must be a string")]
+    [InlineData("""{ "typeRenames": { " ": "B" } }""", "CFG004", "/typeRenames/ ", "key must not be empty")]
+    [InlineData("""{ "typeRenames": { "A": " " } }""", "CFG004", "/typeRenames/A", "value must not be empty")]
+    [InlineData("""{ "typeRenames": { "A": "B", "A": "C" } }""", "CFG006", "/typeRenames/A", "duplicate key \"A\" (JSON keeps only the last one)")]
+    [InlineData("""{ "suppressApiEquivalences": 1 }""", "CFG008", "/suppressApiEquivalences", "\"suppressApiEquivalences\" must be an array of non-empty strings")]
+    [InlineData("""{ "suppressApiEquivalences": ["a", "b", ""] }""", "CFG008", "/suppressApiEquivalences/2", "value must be a non-empty string")]
+    [InlineData("""{ "bound": "x" }""", "CFG002", "/bound", "\"bound\" must be a positive integer")]
+    [InlineData("""{ "bound": 1.5 }""", "CFG002", "/bound", "\"bound\" must be a positive integer")]
+    [InlineData("""{ "timeoutMs": 0 }""", "CFG003", "/timeoutMs", "\"timeoutMs\" must be a positive integer")]
+    public void EachDiagnosticNamesItsPathAndProblem(string json, string id, string path, string message) =>
+        Assert.Equal(new EquivConfigDiagnostic(id, path, message), Assert.Single(EquivConfigLoader.Load(json).Diagnostics));
 }

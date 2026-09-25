@@ -130,6 +130,12 @@ public static class SarifReportWriter
             sarifResult.SetProperty("helpUri", runtimeChange.Url.OriginalString);
         }
 
+        // ADR 0020: an Equivalent says which catalogue entries it rests on.
+        if (!result.EquivalencesApplied.IsEmpty)
+        {
+            sarifResult.SetProperty("equivalencesApplied", result.EquivalencesApplied.ToList());
+        }
+
         bool isEndpoint = ProcedureIdentityNormalizer.IsEndpoint(result.Identity.Value);
         if (result.Identity.Location is { } location)
         {

@@ -262,6 +262,18 @@ public sealed class SarifReportWriterTests
         Assert.False(result.TryGetProperty("ladderTrace", out List<Dictionary<string, string>> _));
     }
 
+    /// <summary>ADR 0020; ticket M3-009 acceptance criterion 4.</summary>
+    [Fact]
+    public void Sarif_ListsEquivalencesApplied()
+    {
+        VerificationResult applied = Fixtures.Result(new Equivalent(ProofMethod.Bounded)) with { EquivalencesApplied = ["webapi.not-found", "webapi.ok-of-int"] };
+
+        Result[] results = [.. SarifReportWriter.Write([applied, Fixtures.Result(new Equivalent(ProofMethod.Bounded))]).Runs[0].Results];
+
+        Assert.Equal(["webapi.not-found", "webapi.ok-of-int"], results[0].GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
+        Assert.False(results[1].TryGetProperty("equivalencesApplied", out List<string> _));
+    }
+
     private static Counterexample RuntimeChangedCounterexample()
     {
         CallIdentity flagged = new("System.String::GetHashCode()", RuntimeChanged: true);

@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Linq;
 
 using Equiv.Core;
+using Equiv.Core.ApiEquivalences;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
@@ -20,13 +21,14 @@ namespace Equiv.Frontend.CSharp;
 /// identity sets to <see cref="IProcedureMatcher"/>, lowers both bodies of every matched pair (M2-003), and counts
 /// each side's analysed lines (<see cref="CodeLines"/>, M3-014). Each lowered pair records whether its two declarations
 /// are token-equal (<see cref="SyntaxTokens"/>, M3-030). A pair whose lowering throws is a
-/// <see cref="LoweringFailure"/>, not the end of the run (P2-011).
+/// <see cref="LoweringFailure"/>, not the end of the run (P2-011). The legacy body is lowered with the enabled
+/// API-equivalence entries and the modern body with none; the pair lists the entries that fired (ADR 0020; M3-009).
 /// </summary>
 public sealed class CSharpFrontend : ILanguageFrontend
 {
     private readonly ISolutionLoader _loader;
     private readonly IProcedureMatcher _matcher;
-    private readonly Func<IMethodSymbol, Compilation, EquivConfig, IrProcedure> _lower;
+    private readonly Func<IMethodSymbol, Compilation, EquivConfig, bool, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> _lower;
 
     public CSharpFrontend()
         : this(new MsBuildSolutionLoader(), new StableIdentityMatcher())
@@ -40,7 +42,10 @@ public sealed class CSharpFrontend : ILanguageFrontend
     }
 
     /// <summary>Seam for unit tests: a <paramref name="lower"/> that can fault on a chosen procedure (P2-011).</summary>
-    internal CSharpFrontend(ISolutionLoader loader, IProcedureMatcher matcher, Func<IMethodSymbol, Compilation, EquivConfig, IrProcedure> lower)
+    internal CSharpFrontend(
+        ISolutionLoader loader,
+        IProcedureMatcher matcher,
+        Func<IMethodSymbol, Compilation, EquivConfig, bool, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> lower)
     {
         _loader = loader;
         _matcher = matcher;
@@ -117,11 +122,14 @@ public sealed class CSharpFrontend : ILanguageFrontend
             SideProcedure modern = modernByIdentity[pair.New];
             try
             {
+                (IrProcedure oldBody, ImmutableArray<string> oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true);
+                (IrProcedure newBody, ImmutableArray<string> newApplied) = _lower(modern.Symbol, modern.Compilation, config, false);
                 lowered.Add(pair with
                 {
-                    OldBody = _lower(legacy.Symbol, legacy.Compilation, config),
-                    NewBody = _lower(modern.Symbol, modern.Compilation, config),
+                    OldBody = oldBody,
+                    NewBody = newBody,
                     TokensEqual = SyntaxTokens.Equal(legacy.Symbol, modern.Symbol),
+                    EquivalencesApplied = [.. oldApplied.Union(newApplied, StringComparer.Ordinal).Order(StringComparer.Ordinal)],
                 });
             }
             catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
@@ -133,9 +141,17 @@ public sealed class CSharpFrontend : ILanguageFrontend
         return (lowered.ToImmutable(), failures.ToImmutable());
     }
 
-    /// <summary>The production lowering (M2-003).</summary>
-    internal static IrProcedure LowerWithIrLowerer(IMethodSymbol symbol, Compilation compilation, EquivConfig config) =>
-        IrLowerer.Lower(symbol, compilation, config.Renames, config.SuppressRuntimeChanges);
+    /// <summary>
+    /// The production lowering (M2-003): the legacy side with the API-equivalence entries <c>equiv.config.json</c> does not
+    /// suppress, the modern side with none (ADR 0020; ticket M3-009).
+    /// </summary>
+    internal static (IrProcedure Body, ImmutableArray<string> EquivalencesApplied) LowerWithIrLowerer(IMethodSymbol symbol, Compilation compilation, EquivConfig config, bool legacy) =>
+        IrLowerer.Lower(
+            symbol,
+            compilation,
+            config.Renames,
+            config.SuppressRuntimeChanges,
+            legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : []);
 
     /// <summary>
     /// <paramref name="skipped"/> (one side's skipped projects) as Core data. Each C# project's procedures are its own,

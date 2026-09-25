@@ -23,4 +23,7 @@ public static class EquivConfigDiagnosticIds
 
     /// <summary>"suppressRuntimeChanges" is present but not an array of non-empty strings.</summary>
     public const string InvalidSuppressRuntimeChangesEntry = "CFG007";
+
+    /// <summary>"suppressApiEquivalences" is present but not an array of non-empty strings.</summary>
+    public const string InvalidSuppressApiEquivalencesEntry = "CFG008";
 }

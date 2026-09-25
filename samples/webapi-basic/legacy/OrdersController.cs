@@ -7,5 +7,12 @@ namespace Equiv.Samples.WebApiBasic
     {
         [HttpGet, Route("{id:int}")]
         public int Get(int id) => id;
+
+        [HttpGet, Route("find/{id:int}")]
+        public IHttpActionResult Find(int id)
+        {
+            if (id < 0) return NotFound();
+            return Ok(id);
+        }
     }
 }

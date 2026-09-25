@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 using Equiv.Core.Ir;
 
 namespace Equiv.Core.Matching;
@@ -9,11 +11,15 @@ namespace Equiv.Core.Matching;
 /// <see cref="NewBody"/> are the lowered bodies a frontend attaches (ticket M2-003); null when no
 /// frontend lowered the pair. <see cref="TokensEqual"/> is true when a frontend found the two
 /// declarations' syntax token sequences equal once trivia is ignored: the census's congruence proxy
-/// until bound fingerprints land (ADR 0034; tickets M3-030, M3-015).
+/// until bound fingerprints land (ADR 0034; tickets M3-030, M3-015). <see cref="EquivalencesApplied"/> is the sorted,
+/// distinct ids of the API-equivalence catalogue entries that fired while either body was lowered (ADR 0020; ticket M3-009).
 /// </summary>
 public sealed record ProcedurePair(
     ProcedureIdentity Old,
     ProcedureIdentity New,
     IrProcedure? OldBody = null,
     IrProcedure? NewBody = null,
-    bool TokensEqual = false);
+    bool TokensEqual = false)
+{
+    public ImmutableArray<string> EquivalencesApplied { get; init; } = [];
+}

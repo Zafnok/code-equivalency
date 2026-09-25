@@ -13,21 +13,22 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// other SSA variable. <see cref="IrLowerer"/> reaches this through one instance (ticket P1-003).
 /// Lowering an operand, null-checking a dereferenced receiver, and resolving an lvalue to its SSA
 /// variable stay <see cref="IrLowerer"/>'s job, so this class calls back into it through the delegates
-/// given at construction rather than naming its type.
+/// given at construction rather than naming its type. Sort names go through <paramref name="sorts"/> (ticket M3-009).
 /// </summary>
 internal sealed class HeapLowerer(
     SsaBuilder ssa,
     Func<IOperation, LoweringContext, IrVar> lower,
     Action<IOperation, IrVar, LoweringContext> throwIfNull,
     Func<IOperation, SsaBuilder.Variable?> resolveTarget,
-    Action<LoweringContext, IrVar, string> throwIf)
+    Action<LoweringContext, IrVar, string> throwIf,
+    Func<string, string> sorts)
 {
     private static readonly IrBool Bool = new();
 
     private readonly Dictionary<string, SsaBuilder.Variable> slices = new(StringComparer.Ordinal);
 
     /// <summary>The synthesised heap inputs (<c>field.*</c>, <c>array.*</c>, <c>length.*</c>) this lowering has used so far.</summary>
-    public HeapInputs Inputs { get; } = new();
+    public HeapInputs Inputs { get; } = new(sorts);
 
     /// <summary>
     /// The outs of every <c>Ref</c> heap map. A heap map exists only once the body touches it, so these are taken after
@@ -54,7 +55,7 @@ internal sealed class HeapLowerer(
     /// </summary>
     public Access Field(IFieldReferenceOperation field, LoweringContext context) => field.Instance is { } instance
         ? new Access(Versioned(Inputs.Field(field.Field)), Array: null, lower(instance, context), instance.Type!.IsValueType ? null : instance)
-        : new Access(Versioned(Inputs.Field(field.Field)), Array: null, Const(HeapInputs.Token(field.Field), context), Dereferenced: null);
+        : new Access(Versioned(Inputs.Field(field.Field)), Array: null, Const(Inputs.Token(field.Field), context), Dereferenced: null);
 
     /// <summary>
     /// An array element is the array's slice of its sort's map, read at the array reference, then a map from
@@ -73,7 +74,7 @@ internal sealed class HeapLowerer(
 
         IrVar reference = lower(element.ArrayReference, context);
         IrVar index = lower(element.Indices[0], context);
-        return new Access(Versioned(Inputs.Elements((IrSort)reference.Type, TypeMapper.Map(element.Type!))), reference, index, element.ArrayReference);
+        return new Access(Versioned(Inputs.Elements((IrSort)reference.Type, TypeMapper.Map(element.Type!, sorts))), reference, index, element.ArrayReference);
     }
 
     /// <summary><c>a.Length</c> on an array variable is the length map read at its reference; every other property stays opaque.</summary>
