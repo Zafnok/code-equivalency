@@ -11,6 +11,7 @@ using Equiv.Core.Verdicts;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FlowAnalysis;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -48,6 +49,7 @@ internal sealed class IrLowerer
     private CSharpCompilation compilation = null!;
     private ControlFlowGraph cfg = null!;
     private SourceSpan bodySpan = null!;
+    private INamedTypeSymbol receiver = null!;
 
     private IrLowerer(RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, IrType? returnType)
     {
@@ -57,8 +59,10 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
-    /// Lowers <paramref name="method"/>'s first declaration. A body that is not an <see cref="IMethodBodyOperation"/>
-    /// (a constructor, an arrow-bodied property, an auto-accessor) is one whole-body <see cref="IrOpaque"/>.
+    /// Lowers <paramref name="method"/>'s first declaration. An instance constructor is lowered like a method, its base or
+    /// <c>this</c> initializer first, unless it leaves out the field initializers C# runs ahead of it (reason
+    /// <c>field-initializer</c>, ticket M4-001). Any other body that is not an <see cref="IMethodBodyOperation"/> (a static
+    /// constructor, an arrow-bodied property, an auto-accessor) is one whole-body <see cref="IrOpaque"/>.
     /// A call to a member listed in <paramref name="suppressedRuntimeChanges"/> is not flagged runtime-changed. A method
     /// whose bound code is erroneous is one whole-body <see cref="IrOpaque"/> per cause, with reason
     /// <see cref="Unknown.UnboundOpaqueReason"/> (ADR 0029 decision 2), and is not lowered further.
@@ -75,28 +79,42 @@ internal sealed class IrLowerer
         {
             (false, _) => Opaque(method, renames, Unknown.UnboundOpaqueReason, unbound),
             (true, IMethodBodyOperation body) => Lower(body, model, renames, suppressedRuntimeChanges),
+            (true, IConstructorBodyOperation) when method.MethodKind == MethodKind.Constructor && OmitsFieldInitializers(method, syntax) =>
+                Opaque(method, renames, "field-initializer", [Span(syntax)]),
+            (true, IConstructorBodyOperation body) when method.MethodKind == MethodKind.Constructor => Lower(body, model, renames, suppressedRuntimeChanges),
             _ => Opaque(method, renames, operation?.Kind.ToString() ?? "no-body", [Span(syntax)]),
         };
     }
 
     /// <summary>
+    /// Whether <paramref name="constructor"/>'s operation tree leaves out instance field or property initializers C# runs
+    /// ahead of its body: it does not chain to <c>this(...)</c>, which runs them itself, and its type declares one.
+    /// </summary>
+    private static bool OmitsFieldInitializers(IMethodSymbol constructor, SyntaxNode syntax) =>
+        !(syntax is ConstructorDeclarationSyntax { Initializer: { } initializer } && initializer.IsKind(SyntaxKind.ThisConstructorInitializer))
+        && constructor.ContainingType.GetMembers()
+            .Where(static m => !m.IsStatic)
+            .SelectMany(static m => m.DeclaringSyntaxReferences)
+            .Any(static r => r.GetSyntax() is VariableDeclaratorSyntax { Initializer: not null } or PropertyDeclarationSyntax { Initializer: not null });
+
+    /// <summary>
     /// Lowers <paramref name="body"/> as it is bound. It does not check for erroneous code; the symbol overload does, and
     /// is the one the frontend uses. Erroneous constructs reaching here lower to named opaques (<c>Invalid</c>, <c>rethrow</c>).
     /// </summary>
-    public static IrProcedure Lower(IMethodBodyOperation body, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
+    public static IrProcedure Lower(IMethodBodyBaseOperation body, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(model);
         IMethodSymbol method = (IMethodSymbol)model.GetDeclaredSymbol(body.Syntax)!;
-        ControlFlowGraph graph = ControlFlowGraph.Create(body);
+        // A constructor's graph starts with its initializer: a call to the base or `this` constructor on `this`.
+        ControlFlowGraph graph = body is IConstructorBodyOperation constructor ? ControlFlowGraph.Create(constructor) : ControlFlowGraph.Create((IMethodBodyOperation)body);
         SourceSpan span = Span(body.Syntax);
         // `async` is checked first: an `await`'s state machine is not modelled (ticket M4-006), and
         // checking it ahead of the other whole-body cases keeps an async method from being classified
         // by whichever of those constructs its body happens to also contain.
-        // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles; only
-        // `foreach` is left, because the CFG desugars every one of them -- arrays included -- into the
-        // enumerator pattern, whose `Current` property no map models (post-MVP ticket P1-004). `using`
-        // and `lock` are out of this ticket's scope even though the CFG gives them ordinary regions.
+        // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles, and
+        // desugars `foreach` and `using` into calls, conversions and a `finally` (ticket M4-001). `lock`
+        // stays whole-body opaque: its desugaring passes `ref` to `Monitor.Enter` (ticket M4-003).
         string? wholeBody = body switch
         {
             _ when method.IsAsync => "async",
@@ -181,6 +199,7 @@ internal sealed class IrLowerer
     private ImmutableArray<IrBlock> LowerBlocks(IMethodSymbol method, ImmutableArray<IrParameter> parameters, SourceSpan span)
     {
         bodySpan = span;
+        receiver = method.ContainingType;
         chains = SwitchChains.Find(cfg);
         exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, bodySpan, Fill);
         heap = new HeapLowerer(ssa, Value, ThrowIfNull, Target, (context, condition, exceptionType) => ThrowIf(condition, exceptionType, context));
@@ -462,8 +481,9 @@ internal sealed class IrLowerer
             case IIsNullOperation { Operand.Type.IsReferenceType: true } test:
                 // The null test the CFG makes of a `using` resource or a `foreach` enumerator before disposing it.
                 return Nullness(test.Operand, Value(test.Operand, context), context) ?? Const(new IrBoolValue(Value: false), context);
-            case IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance, Type: INamedTypeSymbol { IsValueType: false } type }:
-                return heap.Inputs.This(type);
+            case IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance } when !receiver.IsValueType:
+                // Of the containing type even where the reference is typed as the base, as in a `base(...)` initializer.
+                return heap.Inputs.This(receiver);
             default:
                 return Opaque(operation, operation.Kind.ToString(), context);
         }

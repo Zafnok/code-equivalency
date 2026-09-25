@@ -14,7 +14,7 @@ public sealed class IrLowererTests
     private static readonly IrBitVecValue Zero32 = Bits(32, 0);
 
     [Theory]
-    [InlineData("C() { }", ".ctor", "ConstructorBodyOperation")]
+    [InlineData("static int s; static C() { s = 1; }", ".cctor", "ConstructorBodyOperation")]
     [InlineData("int M => 1;", "get_M", "Block")]
     [InlineData("int M { get; }", "get_M", "no-body")]
     [InlineData("static int M(int n) { try { return n; } catch { return 0; } }", "M", "catch-filter")]
@@ -81,7 +81,6 @@ public sealed class IrLowererTests
     [InlineData("static decimal M(decimal d) => ~(int)d;", "Conversion")]
     [InlineData("static int? M(int? n) => ~n;", "Unary")]
     [InlineData("static int M(int? n) => n ?? 0;", "IsNull")]
-    [InlineData("static int M(int[] xs) { int s = 0; foreach (int x in xs) s += x; return s; }", "Conversion")]
     [InlineData("static bool? M(bool? b) => !b;", "Unary")]
     public void UnsupportedConstructIsOpaqueWithItsName(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
@@ -110,6 +109,72 @@ public sealed class IrLowererTests
     [InlineData("static int M(int a, int b) { a >>>= b; return a; }", -8, 1, int.MaxValue - 3)]
     public void CompoundAssignmentReadsOperatesAndWrites(string members, int a, int b, int expected) =>
         Assert.Equal(new IrReturned(Bits(32, expected)), Run(Method(members), Bits(32, a), Bits(32, b)));
+
+    /// <summary>
+    /// Ticket M4-001: an array's enumerator is the non-generic one, so the CFG unboxes <c>Current</c> and disposes through
+    /// <c>as IDisposable</c>. Those two conversions are opaque where they are, and the loop around them is lowered.
+    /// </summary>
+    [Fact]
+    public void ForEachOverAnArrayIsOpaqueOnlyAtItsConversions()
+    {
+        IrProcedure procedure = Method("static int M(int[] xs) { int s = 0; foreach (int x in xs) s += x; return s; }");
+
+        Assert.All(Opaques(procedure), static o => Assert.Equal("Conversion", o.Reason));
+        Assert.Contains(Calls(procedure), static c => string.Equals(c.Callee.Value, "System.Collections.IEnumerator::MoveNext()", StringComparison.Ordinal));
+    }
+
+    /// <summary>A reference typed as the base, as <c>base.N()</c> is, is still the one <c>this</c> input of the containing type.</summary>
+    [Fact]
+    public void ABaseCallPassesThisOfTheContainingType()
+    {
+        IrProcedure procedure = Source("class B { public virtual int N() => 0; } class C : B { int f; public override int N() => base.N() + f; }", "N");
+
+        IrVar receiver = Assert.Single(procedure.Parameters, static p => string.Equals(p.Var.Name, "this", StringComparison.Ordinal)).Var;
+        Assert.Equal(new IrSort("C"), receiver.Type);
+        Assert.Equal(receiver, Assert.Single(Assert.Single(Calls(procedure)).Args));
+    }
+
+    [Fact]
+    public void AStructsThisIsOpaque() =>
+        Assert.Equal("InstanceReference", Assert.Single(Opaques(Source("struct C { int f; int M() => f; }"))).Reason);
+
+    /// <summary>Ticket M4-001 acceptance criterion 3: the base constructor call, explicit or implicit, comes before the body.</summary>
+    [Theory]
+    [InlineData("class B { public B(int n) { } } class C : B { int f; C(int a) : base(a) { f = a; } }", "B::.ctor(int)")]
+    [InlineData("class C { static int s = 1; const int K = 2; int f; C(int a) { f = a; } }", "System.Object::.ctor()")]
+    public void ConstructorCallsItsBaseInitializerFirst(string source, string callee)
+    {
+        IrProcedure procedure = Source(source, ".ctor");
+
+        ImmutableArray<IrInstruction> instructions = [.. procedure.Blocks.SelectMany(static b => b.Instructions)];
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(callee, Assert.Single(Calls(procedure)).Callee.Value);
+        Assert.True(instructions.IndexOf(Calls(procedure)[0]) < instructions.IndexOf(instructions.OfType<IrMapWrite>().Single()));
+    }
+
+    /// <summary>Ticket M4-001 acceptance criterion 3: the constructor chained to runs the field initializers, not this one.</summary>
+    [Fact]
+    public void ConstructorChainingToThisIgnoresFieldInitializers()
+    {
+        IrProcedure procedure = Source("class C { int f = 1; int P { get; } = 2; C() : this(3) { } C(int a) { f = a; } }", ".ctor", parameters: 0);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal("C::.ctor(int)", Assert.Single(Calls(procedure)).Callee.Value);
+    }
+
+    /// <summary>Ticket M4-001 acceptance criterion 3: instance initializers are not in the constructor's operation tree.</summary>
+    [Theory]
+    [InlineData("class C { int f = 1; C() { } }")]
+    [InlineData("class C { int P { get; } = 1; C() { } }")]
+    [InlineData("class C { event Action E = null; C() { E?.Invoke(); } }")]
+    [InlineData("class B { } class C : B { int f = 1; C() : base() { } }")]
+    public void ConstructorInATypeWithFieldInitializersIsOpaque(string source)
+    {
+        IrProcedure procedure = Source($"using System;\n{source}", ".ctor");
+
+        Assert.Single(procedure.Blocks);
+        Assert.Equal("field-initializer", Assert.Single(Opaques(procedure)).Reason);
+    }
 
     [Theory]
     [InlineData("static int M(int a) { a++; return a; }", 5, 6)]
