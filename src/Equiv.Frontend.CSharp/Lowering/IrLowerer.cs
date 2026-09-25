@@ -646,8 +646,8 @@ internal sealed class IrLowerer
     {
         if (heap.Slice(assignment.Target, context) is { } slice)
         {
-            // C# evaluates the target's receiver and index, then the value, and only then stores,
-            // so the bounds check comes after the value in an assignment but before a read.
+            // C# evaluates the target's receiver and index, then the value, and only then stores, so
+            // the null and bounds checks (made at the store) come after the value (ticket P2-017).
             IrVar written = Value(assignment.Value, context);
             heap.WriteSlice(slice, written, context);
             return written;
@@ -957,7 +957,8 @@ internal sealed class IrLowerer
     private IrVar? Invoke(IInvocationOperation invocation, LoweringContext context) =>
         invocation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out)
             ? Opaque(invocation, "ref-argument", context)
-            : Call(
+            : Dispatch(
+                invocation.Instance,
                 Identity(invocation.TargetMethod),
                 Operands(invocation.Instance, invocation.Arguments, context),
                 invocation.TargetMethod.ReturnsVoid ? null : TypeMapper.Map(invocation.Type!),
@@ -971,28 +972,33 @@ internal sealed class IrLowerer
     private IrVar? Accessor(IPropertyReferenceOperation property, IMethodSymbol? accessor, ImmutableArray<IrVar> operands, IrVar? value, LoweringContext context) =>
         accessor is null
             ? Opaque(property, property.Kind.ToString(), context)
-            : Call(Identity(accessor), value is null ? operands : [.. operands, value], value is null ? TypeMapper.Map(property.Type!) : null, context);
+            : Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], value is null ? TypeMapper.Map(property.Type!) : null, context);
 
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
     private static IMethodSymbol? Setter(IPropertySymbol property) => property.SetMethod is { IsInitOnly: false } setter ? setter : null;
 
     private CallIdentity Identity(IMethodSymbol method) => CallIdentityFactory.Of(method, renames, suppressedRuntimeChanges);
 
-    /// <summary>A member access's call operands: the receiver, null-checked unless it is a value type, then the arguments.</summary>
-    private ImmutableArray<IrVar> Operands(IOperation? instance, ImmutableArray<IArgumentOperation> arguments, LoweringContext context)
+    /// <summary>
+    /// A member access's call operands: the receiver, then the arguments. The receiver is null-checked at the call, by
+    /// <see cref="Dispatch"/>, not here.
+    /// </summary>
+    private ImmutableArray<IrVar> Operands(IOperation? instance, ImmutableArray<IArgumentOperation> arguments, LoweringContext context) =>
+        [.. Arguments(instance is null ? [] : [Value(instance, context)], arguments, context)];
+
+    /// <summary>
+    /// A call through <paramref name="receiver"/>, whose value is <paramref name="args"/>' first when it is not null: like
+    /// <c>callvirt</c>, it null-checks a receiver of a reference type at the call, after every argument, a setter's value
+    /// included (ticket P2-017).
+    /// </summary>
+    private IrVar? Dispatch(IOperation? receiver, CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, LoweringContext context)
     {
-        List<IrVar> receiver = [];
-        if (instance is not null)
+        if (receiver is not null && !receiver.Type!.IsValueType)
         {
-            IrVar value = Value(instance, context);
-            receiver.Add(value);
-            if (!instance.Type!.IsValueType)
-            {
-                ThrowIfNull(instance, value, context);
-            }
+            ThrowIfNull(receiver, args[0], context);
         }
 
-        return [.. Arguments(receiver, arguments, context)];
+        return Call(callee, args, returns, context);
     }
 
     /// <summary>The receiver, then the arguments in parameter order; each is evaluated in source order first.</summary>

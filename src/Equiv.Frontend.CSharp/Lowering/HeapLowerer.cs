@@ -48,25 +48,13 @@ internal sealed class HeapLowerer(
         _ => null,
     };
 
-    /// <summary>A field is a map from its receiver, or from its declaring type's token when it is static.</summary>
-    public Access Field(IFieldReferenceOperation field, LoweringContext context)
-    {
-        IrVar key;
-        if (field.Instance is { } instance)
-        {
-            key = lower(instance, context);
-            if (!instance.Type!.IsValueType)
-            {
-                throwIfNull(instance, key, context);
-            }
-        }
-        else
-        {
-            key = Const(HeapInputs.Token(field.Field), context);
-        }
-
-        return new Access(Versioned(Inputs.Field(field.Field)), Array: null, key);
-    }
+    /// <summary>
+    /// A field is a map from its receiver, or from its declaring type's token when it is static. A receiver of a
+    /// reference type is null-checked where the slice is read or written, not here (ticket P2-017).
+    /// </summary>
+    public Access Field(IFieldReferenceOperation field, LoweringContext context) => field.Instance is { } instance
+        ? new Access(Versioned(Inputs.Field(field.Field)), Array: null, lower(instance, context), instance.Type!.IsValueType ? null : instance)
+        : new Access(Versioned(Inputs.Field(field.Field)), Array: null, Const(HeapInputs.Token(field.Field), context), Dereferenced: null);
 
     /// <summary>
     /// An array element is the array's slice of its sort's map, read at the array reference, then a map from
@@ -84,9 +72,8 @@ internal sealed class HeapLowerer(
         }
 
         IrVar reference = lower(element.ArrayReference, context);
-        throwIfNull(element.ArrayReference, reference, context);
         IrVar index = lower(element.Indices[0], context);
-        return new Access(Versioned(Inputs.Elements((IrSort)reference.Type, TypeMapper.Map(element.Type!))), reference, index);
+        return new Access(Versioned(Inputs.Elements((IrSort)reference.Type, TypeMapper.Map(element.Type!))), reference, index, element.ArrayReference);
     }
 
     /// <summary><c>a.Length</c> on an array variable is the length map read at its reference; every other property stays opaque.</summary>
@@ -105,7 +92,7 @@ internal sealed class HeapLowerer(
 
     public IrVar ReadSlice(Access access, LoweringContext context)
     {
-        Bounds(access, context);
+        Check(access, context);
         IrVar map = ssa.Load(context.Current, access.Map);
         return MapRead(access.Array is { } array ? MapRead(map, array, context) : map, access.Key, context);
     }
@@ -113,7 +100,7 @@ internal sealed class HeapLowerer(
     /// <summary>A field's map is written at its key; an array's slice is read, written at the index, and written back.</summary>
     public void WriteSlice(Access access, IrVar value, LoweringContext context)
     {
-        Bounds(access, context);
+        Check(access, context);
         IrVar map = ssa.Load(context.Current, access.Map);
         IrVar updated = access.Array is { } array
             ? MapWrite(map, array, MapWrite(MapRead(map, array, context), access.Key, value, context), context)
@@ -141,9 +128,18 @@ internal sealed class HeapLowerer(
         return variable;
     }
 
-    /// <summary>An index outside the array's length throws; a field access has no bound.</summary>
-    private void Bounds(Access access, LoweringContext context)
+    /// <summary>
+    /// The checks the CLR makes at the <c>ldfld</c>/<c>stfld</c> or <c>ldelem</c>/<c>stelem</c>, after every operand, a
+    /// written value included (ticket P2-017): a null receiver or array throws, then an index outside the array's length
+    /// does; a field access has no bound.
+    /// </summary>
+    private void Check(Access access, LoweringContext context)
     {
+        if (access.Dereferenced is { } dereferenced)
+        {
+            throwIfNull(dereferenced, access.Array ?? access.Key, context);
+        }
+
         if (access.Array is { } array)
         {
             throwIf(context, Emit(IrBinaryOp.Uge, access.Key, Length(array, context), Bool, context), "System.IndexOutOfRangeException");
@@ -177,7 +173,8 @@ internal sealed class HeapLowerer(
     /// <summary>
     /// One access to a heap slice: the SSA variable holding the map's current version, the array reference
     /// whose slice of it is accessed (null for a field, whose map is keyed directly), and the key: a field's
-    /// receiver or an array's bv32 index, bounded by that array's length.
+    /// receiver or an array's bv32 index, bounded by that array's length. <see cref="Dereferenced"/> is the operand
+    /// whose value (the array, else the receiver key) is null-checked at the access, or null when it cannot be null.
     /// </summary>
-    internal readonly record struct Access(SsaBuilder.Variable Map, IrVar? Array, IrVar Key);
+    internal readonly record struct Access(SsaBuilder.Variable Map, IrVar? Array, IrVar Key, IOperation? Dereferenced);
 }

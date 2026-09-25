@@ -579,6 +579,49 @@ public sealed class IrLowererTests
         Assert.Equal(thrown, outcome is IrThrew { ExceptionType: "System.IndexOutOfRangeException" });
     }
 
+    /// <summary>
+    /// Ticket P2-017 acceptance criterion 2: the CLR null-checks a field's receiver, an element's array and a call's
+    /// receiver at the <c>stfld</c>, <c>stelem</c>, <c>ldelem</c> or <c>callvirt</c>, after the operands it evaluates first, so
+    /// with a null target an overflowing operand throws before the dereference does.
+    /// </summary>
+    [Theory]
+    [InlineData("int f; static void M(C o, int n) { o.f = checked(n + 1); }")]
+    [InlineData("static void M(int[] o, int n) { o[0] = checked(n + 1); }")]
+    [InlineData("static int M(int[] o, int n) => o[checked(n + 1)];")]
+    [InlineData("void G(int i) { } static void M(C o, int n) { o.G(checked(n + 1)); }")]
+    [InlineData("int P { get; set; } static void M(C o, int n) { o.P = checked(n + 1); }")]
+    [InlineData("int this[int i] => i; static int M(C o, int n) => o[checked(n + 1)];")]
+    public void ANullTargetIsCheckedAfterItsOperands(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Equal(new IrThrew("System.OverflowException"), Run(procedure, [.. procedure.Parameters.Select(p => NullTarget(p.Var, int.MaxValue))]));
+        Assert.Equal(new IrThrew("System.NullReferenceException"), Run(procedure, [.. procedure.Parameters.Select(p => NullTarget(p.Var, 0))]));
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>
+    /// A compound assignment reads before it evaluates the value, so the getter's <c>callvirt</c> throws first.
+    /// </summary>
+    [Fact]
+    public void ACompoundAssignmentToANullReceiversPropertyThrowsBeforeTheValue()
+    {
+        IrProcedure procedure = Method("int P { get; set; } static void M(C o, int n) { o.P += checked(n + 1); }");
+
+        Assert.Equal(new IrThrew("System.NullReferenceException"), Run(procedure, [.. procedure.Parameters.Select(p => NullTarget(p.Var, int.MaxValue))]));
+    }
+
+    /// <summary>An argument for <see cref="ANullTargetIsCheckedAfterItsOperands"/>: the reference <c>o</c> is null, <c>n</c> is <paramref name="n"/>.</summary>
+    private static IrValue NullTarget(IrVar parameter, int n) => parameter.Type switch
+    {
+        IrSort sort => Reference(0, sort.Name),
+        IrMap { Key: IrSort sort } when parameter.Name.StartsWith("null.", StringComparison.Ordinal) => Nulls(sort.Name, 0, isNull: true),
+        IrMap { Key: IrSort sort } when parameter.Name.StartsWith("length.", StringComparison.Ordinal) => Lengths(sort.Name, 1),
+        IrMap { Key: IrSort sort, Value: IrMap elements } => Elements(sort.Name, elements.Value),
+        IrMap { Key: IrSort sort, Value: var value } => Fields(sort.Name, value),
+        _ => Bits(32, n),
+    };
+
     /// <summary>Ticket M2-004 acceptance criterion 4: a throw inside a try goes to the matching catch.</summary>
     [Theory]
     [InlineData(-1, 10)]

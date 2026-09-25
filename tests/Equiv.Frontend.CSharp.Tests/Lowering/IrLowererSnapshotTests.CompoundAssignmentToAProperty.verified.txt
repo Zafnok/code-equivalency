@@ -1,9 +1,9 @@
 ﻿proc "C::M(C,int)" (%c "c": sort "C", %a "a": bv32, %null.C: map<sort "C", bool>) -> bv32 entry B0
 B0:
-  %c.isNull.10 "c": bool = mapread %null.C, %c
+  %c.isNull.11 "c": bool = mapread %null.C, %c
   goto B1
 B1:
-  br %c.isNull.10, B3, B4
+  br %c.isNull.11, B3, B4
 B3:
   throw "System.NullReferenceException"
 B4:
@@ -18,7 +18,9 @@ B7:
   throw "System.OverflowException"
 B8:
   %$7: bv32 = add %$3, %a
-  call "C::set_P(int)"(%c, %$7) threw %$8: bool
-  br %$8, B5, B9
+  br %c.isNull.11, B3, B9
 B9:
+  call "C::set_P(int)"(%c, %$7) threw %$9: bool
+  br %$9, B5, B10
+B10:
   ret %$7
