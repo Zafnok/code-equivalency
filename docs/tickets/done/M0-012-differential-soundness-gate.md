@@ -1,5 +1,5 @@
 # M0-012 Differential soundness gate: generated C# pairs, executed on the CLR, never contradict the verdict
-Status: in-progress
+Status: done (PR #174)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-002, M3-007, P1-006
