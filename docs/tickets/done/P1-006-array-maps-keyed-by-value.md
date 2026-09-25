@@ -1,5 +1,5 @@
 # P1-006 Array maps are keyed by the array value, not by the variable
-Status: in-progress
+Status: done (PR #166)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M2-004, M3-001, M3-007, P1-003
