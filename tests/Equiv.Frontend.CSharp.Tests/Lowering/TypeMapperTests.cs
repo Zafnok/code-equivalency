@@ -44,6 +44,26 @@ public sealed class TypeMapperTests
         Assert.False(TypeMapper.IsSigned(TypeOf(type)));
     }
 
+    /// <summary>Ticket P2-001: the element a new array starts with, which is the constant a literal default is.</summary>
+    public static TheoryData<string, IrValue> Defaults() => new()
+    {
+        { "string", new IrSortValue("System.String", 0) },
+        { "int?", new IrSortValue("System.Nullable`1", 0) },
+        { "bool", new IrBoolValue(Value: false) },
+        { "int", new IrBitVecValue(32, 0) },
+        { "char", new IrBitVecValue(16, 0) },
+        { "double", TypeMapper.Constant(TypeOf("double"), 0.0) },
+        { "System.DayOfWeek", TypeMapper.Constant(TypeOf("System.DayOfWeek"), 0) },
+    };
+
+    [Theory]
+    [MemberData(nameof(Defaults))]
+    public void DefaultIsTheConstantOfADefault(string type, IrValue expected) =>
+        Assert.Equal(expected, TypeMapper.Default(TypeOf(type), TypeMapper.Unmapped));
+
+    [Fact]
+    public void AStructHasNoConstantDefault() => Assert.Null(TypeMapper.Default(TypeOf("System.DateTime"), TypeMapper.Unmapped));
+
     private static ITypeSymbol TypeOf(string type)
     {
         Compilation compilation = RoslynTestCompilations.Compile(

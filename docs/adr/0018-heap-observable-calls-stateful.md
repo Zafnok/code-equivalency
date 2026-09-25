@@ -75,3 +75,12 @@ silent false Equivalent.
 - New ticket M3-007 (heap maps become `Ref`). P1-005 is rewritten so that the heap is both an
   input and an output of a call. P1-005 and P1-006 move into M3's ordering, ahead of M3-003.
 - Once P1-005, P1-006 and M3-007 have landed, ADR 0015's two gaps are closed.
+
+## Clarifications
+- 2026-09-25 (P2-001). "`length.*` stays `In`, because no instruction changes length" stopped being
+  true once an array creation lowers: a new array's length is written into `length.<Sort>` at its
+  fresh reference. The rule is the Decision's own: a heap map the body writes is `Ref`. So a body
+  that creates an array of a sort has `length.<Sort>` as `Ref`, and a body that only reads lengths
+  keeps it `In`; a pair where one side creates and the other only reads compares the creating
+  side's final length map against the shared input, as for any one-sided `Ref`. `null.*` is
+  unchanged: a new array's nullness is its shadow (false), not a write to `null.<Sort>`.

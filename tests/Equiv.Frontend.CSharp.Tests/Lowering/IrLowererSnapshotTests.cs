@@ -123,6 +123,14 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task ArrayElements() => Dump("static int M(int[] a, int i) { a[i] = a[0]; return a[i] + a.Length; }");
 
+    /// <summary>Ticket P2-001 acceptance criterion 1: an array creation and its element writes, with no opaque.</summary>
+    [Fact]
+    public Task ArrayCreation() => Dump("static int[] M(int a, int b) { var r = new int[2]; r[0] = a; r[1] = b; return r; }");
+
+    /// <summary>Ticket P2-001 acceptance criterion 1: an initialiser, indexed straight away, with no opaque.</summary>
+    [Fact]
+    public Task ArrayInitializer() => Dump("static int M(int n) => new[] { n, n + 1 }[0];");
+
     [Fact]
     public Task ThrowOfANewObject() => Dump("class E : Exception { public E(int n) { } } static int M(int a) { if (a < 0) throw new E(a); return a; }");
 
