@@ -127,7 +127,7 @@ public sealed class IrLowererSnapshotTests
     public Task ThrowOfANewObject() => Dump("class E : Exception { public E(int n) { } } static int M(int a) { if (a < 0) throw new E(a); return a; }");
 
     [Fact]
-    public Task EntirelyOpaque() => Dump("static int M(int[] xs) { int s = 0; foreach (int x in xs) s += x; return s; }");
+    public Task EntirelyOpaque() => Dump("static int M(object o, int a) { lock (o) { a = a + 1; } return a; }");
 
     [Fact]
     public Task WhileLoop() => Dump("static int M(int n) { int s = 0; while (n > 0) { s = s + n; n = n - 1; } return s; }");
@@ -155,6 +155,21 @@ public sealed class IrLowererSnapshotTests
 
     [Fact]
     public Task OutArgumentOfAnOpaqueCall() => Dump("static int M(string s, int fallback) => int.TryParse(s, out var n) ? n : fallback;");
+
+    [Fact]
+    public Task ForEachOverList() => Dump("static int M(System.Collections.Generic.List<int> l) { int s = 0; foreach (int x in l) s += x; return s; }");
+
+    [Fact]
+    public Task ForEachOverIEnumerableOfInt() => Dump("static int M(System.Collections.Generic.IEnumerable<int> xs) { int s = 0; foreach (int x in xs) s += x; return s; }");
+
+    [Fact]
+    public Task ForEachWithBreak() => Dump("static int M(System.Collections.Generic.IEnumerable<int> xs) { int s = 0; foreach (int x in xs) { if (x < 0) break; s += x; } return s; }");
+
+    [Fact]
+    public Task UsingStatement() => Dump("static int M(IDisposable d, int a) { using (d) { a = a + 1; } return a; }");
+
+    [Fact]
+    public Task UsingDeclaration() => Dump("static int M(System.IO.Stream s) { using System.IO.Stream t = s; return t.ReadByte(); }");
 
     private static Task Dump(string members) => Verify(IrText.Dump(Lowered.Method(members)));
 }

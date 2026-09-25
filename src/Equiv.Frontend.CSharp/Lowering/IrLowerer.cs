@@ -100,8 +100,6 @@ internal sealed class IrLowerer
         string? wholeBody = body switch
         {
             _ when method.IsAsync => "async",
-            _ when body.Descendants().Any(static o => o is IForEachLoopOperation) => "foreach-enumerator",
-            _ when body.Descendants().Any(static o => o is IUsingOperation or IUsingDeclarationOperation) => "using",
             _ when body.Descendants().Any(static o => o is ILockOperation) => "lock",
             _ when ExceptionRegions.HasUnsupportedCatch(graph.Root) => "catch-filter",
             _ => null,
@@ -461,6 +459,9 @@ internal sealed class IrLowerer
                 return Create(creation, context);
             case IIsPatternOperation pattern:
                 return Match(pattern, context);
+            case IIsNullOperation { Operand.Type.IsReferenceType: true } test:
+                // The null test the CFG makes of a `using` resource or a `foreach` enumerator before disposing it.
+                return Nullness(test.Operand, Value(test.Operand, context), context) ?? Const(new IrBoolValue(Value: false), context);
             case IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance, Type: INamedTypeSymbol { IsValueType: false } type }:
                 return heap.Inputs.This(type);
             default:
@@ -682,7 +683,7 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// An implicit reference or boxing conversion between different IR types is a read of its <c>cast.&lt;From&gt;.&lt;To&gt;</c>
-    /// map (ticket M3-010). Otherwise integral to integral only: extension follows the source's signedness; a checked
+    /// map (ticket M3-010), and an identity conversion is its operand (ticket M4-001). Otherwise integral to integral only: extension follows the source's signedness; a checked
     /// narrowing throws when the value does not fit.
     /// </summary>
     private IrVar? Convert(IConversionOperation conversion, LoweringContext context)
@@ -690,6 +691,12 @@ internal sealed class IrLowerer
         if (IsCast(conversion))
         {
             return heap.MapRead(heap.Inputs.Cast(conversion.Operand.Type!, conversion.Type!), Value(conversion.Operand, context), context);
+        }
+
+        if (conversion.GetConversion().IsIdentity)
+        {
+            // Such as the one the CFG wraps around a `foreach` collection.
+            return Value(conversion.Operand, context);
         }
 
         if (conversion.OperatorMethod is not null

@@ -17,12 +17,8 @@ public sealed class IrLowererTests
     [InlineData("C() { }", ".ctor", "ConstructorBodyOperation")]
     [InlineData("int M => 1;", "get_M", "Block")]
     [InlineData("int M { get; }", "get_M", "no-body")]
-    [InlineData("static void M(int[] xs) { foreach (int x in xs) { } }", "M", "foreach-enumerator")]
-    [InlineData("static void M(System.Collections.Generic.List<int> l) { foreach (int x in l) { } }", "M", "foreach-enumerator")]
     [InlineData("static int M(int n) { try { return n; } catch { return 0; } }", "M", "catch-filter")]
     [InlineData("static int M(int n) { try { return n; } catch (Exception) when (n > 0) { return 0; } }", "M", "catch-filter")]
-    [InlineData("static int M(IDisposable d) { using (d) { return 1; } }", "M", "using")]
-    [InlineData("static int M(IDisposable d, int n) { if (n > 0) { using IDisposable e = d; return 1; } return n; }", "M", "using")]
     [InlineData("static void M(object o) { lock (o) { } }", "M", "lock")]
     [InlineData("static async System.Threading.Tasks.Task<int> M() { await System.Threading.Tasks.Task.Delay(0); return 1; }", "M", "async")]
     [InlineData("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }", "M", "async")]
@@ -38,7 +34,7 @@ public sealed class IrLowererTests
     [Fact]
     public void WholeBodyOpaqueKeepsByRefParametersAsOuts()
     {
-        IrProcedure procedure = Method("static void M(ref int a, out int b) { b = 0; foreach (int x in new int[0]) a = a - 1; }");
+        IrProcedure procedure = Method("static void M(ref int a, out int b, object o) { b = 0; lock (o) a = a - 1; }");
 
         IrReturn exit = Assert.IsType<IrReturn>(Assert.Single(procedure.Blocks).Terminator);
         Assert.Null(exit.Value);
@@ -84,6 +80,8 @@ public sealed class IrLowererTests
     [InlineData("static double M(double d) => +d;", "Unary")]
     [InlineData("static decimal M(decimal d) => ~(int)d;", "Conversion")]
     [InlineData("static int? M(int? n) => ~n;", "Unary")]
+    [InlineData("static int M(int? n) => n ?? 0;", "IsNull")]
+    [InlineData("static int M(int[] xs) { int s = 0; foreach (int x in xs) s += x; return s; }", "Conversion")]
     [InlineData("static bool? M(bool? b) => !b;", "Unary")]
     public void UnsupportedConstructIsOpaqueWithItsName(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
