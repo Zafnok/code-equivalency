@@ -19,8 +19,10 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// <c>field.*</c> and <c>array.*</c> are <see cref="IrParameterKind.Ref"/>: the body writes them and the final heap is an
 /// observable (ADR 0018, ticket M3-007), so every exit names their final version in its outs. <c>this</c>, <c>null.*</c>,
 /// <c>cast.*</c> and <c>length.*</c> are <see cref="IrParameterKind.In"/>, because nothing the body does changes them.
+/// Every sort name, in a type and in an input's name, goes through <paramref name="sorts"/> (<see cref="TypeMapper"/>;
+/// ticket M3-009).
 /// </summary>
-internal sealed class HeapInputs
+internal sealed class HeapInputs(Func<string, string> sorts)
 {
     private static readonly IrBool Bool = new();
 
@@ -31,7 +33,7 @@ internal sealed class HeapInputs
         [.. inputs.Values.OrderBy(static v => v.Name, StringComparer.Ordinal).Select(static v => new IrParameter(v, IsWritable(v.Name) ? IrParameterKind.Ref : IrParameterKind.In))];
 
     /// <summary>The receiver of an instance method, as an uninterpreted value of its containing type.</summary>
-    public IrVar This(INamedTypeSymbol type) => Input(IrParameterNames.Receiver, new IrSort(TypeMapper.MetadataName(type)));
+    public IrVar This(INamedTypeSymbol type) => Input(IrParameterNames.Receiver, new IrSort(TypeMapper.MetadataName(type, sorts)));
 
     /// <summary>Whether each value of <paramref name="sort"/> is null; equal references are equally null.</summary>
     public IrVar Nulls(IrSort sort) => Input($"null.{Part(sort.Name)}", new IrMap(sort, Bool));
@@ -39,11 +41,11 @@ internal sealed class HeapInputs
     /// <summary>One heap slice per field, from the receiver (a static field's is the type's token) to the field's value.</summary>
     public IrVar Field(IFieldSymbol field) =>
         Input(
-            $"field.{Part(TypeMapper.MetadataName(field.ContainingType))}.{Part(field.Name)}",
-            new IrMap(Receiver(field), TypeMapper.Map(field.Type)));
+            $"field.{Part(TypeMapper.MetadataName(field.ContainingType, sorts))}.{Part(field.Name)}",
+            new IrMap(Receiver(field), TypeMapper.Map(field.Type, sorts)));
 
     /// <summary>The token a static field's map is keyed by: element 0 of its declaring type's sort.</summary>
-    public static IrSortValue Token(IFieldSymbol field) => new(Receiver(field).Name, 0);
+    public IrSortValue Token(IFieldSymbol field) => new(Receiver(field).Name, 0);
 
     /// <summary>
     /// An implicit reference or boxing conversion from <paramref name="from"/> to <paramref name="to"/>, as an
@@ -52,7 +54,9 @@ internal sealed class HeapInputs
     /// over-approximates, since a real upcast or box of a non-null value is never null.
     /// </summary>
     public IrVar Cast(ITypeSymbol from, ITypeSymbol to) =>
-        Input($"cast.{Part(TypeMapper.MetadataName(from))}.{Part(TypeMapper.MetadataName(to))}", new IrMap(TypeMapper.Map(from), TypeMapper.Map(to)));
+        Input(
+            $"cast.{Part(TypeMapper.MetadataName(from, sorts))}.{Part(TypeMapper.MetadataName(to, sorts))}",
+            new IrMap(TypeMapper.Map(from, sorts), TypeMapper.Map(to, sorts)));
 
     /// <summary>The elements of the array a variable holds, by bv32 index.</summary>
     public IrVar Elements(string variable, IrType element) => Input($"array.{Part(variable)}", new IrMap(new IrBitVec(32), element));
@@ -61,7 +65,7 @@ internal sealed class HeapInputs
     public IrVar Length(string variable) => Input($"length.{Part(variable)}", new IrBitVec(32));
 
     /// <summary>A field map's key type. A field of a value type is keyed by the value, which is what value semantics mean.</summary>
-    private static IrSort Receiver(IFieldSymbol field) => new(TypeMapper.MetadataName(field.ContainingType));
+    private IrSort Receiver(IFieldSymbol field) => new(TypeMapper.MetadataName(field.ContainingType, sorts));
 
     private static bool IsWritable(string name) => name.StartsWith("field.", StringComparison.Ordinal) || name.StartsWith("array.", StringComparison.Ordinal);
 

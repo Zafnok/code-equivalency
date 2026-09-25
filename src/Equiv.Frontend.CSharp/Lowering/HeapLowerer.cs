@@ -12,21 +12,22 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// other SSA variable. <see cref="IrLowerer"/> reaches this through one instance (ticket P1-003).
 /// Lowering an operand, null-checking a dereferenced receiver, and resolving an lvalue to its SSA
 /// variable stay <see cref="IrLowerer"/>'s job, so this class calls back into it through the delegates
-/// given at construction rather than naming its type.
+/// given at construction rather than naming its type. Sort names go through <paramref name="sorts"/> (ticket M3-009).
 /// </summary>
 internal sealed class HeapLowerer(
     SsaBuilder ssa,
     Func<IOperation, LoweringContext, IrVar> lower,
     Action<IOperation, IrVar, LoweringContext> throwIfNull,
     Func<IOperation, SsaBuilder.Variable?> resolveTarget,
-    Action<LoweringContext, IrVar, string> throwIf)
+    Action<LoweringContext, IrVar, string> throwIf,
+    Func<string, string> sorts)
 {
     private static readonly IrBool Bool = new();
 
     private readonly Dictionary<string, SsaBuilder.Variable> slices = new(StringComparer.Ordinal);
 
     /// <summary>The synthesised heap inputs (<c>field.*</c>, <c>array.*</c>, <c>length.*</c>) this lowering has used so far.</summary>
-    public HeapInputs Inputs { get; } = new();
+    public HeapInputs Inputs { get; } = new(sorts);
 
     /// <summary>
     /// The outs of every <c>Ref</c> heap map. A heap map exists only once the body touches it, so these are taken after
@@ -61,7 +62,7 @@ internal sealed class HeapLowerer(
         }
         else
         {
-            key = Const(HeapInputs.Token(field.Field), context);
+            key = Const(Inputs.Token(field.Field), context);
         }
 
         return new Access(Versioned(Inputs.Field(field.Field)), key, Length: null);
@@ -85,7 +86,7 @@ internal sealed class HeapLowerer(
         throwIfNull(element.ArrayReference, reference, context);
         IrVar index = lower(element.Indices[0], context);
         return new Access(
-            Versioned(Inputs.Elements(array.Template.Name, TypeMapper.Map(element.Type!))),
+            Versioned(Inputs.Elements(array.Template.Name, TypeMapper.Map(element.Type!, sorts))),
             index,
             Inputs.Length(array.Template.Name));
     }

@@ -887,6 +887,27 @@ public sealed class CompareCommandTests
         Assert.Contains("modern: unbound at a.cs 3:5; modern: unbound at a.cs 4:1", result.Message.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>Ticket M3-009 acceptance criterion 4: a pair's applied catalogue entries reach its SARIF result, whatever the verdict.</summary>
+    [Fact]
+    public void ThePairsEquivalencesAppliedReachTheResult()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity unbound = new("N.C::U()");
+        ProcedurePair verified = Pair(PairIdentity) with { EquivalencesApplied = ["webapi.not-found", "webapi.ok-of-int"] };
+        ProcedurePair unboundPair = Pair(unbound) with { NewBody = UnboundBody(unbound), EquivalencesApplied = ["webapi.ok"] };
+        FakeBackend backend = new(ImmutableDictionary<string, Verdict>.Empty.Add(PairIdentity.Value, new Equivalent(ProofMethod.Bounded)));
+        InMemoryReportSink sink = new();
+
+        CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([verified, unboundPair], [], [], []))], backend, sink);
+
+        Result[] results = [.. sink.Log!.Runs[0].Results];
+        Assert.Equal(["webapi.not-found", "webapi.ok-of-int"], results.Single(static r => string.Equals(r.RuleId, "EQ001", StringComparison.Ordinal)).GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
+        Assert.Equal(["webapi.ok"], results.Single(static r => string.Equals(r.RuleId, "EQ003", StringComparison.Ordinal)).GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
+    }
+
     [Fact]
     public void AnUnboundLegacyBodyIsUnknownUnbound()
     {
