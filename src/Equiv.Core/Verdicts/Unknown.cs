@@ -10,10 +10,14 @@ namespace Equiv.Core.Verdicts;
 /// at, each reached opaque node and each abstraction it depends on (ADR 0027 decision 4). For
 /// <see cref="UnknownReason.Abstraction"/>, <see cref="Candidate"/> is the solver's model replayed on both sides, and
 /// <see cref="Abstractions"/> are what its divergence depends on (ADR 0026). None of the three is part of the result's
-/// fingerprint.
+/// fingerprint, and neither is <see cref="Scope"/>, which is <see cref="UnknownScope.Method"/> unless a backend proved the
+/// residual claim (ADR 0029 decision 4).
 /// </summary>
 public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
 {
+    /// <summary>What a <see cref="UnknownScope.Line"/> Unknown still proves, as SARIF's <c>properties.residualClaim</c>.</summary>
+    public const string ResidualClaim = "equivalent unless a relatedLocation is reached";
+
     /// <summary>
     /// The <c>IrOpaque</c> reason a frontend gives a method whose bound body is erroneous; a pair with one on
     /// either side is <see cref="UnknownReason.Unbound"/> (ADR 0029 decision 2).
@@ -21,6 +25,8 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
     public const string UnboundOpaqueReason = "unbound";
 
     public ImmutableArray<UnknownCause> Causes { get; init; } = [];
+
+    public UnknownScope Scope { get; init; }
 
     public Counterexample? Candidate { get; init; }
 
@@ -45,9 +51,10 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
         && (Reason == other.Reason)
             & string.Equals(Detail, other.Detail, StringComparison.Ordinal)
             & IrEquality.SequenceEqual(Causes, other.Causes)
+            & (Scope == other.Scope)
             & (Candidate == other.Candidate)
             & IrEquality.SequenceEqual(Abstractions, other.Abstractions);
 
     public override int GetHashCode() =>
-        HashCode.Combine(base.GetHashCode(), Reason, Detail, IrEquality.Hash(Causes), Candidate, IrEquality.Hash(Abstractions));
+        HashCode.Combine(base.GetHashCode(), Reason, Detail, IrEquality.Hash(Causes), Scope, Candidate, IrEquality.Hash(Abstractions));
 }

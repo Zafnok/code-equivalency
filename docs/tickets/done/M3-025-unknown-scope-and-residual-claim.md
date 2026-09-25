@@ -1,5 +1,5 @@
 # M3-025 Every Unknown states its scope and residual claim; whole-body opaques point at their construct
-Status: todo
+Status: done (PR #187)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-016, M3-024
@@ -72,3 +72,25 @@ Project-level containment (M3-024).
 ## Notes
 - M4-001 removed the `foreach-enumerator` and `using` whole-body opaques (both now lower), so
   criterion 1 applies to `lock` and `catch-filter` only, plus M4-001's new `field-initializer`.
+- Decision: the whole-body flag is an init property `IrOpaque.WholeBody` (default false), not a
+  reason prefix, so reasons and the census's `opaqueByReason` keys stay as they are. IR text spells
+  it `opaque body "lock" at ...`.
+- Decision: `Unknown.Scope` is an init property defaulting to `Method`; only the Z3 ladder sets
+  `Line`, so every other producer (CLI `Unbound`, unmatched overloads) is `method` without code.
+- Decision: `field-initializer`'s construct is the first instance field declarator or property
+  declaration with an initializer, which is outside the constructor. `async` keeps the body span:
+  criterion 1 does not name it and M4-006 removes it.
+- Decision: `WholeBodyReasonOwners` lives in `Equiv.Tests.Integration`, and its test lowers every
+  sample. The census snapshot, which stays at `pairsWholeBodyOpaque: 16`, is the ratchet.
+- Deviation: criterion 3 lists `Abstraction` as able to be `line`, but an abstraction Unknown only
+  ever comes from rung 1's first query being satisfiable (its model is the candidate), so under the
+  same criterion's "query 1 unsatisfiable" it is always `method`. A looping pair is `method` too:
+  rung 1 runs query 1 on the unrolled pair, so it proves nothing past the bound, and the residual
+  claim would be false. Both recorded as ADR 0029 clarifications and in VERIFICATION-MODEL section 6.
+- Deviation: ADR 0029 decision 3 named no owner for `field-initializer`, `ConstructorBodyOperation`
+  or `unbound`. The first two go to M4-008 (its Goal and criterion 5 now list them), `unbound` to
+  M3-024 as permanent. Recorded as an ADR 0029 clarification.
+- Locally, `webapi-basic`'s legacy side does not load (`System.Web.Http` unresolved, packages not
+  restored on this box), so its integration tests fail here as they do on `main`. The first local
+  integration run also hit an MSBuild `obj` file lock between classes loading the same sample in
+  parallel; it did not recur.

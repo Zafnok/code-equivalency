@@ -252,7 +252,12 @@ Every Unknown carries `properties.scope` (ADR 0029):
   unsatisfiable. The result also carries `properties.residualClaim: "equivalent unless a
   relatedLocation is reached"`, and its message says so.
 - `method`: a whole-body opaque, a timeout, an exhausted loop ladder, an unmatched overload, or
-  `Unbound` code.
+  `Unbound` code. So is any Unknown on a pair with a loop or self-call: rung 1 runs the first query
+  on the unrolled pair, which proves nothing past the bound. An `abstraction` Unknown is `method`
+  too, since the first query found its candidate, so that query was satisfiable (ticket M3-025).
+
+The IR text spells a whole-body opaque `opaque body "reason"` (`IrOpaque.WholeBody`), so scope is
+read from the IR rather than guessed from the span.
 
 A whole-body opaque's span is the construct that caused it (the `foreach`, the `lock`, the filtered
 `catch`), not the method body. A method whose bound body holds a compiler error, an

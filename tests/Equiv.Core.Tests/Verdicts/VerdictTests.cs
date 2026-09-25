@@ -131,6 +131,7 @@ public sealed class VerdictTests
         Assert.NotEqual(first, second with { Reason = UnknownReason.Opaque });
         Assert.NotEqual(first, second with { Detail = "other" });
         Assert.NotEqual(first, second with { Causes = [] });
+        Assert.NotEqual(first, second with { Scope = UnknownScope.Line });
         Assert.NotEqual(first, second with { Candidate = null });
         Assert.NotEqual(first, second with { Abstractions = [] });
         Assert.NotEqual(first, second with { Ladder = [new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, "x")] });

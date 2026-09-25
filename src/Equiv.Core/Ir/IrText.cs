@@ -165,7 +165,7 @@ public static class IrText
         public string Visit(IrOpaque instruction)
         {
             SourceSpan span = instruction.Span;
-            return $"{Assigned(instruction.Target)}opaque {Quote(instruction.Reason)} at {Quote(span.Path)} "
+            return $"{Assigned(instruction.Target)}opaque {(instruction.WholeBody ? "body " : string.Empty)}{Quote(instruction.Reason)} at {Quote(span.Path)} "
                 + $"{Number(span.StartLine)}:{Number(span.StartColumn)}-{Number(span.EndLine)}:{Number(span.EndColumn)}";
         }
     }

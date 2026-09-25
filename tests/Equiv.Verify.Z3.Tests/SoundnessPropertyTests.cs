@@ -1,4 +1,4 @@
-using CsCheck;
+﻿using CsCheck;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -87,6 +87,50 @@ public sealed class SoundnessPropertyTests
         }
 
         Assert.Superset(expected, kinds);
+    }
+
+    /// <summary>
+    /// The residual claim of VERIFICATION-MODEL.md section 7 (ticket M3-025; ADR 0029 decision 4): for a line-scoped
+    /// Unknown, every generated input on which neither side reaches a listed cause gives equal observables in
+    /// <see cref="IrInterpreter"/>, and a cause a run does reach is always listed. Pairs are a generated procedure against
+    /// one or two stacked mutants, so an inserted opaque often sits beside a second change.
+    /// </summary>
+    [Fact]
+    public void LineScopedResidualClaimHolds()
+    {
+        int lineScoped = 0;
+        IrGen.AcyclicProcedure
+            .SelectMany(IrGen.Mutation)
+            .Where(static m => m is not null)
+            .SelectMany(static m => IrGen.Mutation(m!.Mutant).Select(second => (m.Original, New: second?.Mutant ?? m.Mutant)))
+            .SelectMany(static pair => IrGen.Inputs(pair.Original).Array[32].Select(inputs => (pair.Original, pair.New, Inputs: inputs)))
+            .Sample(
+                sample =>
+                {
+                    if (new Z3Backend().Verify(sample.Original, sample.New, Options) is not Unknown { Scope: UnknownScope.Line } unknown)
+                    {
+                        return;
+                    }
+
+                    lineScoped++;
+                    HashSet<SourceSpan> causes = [.. unknown.Causes.Select(static c => c.Span)];
+                    foreach (IrInputs inputs in sample.Inputs)
+                    {
+                        IrRun old = IrGen.Run(sample.Original, inputs);
+                        IrRun @new = IrGen.Run(sample.New, inputs);
+                        if (old.Outcome is IrOpaqueReached || @new.Outcome is IrOpaqueReached)
+                        {
+                            Assert.All(new[] { old.Outcome, @new.Outcome }.OfType<IrOpaqueReached>(), reached => Assert.Contains(reached.Span, causes));
+                            continue;
+                        }
+
+                        Assert.Equal(old, @new);
+                    }
+                },
+                iter: 200,
+                print: static sample => IrText.Dump(sample.Original) + "\n" + IrText.Dump(sample.New));
+
+        Assert.True(lineScoped > 0, "no generated pair was a line-scoped Unknown");
     }
 
     private const int MaxMutationDraws = 4000;

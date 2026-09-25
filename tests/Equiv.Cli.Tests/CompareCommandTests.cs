@@ -524,7 +524,7 @@ public sealed class CompareCommandTests
         Assert.Equal([throwing.Value], run.GetProperty<List<string>>("unverified"), StringComparer.Ordinal);
         Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Equal(
-            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":2,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}}}""",
+            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":2,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}}""" + (lowerOnly ? "}" : ""","unknownByScope":{"line":0,"method":0}}"""),
             census);
         Invocation invocation = Assert.Single(run.Invocations);
         Assert.False(invocation.ExecutionSuccessful);
@@ -1133,6 +1133,40 @@ public sealed class CompareCommandTests
         Assert.All(sink.Log!.Runs[0].Results, static r => Assert.Equal("unbound", r.GetProperty<string>("unknownReason")));
         Assert.True(sink.Log.Runs[0].TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Contains("\"pairsCongruent\":0", census, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket M3-025 criterion 6 (ADR 0029 decision 4): a run with verdicts counts its Unknowns by scope, an unbound one
+    /// under <c>method</c>; <c>--lower-only</c> has no verdicts, so no such count.
+    /// </summary>
+    [Fact]
+    public void CensusCountsUnknownsByScope()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity line = new("T::Line()");
+        ProcedureIdentity method = new("T::Method()");
+        ProcedureIdentity unbound = new("T::Unbound()");
+        MatchResult match = new([Pair(PairIdentity), Pair(line), Pair(method), Pair(unbound) with { NewBody = UnboundBody(unbound) }], [], [], []);
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+        {
+            [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded),
+            [line.Value] = new Unknown(UnknownReason.Opaque, "new: Await") { Scope = UnknownScope.Line },
+            [method.Value] = new Unknown(UnknownReason.Timeout, "gave up"),
+        });
+
+        string Census(bool lowerOnly)
+        {
+            InMemoryReportSink sink = new();
+            _ = CaptureStdOut(() => CompareCommand.Run(
+                new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: lowerOnly),
+                [new FakeFrontend("csharp", _ => true, match)], backend, sink));
+            Assert.True(sink.Log!.Runs[0].TryGetSerializedPropertyValue("loweringCensus", out string? census));
+            return census!;
+        }
+
+        Assert.Contains("\"unknownByScope\":{\"line\":1,\"method\":2}", Census(lowerOnly: false), StringComparison.Ordinal);
+        Assert.DoesNotContain("unknownByScope", Census(lowerOnly: true), StringComparison.Ordinal);
     }
 
     /// <summary>Ticket M3-015 acceptance criteria 9 and 10 (ADR 0019).</summary>

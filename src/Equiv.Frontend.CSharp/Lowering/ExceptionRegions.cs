@@ -1,9 +1,10 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Linq;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.FlowAnalysis;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace Equiv.Frontend.CSharp.Lowering;
 
@@ -97,4 +98,11 @@ internal static class ExceptionRegions
         region.Kind == ControlFlowRegionKind.FilterAndHandler
         || (region.Kind == ControlFlowRegionKind.Catch && region.ExceptionType!.SpecialType == SpecialType.System_Object)
         || region.NestedRegions.Any(HasUnsupportedCatch);
+
+    /// <summary>
+    /// The same test on one <c>catch</c> clause of the operation tree, which gives the whole-body opaque its span (ADR 0029
+    /// decision 3).
+    /// </summary>
+    public static bool IsUnsupported(ICatchClauseOperation clause) =>
+        clause.Filter is not null || clause.ExceptionType.SpecialType == SpecialType.System_Object;
 }

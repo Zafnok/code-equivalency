@@ -94,8 +94,8 @@ internal sealed class IrLowerer
             (false, _) => Opaque(method, renames, entries, Unknown.UnboundOpaqueReason, unbound),
             (true, IMethodBodyOperation body) => Lower(body, model, renames, suppressedRuntimeChanges, entries),
             (true, IConstructorBodyOperation body) when method.MethodKind == MethodKind.Constructor && syntax is ConstructorDeclarationSyntax declaration =>
-                OmitsFieldInitializers(method, declaration)
-                    ? Opaque(method, renames, entries, "field-initializer", [Span(syntax)])
+                OmittedFieldInitializer(method, declaration) is { } initializer
+                    ? Opaque(method, renames, entries, "field-initializer", [Span(initializer)])
                     : Lower(body, model, renames, suppressedRuntimeChanges, entries),
             _ => Opaque(method, renames, entries, operation?.Kind.ToString() ?? "no-body", [Span(syntax)]),
         };
@@ -125,16 +125,18 @@ internal sealed class IrLowerer
         // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles, and
         // desugars `foreach` and `using` into calls, conversions and a `finally` (ticket M4-001). `lock`
         // stays whole-body opaque: its desugaring passes `ref` to `Monitor.Enter` (ticket M4-003).
-        string? wholeBody = body switch
+        // A whole-body opaque points at the first offending construct, not the body (ADR 0029 decision 3).
+        (string Reason, SourceSpan Span)? wholeBody = body switch
         {
-            _ when method.IsAsync => "async",
-            _ when body.Descendants().Any(static o => o is ILockOperation) => "lock",
-            _ when ExceptionRegions.HasUnsupportedCatch(graph.Root) => "catch-filter",
+            _ when method.IsAsync => ("async", span),
+            _ when body.Descendants().FirstOrDefault(static o => o is ILockOperation) is { } @lock => ("lock", Span(@lock.Syntax)),
+            _ when ExceptionRegions.HasUnsupportedCatch(graph.Root) =>
+                ("catch-filter", Span(body.Descendants().OfType<ICatchClauseOperation>().First(ExceptionRegions.IsUnsupported).Syntax)),
             _ => null,
         };
-        if (wholeBody is not null)
+        if (wholeBody is { } opaque)
         {
-            return Opaque(method, renames, catalogue, wholeBody, [span]);
+            return Opaque(method, renames, catalogue, opaque.Reason, [opaque.Span]);
         }
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
@@ -151,15 +153,18 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
-    /// Whether <paramref name="constructor"/>'s operation tree leaves out instance field or property initializers C# runs
-    /// ahead of its body: it does not chain to <c>this(...)</c>, which runs them itself, and its type declares one.
+    /// The first instance field or property initializer C# runs ahead of <paramref name="constructor"/>'s body but its
+    /// operation tree leaves out, or null: none is left out when it chains to <c>this(...)</c>, which runs them itself, or
+    /// its type declares none. The whole-body opaque points at it (ADR 0029 decision 3).
     /// </summary>
-    private static bool OmitsFieldInitializers(IMethodSymbol constructor, ConstructorDeclarationSyntax declaration) =>
-        declaration.Initializer is not { RawKind: (int)SyntaxKind.ThisConstructorInitializer }
-        && constructor.ContainingType.GetMembers()
-            .Where(static m => !m.IsStatic)
-            .SelectMany(static m => m.DeclaringSyntaxReferences)
-            .Any(static r => r.GetSyntax() is VariableDeclaratorSyntax { Initializer: not null } or PropertyDeclarationSyntax { Initializer: not null });
+    private static SyntaxNode? OmittedFieldInitializer(IMethodSymbol constructor, ConstructorDeclarationSyntax declaration) =>
+        declaration.Initializer is { RawKind: (int)SyntaxKind.ThisConstructorInitializer }
+            ? null
+            : constructor.ContainingType.GetMembers()
+                .Where(static m => !m.IsStatic)
+                .SelectMany(static m => m.DeclaringSyntaxReferences)
+                .Select(static r => r.GetSyntax())
+                .FirstOrDefault(static s => s is VariableDeclaratorSyntax { Initializer: not null } or PropertyDeclarationSyntax { Initializer: not null });
 
     /// <summary>
     /// The C# parameters. One declared <c>@this</c> has the name <c>this</c>, which is the receiver's (ADR 0021), so it is
@@ -202,7 +207,8 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// One block: an opaque value (reason <paramref name="reason"/>) returned, by-ref parameters unchanged. There is one
-    /// <see cref="IrOpaque"/> per span in <paramref name="spans"/>, the last one defining the value.
+    /// <see cref="IrOpaque"/> per span in <paramref name="spans"/>, the last one defining the value, each flagged
+    /// <see cref="IrOpaque.WholeBody"/>.
     /// </summary>
     private static IrProcedure Opaque(IMethodSymbol method, RenameMap renames, Catalogue catalogue, string reason, ImmutableArray<SourceSpan> spans)
     {
@@ -210,7 +216,7 @@ internal sealed class IrLowerer
         IrVar? value = returnType is null ? null : new IrVar("$0", returnType);
         IrBlock block = new(
             new IrBlockId(0),
-            [.. spans[..^1].Select(span => new IrOpaque(Target: null, reason, span)), new IrOpaque(value, reason, spans[^1])],
+            [.. spans[..^1].Select(span => new IrOpaque(Target: null, reason, span) { WholeBody = true }), new IrOpaque(value, reason, spans[^1]) { WholeBody = true }],
             new IrReturn(value, [.. parameters.Where(static p => p.Kind != IrParameterKind.In).Select(static p => new IrOut(p.Var, p.Var))]));
         return new IrProcedure(RoslynIdentity.Of(method, renames), parameters, returnType, [block], block.Id);
     }

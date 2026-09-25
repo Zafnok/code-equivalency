@@ -141,6 +141,11 @@ internal static class CompareCommand
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
         List<VerificationResult> results = WithAssumptions(verified, lowered, matchResult);
+        if (!options.LowerOnly)
+        {
+            census = census with { UnknownByScope = ScopeCounts.Of(results) };
+        }
+
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));
         results.AddRange(matchResult.Removed.Select(static identity => new VerificationResult(identity, new Removed())));
 

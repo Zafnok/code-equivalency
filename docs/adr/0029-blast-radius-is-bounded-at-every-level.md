@@ -93,3 +93,14 @@ methods it breaks. So there is no file level.
   (skipped projects, `Unbound`, scope, residual claim) changed in the PR that accepted this ADR.
 - M2-001's "a partial load is a hard failure" no longer holds. The loader test that expects an
   abort on a missing reference changes to expect a skipped project.
+
+## Clarifications
+- 2026-09-25 (M3-025). Decision 3's owners, for the whole-body reasons the list did not name: M4-001
+  left `field-initializer` (a constructor that omits its type's initializers) and
+  `ConstructorBodyOperation` (a static constructor, a primary constructor with base arguments)
+  whole-body, and `async` is M4-006's. M4-008 owns the two constructor reasons with the rest. Its
+  span is the first omitted initializer. `unbound` is not a lowering gap (decision 2) and has no
+  removing ticket; the owners table lists it under M3-024.
+- 2026-09-25 (M3-025). Decision 4's `line` needs the first query over every input, so an Unknown on
+  a pair with a loop or self-call, whose rung 1 query runs on the unrolled pair, is `method`. So is
+  an `abstraction` Unknown: its candidate came from that query, which was satisfiable.

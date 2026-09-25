@@ -128,6 +128,16 @@ public sealed class Z3BackendTests
     }
 
     [Fact]
+    public void TimeoutIsMethodScoped()
+    {
+        Fixture fixture = Fixture.Load("hard-multiplication");
+
+        Unknown unknown = Assert.IsType<Unknown>(new Z3Backend().Verify(fixture.Old, fixture.New, Options with { TimeoutMs = 50 }));
+
+        Assert.Equal(UnknownScope.Method, unknown.Scope);
+    }
+
+    [Fact]
     public void AnOpaqueBehindAHardConditionTimesOutInTheSecondQuery()
     {
         IrProcedure procedure = IrText.Parse("""
