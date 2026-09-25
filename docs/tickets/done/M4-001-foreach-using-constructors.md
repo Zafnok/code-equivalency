@@ -1,5 +1,5 @@
 # M4-001 Lower `foreach`, `using` and constructor bodies instead of making the whole body opaque
-Status: in-progress
+Status: done (PR #171)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-007, M3-010
