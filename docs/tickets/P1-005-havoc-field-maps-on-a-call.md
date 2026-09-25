@@ -161,3 +161,27 @@ Purity attributes or a user-supplied "this callee is pure" config.
 - Decision: the lowering-oracle case -> a `Cell o` parameter whose instance field `G` the generator reads, writes,
   and bumps through `o.Bump(k)` (`G = unchecked(G + k)`); the test oracle answers `Bump` by writing `field.Cell.G`.
   Alternatives: a static `Cell` field (two map levels and another input to bind). Rule: 4.
+- Decision: a counterexample's text (`properties.model`, the message, and the fingerprint through it) -> a call event
+  that read a heap prints it as ` heap("<map>" <value>, ...)` after its arguments; an event without one prints as
+  before. Otherwise `call-reads-heap`'s counterexample would print identical old and new traces while reporting a
+  divergence. Alternatives: leave the text as is (a Divergent whose message shows no difference). Rule: 3.
+- The lowering oracle's generated methods can call `o.Bump(k)` without touching `o.G`. Such a body has no
+  `field.Cell.G` map, so its calls pair nothing for it, and the oracle test can no longer assume that a map the body
+  never touches keeps its initial value. `CompiledRunOracle` threads `field.Cell.G` through the calls exactly as the
+  encoder threads a map one side never names, which is a direct check of the section 5 rule.
+- Two latent name collisions in `IrGen.Mutation` surfaced once calls carried heap pairs and the random stream moved:
+  a stacked mutant that re-applies "change map write" or "duplicate call" to the same instruction minted the same
+  `.one`/`.changed`/`.dup` names twice (IR003). The generator now appends `$` until the name is free. The failures
+  were intermittent (`LineScopedResidualClaimHolds` runs unseeded); 3 x 3,000 iterations of it and of
+  `AMutantIsNeverEquivalentAndEveryDivergenceReplays` passed after the fix.
+- A loop fragment starting at a header (lockstep and k-induction steps) starts a threaded map at the shared input, not
+  at an arbitrary version. That is sound in practice: the side that has the map carries its version in the header
+  state and in every exit's outs, so the step's final-heap or event comparison fails (sat) unless the version equals
+  the input, and a failed step is Unknown, never Equivalent. It costs precision only for a loop pair where one side
+  names a heap map the other never does.
+- Linux: `Equiv.Tests.Integration` runs here with `FrameworkPathOverride` pointed at the
+  `Microsoft.NETFramework.ReferenceAssemblies.net48` package's `build/.NETFramework/v4.8` folder: 103 of 112 pass,
+  including the 200-pair differential gate. The other 9 are environmental, not this change: `webapi-basic`'s legacy
+  side does not load without `System.Web.Http`, and `ComparePipelineTests.AddedAndRemovedHaveLocations` renders a Linux
+  path without `file:///`.
+  `webapi-basic` touches no field or array, so its IR and verdicts are unchanged by this ticket.

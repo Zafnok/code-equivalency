@@ -42,6 +42,10 @@ internal static class CounterexampleText
 
     private static string Values(ImmutableArray<IrValue> values) => string.Join(", ", values.Select(IrText.Value));
 
+    /// <summary>Each call with its arguments, and the heap it read when it read any (ticket P1-005), so that a heap difference at a call shows.</summary>
     private static string Trace(ImmutableArray<IrCallRecord> trace) =>
-        string.Join(", ", trace.Select(static c => $"{IrText.Quote(c.Callee.Value)}({Values(c.Arguments)})"));
+        string.Join(", ", trace.Select(static c => $"{IrText.Quote(c.Callee.Value)}({Values(c.Arguments)}){Heap(c.Heap)}"));
+
+    private static string Heap(ImmutableArray<IrHeapSlice> heap) =>
+        heap.IsEmpty ? string.Empty : $" heap({string.Join(", ", heap.Select(static h => $"{IrText.Quote(h.Map)} {IrText.Value(h.Value)}"))})";
 }

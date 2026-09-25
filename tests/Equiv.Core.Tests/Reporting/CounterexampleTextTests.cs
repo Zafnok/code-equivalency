@@ -66,4 +66,17 @@ public sealed class CounterexampleTextTests
         Counterexample counterexample = new(NoInputs, run, run);
         Assert.Contains("\"Samples.Svc::Next(int32)\"(bv32 1)", CounterexampleText.Dump(counterexample), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TraceIncludesTheHeapACallReadOnlyWhenItReadOne()
+    {
+        IrMapValue heap = new(new IrMap(new IrBitVec(32), new IrBitVec(32)), new IrBitVecValue(32, 0), []);
+        IrRun run = new(
+            new IrInfeasible(),
+            [],
+            [new IrCallRecord(new CallIdentity("F"), []) { Heap = [new IrHeapSlice("field.C.x", heap)] }, new IrCallRecord(new CallIdentity("G"), [])]);
+        Counterexample counterexample = new(NoInputs, run, run);
+
+        Assert.Contains("trace(\"F\"() heap(\"field.C.x\" map<bv32, bv32> [] default bv32 0), \"G\"())", CounterexampleText.Dump(counterexample), StringComparison.Ordinal);
+    }
 }
