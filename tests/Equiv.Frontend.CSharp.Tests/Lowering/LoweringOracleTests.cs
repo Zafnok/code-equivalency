@@ -27,7 +27,7 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 /// CsCheck prints the seed on failure; <see cref="Seed"/> pins the run. The class's static auto-property
 /// <c>P</c> starts each run at the input's <c>B</c> in both; the IR's accessor calls are answered by
 /// <see cref="AutoPropertyOracle"/>, which keeps the value the compiled run's backing field would hold. The
-/// <c>int[]</c> parameters are two arrays, or one passed twice (ticket P1-006), and their final elements are compared
+/// <c>int[]</c> parameters are two arrays, one passed twice (ticket P1-006), or <c>u</c> and a null <c>v</c> (ticket P2-017), and their final elements are compared
 /// along with the static field's final value.
 /// </summary>
 public sealed class LoweringOracleTests
@@ -51,6 +51,9 @@ public sealed class LoweringOracleTests
     private static readonly IrSortValue First = new(ArraySort, 1);
 
     private static readonly IrSortValue Second = new(ArraySort, 2);
+
+    /// <summary>The reference a null <c>v</c> is bound to: the one element the <c>null.int__</c> input answers true for.</summary>
+    private static readonly IrSortValue Null = new(ArraySort, 3);
 
     /// <summary>The key a static field's map is read at: element 0 of its declaring type's sort.</summary>
     private static readonly IrSortValue Token = new("Oracle", 0);
@@ -102,9 +105,9 @@ public sealed class LoweringOracleTests
                     property.SetValue(null, input.B);
                     field.SetValue(null, input.A);
                     int[] u = [input.A, input.B];
-                    int[] v = input.Aliased ? u : [input.B, input.A];
+                    int[]? v = Bind(input, u);
                     string compiled = Compiled(method, input, u, v);
-                    string expected = string.Create(CultureInfo.InvariantCulture, $"{compiled} {LoweringOracleGen.Field}={(int)field.GetValue(null)!} u={u[0]},{u[1]} v={v[0]},{v[1]}");
+                    string expected = string.Create(CultureInfo.InvariantCulture, $"{compiled} {LoweringOracleGen.Field}={(int)field.GetValue(null)!} u={u[0]},{u[1]} v={(v is null ? "null" : $"{v[0]},{v[1]}")}");
                     string actual = Interpreted(procedure, input);
                     Assert.True(
                         string.Equals(expected, actual, StringComparison.Ordinal),
@@ -121,7 +124,15 @@ public sealed class LoweringOracleTests
         }
     }
 
-    private static string Compiled(MethodInfo method, OracleInput input, int[] u, int[] v)
+    /// <summary>The compiled run's <c>v</c>: <c>{ B, A }</c>, <paramref name="u"/> itself, or null.</summary>
+    private static int[]? Bind(OracleInput input, int[] u) => input.V switch
+    {
+        ArrayBinding.Aliased => u,
+        ArrayBinding.Null => null,
+        _ => [input.B, input.A],
+    };
+
+    private static string Compiled(MethodInfo method, OracleInput input, int[] u, int[]? v)
     {
         try
         {
@@ -147,15 +158,20 @@ public sealed class LoweringOracleTests
         FieldMap => InitialField(input),
         ElementMap => InitialArrays(input),
         LengthMap => new IrMapValue((IrMap)parameter.Type, IrBitVecValue.FromSigned(32, 2), []),
-        ArrayNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), []),
+        ArrayNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), ImmutableDictionary<IrValue, IrValue>.Empty.Add(Null, new IrBoolValue(Value: true))),
         _ => new IrMapValue(
             (IrMap)parameter.Type,
             new IrBoolValue(input.SIsNull),
             []),
     };
 
-    /// <summary>The array <c>v</c> is bound to: <c>u</c>'s when the input aliases them.</summary>
-    private static IrSortValue V(OracleInput input) => input.Aliased ? First : Second;
+    /// <summary>The array <c>v</c> is bound to: <c>u</c>'s when the input aliases them, the null reference when it is null.</summary>
+    private static IrSortValue V(OracleInput input) => input.V switch
+    {
+        ArrayBinding.Aliased => First,
+        ArrayBinding.Null => Null,
+        _ => Second,
+    };
 
     private static IrMapValue InitialField(OracleInput input) => new(
         new IrMap(Token.Type, new IrBitVec(32)),
@@ -206,7 +222,7 @@ public sealed class LoweringOracleTests
         IrMapValue arrays = (IrMapValue)heap.GetValueOrDefault(ElementMap, InitialArrays(input));
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{outcome} {LoweringOracleGen.Field}={Value(field, Token)} u={Array(arrays, First)} v={Array(arrays, V(input))}");
+            $"{outcome} {LoweringOracleGen.Field}={Value(field, Token)} u={Array(arrays, First)} v={(input.V == ArrayBinding.Null ? "null" : Array(arrays, V(input)))}");
     }
 
     private static string Array(IrMapValue arrays, IrSortValue array)

@@ -3,35 +3,35 @@ B0:
   %a.isNull.31 "a": bool = mapread %null.int__, %a
   goto B1
 B1:
+  %$4: bv32 = const bv32 0
   br %a.isNull.31, B3, B4
 B3:
-  %array.int__.34: map<sort "int[]", map<bv32, bv32>> = phi [B1: %array.int__, B4: %array.int__, B8: %array.int__.32, B10: %array.int__.32]
+  %array.int__.34: map<sort "int[]", map<bv32, bv32>> = phi [B1: %array.int__, B6: %array.int__, B8: %array.int__.32, B10: %array.int__.32]
   throw "System.NullReferenceException" outs(%array.int__ = %array.int__.34)
 B4:
-  br %a.isNull.31, B3, B5
+  %$6: bv32 = mapread %length.int__, %a
+  %$7: bool = uge %$4, %$6
+  br %$7, B5, B6
 B5:
-  %$6: bv32 = const bv32 0
-  %$7: bv32 = mapread %length.int__, %a
-  %$8: bool = uge %$6, %$7
-  br %$8, B6, B7
-B6:
-  %array.int__.33: map<sort "int[]", map<bv32, bv32>> = phi [B5: %array.int__, B7: %array.int__, B9: %array.int__.32]
+  %array.int__.33: map<sort "int[]", map<bv32, bv32>> = phi [B4: %array.int__, B7: %array.int__, B9: %array.int__.32]
   throw "System.IndexOutOfRangeException" outs(%array.int__ = %array.int__.33)
+B6:
+  %$9: map<bv32, bv32> = mapread %array.int__, %a
+  %$10: bv32 = mapread %$9, %$4
+  br %a.isNull.31, B3, B7
 B7:
-  %$10: map<bv32, bv32> = mapread %array.int__, %a
-  %$11: bv32 = mapread %$10, %$6
   %$12: bv32 = mapread %length.int__, %a
   %$13: bool = uge %i, %$12
-  br %$13, B6, B8
+  br %$13, B5, B8
 B8:
   %$15: map<bv32, bv32> = mapread %array.int__, %a
-  %$16: map<bv32, bv32> = mapwrite %$15, %i, %$11
+  %$16: map<bv32, bv32> = mapwrite %$15, %i, %$10
   %array.int__.32: map<sort "int[]", map<bv32, bv32>> = mapwrite %array.int__, %a, %$16
   br %a.isNull.31, B3, B9
 B9:
   %$21: bv32 = mapread %length.int__, %a
   %$22: bool = uge %i, %$21
-  br %$22, B6, B10
+  br %$22, B5, B10
 B10:
   %$24: map<bv32, bv32> = mapread %array.int__.32, %a
   %$25: bv32 = mapread %$24, %i
