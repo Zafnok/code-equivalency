@@ -11,7 +11,8 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// The synthesised inputs a lowered body needs beyond its C# parameters (VERIFICATION-MODEL.md
 /// section 2; ticket M2-004): the receiver <c>this</c>, one <c>null.&lt;Sort&gt;</c> map per reference
 /// sort whose nullness is read, one <c>field.&lt;Type&gt;.&lt;Field&gt;</c> map per field touched, and
-/// <c>array.&lt;v&gt;</c> plus <c>length.&lt;v&gt;</c> per array variable indexed, and one <c>cast.&lt;From&gt;.&lt;To&gt;</c> map per implicit
+/// <c>array.&lt;Sort&gt;</c> plus <c>length.&lt;Sort&gt;</c> per array sort indexed, each keyed by the array reference like
+/// <c>null.&lt;Sort&gt;</c>, so two variables holding one array read one slice (ticket P1-006), and one <c>cast.&lt;From&gt;.&lt;To&gt;</c> map per implicit
 /// reference or boxing conversion (ticket M3-010), whose result's nullness is over-approximated: it is read from
 /// <c>null.&lt;To&gt;</c>, not tied to the operand's. Each is created once, on first use, and they become parameters ordered by name, so both
 /// sides of a pair share them by name, while the C# parameters, which a caller binds by position, are shared by position (ADR 0021). IR variable names take
@@ -58,11 +59,11 @@ internal sealed class HeapInputs(Func<string, string> sorts)
             $"cast.{Part(TypeMapper.MetadataName(from, sorts))}.{Part(TypeMapper.MetadataName(to, sorts))}",
             new IrMap(TypeMapper.Map(from, sorts), TypeMapper.Map(to, sorts)));
 
-    /// <summary>The elements of the array a variable holds, by bv32 index.</summary>
-    public IrVar Elements(string variable, IrType element) => Input($"array.{Part(variable)}", new IrMap(new IrBitVec(32), element));
+    /// <summary>The elements of every array of <paramref name="array"/>'s sort: from the array reference to its elements by bv32 index.</summary>
+    public IrVar Elements(IrSort array, IrType element) => Input($"array.{Part(array.Name)}", new IrMap(array, new IrMap(new IrBitVec(32), element)));
 
-    /// <summary>The length of the array a variable holds.</summary>
-    public IrVar Length(string variable) => Input($"length.{Part(variable)}", new IrBitVec(32));
+    /// <summary>The length of every array of <paramref name="array"/>'s sort, by array reference.</summary>
+    public IrVar Length(IrSort array) => Input($"length.{Part(array.Name)}", new IrMap(array, new IrBitVec(32)));
 
     /// <summary>A field map's key type. A field of a value type is keyed by the value, which is what value semantics mean.</summary>
     private IrSort Receiver(IFieldSymbol field) => new(TypeMapper.MetadataName(field.ContainingType, sorts));

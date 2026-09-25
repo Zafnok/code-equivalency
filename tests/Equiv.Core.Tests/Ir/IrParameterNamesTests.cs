@@ -13,8 +13,8 @@ public sealed class IrParameterNamesTests
     [InlineData("this", true)]
     [InlineData("field.C.x", true)]
     [InlineData("null.S", true)]
-    [InlineData("array.xs", true)]
-    [InlineData("length.xs", true)]
+    [InlineData("array.int__", true)]
+    [InlineData("length.int__", true)]
     public void SynthesisedInputsAreTheReceiverAndTheDottedNames(string name, bool synthesised) =>
         Assert.Equal(synthesised, IrParameterNames.IsSynthesised(name));
 

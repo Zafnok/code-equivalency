@@ -441,15 +441,60 @@ public sealed class IrLowererTests
         Assert.Empty(Opaques(procedure));
     }
 
+    /// <summary>Ticket P1-006 acceptance criterion 1: one element map and one length map per array sort, keyed by the array.</summary>
     [Fact]
-    public void AnArrayElementIsAMapKeyedByTheIndexWithItsOwnLength()
+    public void AnArrayElementIsAMapKeyedByTheArrayThenTheIndex()
     {
         IrProcedure procedure = Method("static int M(int[] a, int i) { a[i] = 1; return a[0] + a.Length; }");
 
-        Assert.Single(procedure.Parameters, static p => p.Var.Name is "array.a");
-        Assert.Single(procedure.Parameters, static p => p.Var.Name is "length.a" && p.Var.Type is IrBitVec { Width: 32 });
+        IrSort array = new("int[]");
+        Assert.Single(procedure.Parameters, p => p.Var.Name is "array.int__" && p.Var.Type == new IrMap(array, new IrMap(new IrBitVec(32), new IrBitVec(32))));
+        Assert.Single(procedure.Parameters, p => p.Var.Name is "length.int__" && p.Var.Type == new IrMap(array, new IrBitVec(32)));
         Assert.Contains(procedure.Blocks, static b => b.Terminator is IrThrow { ExceptionType: "System.IndexOutOfRangeException" });
         Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>
+    /// Ticket P1-006 acceptance criteria 2 and 3: both writes and the read go through the one element map, read and
+    /// written at the array reference, so passing one array as both parameters makes the second write the one read.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 2, 1)]
+    [InlineData(1, 1, 2)]
+    public void Aliased_ArrayParameters_AreNotDisjoint(int a, int b, int expected)
+    {
+        IrProcedure procedure = Method("static int M(int[] a, int[] b) { a[0] = 1; b[0] = 2; return a[0]; }");
+
+        IrVar elements = Assert.Single(procedure.Parameters, static p => p.Var.Name.StartsWith("array.", StringComparison.Ordinal)).Var;
+        ImmutableArray<IrInstruction> instructions = [.. procedure.Blocks.SelectMany(static b => b.Instructions)];
+        ImmutableArray<IrMapWrite> slices = [.. instructions.OfType<IrMapWrite>().Where(w => w.Target.Type == elements.Type)];
+        Assert.Equal(["a", "b"], slices.Select(static w => w.Key.Name), StringComparer.Ordinal);
+        Assert.Equal(elements, slices[0].Map);
+        Assert.Equal(slices[0].Target, slices[1].Map);
+        Assert.Contains(instructions, i => i is IrMapRead read && read.Map == slices[1].Target && read.Key.Name is "a");
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.EndsWith(".a", StringComparison.Ordinal) || p.Var.Name.EndsWith(".b", StringComparison.Ordinal));
+
+        IrOutcome outcome = Run(
+            procedure,
+            Reference(a, "int[]"),
+            Reference(b, "int[]"),
+            Elements("int[]", new IrBitVec(32)),
+            Lengths("int[]", 1),
+            Nulls("int[]", 0, isNull: true));
+
+        Assert.Equal(new IrReturned(Bits(32, expected)), outcome);
+    }
+
+    /// <summary>Ticket P1-006 acceptance criterion 2: the bounds check and <c>a.Length</c> read the length map at the array.</summary>
+    [Fact]
+    public void TheBoundsCheckAndLengthReadTheLengthMapAtTheArray()
+    {
+        IrProcedure procedure = Method("static int M(int[] a) => a[0] + a.Length;");
+
+        IrVar length = Assert.Single(procedure.Parameters, static p => p.Var.Name is "length.int__").Var;
+        ImmutableArray<IrMapRead> reads = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>().Where(r => r.Map == length)];
+        Assert.Equal(2, reads.Length);
+        Assert.All(reads, static r => Assert.Equal("a", r.Key.Name));
     }
 
     /// <summary>Ticket M3-007 acceptance criterion 1: the maps a body writes are by-ref, the rest are inputs, all ordered by name.</summary>
@@ -462,9 +507,9 @@ public sealed class IrLowererTests
             [
                 ("a", IrParameterKind.In),
                 ("s", IrParameterKind.In),
-                ("array.a", IrParameterKind.Ref),
+                ("array.int__", IrParameterKind.Ref),
                 ("field.C.f", IrParameterKind.Ref),
-                ("length.a", IrParameterKind.In),
+                ("length.int__", IrParameterKind.In),
                 ("null.System.String", IrParameterKind.In),
                 ("null.int__", IrParameterKind.In),
                 ("this", IrParameterKind.In),
@@ -529,7 +574,7 @@ public sealed class IrLowererTests
     {
         IrProcedure procedure = Method("static int M(int[] a, int i) => a[i];");
 
-        IrOutcome outcome = Run(procedure, Reference(0, "int[]"), Bits(32, index), Elements(new IrBitVec(32)), Bits(32, 4), Nulls("int[]", 0, isNull: false));
+        IrOutcome outcome = Run(procedure, Reference(0, "int[]"), Bits(32, index), Elements("int[]", new IrBitVec(32)), Lengths("int[]", 4), Nulls("int[]", 0, isNull: false));
 
         Assert.Equal(thrown, outcome is IrThrew { ExceptionType: "System.IndexOutOfRangeException" });
     }

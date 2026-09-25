@@ -1,0 +1,30 @@
+# Divergent
+# Ticket P1-006: `a[0] = 1; b[0] = 2; return a[0];` against the same writes and `return 2;`. Both arrays are keyed into one
+# element map by reference, so old returns 2 when the caller passes one array twice and 1 otherwise; new always returns 2.
+proc "C::M(int[],int[])" (%a "a": sort "int[]", %b "b": sort "int[]", ref %array.int__: map<sort "int[]", map<bv32, bv32>>) -> bv32 entry B0
+B0:
+  %zero: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  %two: bv32 = const bv32 2
+  %a0: map<bv32, bv32> = mapread %array.int__, %a
+  %a1: map<bv32, bv32> = mapwrite %a0, %zero, %one
+  %h1: map<sort "int[]", map<bv32, bv32>> = mapwrite %array.int__, %a, %a1
+  %b0: map<bv32, bv32> = mapread %h1, %b
+  %b1: map<bv32, bv32> = mapwrite %b0, %zero, %two
+  %h2: map<sort "int[]", map<bv32, bv32>> = mapwrite %h1, %b, %b1
+  %a2: map<bv32, bv32> = mapread %h2, %a
+  %r: bv32 = mapread %a2, %zero
+  ret %r outs(%array.int__ = %h2)
+---
+proc "C::M(int[],int[])" (%a "a": sort "int[]", %b "b": sort "int[]", ref %array.int__: map<sort "int[]", map<bv32, bv32>>) -> bv32 entry B0
+B0:
+  %zero: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  %two: bv32 = const bv32 2
+  %a0: map<bv32, bv32> = mapread %array.int__, %a
+  %a1: map<bv32, bv32> = mapwrite %a0, %zero, %one
+  %h1: map<sort "int[]", map<bv32, bv32>> = mapwrite %array.int__, %a, %a1
+  %b0: map<bv32, bv32> = mapread %h1, %b
+  %b1: map<bv32, bv32> = mapwrite %b0, %zero, %two
+  %h2: map<sort "int[]", map<bv32, bv32>> = mapwrite %h1, %b, %b1
+  ret %two outs(%array.int__ = %h2)
