@@ -43,6 +43,14 @@ internal sealed class HeapLowerer(
         Inputs.Parameters.Where(static p => p.Kind == IrParameterKind.Ref).Select(p => (slices[p.Var.Name], p.Var));
 
     /// <summary>
+    /// The heap slices every call reads and writes (ticket P1-005): each <c>field.*</c> and <c>array.*</c> map the body touches.
+    /// A <c>length.*</c> map the body writes is not one: only an array creation writes it, and a call cannot change the
+    /// length of an array.
+    /// </summary>
+    public IEnumerable<SsaBuilder.Variable> CallHeap() =>
+        Inputs.Parameters.Where(static p => HeapInputs.IsWritable(p.Var.Name)).Select(p => slices[p.Var.Name]);
+
+    /// <summary>
     /// The heap slice an assignment target names, or null when it is not a field or a single-dimensional
     /// array element of a variable.
     /// </summary>
@@ -175,14 +183,17 @@ internal sealed class HeapLowerer(
         return variable;
     }
 
-    /// <summary>The SSA variable holding the current version of a heap slice, starting at its input.</summary>
+    /// <summary>
+    /// The SSA variable holding the current version of a heap slice, starting at its input. The input is stored ahead of
+    /// everything else in the entry, so a call lowered before the body first touches the slice still reads it (ticket P1-005).
+    /// </summary>
     private SsaBuilder.Variable Versioned(IrVar input)
     {
         if (!slices.TryGetValue(input.Name, out SsaBuilder.Variable? variable))
         {
             variable = new SsaBuilder.Variable(input);
             slices[input.Name] = variable;
-            ssa.Store(new IrBlockId(0), variable, input);
+            ssa.StoreFirst(new IrBlockId(0), variable, input);
         }
 
         return variable;

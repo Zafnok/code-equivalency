@@ -278,7 +278,9 @@ internal sealed class IrLowerer
         }
 
         outs.AddRange(heap.Outs());
-        return ssa.Build(new IrBlockId(0), outs.ToImmutable(), bodySpan);
+
+        // Every call reads and writes every field and array slice the body touches, including one first touched after it (ticket P1-005).
+        return ssa.Build(new IrBlockId(0), outs.ToImmutable(), [.. heap.CallHeap()], bodySpan);
     }
 
     private void Fill(BasicBlock block, LoweringContext context)

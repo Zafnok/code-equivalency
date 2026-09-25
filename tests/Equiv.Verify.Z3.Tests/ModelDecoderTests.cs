@@ -175,6 +175,24 @@ public sealed class ModelDecoderTests
         Assert.Equal(new IrSortValue("S", 6), decoded);
     }
 
+    /// <summary>
+    /// Ticket P1-005: replaying the original procedures from a fragment's model can reach a call that pairs a map the
+    /// fragment's encoding has no heap function for; the oracle then leaves that map as it is.
+    /// </summary>
+    [Fact]
+    public void AnOracleLeavesAMapTheEncodingDoesNotRangeOverUnchanged()
+    {
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
+        using Solver solver = context.MkSolver();
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+        ModelDecoder decoder = new(context, solver.Model, encoding);
+
+        IrCallResult result = decoder.Oracle(ProductEncoder.Side.Old).Answer(new CallIdentity("F"), [], resultType: null, 0, [new IrHeapSlice("field.C.x", Heap)]);
+
+        Assert.Equal([Heap], result.Heap);
+    }
+
     [Fact]
     public void AMapInAnUnreadShapeIsAnEncoderBug()
     {
@@ -329,7 +347,7 @@ public sealed class ModelDecoderTests
     private static IrRun Traced(string callee) => new(new IrReturned(Value: null), [], [new IrCallRecord(new CallIdentity(callee), [Bv(1)])]);
 
     private static TraceEncoder Calls(Context context, ImmutableDictionary<string, string>? map = null) =>
-        new(new SortMapper(context), [], map ?? []);
+        new(new SortMapper(context), [], map ?? [], []);
 
     /// <summary>Mirrors the private <c>ModelDecoder.Describe</c> format, so a comma-separator mutation there fails this assertion.</summary>
     private static string ExpectedDescribe(IrRun run) =>

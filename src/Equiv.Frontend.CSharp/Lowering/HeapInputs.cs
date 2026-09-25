@@ -90,7 +90,8 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// <summary>A field map's key type. A field of a value type is keyed by the value, which is what value semantics mean.</summary>
     private IrSort Receiver(IFieldSymbol field) => new(TypeMapper.MetadataName(field.ContainingType, sorts));
 
-    private static bool IsWritable(string name) => name.StartsWith("field.", StringComparison.Ordinal) || name.StartsWith("array.", StringComparison.Ordinal);
+    /// <summary>Whether <paramref name="name"/> is a <c>field.*</c> or <c>array.*</c> map, which is always <see cref="IrParameterKind.Ref"/>.</summary>
+    public static bool IsWritable(string name) => name.StartsWith("field.", StringComparison.Ordinal) || name.StartsWith("array.", StringComparison.Ordinal);
 
     private static string Part(string name) =>
         string.Concat(name.Select(static c => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' ? c : '_'));

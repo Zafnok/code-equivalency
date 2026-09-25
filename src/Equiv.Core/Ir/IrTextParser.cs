@@ -436,7 +436,15 @@ internal sealed class IrTextParser
         CallIdentity callee = new(calleeValue, AcceptSymbol("!"));
         ImmutableArray<IrVar> args = ParseList("(", ")", ParseUse);
         IrVar? threw = AcceptWord("threw") ? ParseDefinition() : null;
-        return new IrCall(target, threw, callee, args);
+        return new IrCall(target, threw, callee, args) { Heap = AcceptWord("heap") ? ParseList("(", ")", ParseHeapPair) : [] };
+    }
+
+    private IrHeapPair ParseHeapPair()
+    {
+        string map = ExpectString();
+        IrVar before = ParseUse();
+        ExpectSymbol("->");
+        return new IrHeapPair(map, before, ParseDefinition());
     }
 
     private IrPure ParsePure(IrVar target)

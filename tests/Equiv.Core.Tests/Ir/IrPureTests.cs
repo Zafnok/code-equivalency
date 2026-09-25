@@ -170,7 +170,7 @@ public sealed class IrPureTests
     /// <summary>Answers every call with the argument it was given, never throwing.</summary>
     private sealed class NoCalls : ICallOracle
     {
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position) =>
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap) =>
             new(resultType is null ? null : arguments[0], Threw: false);
     }
 }

@@ -1,5 +1,5 @@
 # P1-005 An `IrCall` reads and writes the heap
-Status: todo
+Status: done (PR #191)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M2-004, M3-001, M3-007, P1-003
@@ -120,3 +120,76 @@ Modelling `ref`/`out` arguments' effect on the heap beyond what M2-004 already d
 Purity attributes or a user-supplied "this callee is pure" config.
 
 ## Notes
+- Deviation: developed on the session's designated branch `claude/determined-feynman-o6ip4b` rather than a
+  `P1-005-*` branch cut by task-loop step 4; the harness pins the branch name.
+- Decision: the heap pair -> `IrHeapPair(string Map, IrVar Before, IrVar After)` in an `init` property
+  `IrCall.Heap` (default empty). `Map` names the by-ref parameter the pair versions, because a version's SSA name
+  (`field.C.x.7`, `$3`) does not say which map it is, and the validator's "repeats a map" and the encoder's per-map
+  function both need it. Alternatives: bare (before, after) tuples with the map traced back through phis, a new
+  positional constructor parameter (edits every existing `new IrCall`). Rule: 1, then 4.
+- Decision: text form -> ` heap("field.C.x" %before -> %after: <map type>, ...)` after `threw`, omitted when empty, so
+  a dump without heap pairs is byte-identical. Alternatives: `%after = %before` (reads like an assignment of the
+  wrong way round), the map as `%field.C.x` (the parser's first pass would take `%name:` for a definition). Rule: 5.
+- Decision: validator rules -> IR011 (a call's heap pairs repeat a map) and IR012 (a pair's map is not a `Ref`
+  parameter of map type, or its before/after is not of that type); an `after` that re-uses an SSA name is IR003,
+  since `after` is a definition like any other. Alternatives: one id for all three (the id table is one rule per id).
+  Rule: 2.
+- Decision: oracle shape -> `ICallOracle.Answer` gains the `IrHeapSlice(Map, Value)` list the call reads;
+  `IrCallResult.Heap` (init, default empty) holds the new value per slice, in order, and empty means unchanged, so
+  the oracles that predate this ticket keep their results. `IrCallRecord.Heap` records the slices the call read, so
+  a heap difference at a call is a trace difference in the interpreter too. Alternatives: a second oracle method
+  (the result and `threw` must see the heap as well), a nullable list. Rule: 1.
+- Decision: the maps H ranges over -> the union of the map names in either side's heap pairs, not every `field.*`/
+  `array.*` parameter. On frontend output the two sets agree whenever the side has a call (the lowerer pairs every
+  heap map at every call), and a side with no call has no H to build; keying on the IR's own pairs keeps the encoder
+  free of naming conventions and leaves hand-written and generated IR without pairs encoded exactly as before.
+  Alternatives: every `Ref` map parameter of either side (changes the encoding of every existing heap fixture and of
+  loop fragments' cut events). Rule: 3.
+- Decision: one-sided threading -> per side, per map in H, a "call-visible" version threaded through blocks like the
+  call counter: the shared input, then each call's `heap:` result. A call that pairs the map reads its `before` and
+  defines its `after`; one that does not reads the threaded version. A side without the map's parameter reports the
+  threaded version as its final value. The replay oracle threads the same chain. Alternatives: none that line H up
+  across sides without a whole-program view. Rule: 1.
+- Decision: encoder names -> `heap:<callee>(<arg sorts>)$<map>`, domain args, bv32 position, then H in name order;
+  `f:`/`threw:` gain the same H; a trace event's argument sequence is the arguments followed by H (H has the same
+  length on both sides, so the concatenation is injective). Alternatives: a separate `heap` field on the `Event`
+  datatype (changes every existing event term). Rule: 4.
+- Decision: lowering -> `SsaBuilder.Build` takes the heap variables and completes every call's pairs while it fills
+  the blocks, so a map first touched after a call still gets a pair at it; a heap input's initial store is placed at
+  the start of the entry block rather than wherever the first touch happened to be. Alternatives: a pre-scan of the
+  operation tree (would have to predict which accesses lower to a map). Rule: 4.
+- Decision: the lowering-oracle case -> a `Cell o` parameter whose instance field `G` the generator reads, writes,
+  and bumps through `o.Bump(k)` (`G = unchecked(G + k)`); the test oracle answers `Bump` by writing `field.Cell.G`.
+  Alternatives: a static `Cell` field (two map levels and another input to bind). Rule: 4.
+- Decision: a counterexample's text (`properties.model`, the message, and the fingerprint through it) -> a call event
+  that read a heap prints it as ` heap("<map>" <value>, ...)` after its arguments; an event without one prints as
+  before. Otherwise `call-reads-heap`'s counterexample would print identical old and new traces while reporting a
+  divergence. Alternatives: leave the text as is (a Divergent whose message shows no difference). Rule: 3.
+- The lowering oracle's generated methods can call `o.Bump(k)` without touching `o.G`. Such a body has no
+  `field.Cell.G` map, so its calls pair nothing for it, and the oracle test can no longer assume that a map the body
+  never touches keeps its initial value. `CompiledRunOracle` threads `field.Cell.G` through the calls exactly as the
+  encoder threads a map one side never names, which is a direct check of the section 5 rule.
+- Two latent name collisions in `IrGen.Mutation` surfaced once calls carried heap pairs and the random stream moved:
+  a stacked mutant that re-applies "change map write" or "duplicate call" to the same instruction minted the same
+  `.one`/`.changed`/`.dup` names twice (IR003). The failures were intermittent (`LineScopedResidualClaimHolds` runs
+  unseeded). `main` fixed the same collision independently while this PR was open (a suffix lengthened until no name
+  contains it); the merge keeps that fix and gives a duplicated call's heap `after` versions the same fresh suffix.
+- A loop fragment starting at a header (lockstep and k-induction steps) starts a threaded map at the shared input, not
+  at an arbitrary version. That is sound in practice: the side that has the map carries its version in the header
+  state and in every exit's outs, so the step's final-heap or event comparison fails (sat) unless the version equals
+  the input, and a failed step is Unknown, never Equivalent. It costs precision only for a loop pair where one side
+  names a heap map the other never does.
+- Linux: `Equiv.Tests.Integration` runs here with `FrameworkPathOverride` pointed at the
+  `Microsoft.NETFramework.ReferenceAssemblies.net48` package's `build/.NETFramework/v4.8` folder: 103 of 112 pass,
+  including the 200-pair differential gate. The other 9 are environmental, not this change: `webapi-basic`'s legacy
+  side does not load without `System.Web.Http`, and `ComparePipelineTests.AddedAndRemovedHaveLocations` renders a Linux
+  path without `file:///`.
+  `webapi-basic` touches no field or array, so its IR and verdicts are unchanged by this ticket.
+- Merging P2-001 (array creation) while this PR was open: an allocation writes `length.*`, which makes that map `Ref`.
+  Pairing every `Ref` heap map would then pair `length.*` at calls, against criterion 3, so the lowerer now pairs only
+  `field.*` and `array.*` maps (`HeapLowerer.CallHeap`, pinned in `OnlyFieldAndArrayMapsArePaired`).
+- Merging M4-002 (`IrPure`) while this PR was open: the replay taints every pure function, so a run that applies one has
+  a taint source, and the replay then treats every heap version it threaded (and every event, which may carry one) as
+  tainted. A pair that uses a floating-point, `decimal` or user-defined operator and has a map only one side names can
+  therefore be Unknown(Abstraction) where a divergence is real. That costs precision only; tracking which call's
+  answer each threaded version depends on would recover it.

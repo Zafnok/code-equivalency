@@ -50,6 +50,7 @@ public static class IrValidator
             CheckPhis();
             CheckTypes();
             CheckOuts();
+            CheckHeapPairs();
             if (blocks.ContainsKey(procedure.Entry))
             {
                 ComputeDominators();
@@ -187,6 +188,32 @@ public static class IrValidator
                     && !(exitOuts.Select(static o => o.Param).SequenceEqual(byRef) & exitOuts.All(static o => o.Final.Type == o.Param.Type)))
                 {
                     Report(IrDiagnosticIds.ExitOuts, block.Id, $"outs must name every by-ref parameter once, in order: {IrText.Line(block.Terminator)}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// A call's heap pairs each name a different map, and each map is a by-ref parameter of map type whose type the
+        /// pair's before and after share (ticket P1-005).
+        /// </summary>
+        private void CheckHeapPairs()
+        {
+            Dictionary<string, IrParameter> byRef = procedure.Parameters
+                .Where(static p => p.Kind != IrParameterKind.In && p.Var.Type is IrMap)
+                .ToDictionary(static p => p.Var.Name, StringComparer.Ordinal);
+            foreach (IrBlock block in procedure.Blocks)
+            {
+                foreach (IrCall call in block.Instructions.OfType<IrCall>())
+                {
+                    if (call.Heap.Select(static h => h.Map).Distinct(StringComparer.Ordinal).Take(call.Heap.Length + 1).Count() != call.Heap.Length)
+                    {
+                        Report(IrDiagnosticIds.HeapPairRepeated, block.Id, $"heap pairs name a map more than once: {IrText.Line(call)}");
+                    }
+
+                    if (!call.Heap.All(h => byRef.TryGetValue(h.Map, out IrParameter? map) && (h.Before.Type == map.Var.Type) & (h.After.Type == map.Var.Type)))
+                    {
+                        Report(IrDiagnosticIds.HeapPairMap, block.Id, $"a heap pair's map is not a by-ref map parameter of its type: {IrText.Line(call)}");
+                    }
                 }
             }
         }

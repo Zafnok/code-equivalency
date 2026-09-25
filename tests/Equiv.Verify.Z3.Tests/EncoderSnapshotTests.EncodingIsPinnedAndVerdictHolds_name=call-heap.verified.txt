@@ -1,0 +1,44 @@
+﻿old.reach.B0
+(= old.cnt.B0 #x00000000)
+(= old.heap.0.B0 in.field.C.f)
+(= old.f1
+   (|heap:Svc::F(C)(sort<C>)$field.C.f:map<sort<C>,bv32>|
+     in.this
+     (bvadd old.cnt.B0 #x00000000)
+     in.field.C.f))
+new.reach.B0
+(= new.cnt.B0 #x00000000)
+(= new.heap.0.B0 in.field.C.f)
+differs: (let ((a!1 (= (ite old.reach.B0 old.f1 in.field.C.f)
+              (ite new.reach.B0
+                   (|heap:Svc::F(C)(sort<C>)$field.C.f:map<sort<C>,bv32>|
+                     in.this
+                     (bvadd new.cnt.B0 #x00000000)
+                     new.heap.0.B0)
+                   in.field.C.f)))
+      (a!2 (event 0
+                  (seq.++ (as seq.empty (Seq Value))
+                          (seq.unit (|of:sort<C>| in.this))
+                          (seq.unit (|of:map<sort<C>,bv32>| in.field.C.f)))))
+      (a!4 (event 0
+                  (seq.++ (as seq.empty (Seq Value))
+                          (seq.unit (|of:sort<C>| in.this))
+                          (seq.unit (|of:map<sort<C>,bv32>| new.heap.0.B0))))))
+(let ((a!3 (seq.++ (as seq.empty (Seq Event))
+                   (ite old.reach.B0
+                        (seq.++ (seq.unit a!2))
+                        (as seq.empty (Seq Event)))))
+      (a!5 (seq.++ (as seq.empty (Seq Event))
+                   (ite new.reach.B0
+                        (seq.++ (seq.unit a!4))
+                        (as seq.empty (Seq Event))))))
+  (not (and (= (or false old.reach.B0) (or false new.reach.B0))
+            true
+            (= (or false) (or false))
+            (= 0 0)
+            a!1
+            (= a!3 a!5)))))
+opaque.old: (or false)
+opaque.new: (or false)
+unreachable.old: (or false)
+unreachable.new: (or false)

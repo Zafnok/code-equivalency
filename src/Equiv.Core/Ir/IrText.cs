@@ -10,7 +10,8 @@ namespace Equiv.Core.Ir;
 /// procedure order, map entries sorted by their text) and <see cref="Parse"/> inverts it.
 /// Definitions carry their type (<c>%t: bv32 = add %a, %b</c>), literals carry theirs
 /// (<c>bv32 1</c>, <c>bool true</c>, <c>sort "S" 3</c>, <c>map&lt;bv32, bool&gt; [bv32 1 -> bool true] default bool false</c>),
-/// and line breaks are ordinary whitespace.
+/// and line breaks are ordinary whitespace. A call's heap pairs follow its <c>threw</c> flag as
+/// <c>heap("field.C.x" %before -> %after: map&lt;sort "C", bv32&gt;)</c>, and are left out when there are none.
 /// </summary>
 public static class IrText
 {
@@ -154,7 +155,8 @@ public static class IrText
 
         public string Visit(IrCall instruction) =>
             $"{Assigned(instruction.Target)}call {Callee(instruction.Callee)}({string.Join(", ", instruction.Args.Select(Use))})"
-            + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw));
+            + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw))
+            + (instruction.Heap.IsEmpty ? string.Empty : $" heap({string.Join(", ", instruction.Heap.Select(static h => $"{Quote(h.Map)} {Use(h.Before)} -> {Definition(h.After)}"))})");
 
         public string Visit(IrMapRead instruction) =>
             $"{Definition(instruction.Target)} = mapread {Use(instruction.Map)}, {Use(instruction.Key)}";

@@ -201,6 +201,67 @@ public sealed class TaintReplayTests
         Assert.Equal(ModelDecoder.Difference.Abstract, ModelDecoder.Compare(withoutHeap, withHeap, newHeap, inputs, none, changedTainted, Calls(context)));
     }
 
+    /// <summary>
+    /// Ticket P1-005: a side without a heap map reports the version its oracle threaded through its calls, which is tainted
+    /// once that side's run reached an abstraction.
+    /// </summary>
+    [Fact]
+    public void AThreadedHeapIsTheFinalValueOfASideWithoutTheMapAndIsTaintedAfterAnAbstraction()
+    {
+        using Context context = new();
+        IrProcedure withHeap = IrText.Parse("""
+            proc "T::M(int)" (%a: bv32, ref %field.C.x: map<bv32, bv32>) entry B0
+            B0:
+              ret outs(%field.C.x = %field.C.x)
+            """);
+        IrProcedure withoutHeap = IrText.Parse("""
+            proc "T::M(int)" (%a: bv32) entry B0
+            B0:
+              ret
+            """);
+        IrMapValue heap = new(new IrMap(new IrBitVec(32), new IrBitVec(32)), Bv(0), []);
+        IrMapValue written = heap.Write(Bv(1), Bv(2));
+        IrInputs inputs = new([Bv(1), heap]);
+        IrRun changed = new(new IrReturned(Value: null), [written], []);
+        IrRun none = new(new IrReturned(Value: null), [], []);
+        IrRun afterAbstraction = none with { Taint = IrTaint.None with { Sources = [Add] } };
+        ImmutableArray<ProductEncoder.SharedParameter> shared = ProductEncoder.Pair(withHeap, withoutHeap);
+        Dictionary<TraceEncoder.HeapMap, IrValue> threadedTo(IrMapValue value) => new() { [new TraceEncoder.HeapMap("field.C.x", heap.Type)] = value };
+
+        Assert.Equal(ModelDecoder.Difference.None, ModelDecoder.Compare(withHeap, withoutHeap, shared, inputs, changed, none, Calls(context), newThreaded: threadedTo(written)));
+        Assert.Equal(ModelDecoder.Difference.Real, ModelDecoder.Compare(withHeap, withoutHeap, shared, inputs, changed, none, Calls(context), newThreaded: threadedTo(heap)));
+        Assert.Equal(ModelDecoder.Difference.Abstract, ModelDecoder.Compare(withHeap, withoutHeap, shared, inputs, changed, afterAbstraction, Calls(context), newThreaded: threadedTo(heap)));
+        Assert.Equal(ModelDecoder.Difference.Real, ModelDecoder.Compare(withHeap, withoutHeap, shared, inputs, changed, afterAbstraction, Calls(context)));
+    }
+
+    /// <summary>
+    /// Ticket P1-005: when the side without the map threads it through an <c>opaque:</c> call, a difference in the final heap
+    /// depends on the abstraction, and so does every event, which may carry a threaded version.
+    /// </summary>
+    [Fact]
+    public void AHeapThreadedThroughAnAbstractionIsTainted()
+    {
+        Verdict verdict = Verify(
+            """
+            proc "T::M(int)" (%a: bv32, ref %field.C.x: map<bv32, bv32>) entry B0
+            B0:
+              call "opaque:add"(%a) heap("field.C.x" %field.C.x -> %x1: map<bv32, bv32>)
+              %one: bv32 = const bv32 1
+              %x2: map<bv32, bv32> = mapwrite %x1, %a, %one
+              ret outs(%field.C.x = %x2)
+            """,
+            """
+            proc "T::M(int)" (%a: bv32) entry B0
+            B0:
+              call "opaque:add"(%a)
+              ret
+            """);
+
+        Unknown unknown = Assert.IsType<Unknown>(verdict);
+        Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
+        Assert.Equal([0], Assert.IsType<Counterexample>(unknown.Candidate).New.Taint.Trace);
+    }
+
     [Fact]
     public void OnlyOpaquePrefixedCallsAreAbstractions()
     {
@@ -233,5 +294,5 @@ public sealed class TaintReplayTests
 
     private static IrBitVecValue Bv(ulong bits) => new(32, bits);
 
-    private static TraceEncoder Calls(Context context) => new(new SortMapper(context), [], []);
+    private static TraceEncoder Calls(Context context) => new(new SortMapper(context), [], [], []);
 }

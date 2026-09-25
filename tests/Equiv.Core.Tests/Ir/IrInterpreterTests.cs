@@ -140,6 +140,55 @@ public sealed class IrInterpreterTests
         Assert.Throws<InvalidOperationException>(() => IrInterpreter.Run(p, new IrInputs([]), new ScriptedOracle(static (_, _, _) => new IrCallResult(Value: null, Threw: false)), 10));
     }
 
+    private const string HeapCall = """
+        (%k: bv32, ref %field.C.x: map<bv32, bv32>) -> bv32 entry B0
+        B0:
+          %v: bv32 = const bv32 5
+          %x1: map<bv32, bv32> = mapwrite %field.C.x, %k, %v
+          call "Bump"(%k) heap("field.C.x" %x1 -> %x2: map<bv32, bv32>)
+          %r: bv32 = mapread %x2, %k
+          ret %r outs(%field.C.x = %x2)
+        """;
+
+    [Fact]
+    public void ACallGetsTheHeapItReadsAndItsAnswerIsTheNewVersion()
+    {
+        IrProcedure p = IrText.Parse(Header + HeapCall);
+        IrMapValue empty = new(new IrMap(new IrBitVec(32), new IrBitVec(32)), Bv(0), []);
+        IrMapValue written = empty.Write(Bv(1), Bv(5));
+        IrMapValue bumped = written.Write(Bv(1), Bv(6));
+        HeapOracle oracle = new([bumped]);
+
+        IrRun run = Run(p, oracle, Bv(1), empty);
+
+        Assert.Equal(new IrReturned(Bv(6)), run.Outcome);
+        Assert.Equal([bumped], run.Outs);
+        Assert.Equal([new IrHeapSlice("field.C.x", written)], oracle.Heap);
+        Assert.Equal([new IrCallRecord(new CallIdentity("Bump"), [Bv(1)]) { Heap = [new IrHeapSlice("field.C.x", written)] }], run.Trace);
+    }
+
+    [Fact]
+    public void AnOracleThatAnswersNoHeapLeavesEveryMapUnchanged()
+    {
+        IrProcedure p = IrText.Parse(Header + HeapCall);
+        IrMapValue empty = new(new IrMap(new IrBitVec(32), new IrBitVec(32)), Bv(0), []);
+
+        IrRun run = Run(p, Answers42, Bv(1), empty);
+
+        Assert.Equal(new IrReturned(Bv(5)), run.Outcome);
+        Assert.Equal([empty.Write(Bv(1), Bv(5))], run.Outs);
+    }
+
+    [Fact]
+    public void AnOracleHeapThatDoesNotFitTheSlicesIsAnError()
+    {
+        IrProcedure p = IrText.Parse(Header + HeapCall);
+        IrMapValue empty = new(new IrMap(new IrBitVec(32), new IrBitVec(32)), Bv(0), []);
+
+        Assert.Throws<InvalidOperationException>(() => Run(p, new HeapOracle([empty, empty]), Bv(1), empty));
+        Assert.Throws<InvalidOperationException>(() => Run(p, new HeapOracle([Bv(1)]), Bv(1), empty));
+    }
+
     [Fact]
     public void MapsReadWhatWasWritten()
     {
@@ -259,11 +308,23 @@ public sealed class IrInterpreterTests
     private static IrRun Run(IrProcedure procedure, ICallOracle oracle, params IrValue[] args) =>
         IrInterpreter.Run(procedure, new IrInputs([.. args]), oracle, 1000);
 
+    /// <summary>Answers every call with no value and <paramref name="answer"/> as its heap, remembering the heap it was given.</summary>
+    private sealed class HeapOracle(ImmutableArray<IrValue> answer) : ICallOracle
+    {
+        public ImmutableArray<IrHeapSlice> Heap { get; private set; } = [];
+
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
+        {
+            Heap = heap;
+            return new IrCallResult(Value: null, Threw: false) { Heap = answer };
+        }
+    }
+
     private sealed class ScriptedOracle(Func<CallIdentity, ImmutableArray<IrValue>, IrType?, IrCallResult> answer) : ICallOracle
     {
         public List<int> Positions { get; } = [];
 
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position)
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
         {
             Positions.Add(position);
             return answer(callee, arguments, resultType);

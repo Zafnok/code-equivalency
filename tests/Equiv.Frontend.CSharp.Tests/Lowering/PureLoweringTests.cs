@@ -268,7 +268,7 @@ public sealed class PureLoweringTests
 
     private sealed class NoCalls : ICallOracle
     {
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position) =>
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap) =>
             throw new InvalidOperationException($"Unexpected call {callee.Value}.");
     }
 }

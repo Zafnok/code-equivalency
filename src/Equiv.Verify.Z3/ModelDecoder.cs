@@ -7,6 +7,7 @@ using Equiv.Core.Verdicts;
 
 using Microsoft.Z3;
 
+using HeapMap = Equiv.Verify.Z3.TraceEncoder.HeapMap;
 using ProductEncoding = Equiv.Verify.Z3.ProductEncoder.ProductEncoding;
 using SharedParameter = Equiv.Verify.Z3.ProductEncoder.SharedParameter;
 using Side = Equiv.Verify.Z3.ProductEncoder.Side;
@@ -19,9 +20,10 @@ namespace Equiv.Verify.Z3;
 /// keeps its own id, any other element gets the next free id. Both sides are then replayed in
 /// <see cref="IrInterpreter"/>, with a call oracle that answers from the model's call functions at the
 /// position the interpreter passes, and pure functions from the model's pure functions, and the replay must diverge on the
-/// observables the encoder compares. The replay taints every call whose identity starts with <see cref="OpaquePrefix"/>
-/// and every pure function (ADR 0026; tickets M3-016 and M4-002): only a difference in an observable that is untainted on
-/// both sides is real.
+/// observables the encoder compares. The oracle threads each heap map a call does not pair as the encoder does, and each
+/// call event is completed with the whole heap the call read (ticket P1-005). The replay taints every call whose identity
+/// starts with <see cref="OpaquePrefix"/> and every pure function (ADR 0026; tickets M3-016 and M4-002): only a difference
+/// in an observable that is untainted on both sides is real.
 /// </summary>
 internal sealed class ModelDecoder
 {
@@ -68,10 +70,12 @@ internal sealed class ModelDecoder
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
-        IrRun oldRun = decoder.Run(old, Bind(old, shared, inputs, static s => s.Old), Side.Old, Budget(old));
-        IrRun newRun = decoder.Run(@new, Bind(@new, shared, inputs, static s => s.New), Side.New, Budget(@new));
+        ModelOracle oldOracle = decoder.Oracle(Side.Old);
+        ModelOracle newOracle = decoder.Oracle(Side.New);
+        IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, Budget(old));
+        IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, Budget(@new));
         Counterexample counterexample = new(inputs, oldRun, newRun);
-        return EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls) == Difference.Real
+        return EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls, oldOracle.Threaded, newOracle.Threaded) == Difference.Real
             ? new Divergent(counterexample)
             : Unknown.DependingOn(counterexample, [.. Abstractions(Codebase.Legacy, oldRun), .. Abstractions(Codebase.Modern, newRun)]);
     }
@@ -90,19 +94,30 @@ internal sealed class ModelDecoder
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
-        IrRun oldRun = decoder.Run(old, Bind(old, shared, inputs, static s => s.Old), Side.Old, stepBudget);
-        IrRun newRun = decoder.Run(@new, Bind(@new, shared, inputs, static s => s.New), Side.New, stepBudget);
+        ModelOracle oldOracle = decoder.Oracle(Side.Old);
+        ModelOracle newOracle = decoder.Oracle(Side.New);
+        IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, stepBudget);
+        IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, stepBudget);
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
-        return complete && Diverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls) ? new Counterexample(inputs, oldRun, newRun) : null;
+        return complete && Diverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls, oldOracle.Threaded, newOracle.Threaded) ? new Counterexample(inputs, oldRun, newRun) : null;
     }
 
     /// <summary>
     /// A model whose replay agrees on every compared observable is an encoder bug: fail loudly, never report it as
     /// Divergent. Otherwise returns how the runs differ.
     /// </summary>
-    public static Difference EnsureDiverges(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
+    public static Difference EnsureDiverges(
+        IrProcedure old,
+        IrProcedure @new,
+        ImmutableArray<SharedParameter> shared,
+        IrInputs inputs,
+        IrRun oldRun,
+        IrRun newRun,
+        TraceEncoder calls,
+        IReadOnlyDictionary<HeapMap, IrValue>? oldThreaded = null,
+        IReadOnlyDictionary<HeapMap, IrValue>? newThreaded = null)
     {
-        Difference difference = Compare(old, @new, shared, inputs, oldRun, newRun, calls);
+        Difference difference = Compare(old, @new, shared, inputs, oldRun, newRun, calls, oldThreaded, newThreaded);
         return difference != Difference.None
             ? difference
             : throw new InvalidOperationException(
@@ -111,19 +126,41 @@ internal sealed class ModelDecoder
     }
 
     /// <summary>True when the two runs differ in an observable the encoder compares that is untainted on both sides.</summary>
-    public static bool Diverges(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls) =>
-        Compare(old, @new, shared, inputs, oldRun, newRun, calls) == Difference.Real;
+    public static bool Diverges(
+        IrProcedure old,
+        IrProcedure @new,
+        ImmutableArray<SharedParameter> shared,
+        IrInputs inputs,
+        IrRun oldRun,
+        IrRun newRun,
+        TraceEncoder calls,
+        IReadOnlyDictionary<HeapMap, IrValue>? oldThreaded = null,
+        IReadOnlyDictionary<HeapMap, IrValue>? newThreaded = null) =>
+        Compare(old, @new, shared, inputs, oldRun, newRun, calls, oldThreaded, newThreaded) == Difference.Real;
 
     /// <summary>
     /// How the two runs differ on the observables the encoder compares: outcome, call trace (legacy identities renamed
     /// through the call-identity map), and the final value of each by-ref shared input (<paramref name="shared"/>,
-    /// valued by <paramref name="inputs"/>), a side without that parameter standing for its unchanged input. A difference
-    /// is real when some differing observable is untainted on both sides (ADR 0026). Two returned values compare by the
-    /// values' taint, any other outcome difference by the path's. The trace compares its first differing event only,
+    /// valued by <paramref name="inputs"/>), a side without that parameter standing for the version its oracle threaded
+    /// through its calls (<paramref name="oldThreaded"/>, <paramref name="newThreaded"/>; ticket P1-005) or else its unchanged
+    /// input. A difference is real when some differing observable is untainted on both sides (ADR 0026). Two returned values
+    /// compare by the values' taint, any other outcome difference by the path's. A threaded version is tainted once the run
+    /// reached an abstraction. The trace compares its first differing event only,
     /// since control taint can shift every later position.
     /// </summary>
-    public static Difference Compare(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
+    public static Difference Compare(
+        IrProcedure old,
+        IrProcedure @new,
+        ImmutableArray<SharedParameter> shared,
+        IrInputs inputs,
+        IrRun oldRun,
+        IrRun newRun,
+        TraceEncoder calls,
+        IReadOnlyDictionary<HeapMap, IrValue>? oldThreaded = null,
+        IReadOnlyDictionary<HeapMap, IrValue>? newThreaded = null)
     {
+        Replayed oldSide = new(old, oldRun, oldThreaded ?? ImmutableDictionary<HeapMap, IrValue>.Empty);
+        Replayed newSide = new(@new, newRun, newThreaded ?? ImmutableDictionary<HeapMap, IrValue>.Empty);
         List<bool> tainted = [];
         if (oldRun.Outcome != newRun.Outcome)
         {
@@ -143,8 +180,8 @@ internal sealed class ModelDecoder
 
         tainted.AddRange(shared
             .Select((s, i) => (Shared: s, Input: inputs.Arguments[i]))
-            .Where(s => s.Shared.ByRef && Final(old, oldRun, s.Shared.Old, s.Input) != Final(@new, newRun, s.Shared.New, s.Input))
-            .Select(s => FinalTainted(old, oldRun, s.Shared.Old) || FinalTainted(@new, newRun, s.Shared.New)));
+            .Where(s => s.Shared.ByRef && oldSide.Final(s.Shared.Old, s.Shared.Var, s.Input) != newSide.Final(s.Shared.New, s.Shared.Var, s.Input))
+            .Select(s => oldSide.FinalTainted(s.Shared.Old, s.Shared.Var) || newSide.FinalTainted(s.Shared.New, s.Shared.Var)));
 
         return tainted switch
         {
@@ -181,14 +218,14 @@ internal sealed class ModelDecoder
         _ => encoding.Sorts.Literal(value),
     };
 
-    public ICallOracle Oracle(Side side) => new ModelOracle(this, side);
+    public ModelOracle Oracle(Side side) => new(this, side);
 
-    /// <summary>Answers <see cref="IrPure"/> applications from the model: the side's result and flag functions applied to the arguments.</summary>
-    public IPureOracle Pure(Side side) => new ModelOracle(this, side);
-
-    /// <summary>Replays <paramref name="procedure"/> on <paramref name="side"/> from the model, with taint (ADR 0026).</summary>
-    private IrRun Run(IrProcedure procedure, IrInputs inputs, Side side, int stepBudget) =>
-        IrInterpreter.Run(procedure, inputs, Oracle(side), stepBudget, IsAbstraction, Pure(side));
+    /// <summary>
+    /// Replays <paramref name="procedure"/> with <paramref name="oracle"/> answering its calls and pure functions, with taint
+    /// (ADR 0026), and completes each call event with the heap the call read (ticket P1-005).
+    /// </summary>
+    private static IrRun Run(IrProcedure procedure, IrInputs inputs, ModelOracle oracle, int stepBudget) =>
+        oracle.Complete(IrInterpreter.Run(procedure, inputs, oracle, stepBudget, IsAbstraction, oracle));
 
     /// <summary><paramref name="lengths"/> with every negative length replaced by 0.</summary>
     private static IrMapValue NonNegative(IrMapValue lengths) =>
@@ -212,20 +249,6 @@ internal sealed class ModelDecoder
             .Where(static s => s.Parameter is not null)
             .ToDictionary(static s => s.Parameter!.Var.Name, static s => s.Value, StringComparer.Ordinal);
         return new IrInputs([.. procedure.Parameters.Select(p => byName[p.Var.Name])]);
-    }
-
-    /// <summary>The final value of <paramref name="parameter"/> in <paramref name="run"/>, else (not by-ref on this side, or absent) <paramref name="input"/>.</summary>
-    private static IrValue Final(IrProcedure procedure, IrRun run, IrParameter? parameter, IrValue input)
-    {
-        int index = OutIndex(procedure, parameter);
-        return index < 0 ? input : run.Outs[index];
-    }
-
-    /// <summary>Whether the final value of <paramref name="parameter"/> is tainted; the unchanged input of a side without it never is.</summary>
-    private static bool FinalTainted(IrProcedure procedure, IrRun run, IrParameter? parameter)
-    {
-        int index = OutIndex(procedure, parameter);
-        return index >= 0 && run.OutTainted(index);
     }
 
     private static int OutIndex(IrProcedure procedure, IrParameter? parameter) =>
@@ -274,11 +297,32 @@ internal sealed class ModelDecoder
     };
 
     /// <summary>
-    /// Answers a call from the model, the side's result and <c>threw</c> functions applied to the arguments and position,
-    /// and a pure function from its result and flag functions applied to the arguments.
+    /// Answers a call from the model: the side's result, <c>threw</c> and heap functions applied to the arguments, the
+    /// position and the heap at the call (ticket P1-005). The heap at the call is the slice the interpreter passes for a map
+    /// the call pairs, else <see cref="Threaded"/>'s version, which starts at the shared input and takes each call's new
+    /// version, as the encoder threads it. A map the call pairs that the encoding's heap does not range over (a replay of
+    /// the original procedures from a fragment's model) is left as it is. A pure function is answered from its result and
+    /// flag functions applied to the arguments (ticket M4-002).
     /// </summary>
-    private sealed class ModelOracle(ModelDecoder decoder, Side side) : ICallOracle, IPureOracle
+    internal sealed class ModelOracle : ICallOracle, IPureOracle
     {
+        private readonly ModelDecoder decoder;
+        private readonly Side side;
+        private readonly IrValue[] threaded;
+        private readonly List<ImmutableArray<IrHeapSlice>> reads = [];
+
+        public ModelOracle(ModelDecoder decoder, Side side)
+        {
+            this.decoder = decoder;
+            this.side = side;
+            threaded = [.. Heap.Select(m => decoder.Decode(decoder.model.Eval(decoder.encoding.Inputs.First(i => Is(m, i.Shared.Var)).Term, completion: true), m.Type))];
+        }
+
+        /// <summary>The version of each heap map threaded through this side's calls so far.</summary>
+        public IReadOnlyDictionary<HeapMap, IrValue> Threaded => Heap.Zip(threaded).ToDictionary(static e => e.First, static e => e.Second);
+
+        private ImmutableArray<HeapMap> Heap => decoder.encoding.Calls.Heap;
+
         public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments)
         {
             Expr[] applied = [.. arguments.Select(decoder.Encode)];
@@ -289,16 +333,70 @@ internal sealed class ModelDecoder
                 [.. pure.Throws.Select(t => decoder.model.Eval(decoder.context.MkApp(pures.ThrewFunction(side, pure, t.ExceptionType), applied), completion: true).IsTrue)]);
         }
 
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position)
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
         {
             ImmutableArray<IrType> types = [.. arguments.Select(static a => a.Type)];
-            Expr[] applied = [.. arguments.Select(decoder.Encode), decoder.context.MkBV(position, 32)];
+            IrValue[] read = [.. Heap.Select((m, i) => heap.FirstOrDefault(h => Is(m, h)) is { } slice ? slice.Value : threaded[i])];
+            Expr[] applied = [.. arguments.Select(decoder.Encode), decoder.context.MkBV(position, 32), .. read.Select(decoder.Encode)];
             TraceEncoder calls = decoder.encoding.Calls;
             IrValue? value = resultType is null
                 ? null
                 : decoder.Decode(decoder.model.Eval(decoder.context.MkApp(calls.ResultFunction(side, callee, types, resultType), applied), completion: true), resultType);
             bool threw = decoder.model.Eval(decoder.context.MkApp(calls.ThrewFunction(side, callee, types), applied), completion: true).IsTrue;
-            return new IrCallResult(value, threw);
+            for (int i = 0; i < threaded.Length; i++)
+            {
+                threaded[i] = decoder.Decode(decoder.model.Eval(decoder.context.MkApp(calls.HeapFunction(side, callee, types, i), applied), completion: true), Heap[i].Type);
+            }
+
+            reads.Add([.. Heap.Select((m, i) => new IrHeapSlice(m.Name, read[i]))]);
+            return new IrCallResult(value, threw)
+            {
+                Heap = [.. heap.Select(h => Heap.ToList().FindIndex(m => Is(m, h)) is var i and >= 0 ? threaded[i] : h.Value)],
+            };
+        }
+
+        /// <summary>
+        /// <paramref name="run"/>, which this oracle answered, with each call event's heap completed to every map the encoding's
+        /// heap ranges over, as the encoder's events are. A run that reached an abstraction may have threaded a tainted version
+        /// into any event, so then every event is tainted.
+        /// </summary>
+        public IrRun Complete(IrRun run)
+        {
+            IrRun completed = run with { Trace = [.. run.Trace.Select((r, i) => r with { Heap = reads[i] })] };
+            return Heap.IsEmpty || !Replayed.ThreadsTaint(run)
+                ? completed
+                : completed with { Taint = run.Taint with { Trace = [.. Enumerable.Range(0, run.Trace.Length)] } };
+        }
+
+        private static bool Is(HeapMap map, IrVar var) => string.Equals(map.Name, var.Name, StringComparison.Ordinal) && map.Type == var.Type;
+
+        private static bool Is(HeapMap map, IrHeapSlice slice) => string.Equals(map.Name, slice.Map, StringComparison.Ordinal) && map.Type == slice.Value.Type;
+    }
+
+    /// <summary>One replayed side: its procedure, its run and the heap versions its oracle threaded (ticket P1-005).</summary>
+    private sealed record Replayed(IrProcedure Procedure, IrRun Run, IReadOnlyDictionary<HeapMap, IrValue> Threaded)
+    {
+        /// <summary>
+        /// Whether a version threaded through <paramref name="run"/>'s calls may depend on an abstraction: once the run has
+        /// reached one, since every taint, a tainted branch's included, starts at one.
+        /// </summary>
+        public static bool ThreadsTaint(IrRun run) => !run.Taint.Sources.IsEmpty;
+
+        /// <summary>
+        /// The final value of <paramref name="parameter"/> (the shared input <paramref name="shared"/>): its out when it is by-ref
+        /// on this side, else its threaded version, else <paramref name="input"/>.
+        /// </summary>
+        public IrValue Final(IrParameter? parameter, IrVar shared, IrValue input)
+        {
+            int index = OutIndex(Procedure, parameter);
+            return index >= 0 ? Run.Outs[index] : Threaded.GetValueOrDefault(new HeapMap(shared.Name, shared.Type), input);
+        }
+
+        /// <summary>Whether that final value is tainted; the unchanged input of a side without it never is.</summary>
+        public bool FinalTainted(IrParameter? parameter, IrVar shared)
+        {
+            int index = OutIndex(Procedure, parameter);
+            return index >= 0 ? Run.OutTainted(index) : Threaded.ContainsKey(new HeapMap(shared.Name, shared.Type)) && ThreadsTaint(Run);
         }
     }
 }

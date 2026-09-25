@@ -14,7 +14,9 @@ namespace Equiv.Verify.Z3;
 /// of <see cref="Pair"/>. Every other SSA variable is a constant <c>old.&lt;name&gt;</c> or
 /// <c>new.&lt;name&gt;</c> fixed by a definitional equality; SSA makes that sound even for blocks no input
 /// reaches. Control flow is a Bool <c>reach</c> per block, and the call position a bv32 <c>cnt</c> per block. Calls go through
-/// <see cref="TraceEncoder"/>, pure functions through <see cref="PureEncoder"/>.
+/// <see cref="TraceEncoder"/>, pure functions through <see cref="PureEncoder"/>. When a heap pair names a map, the version of
+/// every such map a call reads when it does not pair it is a term per block too, <c>heap.&lt;i&gt;</c>: the shared input,
+/// replaced by each call's new version (ticket P1-005).
 /// The ladder of ticket M3-002 encodes unrolled procedures and loop fragments with it; each is acyclic.
 /// </summary>
 internal static class ProductEncoder
@@ -115,14 +117,14 @@ internal static class ProductEncoder
             .. Pair(old, @new).Select(s => (s, context.MkConst(s.InputName, sorts.Sort(s.Type)))),
         ];
 
-        IEnumerable<IrType> argumentTypes = old.Blocks.Concat(@new.Blocks)
-            .SelectMany(static b => b.Instructions.OfType<IrCall>())
-            .SelectMany(static c => c.Args.Select(static a => a.Type));
-        TraceEncoder calls = new(sorts, argumentTypes, callIdentityMap);
+        IrCall[] allCalls = [.. old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrCall>())];
+        IEnumerable<IrType> argumentTypes = allCalls.SelectMany(static c => c.Args.Select(static a => a.Type));
+        TraceEncoder calls = new(sorts, argumentTypes, callIdentityMap, HeapMaps(allCalls));
+        ImmutableArray<Expr> heapInputs = [.. calls.Heap.Select(m => inputs.First(i => string.Equals(i.Shared.Var.Name, m.Name, StringComparison.Ordinal) && i.Shared.Type == m.Type).Term)];
         PureEncoder pures = new(sorts, old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrPure>()));
         Dictionary<string, int> exceptionTypes = new(StringComparer.Ordinal);
-        SideEncoder oldSide = new(Side.Old, old, sorts, (calls, pures), Bound(inputs, static s => s.Old), exceptionTypes);
-        SideEncoder newSide = new(Side.New, @new, sorts, (calls, pures), Bound(inputs, static s => s.New), exceptionTypes);
+        SideEncoder oldSide = new(Side.Old, old, sorts, (calls, pures), Bound(inputs, static s => s.Old), heapInputs, exceptionTypes);
+        SideEncoder newSide = new(Side.New, @new, sorts, (calls, pures), Bound(inputs, static s => s.New), heapInputs, exceptionTypes);
 
         List<BoolExpr> equal =
         [
@@ -133,7 +135,7 @@ internal static class ProductEncoder
         ];
         equal.AddRange(inputs
             .Where(static i => i.Shared.ByRef)
-            .Select(i => context.MkEq(oldSide.Final(i.Shared.Old, i.Term), newSide.Final(i.Shared.New, i.Term))));
+            .Select(i => context.MkEq(oldSide.Final(i.Shared.Old, i.Shared.Var, i.Term), newSide.Final(i.Shared.New, i.Shared.Var, i.Term))));
         equal.Add(context.MkEq(oldSide.Trace, newSide.Trace));
 
         return new ProductEncoding(
@@ -149,6 +151,20 @@ internal static class ProductEncoder
             oldSide.Terms,
             newSide.Terms);
     }
+
+    /// <summary>
+    /// The maps the heap at a call ranges over (ticket P1-005): each map a heap pair names on either side, with its type,
+    /// ordered by name and then type. Each is a by-ref parameter of the side that pairs it, so it has a shared input.
+    /// </summary>
+    public static ImmutableArray<TraceEncoder.HeapMap> HeapMaps(IEnumerable<IrCall> calls) =>
+    [
+        .. calls
+            .SelectMany(static c => c.Heap)
+            .Select(static h => new TraceEncoder.HeapMap(h.Map, h.Before.Type))
+            .Distinct()
+            .OrderBy(static m => m.Name, StringComparer.Ordinal)
+            .ThenBy(static m => SortMapper.Name(m.Type), StringComparer.Ordinal),
+    ];
 
     /// <summary>One side's parameter names and the input term each is bound to.</summary>
     private static Dictionary<string, Expr> Bound(ImmutableArray<(SharedParameter Shared, Expr Term)> inputs, Func<SharedParameter, IrParameter?> side) =>
@@ -190,6 +206,8 @@ internal static class ProductEncoder
         private readonly Dictionary<string, Expr> constants = new(StringComparer.Ordinal);
         private readonly Dictionary<IrBlockId, BoolExpr> reach = [];
         private readonly Dictionary<IrBlockId, BitVecExpr> countOut = [];
+        private readonly ImmutableArray<Expr> heapInputs;
+        private readonly Dictionary<IrBlockId, Expr[]> heapOut = [];
         private readonly Dictionary<IrBlockId, List<(IrBlockId From, BoolExpr Taken)>> incoming = [];
         private readonly List<(IrBlockId Block, IrTerminator Exit)> exits = [];
         private readonly List<(BoolExpr Reach, IReadOnlyList<Expr> Events)> events = [];
@@ -203,12 +221,14 @@ internal static class ProductEncoder
             SortMapper sorts,
             (TraceEncoder Calls, PureEncoder Pures) functions,
             Dictionary<string, Expr> inputs,
+            ImmutableArray<Expr> heapInputs,
             Dictionary<string, int> exceptionTypes)
         {
             this.side = side;
             this.sorts = sorts;
             (calls, pures) = functions;
             this.inputs = inputs;
+            this.heapInputs = heapInputs;
             Procedure = procedure;
             context = sorts.Context;
 
@@ -259,18 +279,23 @@ internal static class ProductEncoder
                 .Aggregate(none, (rest, e) => context.MkITE(reach[e.Block], Var(((IrReturn)e.Exit).Value!), rest));
 
         /// <summary>
-        /// The final value of <paramref name="parameter"/>: its version at the exit taken, else
-        /// <paramref name="input"/>, which is also the value on a side without the parameter.
+        /// The final value of <paramref name="parameter"/>, the shared input <paramref name="shared"/>: its version at the exit
+        /// taken, else, on a side with no by-ref parameter for it, the version threaded through this side's calls when a
+        /// heap pair names it (ticket P1-005), else <paramref name="input"/>.
         /// </summary>
-        public Expr Final(IrParameter? parameter, Expr input) =>
-            exits
+        public Expr Final(IrParameter? parameter, IrVar shared, Expr input)
+        {
+            int threaded = calls.Heap.IndexOf(new TraceEncoder.HeapMap(shared.Name, shared.Type));
+            return exits
                 .AsEnumerable()
                 .Reverse()
                 .Aggregate(input, (rest, e) =>
                 {
                     IrOut? @out = Outs(e.Exit).FirstOrDefault(o => string.Equals(o.Param.Name, parameter?.Var.Name, StringComparison.Ordinal));
-                    return @out is null ? rest : context.MkITE(reach[e.Block], Var(@out.Final), rest);
+                    Expr? value = @out is not null ? Var(@out.Final) : threaded < 0 ? null : heapOut[e.Block][threaded];
+                    return value is null ? rest : context.MkITE(reach[e.Block], value, rest);
                 });
+        }
 
         private static ImmutableArray<IrOut> Outs(IrTerminator exit) => exit is IrReturn ret ? ret.Outs : ((IrThrow)exit).Outs;
 
@@ -319,25 +344,29 @@ internal static class ProductEncoder
             BitVecExpr count = context.MkBVConst(Name("cnt." + Label(block.Id)), 32);
             reach.Add(block.Id, reached);
             List<(IrBlockId From, BoolExpr Taken)> predecessors = incoming.GetValueOrDefault(block.Id, []);
+            Expr[] heap = [.. calls.Heap.Select((m, i) => context.MkConst(Name($"heap.{i.ToString(CultureInfo.InvariantCulture)}.{Label(block.Id)}"), sorts.Sort(m.Type)))];
             if (entry)
             {
                 Assert(reached);
                 Assert(context.MkEq(count, context.MkBV(0, 32)));
+                AssertAll(heap.Select((h, i) => context.MkEq(h, heapInputs[i])));
             }
             else
             {
                 Assert(context.MkEq(reached, context.MkOr(predecessors.Select(static p => p.Taken))));
                 Assert(context.MkEq(count, Merge(predecessors, p => countOut[p.From])));
+                AssertAll(heap.Select((h, i) => context.MkEq(h, Merge(predecessors, p => heapOut[p.From][i]))));
             }
 
             List<Expr> blockEvents = [];
             foreach (IrInstruction instruction in block.Instructions)
             {
-                EncodeInstruction(instruction, predecessors, reached, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)), blockEvents);
+                EncodeInstruction(instruction, predecessors, reached, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)), blockEvents, heap);
             }
 
             events.Add((reached, blockEvents));
             countOut.Add(block.Id, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)));
+            heapOut.Add(block.Id, heap);
             EncodeTerminator(block, reached);
         }
 
@@ -348,7 +377,13 @@ internal static class ProductEncoder
                 .Reverse()
                 .Aggregate(value(predecessors[^1]), (rest, p) => context.MkITE(p.Taken, value(p), rest));
 
-        private void EncodeInstruction(IrInstruction instruction, List<(IrBlockId From, BoolExpr Taken)> predecessors, BoolExpr reached, BitVecExpr position, List<Expr> blockEvents)
+        private void AssertAll(IEnumerable<BoolExpr> assertions) => assertions.ToList().ForEach(Assert);
+
+        /// <summary>
+        /// Encodes one instruction. <paramref name="heap"/> is the version of each heap map a call reads when it does not pair
+        /// it; a call replaces every entry with its new version of that map (ticket P1-005).
+        /// </summary>
+        private void EncodeInstruction(IrInstruction instruction, List<(IrBlockId From, BoolExpr Taken)> predecessors, BoolExpr reached, BitVecExpr position, List<Expr> blockEvents, Expr[] heap)
         {
             switch (instruction)
             {
@@ -368,22 +403,8 @@ internal static class ProductEncoder
                     Define(phi.Target, Merge([.. predecessors.Where(p => phi.Incoming.Any(i => i.From == p.From))], p => Var(phi.Incoming.First(i => i.From == p.From).Value)));
                     break;
                 case IrCall call:
-                    {
-                        (Expr? result, BoolExpr threw, Expr @event) = calls.Call(side, call, [.. call.Args.Select(a => (a.Type, Var(a)))], position);
-                        if (call.Target is not null)
-                        {
-                            Define(call.Target, result!);
-                        }
-
-                        if (call.Threw is not null)
-                        {
-                            Define(call.Threw, threw);
-                        }
-
-                        blockEvents.Add(@event);
-                        break;
-                    }
-
+                    blockEvents.Add(EncodeCall(call, position, heap));
+                    break;
                 case IrPure pure:
                     {
                         (Expr result, ImmutableArray<BoolExpr> threw) = pures.Apply(side, pure, [.. pure.Args.Select(Var)]);
@@ -407,6 +428,37 @@ internal static class ProductEncoder
                     opaques.Add((side, (IrOpaque)instruction, reached));
                     break;
             }
+        }
+
+        /// <summary>
+        /// Defines a call's result, <c>threw</c> flag and the <c>after</c> of each heap pair, replaces every entry of
+        /// <paramref name="heap"/> with the call's new version of that map (ticket P1-005), and returns its trace event.
+        /// </summary>
+        private Expr EncodeCall(IrCall call, BitVecExpr position, Expr[] heap)
+        {
+            IrHeapPair?[] pairs = [.. calls.Heap.Select(m => call.Heap.FirstOrDefault(h => string.Equals(h.Map, m.Name, StringComparison.Ordinal) && h.Before.Type == m.Type))];
+            ImmutableArray<Expr> read = [.. pairs.Select((p, i) => p is null ? heap[i] : Var(p.Before))];
+            (Expr? result, BoolExpr threw, Expr @event, ImmutableArray<Expr> written) = calls.Call(side, call, [.. call.Args.Select(a => (a.Type, Var(a)))], position, read);
+            if (call.Target is not null)
+            {
+                Define(call.Target, result!);
+            }
+
+            if (call.Threw is not null)
+            {
+                Define(call.Threw, threw);
+            }
+
+            for (int i = 0; i < heap.Length; i++)
+            {
+                heap[i] = written[i];
+                if (pairs[i] is { } pair)
+                {
+                    Define(pair.After, written[i]);
+                }
+            }
+
+            return @event;
         }
 
         private void Define(IrVar target, Expr value) => Assert(context.MkEq(Var(target), value));

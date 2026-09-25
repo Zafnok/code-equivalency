@@ -312,6 +312,60 @@ public sealed class IrValidatorTests
           ret %a
         """;
 
+    private const string HeapCall = """
+        proc "T::M" (%a: bv32, ref %field.C.x: map<bv32, bv32>, ref %field.C.y: map<bv32, bv32>, ref %r: bv32, %m: map<bv32, bv32>) entry B0
+        B0:
+          call "F"(%a) heap({{pairs}})
+          ret outs(%field.C.x = %field.C.x, %field.C.y = %field.C.y, %r = %r)
+        """;
+
+    [Fact]
+    public void IrCallValidator_AcceptsOnePairPerByRefMap()
+    {
+        Assert.Empty(Ids(HeapCall.Replace("{{pairs}}", "\"field.C.x\" %field.C.x -> %x1: map<bv32, bv32>, \"field.C.y\" %field.C.y -> %y1: map<bv32, bv32>", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void IrCallValidator_RejectsARepeatedMap()
+    {
+        Assert.Equal(
+            [IrDiagnosticIds.HeapPairRepeated],
+            Ids(HeapCall.Replace("{{pairs}}", "\"field.C.x\" %field.C.x -> %x1: map<bv32, bv32>, \"field.C.x\" %field.C.x -> %x2: map<bv32, bv32>", StringComparison.Ordinal)));
+    }
+
+    [Theory]
+    [InlineData("\"field.C.z\" %field.C.x -> %x1: map<bv32, bv32>")]
+    [InlineData("\"r\" %r -> %r1: bv32")]
+    [InlineData("\"m\" %m -> %m1: map<bv32, bv32>")]
+    [InlineData("\"field.C.x\" %a -> %x1: map<bv32, bv32>")]
+    [InlineData("\"field.C.x\" %field.C.x -> %x1: map<bv32, bool>")]
+    public void IrCallValidator_RejectsAPairThatIsNotAByRefMapOfItsType(string pair)
+    {
+        Assert.Equal([IrDiagnosticIds.HeapPairMap], Ids(HeapCall.Replace("{{pairs}}", pair, StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void IrCallValidator_RejectsAnAfterThatReusesAnSsaName()
+    {
+        Assert.Equal(
+            [IrDiagnosticIds.MultipleAssignment],
+            Ids(HeapCall.Replace("{{pairs}}", "\"field.C.x\" %field.C.x -> %field.C.y: map<bv32, bv32>", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void IrCallValidator_RejectsABeforeThatIsNotDefined()
+    {
+        IrProcedure p = IrText.Parse(HeapCall.Replace("{{pairs}}", "\"field.C.x\" %field.C.x -> %x1: map<bv32, bv32>", StringComparison.Ordinal));
+        IrCall call = (IrCall)p.Blocks[0].Instructions[0];
+        IrVar stranger = new("stranger", call.Heap[0].Before.Type);
+        IrProcedure changed = p with
+        {
+            Blocks = [p.Blocks[0] with { Instructions = [call with { Heap = [call.Heap[0] with { Before = stranger }] }] }],
+        };
+
+        Assert.Equal([IrDiagnosticIds.UseNotDominated], Ids(changed));
+    }
+
     private static string[] Ids(string text) => Ids(IrText.Parse(text));
 
     private static string[] Ids(IrProcedure procedure) => [.. IrValidator.Validate(procedure).Select(static d => d.Id)];

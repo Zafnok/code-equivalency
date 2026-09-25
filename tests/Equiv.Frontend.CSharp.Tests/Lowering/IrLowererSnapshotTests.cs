@@ -188,6 +188,18 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task UsingDeclaration() => Dump("static int M(System.IO.Stream s) { using System.IO.Stream t = s; return t.ReadByte(); }");
 
+    /// <summary>Ticket P1-005: a call with one field map live, first touched after it; the read takes the call's new version.</summary>
+    [Fact]
+    public Task CallWithOneHeapMap() => Dump("int f; void Foo() { } int M() { Foo(); return f; }");
+
+    /// <summary>Ticket P1-005: a call with a field map and an array map live, each paired, in name order.</summary>
+    [Fact]
+    public Task CallWithTwoHeapMaps() => Dump("int f; void Foo() { } int M(int[] a) { a[0] = f; Foo(); return a[0] + f; }");
+
+    /// <summary>Ticket P1-005: a call in a body with no field or array access has no heap pairs, so its dump is unchanged.</summary>
+    [Fact]
+    public Task CallWithNoHeapMap() => Dump("static int Foo(int a) => a; static int M(int a) { int b = Foo(a); return Foo(b); }");
+
     /// <summary>Ticket P2-003 acceptance criterion 1: a class-constrained type parameter's <c>default</c> is the null element of its sort, with its <c>isNull</c> shadow set.</summary>
     [Fact]
     public Task DefaultValueOfATypeParameter() => Dump("static T M<T>(bool has, T value) where T : class => has ? value : default;");

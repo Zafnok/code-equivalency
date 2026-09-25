@@ -46,7 +46,7 @@ public sealed class IrGenPropertyTests(ITestOutputHelper output)
     public void EveryViolationRuleIsGenerated()
     {
         HashSet<string> seen = new(IrGen.Violations.Array[200].Single().Select(static v => v.ExpectedId), StringComparer.Ordinal);
-        Assert.Equal(10, seen.Count);
+        Assert.Equal(12, seen.Count);
     }
 
     [Fact]

@@ -118,8 +118,9 @@ public static class IrInterpreter
         public IrOutcome? Visit(IrCall instruction)
         {
             ImmutableArray<IrValue> args = [.. instruction.Args.Select(Get)];
+            ImmutableArray<IrHeapSlice> heap = [.. instruction.Heap.Select(h => new IrHeapSlice(h.Map, Get(h.Before)))];
             int position = trace.Count;
-            trace.Add(new IrCallRecord(instruction.Callee, args));
+            trace.Add(new IrCallRecord(instruction.Callee, args) { Heap = heap });
             if (abstraction?.Invoke(instruction.Callee) == true)
             {
                 Tainting(instruction.Callee);
@@ -129,12 +130,23 @@ public static class IrInterpreter
             {
                 taintedEvents.Add(position);
             }
-            IrCallResult result = oracle.Answer(instruction.Callee, args, instruction.Target?.Type, position);
+            IrCallResult result = oracle.Answer(instruction.Callee, args, instruction.Target?.Type, position, heap);
             if (instruction.Target is not null)
             {
                 Set(instruction.Target, result.Value?.Type == instruction.Target.Type
                     ? result.Value
                     : throw new InvalidOperationException($"Call oracle answered {instruction.Callee.Value} with a value that is not of type {IrText.Type(instruction.Target.Type)}."));
+            }
+
+            ImmutableArray<IrValue> after = result.Heap.IsEmpty ? [.. heap.Select(static h => h.Value)] : result.Heap;
+            if (!after.Select(static v => v.Type).SequenceEqual(instruction.Heap.Select(static h => h.After.Type)))
+            {
+                throw new InvalidOperationException($"Call oracle answered {instruction.Callee.Value} with a heap that is not one value per slice it was given, of the slice's type.");
+            }
+
+            foreach ((IrHeapPair pair, IrValue value) in instruction.Heap.Zip(after))
+            {
+                Set(pair.After, value);
             }
 
             return instruction.Threw is null ? null : Set(instruction.Threw, new IrBoolValue(result.Threw));

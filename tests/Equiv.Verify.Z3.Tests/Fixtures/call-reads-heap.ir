@@ -1,0 +1,19 @@
+# Divergent
+# ADR 0018, P1-005: x = 1; Save(this); x = 0; against x = 2; Save(this); x = 0;. Save may read x, so the heap at the call is part of its event, although the results and the final heaps can agree.
+proc "C::M()" (ref %field.C.x: map<sort "C", bv32>, %this: sort "C") entry B0
+B0:
+  %one: bv32 = const bv32 1
+  %x1: map<sort "C", bv32> = mapwrite %field.C.x, %this, %one
+  call "C::Save(C)"(%this) heap("field.C.x" %x1 -> %x2: map<sort "C", bv32>)
+  %zero: bv32 = const bv32 0
+  %x3: map<sort "C", bv32> = mapwrite %x2, %this, %zero
+  ret outs(%field.C.x = %x3)
+---
+proc "C::M()" (ref %field.C.x: map<sort "C", bv32>, %this: sort "C") entry B0
+B0:
+  %two: bv32 = const bv32 2
+  %x1: map<sort "C", bv32> = mapwrite %field.C.x, %this, %two
+  call "C::Save(C)"(%this) heap("field.C.x" %x1 -> %x2: map<sort "C", bv32>)
+  %zero: bv32 = const bv32 0
+  %x3: map<sort "C", bv32> = mapwrite %x2, %this, %zero
+  ret outs(%field.C.x = %x3)

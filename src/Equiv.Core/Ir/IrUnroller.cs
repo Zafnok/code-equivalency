@@ -110,7 +110,13 @@ public static class IrUnroller
         IrOverflows overflows => overflows with { Target = var(overflows.Target), A = var(overflows.A), B = var(overflows.B) },
         IrUnary unary => unary with { Target = var(unary.Target), A = var(unary.A) },
         IrPhi phi => phi with { Target = var(phi.Target), Incoming = [.. phi.Incoming.Select(i => (i.From, var(i.Value)))] },
-        IrCall call => call with { Target = Optional(call.Target, var), Threw = Optional(call.Threw, var), Args = [.. call.Args.Select(var)] },
+        IrCall call => call with
+        {
+            Target = Optional(call.Target, var),
+            Threw = Optional(call.Threw, var),
+            Args = [.. call.Args.Select(var)],
+            Heap = [.. call.Heap.Select(h => h with { Before = var(h.Before), After = var(h.After) })],
+        },
         IrMapRead read => read with { Target = var(read.Target), Map = var(read.Map), Key = var(read.Key) },
         IrMapWrite write => write with { Target = var(write.Target), Map = var(write.Map), Key = var(write.Key), Value = var(write.Value) },
         IrPure pure => pure with { Target = var(pure.Target), Throws = [.. pure.Throws.Select(t => t with { Flag = var(t.Flag) })], Args = [.. pure.Args.Select(var)] },

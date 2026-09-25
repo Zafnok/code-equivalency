@@ -9,7 +9,8 @@ namespace Equiv.TestSupport;
 /// lowers to SSA. Six bv32 slots: parameters <c>a</c> and <c>b</c>, slot 2 (a <c>ref</c>
 /// parameter <c>r</c> or a local <c>c</c>), and locals <c>v0</c> to <c>v2</c>. With a heap, a
 /// <c>ref</c> map parameter <c>field.Gen.x</c> (bv32 to bv32) is read by <see cref="Load"/> and
-/// written by <see cref="Store"/>; without one, a load is its key and a store does nothing.
+/// written by <see cref="Store"/>, and every <see cref="Call"/> reads and writes it (ticket P1-005); without one, a load
+/// is its key and a store does nothing.
 /// </summary>
 internal static class IrGenAst
 {

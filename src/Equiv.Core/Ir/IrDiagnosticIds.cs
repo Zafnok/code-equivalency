@@ -32,4 +32,10 @@ public static class IrDiagnosticIds
 
     /// <summary>An exit's outs are not every by-ref parameter once, in declaration order, with matching types.</summary>
     public const string ExitOuts = "IR010";
+
+    /// <summary>An <see cref="IrCall"/>'s heap pairs name one map more than once (ticket P1-005).</summary>
+    public const string HeapPairRepeated = "IR011";
+
+    /// <summary>A heap pair's map is not a by-ref parameter of map type, or its before or after is not of that type (ticket P1-005).</summary>
+    public const string HeapPairMap = "IR012";
 }

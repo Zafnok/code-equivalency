@@ -16,7 +16,7 @@ public sealed class TraceEncoderTests
     public void RuntimeChangedFunctionsCarryASidePrefixedOwnerTag()
     {
         using Context context = new();
-        TraceEncoder encoder = new(new SortMapper(context), [], []);
+        TraceEncoder encoder = new(new SortMapper(context), [], [], []);
         CallIdentity callee = new("Svc::F(int)", RuntimeChanged: true);
 
         FuncDecl old = encoder.ResultFunction(Side.Old, callee, [], new IrBitVec(32));
@@ -30,7 +30,7 @@ public sealed class TraceEncoderTests
     public void TheSameCalleeAndSignatureReuseTheSameFunctionDeclaration()
     {
         using Context context = new();
-        TraceEncoder encoder = new(new SortMapper(context), [], []);
+        TraceEncoder encoder = new(new SortMapper(context), [], [], []);
         CallIdentity callee = new("Svc::F(int)");
 
         FuncDecl first = encoder.ResultFunction(Side.Old, callee, [], new IrBitVec(32));

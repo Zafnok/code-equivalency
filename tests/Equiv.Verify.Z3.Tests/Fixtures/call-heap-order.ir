@@ -1,0 +1,13 @@
+# Divergent
+# P1-005: the same call and the same field read; the old side reads before the call, the new side after it, and the call may write the field.
+proc "C::M()" (ref %field.C.f: map<sort "C", bv32>, %this: sort "C") -> bv32 entry B0
+B0:
+  %x: bv32 = mapread %field.C.f, %this
+  call "C::Foo()"(%this) heap("field.C.f" %field.C.f -> %f1: map<sort "C", bv32>)
+  ret %x outs(%field.C.f = %f1)
+---
+proc "C::M()" (ref %field.C.f: map<sort "C", bv32>, %this: sort "C") -> bv32 entry B0
+B0:
+  call "C::Foo()"(%this) heap("field.C.f" %field.C.f -> %f1: map<sort "C", bv32>)
+  %x: bv32 = mapread %f1, %this
+  ret %x outs(%field.C.f = %f1)

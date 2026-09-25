@@ -51,6 +51,13 @@ public sealed class IrRecordEqualityTests
     public void PureResult() => AssertStructural(() => new IrPureResult(One, [true, false]), r => r with { Threw = [true] });
 
     [Fact]
+    public void CallHeap() =>
+        AssertStructural(() => new IrCall(A, Threw: null, new CallIdentity("F"), [B]) { Heap = [new IrHeapPair("m", A, B)] }, c => c with { Heap = [] });
+
+    [Fact]
+    public void CallResult() => AssertStructural(() => new IrCallResult(One, Threw: false) { Heap = [One] }, r => r with { Heap = [] });
+
+    [Fact]
     public void Switch() =>
         AssertStructural(() => new IrSwitch(A, [(One, new IrBlockId(1))], new IrBlockId(2)), s => s with { Cases = [] });
 
@@ -65,6 +72,10 @@ public sealed class IrRecordEqualityTests
 
     [Fact]
     public void CallRecord() => AssertStructural(() => new IrCallRecord(new CallIdentity("F"), [One]), r => r with { Arguments = [] });
+
+    [Fact]
+    public void CallRecordHeap() =>
+        AssertStructural(() => new IrCallRecord(new CallIdentity("F"), [One]) { Heap = [new IrHeapSlice("m", One)] }, r => r with { Heap = [] });
 
     [Fact]
     public void Run() =>

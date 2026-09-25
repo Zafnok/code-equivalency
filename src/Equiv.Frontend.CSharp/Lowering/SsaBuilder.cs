@@ -57,14 +57,20 @@ internal sealed class SsaBuilder
 
     public void Store(IrBlockId block, Variable variable, IrVar value) => drafts[block.Value].Steps.Add(new StoreStep(variable, value));
 
+    /// <summary>Stores <paramref name="value"/> to <paramref name="variable"/> before anything else in <paramref name="block"/>: an input's initial version.</summary>
+    public void StoreFirst(IrBlockId block, Variable variable, IrVar value) => drafts[block.Value].Steps.Insert(0, new StoreStep(variable, value));
+
     public void Terminate(IrBlockId block, IrTerminator terminator) => drafts[block.Value].Terminator = terminator;
 
     /// <summary>
     /// Pass 2. Blocks unreachable from <paramref name="entry"/> are dropped. Every exit's outs name the
-    /// value of each <paramref name="outs"/> variable live there. A read with no reaching definition
-    /// becomes an <see cref="IrOpaque"/> with reason <c>undefined</c> at <paramref name="bodySpan"/>.
+    /// value of each <paramref name="outs"/> variable live there. Every <see cref="IrCall"/> reads and writes each
+    /// <paramref name="heap"/> variable, in order (ticket P1-005): it gets a heap pair of the version live at the call and a
+    /// fresh one that the call defines. The heap is only known once the whole body is lowered, which is why the pairs are
+    /// added here and not when the call is emitted. A read with no reaching definition becomes an
+    /// <see cref="IrOpaque"/> with reason <c>undefined</c> at <paramref name="bodySpan"/>.
     /// </summary>
-    public ImmutableArray<IrBlock> Build(IrBlockId entry, ImmutableArray<(Variable Variable, IrVar Param)> outs, SourceSpan bodySpan)
+    public ImmutableArray<IrBlock> Build(IrBlockId entry, ImmutableArray<(Variable Variable, IrVar Param)> outs, ImmutableArray<Variable> heap, SourceSpan bodySpan)
     {
         span = bodySpan;
         List<IrBlockId> order = [];
@@ -79,7 +85,7 @@ internal sealed class SsaBuilder
         foreach (IrBlockId block in order)
         {
             TrySeal(block);
-            Fill(drafts[block.Value], outs);
+            Fill(drafts[block.Value], outs, heap);
             filled.Add(block);
             foreach (IrBlockId successor in Successors(drafts[block.Value].Terminator!))
             {
@@ -116,17 +122,20 @@ internal sealed class SsaBuilder
         postorder.Add(block);
     }
 
-    private void Fill(Draft draft, ImmutableArray<(Variable Variable, IrVar Param)> outs)
+    private void Fill(Draft draft, ImmutableArray<(Variable Variable, IrVar Param)> outs, ImmutableArray<Variable> heap)
     {
-        foreach (IStep step in draft.Steps)
+        for (int i = 0; i < draft.Steps.Count; i++)
         {
-            switch (step)
+            switch (draft.Steps[i])
             {
                 case LoadStep load:
                     alias[load.Temp] = ReadVariable(load.Variable, draft.Id);
                     break;
                 case StoreStep store:
                     WriteVariable(store.Variable, draft.Id, Name(store.Variable, Resolve(store.Value)));
+                    break;
+                case Instruction { Value: IrCall call }:
+                    draft.Steps[i] = new Instruction(call with { Heap = [.. heap.Select(v => HeapPair(v, draft.Id))] });
                     break;
             }
         }
@@ -137,6 +146,15 @@ internal sealed class SsaBuilder
             IrThrow exit => exit with { Outs = Outs(outs, draft.Id) },
             var other => other,
         };
+    }
+
+    /// <summary>The version of <paramref name="variable"/> a call in <paramref name="block"/> reads, and a fresh one it leaves.</summary>
+    private IrHeapPair HeapPair(Variable variable, IrBlockId block)
+    {
+        IrVar before = ReadVariable(variable, block);
+        IrVar after = new($"{variable.Template.Name}.{(counter++).ToString(CultureInfo.InvariantCulture)}", variable.Template.Type, variable.Template.SourceName);
+        WriteVariable(variable, block, after);
+        return new IrHeapPair(variable.Template.Name, before, after);
     }
 
     private ImmutableArray<IrOut> Outs(ImmutableArray<(Variable Variable, IrVar Param)> outs, IrBlockId block) =>
@@ -269,7 +287,13 @@ internal sealed class SsaBuilder
         IrBinary b => b with { Target = Resolve(b.Target), A = Resolve(b.A), B = Resolve(b.B) },
         IrUnary u => u with { Target = Resolve(u.Target), A = Resolve(u.A) },
         IrOverflows o => o with { Target = Resolve(o.Target), A = Resolve(o.A), B = Resolve(o.B) },
-        IrCall c => c with { Target = c.Target is null ? null : Resolve(c.Target), Threw = Resolve(c.Threw!), Args = [.. c.Args.Select(Resolve)] },
+        IrCall c => c with
+        {
+            Target = c.Target is null ? null : Resolve(c.Target),
+            Threw = Resolve(c.Threw!),
+            Args = [.. c.Args.Select(Resolve)],
+            Heap = [.. c.Heap.Select(h => h with { Before = Resolve(h.Before) })],
+        },
         IrMapRead r => r with { Target = Resolve(r.Target), Map = Resolve(r.Map), Key = Resolve(r.Key) },
         IrMapWrite w => w with { Target = Resolve(w.Target), Map = Resolve(w.Map), Key = Resolve(w.Key), Value = Resolve(w.Value) },
         IrPure p => p with { Target = Resolve(p.Target), Throws = [.. p.Throws.Select(t => t with { Flag = Resolve(t.Flag) })], Args = [.. p.Args.Select(Resolve)] },

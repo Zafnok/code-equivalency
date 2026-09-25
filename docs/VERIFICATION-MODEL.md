@@ -60,7 +60,7 @@ Instructions:
 | `IrOverflows(var, overflowOp, a, b)` | Bool: would the checked operation overflow; `overflowOp` in SAdd, UAdd, SSub, USub, SMul, UMul, SDiv |
 | `IrUnary(var, op, a)` | negation, not, conversions with explicit target width and signedness |
 | `IrPhi(var, [(block, var)])` | SSA merge |
-| `IrCall(var?, threw?, callee identity, args)` | opaque call; appended to the observable call trace; `threw` is a Bool output. Result, `threw` and heap effect are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018; heap in and out land in P1-005) |
+| `IrCall(var?, threw?, callee identity, args, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005). Result, `threw` and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018) |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
 | `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025) |
 | `IrOpaque(var?, reason, sourceSpan, fingerprint?, reads)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024) |
@@ -119,16 +119,12 @@ final heap is an observable like any `ref` parameter. When only one side of a pa
 final value against the shared input. IR variable names take only letters, digits, `_`, `.`
 and `$`, which is why these names are spelled with dots.
 
-Two gaps the M2-004 heap model leaves open, stated here so a later ticket does not assume
-otherwise (ADR 0015). ADR 0018 schedules both fixes, and M3-007's, before M3-003, so no
-build that reports sample verdicts carries them. An `IrCall` does not havoc any `field.*` map, so a call's effect on the
-heap is not modelled and a pair that differs only in where it reads a field around a call is not
-distinguished; ticket P1-005 closes this. The second gap, array maps keyed per array *variable*
+Two gaps the M2-004 heap model left open (ADR 0015), both closed before M3-003 as ADR 0018
+schedules. The first, a call that neither read nor wrote the heap, so that a pair differing only in
+where it reads a field around a call was not distinguished, is closed by P1-005: every `IrCall`
+reads and writes each `field.*` and `array.*` map its procedure touches. The second gap, array maps keyed per array *variable*
 so that two variables holding one array were two independent slices, is closed by P1-006: the
-element and length maps are keyed by the array reference. The open gap follows the M2-004
-acceptance criteria, is unsound in general, and can only produce a false Equivalent, silently: no
-`IrOpaque`, no `properties.opaqueNodes` entry, no Unknown. Until P1-005 lands, M3-001's soundness
-harness (section 7) is not evidence that the C# frontend is sound.
+element and length maps are keyed by the array reference.
 
 ## 3. Lowering rules (C#)
 
@@ -214,7 +210,11 @@ side-specific functions. An `IrOpaque` whose fingerprint occurs on both sides is
 exactly such a call, with identity `opaque:<fingerprint>` and its reads as arguments (ADR
 0024). An `IrPure` is a function of its arguments only, shared unless runtime-sensitive (ADR
 0025). The call trace is a bounded list compared element-wise; an event
-is (identity, arguments, heap at the call).
+is (identity, arguments, heap at the call). The heap at a call ranges over every map a heap pair
+names on either side, in name order (P1-005). A call reads a map it pairs at its `before`; any
+other map it reads at the version the encoder threads through that side's calls, which starts at
+the shared input and is replaced by each call's new version of the map. A side that does not have
+the map as a parameter reports that threaded version as its final value.
 
 ### 5.1 Loop ladder
 
