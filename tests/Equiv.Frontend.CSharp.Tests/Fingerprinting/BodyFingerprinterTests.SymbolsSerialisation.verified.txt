@@ -1,0 +1,238 @@
+﻿Ordinary static=False async=False returns=System.Collections.Generic.List`1<System.String> (None System.Object, None System.Decimal, None System.String, None dynamic, None Method0, None System.Collections.Generic.List`1<System.Int32>, Ref System.Int32)
+MethodBodyOperation syntax=MethodDeclaration implicit=False
+  Block syntax=Block implicit=False
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L0:None System.Int32[]
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            ArrayCreation syntax=ImplicitArrayCreationExpression implicit=False type=System.Int32[]
+              Literal syntax=ImplicitArrayCreationExpression implicit=True type=System.Int32 const=2
+              ArrayInitializer syntax=ArrayInitializerExpression implicit=False
+                Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=1
+                Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=2
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L1:None System.Func`2<System.Int32,System.Int32>
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            DelegateCreation syntax=SimpleLambdaExpression implicit=True type=System.Func`2<System.Int32,System.Int32>
+              AnonymousFunction syntax=SimpleLambdaExpression implicit=False symbols=F2(async=False None System.Int32) -> System.Int32
+                Block syntax=MultiplyExpression implicit=True
+                  Return syntax=MultiplyExpression implicit=True
+                    Binary syntax=MultiplyExpression implicit=False type=System.Int32 context=unchecked
+                      ParameterReference syntax=IdentifierName implicit=False type=System.Int32 symbols=A3
+                      Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=2
+    LocalFunction syntax=LocalFunctionStatement implicit=False symbols=F4(async=False None T5) -> System.Int32
+      Block syntax=ArrowExpressionClause implicit=False
+        Return syntax=SimpleMemberAccessExpression implicit=True
+          PropertyReference syntax=SimpleMemberAccessExpression implicit=False type=System.Int32 symbols=System.String::get_Length()
+            PropertyReference syntax=SimpleMemberAccessExpression implicit=False type=System.String symbols=System.Reflection.MemberInfo::get_Name()
+              TypeOf syntax=TypeOfExpression implicit=False type=System.Type symbols=T5
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L6:None System.Decimal
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            Unary syntax=UnaryMinusExpression implicit=False type=System.Decimal context=unchecked
+              ParameterReference syntax=IdentifierName implicit=False type=System.Decimal symbols=P1
+    ExpressionStatement syntax=ExpressionStatement implicit=False
+      CompoundAssignment syntax=AddAssignmentExpression implicit=False type=System.Decimal context=unchecked
+        LocalReference syntax=IdentifierName implicit=False type=System.Decimal symbols=L6:None System.Decimal
+        ParameterReference syntax=IdentifierName implicit=False type=System.Decimal symbols=P1
+    ExpressionStatement syntax=ExpressionStatement implicit=False
+      Increment syntax=PostIncrementExpression implicit=False type=System.Decimal context=unchecked
+        LocalReference syntax=IdentifierName implicit=False type=System.Decimal symbols=L6:None System.Decimal
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L7:None N.C
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            Conversion syntax=NumericLiteralExpression implicit=True type=N.C symbols=N.C::op_Implicit(int) context=unchecked
+              Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=5
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L8:None System.Char
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            Literal syntax=CharacterLiteralExpression implicit=False type=System.Char const=120
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L9:None System.String
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            Conversion syntax=NullLiteralExpression implicit=True type=System.String const=null context=unchecked
+              Literal syntax=NullLiteralExpression implicit=False const=null
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L10:None System.Nullable`1<System.Int64>
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            Conversion syntax=CastExpression implicit=True type=System.Nullable`1<System.Int64> context=unchecked
+              Conversion syntax=CastExpression implicit=False type=System.Nullable`1<System.Int32> const=null context=unchecked
+                Literal syntax=NullLiteralExpression implicit=False const=null
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L11:None System.DayOfWeek
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            FieldReference syntax=SimpleMemberAccessExpression implicit=False type=System.DayOfWeek const=1 symbols=System.DayOfWeek::Monday
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L12:None System.Boolean
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            Binary syntax=LogicalAndExpression implicit=False type=System.Boolean context=unchecked
+              Binary syntax=LogicalAndExpression implicit=False type=System.Boolean context=unchecked
+                Binary syntax=LogicalAndExpression implicit=False type=System.Boolean context=unchecked
+                  Binary syntax=LogicalAndExpression implicit=False type=System.Boolean context=unchecked
+                    Binary syntax=LogicalAndExpression implicit=False type=System.Boolean context=unchecked
+                      IsPattern syntax=IsPatternExpression implicit=False type=System.Boolean
+                        ParameterReference syntax=IdentifierName implicit=False type=System.Object symbols=P0
+                        DeclarationPattern syntax=DeclarationPattern implicit=False symbols=System.String, L13:None System.String
+                      Binary syntax=GreaterThanExpression implicit=False type=System.Boolean context=unchecked
+                        PropertyReference syntax=SimpleMemberAccessExpression implicit=False type=System.Int32 symbols=System.String::get_Length()
+                          LocalReference syntax=IdentifierName implicit=False type=System.String symbols=L13:None System.String
+                        Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=1
+                    IsPattern syntax=IsPatternExpression implicit=False type=System.Boolean
+                      ParameterReference syntax=IdentifierName implicit=False type=System.Object symbols=P0
+                      RecursivePattern syntax=RecursivePattern implicit=False symbols=N.C
+                        PropertySubpattern syntax=Subpattern implicit=False
+                          FieldReference syntax=IdentifierName implicit=False type=System.Int32 symbols=N.C::field
+                            InstanceReference syntax=IdentifierName implicit=True type=N.C
+                          RelationalPattern syntax=RelationalPattern implicit=False symbols=System.Int32 context=GreaterThan
+                            Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=0
+                  IsPattern syntax=IsPatternExpression implicit=False type=System.Boolean
+                    LocalReference syntax=IdentifierName implicit=False type=System.Int32[] symbols=L0:None System.Int32[]
+                    ListPattern syntax=ListPattern implicit=False symbols=System.Int32[], System.Array::get_Length()
+                      ConstantPattern syntax=ConstantPattern implicit=False symbols=System.Int32
+                        Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=1
+                      SlicePattern syntax=SlicePattern implicit=False symbols=System.Int32[]
+                IsPattern syntax=IsPatternExpression implicit=False type=System.Boolean
+                  ParameterReference syntax=IdentifierName implicit=False type=System.Object symbols=P0
+                  NegatedPattern syntax=NotPattern implicit=False symbols=System.Object
+                    ConstantPattern syntax=ConstantPattern implicit=False symbols=System.Object
+                      Conversion syntax=NullLiteralExpression implicit=True type=System.Object const=null context=unchecked
+                        Literal syntax=NullLiteralExpression implicit=False const=null
+              IsType syntax=IsExpression implicit=False type=System.Boolean symbols=System.Int32
+                ParameterReference syntax=IdentifierName implicit=False type=System.Object symbols=P0
+    ExpressionStatement syntax=ExpressionStatement implicit=False
+      EventAssignment syntax=AddAssignmentExpression implicit=False type=System.Void
+        EventReference syntax=SimpleMemberAccessExpression implicit=False type=System.EventHandler symbols=N.C::Changed
+          InstanceReference syntax=ThisExpression implicit=False type=N.C
+        DelegateCreation syntax=ParenthesizedLambdaExpression implicit=True type=System.EventHandler
+          AnonymousFunction syntax=ParenthesizedLambdaExpression implicit=False symbols=F14(async=False None System.Object, None System.EventArgs) -> void
+            Block syntax=Block implicit=False
+              Return syntax=Block implicit=True
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L15:None System.Func`1<System.String>
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            DelegateCreation syntax=SimpleMemberAccessExpression implicit=True type=System.Func`1<System.String>
+              MethodReference syntax=SimpleMemberAccessExpression implicit=False symbols=System.String::ToString()
+                ParameterReference syntax=IdentifierName implicit=False type=System.String symbols=P2
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L16:None System.TypedReference
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            None syntax=MakeRefExpression implicit=False type=System.TypedReference context="__makeref ( r )"
+              ParameterReference syntax=IdentifierName implicit=False type=System.Int32 symbols=P6
+    ExpressionStatement syntax=ExpressionStatement implicit=False
+      DynamicInvocation syntax=InvocationExpression implicit=False type=dynamic context="d . Frob ( 1 )"
+        DynamicMemberReference syntax=SimpleMemberAccessExpression implicit=False type=dynamic context="d . Frob"
+          ParameterReference syntax=IdentifierName implicit=False type=dynamic symbols=P3
+        Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=1
+    ExpressionStatement syntax=ExpressionStatement implicit=False
+      SimpleAssignment syntax=SimpleAssignmentExpression implicit=False type=System.Int32
+        PropertyReference syntax=IdentifierName implicit=False type=System.Int32 symbols=N.C::set_Set(int)
+          InstanceReference syntax=IdentifierName implicit=True type=N.C
+        Binary syntax=AddExpression implicit=False type=System.Int32 context=unchecked
+          Binary syntax=AddExpression implicit=False type=System.Int32 context=unchecked
+            Binary syntax=AddExpression implicit=False type=System.Int32 context=unchecked
+              Binary syntax=AddExpression implicit=False type=System.Int32 context=unchecked
+                Binary syntax=AddExpression implicit=False type=System.Int32 context=unchecked
+                  Binary syntax=AddExpression implicit=False type=System.Int32 context=unchecked
+                    Binary syntax=AddExpression implicit=False type=System.Int32 context=unchecked
+                      PropertyReference syntax=ElementAccessExpression implicit=False type=System.Int32 symbols=N.C::get_Item(int)
+                        InstanceReference syntax=ThisExpression implicit=False type=N.C
+                        Argument syntax=Argument implicit=False symbols=#0
+                          Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=0
+                      FieldReference syntax=IdentifierName implicit=False type=System.Int32 symbols=N.C::field
+                        InstanceReference syntax=IdentifierName implicit=True type=N.C
+                    ArrayElementReference syntax=ElementAccessExpression implicit=False type=System.Int32
+                      FieldReference syntax=IdentifierName implicit=False type=System.Int32[,] symbols=N.C::grid
+                        InstanceReference syntax=IdentifierName implicit=True type=N.C
+                      Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=0
+                      Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=0
+                  SizeOf syntax=SizeOfExpression implicit=False type=System.Int32 const=4 symbols=System.Int32
+                Conversion syntax=IdentifierName implicit=True type=System.Int32 context=unchecked
+                  LocalReference syntax=IdentifierName implicit=False type=System.Char symbols=L8:None System.Char
+              Invocation syntax=InvocationExpression implicit=False type=System.Int32 symbols=F17(async=False None Method0) -> System.Int32
+                Argument syntax=Argument implicit=False symbols=A18
+                  ParameterReference syntax=IdentifierName implicit=False type=Method0 symbols=P4
+            Invocation syntax=InvocationExpression implicit=False type=System.Int32 symbols=F19(async=False None System.Int32) -> System.Int32
+              Argument syntax=Argument implicit=False symbols=A20
+                Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=1
+          Invocation syntax=InvocationExpression implicit=False type=System.Int32 symbols=System.Func`2::Invoke(int)<int,int>
+            LocalReference syntax=IdentifierName implicit=False type=System.Func`2<System.Int32,System.Int32> symbols=L1:None System.Func`2<System.Int32,System.Int32>
+            Argument syntax=Argument implicit=False symbols=#0
+              ParameterReference syntax=IdentifierName implicit=False type=System.Int32 symbols=P6
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L21:None System.Text.StringBuilder
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            ObjectCreation syntax=ObjectCreationExpression implicit=False type=System.Text.StringBuilder symbols=System.Text.StringBuilder::.ctor()
+    ExpressionStatement syntax=ExpressionStatement implicit=False
+      Invocation syntax=InvocationExpression implicit=False type=System.Text.StringBuilder symbols=System.Text.StringBuilder::Append(ref System.Text.StringBuilder.AppendInterpolatedStringHandler)
+        LocalReference syntax=IdentifierName implicit=False type=System.Text.StringBuilder symbols=L21:None System.Text.StringBuilder
+        Argument syntax=Argument implicit=False symbols=#0
+          InterpolatedStringHandlerCreation syntax=InterpolatedStringExpression implicit=True type=System.Text.StringBuilder.AppendInterpolatedStringHandler
+            ObjectCreation syntax=InterpolatedStringExpression implicit=True type=System.Text.StringBuilder.AppendInterpolatedStringHandler symbols=System.Text.StringBuilder.AppendInterpolatedStringHandler::.ctor(int,int,System.Text.StringBuilder)
+              Argument syntax=Argument implicit=True symbols=#0
+                Literal syntax=InterpolatedStringExpression implicit=True type=System.Int32 const=0
+              Argument syntax=Argument implicit=True symbols=#1
+                Literal syntax=InterpolatedStringExpression implicit=True type=System.Int32 const=1
+              Argument syntax=IdentifierName implicit=True symbols=#2
+                InterpolatedStringHandlerArgumentPlaceholder syntax=IdentifierName implicit=True
+            InterpolatedString syntax=InterpolatedStringExpression implicit=False type=System.String
+              InterpolatedStringAppendFormatted syntax=Interpolation implicit=True
+                Invocation syntax=Interpolation implicit=True type=System.Void symbols=System.Text.StringBuilder.AppendInterpolatedStringHandler::AppendFormatted`1(decimal)<decimal>
+                  InstanceReference syntax=InterpolatedStringExpression implicit=True type=System.Text.StringBuilder.AppendInterpolatedStringHandler
+                  Argument syntax=IdentifierName implicit=True symbols=#0
+                    ParameterReference syntax=IdentifierName implicit=False type=System.Decimal symbols=P1
+    Conditional syntax=IfStatement implicit=False
+      IsType syntax=IsExpression implicit=False type=System.Boolean symbols=System.String
+        ParameterReference syntax=IdentifierName implicit=False type=System.Object symbols=P0
+      Block syntax=Block implicit=False
+        Branch syntax=GotoStatement implicit=False symbols=B22
+    Try syntax=TryStatement implicit=False
+      Block syntax=Block implicit=False
+        ExpressionStatement syntax=ExpressionStatement implicit=False
+          SimpleAssignment syntax=SimpleAssignmentExpression implicit=False type=System.Int32
+            ParameterReference syntax=IdentifierName implicit=False type=System.Int32 symbols=P6
+            PropertyReference syntax=SimpleMemberAccessExpression implicit=False type=System.Int32 symbols=System.String::get_Length()
+              ParameterReference syntax=IdentifierName implicit=False type=System.String symbols=P2
+      CatchClause syntax=CatchClause implicit=False symbols=System.InvalidOperationException
+        Block syntax=Block implicit=False
+          Throw syntax=ThrowStatement implicit=False
+    Labeled syntax=LabeledStatement implicit=False symbols=B22
+      Return syntax=ReturnStatement implicit=False
+        ObjectCreation syntax=ObjectCreationExpression implicit=False type=System.Collections.Generic.List`1<System.String> symbols=System.Collections.Generic.List`1::.ctor()<string>
+          ObjectOrCollectionInitializer syntax=CollectionInitializerExpression implicit=False type=System.Collections.Generic.List`1<System.String>
+            Invocation syntax=IdentifierName implicit=True type=System.Void symbols=System.Collections.Generic.List`1::Add(string)<string>
+              InstanceReference syntax=QualifiedName implicit=True type=System.Collections.Generic.List`1<System.String>
+              Argument syntax=IdentifierName implicit=True symbols=#0
+                ParameterReference syntax=IdentifierName implicit=False type=System.String symbols=P2
+            Invocation syntax=InterpolatedStringExpression implicit=True type=System.Void symbols=System.Collections.Generic.List`1::Add(string)<string>
+              InstanceReference syntax=QualifiedName implicit=True type=System.Collections.Generic.List`1<System.String>
+              Argument syntax=InterpolatedStringExpression implicit=True symbols=#0
+                InterpolatedString syntax=InterpolatedStringExpression implicit=False type=System.String context=DefaultInterpolatedStringHandler
+                  Interpolation syntax=Interpolation implicit=False
+                    LocalReference syntax=IdentifierName implicit=False type=System.Decimal symbols=L6:None System.Decimal
+                  InterpolatedStringText syntax=InterpolatedStringText implicit=False
+                    Literal syntax=InterpolatedStringText implicit=True type=System.String const=" "
+                  Interpolation syntax=Interpolation implicit=False
+                    LocalReference syntax=IdentifierName implicit=False type=System.Boolean symbols=L12:None System.Boolean
+                  InterpolatedStringText syntax=InterpolatedStringText implicit=False
+                    Literal syntax=InterpolatedStringText implicit=True type=System.String const=" "
+                  Interpolation syntax=Interpolation implicit=False
+                    LocalReference syntax=IdentifierName implicit=False type=System.Nullable`1<System.Int64> symbols=L10:None System.Nullable`1<System.Int64>
+                  InterpolatedStringText syntax=InterpolatedStringText implicit=False
+                    Literal syntax=InterpolatedStringText implicit=True type=System.String const=" "
+                  Interpolation syntax=Interpolation implicit=False
+                    LocalReference syntax=IdentifierName implicit=False type=System.DayOfWeek symbols=L11:None System.DayOfWeek
+                  InterpolatedStringText syntax=InterpolatedStringText implicit=False
+                    Literal syntax=InterpolatedStringText implicit=True type=System.String const=" "
+                  Interpolation syntax=Interpolation implicit=False
+                    LocalReference syntax=IdentifierName implicit=False type=System.String symbols=L9:None System.String

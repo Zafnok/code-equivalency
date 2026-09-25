@@ -1,5 +1,5 @@
 # M3-015 Bound fingerprints, congruence without the solver, and the callee pairs every verdict assumes
-Status: todo
+Status: done (PR #175)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-014, M3-001, M3-009, M3-024
@@ -93,3 +93,46 @@ Fragment fingerprints on `IrOpaque` (M4-004). Caching verdicts across runs. Chan
 based on callee results. Transitive assumptions (a callee's callees). Call graph visualisation.
 
 ## Notes
+
+- Decision: `BodyFingerprint` lives in `Equiv.Core.Matching` beside `ProcedurePair`, since Core cannot see the frontend.
+  `ProofMethod` gains `Congruence`, the value criterion 5 puts in `properties.proofMethod`.
+- Decision: the serialisation (`Fingerprinting/BoundSerialiser`, one `OperationWalker`, about 280 lines) writes one line
+  per operation: its kind, syntax kind, `IsImplicit`, type, constant, the symbols it references, and its `checked`
+  context. `OperationKind.None` and `dynamic` operations also carry their source tokens, because their meaning is not in
+  their kind and symbols. The cost is congruence on a local rename inside them, never a false equality.
+- Decision: a property reference is spelled as its accessors' call identities, so `runtime-changes.json` rows that name
+  an accessor (`System.Text.Encoding::get_Default(`) match it. Fields and events are `Type::Name`, matched by prefix.
+- Decision: `suppressRuntimeChanges` is honoured by the runtime-sensitive flag, as it is by the IR's `RuntimeChanged`.
+- Decision: "floating-point arithmetic on x87" is any operation of type `float` or `double`, when the legacy
+  compilation's platform is `X86` or `AnyCpu32BitPreferred` (MSBuild's `PlatformTarget=x86`, and `AnyCPU` with
+  `Prefer32Bit`). That reads the compilation options, so no loader change was needed. A float-to-integer conversion
+  counts when its target is a nullable or an enum over an integral type too.
+- Decision: an interpolated string that is not a handler argument records how the compiler lowers it:
+  `DefaultInterpolatedStringHandler` when the language version is 10 or later and the type exists, else `string.Format`.
+- Decision: API-equivalence type entries rename types. A member entry renames the callee only when its adapter passes
+  every argument through unchanged. Any other adapter changes the arguments, which a fingerprint of the tree as bound
+  cannot express, so those calls keep their legacy name and the pair goes to the solver.
+- Decision: an auto-accessor (a property with a compiler-generated backing field) is fingerprinted as the body the
+  compiler generates for it, a header plus `AutoAccessor`. "No body" means `GetOperation` returns null and there is no
+  backing field (a partial definition, an abstract accessor). Without this, criterion 8's 14 accessors would stay Unknown.
+- Decision: a constructor that does not chain to `this(...)`, and a static constructor, serialise the field and property
+  initializers of their staticness first, because those run as part of the constructor.
+- Decision: the census's token-equality proxy (`SyntaxTokens`, `ProcedurePair.TokensEqual`, M3-030) is removed. A pair
+  is changed unless it is congruent, as VERIFICATION-MODEL section 6 said would happen at this ticket.
+- Decision: `CompareCommand.IsCongruent` is `internal` so the soundness property in `Equiv.Tests.Integration` checks
+  the production rule. The property lives there because it needs both the frontend and Z3, and that project now
+  references `Equiv.TestSupport` for `LoweringOracleGen`.
+- Decision: a matched pair whose lowering threw (P2-011) is still a matched pair for criterion 9. It has no result, so it
+  is always among `unprovenAssumptions`.
+- Surprise: `business-layer`'s `Describe` is not congruent. Its interpolated string binds `string.Format` on 4.8 and
+  `DefaultInterpolatedStringHandler` on .NET 10, which is exactly criterion 3's drift. No ticket lowers interpolated
+  strings, and M4-004's fragment fingerprints will differ for the same reason. The README says so.
+- Surprise: `OperationWalker` does not route `OperationKind.None` operations (`__makeref`) through `DefaultVisit`, so
+  the serialiser overrides `Visit` and recurses over `ChildOperations` itself.
+- Surprise: an expression-bodied member and the same logic in a block body are not congruent, because the implicit
+  `return` differs. That costs precision only.
+- Surprise: a call to a generic method has a callee identity with constructed parameter types and `<typeArgs>`, so it
+  never equals a matched pair's identity and is missing from `assumedCallees`. That comes from the existing identity
+  scheme and is left alone here.
+- Surprise: `CongruenceSampleTests` over `webapi-basic` needs the samples restored, as every sample test does
+  (`build.ps1 -Integration` does it).

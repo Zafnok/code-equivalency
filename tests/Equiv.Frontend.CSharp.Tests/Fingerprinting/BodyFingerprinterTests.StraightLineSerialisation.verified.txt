@@ -1,0 +1,31 @@
+﻿Ordinary static=False async=False returns=System.Int32 (None System.Int32, None System.Int64, None System.Boolean)
+MethodBodyOperation syntax=MethodDeclaration implicit=False
+  Block syntax=Block implicit=False
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L0:None System.Int32
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            Binary syntax=MultiplyExpression implicit=False type=System.Int32 context=unchecked
+              ParameterReference syntax=IdentifierName implicit=False type=System.Int32 symbols=P0
+              Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=3
+    VariableDeclarationGroup syntax=LocalDeclarationStatement implicit=False
+      VariableDeclaration syntax=VariableDeclaration implicit=False
+        VariableDeclarator syntax=VariableDeclarator implicit=False symbols=L1:None System.Int64
+          VariableInitializer syntax=EqualsValueClause implicit=False
+            Binary syntax=AddExpression implicit=False type=System.Int64 context=checked
+              ParameterReference syntax=IdentifierName implicit=False type=System.Int64 symbols=P1
+              Conversion syntax=IdentifierName implicit=True type=System.Int64 context=checked
+                LocalReference syntax=IdentifierName implicit=False type=System.Int32 symbols=L0:None System.Int32
+    Conditional syntax=IfStatement implicit=False
+      Binary syntax=LogicalAndExpression implicit=False type=System.Boolean context=unchecked
+        ParameterReference syntax=IdentifierName implicit=False type=System.Boolean symbols=P2
+        Binary syntax=GreaterThanExpression implicit=False type=System.Boolean context=unchecked
+          LocalReference syntax=IdentifierName implicit=False type=System.Int64 symbols=L1:None System.Int64
+          Conversion syntax=NumericLiteralExpression implicit=True type=System.Int64 const=10 context=unchecked
+            Literal syntax=NumericLiteralExpression implicit=False type=System.Int32 const=10
+      Block syntax=Block implicit=False
+        Return syntax=ReturnStatement implicit=False
+          LocalReference syntax=IdentifierName implicit=False type=System.Int32 symbols=L0:None System.Int32
+    Return syntax=ReturnStatement implicit=False
+      Conversion syntax=CastExpression implicit=False type=System.Int32 context=unchecked
+        LocalReference syntax=IdentifierName implicit=False type=System.Int64 symbols=L1:None System.Int64

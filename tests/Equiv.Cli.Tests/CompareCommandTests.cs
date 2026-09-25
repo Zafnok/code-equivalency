@@ -1058,6 +1058,175 @@ public sealed class CompareCommandTests
         }
     }
 
+    /// <summary>Ticket M3-015 acceptance criteria 5 and 6 (ADR 0024).</summary>
+    [Fact]
+    public void CongruentPairSkipsTheBackend()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        BodyFingerprint fingerprint = new("ab", RuntimeSensitive: false);
+        ProcedurePair pair = Pair(PairIdentity) with { OldFingerprint = fingerprint, NewFingerprint = fingerprint, EquivalencesApplied = ["webapi.ok"] };
+        FakeBackend backend = new(NoVerdicts);
+        InMemoryReportSink sink = new();
+
+        int exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: "unknown", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Empty(backend.Calls);
+        Run run = sink.Log!.Runs[0];
+        Result result = Assert.Single(run.Results);
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+        Assert.Equal(["webapi.ok"], result.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
+        Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
+        Assert.Contains("\"pairsCongruent\":1", census, StringComparison.Ordinal);
+        Assert.Contains("\"changedPairs\":0", census, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket M3-015 acceptance criterion 5: every other pair goes to the backend as before.</summary>
+    [Theory]
+    [InlineData("ab", false, "cd", false)]
+    [InlineData("ab", true, "ab", true)]
+    [InlineData("ab", false, "ab", true)]
+    [InlineData(null, false, "ab", false)]
+    [InlineData("ab", false, null, false)]
+    public void APairWhoseFingerprintsDifferOrAreRuntimeSensitiveGoesToTheBackend(string? oldHash, bool oldSensitive, string? newHash, bool newSensitive)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedurePair pair = Pair(PairIdentity) with
+        {
+            OldFingerprint = oldHash is null ? null : new BodyFingerprint(oldHash, oldSensitive),
+            NewFingerprint = newHash is null ? null : new BodyFingerprint(newHash, newSensitive),
+        };
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
+        InMemoryReportSink sink = new();
+
+        CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink);
+
+        Assert.Single(backend.Calls);
+        Assert.Equal("bounded", Assert.Single(sink.Log!.Runs[0].Results).GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>Ticket M3-015 acceptance criterion 5 (ADR 0029 decision 2): equal fingerprints do not make unbound code congruent.</summary>
+    [Fact]
+    public void AnUnboundMethodIsNeverCongruent()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        BodyFingerprint fingerprint = new("ab", RuntimeSensitive: false);
+        ProcedureIdentity other = new("T::Other()");
+        ProcedurePair unboundLegacy = Pair(PairIdentity) with { OldBody = UnboundBody(PairIdentity), OldFingerprint = fingerprint, NewFingerprint = fingerprint };
+        ProcedurePair unboundModern = Pair(other) with { NewBody = UnboundBody(other), OldFingerprint = fingerprint, NewFingerprint = fingerprint };
+        FakeBackend backend = new(NoVerdicts);
+        InMemoryReportSink sink = new();
+
+        CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([unboundLegacy, unboundModern], [], [], []))], backend, sink);
+
+        Assert.Empty(backend.Calls);
+        Assert.All(sink.Log!.Runs[0].Results, static r => Assert.Equal("unbound", r.GetProperty<string>("unknownReason")));
+        Assert.True(sink.Log.Runs[0].TryGetSerializedPropertyValue("loweringCensus", out string? census));
+        Assert.Contains("\"pairsCongruent\":0", census, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket M3-015 acceptance criteria 9 and 10 (ADR 0019).</summary>
+    [Fact]
+    public void Assumptions_ListMatchedCalleesOnly()
+    {
+        Dictionary<string, Result> results = AssumptionRun(
+            [
+                Caller("T::Total()", "T::Tax()", "System.Math::Abs(int)", "T::Broken()", "T::Tax()"),
+                Caller("T::Tax()"),
+            ],
+            new Dictionary<string, Verdict>(StringComparer.Ordinal) { ["T::Total()"] = new Equivalent(ProofMethod.Bounded), ["T::Tax()"] = new Equivalent(ProofMethod.Bounded) },
+            failures: [new LoweringFailure(new ProcedureIdentity("T::Broken()"), new ProcedureIdentity("T::Broken()"), new InvalidOperationException("boom"))]);
+
+        Assert.Equal(["T::Broken()", "T::Tax()"], results["T::Total()"].GetProperty<List<string>>("assumedCallees"), StringComparer.Ordinal);
+        Assert.Equal(["T::Broken()"], results["T::Total()"].GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+        Assert.False(results["T::Tax()"].TryGetProperty("assumedCallees", out List<string> _));
+    }
+
+    /// <summary>Ticket M3-015 acceptance criterion 9: a self-call is not an assumption (ADR 0019 clarification).</summary>
+    [Fact]
+    public void Assumptions_ExcludeSelfRecursion()
+    {
+        Dictionary<string, Result> results = AssumptionRun(
+            [Caller("T::Fact()", "T::Fact()")],
+            new Dictionary<string, Verdict>(StringComparer.Ordinal) { ["T::Fact()"] = new Unknown(UnknownReason.Recursion, "self-call") });
+
+        Assert.False(results["T::Fact()"].TryGetProperty("assumedCallees", out List<string> _));
+    }
+
+    /// <summary>Ticket M3-015 acceptance criterion 10.</summary>
+    [Fact]
+    public void UnprovenAssumptions_AreCalleesNotEquivalent()
+    {
+        Dictionary<string, Result> results = AssumptionRun(
+            [Caller("T::Total()", "T::Proved()", "T::Open()", "T::Changed()"), Caller("T::Proved()"), Caller("T::Open()"), Caller("T::Changed()")],
+            new Dictionary<string, Verdict>(StringComparer.Ordinal)
+            {
+                ["T::Total()"] = new Equivalent(ProofMethod.Bounded),
+                ["T::Proved()"] = new Equivalent(ProofMethod.LockstepInduction),
+                ["T::Open()"] = new Unknown(UnknownReason.Timeout, "5000ms"),
+                ["T::Changed()"] = new Divergent(Counterexample()),
+            });
+
+        Assert.Equal(["T::Changed()", "T::Open()", "T::Proved()"], results["T::Total()"].GetProperty<List<string>>("assumedCallees"), StringComparer.Ordinal);
+        Assert.Equal(["T::Changed()", "T::Open()"], results["T::Total()"].GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+        Assert.Equal("T::Total() is equivalent. Assumes callees equivalent; not proved for: T::Changed(), T::Open().", results["T::Total()"].Message.Text);
+    }
+
+    /// <summary>
+    /// Ticket M3-015: a congruent result assumes its callees like any other (ADR 0024 decision 1), and the assumption changes
+    /// neither its verdict nor the exit code, which the callee's own Divergent sets (ADR 0019).
+    /// </summary>
+    [Fact]
+    public void CongruentResult_ListsAssumedCallees()
+    {
+        BodyFingerprint fingerprint = new("ab", RuntimeSensitive: false);
+        int exitCode = ExitCodes.UsageError;
+        Dictionary<string, Result> results = AssumptionRun(
+            [Caller("T::Total()", "T::Tax()") with { OldFingerprint = fingerprint, NewFingerprint = fingerprint }, Caller("T::Tax()")],
+            new Dictionary<string, Verdict>(StringComparer.Ordinal) { ["T::Tax()"] = new Divergent(Counterexample()) },
+            onExit: code => exitCode = code);
+
+        Result total = results["T::Total()"];
+        Assert.Equal("congruence", total.GetProperty<string>("proofMethod"));
+        Assert.Equal(["T::Tax()"], total.GetProperty<List<string>>("assumedCallees"), StringComparer.Ordinal);
+        Assert.Equal(["T::Tax()"], total.GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+        Assert.Equal("EQ002", results["T::Tax()"].RuleId);
+        Assert.Equal(ExitCodes.Divergent, exitCode);
+    }
+
+    private static Dictionary<string, Result> AssumptionRun(
+        ImmutableArray<ProcedurePair> pairs, IReadOnlyDictionary<string, Verdict> verdicts, ImmutableArray<LoweringFailure> failures = default, Action<int>? onExit = null)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        MatchResult matchResult = new MatchResult(pairs, [], [], []) with { LoweringFailures = failures.IsDefault ? [] : failures };
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.UsageError;
+        CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(verdicts), sink));
+        onExit?.Invoke(exitCode);
+        return sink.Log!.Runs[0].Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal);
+    }
+
+    /// <summary>A pair whose bodies call each of <paramref name="callees"/> once, in order, and return nothing.</summary>
+    private static ProcedurePair Caller(string identity, params string[] callees)
+    {
+        string calls = string.Concat(callees.Select(static (callee, i) => $"  %c{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}: bv32 = call \"{callee}\"()\n"));
+        IrProcedure body = IrText.Parse($"proc \"{identity}\" () entry B0\nB0:\n{calls}  ret\n");
+        return new ProcedurePair(new ProcedureIdentity(identity), new ProcedureIdentity(identity), body, body);
+    }
+
     private static IrProcedure UnboundBody(ProcedureIdentity identity) => new(
         identity,
         [],

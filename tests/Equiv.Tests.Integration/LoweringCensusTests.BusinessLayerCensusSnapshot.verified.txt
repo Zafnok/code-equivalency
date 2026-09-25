@@ -6,7 +6,7 @@
   matchedPairs: 28,
   pairsWithoutOpaque: 6,
   pairsWholeBodyOpaque: 16,
-  pairsCongruent: 0,
+  pairsCongruent: 24,
   projectsSkipped: {
     legacy: 0,
     modern: 0
@@ -54,11 +54,12 @@
     }
   },
   changedPairs: 4,
-  changedPairsWithoutOpaque: 3,
+  changedPairsWithoutOpaque: 2,
   changedPairsWholeBodyOpaque: 0,
   changedReasonSets: {
-    : 3,
-    Binary+Conversion: 1
+    : 2,
+    Binary+Conversion: 1,
+    InterpolatedString: 1
   },
   runtimeChangeCalls: {
     callSites: {

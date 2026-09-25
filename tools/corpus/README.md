@@ -58,5 +58,5 @@ its `license` column), and none of their code is in this repository.
 
 `-Unchanged` matches files by relative path. A migration that renames folders (`eshop-manual`
 renames `eShopLegacyMVC` to `eShop.MVC`) therefore scores 0% even where contents match. Read
-the unchanged share for such pairs with that in mind, and prefer `pairsCongruent` once M3-015
-lands.
+the unchanged share for such pairs with that in mind, and prefer the census's `pairsCongruent`
+(M3-015).

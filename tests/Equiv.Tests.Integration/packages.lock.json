@@ -14,6 +14,12 @@
           "Microsoft.Testing.Platform": "2.2.2"
         }
       },
+      "CsCheck": {
+        "type": "Direct",
+        "requested": "[4.9.1, )",
+        "resolved": "4.9.1",
+        "contentHash": "rEmuFiG19sF8U4Ef/S79cu9HW4pUGraoCTkmYs0z7SvsGqGAVO3wCjxQPS0KQvPa1g2/w1wBbnAP6cDZKBFEcA=="
+      },
       "Meziantou.Analyzer": {
         "type": "Direct",
         "requested": "[3.0.290, )",
@@ -451,6 +457,13 @@
           "Equiv.Core": "[1.0.0, )",
           "Microsoft.CodeAnalysis.CSharp.Workspaces": "[5.9.0, )",
           "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.9.0, )"
+        }
+      },
+      "equiv.testsupport": {
+        "type": "Project",
+        "dependencies": {
+          "CsCheck": "[4.9.1, )",
+          "Equiv.Core": "[1.0.0, )"
         }
       },
       "equiv.verify.z3": {
