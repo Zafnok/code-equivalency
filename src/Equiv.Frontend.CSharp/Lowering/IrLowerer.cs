@@ -88,17 +88,6 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
-    /// Whether <paramref name="constructor"/>'s operation tree leaves out instance field or property initializers C# runs
-    /// ahead of its body: it does not chain to <c>this(...)</c>, which runs them itself, and its type declares one.
-    /// </summary>
-    private static bool OmitsFieldInitializers(IMethodSymbol constructor, ConstructorDeclarationSyntax declaration) =>
-        declaration.Initializer is not { RawKind: (int)SyntaxKind.ThisConstructorInitializer }
-        && constructor.ContainingType.GetMembers()
-            .Where(static m => !m.IsStatic)
-            .SelectMany(static m => m.DeclaringSyntaxReferences)
-            .Any(static r => r.GetSyntax() is VariableDeclaratorSyntax { Initializer: not null } or PropertyDeclarationSyntax { Initializer: not null });
-
-    /// <summary>
     /// Lowers <paramref name="body"/> as it is bound. It does not check for erroneous code; the symbol overload does, and
     /// is the one the frontend uses. Erroneous constructs reaching here lower to named opaques (<c>Invalid</c>, <c>rethrow</c>).
     /// </summary>
@@ -140,6 +129,17 @@ internal sealed class IrLowerer
         Debug.Assert(IrValidator.Validate(procedure).IsEmpty, "lowered IR must validate");
         return procedure;
     }
+
+    /// <summary>
+    /// Whether <paramref name="constructor"/>'s operation tree leaves out instance field or property initializers C# runs
+    /// ahead of its body: it does not chain to <c>this(...)</c>, which runs them itself, and its type declares one.
+    /// </summary>
+    private static bool OmitsFieldInitializers(IMethodSymbol constructor, ConstructorDeclarationSyntax declaration) =>
+        declaration.Initializer is not { RawKind: (int)SyntaxKind.ThisConstructorInitializer }
+        && constructor.ContainingType.GetMembers()
+            .Where(static m => !m.IsStatic)
+            .SelectMany(static m => m.DeclaringSyntaxReferences)
+            .Any(static r => r.GetSyntax() is VariableDeclaratorSyntax { Initializer: not null } or PropertyDeclarationSyntax { Initializer: not null });
 
     /// <summary>
     /// The C# parameters. One declared <c>@this</c> has the name <c>this</c>, which is the receiver's (ADR 0021), so it is
