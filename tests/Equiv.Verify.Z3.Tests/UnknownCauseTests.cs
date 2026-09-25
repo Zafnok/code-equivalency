@@ -1,4 +1,4 @@
-using Equiv.Core;
+﻿using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
@@ -83,6 +83,7 @@ public sealed class UnknownCauseTests
               opaque "Wide" at "A.cs" 4:20-4:29
               opaque "Near" at "A.cs" 4:5-4:9
               opaque "Near" at "A.cs" 4:5-4:9
+              opaque "Near" at "A.cs" 6:1-6:9
               ret
             """));
 
@@ -91,6 +92,7 @@ public sealed class UnknownCauseTests
                 new UnknownCause(Codebase.Legacy, "Late", new SourceSpan("Old.cs", 8, 1, 8, 9)),
                 new UnknownCause(Codebase.Modern, "Near", new SourceSpan("A.cs", 4, 5, 4, 9)),
                 new UnknownCause(Codebase.Modern, "Wide", new SourceSpan("A.cs", 4, 20, 4, 29)),
+                new UnknownCause(Codebase.Modern, "Near", new SourceSpan("A.cs", 6, 1, 6, 9)),
                 new UnknownCause(Codebase.Modern, "Late", new SourceSpan("A.cs", 9, 1, 9, 9)),
                 new UnknownCause(Codebase.Modern, "Other", new SourceSpan("B.cs", 1, 1, 1, 9)),
             ],
