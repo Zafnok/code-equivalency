@@ -13,6 +13,9 @@ M4-001 owns `foreach`, `using` and constructors, and M4-003 owns `lock`. This ti
   `no-body`. They are enumerated as procedures, so every auto-property on a DTO is a method-scope
   Unknown.
 - **`catch` with a `when` filter and a bare `catch`** (reason `catch-filter`).
+- **Constructors M4-001 left whole-body** (ADR 0029 clarification, M3-025): one that omits its
+  type's field initializers (reason `field-initializer`), a static constructor and a primary
+  constructor with base arguments (reason `ConstructorBodyOperation`).
 
 After this ticket none of these makes a whole body opaque.
 
@@ -43,7 +46,8 @@ VERIFICATION-MODEL sections 2 and 3; `docs/tickets/IOPERATION-COVERAGE.md`.
 3. A bare `catch` catches every thrown type in source order.
 4. A `when` filter that evaluates false passes the exception on. A filter that throws counts as
    false. Each has a snapshot and an interpreter test.
-5. The reasons `Block`, `no-body` and `catch-filter` no longer appear for these constructs.
+5. The reasons `Block`, `no-body`, `catch-filter`, `field-initializer` and `ConstructorBodyOperation`
+   no longer appear for these constructs.
    `WholeBodyReasonOwners` (M3-025) drops them, and IOPERATION-COVERAGE's rows say `lowered`.
 6. `business-layer`'s `pairsWholeBodyOpaque` does not rise, and it falls if the sample holds any of
    these constructs. Add one auto-property and one filtered `catch` to the sample if it holds
