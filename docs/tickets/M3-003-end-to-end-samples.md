@@ -2,10 +2,12 @@
 Status: todo
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: M2-004, M2-005, M2-006, M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, M3-024, M3-025, P1-005, P1-006 (ADR 0018: no sample
+Depends on: M0-012, M2-004, M2-005, M2-006, M2-007, M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, M3-024, M3-025, P1-005, P1-006 (ADR 0018: no sample
 verdicts ship with a known silent false Equivalent; ADRs 0024, 0026 and 0027: snapshots are taken
 with congruence, taint, Unknown locations and Unknown scope in place, so they are not rewritten
-again; ADR 0029: a partial load is contained before any snapshot records exit codes)
+again; ADR 0029: a partial load is contained before any snapshot records exit codes; M0-012: the differential
+soundness gate is green with an empty skip list before sample verdicts are approved; M2-007: the
+snapshots record EQ006 and congruence against the complete runtime-changes table)
 
 ## Goal
 Wire the real backend into the CLI, run every sample through `equiv compare`, check in

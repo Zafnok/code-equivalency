@@ -12,9 +12,9 @@ S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it 
 
 | Milestone | Planned | Actual | State |
 |---|---|---|---|
-| M0 Skeleton and gates | day 1 | 2026-09-18 to 2026-09-21, PRs 1 to 4, 12, 17, 18, 32, 68, 73, 76 | done |
+| M0 Skeleton and gates | day 1 | 2026-09-18 to 2026-09-21, PRs 1 to 4, 12, 17, 18, 32, 68, 73, 76 | done, except M0-012 (added 2026-09-24; needed by M3-003) |
 | M1 Core IR, samples, SARIF | days 2–3 | 2026-09-18, PRs 13, 15, 19, 20, 22 | done |
-| M2 C# frontend | days 3–5 | 2026-09-18 to 2026-09-20, PRs 24, 25, 27, 30, 59, 67 | done |
+| M2 C# frontend | days 3–5 | 2026-09-18 to 2026-09-20, PRs 24, 25, 27, 30, 59, 67 | done, except M2-007 (added 2026-09-24; needed by M3-003) |
 | M3 Z3 backend and shipping | days 5–7 | M3-001 PR #78 | next: M3-014 and M3-024, in parallel with M3-002 |
 | M4 Precision and first corpus run | after M3 | | order set by M3-022's corpus census |
 | M5 Agent surface (MCP) | after M3-004, parallel with M4 | | M5-001 written |
@@ -36,6 +36,36 @@ method or a line, and makes each Unknown say which (tickets M3-024, M3-025, M4-0
 that day on the corpus pair `eshop-upgrade-assistant` aborted with exit 4, as expected before
 M3-024. Sonar issue batches wait until M3-022's verdict, because they polish code whose future the
 census decides.
+
+The 2026-09-24 second-oracle review followed the census verdict ("continue"). It found three
+gaps that more solver work cannot close:
+- About 76% of Git Extensions' changed pairs contain an opaque node.
+- On the agent pairs, which are pure retargets, congruence decides nearly every verdict. It rests
+  on a 14-row, hand-picked `runtime-changes.json`, so any runtime change the table misses is a
+  silent false Equivalent.
+- Nothing yet checks a verdict against the code as the CLR runs it. Section 7's soundness harness
+  generates IR, and seeded recall waits for M4-007.
+
+Three proposed ADRs respond:
+- ADR 0035: the real runtimes are a second oracle. Execution measures the runtime table,
+  confirms counterexamples and bounds Unknowns, and never proves.
+- ADR 0036: a proposed invariant, contract or table row is a hypothesis until a checker admits
+  it, and relational callee contracts can replace unproven assumptions.
+- ADR 0037: an Unknown says whether the modern side can fail where the legacy side does not.
+
+Tickets were added to every milestone they belong to:
+- M0-012: a differential soundness gate over generated C# pairs.
+- M2-007: `runtime-changes.json` made complete against Microsoft's breaking-change pages.
+- M3-032 and M3-033: measure the BCL on both runtimes.
+- M4-009: counterexample replay.
+- M4-010: mechanical seeds on the corpus.
+- M5-002: an MCP `probe` tool.
+- P1-007 to P1-012: tested Unknowns, trace-mined invariants, callee contracts, two measuring
+  spikes (equality saturation, IL lowering) and failure refinement.
+- P2-018: a vacuous side is a load failure.
+
+M0-012 and M2-007 are MVP-blocking: M3-003 now needs both. M3-033, M4-009 and M4-010 are needed
+by M4-007.
 
 ### Carried forward from M0 to M2
 
@@ -101,6 +131,12 @@ Everything after this milestone runs under 100% coverage and full CI.
 - M0-011 (S) done, PR #76. Blocking mutation gate: `mutation.yml` fails below `--break-at 90` and is
   no longer `continue-on-error`; `Equiv.Cli` raised from 69% to 98%. Pulled forward from
   M3-004 criterion 5, since M3 is where the solver code lands.
+- M0-012 (L) Differential soundness gate: generated C# method pairs (one of them mutated) are
+  compiled and run, then verified by the real frontend and Z3. An observed divergence is never
+  Equivalent, a Divergent's model replays as a divergence, and a semantics-preserving mutation is
+  never Divergent. 200 pairs per PR, 5,000 nightly. Added 2026-09-24. It covers the gap between C#
+  and the verdict, which section 7's IR-level harness cannot see by construction. Needs M3-002,
+  M3-007, P1-006. M3-003 needs it.
 
 ## M1 — Core IR, samples, SARIF (days 2–3) — done
 
@@ -138,6 +174,10 @@ Everything after this milestone runs under 100% coverage and full CI.
 - M2-006 (M) done, PR #67. Runtime-changes table: `runtime-changes.json` of BCL members whose behaviour
   differs between .NET Framework and .NET 10 (ICU vs NLS, x87 vs SSE, hash randomisation);
   matched calls to them are EQ006, never assumed equal.
+- M2-007 (M) `runtime-changes.json` complete against Microsoft's breaking-change pages. Every
+  behavioural entry for .NET Core 3.0 to .NET 10 is a row or a reasoned exclusion in
+  `docs/runtime-changes-review.md`, and every row carries `source`. Added 2026-09-24: on retargets,
+  congruence is only as sound as this table (ADR 0024), and it has 14 rows. M3-003 needs it.
 
 ## M3 — Z3 backend and shipping (days 5–7)
 
@@ -209,6 +249,13 @@ tickets.
   was fixed and unit-tested on Linux, where the census cannot run.
 - P1-003, P1-005 and P1-006 are promoted into M3 (ADR 0018): a call reads and writes the heap,
   and arrays are keyed by value. P1-003 comes with them as their shared prerequisite.
+- M3-032 (L) `Equiv.Execute` and `tools/runtime-diff` (ADR 0035 decision 1). A BCL member is
+  called with generated arguments under .NET Framework 4.8 and .NET 10, in child processes built
+  from generated drivers, under five cultures, with each input run twice per side. Windows only.
+  Needs M2-007 and ADR 0035 accepted.
+- M3-033 (M) The census lists every BCL member a lowered body calls. `runtime-diff` runs on the
+  most-called ones from the corpus pairs, and the ones that differ become `measured` rows with a
+  witness. Needs M3-032, M3-030. M4-007 needs it.
 
 Where the tickets came from: the pre-M3 architecture review (ADRs 0018 to 0020) found three
 silent false-Equivalent paths in the spec and a precision gap. The 2026-09-23 feasibility review
@@ -233,8 +280,12 @@ Order:
 3. **Blast radius, before any snapshot is taken:** M3-015 (needs M3-014, M3-009, M3-024); M3-016
    (needs M3-014); M3-025 (needs M3-016, M3-024).
 4. **Linux parity, in parallel with 2 and 3:** M3-028 (needs M3-024) → M3-029.
-5. M3-003 (needs M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, M3-024, M3-025, P1-005,
-   P1-006) → M3-004 (also needs M3-027 and M3-029). M3-004 is the gate for M4-007, M5 and M6.
+5. **Second oracle, in parallel with 2 to 4:** M0-012 and M2-007 now (both independent; M3-003
+   needs both). Once ADR 0035 is accepted: M3-032 → M3-033. These don't block M3-004, but M4-007
+   needs M3-033.
+6. M3-003 (needs M0-012, M2-007, M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, M3-024,
+   M3-025, P1-005, P1-006) → M3-004 (also needs M3-027 and M3-029). M3-004 is the gate for M4-007,
+   M5 and M6.
 
 ## M4 — Precision and the first corpus run
 
@@ -260,9 +311,17 @@ changed-pair data, which is what reorders this list.
   Unlocks 25 changed pairs (7.9%).
 - M4-002 (L) `IrPure` for float, decimal and user-defined operators (ADR 0025). Needs M3-015,
   M3-016. Unlocks 19 changed pairs (6.0%).
-- M4-007 (S) First full corpus run in the skill's `full` and `seeded` modes. It scores all five ADR
-  0028 criteria, including 100% recall on seeded behaviour changes. Findings become tickets, not
-  fixes. Needs M3-004, M3-022, M4-001, M4-002, M4-004, P2-001.
+- M4-009 (M) `--execute`: every Divergent's model is replayed on both real runtimes, and
+  `properties.replay` is `reproduced`, `not-reproduced` or `not-constructible`. It never changes
+  a verdict (ADR 0035 decision 2). Needs M3-032, M3-003, M3-016. Added 2026-09-24. It is outside
+  the 5% bar, which ranks precision tickets, and it makes a Divergent something a user can run.
+- M4-010 (M) Seeded at scale: M0-012's mutation operators applied to corpus methods by a seeder
+  in `tools/corpus/`, so seeded recall is measured over hundreds of seeds. A seed counts as a miss
+  only when tests or replay confirm the behaviour changed. Needs M0-012. Added 2026-09-24.
+- M4-007 (S) First full corpus run in the skill's `full` and `seeded` modes, plus a `full` run with
+  `--execute`. It scores all five ADR 0028 criteria, including 100% recall on seeded behaviour
+  changes, over the hand-written and mechanical seeds. Findings become tickets, not fixes. Needs
+  M3-004, M3-022, M3-033, M4-001, M4-002, M4-004, M4-009, M4-010, P2-001.
 
 ## P2 — Census findings (M3-022, M3-031)
 
@@ -299,6 +358,10 @@ ticket id (not listed again here). P2-015 is a `corpus.ps1` finding from the sam
 - P2-017 (S) A dereference is null-checked where the CLR checks it, after the value, index or
   arguments, not before them (a false-Equivalent path). Found in P1-006, not by a census. Needs
   P1-006.
+- P2-018 (S) A loaded project that declares types but yields zero procedures is skipped with
+  reason `no-procedures` and exits 4, instead of reporting a clean, empty side. Found from P2-016's
+  data: ShortestPaths' modern side reported 100% loaded with 0 procedures. P2-016 finds that
+  repo's cause; this is the general guard. Needs M3-024.
 
 ## M5 — Agent surface (MCP)
 
@@ -308,6 +371,9 @@ needs only a shippable binary, so it can run alongside M4.
 - M5-001 (M) `equiv mcp`: an MCP server over stdio in the same binary and container, with
   `compare` and `lower_only` tools that return the SARIF log. Needs M3-004. A remote (HTTP)
   transport waits for the hosted tier.
+- M5-002 (M) A `probe` tool: the agent names a matched pair and supplies arguments, and gets both
+  runtimes' outcomes. It is never a verdict, and it is registered only on Windows (ADRs 0035 and
+  0036). Needs M5-001, M4-009.
 
 ## M6 — Hosted tier on Container Apps
 
@@ -320,8 +386,12 @@ keys or quotas exist. It can run alongside M4 and M5.
   script. Needs M3-004 (which needs M3-029, so the Linux image can load solutions).
 - Later, unwritten until M6-001 lands: queue-triggered executions, blob inputs, an HTTP API with
   keys and quotas, and `equiv mcp` over Streamable HTTP (ADR 0033).
+- No execution oracle in the hosted tier. ADR 0035's `--execute` needs Windows and .NET Framework
+  4.8, and Container Apps runs Linux containers only. Hosted results therefore never carry
+  `replay` or `differentialTesting`. Revisit only if a Windows compute option is chosen by a new
+  ADR, which would also need a sandboxing decision, because `--execute` runs customer code.
 
-## P1 — Loop ladder rungs 4 and 5 (first post-MVP milestone, tickets written)
+## P1 — Beyond the solver: loop ladder rungs 4 and 5, and the second oracle (first post-MVP milestone, tickets written)
 
 - P1-001 (L) Constrained Horn clause encoding solved by Z3 Spacer for non-aligned loops.
 - P1-002 (M) LLM-proposed coupling invariants, Z3-checked; pluggable model, off by default.
@@ -333,6 +403,27 @@ keys or quotas exist. It can run alongside M4 and M5.
   shared by both sides (ADRs 0015, 0018).
 - P1-006 (L) (promoted into M3) Array element and length maps keyed by the array value instead of the array
   variable, so two variables holding one array are one slice (ADR 0015).
+- P1-007 (L) Tested Unknowns: with `--execute`, a constructible Unknown pair runs on generated
+  inputs until the Good-Turing discovery probability (Böhme et al., FSE 2021) falls below a target.
+  It stays EQ003 with `properties.differentialTesting`. An observed divergence is EQ002 with
+  `proofMethod: observed` (ADR 0035 decision 3). Needs M4-009. This is the first post-MVP ticket:
+  it gives the stated likelihood figure for code the solver cannot decide.
+- P1-008 (M) Trace-mined coupling invariants: `IrInterpreter` traces propose, P1-002's rung checks.
+  On by default because nothing leaves the machine (ADR 0036). Needs P1-002, P1-007.
+- P1-009 (L) Caller-sufficient relational callee contracts. A changed callee that the caller
+  cannot observe moves from `unprovenAssumptions` to `contractsUsed` (ADR 0036 decision 2). Needs
+  M3-015, P1-005, P1-002.
+- P1-010 (M) Spike: would equality saturation (Peggy, egg) close changed pairs that congruence and
+  Z3 cannot? It measures on Git Extensions and writes an ADR only if the share is at least 5% of
+  changed pairs. Needs M3-015, M4-004.
+- P1-011 (M) Spike: how much of the opaque tail disappears if the fallback lowers from IL
+  (ICSharpCode.Decompiler's ILAst)? It measures, and writes an ADR against ADR 0003 only if the
+  gain is at least 5% and compiler shape drift is small. Needs M4-001, M4-002, M4-004, P2-001.
+- P1-012 (M) Failure refinement: every Unknown reports whether the modern side can newly fail,
+  and whether it removed a failure (ADR 0037). Needs M3-016, M3-025.
+
+Order after M4-007: P1-007 first. Then P1-012 and the two spikes (cheap, and they decide their
+own futures). Then P1-001 → P1-002 → P1-008, and P1-009.
 
 P1-005 and P1-006 are the two soundness limits ADR 0015 names. ADR 0018 moves both ahead
 of M3-003, so no build that reports sample verdicts carries them. Until they land, an
@@ -357,3 +448,22 @@ are unchanged; a later census that shows more changed pairs can move any of thes
 - Java frontend (Eclipse JDT sidecar) reusing Core, Verify, Cli unchanged.
 - Web UI: SARIF viewer + CFG split pane (React Flow). Only after users ask.
 - SonarQube: confirm `sonar.sarifReportPaths` ingestion of EQ* rules; GitHub Code Scanning upload step in `action.yml`.
+
+From the 2026-09-24 second-oracle review, unticketed until a result above asks for them:
+- Shadowing the residual in staging or production: generate a Scientist.NET experiment, or a
+  Diffy configuration per routed endpoint, for each remaining Unknown. This is a new output
+  surface beyond SARIF, so it needs an ADR against ADR 0006.
+- Coverage-guided generation for P1-007 (SharpFuzz): an ADR 0002 row, once plain generation's
+  discovery probability visibly plateaus.
+- A second solver (cvc5, BSD-3-Clause, as a separate process) cross-checking Equivalent
+  verdicts, with Alethe proof certificates checked by Carcara. Low priority: M0-012 and M4-009
+  catch encoding bugs, which are far likelier than solver bugs.
+- Stronger string solving (cvc5 strings, OSTRICH) for string-heavy line-of-business code, if
+  M4-007 shows string opaques dominating the residual.
+- ARDiff-style refinement (Badihi et al., FSE 2020): start with unchanged fragments as
+  uninterpreted functions and refine only on spurious counterexamples. It extends ADR 0024's shared
+  fragments.
+- Abstract semantic differencing (Partush and Yahav, OOPSLA 2014): relational abstract domains
+  for loops where the ladder and CHC time out.
+- Partition verdicts (PASDA, Glock et al., JSS 2024): Equivalent on some input partitions and
+  Divergent on others. ADR 0037 rejected this for now.

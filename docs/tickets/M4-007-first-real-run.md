@@ -2,9 +2,11 @@
 Status: todo
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: M3-004, M3-022, M4-001, M4-002, M4-003, M4-004, M4-005, M4-006, M4-008
-(without them the run is mostly `Unknown(opaque)` and says little; M3-022's census may drop
-precision tickets that its histogram shows are not worth their effort, and edits this line)
+Depends on: M3-004, M3-022, M3-033, M4-001, M4-002, M4-004, M4-009, M4-010, P2-001
+(without the precision tickets the run is mostly `Unknown(opaque)` and says little. The
+2026-09-24 census moved M4-003, M4-005, M4-006 and M4-008 to the post-MVP backlog. M3-033,
+M4-009 and M4-010 came from the 2026-09-24 second-oracle review (ADR 0035): a measured runtime
+table, replayed counterexamples, and seeded recall over mechanical seeds)
 
 ## Goal
 Run the full tool on the public corpus (ADR 0028), exactly as a user would after an agent migrated
@@ -22,8 +24,11 @@ corpus.)
    - the repo's own test results on both sides (`verify_command` from the manifest);
    - unchanged share, lowerable share, project load rate, line-scoped Unknown share and seeded
      recall (ADR 0028);
-   - wall-clock time.
-3. Seeded recall is 100%: no seeded change is reported Equivalent. Any miss is written first, as
+   - wall-clock time;
+   - `replay` counts by value, from a third run of `full` with `--execute` (M4-009); every
+     `not-reproduced` result is a ticket, as in criterion 3.
+3. Seeded recall is 100%, over the hand-written seeds and M4-010's confirmed mechanical seeds: no
+   seeded change is reported Equivalent. Any miss is written first, as
    a `P2` ticket titled `soundness:` with the seed id, and reported to the user before anything
    else.
 4. Every test that passes on the legacy side and fails on the modern side is listed. Next to it
