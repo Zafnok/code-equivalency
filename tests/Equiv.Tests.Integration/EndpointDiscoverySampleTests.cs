@@ -28,9 +28,10 @@ public sealed class EndpointDiscoverySampleTests
 
         MatchResult result = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, TestContext.Current.CancellationToken).Match;
 
-        ProcedurePair pair = Assert.Single(result.Pairs);
+        // Find (ticket M3-009) is the sample's second action.
+        Assert.Equal(["GET /api/orders/find/{id}", "GET /api/orders/{id}"], result.Pairs.Select(static p => p.New.Value).Order(StringComparer.Ordinal), StringComparer.Ordinal);
+        ProcedurePair pair = result.Pairs.Single(static p => string.Equals(p.New.Value, "GET /api/orders/{id}", StringComparison.Ordinal));
         Assert.Equal("GET /api/orders/{id}", pair.Old.Value);
-        Assert.Equal("GET /api/orders/{id}", pair.New.Value);
         Assert.Empty(result.Added);
         Assert.Empty(result.Removed);
         Assert.Empty(result.Ambiguous);
@@ -45,7 +46,7 @@ public sealed class EndpointDiscoverySampleTests
         string modern = Directory.GetFiles(Path.Combine(SamplesRoot, "webapi-basic", "modern"), "*.slnx").Single();
 
         MatchResult result = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, TestContext.Current.CancellationToken).Match;
-        ProcedurePair pair = Assert.Single(result.Pairs);
+        ProcedurePair pair = result.Pairs.Single(static p => string.Equals(p.New.Value, "GET /api/orders/{id}", StringComparison.Ordinal));
 
         string dump = $"""
             legacy:

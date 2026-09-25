@@ -137,9 +137,11 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
 Migration-specific normalisations (applied to both sides before matching):
 
 - `System.Web` vs `Microsoft.AspNetCore` attribute routes map to one route identity.
-- `HttpResponseMessage` / `IHttpActionResult` vs `IActionResult` map to one result
-  identity (status code observed, body opaque). This is done by `api-equivalences.json`
-  type and member entries (ADR 0020, ticket M3-009), not by a separate normaliser.
+- `IHttpActionResult` vs `IActionResult` map to one result identity (status code observed,
+  body opaque). This is done by `api-equivalences.json` type and member entries (ADR 0020,
+  ticket M3-009), not by a separate normaliser, and like every catalogue entry it is applied
+  to the legacy side only. `HttpResponseMessage` has no entry: an action returning it stays
+  Divergent unless the user maps it.
 - Namespace and type rename maps come from `equiv.config.json`.
 - BCL API changes are NOT auto-equated (`WebClient` vs `HttpClient` calls are different
   identities and therefore Divergent unless the user maps them). False alarms are

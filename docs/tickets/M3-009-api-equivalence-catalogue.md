@@ -106,3 +106,39 @@ Explicit conversions in adapters. Differential testing of entries on both runtim
 EF6 → EF Core, WCF, `System.Web` request/response APIs.
 
 ## Notes
+- Decision: a fourth `src/` file, `ApiEquivalences/ApiArgument.cs`, holds one adapter item. The
+  repo keeps one top-level type per file (Meziantou MA0048), and a public nested type trips CA1034.
+  `ApiEquivalence` is a single record with `IsType`; a type entry keeps its names in `Legacy`/`Modern`.
+- Decision: the receiver of an instance legacy call is argument 0, as the ticket already says for
+  an extension call. Without that, `String::Split` (instance on both sides) cannot address `s`.
+- Decision: an entry applies only when its adapter uses every source argument and every position
+  it names exists. That is how "element count differs" is detected, so the table needs no count
+  field. An array passed straight to a `params` parameter (`s.Split(arr)`) is not addressable,
+  because the adapter addresses elements only.
+- Decision: `Ok<T>(T)` is matched on the exact `CallIdentity`, which includes the type argument, so
+  the shipped entry is `webapi.ok-of-int` (`Ok`1(int)<int>`). `Ok(dto)` or `Ok(string)` stays
+  Divergent (a false alarm, not a false proof). Covering every `T` needs a pattern in `legacy`,
+  which is beyond "positions and constants" (size guard).
+- Decision: an adapter constant is its JSON literal's text with an IR type of `bool`, `bv<n>` or a
+  sort name. A sort constant is the element `TypeMapper.Constant` gives a C# constant with the
+  same invariant text, so `{"const": 0, "type": "System.StringSplitOptions"}` is exactly the
+  modern side's default `StringSplitOptions.None`.
+- Decision: a type entry counts as applied when a legacy sort name is mapped by it, so
+  `equivalencesApplied` lists type entries too (the `webapi-basic` README names them).
+- Decision: `VerificationResult` gains `EquivalencesApplied` and `CompareCommand` copies it from
+  the pair, because the SARIF writer only sees `VerificationResult`s (two files the ticket's Files
+  list does not name).
+- Decision: a rewritten call's identity is checked against `runtime-changes.json` as the modern
+  member it becomes, the same flag the modern side's own call gets.
+- Decision: `Find` has routes (`find/{id:int}`, `find/{id}`), so it matches as
+  `GET /api/orders/find/{id}` like `Get` does.
+- Decision: VERIFICATION-MODEL section 3's result-identity bullet named `HttpResponseMessage`
+  and sat under "applied to both sides". Neither held, so the bullet now says the catalogue is
+  legacy-only and `HttpResponseMessage` has no entry. Section 6 already matched.
+- Verified end to end with the CLI: `api-drift` gives `Parts` EQ001 and `HasX` EQ002 (the
+  counterexample is a null `s`: legacy returns, modern throws `NullReferenceException`), and
+  `webapi-basic` gives `Find` EQ001. Each result lists its entries.
+- A fresh worktree needs the samples restored before the integration tests can load them
+  (`MSBuild -t:Restore` for the legacy side, `dotnet restore` for the modern side, as
+  `build.ps1` does). On a first run, parallel tests loading the same fresh sample once hit an
+  `obj/*.AssemblyReference.cache` file lock. It passed on rerun.
