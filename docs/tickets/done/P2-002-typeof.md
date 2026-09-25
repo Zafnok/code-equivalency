@@ -1,5 +1,5 @@
 # P2-002 `typeof(T)` is a shared synthesised input, not opaque
-Status: todo
+Status: done (PR #183)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-010
@@ -33,3 +33,11 @@ One lowering arm plus one `HeapInputs` entry. Anything more, stop.
 Reflection members on the `Type` (they are ordinary property reads, M3-010).
 
 ## Notes
+
+Decision: `typeof(T)` for a closed `T` is a plain scalar `In` input of `System.Type` sort read
+directly (like `this`), not a map indexed by the operand (unlike `cast.<From>.<To>`), since there
+is nothing to index by — one input per closed `T`. Its nullness is asserted provably-false in
+`Nullness()` (alongside `IObjectCreationOperation`/`IInstanceReferenceOperation`), not
+over-approximated through the `null.<Sort>` map as a cast conversion's result is, because the
+ticket states it is non-null and .NET guarantees a `typeof` result is never null. Decided per
+`equiv-decide`; no ADR needed (representation detail, not an architectural choice).

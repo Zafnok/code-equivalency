@@ -86,10 +86,13 @@ field touched, `array.<Sort>` from an array reference to its elements by bv32 in
 `length.<Sort>` from an array reference to its length, per array sort indexed, keyed by the
 reference like `null.<Sort>` so that two variables holding one array share its elements (P1-006), and one
 `cast.<From>.<To>` map from `<From>`'s IR type to `<To>`'s sort per implicit reference or boxing
-conversion between different IR types (M3-010). A cast map is an uninterpreted function with no
+conversion between different IR types (M3-010), and one `typeof.<T>` input of `System.Type` sort
+per closed type `T` a body reads with `typeof(T)` (P2-002). A cast map is an uninterpreted function with no
 trace event: the same operand always converts to the same value. The converted value's nullness is
 read from `null.<To>` like any value's, not tied to the operand's, which over-approximates (a real
-upcast of a non-null value is never null). The product
+upcast of a non-null value is never null). `typeof(T)` for an open generic or method type parameter
+`T` stays `IrOpaque("TypeOf")`; for a closed `T` it reads `typeof.<T>` directly, is never null and
+adds no trace event. The product
 encoding (M3-001, ADR 0021) shares the C# parameters by position, because that is how a caller
 binds them, and the synthesised inputs by name; two parameters of different types are never
 shared, each is then an input of its own side. A synthesised input's name is `this` or contains
@@ -98,7 +101,7 @@ is the one definition). A C# parameter whose name would be synthesised, which ca
 is spelled with a leading `$` in IR (`$this`; its source name stays `this`). No C# identifier contains `$`, so
 that name is never another parameter's (M3-007). A value's shadow is a `mapread` of `null.<Sort>`,
 so equal references are equally null; `new` sets the shadow to false instead. `this`,
-`null.*`, `cast.*` and `length.*` are `In`, because nothing changes them. `field.*` and `array.*` are
+`null.*`, `cast.*`, `length.*` and `typeof.*` are `In`, because nothing changes them. `field.*` and `array.*` are
 `Ref` (ADR 0018, ticket M3-007), so every exit names their final version in `outs` and the
 final heap is an observable like any `ref` parameter. When only one side of a pair has a given
 `Ref` map, the other side never touches that slice, and the encoder compares the first side's
