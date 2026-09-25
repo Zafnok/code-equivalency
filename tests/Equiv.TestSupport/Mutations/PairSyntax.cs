@@ -24,7 +24,7 @@ internal static class PairSyntax
     public static string Keyword(Type type) => OracleMethod.Keyword(type);
 
     /// <summary>The whole compilation unit: the class, its field and the one method.</summary>
-    public static string Render(Method method)
+    public static string RenderMethod(Method method)
     {
         StringBuilder text = new();
         text.Append(CultureInfo.InvariantCulture, $"public static class {ClassName}\n{{\n    public static int {Field};\n\n")
