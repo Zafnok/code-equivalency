@@ -123,3 +123,7 @@ Coverage-guided generation.
 - Note: CsCheck puts one line before the printed failure, with the seed that replays it. The rest of
   the message is what criterion 4 lists and nothing else. CsCheck shrinks these pairs poorly (5 shrinks
   on the P2-019 case), because shrinking a generated method rarely keeps the mutation site.
+- Deviation: `tests/Equiv.Frontend.CSharp.Tests/Lowering/PairGenLoweringTests.cs` (tenth new file). Sonar's
+  ubuntu run does not run `Equiv.Tests.Integration`, so it saw 0% coverage on the new `Equiv.TestSupport`
+  code. The test asserts that every generated side compiles and lowers to valid IR with no `IrOpaque`,
+  which is the Design's claim that `PairGen` stays within lowered constructs, and it runs where Sonar measures.
