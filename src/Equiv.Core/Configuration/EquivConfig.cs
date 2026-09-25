@@ -19,6 +19,12 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
     /// </summary>
     public ImmutableArray<string> SuppressRuntimeChanges { get; init; } = [];
 
+    /// <summary>
+    /// API-equivalence id prefixes (ticket M3-009, ADR 0020): an
+    /// <see cref="Equiv.Core.ApiEquivalences.ApiEquivalenceTable"/> entry whose id starts with one is not applied.
+    /// </summary>
+    public ImmutableArray<string> SuppressApiEquivalences { get; init; } = [];
+
     // Deliberate non-short-circuit '&' after the null check, matching Equiv.Core.Ir.IrEquality's
     // documented rationale: '&&' always compiles to a branch per operand, which would need extra
     // tests per field to keep this repo's 100% branch-coverage gate; the operands here are cheap
@@ -29,8 +35,9 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
             & ConfigEquality.DictionaryEqual(CallIdentityRenames, other.CallIdentityRenames) // NOSONAR
             & (Bound == other.Bound) // NOSONAR
             & (TimeoutMs == other.TimeoutMs) // NOSONAR
-            & IrEquality.SequenceEqual(SuppressRuntimeChanges, other.SuppressRuntimeChanges); // NOSONAR
+            & IrEquality.SequenceEqual(SuppressRuntimeChanges, other.SuppressRuntimeChanges) // NOSONAR
+            & IrEquality.SequenceEqual(SuppressApiEquivalences, other.SuppressApiEquivalences); // NOSONAR
 
     public override int GetHashCode() =>
-        HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges));
+        HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences));
 }

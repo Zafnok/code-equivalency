@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="RuntimeChanges/runtime-changes.json" />
+    <EmbeddedResource Include="ApiEquivalences/api-equivalences.json" />
   </ItemGroup>
 
 </Project>

@@ -165,4 +165,41 @@ public sealed class EquivConfigLoaderTests
         Assert.Equal([EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry], result.Diagnostics.Select(static d => d.Id), StringComparer.Ordinal);
         Assert.Equal(["System.String::IndexOf("], result.Config.SuppressRuntimeChanges);
     }
+
+    [Fact]
+    public void Config_SuppressApiEquivalences_IsParsed()
+    {
+        EquivConfigResult result = EquivConfigLoader.Load("""{ "suppressApiEquivalences": ["webapi.", "bcl.string-split-one-char"] }""");
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["webapi.", "bcl.string-split-one-char"], result.Config.SuppressApiEquivalences);
+    }
+
+    [Fact]
+    public void Config_SuppressApiEquivalences_DefaultsToEmpty()
+    {
+        EquivConfigResult result = EquivConfigLoader.Load("{}");
+        Assert.Empty(result.Config.SuppressApiEquivalences);
+    }
+
+    [Theory]
+    [InlineData("""{ "suppressApiEquivalences": "nope" }""")]
+    [InlineData("""{ "suppressApiEquivalences": [""] }""")]
+    [InlineData("""{ "suppressApiEquivalences": ["   "] }""")]
+    [InlineData("""{ "suppressApiEquivalences": [5] }""")]
+    public void Config_SuppressApiEquivalences_InvalidEntryFallsBackToEmptyAndIsReported(string json)
+    {
+        EquivConfigResult result = EquivConfigLoader.Load(json);
+        Assert.Equal([EquivConfigDiagnosticIds.InvalidSuppressApiEquivalencesEntry], result.Diagnostics.Select(static d => d.Id), StringComparer.Ordinal);
+        Assert.Empty(result.Config.SuppressApiEquivalences);
+    }
+
+    [Fact]
+    public void Config_SuppressApiEquivalences_KeepsAValidEntryWhenAnotherIsInvalid()
+    {
+        EquivConfigResult result = EquivConfigLoader.Load("""{ "suppressApiEquivalences": ["webapi.", ""] }""");
+
+        Assert.Equal([EquivConfigDiagnosticIds.InvalidSuppressApiEquivalencesEntry], result.Diagnostics.Select(static d => d.Id), StringComparer.Ordinal);
+        Assert.Equal(["webapi."], result.Config.SuppressApiEquivalences);
+    }
 }

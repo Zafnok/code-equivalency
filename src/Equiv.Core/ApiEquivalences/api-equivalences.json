@@ -1,0 +1,104 @@
+// Known-equivalent API pairs (VERIFICATION-MODEL.md section 3; ADR 0020; ticket M3-009): a member or type the legacy
+// (.NET Framework 4.8) side uses and its modern (.NET 10) counterpart. The frontend applies an entry while lowering the
+// legacy side only, and every result lists the ids applied to it in properties.equivalencesApplied.
+//
+// A member entry names both members as exact CallIdentity values and gives the modern argument list in terms of the
+// legacy call's source arguments: {"arg": n} (the receiver of an instance or extension call is argument 0, and a
+// params array's elements count one by one), optionally with "unwrap": true (without its outermost implicit
+// conversion) or "convertTo" (through the implicit boxing or reference conversion to that metadata name), or
+// {"const": literal, "type": irType}. A call whose arguments the adapter cannot address all of is left as it is.
+// A type entry maps a legacy metadata name to a modern one as a sort name.
+//
+// Soundness (ADR 0020): whenever both members are invoked on adapted arguments, they return the same value and either
+// neither throws or both throw the same exception type. Every "reason" says why that holds, including for null. An
+// equivalence that needs any further precondition is not an entry. The Web API entries equate action results (status
+// code observed, body opaque), not serialized responses: the pipeline's serializer (Newtonsoft, PascalCase, on Web API 2;
+// System.Text.Json, camelCase, on ASP.NET Core) is configured outside every procedure and is not checked.
+//
+// Not an entry: ApiController.StatusCode(HttpStatusCode) -> ControllerBase.StatusCode(int), because the enum-to-int
+// conversion is explicit and the adapter has only implicit ones.
+[
+  {
+    "id": "bcl.string-split-one-char",
+    "legacy": "System.String::Split(char[])",
+    "modern": "System.String::Split(char,System.StringSplitOptions)",
+    "arguments": [{ "arg": 0 }, { "arg": 1 }, { "const": 0, "type": "System.StringSplitOptions" }],
+    "reason": "String.Split(params char[]) with exactly one separator element splits on that character with no options, which is Split(char, StringSplitOptions.None); neither throws for any character. Both are instance members, so a null receiver throws NullReferenceException from the receiver check on both sides before either is invoked.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.split"
+  },
+  {
+    "id": "bcl.string-contains-char",
+    "legacy": "System.Linq.Enumerable::Contains`1(System.Collections.Generic.IEnumerable<char>,char)<char>",
+    "modern": "System.String::Contains(char)",
+    "arguments": [{ "arg": 0, "unwrap": true }, { "arg": 1 }],
+    "reason": "On a non-null string, Enumerable.Contains<char> enumerates its characters and compares each with EqualityComparer<char>.Default, which is ordinal, and String.Contains(char) is an ordinal search, so both return the same bool and neither throws. On a null string the legacy call throws ArgumentNullException and the modern side's receiver check throws NullReferenceException before String.Contains is invoked, so the entry covers only the non-null case and that pair stays Divergent on null, which is the real behaviour change.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.contains"
+  },
+  {
+    "id": "webapi.ok",
+    "legacy": "System.Web.Http.ApiController::Ok()",
+    "modern": "Microsoft.AspNetCore.Mvc.ControllerBase::Ok()",
+    "arguments": [{ "arg": 0 }],
+    "reason": "Both create an empty 200 OK action result and never throw; the receiver is the controller, which is never null inside its own action. This equates action results (status code observed, body opaque), not serialized responses.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.mvc.controllerbase.ok"
+  },
+  {
+    "id": "webapi.ok-of-int",
+    "legacy": "System.Web.Http.ApiController::Ok`1(int)<int>",
+    "modern": "Microsoft.AspNetCore.Mvc.ControllerBase::Ok(object)",
+    "arguments": [{ "arg": 0 }, { "arg": 1, "convertTo": "System.Object" }],
+    "reason": "Both create a 200 OK action result carrying the content, boxed to object on the modern side, and never throw; an int is never null. This equates action results (status code observed, body opaque), not serialized responses.",
+    "url": "https://learn.microsoft.com/en-us/aspnet/web-api/overview/getting-started-with-aspnet-web-api/action-results"
+  },
+  {
+    "id": "webapi.not-found",
+    "legacy": "System.Web.Http.ApiController::NotFound()",
+    "modern": "Microsoft.AspNetCore.Mvc.ControllerBase::NotFound()",
+    "arguments": [{ "arg": 0 }],
+    "reason": "Both create an empty 404 Not Found action result and never throw; the receiver is the controller, which is never null inside its own action. This equates action results (status code observed, body opaque), not serialized responses.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.mvc.controllerbase.notfound"
+  },
+  {
+    "id": "webapi.bad-request",
+    "legacy": "System.Web.Http.ApiController::BadRequest()",
+    "modern": "Microsoft.AspNetCore.Mvc.ControllerBase::BadRequest()",
+    "arguments": [{ "arg": 0 }],
+    "reason": "Both create an empty 400 Bad Request action result and never throw; the receiver is the controller, which is never null inside its own action. This equates action results (status code observed, body opaque), not serialized responses.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.mvc.controllerbase.badrequest"
+  },
+  {
+    "id": "webapi.type.action-result",
+    "legacyType": "System.Web.Http.IHttpActionResult",
+    "modernType": "Microsoft.AspNetCore.Mvc.IActionResult",
+    "reason": "Each is the action-result interface its framework turns into the response, and an action returning it is equated by the result it returns; a type entry has no call and so no exception of its own. This equates action results (status code observed, body opaque), not serialized responses.",
+    "url": "https://learn.microsoft.com/en-us/aspnet/core/migration/fx-to-core/areas/webapi"
+  },
+  {
+    "id": "webapi.type.ok-result",
+    "legacyType": "System.Web.Http.Results.OkResult",
+    "modernType": "Microsoft.AspNetCore.Mvc.OkResult",
+    "reason": "The result type of the Ok() helper on each side (webapi.ok): an empty 200 OK; a type entry has no call and so no exception of its own. This equates action results (status code observed, body opaque), not serialized responses.",
+    "url": "https://learn.microsoft.com/en-us/aspnet/core/web-api/action-return-types"
+  },
+  {
+    "id": "webapi.type.ok-content-result",
+    "legacyType": "System.Web.Http.Results.OkNegotiatedContentResult`1",
+    "modernType": "Microsoft.AspNetCore.Mvc.OkObjectResult",
+    "reason": "The result type of the Ok(content) helper on each side (webapi.ok-of-int): a 200 OK carrying the content; a type entry has no call and so no exception of its own. This equates action results (status code observed, body opaque), not serialized responses.",
+    "url": "https://learn.microsoft.com/en-us/aspnet/core/web-api/action-return-types"
+  },
+  {
+    "id": "webapi.type.not-found-result",
+    "legacyType": "System.Web.Http.Results.NotFoundResult",
+    "modernType": "Microsoft.AspNetCore.Mvc.NotFoundResult",
+    "reason": "The result type of the NotFound() helper on each side (webapi.not-found): an empty 404 Not Found; a type entry has no call and so no exception of its own. This equates action results (status code observed, body opaque), not serialized responses.",
+    "url": "https://learn.microsoft.com/en-us/aspnet/core/web-api/action-return-types"
+  },
+  {
+    "id": "webapi.type.bad-request-result",
+    "legacyType": "System.Web.Http.Results.BadRequestResult",
+    "modernType": "Microsoft.AspNetCore.Mvc.BadRequestResult",
+    "reason": "The result type of the BadRequest() helper on each side (webapi.bad-request): an empty 400 Bad Request; a type entry has no call and so no exception of its own. This equates action results (status code observed, body opaque), not serialized responses.",
+    "url": "https://learn.microsoft.com/en-us/aspnet/core/web-api/action-return-types"
+  }
+]
