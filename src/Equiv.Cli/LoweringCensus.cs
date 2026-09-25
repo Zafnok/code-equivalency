@@ -11,13 +11,12 @@ namespace Equiv.Cli;
 /// <see cref="Procedures"/> counts the procedures each side contributes to the match: matched pairs plus the
 /// removed (legacy) or added (modern) ones. Every other count is per lowered body of a matched pair.
 /// <see cref="OpaqueByReason"/> counts, per side, the bodies holding at least one <see cref="IrOpaque"/> with that
-/// reason, so a whole-body opaque counts once under its reason. <see cref="PairsCongruent"/> stays 0 until
-/// ticket M3-015. <see cref="ProjectsSkipped"/> counts the projects each side's frontend skipped, in any language
+/// reason, so a whole-body opaque counts once under its reason. <see cref="PairsCongruent"/> counts the pairs that are
+/// Equivalent by congruence (ADR 0024; ticket M3-015). <see cref="ProjectsSkipped"/> counts the projects each side's frontend skipped, in any language
 /// (ADR 0029; ticket M3-024). A matched pair the frontend could not lower (ticket P2-011) counts in
 /// <see cref="Procedures"/> and <see cref="MatchedPairs"/>, but has no body for any per-body count.
 /// <see cref="Changed"/> and <see cref="RuntimeChangeCalls"/> are per matched pair (ADR 0034; ticket M3-030). A pair is
-/// changed unless its declarations are token-equal and neither lowered body calls a <see cref="RuntimeChangeTable"/>
-/// member.
+/// changed unless it is congruent.
 /// </summary>
 internal sealed record LoweringCensus(
     SideCounts Procedures,
@@ -30,7 +29,7 @@ internal sealed record LoweringCensus(
     ChangedPairCounts Changed,
     RuntimeChangeCalls RuntimeChangeCalls)
 {
-    public static LoweringCensus Compute(IReadOnlyList<(IrProcedure Old, IrProcedure New, bool TokensEqual)> pairs, int removed, int added, SideCounts? projectsSkipped = null, int unlowered = 0)
+    public static LoweringCensus Compute(IReadOnlyList<(IrProcedure Old, IrProcedure New, bool Congruent)> pairs, int removed, int added, SideCounts? projectsSkipped = null, int unlowered = 0)
     {
         ArgumentNullException.ThrowIfNull(pairs);
 
@@ -42,9 +41,10 @@ internal sealed record LoweringCensus(
         int changed = 0;
         int changedWithoutOpaque = 0;
         int changedWholeBodyOpaque = 0;
+        int congruent = 0;
         RuntimeChangeTally legacyCalls = new();
         RuntimeChangeTally modernCalls = new();
-        foreach ((IrProcedure old, IrProcedure @new, bool tokensEqual) in pairs)
+        foreach ((IrProcedure old, IrProcedure @new, bool isCongruent) in pairs)
         {
             ImmutableHashSet<string> oldReasons = Reasons(old);
             ImmutableHashSet<string> newReasons = Reasons(@new);
@@ -61,12 +61,12 @@ internal sealed record LoweringCensus(
                     counts.Modern + (newReasons.Contains(reason) ? 1 : 0));
             }
 
-            bool oldCallsRuntimeChange = legacyCalls.Add(old, table);
-            bool newCallsRuntimeChange = modernCalls.Add(@new, table);
+            legacyCalls.Add(old, table);
+            modernCalls.Add(@new, table);
 
-            // ADR 0034: until M3-015, a pair is congruent only when its tokens are equal and neither side calls a runtime-changes member.
-            if (tokensEqual && !oldCallsRuntimeChange && !newCallsRuntimeChange)
+            if (isCongruent)
             {
+                congruent++;
                 continue;
             }
 
@@ -82,7 +82,7 @@ internal sealed record LoweringCensus(
             pairs.Count + unlowered,
             withoutOpaque,
             wholeBodyOpaque,
-            PairsCongruent: 0,
+            congruent,
             projectsSkipped ?? new SideCounts(0, 0),
             byReason.ToImmutableSortedDictionary(StringComparer.Ordinal),
             new ChangedPairCounts(changed, changedWithoutOpaque, changedWholeBodyOpaque, reasonSets.ToImmutableSortedDictionary(StringComparer.Ordinal)),
@@ -137,8 +137,8 @@ internal sealed record LoweringCensus(
 
         public int Pairs { get; private set; }
 
-        /// <summary>Counts <paramref name="body"/>'s calls that <paramref name="table"/> matches; true when there is at least one.</summary>
-        public bool Add(IrProcedure body, RuntimeChangeTable table)
+        /// <summary>Counts <paramref name="body"/>'s calls that <paramref name="table"/> matches.</summary>
+        public void Add(IrProcedure body, RuntimeChangeTable table)
         {
             string[] matched = [.. body.Blocks
                 .SelectMany(static b => b.Instructions)
@@ -148,7 +148,6 @@ internal sealed record LoweringCensus(
             CallSites += matched.Length;
             Members.UnionWith(matched);
             Pairs += matched.Length > 0 ? 1 : 0;
-            return matched.Length > 0;
         }
     }
 }

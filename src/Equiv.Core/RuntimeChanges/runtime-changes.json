@@ -5,73 +5,2196 @@
 // shape), so one row covers every overload of a family, or every member of a type when the
 // prefix ends right after "::".
 //
+// "source" (ADR 0035) says where a row came from: "curated" rows were picked by hand in M2-006,
+// "documented" rows come from Microsoft's compatibility pages (M2-007; each is traced to its page
+// in docs/runtime-changes-review.md), and "measured" rows carry a witness input (M3-033).
+//
 // x87 vs SSE floating-point on x86 is NOT a row here: floats are an uninterpreted Sort in the
 // MVP, so there is no bit-level float semantics yet for a row to flag calls against. Add it once
 // floats gain a real encoding (post-MVP).
 [
   {
     "member": "System.String::IndexOf(",
+    "source": "curated",
     "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
   },
   {
     "member": "System.String::LastIndexOf(",
+    "source": "curated",
     "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
   },
   {
     "member": "System.String::StartsWith(",
+    "source": "curated",
     "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
   },
   {
     "member": "System.String::EndsWith(",
+    "source": "curated",
     "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
   },
   {
     "member": "System.String::Compare(",
+    "source": "curated",
     "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
   },
   {
     "member": "System.String::CompareTo(",
+    "source": "curated",
     "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
   },
   {
     "member": "System.String::GetHashCode(",
+    "source": "curated",
     "reason": "String.GetHashCode is randomized per process on .NET and is not guaranteed to match .NET Framework 4.8's algorithm, so the same string can hash differently on each side.",
     "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0"
   },
   {
     "member": "System.Globalization.CompareInfo::",
+    "source": "curated",
     "reason": "CompareInfo's culture-sensitive comparison, sort-key and index members use ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture.",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
   },
   {
     "member": "System.Text.Encoding::get_Default(",
+    "source": "curated",
     "reason": "Encoding.Default is UTF-8 on .NET but the process's ANSI code page on .NET Framework 4.8, so the same bytes decode differently.",
     "url": "https://learn.microsoft.com/en-us/dotnet/api/system.text.encoding.default?view=net-10.0"
   },
   {
     "member": "System.Runtime.Serialization.Formatters.Binary.BinaryFormatter::",
+    "source": "curated",
     "reason": "BinaryFormatter is obsolete and disabled by default on .NET, so a payload serialized through it on .NET Framework 4.8 does not round-trip through the same calls on .NET.",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/serialization/8.0/binaryformatter-disabled"
   },
   {
     "member": "System.Double::ToString(",
+    "source": "curated",
     "reason": "Floating-point formatting became IEEE 754-compliant in .NET Core 3.0, so the exact string produced for the same double can differ from .NET Framework 4.8.",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#floating-point-formatting-and-parsing-behavior-changed"
   },
   {
     "member": "System.Single::ToString(",
+    "source": "curated",
     "reason": "Floating-point formatting became IEEE 754-compliant in .NET Core 3.0, so the exact string produced for the same float can differ from .NET Framework 4.8.",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#floating-point-formatting-and-parsing-behavior-changed"
   },
   {
     "member": "System.Double::Parse(",
+    "source": "curated",
     "reason": "Floating-point parsing became IEEE 754-compliant in .NET Core 3.0, so the same string can parse to a different nearest double than it did on .NET Framework 4.8.",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#floating-point-formatting-and-parsing-behavior-changed"
+  },
+  {
+    "member": "System.Environment::get_Version(",
+    "source": "documented",
+    "reason": "Reports the runtime's own version or product name, which is 4.x/.NET Framework on one side and 10.x/.NET on the other.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#apis-that-report-version-now-report-product-and-not-file-version"
+  },
+  {
+    "member": "System.Runtime.InteropServices.RuntimeInformation::get_FrameworkDescription(",
+    "source": "documented",
+    "reason": "Reports the runtime's own version or product name, which is 4.x/.NET Framework on one side and 10.x/.NET on the other.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#apis-that-report-version-now-report-product-and-not-file-version"
+  },
+  {
+    "member": "System.Text.EncoderFallbackBuffer::Fallback(",
+    "source": "documented",
+    "reason": "A fallback buffer may no longer hand back characters that themselves need a fallback; .NET throws where .NET Framework recursed.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#custom-encoderfallbackbuffer-instances-cannot-fall-back-recursively"
+  },
+  {
+    "member": "System.Text.EncoderFallbackBuffer::GetNextChar(",
+    "source": "documented",
+    "reason": "A fallback buffer may no longer hand back characters that themselves need a fallback; .NET throws where .NET Framework recursed.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#custom-encoderfallbackbuffer-instances-cannot-fall-back-recursively"
+  },
+  {
+    "member": "System.Double::TryParse(",
+    "source": "documented",
+    "reason": "Float and double text conversion follows IEEE 754 on .NET, so the shortest round-trippable string and the nearest parsed value can differ from .NET Framework 4.8.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#floating-point-formatting-and-parsing-behavior-changed"
+  },
+  {
+    "member": "System.Single::Parse(",
+    "source": "documented",
+    "reason": "Float and double text conversion follows IEEE 754 on .NET, so the shortest round-trippable string and the nearest parsed value can differ from .NET Framework 4.8.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#floating-point-formatting-and-parsing-behavior-changed"
+  },
+  {
+    "member": "System.Single::TryParse(",
+    "source": "documented",
+    "reason": "Float and double text conversion follows IEEE 754 on .NET, so the shortest round-trippable string and the nearest parsed value can differ from .NET Framework 4.8.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#floating-point-formatting-and-parsing-behavior-changed"
+  },
+  {
+    "member": "System.Text.UTF8Encoding::GetCharCount(",
+    "source": "documented",
+    "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
+  },
+  {
+    "member": "System.Text.UTF8Encoding::GetChars(",
+    "source": "documented",
+    "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
+  },
+  {
+    "member": "System.Text.UTF8Encoding::GetString(",
+    "source": "documented",
+    "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
+  },
+  {
+    "member": "System.Text.Encoding::GetCharCount(",
+    "source": "documented",
+    "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
+  },
+  {
+    "member": "System.Text.Encoding::GetChars(",
+    "source": "documented",
+    "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
+  },
+  {
+    "member": "System.Text.Encoding::GetString(",
+    "source": "documented",
+    "reason": "Ill-formed UTF-8 input is replaced with U+FFFD per the Unicode best-practice rules on .NET, so the decoded text and its length can differ from .NET Framework; the Encoding base members are flagged because Encoding.UTF8 calls bind to them.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#replacing-ill-formed-utf-8-byte-sequences-follows-unicode-guidelines"
+  },
+  {
+    "member": "System.IO.Compression.ZipArchiveEntry::Open(",
+    "source": "documented",
+    "reason": "An entry whose local and central headers disagree on size now fails to open or extract instead of decompressing to the end of the stream.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#ziparchiveentry-no-longer-handles-archives-with-inconsistent-entry-sizes"
+  },
+  {
+    "member": "System.IO.Compression.ZipFileExtensions::ExtractTo",
+    "source": "documented",
+    "reason": "An entry whose local and central headers disagree on size now fails to open or extract instead of decompressing to the end of the stream.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#ziparchiveentry-no-longer-handles-archives-with-inconsistent-entry-sizes"
+  },
+  {
+    "member": "System.IO.Compression.ZipFile::ExtractToDirectory(",
+    "source": "documented",
+    "reason": "An entry whose local and central headers disagree on size now fails to open or extract instead of decompressing to the end of the stream.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#ziparchiveentry-no-longer-handles-archives-with-inconsistent-entry-sizes"
+  },
+  {
+    "member": "System.Reflection.FieldInfo::SetValue(",
+    "source": "documented",
+    "reason": "Setting a static readonly field through reflection throws on .NET after the type is initialized, where .NET Framework allowed it.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#fieldinfosetvalue-throws-exception-for-static-init-only-fields"
+  },
+  {
+    "member": "System.Security.Cryptography.Pkcs.EnvelopedCms::.ctor(",
+    "source": "documented",
+    "reason": "Without an explicit algorithm, EnvelopedCms encrypts with AES-256 on .NET but TripleDES on .NET Framework, so the produced message differs.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#envelopedcms-defaults-to-aes-256-encryption"
+  },
+  {
+    "member": "System.Security.Cryptography.CryptoStream::Dispose(",
+    "source": "documented",
+    "reason": "Disposing a read-mode CryptoStream after a partial read no longer transforms the final block, so it no longer throws where .NET Framework could.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#cryptostreamdispose-transforms-final-block-only-when-writing"
+  },
+  {
+    "member": "System.Security.Cryptography.CryptoStream::Close(",
+    "source": "documented",
+    "reason": "Disposing a read-mode CryptoStream after a partial read no longer transforms the final block, so it no longer throws where .NET Framework could.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#cryptostreamdispose-transforms-final-block-only-when-writing"
+  },
+  {
+    "member": "System.Windows.Forms.Control::get_DefaultFont(",
+    "source": "documented",
+    "reason": "The default control font is Segoe UI 9pt on .NET instead of Microsoft Sans Serif 8.25pt, so the returned font and every size derived from it differ.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#default-control-font-changed-to-segoe-ui-9-pt"
+  },
+  {
+    "member": "System.Diagnostics.PerformanceData.CounterSet::CreateCounterSetInstance(",
+    "source": "documented",
+    "reason": "Creating a counter set instance under a name already in use throws InvalidOperationException on .NET instead of ArgumentException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/createcountersetinstance-throws-invalidoperation"
+  },
+  {
+    "member": "System.Environment::get_OSVersion(",
+    "source": "documented",
+    "reason": "OSVersion reports the real Windows version on .NET, while .NET Framework can report a compatibility-shimmed older version.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/environment-osversion-returns-correct-version"
+  },
+  {
+    "member": "System.Reflection.Assembly::get_GlobalAssemblyCache(",
+    "source": "documented",
+    "reason": "There is no global assembly cache on .NET, so this property is always false, where .NET Framework reports true for GAC-loaded assemblies.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/global-assembly-cache-apis-obsolete"
+  },
+  {
+    "member": "System.Linq.Enumerable::First(",
+    "source": "documented",
+    "reason": "After OrderBy, First and FirstOrDefault with a predicate may invoke the predicate on every element instead of stopping early, so side effects in the predicate run a different number of times.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/orderby-firstordefault-complexity-increase"
+  },
+  {
+    "member": "System.Linq.Enumerable::FirstOrDefault(",
+    "source": "documented",
+    "reason": "After OrderBy, First and FirstOrDefault with a predicate may invoke the predicate on every element instead of stopping early, so side effects in the predicate run a different number of times.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/orderby-firstordefault-complexity-increase"
+  },
+  {
+    "member": "System.Numerics.Vector2::Lerp(",
+    "source": "documented",
+    "reason": "Lerp uses a different formula on .NET, so the interpolated components can differ in the last bits.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/vector-lerp-behavior-change"
+  },
+  {
+    "member": "System.Numerics.Vector4::Lerp(",
+    "source": "documented",
+    "reason": "Lerp uses a different formula on .NET, so the interpolated components can differ in the last bits.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/vector-lerp-behavior-change"
+  },
+  {
+    "member": "System.Numerics.Vector`1::",
+    "source": "documented",
+    "reason": "Vector<T> members throw NotSupportedException for an unsupported element type on .NET, where some operations used to return a value.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/5.0/vectort-throws-notsupportedexception"
+  },
+  {
+    "member": "System.Security.Cryptography.Oid::set_Value(",
+    "source": "documented",
+    "reason": "Oid values can be set only once on .NET; a second assignment throws, where .NET Framework overwrote it.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/5.0/cryptography-oid-init-only"
+  },
+  {
+    "member": "System.Security.Cryptography.Oid::set_FriendlyName(",
+    "source": "documented",
+    "reason": "Oid values can be set only once on .NET; a second assignment throws, where .NET Framework overwrote it.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/5.0/cryptography-oid-init-only"
+  },
+  {
+    "member": "System.Globalization.StringInfo::",
+    "source": "documented",
+    "reason": "Text elements are segmented by the UAX #29 grapheme rules on .NET, so element counts and boundaries can differ from .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/uax29-compliant-grapheme-enumeration"
+  },
+  {
+    "member": "System.Globalization.TextElementEnumerator::",
+    "source": "documented",
+    "reason": "Text elements are segmented by the UAX #29 grapheme rules on .NET, so element counts and boundaries can differ from .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/uax29-compliant-grapheme-enumeration"
+  },
+  {
+    "member": "System.Char::GetUnicodeCategory(",
+    "source": "documented",
+    "reason": "Several Latin-1 characters report a different Unicode category on .NET, which changes these classification results.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/unicode-categories-for-latin1-chars"
+  },
+  {
+    "member": "System.Char::IsLetter(",
+    "source": "documented",
+    "reason": "Several Latin-1 characters report a different Unicode category on .NET, which changes these classification results.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/unicode-categories-for-latin1-chars"
+  },
+  {
+    "member": "System.Char::IsPunctuation(",
+    "source": "documented",
+    "reason": "Several Latin-1 characters report a different Unicode category on .NET, which changes these classification results.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/unicode-categories-for-latin1-chars"
+  },
+  {
+    "member": "System.Char::IsSymbol(",
+    "source": "documented",
+    "reason": "Several Latin-1 characters report a different Unicode category on .NET, which changes these classification results.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/unicode-categories-for-latin1-chars"
+  },
+  {
+    "member": "System.Char::IsLower(",
+    "source": "documented",
+    "reason": "Several Latin-1 characters report a different Unicode category on .NET, which changes these classification results.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/unicode-categories-for-latin1-chars"
+  },
+  {
+    "member": "System.Globalization.TextInfo::get_ListSeparator(",
+    "source": "documented",
+    "reason": "Culture list separators come from updated culture data on .NET and can differ from .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/listseparator-value-change"
+  },
+  {
+    "member": "System.Net.CookieContainer::",
+    "source": "documented",
+    "reason": "Cookie path defaults and path matching follow RFC 6265 on .NET, so which cookies are stored and returned can differ.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/5.0/cookie-path-conforms-to-rfc6265"
+  },
+  {
+    "member": "System.Net.Cookie::",
+    "source": "documented",
+    "reason": "Cookie path defaults and path matching follow RFC 6265 on .NET, so which cookies are stored and returned can differ.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/5.0/cookie-path-conforms-to-rfc6265"
+  },
+  {
+    "member": "System.Net.Sockets.Socket::get_LocalEndPoint(",
+    "source": "documented",
+    "reason": "LocalEndPoint is populated after an implicit bind by SendToAsync on .NET, where it used to stay null.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/5.0/localendpoint-updated-on-sendtoasync"
+  },
+  {
+    "member": "System.Net.Sockets.MulticastOption::set_Group(",
+    "source": "documented",
+    "reason": "Setting a null multicast group throws ArgumentNullException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/5.0/multicastoption-group-doesnt-accept-null"
+  },
+  {
+    "member": "System.Net.Security.SslStream::BeginAuthenticateAs",
+    "source": "documented",
+    "reason": "A second BeginAuthenticateAs call before the first completes no longer throws NotSupportedException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/5.0/negotiatestream-sslstream-dont-fail-on-successive-begin-calls"
+  },
+  {
+    "member": "System.Net.Security.NegotiateStream::BeginAuthenticateAs",
+    "source": "documented",
+    "reason": "A second BeginAuthenticateAs call before the first completes no longer throws NotSupportedException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/5.0/negotiatestream-sslstream-dont-fail-on-successive-begin-calls"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridView::set_Font(",
+    "source": "documented",
+    "reason": "Changing the grid's font no longer resets fonts set on its cell styles.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/datagridview-doesnt-reset-custom-font-settings"
+  },
+  {
+    "member": "System.Windows.Forms.TabControl::GetToolTipText(",
+    "source": "documented",
+    "reason": "Invalid arguments throw ArgumentException on .NET where .NET Framework continued in an undefined state.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/invalid-args-cause-argumentexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataFormats::GetFormat(string",
+    "source": "documented",
+    "reason": "Invalid arguments throw ArgumentException on .NET where .NET Framework continued in an undefined state.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/invalid-args-cause-argumentexception"
+  },
+  {
+    "member": "System.Windows.Forms.InputLanguageChangedEventArgs::.ctor(",
+    "source": "documented",
+    "reason": "Invalid arguments throw ArgumentException on .NET where .NET Framework continued in an undefined state.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/invalid-args-cause-argumentexception"
+  },
+  {
+    "member": "System.Windows.Forms.Control.ControlCollection::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewComboBoxEditingControl::ApplyCellStyleToEditingControl(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ListBox.IntegerCollection::",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ListBox.ObjectCollection::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ListBox.ObjectCollection::AddRange(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ListBox.ObjectCollection::CopyTo(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ListView.ListViewItemCollection::Find(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ListView.SelectedIndexCollection::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.RichTextBox::LoadFile(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ScrollableControl::OnPaintBackground(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.TableLayoutControlCollection::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ToolStripRenderer::OnRender",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.TreeNodeCollection::Find(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.VisualStyles.VisualStyleRenderer::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-args-cause-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.TreeNode::set_ImageIndex(",
+    "source": "documented",
+    "reason": "Out-of-range values throw ArgumentOutOfRangeException on .NET where other exception types were thrown before.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/invalid-args-cause-argumentoutofrangeexception"
+  },
+  {
+    "member": "System.Windows.Forms.TreeNode::set_SelectedImageIndex(",
+    "source": "documented",
+    "reason": "Out-of-range values throw ArgumentOutOfRangeException on .NET where other exception types were thrown before.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/invalid-args-cause-argumentoutofrangeexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewButtonCell.DataGridViewButtonCellAccessibleObject::",
+    "source": "documented",
+    "reason": "With no owning cell these accessibility members throw InvalidOperationException on .NET instead of NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-owner-causes-invalidoperationexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewCheckBoxCell.DataGridViewCheckBoxCellAccessibleObject::",
+    "source": "documented",
+    "reason": "With no owning cell these accessibility members throw InvalidOperationException on .NET instead of NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-owner-causes-invalidoperationexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewColumnHeaderCell.DataGridViewColumnHeaderCellAccessibleObject::",
+    "source": "documented",
+    "reason": "With no owning cell these accessibility members throw InvalidOperationException on .NET instead of NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-owner-causes-invalidoperationexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewImageCell.DataGridViewImageCellAccessibleObject::",
+    "source": "documented",
+    "reason": "With no owning cell these accessibility members throw InvalidOperationException on .NET instead of NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-owner-causes-invalidoperationexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewLinkCell.DataGridViewLinkCellAccessibleObject::",
+    "source": "documented",
+    "reason": "With no owning cell these accessibility members throw InvalidOperationException on .NET instead of NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/5.0/null-owner-causes-invalidoperationexception"
+  },
+  {
+    "member": "System.Diagnostics.Debug::Assert(bool,ref ",
+    "source": "documented",
+    "reason": "With an interpolated message, the message holes are evaluated only when the condition requires it, so side effects in them may not run.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/debug-assert-conditional-evaluation"
+  },
+  {
+    "member": "System.Diagnostics.Debug::WriteIf(bool,ref ",
+    "source": "documented",
+    "reason": "With an interpolated message, the message holes are evaluated only when the condition requires it, so side effects in them may not run.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/debug-assert-conditional-evaluation"
+  },
+  {
+    "member": "System.Diagnostics.Debug::WriteLineIf(bool,ref ",
+    "source": "documented",
+    "reason": "With an interpolated message, the message holes are evaluated only when the condition requires it, so side effects in them may not run.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/debug-assert-conditional-evaluation"
+  },
+  {
+    "member": "System.Environment::get_ProcessorCount(",
+    "source": "documented",
+    "reason": "ProcessorCount honours process affinity and job CPU limits on Windows on .NET, so it can be lower than the machine's logical processor count.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/environment-processorcount-on-windows"
+  },
+  {
+    "member": "System.Diagnostics.Tracing.EventSource::IsEnabled(",
+    "source": "documented",
+    "reason": "Inside the disable callback, IsEnabled already reports false on .NET, where it reported true.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/eventsource-callback"
+  },
+  {
+    "member": "System.IO.FileStream::get_Position(",
+    "source": "documented",
+    "reason": "Position moves when an async read or write is issued rather than when it completes, so a read of Position during the operation differs.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/filestream-position-updates-after-readasync-writeasync-completion"
+  },
+  {
+    "member": "System.IO.Compression.DeflateStream::Read",
+    "source": "documented",
+    "reason": "A read can return as soon as some data is available instead of filling the buffer, so the returned count differs.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/partial-byte-reads-in-streams"
+  },
+  {
+    "member": "System.IO.Compression.DeflateStream::BeginRead(",
+    "source": "documented",
+    "reason": "A read can return as soon as some data is available instead of filling the buffer, so the returned count differs.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/partial-byte-reads-in-streams"
+  },
+  {
+    "member": "System.IO.Compression.GZipStream::Read",
+    "source": "documented",
+    "reason": "A read can return as soon as some data is available instead of filling the buffer, so the returned count differs.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/partial-byte-reads-in-streams"
+  },
+  {
+    "member": "System.IO.Compression.GZipStream::BeginRead(",
+    "source": "documented",
+    "reason": "A read can return as soon as some data is available instead of filling the buffer, so the returned count differs.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/partial-byte-reads-in-streams"
+  },
+  {
+    "member": "System.Security.Cryptography.CryptoStream::Read",
+    "source": "documented",
+    "reason": "A read can return as soon as some data is available instead of filling the buffer, so the returned count differs.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/partial-byte-reads-in-streams"
+  },
+  {
+    "member": "System.Security.Cryptography.CryptoStream::BeginRead(",
+    "source": "documented",
+    "reason": "A read can return as soon as some data is available instead of filling the buffer, so the returned count differs.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/partial-byte-reads-in-streams"
+  },
+  {
+    "member": "System.IO.File::SetCreationTime",
+    "source": "documented",
+    "reason": "Setting a timestamp succeeds on a read-only file and applies to a symbolic link itself on .NET, where .NET Framework threw or updated the link's target.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/set-timestamp-readonly-file"
+  },
+  {
+    "member": "System.IO.File::SetLastAccessTime",
+    "source": "documented",
+    "reason": "Setting a timestamp succeeds on a read-only file and applies to a symbolic link itself on .NET, where .NET Framework threw or updated the link's target.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/set-timestamp-readonly-file"
+  },
+  {
+    "member": "System.IO.File::SetLastWriteTime",
+    "source": "documented",
+    "reason": "Setting a timestamp succeeds on a read-only file and applies to a symbolic link itself on .NET, where .NET Framework threw or updated the link's target.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/set-timestamp-readonly-file"
+  },
+  {
+    "member": "System.Byte::ToString(string",
+    "source": "documented",
+    "reason": "Format strings with a precision above 99 are accepted on .NET, where .NET Framework threw FormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/numeric-format-parsing-handles-higher-precision"
+  },
+  {
+    "member": "System.SByte::ToString(string",
+    "source": "documented",
+    "reason": "Format strings with a precision above 99 are accepted on .NET, where .NET Framework threw FormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/numeric-format-parsing-handles-higher-precision"
+  },
+  {
+    "member": "System.Int16::ToString(string",
+    "source": "documented",
+    "reason": "Format strings with a precision above 99 are accepted on .NET, where .NET Framework threw FormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/numeric-format-parsing-handles-higher-precision"
+  },
+  {
+    "member": "System.UInt16::ToString(string",
+    "source": "documented",
+    "reason": "Format strings with a precision above 99 are accepted on .NET, where .NET Framework threw FormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/numeric-format-parsing-handles-higher-precision"
+  },
+  {
+    "member": "System.Int32::ToString(string",
+    "source": "documented",
+    "reason": "Format strings with a precision above 99 are accepted on .NET, where .NET Framework threw FormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/numeric-format-parsing-handles-higher-precision"
+  },
+  {
+    "member": "System.UInt32::ToString(string",
+    "source": "documented",
+    "reason": "Format strings with a precision above 99 are accepted on .NET, where .NET Framework threw FormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/numeric-format-parsing-handles-higher-precision"
+  },
+  {
+    "member": "System.Int64::ToString(string",
+    "source": "documented",
+    "reason": "Format strings with a precision above 99 are accepted on .NET, where .NET Framework threw FormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/numeric-format-parsing-handles-higher-precision"
+  },
+  {
+    "member": "System.UInt64::ToString(string",
+    "source": "documented",
+    "reason": "Format strings with a precision above 99 are accepted on .NET, where .NET Framework threw FormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/numeric-format-parsing-handles-higher-precision"
+  },
+  {
+    "member": "System.Decimal::ToString(string",
+    "source": "documented",
+    "reason": "Format strings with a precision above 99 are accepted on .NET, where .NET Framework threw FormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/numeric-format-parsing-handles-higher-precision"
+  },
+  {
+    "member": "System.Text.StringBuilder::Append(ref ",
+    "source": "documented",
+    "reason": "An interpolated argument is appended piece by piece, so holes that read or change the builder see a different state than when the whole string was built first.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/stringbuilder-append-evaluation-order"
+  },
+  {
+    "member": "System.Text.StringBuilder::AppendLine(ref ",
+    "source": "documented",
+    "reason": "An interpolated argument is appended piece by piece, so holes that read or change the builder see a different state than when the whole string was built first.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/stringbuilder-append-evaluation-order"
+  },
+  {
+    "member": "System.Reflection.StrongNameKeyPair::",
+    "source": "documented",
+    "reason": "Strong-name key pair members throw PlatformNotSupportedException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/strong-name-signing-exceptions"
+  },
+  {
+    "member": "System.Reflection.AssemblyName::get_KeyPair(",
+    "source": "documented",
+    "reason": "Strong-name key pair members throw PlatformNotSupportedException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/strong-name-signing-exceptions"
+  },
+  {
+    "member": "System.Reflection.AssemblyName::set_KeyPair(",
+    "source": "documented",
+    "reason": "Strong-name key pair members throw PlatformNotSupportedException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/strong-name-signing-exceptions"
+  },
+  {
+    "member": "System.Threading.Tasks.Task::FromResult(",
+    "source": "documented",
+    "reason": "FromResult can return a cached task for common values, so reference comparisons between returned tasks differ.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/task-fromresult-returns-singleton"
+  },
+  {
+    "member": "System.Security.Cryptography.AesCng::CreateEncryptor(",
+    "source": "documented",
+    "reason": "A feedback size that a persisted key cannot honour throws on .NET, where it was silently treated as CFB8.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/6.0/cfb-mode-feedback-size-exception"
+  },
+  {
+    "member": "System.Security.Cryptography.AesCng::CreateDecryptor(",
+    "source": "documented",
+    "reason": "A feedback size that a persisted key cannot honour throws on .NET, where it was silently treated as CFB8.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/6.0/cfb-mode-feedback-size-exception"
+  },
+  {
+    "member": "System.Security.Cryptography.TripleDESCng::CreateEncryptor(",
+    "source": "documented",
+    "reason": "A feedback size that a persisted key cannot honour throws on .NET, where it was silently treated as CFB8.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/6.0/cfb-mode-feedback-size-exception"
+  },
+  {
+    "member": "System.Security.Cryptography.TripleDESCng::CreateDecryptor(",
+    "source": "documented",
+    "reason": "A feedback size that a persisted key cannot honour throws on .NET, where it was silently treated as CFB8.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/6.0/cfb-mode-feedback-size-exception"
+  },
+  {
+    "member": "System.Runtime.Serialization.DataContractSerializer::ReadObject(",
+    "source": "documented",
+    "reason": "Deserializing \"-0\" into a float or double keeps the negative sign on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/serialization/7.0/datacontractserializer-negative-sign"
+  },
+  {
+    "member": "System.Runtime.Serialization.Json.DataContractJsonSerializer::ReadObject(",
+    "source": "documented",
+    "reason": "Deserializing \"-0\" into a float or double keeps the negative sign on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/serialization/7.0/datacontractserializer-negative-sign"
+  },
+  {
+    "member": "System.Runtime.Serialization.XmlObjectSerializer::ReadObject(",
+    "source": "documented",
+    "reason": "Deserializing \"-0\" into a float or double keeps the negative sign on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/serialization/7.0/datacontractserializer-negative-sign"
+  },
+  {
+    "member": "System.Windows.Forms.TableLayoutPanel::set_CellBorderStyle(",
+    "source": "documented",
+    "reason": "An undefined enum value throws InvalidEnumArgumentException on .NET instead of ArgumentOutOfRangeException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/tablelayoutsettings-apis-throw-invalidenumargumentexception"
+  },
+  {
+    "member": "System.Windows.Forms.TableLayoutPanel::set_GrowStyle(",
+    "source": "documented",
+    "reason": "An undefined enum value throws InvalidEnumArgumentException on .NET instead of ArgumentOutOfRangeException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/tablelayoutsettings-apis-throw-invalidenumargumentexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewTopLeftHeaderCell.DataGridViewTopLeftHeaderCellAccessibleObject::",
+    "source": "documented",
+    "reason": "With no owning cell these accessibility members throw InvalidOperationException on .NET instead of NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/null-owner-causes-invalidoperationexception"
+  },
+  {
+    "member": "System.Windows.Forms.ListViewGroupCollection::",
+    "source": "documented",
+    "reason": "Adding or inserting a group already owned by another ListView throws InvalidOperationException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/listview-invalidoperationexception"
+  },
+  {
+    "member": "System.Windows.Forms.NotifyIcon::set_Text(",
+    "source": "documented",
+    "reason": "NotifyIcon text may be longer on .NET before an ArgumentOutOfRangeException is thrown.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/notifyicon-text-max-text-length-increased"
+  },
+  {
+    "member": "System.Windows.Forms.TreeNodeCollection::get_Item(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.DrawTreeNodeEventArgs::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewRowStateChangedEventArgs::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewColumnStateChangedEventArgs::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.TreeNodeCollection::set_Item(",
+    "source": "documented",
+    "reason": "Assigning a node that already belongs to another TreeView throws ArgumentException on .NET instead of duplicating it.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/treenodecollection-item-throws-argumentexception"
+  },
+  {
+    "member": "System.Xml.XmlReader::GetAttribute(int)",
+    "source": "documented",
+    "reason": "On an XNodeReader, an out-of-range attribute index throws ArgumentOutOfRangeException on .NET instead of returning null.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/xnodereader-getattribute"
+  },
+  {
+    "member": "System.Reflection.Assembly::Load(string",
+    "source": "documented",
+    "reason": "An asterisk as an assembly-name attribute value is rejected on .NET instead of being treated as unspecified.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/assembly-name-wildcard"
+  },
+  {
+    "member": "System.Reflection.AssemblyName::.ctor(string",
+    "source": "documented",
+    "reason": "An asterisk as an assembly-name attribute value is rejected on .NET instead of being treated as unspecified.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/assembly-name-wildcard"
+  },
+  {
+    "member": "System.Reflection.MethodBase::Invoke(",
+    "source": "documented",
+    "reason": "Exceptions raised by the invoked member are always wrapped in TargetInvocationException on .NET, and null for a by-value byref-like parameter throws.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/reflection-invoke-exceptions"
+  },
+  {
+    "member": "System.Reflection.ConstructorInfo::Invoke(",
+    "source": "documented",
+    "reason": "Exceptions raised by the invoked member are always wrapped in TargetInvocationException on .NET, and null for a by-value byref-like parameter throws.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/reflection-invoke-exceptions"
+  },
+  {
+    "member": "System.DateTime::AddDays(",
+    "source": "documented",
+    "reason": "The double argument is no longer rounded to the nearest millisecond, so the resulting DateTime can differ in its sub-millisecond ticks.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/datetime-add-precision"
+  },
+  {
+    "member": "System.DateTime::AddHours(",
+    "source": "documented",
+    "reason": "The double argument is no longer rounded to the nearest millisecond, so the resulting DateTime can differ in its sub-millisecond ticks.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/datetime-add-precision"
+  },
+  {
+    "member": "System.DateTime::AddMilliseconds(",
+    "source": "documented",
+    "reason": "The double argument is no longer rounded to the nearest millisecond, so the resulting DateTime can differ in its sub-millisecond ticks.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/datetime-add-precision"
+  },
+  {
+    "member": "System.DateTime::AddMinutes(",
+    "source": "documented",
+    "reason": "The double argument is no longer rounded to the nearest millisecond, so the resulting DateTime can differ in its sub-millisecond ticks.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/datetime-add-precision"
+  },
+  {
+    "member": "System.DateTime::AddSeconds(",
+    "source": "documented",
+    "reason": "The double argument is no longer rounded to the nearest millisecond, so the resulting DateTime can differ in its sub-millisecond ticks.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/datetime-add-precision"
+  },
+  {
+    "member": "System.Numerics.Vector2::Equals(",
+    "source": "documented",
+    "reason": "Equals treats NaN components as equal to themselves on .NET, so it returns true where it returned false.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/equals-nan"
+  },
+  {
+    "member": "System.Numerics.Vector3::Equals(",
+    "source": "documented",
+    "reason": "Equals treats NaN components as equal to themselves on .NET, so it returns true where it returned false.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/equals-nan"
+  },
+  {
+    "member": "System.Numerics.Vector4::Equals(",
+    "source": "documented",
+    "reason": "Equals treats NaN components as equal to themselves on .NET, so it returns true where it returned false.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/equals-nan"
+  },
+  {
+    "member": "System.Numerics.Matrix3x2::Equals(",
+    "source": "documented",
+    "reason": "Equals treats NaN components as equal to themselves on .NET, so it returns true where it returned false.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/equals-nan"
+  },
+  {
+    "member": "System.Numerics.Matrix4x4::Equals(",
+    "source": "documented",
+    "reason": "Equals treats NaN components as equal to themselves on .NET, so it returns true where it returned false.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/equals-nan"
+  },
+  {
+    "member": "System.Numerics.Plane::Equals(",
+    "source": "documented",
+    "reason": "Equals treats NaN components as equal to themselves on .NET, so it returns true where it returned false.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/equals-nan"
+  },
+  {
+    "member": "System.Numerics.Quaternion::Equals(",
+    "source": "documented",
+    "reason": "Equals treats NaN components as equal to themselves on .NET, so it returns true where it returned false.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/equals-nan"
+  },
+  {
+    "member": "System.Numerics.Vector`1::Equals(",
+    "source": "documented",
+    "reason": "Equals treats NaN components as equal to themselves on .NET, so it returns true where it returned false.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/equals-nan"
+  },
+  {
+    "member": "System.Text.RegularExpressions.Regex::",
+    "source": "documented",
+    "reason": "Case-insensitive character ranges and other pattern details are interpreted differently by the .NET regex engine, so matches can differ.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges"
+  },
+  {
+    "member": "System.IO.Directory::SetCreationTime",
+    "source": "documented",
+    "reason": "On a symbolic link, the timestamp is set on the link itself on .NET, where .NET Framework changed the target's timestamp.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/symbolic-link-timestamps"
+  },
+  {
+    "member": "System.IO.Directory::SetLastAccessTime",
+    "source": "documented",
+    "reason": "On a symbolic link, the timestamp is set on the link itself on .NET, where .NET Framework changed the target's timestamp.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/symbolic-link-timestamps"
+  },
+  {
+    "member": "System.IO.Directory::SetLastWriteTime",
+    "source": "documented",
+    "reason": "On a symbolic link, the timestamp is set on the link itself on .NET, where .NET Framework changed the target's timestamp.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/symbolic-link-timestamps"
+  },
+  {
+    "member": "System.IO.FileSystemInfo::set_CreationTime",
+    "source": "documented",
+    "reason": "On a symbolic link, the timestamp is set on the link itself on .NET, where .NET Framework changed the target's timestamp.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/symbolic-link-timestamps"
+  },
+  {
+    "member": "System.IO.FileSystemInfo::set_LastAccessTime",
+    "source": "documented",
+    "reason": "On a symbolic link, the timestamp is set on the link itself on .NET, where .NET Framework changed the target's timestamp.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/symbolic-link-timestamps"
+  },
+  {
+    "member": "System.IO.FileSystemInfo::set_LastWriteTime",
+    "source": "documented",
+    "reason": "On a symbolic link, the timestamp is set on the link itself on .NET, where .NET Framework changed the target's timestamp.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/symbolic-link-timestamps"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.X509ChainPolicy::get_VerificationTime(",
+    "source": "documented",
+    "reason": "Chain building uses the current time at each Build call unless a time was set, where it used the time the policy was created.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/7.0/x509chainpolicy-verification-time"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.X509Chain::Build(",
+    "source": "documented",
+    "reason": "Chain building uses the current time at each Build call unless a time was set, where it used the time the policy was created.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/7.0/x509chainpolicy-verification-time"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.X500DistinguishedName::.ctor(",
+    "source": "documented",
+    "reason": "Distinguished-name parsing is stricter on .NET and rejects input that .NET Framework accepted.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/7.0/x500-distinguished-names"
+  },
+  {
+    "member": "System.Runtime.InteropServices.RuntimeInformation::get_OSArchitecture(",
+    "source": "documented",
+    "reason": "Under emulation, OSArchitecture reports the real machine architecture on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/interop/7.0/osarchitecture-emulation"
+  },
+  {
+    "member": "System.Net.Security.SslStream::AuthenticateAsServer",
+    "source": "documented",
+    "reason": "Client-initiated renegotiation is refused by default on .NET, where .NET Framework allowed it.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/7.0/allowrenegotiation-default"
+  },
+  {
+    "member": "System.Net.Sockets.Socket::End",
+    "source": "documented",
+    "reason": "End methods on a closed socket throw SocketException rather than ObjectDisposedException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/7.0/socket-end-closed-sockets"
+  },
+  {
+    "member": "System.Windows.Forms.ComboBox.ChildAccessibleObject::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/7.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ControlPaint::CreateHBitmap",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/7.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewEditingControlShowingEventArgs::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/7.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ListView.CheckedIndexCollection::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/7.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ToolStripArrowRenderEventArgs::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/7.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ToolStripContentPanelRenderEventArgs::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/7.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ToolStripItemRenderEventArgs::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/7.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Windows.Forms.ToolStripPanelRenderEventArgs::.ctor(",
+    "source": "documented",
+    "reason": "A null argument throws ArgumentNullException on .NET where .NET Framework threw NullReferenceException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/7.0/apis-throw-argumentnullexception"
+  },
+  {
+    "member": "System.Xml.XmlSecureResolver::",
+    "source": "documented",
+    "reason": "XmlSecureResolver no longer sandboxes resolution; GetEntity always throws on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/xml/7.0/xmlsecureresolver-obsolete"
+  },
+  {
+    "member": "System.IO.Pipes.AnonymousPipeServerStream::Dispose(",
+    "source": "documented",
+    "reason": "Disposing the server also disposes an inheritable client handle that was never exposed.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/anonymouspipeserverstream-dispose"
+  },
+  {
+    "member": "System.Numerics.Complex::ToString(",
+    "source": "documented",
+    "reason": "Complex numbers format as <a; b> on .NET instead of (a, b).",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/complex-format"
+  },
+  {
+    "member": "System.IO.Directory::Enumerate",
+    "source": "documented",
+    "reason": "Enumerating a drive-relative path such as \"C:\" yields paths without the inserted separator on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/drive-current-dir-paths"
+  },
+  {
+    "member": "System.IO.Directory::GetFiles(",
+    "source": "documented",
+    "reason": "Enumerating a drive-relative path such as \"C:\" yields paths without the inserted separator on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/drive-current-dir-paths"
+  },
+  {
+    "member": "System.IO.Directory::GetDirectories(",
+    "source": "documented",
+    "reason": "Enumerating a drive-relative path such as \"C:\" yields paths without the inserted separator on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/drive-current-dir-paths"
+  },
+  {
+    "member": "System.IO.Directory::GetFileSystemEntries(",
+    "source": "documented",
+    "reason": "Enumerating a drive-relative path such as \"C:\" yields paths without the inserted separator on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/drive-current-dir-paths"
+  },
+  {
+    "member": "System.IO.DirectoryInfo::Enumerate",
+    "source": "documented",
+    "reason": "Enumerating a drive-relative path such as \"C:\" yields paths without the inserted separator on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/drive-current-dir-paths"
+  },
+  {
+    "member": "System.IO.DirectoryInfo::GetFiles(",
+    "source": "documented",
+    "reason": "Enumerating a drive-relative path such as \"C:\" yields paths without the inserted separator on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/drive-current-dir-paths"
+  },
+  {
+    "member": "System.IO.DirectoryInfo::GetDirectories(",
+    "source": "documented",
+    "reason": "Enumerating a drive-relative path such as \"C:\" yields paths without the inserted separator on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/drive-current-dir-paths"
+  },
+  {
+    "member": "System.IO.DirectoryInfo::GetFileSystemInfos(",
+    "source": "documented",
+    "reason": "Enumerating a drive-relative path such as \"C:\" yields paths without the inserted separator on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/drive-current-dir-paths"
+  },
+  {
+    "member": "System.Linq.Enumerable::Sum(",
+    "source": "documented",
+    "reason": "The vectorized Sum can throw OverflowException for inputs whose intermediate sums overflowed differently before.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/enumerable-sum"
+  },
+  {
+    "member": "System.IO.FileStream::Write",
+    "source": "documented",
+    "reason": "Writing to a FileStream over a closed pipe throws IOException on .NET, where the write was silently dropped.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/filestream-disposed-pipe"
+  },
+  {
+    "member": "System.TimeZoneInfo::FindSystemTimeZoneById(",
+    "source": "documented",
+    "reason": "The same cached TimeZoneInfo instance can be returned on repeated calls, so reference comparisons differ.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/timezoneinfo-object"
+  },
+  {
+    "member": "System.GC::GetGeneration(",
+    "source": "documented",
+    "reason": "Objects on the non-GC heap, such as string literals, report generation Int32.MaxValue.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/getgeneration-return-value"
+  },
+  {
+    "member": "System.Runtime.InteropServices.RuntimeEnvironment::GetSystemVersion(",
+    "source": "documented",
+    "reason": "Returns the .NET product version instead of the v4.0.30319 image runtime version.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/getsystemversion"
+  },
+  {
+    "member": "System.Reflection.ParameterInfo::get_HasDefaultValue(",
+    "source": "documented",
+    "reason": "Parameters defined through Reflection.Emit without a default report HasDefaultValue false on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/parameterinfo-hasdefaultvalue"
+  },
+  {
+    "member": "System.IO.Packaging.Package::",
+    "source": "documented",
+    "reason": "Package part URIs compare case-insensitively on .NET, so lookups and duplicate detection differ.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/system-io-packaging-case-insensitive-uri"
+  },
+  {
+    "member": "System.Type::GetType(",
+    "source": "documented",
+    "reason": "A type name with an invalid element type throws TypeLoadException on .NET where some forms returned null; an asterisk in an assembly name is also rejected.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/8.0/type-gettype"
+  },
+  {
+    "member": "System.Management.ManagementDateTimeConverter::ToDateTime(",
+    "source": "documented",
+    "reason": "The returned DateTime has Kind Local on .NET instead of Unspecified.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/extensions/8.0/dmtf-todatetime"
+  },
+  {
+    "member": "System.ComponentModel.DateTimeConverter::ConvertTo(",
+    "source": "documented",
+    "reason": "The culture argument is used to format the value on .NET, where the current culture was used.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/typeconverter-cultureinfo"
+  },
+  {
+    "member": "System.ComponentModel.DateTimeOffsetConverter::ConvertTo(",
+    "source": "documented",
+    "reason": "The culture argument is used to format the value on .NET, where the current culture was used.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/typeconverter-cultureinfo"
+  },
+  {
+    "member": "System.Globalization.Calendar::get_TwoDigitYearMax(",
+    "source": "documented",
+    "reason": "The two-digit-year window ends at 2049 on .NET instead of 2029, so a parsed two-digit year from 30 to 49 lands in a different century.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/twodigityearmax-default"
+  },
+  {
+    "member": "System.Globalization.Calendar::ToFourDigitYear(",
+    "source": "documented",
+    "reason": "The two-digit-year window ends at 2049 on .NET instead of 2029, so a parsed two-digit year from 30 to 49 lands in a different century.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/twodigityearmax-default"
+  },
+  {
+    "member": "System.DateTime::Parse",
+    "source": "documented",
+    "reason": "The two-digit-year window ends at 2049 on .NET instead of 2029, so a parsed two-digit year from 30 to 49 lands in a different century.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/twodigityearmax-default"
+  },
+  {
+    "member": "System.DateTime::TryParse",
+    "source": "documented",
+    "reason": "The two-digit-year window ends at 2049 on .NET instead of 2029, so a parsed two-digit year from 30 to 49 lands in a different century.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/twodigityearmax-default"
+  },
+  {
+    "member": "System.DateTimeOffset::Parse",
+    "source": "documented",
+    "reason": "The two-digit-year window ends at 2049 on .NET instead of 2029, so a parsed two-digit year from 30 to 49 lands in a different century.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/twodigityearmax-default"
+  },
+  {
+    "member": "System.DateTimeOffset::TryParse",
+    "source": "documented",
+    "reason": "The two-digit-year window ends at 2049 on .NET instead of 2029, so a parsed two-digit year from 30 to 49 lands in a different century.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/twodigityearmax-default"
+  },
+  {
+    "member": "System.Net.Sockets.Socket::SendFile",
+    "source": "documented",
+    "reason": "SendFile on a connectionless socket throws NotSupportedException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/8.0/sendfile-connectionless"
+  },
+  {
+    "member": "System.Uri::Equals(",
+    "source": "documented",
+    "reason": "User information in mailto: URIs takes part in equality on .NET, so URIs that compared equal no longer do.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/8.0/uri-comparison"
+  },
+  {
+    "member": "System.Uri::op_Equality(",
+    "source": "documented",
+    "reason": "User information in mailto: URIs takes part in equality on .NET, so URIs that compared equal no longer do.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/8.0/uri-comparison"
+  },
+  {
+    "member": "System.Uri::op_Inequality(",
+    "source": "documented",
+    "reason": "User information in mailto: URIs takes part in equality on .NET, so URIs that compared equal no longer do.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/8.0/uri-comparison"
+  },
+  {
+    "member": "System.Reflection.FieldInfo::get_FieldType(",
+    "source": "documented",
+    "reason": "Function pointer types are reported as function pointer types on .NET instead of IntPtr.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/reflection/8.0/function-pointer-reflection"
+  },
+  {
+    "member": "System.Reflection.PropertyInfo::get_PropertyType(",
+    "source": "documented",
+    "reason": "Function pointer types are reported as function pointer types on .NET instead of IntPtr.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/reflection/8.0/function-pointer-reflection"
+  },
+  {
+    "member": "System.Reflection.ParameterInfo::get_ParameterType(",
+    "source": "documented",
+    "reason": "Function pointer types are reported as function pointer types on .NET instead of IntPtr.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/reflection/8.0/function-pointer-reflection"
+  },
+  {
+    "member": "System.Windows.Forms.PictureBox::Load",
+    "source": "documented",
+    "reason": "Loading a remote image checks certificate revocation and surfaces HttpClient exceptions on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/8.0/picturebox-remote-image"
+  },
+  {
+    "member": "System.Windows.Forms.PictureBox::set_ImageLocation(",
+    "source": "documented",
+    "reason": "Loading a remote image checks certificate revocation and surfaces HttpClient exceptions on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/8.0/picturebox-remote-image"
+  },
+  {
+    "member": "System.Windows.Forms.DateTimePicker::get_Text(",
+    "source": "documented",
+    "reason": "Text is empty until the control's handle is created on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/8.0/datetimepicker-text"
+  },
+  {
+    "member": "System.ComponentModel.Design.ExceptionCollection::.ctor(",
+    "source": "documented",
+    "reason": "A list containing non-exception items is rejected with ArgumentException at construction on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/8.0/exceptioncollection"
+  },
+  {
+    "member": "System.Windows.Forms.ImageList::get_ColorDepth(",
+    "source": "documented",
+    "reason": "ImageList defaults to 32-bit colour depth on .NET instead of 8-bit.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/8.0/imagelist-colordepth"
+  },
+  {
+    "member": "System.Windows.Forms.TableLayoutStyleCollection::",
+    "source": "documented",
+    "reason": "Adding an item that is not a TableLayoutStyle throws ArgumentException on .NET instead of InvalidCastException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/8.0/tablelayoutstylecollection"
+  },
+  {
+    "member": "System.IO.Compression.ZipArchive::CreateEntry(string,System.IO.Compression.CompressionLevel)",
+    "source": "documented",
+    "reason": "Entries created with an explicit compression level get different general-purpose bit flags, so the written archive bytes differ.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/compressionlevel-bits"
+  },
+  {
+    "member": "System.Numerics.BigInteger::",
+    "source": "documented",
+    "reason": "BigInteger has a lower maximum bit length on .NET and throws OverflowException beyond it.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/biginteger-limit"
+  },
+  {
+    "member": "System.IO.BinaryReader::ReadString(",
+    "source": "documented",
+    "reason": "Malformed encoded bytes decode to U+FFFD on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader"
+  },
+  {
+    "member": "System.Type::MakeArrayType(",
+    "source": "documented",
+    "reason": "Making an array type of System.Void throws on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/type-instance"
+  },
+  {
+    "member": "System.ComponentModel.EnumConverter::.ctor(",
+    "source": "documented",
+    "reason": "Constructing an EnumConverter for a non-enum type throws ArgumentException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/enumconverter"
+  },
+  {
+    "member": "System.Environment::SetEnvironmentVariable(",
+    "source": "documented",
+    "reason": "An empty string value sets an empty variable instead of deleting it, and null deletes a child-process variable instead of emptying it.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/empty-env-variable"
+  },
+  {
+    "member": "System.Diagnostics.ProcessStartInfo::get_Environment",
+    "source": "documented",
+    "reason": "An empty string value sets an empty variable instead of deleting it, and null deletes a child-process variable instead of emptying it.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/empty-env-variable"
+  },
+  {
+    "member": "System.Diagnostics.ProcessStartInfo::get_EnvironmentVariables(",
+    "source": "documented",
+    "reason": "An empty string value sets an empty variable instead of deleting it, and null deletes a child-process variable instead of emptying it.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/empty-env-variable"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.X509Certificate2Collection::Import(",
+    "source": "documented",
+    "reason": "The private key's lifetime follows the certificate object directly loaded from the PFX, which changes when keys are deleted.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/9.0/private-key-lifetime"
+  },
+  {
+    "member": "System.Windows.Forms.BindingSource::get_SortDescriptions(",
+    "source": "documented",
+    "reason": "SortDescriptions returns an empty collection instead of null when the source is not an IBindingListView.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/9.0/sortdescriptions-return-value"
+  },
+  {
+    "member": "System.ComponentModel.Design.ComponentDesigner::Initialize",
+    "source": "documented",
+    "reason": "A null component throws ArgumentNullException immediately on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/9.0/componentdesigner-initialize"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewRow.DataGridViewRowAccessibleObject::get_Name(",
+    "source": "documented",
+    "reason": "The accessible row name counts rows from 1 instead of 0.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/9.0/datagridviewrowaccessibleobject-name-row"
+  },
+  {
+    "member": "System.Windows.Forms.DataGridViewHeaderCell::Mouse",
+    "source": "documented",
+    "reason": "These methods return false instead of throwing NullReferenceException when the cell has no grid.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/9.0/datagridviewheadercell-nre"
+  },
+  {
+    "member": "System.Windows.Markup.XmlAttributeProperties::GetXmlNamespaceMaps(",
+    "source": "documented",
+    "reason": "GetXmlNamespaceMaps returns the Hashtable instead of throwing InvalidCastException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/wpf/9.0/xml-namespace-maps"
+  },
+  {
+    "member": "System.IO.BufferedStream::WriteByte(",
+    "source": "documented",
+    "reason": "WriteByte no longer flushes when the buffer fills, so data reaches the underlying stream at a different time.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/10.0/bufferedstream-writebyte-flush"
+  },
+  {
+    "member": "System.DirectoryServices.Protocols.LdapConnection::SendRequest(",
+    "source": "documented",
+    "reason": "Directory control parsing validates tags, lengths and UTF-8 strictly on .NET and throws on input that was accepted before.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/10.0/ldap-directorycontrol-parsing"
+  },
+  {
+    "member": "System.DirectoryServices.Protocols.LdapConnection::EndSendRequest(",
+    "source": "documented",
+    "reason": "Directory control parsing validates tags, lengths and UTF-8 strictly on .NET and throws on input that was accepted before.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/10.0/ldap-directorycontrol-parsing"
+  },
+  {
+    "member": "System.DirectoryServices.Protocols.VlvRequestControl::.ctor(",
+    "source": "documented",
+    "reason": "Directory control parsing validates tags, lengths and UTF-8 strictly on .NET and throws on input that was accepted before.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/10.0/ldap-directorycontrol-parsing"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.X509Certificate::GetKeyAlgorithmParameters",
+    "source": "documented",
+    "reason": "A key without algorithm parameters reports null on .NET instead of an empty value.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/10.0/x509-publickey-null"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.PublicKey::get_EncodedParameters(",
+    "source": "documented",
+    "reason": "A key without algorithm parameters reports null on .NET instead of an empty value.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/10.0/x509-publickey-null"
+  },
+  {
+    "member": "System.Net.Mail.MailAddress::.ctor(",
+    "source": "documented",
+    "reason": "Addresses with consecutive dots are rejected with FormatException on .NET.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/10.0/mailaddress-consecutive-dots"
+  },
+  {
+    "member": "System.Uri::.ctor(",
+    "source": "documented",
+    "reason": "URIs longer than about 65,000 characters are accepted on .NET, where .NET Framework threw UriFormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/10.0/uri-length-limits-removed"
+  },
+  {
+    "member": "System.Uri::TryCreate(",
+    "source": "documented",
+    "reason": "URIs longer than about 65,000 characters are accepted on .NET, where .NET Framework threw UriFormatException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/networking/10.0/uri-length-limits-removed"
+  },
+  {
+    "member": "System.Xml.Serialization.XmlSerializer::Serialize(",
+    "source": "documented",
+    "reason": "Properties marked [Obsolete] are serialized on .NET, where .NET Framework skipped them.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/serialization/10/xmlserializer-obsolete-properties"
+  },
+  {
+    "member": "System.Xml.Serialization.XmlSerializer::Deserialize(",
+    "source": "documented",
+    "reason": "Properties marked [Obsolete] are serialized on .NET, where .NET Framework skipped them.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/serialization/10/xmlserializer-obsolete-properties"
+  },
+  {
+    "member": "System.Drawing.Image::",
+    "source": "documented",
+    "reason": "GDI+ failures surface as ExternalException on .NET where OutOfMemoryException was thrown.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/10.0/system-drawing-outofmemory-externalexception"
+  },
+  {
+    "member": "System.Drawing.Bitmap::",
+    "source": "documented",
+    "reason": "GDI+ failures surface as ExternalException on .NET where OutOfMemoryException was thrown.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/10.0/system-drawing-outofmemory-externalexception"
+  },
+  {
+    "member": "System.Drawing.Icon::",
+    "source": "documented",
+    "reason": "GDI+ failures surface as ExternalException on .NET where OutOfMemoryException was thrown.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/10.0/system-drawing-outofmemory-externalexception"
+  },
+  {
+    "member": "System.Drawing.Graphics::",
+    "source": "documented",
+    "reason": "GDI+ failures surface as ExternalException on .NET where OutOfMemoryException was thrown.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/10.0/system-drawing-outofmemory-externalexception"
+  },
+  {
+    "member": "System.Diagnostics.Process::Start(",
+    "source": "documented",
+    "reason": "UseShellExecute defaults to false on .NET, so starting a document or URL without the shell fails where it opened before, and WindowStyle is honoured without the shell.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#change-in-default-value-of-useshellexecute"
+  },
+  {
+    "member": "System.Diagnostics.ProcessStartInfo::get_UseShellExecute(",
+    "source": "documented",
+    "reason": "UseShellExecute defaults to false on .NET, so starting a document or URL without the shell fails where it opened before, and WindowStyle is honoured without the shell.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#change-in-default-value-of-useshellexecute"
+  },
+  {
+    "member": "System.IO.FileSystemInfo::set_Attributes(",
+    "source": "documented",
+    "reason": "Setting attributes without write access throws UnauthorizedAccessException on .NET instead of ArgumentException.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#unauthorizedaccessexception-thrown-by-filesysteminfoattributes"
+  },
+  {
+    "member": "System.UriBuilder::set_Fragment(",
+    "source": "documented",
+    "reason": "The setters no longer prepend # or ? on .NET, so a value that already carries the character is not doubled.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#uribuilder-properties-no-longer-prepend-leading-characters"
+  },
+  {
+    "member": "System.UriBuilder::set_Query(",
+    "source": "documented",
+    "reason": "The setters no longer prepend # or ? on .NET, so a value that already carries the character is not doubled.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#uribuilder-properties-no-longer-prepend-leading-characters"
+  },
+  {
+    "member": "System.Diagnostics.Process::get_StartInfo(",
+    "source": "documented",
+    "reason": "Reading StartInfo of a process this code did not start throws InvalidOperationException on .NET instead of returning a placeholder.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#processstartinfo-throws-invalidoperationexception-for-processes-you-didnt-start"
+  },
+  {
+    "member": "System.Security.Cryptography.Pkcs.SignedCms::ComputeSignature(",
+    "source": "documented",
+    "reason": "The silent flag is honoured on .NET, so a key needing a PIN fails instead of prompting.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#boolean-parameter-of-signedcmscomputesignature-is-respected"
+  },
+  {
+    "member": "System.Net.WebClient::CancelAsync(",
+    "source": "documented",
+    "reason": "CancelAsync may not cancel immediately once the response is being read.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/fx-core#webclientcancelasync-doesnt-always-cancel-immediately"
+  },
+  {
+    "member": "System.AppDomain::CreateDomain(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#system"
+  },
+  {
+    "member": "System.AppDomain::ExecuteAssembly(string,string[],byte[],",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#system"
+  },
+  {
+    "member": "System.AppDomain::Unload(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#system"
+  },
+  {
+    "member": "System.Delegate::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#system"
+  },
+  {
+    "member": "System.Exception::add_SerializeObjectState(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#system"
+  },
+  {
+    "member": "System.MarshalByRefObject::GetLifetimeService(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#system"
+  },
+  {
+    "member": "System.MarshalByRefObject::InitializeLifetimeService(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#system"
+  },
+  {
+    "member": "System.OperatingSystem::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#system"
+  },
+  {
+    "member": "System.Type::ReflectionOnlyGetType(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#system"
+  },
+  {
+    "member": "System.CodeDom.Compiler.CodeDomProvider::CompileAssemblyFromDom(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemcodedomcompiler"
+  },
+  {
+    "member": "System.CodeDom.Compiler.CodeDomProvider::CompileAssemblyFromFile(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemcodedomcompiler"
+  },
+  {
+    "member": "System.CodeDom.Compiler.CodeDomProvider::CompileAssemblyFromSource(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemcodedomcompiler"
+  },
+  {
+    "member": "System.Collections.Specialized.NameObjectCollectionBase::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemcollectionsspecialized"
+  },
+  {
+    "member": "System.Collections.Specialized.NameObjectCollectionBase::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemcollectionsspecialized"
+  },
+  {
+    "member": "System.Collections.Specialized.NameObjectCollectionBase::OnDeserialization(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemcollectionsspecialized"
+  },
+  {
+    "member": "System.Configuration.RsaProtectedConfigurationProvider::",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemconfiguration"
+  },
+  {
+    "member": "System.IO.FileSystemInfo::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemio"
+  },
+  {
+    "member": "System.IO.FileSystemInfo::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemio"
+  },
+  {
+    "member": "System.Media.SoundPlayer::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemmedia"
+  },
+  {
+    "member": "System.Net.AuthenticationManager::",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.FileWebRequest::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.FileWebRequest::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.FileWebResponse::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.FileWebResponse::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.HttpWebRequest::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.HttpWebRequest::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.HttpWebResponse::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.HttpWebResponse::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.WebProxy::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.WebProxy::GetDefaultProxy(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.WebProxy::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.WebRequest::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.WebRequest::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.WebResponse::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.WebResponse::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnet"
+  },
+  {
+    "member": "System.Net.Sockets.Socket::.ctor(System.Net.Sockets.SocketInformation)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnetsockets"
+  },
+  {
+    "member": "System.Net.Sockets.Socket::DuplicateAndClose(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnetsockets"
+  },
+  {
+    "member": "System.Net.WebSockets.WebSocket::RegisterPrefixes(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemnetwebsockets"
+  },
+  {
+    "member": "System.Reflection.Assembly::get_CodeBase(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemreflection"
+  },
+  {
+    "member": "System.Reflection.Assembly::get_EscapedCodeBase(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemreflection"
+  },
+  {
+    "member": "System.Reflection.Assembly::LoadFrom(string,byte[],",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemreflection"
+  },
+  {
+    "member": "System.Reflection.Assembly::ReflectionOnlyLoad(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemreflection"
+  },
+  {
+    "member": "System.Reflection.Assembly::ReflectionOnlyLoadFrom(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemreflection"
+  },
+  {
+    "member": "System.Reflection.AssemblyName::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemreflection"
+  },
+  {
+    "member": "System.Reflection.AssemblyName::OnDeserialization(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemreflection"
+  },
+  {
+    "member": "System.Reflection.StrongNameKeyPair::.ctor(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemreflection"
+  },
+  {
+    "member": "System.Reflection.StrongNameKeyPair::get_PublicKey(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemreflection"
+  },
+  {
+    "member": "System.Runtime.CompilerServices.DebugInfoGenerator::CreatePdbGenerator(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemruntimecompilerservices"
+  },
+  {
+    "member": "System.Runtime.InteropServices.Marshal::GetIDispatchForObject(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemruntimeinteropservices"
+  },
+  {
+    "member": "System.Runtime.InteropServices.RuntimeEnvironment::get_SystemConfigurationFile(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemruntimeinteropservices"
+  },
+  {
+    "member": "System.Runtime.InteropServices.RuntimeEnvironment::GetRuntimeInterfaceAsIntPtr(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemruntimeinteropservices"
+  },
+  {
+    "member": "System.Runtime.InteropServices.RuntimeEnvironment::GetRuntimeInterfaceAsObject(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemruntimeinteropservices"
+  },
+  {
+    "member": "System.Runtime.Serialization.XsdDataContractExporter::get_Schemas(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemruntimeserialization"
+  },
+  {
+    "member": "System.Security.CodeAccessPermission::Deny(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.CodeAccessPermission::PermitOnly(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.PermissionSet::ConvertPermissionSet(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.PermissionSet::Deny(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.PermissionSet::PermitOnly(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.SecurityContext::Capture(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.SecurityContext::CreateCopy(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.SecurityContext::Dispose(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.SecurityContext::IsFlowSuppressed(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.SecurityContext::IsWindowsIdentityFlowSuppressed(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.SecurityContext::RestoreFlow(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.SecurityContext::Run(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.SecurityContext::SuppressFlow(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.SecurityContext::SuppressFlowWindowsIdentity(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurity"
+  },
+  {
+    "member": "System.Security.Claims.ClaimsPrincipal::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurityclaims"
+  },
+  {
+    "member": "System.Security.Claims.ClaimsPrincipal::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurityclaims"
+  },
+  {
+    "member": "System.Security.Claims.ClaimsIdentity::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurityclaims"
+  },
+  {
+    "member": "System.Security.Claims.ClaimsIdentity::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurityclaims"
+  },
+  {
+    "member": "System.Security.Cryptography.AsymmetricAlgorithm::Create(string)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.CryptoConfig::EncodeOID(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.ECDiffieHellmanCng::FromXmlString(string,System.Security.Cryptography.ECKeyXmlFormat)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.ECDiffieHellmanCng::ToXmlString(System.Security.Cryptography.ECKeyXmlFormat)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.ECDiffieHellmanCngPublicKey::FromXmlString(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.ECDiffieHellmanCngPublicKey::ToXmlString(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.ECDiffieHellmanPublicKey::ToXmlString(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.ECDsaCng::FromXmlString(string,System.Security.Cryptography.ECKeyXmlFormat)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.ECDsaCng::ToXmlString(System.Security.Cryptography.ECKeyXmlFormat)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.HashAlgorithm::Create()",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.HMAC::Create()",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.HMAC::Create(string)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.HMAC::HashCore(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.HMAC::HashFinal(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.HMAC::Initialize(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.KeyedHashAlgorithm::Create()",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.KeyedHashAlgorithm::Create(string)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.RSACryptoServiceProvider::DecryptValue(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.RSACryptoServiceProvider::EncryptValue(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.RSA::DecryptValue(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.RSA::EncryptValue(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.RSA::FromXmlString(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.RSA::ToXmlString(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.SymmetricAlgorithm::Create()",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.SymmetricAlgorithm::Create(string)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptography"
+  },
+  {
+    "member": "System.Security.Cryptography.Pkcs.CmsSigner::.ctor(System.Security.Cryptography.CspParameters)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptographypkcs"
+  },
+  {
+    "member": "System.Security.Cryptography.Pkcs.SignerInfo::ComputeCounterSignature()",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptographypkcs"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.X509Certificate::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptographyx509certificates"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.X509Certificate::Import(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptographyx509certificates"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.X509Certificate2::Import(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptographyx509certificates"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.X509Certificate2::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptographyx509certificates"
+  },
+  {
+    "member": "System.Security.Cryptography.X509Certificates.X509Certificate2::set_PrivateKey(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritycryptographyx509certificates"
+  },
+  {
+    "member": "System.Security.Authentication.ExtendedProtection.ExtendedProtectionPolicy::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecurityauthenticationextendedprotection"
+  },
+  {
+    "member": "System.Security.Policy.Hash::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemsecuritypolicy"
+  },
+  {
+    "member": "System.ServiceProcess.TimeoutException::.ctor(System.Runtime.Serialization.SerializationInfo",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemserviceprocessservicecontroller"
+  },
+  {
+    "member": "System.Text.RegularExpressions.Regex::CompileToAssembly(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemtextregularexpressions"
+  },
+  {
+    "member": "System.Threading.CompressedStack::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemthreading"
+  },
+  {
+    "member": "System.Threading.ExecutionContext::GetObjectData(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemthreading"
+  },
+  {
+    "member": "System.Threading.Thread::Abort(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemthreading"
+  },
+  {
+    "member": "System.Threading.Thread::ResetAbort(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemthreading"
+  },
+  {
+    "member": "System.Threading.Thread::Resume(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemthreading"
+  },
+  {
+    "member": "System.Threading.Thread::Suspend(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemthreading"
+  },
+  {
+    "member": "System.Xml.XmlDictionaryReader::CreateMtomReader(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemxml"
+  },
+  {
+    "member": "System.Xml.XmlDictionaryWriter::CreateMtomWriter(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemxml"
+  },
+  {
+    "member": "System.Xml.Xsl.XsltSettings::set_EnableScript(",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemxml"
+  },
+  {
+    "member": "System.Xml.Xsl.XsltSettings::.ctor(bool,bool)",
+    "source": "documented",
+    "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemxml"
   }
 ]

@@ -96,14 +96,7 @@
           },
           baselineState: new,
           properties: {
-            proofMethod: bounded,
-            ladderTrace: [
-              {
-                rung: bounded,
-                outcome: proved,
-                detail: no loop or self-call; every input checked
-              }
-            ]
+            proofMethod: congruence
           }
         },
         {
@@ -173,7 +166,7 @@
           matchedPairs: 1,
           pairsWithoutOpaque: 1,
           pairsWholeBodyOpaque: 0,
-          pairsCongruent: 0,
+          pairsCongruent: 1,
           projectsSkipped: {
             legacy: 0,
             modern: 0

@@ -9,13 +9,14 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="coverlet.MTP" />
-    <PackageReference Include="CsCheck" />
     <PackageReference Include="Verify.XunitV3" />
     <PackageReference Include="Sarif.Sdk" />
+    <PackageReference Include="CsCheck" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Equiv.Cli\Equiv.Cli.csproj" />
+    <!-- M3-015: the congruence soundness property draws its programs from LoweringOracleGen; M0-012: the differential soundness gate from PairGen. -->
     <ProjectReference Include="..\Equiv.TestSupport\Equiv.TestSupport.csproj" />
   </ItemGroup>
 

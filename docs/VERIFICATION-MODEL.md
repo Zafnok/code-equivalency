@@ -278,9 +278,9 @@ no lowered body, so it counts in `procedures` and `matchedPairs` but in neither
 `pairsWithoutOpaque` nor `pairsWholeBodyOpaque`, nor in `opaqueByReason` (ticket P2-011).
 
 The census also counts what the solver will see (ADR 0034; ticket M3-030). A lowered matched pair
-is *changed* unless it is congruent. Until M3-015, congruent means the two declarations' syntax
-token sequences are equal once trivia is ignored, and neither lowered body has an `IrCall` that
-`RuntimeChangeTable.TryMatch` matches. `changedPairs`, `changedPairsWithoutOpaque` and
+is *changed* unless it is congruent: both bound fingerprints are equal, neither is runtime-sensitive,
+and neither body is unbound (ADRs 0024 and 0029; ticket M3-015). `pairsCongruent` counts the
+congruent pairs. `changedPairs`, `changedPairsWithoutOpaque` and
 `changedPairsWholeBodyOpaque` are `matchedPairs`, `pairsWithoutOpaque` and `pairsWholeBodyOpaque`
 restricted to changed pairs; lowerable share is `changedPairsWithoutOpaque / changedPairs`.
 `changedReasonSets` maps the sorted, `+`-joined union of both sides' opaque reasons to its number

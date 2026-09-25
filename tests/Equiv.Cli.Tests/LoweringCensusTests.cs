@@ -8,8 +8,8 @@ namespace Equiv.Cli.Tests;
 
 /// <summary>
 /// <see cref="LoweringCensus"/> (ADR 0027; ticket M3-014 acceptance criteria 1 and 3;
-/// ADR 0034, ticket M3-030 acceptance criteria 1 to 3): counts over the lowered bodies of
-/// matched pairs, computed without a solver.
+/// ADR 0034, ticket M3-030 acceptance criteria 1 to 3; ticket M3-015 acceptance criterion 6): counts over the lowered
+/// bodies of matched pairs, computed without a solver. Each pair comes with whether it is congruent, which the CLI decides.
 /// </summary>
 public sealed class LoweringCensusTests
 {
@@ -102,20 +102,20 @@ public sealed class LoweringCensusTests
     }
 
     [Fact]
-    public void ProceduresCountEachSidesMatchedPlusUnmatchedAndCongruentStaysZero()
+    public void ProceduresCountEachSidesMatchedPlusUnmatchedAndCongruentPairsAreCounted()
     {
-        LoweringCensus census = LoweringCensus.Compute([(Body(Clean), Body(Clean), true), (Body(Clean), Body(Clean), true)], removed: 3, added: 5);
+        LoweringCensus census = LoweringCensus.Compute([(Body(Clean), Body(Clean), true), (Body(Clean), Body(Clean), false)], removed: 3, added: 5);
 
         Assert.Equal(new SideCounts(Legacy: 5, Modern: 7), census.Procedures);
         Assert.Equal(2, census.MatchedPairs);
         Assert.Equal(2, census.PairsWithoutOpaque);
-        Assert.Equal(0, census.PairsCongruent);
+        Assert.Equal(1, census.PairsCongruent);
         Assert.Equal(new SideCounts(0, 0), census.ProjectsSkipped);
         Assert.Empty(census.OpaqueByReason);
     }
 
     [Fact]
-    public void AChangedPairIsOneWithDifferentTokensOrARuntimeChangesCall()
+    public void AChangedPairIsOneThatIsNotCongruent()
     {
         IrProcedure opaque = Body("""
             proc "T::M" (%a: bv32) -> bv32 entry B0
@@ -136,13 +136,14 @@ public sealed class LoweringCensusTests
                 (opaque, opaque, true),
                 (Body(Clean), Body(Clean), false),
                 (opaque, wholeBody, false),
-                (Body(RuntimeChangeCall), Body(Clean), true),
-                (Body(Clean), Body(RuntimeChangeCall), true),
+                (Body(RuntimeChangeCall), Body(Clean), false),
+                (Body(Clean), Body(RuntimeChangeCall), false),
             ],
             removed: 0,
             added: 0);
 
         Assert.Equal(6, census.MatchedPairs);
+        Assert.Equal(2, census.PairsCongruent);
         Assert.Equal(4, census.Changed.Pairs);
         Assert.Equal(3, census.Changed.WithoutOpaque);
         Assert.Equal(1, census.Changed.WholeBodyOpaque);
@@ -166,7 +167,7 @@ public sealed class LoweringCensusTests
             """);
 
         LoweringCensus census = LoweringCensus.Compute(
-            [(twice, Body(RuntimeChangeCall), true), (Body(RuntimeChangeCall), Body(Clean), true), (Body(Clean), Body(Clean), true)],
+            [(twice, Body(RuntimeChangeCall), false), (Body(RuntimeChangeCall), Body(Clean), false), (Body(Clean), Body(Clean), true)],
             removed: 0,
             added: 0);
 

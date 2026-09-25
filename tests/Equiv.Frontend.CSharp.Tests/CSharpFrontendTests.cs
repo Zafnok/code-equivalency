@@ -115,6 +115,25 @@ public sealed class CSharpFrontendTests
         Assert.DoesNotContain("System.String::Contains(char)", IrText.Dump(pair.NewBody!), StringComparison.Ordinal);
     }
 
+    /// <summary>Ticket M3-015 acceptance criterion 1: every lowered pair carries both bodies' fingerprints.</summary>
+    [Fact]
+    public void FingerprintsBothBodiesOfEveryLoweredPair()
+    {
+        Compilation legacyCompilation = RoslynTestCompilations.Compile("namespace N { public class C { public int Same(int a) => a + 1; public int Changed(int a) => a + 1; } }");
+        Compilation modernCompilation = RoslynTestCompilations.Compile("namespace N { public class C { public int Same(int b) =>  b+1; public int Changed(int a) => a + 2; } }");
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+
+        ProcedurePair same = result.Pairs.Single(static p => p.New.Value.Contains("::Same(", StringComparison.Ordinal));
+        ProcedurePair changed = result.Pairs.Single(static p => p.New.Value.Contains("::Changed(", StringComparison.Ordinal));
+        Assert.NotNull(same.OldFingerprint);
+        Assert.Equal(same.OldFingerprint, same.NewFingerprint);
+        Assert.NotEqual(changed.OldFingerprint, changed.NewFingerprint);
+    }
+
     [Fact]
     public void LowersBothBodiesOfEveryMatchedPair()
     {
