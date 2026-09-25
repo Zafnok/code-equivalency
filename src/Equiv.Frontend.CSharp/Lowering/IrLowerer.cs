@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 
 using Equiv.Core;
+using Equiv.Core.ApiEquivalences;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
@@ -24,7 +25,9 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// reason naming the construct; this class never throws on unsupported input. The heap
 /// (<see cref="HeapLowerer"/>) and the exception regions (<see cref="ExceptionLowerer"/>) are
 /// collaborators reached through one instance each (ticket P1-003); everything either needs while
-/// filling a block is a <see cref="LoweringContext"/> passed explicitly, never a swapped field.
+/// filling a block is a <see cref="LoweringContext"/> passed explicitly, never a swapped field. On the legacy side, the
+/// API-equivalence entries it is given rewrite calls and map sort names to their modern counterparts (ADR 0020; ticket
+/// M3-009); the modern side is given none.
 /// </summary>
 internal sealed class IrLowerer
 {
@@ -35,6 +38,7 @@ internal sealed class IrLowerer
     private readonly SsaBuilder ssa = new();
     private readonly RenameMap renames;
     private readonly ImmutableArray<string> suppressedRuntimeChanges;
+    private readonly Catalogue catalogue;
     private readonly IrType? returnType;
     private readonly Dictionary<ISymbol, SsaBuilder.Variable> variables = new(SymbolEqualityComparer.Default);
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captures = [];
@@ -49,10 +53,11 @@ internal sealed class IrLowerer
     private ControlFlowGraph cfg = null!;
     private SourceSpan bodySpan = null!;
 
-    private IrLowerer(RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, IrType? returnType)
+    private IrLowerer(RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue, IrType? returnType)
     {
         this.renames = renames;
         this.suppressedRuntimeChanges = suppressedRuntimeChanges;
+        this.catalogue = catalogue;
         this.returnType = returnType;
     }
 
@@ -63,20 +68,30 @@ internal sealed class IrLowerer
     /// whose bound code is erroneous is one whole-body <see cref="IrOpaque"/> per cause, with reason
     /// <see cref="Unknown.UnboundOpaqueReason"/> (ADR 0029 decision 2), and is not lowered further.
     /// </summary>
-    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
+    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges) =>
+        Lower(method, compilation, renames, suppressedRuntimeChanges, []).Body;
+
+    /// <summary>
+    /// As the four-argument overload, applying <paramref name="equivalences"/> (the legacy side's enabled catalogue
+    /// entries, or none for the modern side), and returning the sorted ids of the entries that fired.
+    /// </summary>
+    public static (IrProcedure Body, ImmutableArray<string> EquivalencesApplied) Lower(
+        IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
+        Catalogue entries = new(equivalences);
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
         ImmutableArray<SourceSpan> unbound = UnboundCauses(syntax, model, operation);
-        return (unbound.IsEmpty, operation) switch
+        IrProcedure procedure = (unbound.IsEmpty, operation) switch
         {
-            (false, _) => Opaque(method, renames, Unknown.UnboundOpaqueReason, unbound),
-            (true, IMethodBodyOperation body) => Lower(body, model, renames, suppressedRuntimeChanges),
-            _ => Opaque(method, renames, operation?.Kind.ToString() ?? "no-body", [Span(syntax)]),
+            (false, _) => Opaque(method, renames, entries, Unknown.UnboundOpaqueReason, unbound),
+            (true, IMethodBodyOperation body) => Lower(body, model, renames, suppressedRuntimeChanges, entries),
+            _ => Opaque(method, renames, entries, operation?.Kind.ToString() ?? "no-body", [Span(syntax)]),
         };
+        return (procedure, [.. entries.Applied]);
     }
 
     /// <summary>
@@ -87,6 +102,11 @@ internal sealed class IrLowerer
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(model);
+        return Lower(body, model, renames, suppressedRuntimeChanges, new Catalogue([]));
+    }
+
+    private static IrProcedure Lower(IMethodBodyOperation body, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue)
+    {
         IMethodSymbol method = (IMethodSymbol)model.GetDeclaredSymbol(body.Syntax)!;
         ControlFlowGraph graph = ControlFlowGraph.Create(body);
         SourceSpan span = Span(body.Syntax);
@@ -108,11 +128,11 @@ internal sealed class IrLowerer
         };
         if (wholeBody is not null)
         {
-            return Opaque(method, renames, wholeBody, [span]);
+            return Opaque(method, renames, catalogue, wholeBody, [span]);
         }
 
-        (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method);
-        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, returnType) { compilation = (CSharpCompilation)model.Compilation, cfg = graph };
+        (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
+        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, catalogue, returnType) { compilation = (CSharpCompilation)model.Compilation, cfg = graph };
         ImmutableArray<IrBlock> blocks = lowerer.LowerBlocks(method, parameters, span);
         IrProcedure procedure = new(
             RoslynIdentity.Of(method, renames),
@@ -128,16 +148,16 @@ internal sealed class IrLowerer
     /// The C# parameters. One declared <c>@this</c> has the name <c>this</c>, which is the receiver's (ADR 0021), so it is
     /// spelled <c>$this</c>; no C# identifier contains <c>$</c>, so that name is never another parameter's (ticket M3-007).
     /// </summary>
-    private static (ImmutableArray<IrParameter> Parameters, IrType? ReturnType) Signature(IMethodSymbol method) => (
-        [.. method.Parameters.Select(static p => new IrParameter(
-            new IrVar(IrParameterNames.IsSynthesised(p.Name) ? "$" + p.Name : p.Name, TypeMapper.Map(p.Type), p.Name),
+    private static (ImmutableArray<IrParameter> Parameters, IrType? ReturnType) Signature(IMethodSymbol method, Func<string, string> sorts) => (
+        [.. method.Parameters.Select(p => new IrParameter(
+            new IrVar(IrParameterNames.IsSynthesised(p.Name) ? "$" + p.Name : p.Name, TypeMapper.Map(p.Type, sorts), p.Name),
             p.RefKind switch
             {
                 RefKind.Ref => IrParameterKind.Ref,
                 RefKind.Out => IrParameterKind.Out,
                 _ => IrParameterKind.In,
             }))],
-        method.ReturnsVoid ? null : TypeMapper.Map(method.ReturnType));
+        method.ReturnsVoid ? null : TypeMapper.Map(method.ReturnType, sorts));
 
     /// <summary>
     /// Where <paramref name="syntax"/>'s bound code is erroneous (ADR 0029 decision 2): the span of every compiler error
@@ -167,9 +187,9 @@ internal sealed class IrLowerer
     /// One block: an opaque value (reason <paramref name="reason"/>) returned, by-ref parameters unchanged. There is one
     /// <see cref="IrOpaque"/> per span in <paramref name="spans"/>, the last one defining the value.
     /// </summary>
-    private static IrProcedure Opaque(IMethodSymbol method, RenameMap renames, string reason, ImmutableArray<SourceSpan> spans)
+    private static IrProcedure Opaque(IMethodSymbol method, RenameMap renames, Catalogue catalogue, string reason, ImmutableArray<SourceSpan> spans)
     {
-        (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method);
+        (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
         IrVar? value = returnType is null ? null : new IrVar("$0", returnType);
         IrBlock block = new(
             new IrBlockId(0),
@@ -185,7 +205,7 @@ internal sealed class IrLowerer
         bodySpan = span;
         chains = SwitchChains.Find(cfg);
         exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, bodySpan, Fill);
-        heap = new HeapLowerer(ssa, Value, ThrowIfNull, Target, (context, condition, exceptionType) => ThrowIf(condition, exceptionType, context));
+        heap = new HeapLowerer(ssa, Value, ThrowIfNull, Target, (context, condition, exceptionType) => ThrowIf(condition, exceptionType, context), catalogue.Sorts);
         assignedCaptures =
         [
             .. cfg.Blocks
@@ -471,13 +491,13 @@ internal sealed class IrLowerer
     private SsaBuilder.Variable Local(ILocalSymbol local) =>
         variables.TryGetValue(local, out SsaBuilder.Variable? variable)
             ? variable
-            : Declare(local, new IrVar(local.Name, TypeMapper.Map(local.Type), local.Name), local.Type);
+            : Declare(local, new IrVar(local.Name, Map(local.Type), local.Name), local.Type);
 
     private SsaBuilder.Variable Capture(CaptureId id, ITypeSymbol type)
     {
         if (!captures.TryGetValue(id, out SsaBuilder.Variable? variable))
         {
-            variable = Shadowed(new IrVar($"$c{captures.Count.ToString(CultureInfo.InvariantCulture)}", TypeMapper.Map(type)), type);
+            variable = Shadowed(new IrVar($"$c{captures.Count.ToString(CultureInfo.InvariantCulture)}", Map(type)), type);
             captures[id] = variable;
         }
 
@@ -565,7 +585,7 @@ internal sealed class IrLowerer
     /// </summary>
     private IrVar? Opaque(IOperation operation, string reason, LoweringContext context)
     {
-        IrVar? target = operation.Type is { SpecialType: not SpecialType.System_Void } type ? ssa.Temp(TypeMapper.Map(type)) : null;
+        IrVar? target = operation.Type is { SpecialType: not SpecialType.System_Void } type ? ssa.Temp(Map(type)) : null;
         SourceSpan span = Span(operation.Syntax);
         ssa.Emit(context.Current, new IrOpaque(target, reason, span));
         foreach (SsaBuilder.Variable written in Written(operation))
@@ -603,7 +623,10 @@ internal sealed class IrLowerer
         _ => [target],
     };
 
-    private IrVar Constant(ITypeSymbol type, object? value, LoweringContext context) => Const(TypeMapper.Constant(type, value), context);
+    private IrVar Constant(ITypeSymbol type, object? value, LoweringContext context) => Const(TypeMapper.Constant(type, value, catalogue.Sorts), context);
+
+    /// <summary>The IR type of <paramref name="type"/>, with this side's sort names (ticket M3-009).</summary>
+    private IrType Map(ITypeSymbol type) => TypeMapper.Map(type, catalogue.Sorts);
 
     private IrVar Const(IrValue value, LoweringContext context)
     {
@@ -764,7 +787,7 @@ internal sealed class IrLowerer
             return Call(
                 new CallIdentity(ProcedureIdentityNormalizer.Member("System", "String", "Concat", 0, ["string", "string"], renames).Value),
                 [Value(binary.LeftOperand, context), Value(binary.RightOperand, context)],
-                TypeMapper.Map(binary.Type!),
+                Map(binary.Type!),
                 context);
         }
 
@@ -775,7 +798,7 @@ internal sealed class IrLowerer
         {
             not { } => Opaque(binary, binary.Kind.ToString(), context),
             { } op when OperatorMapper.IsShift(op) => Shift(op, left, right, (IrBitVec)left.Type, context),
-            { } op => Arithmetic(op, left, right, signed, binary.IsChecked, TypeMapper.Map(binary.Type!), context),
+            { } op => Arithmetic(op, left, right, signed, binary.IsChecked, Map(binary.Type!), context),
         };
     }
 
@@ -951,28 +974,154 @@ internal sealed class IrLowerer
     private IrVar? Create(IObjectCreationOperation creation, LoweringContext context) =>
         creation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out)
             ? Opaque(creation, "ref-argument", context)
-            : Call(Identity(creation.Constructor!), [.. Arguments([], creation.Arguments, context)], TypeMapper.Map(creation.Type!), context);
+            : Call(Identity(creation.Constructor!), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), context);
 
-    /// <summary>An opaque call (receiver first, then arguments in parameter order) that may throw System.Exception.</summary>
-    private IrVar? Invoke(IInvocationOperation invocation, LoweringContext context) =>
-        invocation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out)
-            ? Opaque(invocation, "ref-argument", context)
-            : Dispatch(
-                invocation.Instance,
-                Identity(invocation.TargetMethod),
-                Operands(invocation.Instance, invocation.Arguments, context),
-                invocation.TargetMethod.ReturnsVoid ? null : TypeMapper.Map(invocation.Type!),
-                context);
+    /// <summary>
+    /// An opaque call (receiver first, then arguments in parameter order) that may throw System.Exception. A call to an
+    /// API-equivalence entry's legacy member whose arguments its adapter addresses is a call to the entry's modern member
+    /// instead, and the entry is recorded as applied (ADR 0020; ticket M3-009).
+    /// </summary>
+    private IrVar? Invoke(IInvocationOperation invocation, LoweringContext context)
+    {
+        if (invocation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out))
+        {
+            return Opaque(invocation, "ref-argument", context);
+        }
+
+        CallIdentity callee = Identity(invocation.TargetMethod);
+        IrType? returns = invocation.TargetMethod.ReturnsVoid ? null : Map(invocation.Type!);
+        if (catalogue.Members.TryGetValue(callee.Value, out ApiEquivalence? entry) && Adapt(entry, invocation, context) is { } adapted)
+        {
+            catalogue.Applied.Add(entry.Id);
+            return Call(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges), adapted, returns, context);
+        }
+
+        return Dispatch(invocation.Instance, callee, Operands(invocation.Instance, invocation.Arguments, context), returns, context);
+    }
+
+    /// <summary>
+    /// The modern call's arguments under <paramref name="entry"/>'s adapter, or null, with nothing emitted, when it cannot
+    /// address the legacy call's source arguments (<see cref="Plan"/>). The source arguments are evaluated in source order,
+    /// and then the receiver of an instance call is null-checked, as <see cref="Dispatch"/> checks the legacy call's
+    /// (ticket P2-017); a static or extension call has no check, even when the modern member is an instance member (ADR 0020).
+    /// </summary>
+    private ImmutableArray<IrVar>? Adapt(ApiEquivalence entry, IInvocationOperation invocation, LoweringContext context)
+    {
+        if (CallIdentityFactory.SourceArguments(invocation.Instance, invocation.Arguments) is not { } sources
+            || Plan(entry.Arguments, [.. sources.OrderBy(static s => s.Position).Select(static s => s.Value)]) is not { } plan)
+        {
+            return null;
+        }
+
+        IrVar[] values = new IrVar[sources.Length];
+        foreach ((int position, _) in sources)
+        {
+            values[position] = Value(plan.Operands[position], context);
+        }
+
+        ImmutableArray<IrVar> adapted =
+        [
+            .. entry.Arguments.Select((item, i) => item.Source is { } source
+                ? Adapted(plan.Operands[source], values[source], plan.Targets[i], context)
+                : Const(TypeMapper.Constant(item.ConstantType!, item.Constant!)!, context)),
+        ];
+        if (invocation.Instance is { Type.IsValueType: false } instance)
+        {
+            ThrowIfNull(instance, values[0], context);
+        }
+
+        return adapted;
+    }
+
+    /// <summary>
+    /// What each adapter item takes, checked before anything is emitted: every source position is in range and used, so
+    /// a <c>params</c> element count other than the entry's does not match; an unwrapped argument has an implicit
+    /// conversion and is not also used as it is; a <c>convertTo</c> type resolves and the conversion to it is an implicit
+    /// identity, boxing or reference conversion; a constant parses. Null when any of that fails.
+    /// </summary>
+    private AdapterPlan? Plan(ImmutableArray<ApiArgument> items, ImmutableArray<IOperation> sources)
+    {
+        IOperation[] operands = [.. sources];
+        bool?[] unwrapped = new bool?[sources.Length];
+        ImmutableArray<ITypeSymbol?>.Builder targets = ImmutableArray.CreateBuilder<ITypeSymbol?>(items.Length);
+        foreach (ApiArgument item in items)
+        {
+            if (!Planned(item, sources, operands, unwrapped, out ITypeSymbol? target))
+            {
+                return null;
+            }
+
+            targets.Add(target);
+        }
+
+        return Array.TrueForAll(unwrapped, static u => u is not null) ? new AdapterPlan([.. operands], targets.MoveToImmutable()) : null;
+    }
+
+    /// <summary>
+    /// One adapter item of <see cref="Plan"/>: false when it cannot be addressed. A source item records whether its
+    /// argument is unwrapped in <paramref name="unwrapped"/> and, when it is, the conversion's operand in
+    /// <paramref name="operands"/>; <paramref name="target"/> is its <c>convertTo</c> type, or null.
+    /// </summary>
+    private bool Planned(ApiArgument item, ImmutableArray<IOperation> sources, IOperation[] operands, bool?[] unwrapped, out ITypeSymbol? target)
+    {
+        target = null;
+        if (item.Source is not { } position)
+        {
+            return TypeMapper.Constant(item.ConstantType!, item.Constant!) is not null;
+        }
+
+        if ((uint)position >= (uint)sources.Length || (unwrapped[position] ?? item.Unwrap) != item.Unwrap)
+        {
+            return false;
+        }
+
+        unwrapped[position] = item.Unwrap;
+        if (item.Unwrap)
+        {
+            if (sources[position] is not IConversionOperation conversion || !conversion.GetConversion().IsImplicit)
+            {
+                return false;
+            }
+
+            operands[position] = conversion.Operand;
+        }
+
+        if (item.ConvertTo is not { } name)
+        {
+            return true;
+        }
+
+        target = compilation.GetTypeByMetadataName(name);
+        return target is not null && IsImplicitCast(operands[position].Type, target);
+    }
+
+    /// <summary>Whether a value of <paramref name="from"/> converts to <paramref name="to"/> by an implicit identity, boxing or reference conversion.</summary>
+    private bool IsImplicitCast(ITypeSymbol? from, ITypeSymbol to) =>
+        from is not null
+        && compilation.ClassifyConversion(from, to) is { IsImplicit: true } conversion
+        && (conversion.IsIdentity || conversion.IsBoxing || conversion.IsReference);
+
+    /// <summary>An adapted source argument as it is or, converted to <paramref name="target"/>, a read of the <c>cast</c> map, as M3-010 lowers that conversion.</summary>
+    private IrVar Adapted(IOperation operand, IrVar value, ITypeSymbol? target, LoweringContext context) =>
+        target is null || Map(operand.Type!) == Map(target)
+            ? value
+            : heap.MapRead(heap.Inputs.Cast(operand.Type!, target), value, context);
 
     /// <summary>
     /// A property access is a call to its accessor, lowered as an invocation of it is (ticket M3-010 acceptance criteria
     /// 1 to 3): the getter with the receiver and index arguments, or, given <paramref name="value"/>, the setter with the
     /// value last and no result. A property with no accessor for the access stays opaque.
     /// </summary>
-    private IrVar? Accessor(IPropertyReferenceOperation property, IMethodSymbol? accessor, ImmutableArray<IrVar> operands, IrVar? value, LoweringContext context) =>
-        accessor is null
-            ? Opaque(property, property.Kind.ToString(), context)
-            : Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], value is null ? TypeMapper.Map(property.Type!) : null, context);
+    private IrVar? Accessor(IPropertyReferenceOperation property, IMethodSymbol? accessor, ImmutableArray<IrVar> operands, IrVar? value, LoweringContext context)
+    {
+        if (accessor is null)
+        {
+            return Opaque(property, property.Kind.ToString(), context);
+        }
+
+        IrType? returns = value is null ? Map(property.Type!) : null;
+        return Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], returns, context);
+    }
 
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
     private static IMethodSymbol? Setter(IPropertySymbol property) => property.SetMethod is { IsInitOnly: false } setter ? setter : null;
@@ -1019,4 +1168,41 @@ internal sealed class IrLowerer
 
     /// <summary>A property an assignment writes, and its receiver and index arguments, evaluated once.</summary>
     private sealed record PropertyAccess(IPropertyReferenceOperation Reference, ImmutableArray<IrVar> Operands);
+
+    /// <summary>Each source argument's operand as an adapter takes it, and each adapter item's <c>convertTo</c> type, if any.</summary>
+    private sealed record AdapterPlan(ImmutableArray<IOperation> Operands, ImmutableArray<ITypeSymbol?> Targets);
+
+    /// <summary>
+    /// The API-equivalence entries one body is lowered with (ADR 0020; ticket M3-009): member entries by legacy identity,
+    /// type entries as <see cref="Sorts"/>, and the ids of the entries that fired, sorted.
+    /// </summary>
+    private sealed class Catalogue
+    {
+        private readonly ImmutableDictionary<string, ApiEquivalence> types;
+
+        public Catalogue(ImmutableArray<ApiEquivalence> entries)
+        {
+            Members = entries.Where(static e => !e.IsType).ToImmutableDictionary(static e => e.Legacy, StringComparer.Ordinal);
+            types = entries.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, StringComparer.Ordinal);
+            Sorts = Sort;
+        }
+
+        public ImmutableDictionary<string, ApiEquivalence> Members { get; }
+
+        public SortedSet<string> Applied { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>A sort name, mapped by a type entry, which is then recorded as applied, or left as it is.</summary>
+        public Func<string, string> Sorts { get; }
+
+        private string Sort(string name)
+        {
+            if (!types.TryGetValue(name, out ApiEquivalence? entry))
+            {
+                return name;
+            }
+
+            Applied.Add(entry.Id);
+            return entry.Modern;
+        }
+    }
 }

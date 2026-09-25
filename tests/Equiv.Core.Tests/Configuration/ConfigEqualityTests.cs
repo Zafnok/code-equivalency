@@ -91,6 +91,7 @@ public sealed class ConfigEqualityTests
             { baseline, baseline with { Bound = 4 } },
             { baseline, baseline with { TimeoutMs = 6000 } },
             { baseline, baseline with { SuppressRuntimeChanges = ["System.String::IndexOf("] } },
+            { baseline, baseline with { SuppressApiEquivalences = ["webapi."] } },
         };
     }
 

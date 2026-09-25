@@ -1,0 +1,72 @@
+﻿Equiv.Samples.ApiDrift.Text::HasX(string) [bcl.string-contains-char]
+legacy:
+proc "Equiv.Samples.ApiDrift.Text::HasX(string)" (%s "s": sort "System.String", %null.System.String: map<sort "System.String", bool>) -> bool entry B0
+B0:
+  %s.isNull.6 "s": bool = mapread %null.System.String, %s
+  goto B1
+B1:
+  %$2: bv16 = const bv16 120
+  %$3: bool = call "System.String::Contains(char)"(%s, %$2) threw %$4: bool
+  br %$4, B3, B4
+B3:
+  throw "System.Exception"
+B4:
+  ret %$3
+
+modern:
+proc "Equiv.Samples.ApiDrift.Text::HasX(string)" (%s "s": sort "System.String", %null.System.String: map<sort "System.String", bool>) -> bool entry B0
+B0:
+  %s.isNull.7 "s": bool = mapread %null.System.String, %s
+  goto B1
+B1:
+  %$2: bv16 = const bv16 120
+  br %s.isNull.7, B3, B4
+B3:
+  throw "System.NullReferenceException"
+B4:
+  %$4: bool = call "System.String::Contains(char)"(%s, %$2) threw %$5: bool
+  br %$5, B5, B6
+B5:
+  throw "System.Exception"
+B6:
+  ret %$4
+
+
+Equiv.Samples.ApiDrift.Text::Parts(string) [bcl.string-split-one-char]
+legacy:
+proc "Equiv.Samples.ApiDrift.Text::Parts(string)" (%s "s": sort "System.String", %null.System.String: map<sort "System.String", bool>) -> sort "string[]" entry B0
+B0:
+  %s.isNull.8 "s": bool = mapread %null.System.String, %s
+  goto B1
+B1:
+  %$2: bv16 = const bv16 44
+  %$3: sort "System.StringSplitOptions" = const sort "System.StringSplitOptions" 890022063
+  br %s.isNull.8, B3, B4
+B3:
+  throw "System.NullReferenceException"
+B4:
+  %$5: sort "string[]" = call "System.String::Split(char,System.StringSplitOptions)"(%s, %$2, %$3) threw %$6: bool
+  br %$6, B5, B6
+B5:
+  throw "System.Exception"
+B6:
+  ret %$5
+
+modern:
+proc "Equiv.Samples.ApiDrift.Text::Parts(string)" (%s "s": sort "System.String", %null.System.String: map<sort "System.String", bool>) -> sort "string[]" entry B0
+B0:
+  %s.isNull.8 "s": bool = mapread %null.System.String, %s
+  goto B1
+B1:
+  %$2: bv16 = const bv16 44
+  %$3: sort "System.StringSplitOptions" = const sort "System.StringSplitOptions" 890022063
+  br %s.isNull.8, B3, B4
+B3:
+  throw "System.NullReferenceException"
+B4:
+  %$5: sort "string[]" = call "System.String::Split(char,System.StringSplitOptions)"(%s, %$2, %$3) threw %$6: bool
+  br %$6, B5, B6
+B5:
+  throw "System.Exception"
+B6:
+  ret %$5

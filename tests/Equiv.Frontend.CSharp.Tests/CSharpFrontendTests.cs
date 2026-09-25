@@ -100,6 +100,21 @@ public sealed class CSharpFrontendTests
         Assert.Empty(analysis.ModernNotBuilt);
     }
 
+    /// <summary>Ticket M3-009 acceptance criterion 4: only the legacy body is rewritten, and the pair lists what fired.</summary>
+    [Fact]
+    public void RecordsTheEquivalencesAppliedToTheLegacyBody()
+    {
+        Compilation compilation = RoslynTestCompilations.Compile("namespace N { public class C { public bool M(string s, char c) => System.Linq.Enumerable.Contains(s, c); } }");
+        StubLoader loader = new(_ => new LoadedSolution(null!, [compilation], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+
+        ProcedurePair pair = Assert.Single(result.Pairs);
+        Assert.Equal(["bcl.string-contains-char"], pair.EquivalencesApplied);
+        Assert.Contains("System.String::Contains(char)", IrText.Dump(pair.OldBody!), StringComparison.Ordinal);
+        Assert.DoesNotContain("System.String::Contains(char)", IrText.Dump(pair.NewBody!), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void LowersBothBodiesOfEveryMatchedPair()
     {
@@ -198,10 +213,10 @@ public sealed class CSharpFrontendTests
     }
 
     /// <summary>The production lowering, except that a method named <paramref name="name"/> throws <paramref name="fault"/>.</summary>
-    private static Func<IMethodSymbol, Compilation, EquivConfig, IrProcedure> FaultOn(string name, Exception fault) =>
-        (symbol, compilation, config) => string.Equals(symbol.Name, name, StringComparison.Ordinal)
+    private static Func<IMethodSymbol, Compilation, EquivConfig, bool, (IrProcedure, ImmutableArray<string>)> FaultOn(string name, Exception fault) =>
+        (symbol, compilation, config, legacy) => string.Equals(symbol.Name, name, StringComparison.Ordinal)
             ? throw fault
-            : CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config);
+            : CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy);
 
     [Fact]
     public void NullConfigThrows()

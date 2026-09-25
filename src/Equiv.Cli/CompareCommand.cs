@@ -303,13 +303,13 @@ internal static class CompareCommand
             string unbound = string.Join("; ", UnboundCauses("legacy", old).Concat(UnboundCauses("modern", @new)));
             if (unbound.Length > 0)
             {
-                results.Add(new VerificationResult(pair.New, new Unknown(UnknownReason.Unbound, unbound)));
+                results.Add(new VerificationResult(pair.New, new Unknown(UnknownReason.Unbound, unbound)) { EquivalencesApplied = pair.EquivalencesApplied });
                 continue;
             }
 
             try
             {
-                results.Add(new VerificationResult(pair.New, backend.Verify(old, @new, options)));
+                results.Add(new VerificationResult(pair.New, backend.Verify(old, @new, options)) { EquivalencesApplied = pair.EquivalencesApplied });
             }
             catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
             {
