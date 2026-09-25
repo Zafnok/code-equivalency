@@ -1,5 +1,5 @@
 # M3-028 Spike: load both sides of every sample on Linux
-Status: in-progress
+Status: done (PR #185)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-024
