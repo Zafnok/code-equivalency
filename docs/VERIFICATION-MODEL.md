@@ -41,7 +41,7 @@ terminator. SSA: every `IrVar` is assigned once; blocks with several predecessor
 Types: `Bool`; `BitVec(n)` for integral types (n in 8, 16, 32, 64, signedness kept on
 the operation, not the type); `Sort(name)` for everything else (strings, objects,
 decimals, floats), treated as uninterpreted with equality only; `Map(key, value)` for
-SSA heap slices (one map per field, one per array) encoded as SMT arrays. Floating
+SSA heap slices (one map per field, one per array sort) encoded as SMT arrays. Floating
 point is a `Sort` in the MVP (not IEEE-modelled); a post-MVP ticket exists. Operators on
 floating point, `decimal` and user-defined operators are `IrPure` applications of named
 functions both sides share (ADR 0025, ticket M4-002), so unchanged arithmetic is provable
@@ -80,7 +80,9 @@ variable. A dereference lowers to a conditional `IrThrow(NullReferenceException)
 Heap and nullness are inputs (M2-004). A procedure's parameter list is its C# parameters
 followed by the synthesised inputs its body needs, ordered by name: the receiver `this`,
 one `null.<Sort>` map from a reference sort to Bool, one `field.<Type>.<Field>` map per
-field touched, `array.<v>` plus `length.<v>` per array variable indexed, and one
+field touched, `array.<Sort>` from an array reference to its elements by bv32 index plus
+`length.<Sort>` from an array reference to its length, per array sort indexed, keyed by the
+reference like `null.<Sort>` so that two variables holding one array share its elements (P1-006), and one
 `cast.<From>.<To>` map from `<From>`'s IR type to `<To>`'s sort per implicit reference or boxing
 conversion between different IR types (M3-010). A cast map is an uninterpreted function with no
 trace event: the same operand always converts to the same value. The converted value's nullness is
@@ -105,12 +107,12 @@ Two gaps the M2-004 heap model leaves open, stated here so a later ticket does n
 otherwise (ADR 0015). ADR 0018 schedules both fixes, and M3-007's, before M3-003, so no
 build that reports sample verdicts carries them. An `IrCall` does not havoc any `field.*` map, so a call's effect on the
 heap is not modelled and a pair that differs only in where it reads a field around a call is not
-distinguished; ticket P1-005 closes this. And `array.<v>` is keyed per array *variable*, not per
-array value, so two variables holding the same array are two independent slices; ticket P1-006
-closes this. Both follow the M2-004 acceptance criteria, both are unsound in general, and both can
-only produce a false Equivalent, silently: no `IrOpaque`, no `properties.opaqueNodes` entry, no
-Unknown. Until P1-005 and P1-006 land, M3-001's soundness harness (section 7) is not evidence that
-the C# frontend is sound.
+distinguished; ticket P1-005 closes this. The second gap, array maps keyed per array *variable*
+so that two variables holding one array were two independent slices, is closed by P1-006: the
+element and length maps are keyed by the array reference. The open gap follows the M2-004
+acceptance criteria, is unsound in general, and can only produce a false Equivalent, silently: no
+`IrOpaque`, no `properties.opaqueNodes` entry, no Unknown. Until P1-005 lands, M3-001's soundness
+harness (section 7) is not evidence that the C# frontend is sound.
 
 ## 3. Lowering rules (C#)
 
@@ -333,7 +335,7 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   dropping or changing a map write (the final heap is observable) and duplicating a call
   whose results are compared (calls are not idempotent; ADR 0018). Runs against
   every ladder rung independently. It generates IR, so it covers the encoder and the
-  ladder only: a C#-to-IR lowering gap is invisible to it by construction, and the two
+  ladder only: a C#-to-IR lowering gap is invisible to it by construction, and the
   section 2 heap gaps are exactly that (ADR 0015). The obligation that covers C#-to-IR is
   the lowering oracle below, which P1-005 and P1-006 each extend with the case that
   catches its own gap.

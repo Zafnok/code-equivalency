@@ -70,12 +70,11 @@ program analysis and is explicitly out of scope.
    (a reference's nullness is a property of the value, which a call cannot change). A
    procedure with no field access emits an empty list and its IR dump is byte-identical to
    the one M2-004 produced.
-   Array slices: while they are keyed per *variable* (M2-004), havocking them is not
-   meaningful and they are excluded. If P1-006 has already landed and they are keyed by the
-   array value, they are included on the same terms as `field.*` maps, and the criterion 6
-   fixtures gain an array counterpart. Whichever of P1-005 and P1-006 lands second owns
-   this; neither may leave a call's effect on array elements unmodelled once both have
-   landed.
+   Array slices: P1-006 has landed, so the `array.*` maps are keyed by the array value and
+   are included on the same terms as `field.*` maps (`length.*` is not: a call cannot change
+   an array's length), and the criterion 6 fixtures gain an array counterpart to
+   `call-heap-order.ir`. P1-005 lands second, so it owns this; it may not leave a call's
+   effect on array elements unmodelled.
 4. `ProductEncoder` encodes each `after` as `store`-free equality to
    `f_callee$heap$<map>(args..., pos, H...)`, one `FuncDecl` per (callee identity, map
    name) pair shared across sides, side-specific when the identity is `RuntimeChanged`.
@@ -98,7 +97,7 @@ program analysis and is explicitly out of scope.
    none) and an `IOPERATION-COVERAGE.md` update for `Invocation` naming this ticket.
 8. VERIFICATION-MODEL section 2's `IrCall` row states the heap effect, and the two-gaps
    paragraph's first gap is replaced by a sentence saying it is closed here. Section 2's
-   second gap and its P1-006 reference stay.
+   sentence on the second gap, closed by P1-006, stays.
 
 ## Files
 `src/Equiv.Core/Ir/IrCall.cs`, the validator, `IrText`, `IrInterpreter`;

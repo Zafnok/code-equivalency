@@ -1,5 +1,5 @@
 # P1-006 Array maps are keyed by the array value, not by the variable
-Status: todo
+Status: done (PR #166)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M2-004, M3-001, M3-007, P1-003
@@ -91,3 +91,24 @@ An alias analysis that proves two references distinct (the map key does the work
 Arrays of arrays as *elements*. `Span<T>`, `List<T>`, collection expressions.
 
 ## Notes
+- Decision: the inputs are `array.<Sort>` and `length.<Sort>`, `<Sort>` being the array's own IR sort name spelled with
+  `HeapInputs.Part` exactly as `null.<Sort>` already spells it (`int[]` → `array.int__`, `length.int__`, beside
+  `null.int__`). Naming by the array sort rather than the element type keeps one name per key sort, so a name can
+  never be asked for at two different map types.
+- Criterion 4, checked before the fix: with the generator extended (two `int[]` parameters `u`, `v`, element reads as
+  `int` leaves, element writes at index 0..2, `v` bound to `u` when `OracleInput.Aliased`) and the harness binding the
+  old `array.u`/`array.v`/`length.u`/`length.v` inputs, the oracle failed on its first sample:
+  `v[0] = unchecked(P ^ (1)); return ...;` with `Aliased = True` gave C# `u=6,7 v=6,7` and IR `u=31,7 v=6,7`. The
+  harness now compares the final elements of both arrays along with `F`, so a write through one alias that the other
+  does not see fails the oracle whether or not the method reads it back.
+- `Samples_LowerWithoutOpaque` is `SampleLoweringTests.EveryMatchedPairLowersWithoutOpaqueNodes`; no sample indexes an
+  array, so it is unaffected.
+- Left alone, out of this ticket's files: `IrUnroller.InliningObstacle` still refuses to inline a self-call when any
+  `array.*`/`length.*` input exists ("an input is keyed by an array variable", ADR 0015). That was needed while the maps
+  were per variable; keyed by value, a read-only array map inlines as soundly as a `field.*` map, and a written one is
+  already stopped by "it writes the heap". Still sound, only conservative, and the message is now stale.
+- Observed, pre-existing and not this ticket: an element (or field) assignment null-checks the array (receiver) before
+  evaluating the right-hand side, but the CLR throws `NullReferenceException` at the `stelem`/`stfld`, after it. So
+  `a[0] = F();` with `a == null` calls `F` in C# and not in IR. The oracle never passes a null array, so it cannot see
+  this.
+

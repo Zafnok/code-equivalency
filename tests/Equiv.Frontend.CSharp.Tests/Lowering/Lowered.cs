@@ -67,8 +67,15 @@ internal static class Lowered
     /// <summary>An empty <c>field.&lt;Type&gt;.&lt;Field&gt;</c> input over receivers of <paramref name="sort"/>.</summary>
     public static IrMapValue Fields(string sort, IrType value) => Empty(new IrMap(new IrSort(sort), value));
 
-    /// <summary>An empty <c>array.&lt;v&gt;</c> input.</summary>
-    public static IrMapValue Elements(IrType element) => Empty(new IrMap(new IrBitVec(32), element));
+    /// <summary>An empty <c>array.&lt;Sort&gt;</c> input: every array of <paramref name="sort"/> holds the default element.</summary>
+    public static IrMapValue Elements(string sort, IrType element)
+    {
+        IrMapValue elements = Empty(new IrMap(new IrBitVec(32), element));
+        return new(new IrMap(new IrSort(sort), elements.MapType), elements, []);
+    }
+
+    /// <summary>A <c>length.&lt;Sort&gt;</c> input: every array of <paramref name="sort"/> is <paramref name="length"/> long.</summary>
+    public static IrMapValue Lengths(string sort, int length) => new(new IrMap(new IrSort(sort), new IrBitVec(32)), Bits(32, length), []);
 
     /// <summary>A <c>null.&lt;Sort&gt;</c> input that answers <paramref name="isNull"/> for <paramref name="id"/> and false elsewhere.</summary>
     private static IrMapValue Empty(IrMap type) => new(
