@@ -505,6 +505,8 @@ internal sealed class IrLowerer
                 return Invoke(invocation, context);
             case IObjectCreationOperation creation:
                 return Create(creation, context);
+            case IArrayCreationOperation creation:
+                return CreateArray(creation, context);
             case IIsPatternOperation pattern:
                 return Match(pattern, context);
             case IIsNullOperation test when test.Operand.Type!.IsReferenceType:
@@ -574,7 +576,7 @@ internal sealed class IrLowerer
 
         return unwrapped switch
         {
-            IObjectCreationOperation or IInstanceReferenceOperation or ITypeOfOperation => null,
+            IObjectCreationOperation or IArrayCreationOperation or IInstanceReferenceOperation or ITypeOfOperation => null,
             _ when ShadowOf(unwrapped) is { } shadow => ssa.Load(context.Current, shadow),
             { ConstantValue.HasValue: true, ConstantValue.Value: null } => Const(new IrBoolValue(Value: true), context),
             _ => heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context),
@@ -1016,6 +1018,40 @@ internal sealed class IrLowerer
         creation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out)
             ? Opaque(creation, "ref-argument", context)
             : Call(Identity(creation.Constructor!), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), context);
+
+    /// <summary>
+    /// <c>new T[n]</c> or <c>new T[] { ... }</c> with one <c>int</c> dimension (ticket P2-001): a negative length throws
+    /// <c>System.OverflowException</c>, as <c>newarr</c> does, then a fresh array of that length holds <c>default(T)</c>
+    /// everywhere and the initialiser's values in order, each evaluated and stored before the next. Several dimensions,
+    /// another length type, an element type that is an array (a jagged creation) or one with no constant default stay
+    /// opaque with reason <c>ArrayCreation</c>.
+    /// </summary>
+    private IrVar? CreateArray(IArrayCreationOperation creation, LoweringContext context)
+    {
+        IArrayTypeSymbol type = (IArrayTypeSymbol)creation.Type!;
+        if (creation.DimensionSizes is not [{ Type.SpecialType: SpecialType.System_Int32 } size]
+            || type.ElementType is IArrayTypeSymbol
+            || TypeMapper.Default(type.ElementType, catalogue.Sorts) is not { } initial)
+        {
+            return Opaque(creation, creation.Kind.ToString(), context);
+        }
+
+        IrVar length = Value(size, context);
+        if (!size.ConstantValue.HasValue)
+        {
+            // A constant size is never negative: the compiler rejects one that is.
+            ThrowIf(Emit(IrBinaryOp.Slt, length, Zero(length.Type, context), Bool, context), "System.OverflowException", context);
+        }
+
+        IrVar array = heap.Allocate((IrSort)Map(type), Map(type.ElementType), length, initial, context);
+        ImmutableArray<IOperation> values = creation.Initializer?.ElementValues ?? [];
+        for (int i = 0; i < values.Length; i++)
+        {
+            heap.Initialize(array, i, Value(values[i], context), context);
+        }
+
+        return array;
+    }
 
     /// <summary>
     /// An opaque call (receiver first, then arguments in parameter order) that may throw System.Exception. A call to an
