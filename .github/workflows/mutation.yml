@@ -85,6 +85,11 @@ jobs:
         with:
           global-json-file: global.json
 
+      - if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .z3-feed
+          key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
       - name: Fetch Microsoft.Z3 (ADR 0030)
         if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
         shell: pwsh

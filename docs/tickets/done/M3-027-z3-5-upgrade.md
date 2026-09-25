@@ -75,33 +75,51 @@ container (M3-004), Linux loading (M3-028).
   workflow currently runs no `dotnet` command and so does not strictly need the feed yet. Keeps
   the four workflows uniform and avoids a silent gap if CodeQL's build mode ever changes.
   Rule: 4.
-- Decision: found via `SoundnessPropertyTests.AProcedureIsEquivalentToItself` and
-  `RenamingTheParametersKeepsAProcedureEquivalent` (`Equiv.Verify.Z3.Tests`) and
-  `LadderPropertyTests.ALoopingProcedureIsEquivalentToItself`: Z3 5.1.0 can time out to
-  `Unknown` on some generated map-and-arithmetic-heavy `Verify(P, P)` pairs that 4.12.2 folded to
-  `Equivalent` in under 200 ms (confirmed by an A/B run of the identical failing IR fixture
-  against a cached 4.12.2 package: 147 ms/Equivalent on 4.12.2, still `Unknown` on 5.1.0 even at
-  a 120 s timeout, both through the existing `solve-eqs, simplify, propagate-values, solve-eqs,
-  smt` tactic pipeline). Tried adding `elim-term-ite` to the pipeline and, separately, a plain
-  `QF_AUFBV` logic solver with no custom pipeline at all; neither resolved the same fixture
-  faster. Read as a genuine Z3 5.1.0 performance change on this query shape (plausibly related to
-  the `intblast` array/bit-vector work ADR 0030 cites), not a defect in this repo's tactic
-  pipeline, and out of this ticket's scope to chase further (Out of scope: solver parameter
-  tuning). The three properties above now assert `IsNotType<Divergent>` instead of
-  `IsType<Equivalent>`: a self-comparison reporting Divergent would be unsound and must still
-  never happen, but Unknown is an honest, expected outcome of a bounded verifier (ADR 0005), so
-  this is the "each change is explained" case in the Goal, not the Equivalent/Divergent flip that
-  criterion 7 calls a stop condition. Alternatives: raise the timeout further (120 s already
-  didn't help); keep the strict assertion and accept a flaky gate (every CI run draws a fresh
-  random seed, and this pattern appeared twice in one 200-draw run, so the properties would fail
-  intermittently on `main` too). Rule: 3.
+- Note: on 5.1.0 the self-comparison properties
+  (`SoundnessPropertyTests.AProcedureIsEquivalentToItself`,
+  `RenamingTheParametersKeepsAProcedureEquivalent`, `LadderPropertyTests.ALoopingProcedureIsEquivalentToItself`)
+  each hit about one `Unknown` per 200 draws. It was a genuine timeout: `ReasonUnknown` was
+  `timeout`, returned at the deadline (5,161 ms at a 5 s timeout, 15,118 ms at 15 s, still unknown
+  at 120 s). On 4.12.2 the same fixture was `Equivalent` in 104-147 ms. Cause, from dumping the goal
+  after preprocessing: 4.12.2's pipeline reduces the whole goal to `false`, while 5.1.0's first
+  `solve-eqs` inverts the definition `old.t25 = old.t24 + in.b` and eliminates the shared input
+  `in.b` instead of `old.t25`. After that neither side's definitions can be eliminated and the two
+  sides stay different terms, so `smt` has to bit-blast a 32-bit multiply. `solve-eqs` parameters
+  do not stop it: `theory_solver=false`, `ite_solver=false`, `context_solve` and even
+  `solve_eqs_max_occs=0` all produced a byte-identical goal. Parameters are validated, since an unknown
+  name throws, so this is not a typo. Adding `elim-term-ite`, or using a plain `QF_AUFBV` solver,
+  did not help either.
+- Decision: `Z3Backend.Query` substitutes the encoding's definitions into the query before adding it
+  (`Z3Backend.Inline`). A lone Bool constant is `true`, and `(= c t)` with a constant `c` is `t`
+  with the earlier definitions substituted, in assertion order. The definitions stay asserted, so
+  the query is equivalent and models are unchanged. Identical computations on both sides are now one
+  hash-consed term before Z3 sees them, so this does not depend on which variable `solve-eqs`
+  chooses to eliminate. The failing fixture is `Equivalent` in 79 ms, the strict
+  `IsType<Equivalent>` assertions stay as they were, and `Equiv.Verify.Z3.Tests` went from
+  25-42 s to 14-18 s a run. Tests: `Z3BackendTests.InliningSubstitutesDefinitionsInOrderAndSkipsEverythingElse`
+  and `ASelfComparisonWhoseInputFeedsAnAdditionIsEquivalent`, which is `Unknown` when `Inline` is
+  bypassed. Alternatives: relax the properties to `IsNotType<Divergent>` (tried first and reverted
+  in review, because it lets a backend that always answers `Unknown` pass); tune the solver (no
+  parameter changed the outcome). Rule: 4.
+- Note: the Unknown-rate baseline predates this ticket. M3-031 scored the Git Extensions census on
+  4.12.2, and 5.1.0 plus `Inline` changes which queries time out. Re-run the census before comparing
+  any later Unknown rate against M3-031's; a pointer is in M3-031's Notes.
 - Note: the samples-backed verdict tests (`Equiv.Tests.Integration`'s `ComparePipelineTests`,
   `LoopLadderSampleTests`) were run directly against 5.1.0 and are unchanged; the Goal's
-  "verdicts on the samples stay the same" holds without any snapshot updates. Three unrelated
-  `Equiv.Tests.Integration` tests fail on this box for environment reasons that predate this
-  ticket (the legacy `webapi-basic` sample's non-SDK restore and an `obj/` file lock), not
-  because of the Z3 bump; they need `build.ps1 -Integration`'s MSBuild restore step, which this
-  box's local run skipped.
+  "verdicts on the samples stay the same" holds without any snapshot updates. Two unrelated
+  `Equiv.Tests.Integration` tests (`EndpointDiscoverySampleTests`) fail on this box for environment
+  reasons that predate this ticket: the legacy `webapi-basic` sample needs `build.ps1 -Integration`'s
+  MSBuild restore step, which this box's local run skipped.
+- Note (review): with `.z3-feed/` absent, a restore that needs only nuget.org packages still succeeds
+  (no NU1301), because package source mapping never queries the local feed for them. This was checked
+  with an empty `--packages` folder, on both a repo project and a copy of `corpus.ps1`'s
+  reference-assembly restore under `.corpus/`. So the corpus script and Dependabot's non-Z3 updates
+  do not need the fetch.
+- Note (review): every workflow caches `.z3-feed/` with `actions/cache`, keyed on the pinned
+  `.sha256`, before the fetch runs. `fetch.ps1` is a no-op on a hash match, so most runs skip the
+  65 MB download. `fetch.ps1` turns off the progress bar, which slows Windows PowerShell 5.1
+  downloads a lot. README, CONTRIBUTING and the `equiv-corpus-run` skill say to run `fetch.ps1`
+  before any direct `dotnet restore`/`build`.
 - Note: `tools/licence-check --fix` regenerated `THIRD-PARTY-NOTICES.md` (only the `Microsoft.Z3`
   row's version changed); the licence gate passes for all 77 restored packages.
 - Note: criterion 6's post-merge Dependabot verification cannot be done before this PR merges.

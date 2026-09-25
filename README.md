@@ -171,6 +171,10 @@ and of `baselineState` is in [docs/VERIFICATION-MODEL.md](docs/VERIFICATION-MODE
 ./build.ps1 -Integration  # also runs tests/Equiv.Tests.Integration (needs VS Build Tools)
 ```
 
+`Microsoft.Z3` restores only from the git-ignored local feed `.z3-feed/` (ADR 0030), which
+`build.ps1` fills first. Before any direct `dotnet restore`, `dotnet build` or `dotnet test`
+on a fresh clone (an IDE build included), run `./tools/z3-feed/fetch.ps1` once.
+
 Every gate in [docs/QUALITY-GATES.md](docs/QUALITY-GATES.md) runs locally through this
 script and in GitHub Actions on every PR. Coverage flags for coverlet.MTP go after `--`
 on `dotnet test`; the script already does this.

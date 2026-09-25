@@ -28,7 +28,8 @@ The rules are in [CLAUDE.md](CLAUDE.md) and are enforced by CI, not by review ta
   `.claude/skills/equiv-task-loop/SKILL.md` is the definition of done.
 - 100% line and branch coverage on every `src/` project, warnings as errors,
   `dotnet format` clean, architecture tests green. See [docs/QUALITY-GATES.md](docs/QUALITY-GATES.md).
-- Run `./build.ps1` before pushing.
+- Run `./build.ps1` before pushing. It fetches `Microsoft.Z3` into `.z3-feed/` first; before
+  any direct `dotnet restore`/`build`/`test`, run `./tools/z3-feed/fetch.ps1` once (ADR 0030).
 - Conventional Commits, with the ticket id in the footer (`Ticket: M1-003`).
 
 ## Dependencies

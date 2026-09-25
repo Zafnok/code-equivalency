@@ -52,6 +52,15 @@ jobs:
         with:
           global-json-file: global.json
 
+      # build.ps1 runs tools/z3-feed/fetch.ps1, which is a no-op when the cached nupkg matches its
+      # pinned hash (ADR 0030), so most runs skip the 65 MB release download.
+      - name: Cache the Microsoft.Z3 feed
+        if: steps.pass.outputs.cache-hit != 'true'
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .z3-feed
+          key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
+
       # -Integration needs VS Build Tools + the .NET Framework 4.8 targeting pack,
       # which only the windows-latest hosted runner has (see README).
       - name: Run gates (Windows, with integration tests)
@@ -105,6 +114,11 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
+
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .z3-feed
+          key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
 
       - name: Fetch Microsoft.Z3 (ADR 0030)
         shell: pwsh

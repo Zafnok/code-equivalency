@@ -14,6 +14,9 @@
     downloaded.
 #>
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 5.1 redraws the Invoke-WebRequest progress bar per chunk, which makes a 65 MB
+# download many times slower.
+$ProgressPreference = "SilentlyContinue"
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $packageName = "Microsoft.Z3.5.1.0.nupkg"
