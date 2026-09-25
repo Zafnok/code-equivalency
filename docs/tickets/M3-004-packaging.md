@@ -16,11 +16,18 @@ QUALITY-GATES.md (packaging row, mutation row); ADR 0006 (container is the free 
 1. `dotnet publish src/Equiv.Cli -r win-x64` and `-r linux-x64` with
    `PublishSingleFile=true`, `SelfContained=true`, `IncludeNativeLibrariesForSelfExtract=true`
    (Z3 native), produce one executable each; `equiv --version` prints the MinVer version.
-   The linux binary runs and exits 3 with the message "no frontend supports these
-   inputs on this platform" when given a `.sln` (loader unsupported off Windows).
-2. `Dockerfile` (multi-stage, `mcr.microsoft.com/dotnet/sdk:10.0` build,
-   `mcr.microsoft.com/dotnet/runtime-deps:10.0` final) builds `equiv:<version>`;
-   `docker run equiv --version` works. Image size is recorded in Notes.
+   On `ubuntu-latest` with the .NET 10 SDK installed, the linux-x64 binary runs `equiv compare`
+   on every sample pair (M3-029's loader), and its SARIF results equal the win-x64 binary's
+   modulo paths. M3-029's `parity` job runs against the two published binaries, not only
+   `dotnet run`.
+2. The image builds `equiv:<version>` on an Ubuntu 24.04 .NET SDK base
+   (`mcr.microsoft.com/dotnet/sdk:10.0-noble` or the SDK container tooling's equivalent). It needs
+   the SDK because SDK-style projects load through the SDK's MSBuild (ADR 0031 Clarification
+   2026-09-25), and it needs noble for `libz3`'s glibc 2.38 floor. `runtime-deps` is not enough.
+   `docker run equiv --version` works, and `docker run` with `samples/` mounted analyses every
+   sample pair with the same results as criterion 1. The image holds no net4x reference
+   assemblies or packages (M3-029 fetches them into a cache). README documents the volume for
+   that cache. Image size is recorded in Notes (M3-028 measured the Debian `sdk:10.0` at 917 MB).
 3. `action.yml` at repo root: inputs `legacy`, `modern`, `config`, `baseline`,
    `fail-on`; runs the container (`runs.using: docker`); output `sarif` path; a
    documented follow-up step in README shows `github/codeql-action/upload-sarif` with
@@ -67,3 +74,4 @@ consumable by `sonar.sarifReportPaths`; document it in README, do not integrate)
 - Note (from the M3-001 review, 2026-09-21): `Microsoft.Z3` 4.12.2 ships no `runtimes/linux-x64` native, so criterion 1's `IncludeNativeLibrariesForSelfExtract` has no Linux `libz3.so` to bundle, and the Docker image lacks one too. CI takes it from the pinned PyPI `z3-solver==4.12.2.0` manylinux wheel (`.github/workflows/ci.yml`, "Provide libz3 (Linux)"); this ticket must choose how the linux-x64 artifact and the image get it (same wheel, or a source build) and verify the Linux binary actually loads it. ADR 0002's Microsoft.Z3 row records the gap.
 - Note (2026-09-23, ADRs 0030 and 0031): this ticket now also depends on M3-027 (Z3 5.1 ships `libz3.so` for linux-x64, which answers the note above) and on M3-029 (Linux loader). M3-028 rewrites criteria 1 and 2 once the loader mechanism is chosen: the Linux binary and the container must analyse the samples, not exit 3, and the final image must be Ubuntu 24.04-based (glibc 2.38 floor for `libz3`). Prefer `dotnet publish -t:PublishContainer` over a hand-written Dockerfile unless the chosen loader needs packages the SDK container tooling cannot add.
 - Note (M3-027, 2026-09-24): the Linux `libz3` question above is answered. `Microsoft.Z3` 5.1.0 (ADR 0030) ships `runtimes/linux-x64/native/libz3.so` in the package itself; the PyPI wheel workaround is gone from every workflow. `IncludeNativeLibrariesForSelfExtract` (criterion 1) now has a native to bundle without any extra step here.
+- Note (M3-028, 2026-09-25): criteria 1 and 2 were rewritten for ADR 0031's chosen loader (candidate 2). This also answers criterion 9 in part. The image carries only the .NET SDK's own MSBuild (redistributable), which is used for SDK-style projects. Non-SDK projects load with M3-029's bare loader and need no MSBuild, so no VS Build Tools component goes into the image. Criterion 9's Notes entry should say so, citing the Clarification. With `PublishContainer`, set `ContainerBaseImage` to the noble SDK image. The default base for a self-contained app is `runtime-deps`, which lacks the SDK.

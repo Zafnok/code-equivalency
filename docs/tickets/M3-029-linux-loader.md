@@ -1,0 +1,157 @@
+# M3-029 Linux loader: bare loader for non-SDK projects off Windows, and the Windows/Ubuntu parity job
+Status: todo
+Effort: L
+Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
+Depends on: M3-028
+
+## Goal
+ADR 0031 as clarified by M3-028 (candidate 2). Off Windows, `Equiv.Frontend.CSharp` loads non-SDK
+(old-style) C# projects with a bare loader. That loader reads project XML, takes Compile items,
+resolves references from HintPaths, net4x reference-assembly packages and NuGet packages, and
+builds the `CSharpCompilation` itself. SDK-style projects still load through MSBuildWorkspace on
+the .NET SDK. Windows keeps `MsBuildSolutionLoader` exactly as it is. A CI parity job runs
+`equiv compare` on every sample on `windows-latest` and `ubuntu-latest` and fails on any
+difference in the SARIF results. After this ticket, M3-004's Linux binary and container analyse
+solutions instead of exiting 3.
+
+## Spec references
+ADR 0031 (Clarification 2026-09-25), ADR 0004 (the bare loader as first described), ADR 0029
+(skip, never approximate), ADR 0002 (dependencies), ADR 0028 (project load rate), M2-001 (loader
+contract, Design), M3-024 (skipped projects), P2-013 (`SolutionBuildConfiguration`), M3-028
+Notes (the evidence, the reference numbers and the pitfalls below). The probe on the unmerged
+branch `spike/M3-028-probes` (`spike/M3-028/Probe/Bare/*.cs`) is a working starting point. It is
+not production code.
+
+## Design
+- **Routing.** On Windows, `CSharpFrontend` keeps using `MsBuildSolutionLoader`. Elsewhere it uses a
+  new composite `ISolutionLoader`. The composite takes the projects the solution builds
+  (`SolutionBuildConfiguration`) and splits them with the same SDK-style test Roslyn's build-host
+  manager uses: a root `Sdk` attribute, an `<Import Sdk=...>`, an `<Sdk>` element, or a
+  `TargetFramework(s)` property. SDK-style projects go to `MsBuildSolutionLoader` through a
+  `.slnf` that leaves the non-SDK ones out (P2-013's mechanism). Non-SDK C# projects go to the
+  bare loader. The result is one `LoadedSolution`. Downstream code reads only `Compilations` and
+  `Skipped`, so nothing past the loader changes.
+- **Cross-style references.** SDK-style projects load first. A non-SDK project that references one
+  gets its compilation as a `CompilationReference`. An SDK-style project that references a non-SDK
+  project must bind against the bare compilation, not the copy MSBuildWorkspace evaluates through
+  its netcore build host (swap it with `Compilation.ReplaceReference`).
+- **Bare evaluation (non-SDK only).** Properties are read in import order, with global
+  `Configuration=Debug` and `Platform=AnyCPU` that the project cannot override. Directory.Build.props
+  is imported the way Microsoft.Common.props does it. Relative imports that exist are followed.
+  MSBuild's own tool-path imports (`$(MSBuildToolsPath)`, `$(MSBuildBinPath)`,
+  `$(MSBuildExtensionsPath*)`, `$(VSToolsPath)`) are replaced by the loader's built-in knowledge
+  of Microsoft.CSharp.targets. Conditions support `==`, `!=`, `Exists`, `HasTrailingSlash`,
+  `and`, `or`, `!`, parentheses and version comparisons. Items: `Compile` (wildcards, `Exclude`,
+  `Remove`), `Reference`, `ProjectReference`, `PackageReference`.
+- **Never approximate (ADR 0029).** A non-SDK project that uses something the bare evaluator cannot
+  evaluate exactly is skipped as a C# project (error-level notification, exit 4) with a diagnostic
+  naming the construct. The closed list: `<Choose>`; a property function or method call in a
+  property the loader reads; a condition outside the supported grammar; a `<Target>` in the
+  project or its followed imports that creates `Compile`, `Reference` or `ProjectReference` items;
+  `<COMReference>`; a missing relative import that is not conditioned on `Exists`. A project that
+  loads approximately could give a wrong verdict. A skipped one gives none.
+- **References.** A HintPath comes first. HintPaths are written on Windows, so backslashes are
+  always converted, and when the exact path does not exist it is matched case-insensitively.
+  Framework assemblies come from `<root>/.NETFramework/v<x>/` in the
+  `Microsoft.NETFramework.ReferenceAssemblies.<tfm>` layout, fetched per framework version on
+  first use and cached. The image holds none (about 110 MB each). Implicit references, as
+  measured against MSBuild: `mscorlib` always, and `System.Core` for 3.5 and later. Facades: a
+  reference that depends on `System.Runtime` pulls in `Facades/*.dll`. One that depends only on
+  `netstandard` pulls in `Facades/netstandard.dll` (4.7.1 and later). Before 4.7.1, the shims
+  come from the SDK's `Microsoft.NET.Build.Extensions` folder, which the image has.
+  A package's nuspec `<frameworkAssemblies>` are references too (webapi-basic needs
+  `System.Numerics` this way).
+- **Packages.** `packages.config`: the tool extracts each missing package into the folder the
+  HintPaths expect (`<solution dir>/packages/<Id>.<Version>/`, or `repositoryPath` from
+  nuget.config). It does not use nuget.exe, Mono or MSBuild. `dotnet msbuild
+  -p:RestorePackagesConfig=true` restores nothing on Linux (M3-028). A non-SDK project's
+  PackageReferences take their compile assets from NuGet's own resolution: `project.assets.json`
+  from a `dotnet restore`, or NuGet's restore libraries. A hand-written graph resolver is not
+  allowed. The probe's resolver was an approximation and got one reference wrong on an SDK-style
+  project. Package sources come from the solution's nuget.config (default nuget.org).
+- **Compilation options** come from the project, with MSBuild's defaults for .NET Framework:
+  LangVersion 7.3 unless set, `DefineConstants`, `AllowUnsafeBlocks`, `CheckForOverflowUnderflow`,
+  `TreatWarningsAsErrors`/`WarningsAsErrors`/`NoWarn`, `OutputType`, `Nullable`, `AssemblyName`,
+  and the platform. `BoundSerialiser` reads `compilation.Options.Platform` for x87, so
+  `PlatformTarget` and `Prefer32Bit` (true by default for an AnyCPU exe) must be applied exactly.
+  The generated `obj/Debug/<moniker>.AssemblyAttributes.cs` (the `TargetFrameworkAttribute`) is
+  part of the compilation, as it is on Windows.
+
+## Acceptance criteria (all must hold; nothing beyond them)
+1. `CSharpFrontend` uses the composite loader when `OperatingSystem.IsWindows()` is false and
+   `MsBuildSolutionLoader` otherwise. The routing is unit-tested through a seam, and
+   `MsBuildSolutionLoader` is unchanged.
+2. On `windows-latest`, an integration test loads every sample's legacy side with both
+   `MsBuildSolutionLoader` and the bare loader. It asserts, per project, the same status, source
+   paths (relative to the solution), reference file names, error ids with locations, and
+   `Options.Platform`.
+3. Each construct in the Design's "never approximate" list skips its project with a diagnostic
+   naming the construct, and other projects still load (one test per construct).
+4. `packages.config` restore and non-SDK PackageReference resolution work on Linux with no
+   nuget.exe, Mono or MSBuild.exe. A test restores a `packages.config` copy of a sample into a temp
+   directory through a fake feed seam. nuget.config package sources are honoured.
+5. Framework reference assemblies are fetched per framework version on first use into a cache
+   directory that an environment variable can relocate. The Decision line names the variable.
+   Nothing is fetched when the cache already holds the version.
+6. A `parity` job in `.github/workflows/ci.yml` runs `equiv compare` on every sample pair on
+   `windows-latest` and on `ubuntu-latest`, then diffs the two SARIF files' `runs[0].results`
+   (rule id, level, message, logical locations, properties). It ignores every path, URI and
+   anything else rooted in the checkout. Any difference fails the job. It is added to the
+   required checks in `docs/QUALITY-GATES.md`.
+7. Every new NuGet package has a line in `docs/adr/0002-dependencies.md` and passes the licence
+   gate (M0-010) and the `vulnerable-packages` job. NuGet.Packaging 6.14.0 does not pass the
+   latter (NU1901).
+8. 100% line and branch coverage holds. The only new `ExcludeFromCodeCoverage` is the network
+   factory behind the feed seam, with a justification naming M3-029.
+9. README prerequisites say what Linux needs: the .NET 10 SDK (for SDK-style projects) and
+   network access to the package sources, or a pre-filled cache.
+
+## Files
+- `src/Equiv.Frontend.CSharp/Loading/`: the composite loader, the bare loader and its evaluator,
+  the package and reference-assembly source (behind a seam), and the SDK-style test. Keep one type
+  per file, as M2-001 did.
+- `src/Equiv.Frontend.CSharp/CSharpFrontend.cs` (routing only)
+- `Directory.Packages.props`, `docs/adr/0002-dependencies.md`, `THIRD-PARTY-NOTICES.md` if the
+  licence gate requires it
+- `.github/workflows/ci.yml` (`parity` job), `docs/QUALITY-GATES.md`, `README.md`
+- tests in `tests/Equiv.Frontend.CSharp.Tests` and `tests/Equiv.Tests.Integration`
+
+## Tests
+- `Equiv.Frontend.CSharp.Tests`: `NonWindowsRoutesToTheCompositeLoader`,
+  `SdkStyleDetectionMatchesRoslyn` (one case per signal), `ConditionGrammar` (property test over
+  generated `==`/`!=`/`and`/`or`/`!` trees against a reference evaluator),
+  `HintPathsResolveWithBackslashesAndWrongCase`, `ImplicitReferencesAndFacades`,
+  `NuspecFrameworkAssembliesAreReferences`, `UnsupportedConstructSkipsTheProject` (one case per
+  construct), `PackagesConfigRestoresThroughTheFeedSeam`, `NuGetConfigSourcesAreHonoured`,
+  `ReferenceAssembliesAreFetchedOnceAndCached`, `PlatformAndPrefer32BitAreApplied`,
+  `ASdkProjectReferencingALegacyProjectBindsAgainstTheBareCompilation`.
+- `Equiv.Tests.Integration` (Windows): `BareLoaderMatchesMsBuildOnEverySampleLegacySide`.
+- CI: the `parity` job.
+
+## Size guard
+About 15 new source files under `Loading/`. If you are writing SDK-style evaluation (default
+globs, implicit usings, targeting packs, `FrameworkReference`, source generators), stop. That is
+candidate 3, which M3-028 rejected.
+
+## Out of scope
+SDK-style projects without the SDK. The Windows loader worker (ADR 0031's fallback). The
+container, Dockerfile and release (M3-004). arm64. VB and F#. The NETSDK1086-as-failure
+misclassification M3-028 found on Windows (its own ticket). Running `Equiv.Tests.Integration` on
+Linux.
+
+## Pitfalls (from M3-028)
+- Roslyn's build host warns "An installation of Mono MSBuild could not be found" for each non-SDK
+  project it opens on Linux. After the split, it should open none. If the warning shows up, a
+  non-SDK project slipped through, most likely as a `ProjectReference` target of an SDK-style
+  project.
+- MSBuildWorkspace tolerates missing imports on both OSes. eShopLegacyMVC's unconditioned
+  `WebApplication.targets` import loads without the file. The bare loader's stricter rule applies
+  only to relative imports; tool-path imports are always replaced.
+- A checkout's own `global.json` can pin an SDK the image lacks. The netcore build host then fails
+  to start. Report that as a load failure that names `global.json`.
+- The eShop corpus pair is not a CI input (ADR 0028), and `equiv-corpus-run` is Windows-only for
+  now. Before closing, repeat M3-028's check by hand: fetch `eshop-upgrade-assistant` with
+  `corpus.ps1` on Linux, load both sides with the new loader, compare with the Windows reference
+  numbers in M3-028's Notes, and record the result in Notes.
+
+## Notes

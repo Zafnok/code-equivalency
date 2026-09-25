@@ -202,9 +202,11 @@ tickets.
 - M3-027 (M) Z3 4.12.2 to 5.1.0 from the official GitHub release through a hash-pinned local feed;
   drops the PyPI `libz3.so` workaround (ADR 0030).
 - M3-028 (M) Spike: which loader reaches Linux parity on the samples and one corpus pair; writes
-  M3-029, the loader itself, and the Windows/Ubuntu SARIF parity job (ADR 0031).
-- M3-029 (M or L, sized by M3-028) The Linux loader M3-028 chooses, plus the parity job. Written
-  by M3-028, not before: its design depends on the spike's result.
+  M3-029, the loader itself, and the Windows/Ubuntu SARIF parity job (ADR 0031). Chose candidate
+  2, the only one that matched Windows on all 11 solutions (ADR 0031 Clarification 2026-09-25).
+- M3-029 (L) The Linux loader. Off Windows, non-SDK projects load through a bare loader and
+  SDK-style projects through MSBuildWorkspace on the .NET SDK. Windows is unchanged. Also adds the
+  Windows/Ubuntu SARIF parity job. The Linux image needs the SDK.
 - M3-007 (L) Synthesised inputs: field and array maps are `Ref` parameters, so the final heap is
   observable (ADR 0018). The naming rule ADR 0021 relies on is enforced over `samples/`, and a C#
   parameter named `@this` no longer collides with the receiver input.
