@@ -123,6 +123,14 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task ArrayElements() => Dump("static int M(int[] a, int i) { a[i] = a[0]; return a[i] + a.Length; }");
 
+    /// <summary>Ticket P2-001 acceptance criterion 1: an array creation and its element writes, with no opaque.</summary>
+    [Fact]
+    public Task ArrayCreation() => Dump("static int[] M(int a, int b) { var r = new int[2]; r[0] = a; r[1] = b; return r; }");
+
+    /// <summary>Ticket P2-001 acceptance criterion 1: an initialiser, indexed straight away, with no opaque.</summary>
+    [Fact]
+    public Task ArrayInitializer() => Dump("static int M(int n) => new[] { n, n + 1 }[0];");
+
     [Fact]
     public Task ThrowOfANewObject() => Dump("class E : Exception { public E(int n) { } } static int M(int a) { if (a < 0) throw new E(a); return a; }");
 
@@ -182,6 +190,10 @@ public sealed class IrLowererSnapshotTests
     /// <summary>Ticket P1-005: a call in a body with no field or array access has no heap pairs, so its dump is unchanged.</summary>
     [Fact]
     public Task CallWithNoHeapMap() => Dump("static int Foo(int a) => a; static int M(int a) { int b = Foo(a); return Foo(b); }");
+
+    /// <summary>Ticket P2-003 acceptance criterion 1: a class-constrained type parameter's <c>default</c> is the null element of its sort, with its <c>isNull</c> shadow set.</summary>
+    [Fact]
+    public Task DefaultValueOfATypeParameter() => Dump("static T M<T>(bool has, T value) where T : class => has ? value : default;");
 
     private static Task Dump(string members) => Verify(IrText.Dump(Lowered.Method(members)));
 }

@@ -86,8 +86,15 @@ field touched, `array.<Sort>` from an array reference to its elements by bv32 in
 `length.<Sort>` from an array reference to its length, per array sort indexed, keyed by the
 reference like `null.<Sort>` so that two variables holding one array share its elements (P1-006), and one
 `cast.<From>.<To>` map from `<From>`'s IR type to `<To>`'s sort per implicit reference or boxing
-conversion between different IR types (M3-010), and one `typeof.<T>` input of `System.Type` sort
-per closed type `T` a body reads with `typeof(T)` (P2-002). A cast map is an uninterpreted function with no
+conversion between different IR types (M3-010), one `typeof.<T>` input of `System.Type` sort
+per closed type `T` a body reads with `typeof(T)` (P2-002), and one `new.<Sort>` from bv32 to an
+array sort per array sort a body creates (P2-001). An array creation `new T[n]` (one `int` dimension)
+throws `System.OverflowException` when `n` is negative, then reads its reference from `new.<Sort>` at
+the body's count of that sort's creations so far (0 for the first), writes `n` into `length.<Sort>`
+and a constant map of `default(T)` into `array.<Sort>` at that reference, and stores an initialiser's
+values at indices 0, 1, ... in order; its shadow is false. `new.<Sort>` is shared by name, so both
+sides' k-th creations of a sort are one reference; nothing keeps it apart from the arrays the inputs
+reach, which only adds inputs, never removes a real run. A cast map is an uninterpreted function with no
 trace event: the same operand always converts to the same value. The converted value's nullness is
 read from `null.<To>` like any value's, not tied to the operand's, which over-approximates (a real
 upcast of a non-null value is never null). `typeof(T)` for an open generic or method type parameter
@@ -101,7 +108,8 @@ is the one definition). A C# parameter whose name would be synthesised, which ca
 is spelled with a leading `$` in IR (`$this`; its source name stays `this`). No C# identifier contains `$`, so
 that name is never another parameter's (M3-007). A value's shadow is a `mapread` of `null.<Sort>`,
 so equal references are equally null; `new` sets the shadow to false instead. `this`,
-`null.*`, `cast.*`, `length.*` and `typeof.*` are `In`, because nothing changes them. No CLR array has a
+`null.*`, `cast.*`, `length.*`, `typeof.*` and `new.*` are `In`, because nothing changes them, except
+that `length.<Sort>` is `Ref` in a body that creates an array of that sort (P2-001; ADR 0018 clarification). No CLR array has a
 negative length, so the encoder assumes every read of a `length.*` input is non-negative, whether or not the read is
 reached (the CLR never reads a null reference's length, so this drops no input a caller can pass), and the model
 decoder gives 0 wherever a model's length map is negative, which can only be at a reference nothing reads (P2-019). `field.*` and `array.*` are

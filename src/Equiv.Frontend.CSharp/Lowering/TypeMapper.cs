@@ -59,6 +59,20 @@ internal static class TypeMapper
     };
 
     /// <summary>
+    /// The IR value of <c>default(<paramref name="type"/>)</c>, the element a new array starts with (ticket P2-001):
+    /// <c>null</c> (element 0) for a reference or nullable type, <c>false</c>, and for a numeric or enum type the
+    /// constant <c>0</c>, which is the element a literal zero of an uninterpreted numeric sort is. Null for any other
+    /// value type, whose default is no constant.
+    /// </summary>
+    public static IrValue? Default(ITypeSymbol type, Func<string, string> sorts) => type switch
+    {
+        { IsReferenceType: true } or { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } => Constant(type, value: null, sorts),
+        { SpecialType: SpecialType.System_Boolean } => new IrBoolValue(Value: false),
+        { TypeKind: TypeKind.Enum } or { SpecialType: >= SpecialType.System_Char and <= SpecialType.System_Double } => Constant(type, 0, sorts),
+        _ => null,
+    };
+
+    /// <summary>
     /// An API-equivalence adapter constant (ticket M3-009): <paramref name="text"/> of the IR type <paramref name="type"/>,
     /// which is <c>bool</c>, <c>bv</c><i>n</i> (a signed integer), or a sort name. A sort constant is the element
     /// <see cref="Constant(ITypeSymbol, object?)"/> gives a C# constant with the same invariant text, so an enum member

@@ -185,3 +185,6 @@ Purity attributes or a user-supplied "this callee is pure" config.
   side does not load without `System.Web.Http`, and `ComparePipelineTests.AddedAndRemovedHaveLocations` renders a Linux
   path without `file:///`.
   `webapi-basic` touches no field or array, so its IR and verdicts are unchanged by this ticket.
+- Merging P2-001 (array creation) while this PR was open: an allocation writes `length.*`, which makes that map `Ref`.
+  Pairing every `Ref` heap map would then pair `length.*` at calls, against criterion 3, so the lowerer now pairs only
+  `field.*` and `array.*` maps (`HeapLowerer.CallHeap`, pinned in `OnlyFieldAndArrayMapsArePaired`).

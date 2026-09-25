@@ -25,7 +25,11 @@ internal sealed class HeapLowerer(
 {
     private static readonly IrBool Bool = new();
 
+    private static readonly IrBitVec Index = new(32);
+
     private readonly Dictionary<string, SsaBuilder.Variable> slices = new(StringComparer.Ordinal);
+
+    private readonly Dictionary<string, SsaBuilder.Variable> counts = new(StringComparer.Ordinal);
 
     /// <summary>The synthesised heap inputs (<c>field.*</c>, <c>array.*</c>, <c>length.*</c>) this lowering has used so far.</summary>
     public HeapInputs Inputs { get; } = new(sorts);
@@ -37,6 +41,14 @@ internal sealed class HeapLowerer(
     /// </summary>
     public IEnumerable<(SsaBuilder.Variable Variable, IrVar Out)> Outs() =>
         Inputs.Parameters.Where(static p => p.Kind == IrParameterKind.Ref).Select(p => (slices[p.Var.Name], p.Var));
+
+    /// <summary>
+    /// The heap slices every call reads and writes (ticket P1-005): each <c>field.*</c> and <c>array.*</c> map the body touches.
+    /// A <c>length.*</c> map the body writes is not one: only an array creation writes it, and a call cannot change the
+    /// length of an array.
+    /// </summary>
+    public IEnumerable<SsaBuilder.Variable> CallHeap() =>
+        Inputs.Parameters.Where(static p => HeapInputs.IsWritable(p.Var.Name)).Select(p => slices[p.Var.Name]);
 
     /// <summary>
     /// The heap slice an assignment target names, or null when it is not a field or a single-dimensional
@@ -68,14 +80,14 @@ internal sealed class HeapLowerer(
     /// <summary>
     /// An array element is the array's slice of its sort's map, read at the array reference, then a map from
     /// a bv32 index, bounded by the length map read at the same reference. The unsigned comparison catches a
-    /// negative index too. Null when the array is not a plain variable, the index is not bv32, or the array
+    /// negative index too. Null when the array is neither a plain variable nor an array creation (ticket P2-001), the index is not bv32, or the array
     /// has several dimensions; nothing is emitted in that case.
     /// </summary>
     public Access? Element(IArrayElementReferenceOperation element, LoweringContext context)
     {
         if (element.Indices is not [{ Type: { } indexType }]
             || TypeMapper.Map(indexType) is not IrBitVec { Width: 32 }
-            || resolveTarget(element.ArrayReference) is null)
+            || (resolveTarget(element.ArrayReference) is null && element.ArrayReference is not IArrayCreationOperation))
         {
             return null;
         }
@@ -110,6 +122,34 @@ internal sealed class HeapLowerer(
     public void WriteSlice(Access access, IrVar value, LoweringContext context)
     {
         Check(access, context);
+        Store(access, value, context);
+    }
+
+    /// <summary>
+    /// A new array of <paramref name="array"/>'s sort (ticket P2-001): the next element of <c>new.&lt;Sort&gt;</c> by this
+    /// body's allocation count of that sort, whose length is written to <paramref name="length"/> and whose elements to
+    /// <paramref name="default"/>. The caller has already thrown on a negative length.
+    /// </summary>
+    public IrVar Allocate(IrSort array, IrType element, IrVar length, IrValue @default, LoweringContext context)
+    {
+        SsaBuilder.Variable count = Count(Inputs.Fresh(array));
+        IrVar allocated = ssa.Load(context.Current, count);
+        IrVar reference = MapRead(Inputs.Fresh(array), allocated, context);
+        ssa.Store(context.Current, count, Emit(IrBinaryOp.Add, allocated, Const(new IrBitVecValue(32, 1), context), Index, context));
+
+        IrVar lengths = Inputs.Length(array);
+        Inputs.Write(lengths);
+        Overwrite(Versioned(lengths), reference, length, context);
+        Overwrite(Versioned(Inputs.Elements(array, element)), reference, Const(new IrMapValue(new IrMap(Index, element), @default, []), context), context);
+        return reference;
+    }
+
+    /// <summary>Element <paramref name="index"/> of a new array's initialiser: a write with no null or bounds check, as the index is in range.</summary>
+    public void Initialize(IrVar array, int index, IrVar value, LoweringContext context) =>
+        Store(new Access(Versioned(Inputs.Elements((IrSort)array.Type, value.Type)), array, Const(new IrBitVecValue(32, (ulong)index), context), Dereferenced: null), value, context);
+
+    private void Store(Access access, IrVar value, LoweringContext context)
+    {
         IrVar map = ssa.Load(context.Current, access.Map);
         IrVar updated = access.Array is { } array
             ? MapWrite(map, array, MapWrite(MapRead(map, array, context), access.Key, value, context), context)
@@ -122,6 +162,25 @@ internal sealed class HeapLowerer(
         IrVar target = ssa.Temp(((IrMap)map.Type).Value);
         ssa.Emit(context.Current, new IrMapRead(target, map, key));
         return target;
+    }
+
+    /// <summary>Writes <paramref name="value"/> at <paramref name="key"/> of the current version of <paramref name="map"/>.</summary>
+    private void Overwrite(SsaBuilder.Variable map, IrVar key, IrVar value, LoweringContext context) =>
+        ssa.Store(context.Current, map, MapWrite(ssa.Load(context.Current, map), key, value, context));
+
+    /// <summary>How many arrays of a sort the body has allocated so far, starting at 0 in the entry block.</summary>
+    private SsaBuilder.Variable Count(IrVar fresh)
+    {
+        if (!counts.TryGetValue(fresh.Name, out SsaBuilder.Variable? variable))
+        {
+            variable = new SsaBuilder.Variable(new IrVar($"${fresh.Name}", Index));
+            counts[fresh.Name] = variable;
+            IrVar zero = ssa.Temp(Index);
+            ssa.Emit(new IrBlockId(0), new IrConst(zero, new IrBitVecValue(32, 0)));
+            ssa.Store(new IrBlockId(0), variable, zero);
+        }
+
+        return variable;
     }
 
     /// <summary>
@@ -159,7 +218,7 @@ internal sealed class HeapLowerer(
     }
 
     /// <summary>The length of the array <paramref name="array"/> references, from its sort's length map.</summary>
-    private IrVar Length(IrVar array, LoweringContext context) => MapRead(Inputs.Length((IrSort)array.Type), array, context);
+    private IrVar Length(IrVar array, LoweringContext context) => MapRead(ssa.Load(context.Current, Versioned(Inputs.Length((IrSort)array.Type))), array, context);
 
     private IrVar MapWrite(IrVar map, IrVar key, IrVar value, LoweringContext context)
     {

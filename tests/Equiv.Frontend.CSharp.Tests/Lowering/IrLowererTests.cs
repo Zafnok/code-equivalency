@@ -109,6 +109,9 @@ public sealed class IrLowererTests
     [InlineData("static void M(int a, Exception e) { if (a < 0) throw e; }", "Throw")]
     [InlineData("static T M<T>() where T : new() => new T();", "TypeParameterObjectCreation")]
     [InlineData("static object M<T>() => typeof(T);", "TypeOf")]
+    [InlineData("static T M<T>() => default(T);", "DefaultValue")]
+    [InlineData("static T M<T>() where T : struct => default(T);", "DefaultValue")]
+    [InlineData("struct Point { public int X, Y; } static Point M() => default(Point);", "DefaultValue")]
     [InlineData("static C M(int a) { int b = 0; return new C(ref b); } C(ref int x) { }", "ref-argument")]
     [InlineData("static void M(int a) { ref int r = ref a; r = 1; }", "SimpleAssignment")]
     [InlineData("static int M(double d) => (int)d;", "Conversion")]
@@ -502,6 +505,21 @@ public sealed class IrLowererTests
         Assert.Equal(new IrReturned(new IrBoolValue(Value: true)), Run(procedure));
     }
 
+    /// <summary>
+    /// Ticket P2-003 acceptance criterion 2: a type parameter's <c>default</c> is the null element of its sort when the
+    /// parameter is constrained to <c>class</c>; Roslyn folds it to the constant <c>null</c>, so it needs no dedicated
+    /// lowering arm, the same path a closed reference type's <c>default</c> already took.
+    /// </summary>
+    [Fact]
+    public void DefaultOfAClassConstrainedTypeParameterIsTheNullElement()
+    {
+        IrProcedure procedure = Method("static T M<T>() where T : class => default(T);");
+
+        Assert.Empty(Opaques(procedure));
+        IrConst value = Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>());
+        Assert.Equal(new IrSortValue("T", 0), value.Value);
+    }
+
     [Fact]
     public void ALocalAssignedANewObjectIsNeverNull()
     {
@@ -600,6 +618,74 @@ public sealed class IrLowererTests
 
         Assert.Equal(new IrReturned(Bits(32, expected)), outcome);
     }
+
+    /// <summary>Ticket P2-001 acceptance criterion 1: neither repro method is opaque anywhere.</summary>
+    [Theory]
+    [InlineData("static int[] M(int a, int b) { var r = new int[2]; r[0] = a; r[1] = b; return r; }")]
+    [InlineData("static int M(int n) => new[] { n, n + 1 }[0];")]
+    public void AnArrayCreationIsNotOpaque(string members) => Assert.Empty(Opaques(Method(members)));
+
+    /// <summary>
+    /// Ticket P2-001 acceptance criterion 2: a negative length throws <c>OverflowException</c> before anything is allocated;
+    /// any other length gives an array of that length whose elements are the default.
+    /// </summary>
+    [Theory]
+    [InlineData(-1, true)]
+    [InlineData(int.MinValue, true)]
+    [InlineData(0, false)]
+    [InlineData(3, false)]
+    public void ANegativeLengthThrowsOverflow(int n, bool thrown)
+    {
+        IrProcedure procedure = Method("static int M(int n) { var r = new int[n]; return r.Length; }");
+
+        IrOutcome outcome = Run(procedure, [Bits(32, n), .. procedure.Parameters.Skip(1).Select(static p => Input(p.Var))]);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(thrown ? new IrThrew("System.OverflowException") : new IrReturned(Bits(32, n)), outcome);
+    }
+
+    /// <summary>
+    /// Ticket P2-001: a new array's elements are the element type's default, or the initialiser's values in order, and two
+    /// creations are two arrays; a body that creates one writes its length map, so the map is <c>Ref</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(int n) { var r = new int[2]; return r[1]; }", 0)]
+    [InlineData("static int M(int n) => new[] { n, n + 1 }[1];", 6)]
+    [InlineData("static int M(int n) { var a = new int[1]; var b = new int[1]; a[0] = n; b[0] = 2; return a[0]; }", 5)]
+    [InlineData("static int M(int n) { var a = new int[] { n }; var b = new int[3]; return a.Length * 10 + b.Length; }", 13)]
+    public void ANewArrayHoldsItsDefaultsOrItsInitialiser(string members, int expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        IrOutcome outcome = Run(procedure, [Bits(32, 5), .. procedure.Parameters.Skip(1).Select(static p => Input(p.Var))]);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), outcome);
+        Assert.All(procedure.Parameters.Where(static p => p.Var.Name.StartsWith("length.", StringComparison.Ordinal)), static p => Assert.Equal(IrParameterKind.Ref, p.Kind));
+    }
+
+    /// <summary>Ticket P2-001 acceptance criterion 3: several dimensions, a jagged creation and a <c>long</c> length stay opaque.</summary>
+    [Theory]
+    [InlineData("static int[,] M(int n) => new int[n, 2];")]
+    [InlineData("static int[][] M(int n) => new int[n][];")]
+    [InlineData("static int[] M(long n) => new int[n];")]
+    [InlineData("struct S { int x; } static S[] M(int n) => new S[n];")]
+    public void AnUnsupportedArrayCreationIsOpaque(string members) =>
+        Assert.Equal("ArrayCreation", Assert.Single(Opaques(Method(members))).Reason);
+
+    /// <summary>A <c>new.&lt;Sort&gt;</c> input: allocation <c>k</c> of <paramref name="sort"/> is element <c>k + 1</c>.</summary>
+    private static IrMapValue Fresh(string sort) => new(
+        new IrMap(new IrBitVec(32), new IrSort(sort)),
+        new IrSortValue(sort, 99),
+        ImmutableDictionary<IrValue, IrValue>.Empty.Add(Bits(32, 0), new IrSortValue(sort, 1)).Add(Bits(32, 1), new IrSortValue(sort, 2)));
+
+    private static IrMapValue Input(IrVar parameter) => parameter.Name switch
+    {
+        ['n', 'e', 'w', '.', ..] => Fresh("int[]"),
+        ['l', 'e', 'n', 'g', 't', 'h', '.', ..] => Lengths("int[]", 7),
+        ['n', 'u', 'l', 'l', '.', ..] => Nulls("int[]", 0, isNull: false),
+        _ => Elements("int[]", new IrBitVec(32)),
+    };
 
     /// <summary>Ticket P1-006 acceptance criterion 2: the bounds check and <c>a.Length</c> read the length map at the array.</summary>
     [Fact]
@@ -731,6 +817,11 @@ public sealed class IrLowererTests
             ["array.int__", "field.C.g"],
             Assert.Single(Calls(Method("int g; static int M(C o, int[] a) { int n = a[0] + a.Length + o.g; return Math.Abs(n); }"))).Heap.Select(static h => h.Map),
             StringComparer.Ordinal);
+
+        // An array creation writes length.int__, which makes it by-ref (P2-001), but a call cannot change an array's length.
+        IrProcedure allocating = Method("static int M(int n) { int[] a = new int[n]; return Math.Abs(a[0]); }");
+        Assert.Contains(allocating.Parameters, static p => p is { Var.Name: "length.int__", Kind: IrParameterKind.Ref });
+        Assert.Equal(["array.int__"], Assert.Single(Calls(allocating)).Heap.Select(static h => h.Map), StringComparer.Ordinal);
     }
 
     [Theory]
