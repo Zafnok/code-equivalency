@@ -16,19 +16,11 @@ namespace Equiv.Verify.Z3;
 /// application in the pair marks <see cref="IrPure.RuntimeSensitive"/> is side-specific instead: every application of it
 /// on either side uses an <c>old.</c> or <c>new.</c> prefixed name, so the two sides are never forced to agree.
 /// </summary>
-internal sealed class PureEncoder
+internal sealed class PureEncoder(SortMapper sorts, IEnumerable<IrPure> applications)
 {
-    private readonly Context context;
-    private readonly SortMapper sorts;
-    private readonly FrozenSet<string> sideSpecific;
+    private readonly Context context = sorts.Context;
+    private readonly FrozenSet<string> sideSpecific = applications.Where(static p => p.RuntimeSensitive).Select(static p => p.Function).ToFrozenSet(StringComparer.Ordinal);
     private readonly Dictionary<string, FuncDecl> functions = new(StringComparer.Ordinal);
-
-    public PureEncoder(SortMapper sorts, IEnumerable<IrPure> applications)
-    {
-        this.sorts = sorts;
-        context = sorts.Context;
-        sideSpecific = applications.Where(static p => p.RuntimeSensitive).Select(static p => p.Function).ToFrozenSet(StringComparer.Ordinal);
-    }
 
     /// <summary>The name <paramref name="pure"/>'s function has on <paramref name="side"/>: its own, or prefixed with the side when side-specific.</summary>
     public string Name(Side side, IrPure pure) =>
