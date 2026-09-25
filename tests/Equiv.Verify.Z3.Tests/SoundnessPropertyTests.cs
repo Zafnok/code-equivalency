@@ -19,32 +19,25 @@ public sealed class SoundnessPropertyTests
 {
     private static readonly VerificationOptions Options = new(3, 10_000, []);
 
-    /// <summary>
-    /// <c>Verify(P, P)</c> is never Divergent for 200 generated acyclic procedures (a self-comparison
-    /// reporting Divergent would be unsound). It is usually Equivalent; ticket M3-027's Notes record that
-    /// Z3 5.1.0, unlike 4.12.2, can time out to Unknown on some map-and-arithmetic-heavy generated pairs
-    /// instead of folding the self-comparison, which is a conservatism change, not a soundness one (ADR 0005).
-    /// </summary>
+    /// <summary><c>Verify(P, P)</c> is Equivalent for 200 generated acyclic procedures.</summary>
     [Fact]
     public void AProcedureIsEquivalentToItself()
     {
         IrGen.AcyclicProcedure.Sample(
-            static p => Assert.IsNotType<Divergent>(new Z3Backend().Verify(p, p, Options)),
+            static p => Assert.IsType<Equivalent>(new Z3Backend().Verify(p, p, Options)),
             iter: 200,
             print: IrText.Dump);
     }
 
     /// <summary>
-    /// <c>Verify(P, Rename(P))</c> is never Divergent for 200 generated acyclic procedures whose
-    /// source-language parameters are renamed on one side: inputs are shared by position, not by name (ADR
-    /// 0021). As with <see cref="AProcedureIsEquivalentToItself"/>, Z3 5.1.0 can report Unknown here instead
-    /// of Equivalent (ticket M3-027 Notes).
+    /// <c>Verify(P, Rename(P))</c> is Equivalent for 200 generated acyclic procedures whose source-language
+    /// parameters are renamed on one side: inputs are shared by position, not by name (ADR 0021).
     /// </summary>
     [Fact]
     public void RenamingTheParametersKeepsAProcedureEquivalent()
     {
         IrGen.AcyclicRenamedPair.Sample(
-            static pair => Assert.IsNotType<Divergent>(new Z3Backend().Verify(pair.Original, pair.Renamed, Options)),
+            static pair => Assert.IsType<Equivalent>(new Z3Backend().Verify(pair.Original, pair.Renamed, Options)),
             iter: 200,
             print: static pair => IrText.Dump(pair.Original) + "\n" + IrText.Dump(pair.Renamed));
     }

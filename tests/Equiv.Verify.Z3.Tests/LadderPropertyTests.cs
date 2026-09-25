@@ -21,12 +21,7 @@ public sealed class LadderPropertyTests
 {
     private static readonly VerificationOptions Options = new(3, 10_000, []);
 
-    /// <summary>
-    /// <c>Verify(P, P)</c> is never Divergent for 200 generated looping procedures (a self-comparison reporting
-    /// Divergent would be unsound); when it is Equivalent, it is bounded only when a bound covers every loop.
-    /// It is usually Equivalent; ticket M3-027's Notes record that Z3 5.1.0, unlike 4.12.2, can time out to
-    /// Unknown on some generated pairs instead, which is a conservatism change, not a soundness one (ADR 0005).
-    /// </summary>
+    /// <summary><c>Verify(P, P)</c> is Equivalent for 200 generated looping procedures, bounded only when a bound covers every loop.</summary>
     [Fact]
     public void ALoopingProcedureIsEquivalentToItself()
     {
@@ -34,12 +29,8 @@ public sealed class LadderPropertyTests
         looping.Sample(
             static p =>
             {
-                Verdict verdict = new Z3Backend().Verify(p, p, Options);
-                Assert.IsNotType<Divergent>(verdict);
-                if (verdict is Equivalent equivalent)
-                {
-                    Assert.Equal(equivalent.Method == ProofMethod.Bounded ? Options.Bound : null, equivalent.BoundedBy);
-                }
+                Equivalent equivalent = Assert.IsType<Equivalent>(new Z3Backend().Verify(p, p, Options));
+                Assert.Equal(equivalent.Method == ProofMethod.Bounded ? Options.Bound : null, equivalent.BoundedBy);
             },
             iter: 200,
             print: IrText.Dump);
