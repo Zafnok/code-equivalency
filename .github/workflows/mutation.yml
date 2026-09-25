@@ -142,3 +142,28 @@ jobs:
         with:
           path: ${{ runner.temp }}/ci-pass
           key: ${{ env.PASS_KEY_PREFIX }}-${{ steps.fp.outputs.hash }}
+
+  # The differential soundness gate's nightly budget (VERIFICATION-MODEL.md section 7, M0-012): the
+  # same DifferentialSoundnessTests every PR runs with 200 pairs in the Windows gates leg, run with
+  # 5,000. On a failure the log holds the seed; EQUIV_DIFFERENTIAL_SEED replays it locally.
+  differential:
+    if: github.event_name == 'schedule'
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .z3-feed
+          key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
+      - name: Fetch Microsoft.Z3 (ADR 0030)
+        shell: pwsh
+        run: ./tools/z3-feed/fetch.ps1
+      - run: dotnet restore --locked-mode
+      - name: Run the differential soundness gate (5,000 pairs)
+        env:
+          EQUIV_DIFFERENTIAL_BUDGET: nightly
+        run: dotnet test --project tests/Equiv.Tests.Integration --no-restore -- --filter-class Equiv.Tests.Integration.DifferentialSoundnessTests

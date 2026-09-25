@@ -362,6 +362,9 @@ ticket id (not listed again here). P2-015 is a `corpus.ps1` finding from the sam
   reason `no-procedures` and exits 4, instead of reporting a clean, empty side. Found from P2-016's
   data: ShortestPaths' modern side reported 100% loaded with 0 procedures. P2-016 finds that
   repo's cause; this is the general guard. Needs M3-024.
+- P2-019 (S) An array's length is never negative in a model. Found by M0-012's gate at the
+  nightly budget (a false Divergent, rule 2); the gate skips it until this lands. M3-003 needs
+  it (M0-012 criterion 7). Needs M0-012.
 
 ## M5 — Agent surface (MCP)
 
