@@ -1,5 +1,5 @@
 # M2-007 `runtime-changes.json` is complete against Microsoft's breaking-change pages, and every row says where it came from
-Status: in-progress
+Status: done (PR #173)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
