@@ -21,5 +21,7 @@ internal interface IIrInstructionVisitor<out TResult>
 
     TResult Visit(IrMapWrite instruction);
 
+    TResult Visit(IrPure instruction);
+
     TResult Visit(IrOpaque instruction);
 }

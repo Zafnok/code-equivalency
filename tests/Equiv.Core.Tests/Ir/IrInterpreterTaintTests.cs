@@ -278,10 +278,10 @@ public sealed class IrInterpreterTaintTests
                 {
                     (IrProcedure procedure, IrInputs input, bool all) = s;
                     IrRun plain = IrGen.Run(procedure, input);
-                    IrRun tainted = IrInterpreter.Run(procedure, input, IrGenOracle.Instance, IrGen.StepBudget, all ? static _ => true : static c => c.Value.Length % 2 == 0);
+                    IrRun tainted = IrInterpreter.Run(procedure, input, IrGenOracle.Instance, IrGen.StepBudget, all ? static _ => true : static c => c.Value.Length % 2 == 0, IrGenOracle.Instance);
                     Assert.Equal(IrTaint.None, plain.Taint);
                     Assert.Equal(plain, tainted with { Taint = IrTaint.None });
-                    Assert.Equal(plain, IrInterpreter.Run(procedure, input, IrGenOracle.Instance, IrGen.StepBudget, static _ => false) with { Taint = IrTaint.None });
+                    Assert.Equal(plain, IrInterpreter.Run(procedure, input, IrGenOracle.Instance, IrGen.StepBudget, static _ => false, IrGenOracle.Instance) with { Taint = IrTaint.None });
                 },
                 iter: 200,
                 print: static s => IrText.Dump(s.p));
