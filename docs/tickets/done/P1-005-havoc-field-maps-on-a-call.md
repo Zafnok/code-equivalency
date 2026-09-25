@@ -188,3 +188,8 @@ Purity attributes or a user-supplied "this callee is pure" config.
 - Merging P2-001 (array creation) while this PR was open: an allocation writes `length.*`, which makes that map `Ref`.
   Pairing every `Ref` heap map would then pair `length.*` at calls, against criterion 3, so the lowerer now pairs only
   `field.*` and `array.*` maps (`HeapLowerer.CallHeap`, pinned in `OnlyFieldAndArrayMapsArePaired`).
+- Merging M4-002 (`IrPure`) while this PR was open: the replay taints every pure function, so a run that applies one has
+  a taint source, and the replay then treats every heap version it threaded (and every event, which may carry one) as
+  tainted. A pair that uses a floating-point, `decimal` or user-defined operator and has a map only one side names can
+  therefore be Unknown(Abstraction) where a divergence is real. That costs precision only; tracking which call's
+  answer each threaded version depends on would recover it.
