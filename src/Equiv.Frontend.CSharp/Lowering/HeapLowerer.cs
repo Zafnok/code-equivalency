@@ -53,9 +53,17 @@ internal sealed class HeapLowerer(
     /// A field is a map from its receiver, or from its declaring type's token when it is static. A receiver of a
     /// reference type is null-checked where the slice is read or written, not here (ticket P2-017).
     /// </summary>
-    public Access Field(IFieldReferenceOperation field, LoweringContext context) => field.Instance is { } instance
-        ? new Access(Versioned(Inputs.Field(field.Field)), Array: null, lower(instance, context), instance.Type!.IsValueType ? null : instance)
-        : new Access(Versioned(Inputs.Field(field.Field)), Array: null, Const(Inputs.Token(field.Field), context), Dereferenced: null);
+    public Access Field(IFieldReferenceOperation field, LoweringContext context)
+    {
+        SsaBuilder.Variable map = Versioned(Inputs.Field(field.Field));
+        if (field.Instance is not { } instance)
+        {
+            return new Access(map, Array: null, Const(Inputs.Token(field.Field), context), Dereferenced: null);
+        }
+
+        IOperation? dereferenced = instance.Type!.IsValueType ? null : instance;
+        return new Access(map, Array: null, lower(instance, context), dereferenced);
+    }
 
     /// <summary>
     /// An array element is the array's slice of its sort's map, read at the array reference, then a map from

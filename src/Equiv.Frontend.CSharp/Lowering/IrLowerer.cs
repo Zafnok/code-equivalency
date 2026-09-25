@@ -895,7 +895,7 @@ internal sealed class IrLowerer
             ? TypeMapper.Promote(compound.Target.Type!)
             : mappedRight;
         return compound.OperatorMethod is null && operands is { } promoted
-            ? Update(compound, compound.Target, compound.OperatorKind, () => Value(compound.Value, context), promoted, compound.IsChecked, isPostfix: false, context)
+            ? Update(new UpdateSite(compound, compound.Target, compound.IsChecked, IsPostfix: false), compound.OperatorKind, () => Value(compound.Value, context), promoted, context)
             : Opaque(compound, compound.Kind.ToString(), context);
     }
 
@@ -908,7 +908,7 @@ internal sealed class IrLowerer
         }
 
         BinaryOperatorKind kind = step.Kind == OperationKind.Increment ? BinaryOperatorKind.Add : BinaryOperatorKind.Subtract;
-        return Update(step, step.Target, kind, () => Const(new IrBitVecValue(promoted.Type.Width, 1), context), promoted, step.IsChecked, step.IsPostfix, context);
+        return Update(new UpdateSite(step, step.Target, step.IsChecked, step.IsPostfix), kind, () => Const(new IrBitVecValue(promoted.Type.Width, 1), context), promoted, context);
     }
 
     /// <summary>
@@ -916,8 +916,9 @@ internal sealed class IrLowerer
     /// and writes back. The target is a local or parameter, or a property with a getter and a non-init setter, whose
     /// receiver and index arguments are evaluated once for both accessor calls (ticket M3-010 acceptance criterion 2).
     /// </summary>
-    private IrVar? Update(IOperation node, IOperation lvalue, BinaryOperatorKind kind, Func<IrVar> operand, (IrBitVec Type, bool Signed) promoted, bool isChecked, bool isPostfix, LoweringContext context)
+    private IrVar? Update(UpdateSite site, BinaryOperatorKind kind, Func<IrVar> operand, (IrBitVec Type, bool Signed) promoted, LoweringContext context)
     {
+        (IOperation node, IOperation lvalue, bool isChecked, bool isPostfix) = site;
         if (TypeMapper.Map(lvalue.Type!) is not IrBitVec narrow || Place(lvalue, context) is not { } place)
         {
             return Opaque(node, lvalue.Kind.ToString(), context);
@@ -1197,6 +1198,9 @@ internal sealed class IrLowerer
         ThrowIf(threw, "System.Exception", context, known: false);
         return target;
     }
+
+    /// <summary>The operation <see cref="Update"/> rewrites, the lvalue it reads and writes, and how: checked, and whether it yields the value read.</summary>
+    private sealed record UpdateSite(IOperation Node, IOperation Target, bool IsChecked, bool IsPostfix);
 
     /// <summary>A property an assignment writes, and its receiver and index arguments, evaluated once.</summary>
     private sealed record PropertyAccess(IPropertyReferenceOperation Reference, ImmutableArray<IrVar> Operands);
