@@ -171,9 +171,9 @@ Purity attributes or a user-supplied "this callee is pure" config.
   encoder threads a map one side never names, which is a direct check of the section 5 rule.
 - Two latent name collisions in `IrGen.Mutation` surfaced once calls carried heap pairs and the random stream moved:
   a stacked mutant that re-applies "change map write" or "duplicate call" to the same instruction minted the same
-  `.one`/`.changed`/`.dup` names twice (IR003). The generator now appends `$` until the name is free. The failures
-  were intermittent (`LineScopedResidualClaimHolds` runs unseeded); 3 x 3,000 iterations of it and of
-  `AMutantIsNeverEquivalentAndEveryDivergenceReplays` passed after the fix.
+  `.one`/`.changed`/`.dup` names twice (IR003). The failures were intermittent (`LineScopedResidualClaimHolds` runs
+  unseeded). `main` fixed the same collision independently while this PR was open (a suffix lengthened until no name
+  contains it); the merge keeps that fix and gives a duplicated call's heap `after` versions the same fresh suffix.
 - A loop fragment starting at a header (lockstep and k-induction steps) starts a threaded map at the shared input, not
   at an arbitrary version. That is sound in practice: the side that has the map carries its version in the header
   state and in every exit's outs, so the step's final-heap or event comparison fails (sat) unless the version equals

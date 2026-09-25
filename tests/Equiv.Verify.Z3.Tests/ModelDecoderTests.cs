@@ -208,6 +208,39 @@ public sealed class ModelDecoderTests
         Assert.StartsWith("Encoder bug: the model gives a map in a shape the decoder does not read", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-019 criterion 1: the encoder only assumes the lengths it reads, so a model can give a reference nothing
+    /// reads a negative length; the decoded input gives it 0 and keeps the length it read.
+    /// </summary>
+    [Fact]
+    public void ANegativeLengthAtAnUnreadReferenceDecodesAsZero()
+    {
+        IrProcedure reads = IrText.Parse("""
+            proc "T::M(int[])" (%u "u": sort "int[]", %length.int__: map<sort "int[]", bv32>) -> bv32 entry B0
+            B0:
+              %l: bv32 = mapread %length.int__, %u
+              ret %l
+            """);
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, reads, reads, []);
+        ArrayExpr lengths = (ArrayExpr)encoding.Inputs[1].Term;
+        Expr u = encoding.Inputs[0].Term;
+        Expr other = context.MkConst("other", encoding.Sorts.Sort(new IrSort("int[]")));
+        using Solver solver = context.MkSolver();
+        solver.Add(encoding.Assertions);
+        solver.Add(context.MkNot(context.MkEq(other, u)), context.MkEq(context.MkSelect(lengths, u), context.MkBV(3, 32)), context.MkEq(context.MkSelect(lengths, other), context.MkBV(-1, 32)));
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+        ModelDecoder decoder = new(context, solver.Model, encoding);
+        IrValue raw = decoder.Decode(solver.Model.Eval(lengths, completion: true), encoding.Inputs[1].Shared.Type);
+
+        IrInputs inputs = decoder.Inputs();
+
+        IrMapValue decoded = Assert.IsType<IrMapValue>(inputs.Arguments[1]);
+        Assert.Contains(IrBitVecValue.FromSigned(32, -1), ((IrMapValue)raw).Entries.Values.Append(((IrMapValue)raw).Default));
+        Assert.Equal(IrBitVecValue.FromSigned(32, 3), decoded.Read(inputs.Arguments[0]));
+        Assert.All(decoded.Entries.Values.Prepend(decoded.Default), static v => Assert.True(((IrBitVecValue)v).TwosComplement >= 0, $"negative length {v}"));
+    }
+
     [Fact]
     public void ReplayThrowsWhenTheModelDoesNotActuallyDiverge()
     {

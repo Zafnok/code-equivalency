@@ -67,6 +67,9 @@ internal static class ProductEncoder
             [IrOverflowOp.SDiv] = static (c, a, b) => c.MkBVSDivNoOverflow(a, b),
         }.ToFrozenDictionary();
 
+    /// <summary>The name prefix of the synthesised input that maps an array reference to its length (VERIFICATION-MODEL.md section 2).</summary>
+    public const string LengthPrefix = "length.";
+
     public static string Prefix(Side side) => side == Side.Old ? "old" : "new";
 
     /// <summary>
@@ -425,6 +428,7 @@ internal static class ProductEncoder
 
                 case IrMapRead read:
                     Define(read.Target, context.MkSelect((ArrayExpr)Var(read.Map), Var(read.Key)));
+                    AssumeLength(read);
                     break;
                 case IrMapWrite write:
                     Define(write.Target, context.MkStore((ArrayExpr)Var(write.Map), Var(write.Key), Var(write.Value)));
@@ -436,6 +440,19 @@ internal static class ProductEncoder
         }
 
         private void Define(IrVar target, Expr value) => Assert(context.MkEq(Var(target), value));
+
+        /// <summary>
+        /// A read of a <c>length.&lt;Sort&gt;</c> input is non-negative, since no CLR array has a negative length
+        /// (ticket P2-019). The assumption holds whether or not the read is reached: the CLR never reads a null
+        /// reference's length, so no input a caller can pass is lost.
+        /// </summary>
+        private void AssumeLength(IrMapRead read)
+        {
+            if (read.Map.Name.StartsWith(LengthPrefix, StringComparison.Ordinal))
+            {
+                Assert(context.MkBVSGE((BitVecExpr)Var(read.Target), context.MkBV(0, 32)));
+            }
+        }
 
         private Expr Binary(IrBinaryOp op, Expr a, Expr b) => op switch
         {

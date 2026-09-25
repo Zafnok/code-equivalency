@@ -12,6 +12,7 @@ using Equiv.Frontend.CSharp.Loading;
 using Equiv.Frontend.CSharp.Lowering;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Equiv.Frontend.CSharp;
 
@@ -65,8 +66,8 @@ public sealed class CSharpFrontend : ILanguageFrontend
     {
         ArgumentNullException.ThrowIfNull(config);
 
-        LoadedSolution legacy = LoadOrThrow(legacyPath, ct);
-        LoadedSolution modern = LoadOrThrow(modernPath, ct);
+        LoadedSolution legacy = SkipVacuousProjects(LoadOrThrow(legacyPath, ct));
+        LoadedSolution modern = SkipVacuousProjects(LoadOrThrow(modernPath, ct));
 
         EndpointOverrides overrides = EndpointOverrides.Build(Endpoints(legacy.Compilations), Endpoints(modern.Compilations));
 
@@ -186,6 +187,44 @@ public sealed class CSharpFrontend : ILanguageFrontend
 
         return ([.. unmatched.Where(identity => !taken.Contains(identity))], projects.MoveToImmutable());
     }
+
+    /// <summary>
+    /// P2-018 (ADR 0029): after symbol enumeration, a loaded C# project that holds a type declaration but yields
+    /// zero procedures is treated as a project the loader skipped, with reason
+    /// <see cref="LoadDiagnosticKind.NoProcedures"/> ("a loaded project with source files that yields no procedures
+    /// is a load failure, not an empty project"). A project with no type declaration at all (only assembly
+    /// attributes, say) is unaffected: it was never going to yield procedures.
+    /// </summary>
+    private static LoadedSolution SkipVacuousProjects(LoadedSolution loaded)
+    {
+        ImmutableArray<Compilation>.Builder kept = ImmutableArray.CreateBuilder<Compilation>();
+        ImmutableArray<SkippedProject>.Builder vacuous = ImmutableArray.CreateBuilder<SkippedProject>();
+        foreach (Compilation compilation in loaded.Compilations)
+        {
+            if (!ProcedureEnumerator.Enumerate(compilation).IsEmpty || !DeclaresAType(compilation))
+            {
+                kept.Add(compilation);
+                continue;
+            }
+
+            // A C# project's compilation always has an assembly name (it comes from the loaded Project).
+            string assemblyName = compilation.AssemblyName!;
+            LoadDiagnostic diagnostic = new(
+                LoadDiagnosticKind.NoProcedures,
+                string.Empty,
+                assemblyName,
+                "the project loaded and declares at least one type, but symbol enumeration found zero procedures");
+            vacuous.Add(new SkippedProject(assemblyName, assemblyName, IsCSharp: true, [diagnostic], Compilation: null));
+        }
+
+        return vacuous.Count == 0
+            ? loaded
+            : loaded with { Compilations = kept.ToImmutable(), Skipped = [.. loaded.Skipped, .. vacuous] };
+    }
+
+    /// <summary>Whether any of the compilation's syntax trees declares a class, struct, interface, record or enum.</summary>
+    private static bool DeclaresAType(Compilation compilation) =>
+        compilation.SyntaxTrees.Any(static tree => tree.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Any());
 
     private LoadedSolution LoadOrThrow(string path, CancellationToken ct)
     {

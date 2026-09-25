@@ -79,7 +79,11 @@ public static class IrGen
     /// the start of a block (ADR 0014), drop or change a heap map write, or duplicate a call (ADR
     /// 0018; calls are not idempotent). An edit is kept only when some input (edge values plus
     /// random ones) makes the interpreter observe a difference; otherwise the generator discards it
-    /// and yields null.
+    /// and yields null. A caller may re-mutate an already-mutated procedure (a stacked pair): an edit's
+    /// derived variable name (<c>.dup</c>, <c>.kept</c>, ...) is fixed to the instruction it targets, so
+    /// re-selecting the same instruction on the second pass can collide with a name the first pass
+    /// already introduced. Rather than have every edit track uniqueness across stacking, a mutant that
+    /// turns out not to validate is discarded the same as one with no observable difference.
     /// </summary>
     public static Gen<IrMutant?> Mutation(IrProcedure procedure)
     {
@@ -94,6 +98,11 @@ public static class IrGen
         return Gen.Select(Gen.Int[0, edits.Count - 1], Inputs(procedure).Array[16], (index, random) =>
         {
             IrProcedure mutant = edits[index].Apply();
+            if (!IrValidator.Validate(mutant).IsEmpty)
+            {
+                return null;
+            }
+
             IrInputs? witness = edgeInputs.Concat(random).FirstOrDefault(input => Run(procedure, input) != Run(mutant, input));
             return witness is null ? null : new IrMutant(procedure, mutant, witness, edits[index].Description);
         });
@@ -166,9 +175,9 @@ public static class IrGen
                 {
                     case IrMapWrite write:
                         {
-                            IrVar kept = Fresh(procedure, write.Target.Name + ".kept", write.Value.Type);
-                            IrVar one = Fresh(procedure, write.Target.Name + ".one", write.Value.Type);
-                            IrVar changed = Fresh(procedure, write.Target.Name + ".changed", write.Value.Type);
+                            IrVar kept = new(write.Target.Name + Fresh(procedure, ".kept"), write.Value.Type);
+                            IrVar one = new(write.Target.Name + Fresh(procedure, ".one"), write.Value.Type);
+                            IrVar changed = new(write.Target.Name + Fresh(procedure, ".changed"), write.Value.Type);
                             edits.Add(($"drop map write {write.Target.Name}", () =>
                                 InsertInstructions(ReplaceInstruction(procedure, blockIndex, index, write with { Value = kept }), blockIndex, index, new IrMapRead(kept, write.Map, write.Key))));
                             edits.Add(($"change map write {write.Target.Name}", () =>
@@ -220,29 +229,33 @@ public static class IrGen
     }
 
     /// <summary>
-    /// A variable named <paramref name="name"/>, with <c>$</c> appended until no definition in <paramref name="procedure"/> has
-    /// the name (a stacked mutant re-edits a mutant). A definition is dumped as <c>%name:</c> or <c>%name "source":</c>.
+    /// <paramref name="suffix"/>, lengthened until no variable of <paramref name="procedure"/> contains it, so an edit of a
+    /// procedure that is already a mutant derives names no earlier edit used.
     /// </summary>
-    private static IrVar Fresh(IrProcedure procedure, string name, IrType type)
+    private static string Fresh(IrProcedure procedure, string suffix)
     {
         string text = IrText.Dump(procedure);
-        while (text.Contains($"%{name}:", StringComparison.Ordinal) || text.Contains($"%{name} \"", StringComparison.Ordinal))
+        while (text.Contains(suffix, StringComparison.Ordinal))
         {
-            name += "$";
+            suffix += "m";
         }
 
-        return new IrVar(name, type);
+        return suffix;
     }
 
     /// <summary>A copy of <paramref name="call"/> that defines fresh names; its heap versions are left unused.</summary>
-    private static IrCall Duplicate(IrProcedure procedure, IrCall call) => call with
+    private static IrCall Duplicate(IrProcedure procedure, IrCall call)
     {
-        Target = Renamed(procedure, call.Target),
-        Threw = Renamed(procedure, call.Threw),
-        Heap = [.. call.Heap.Select(h => h with { After = Renamed(procedure, h.After)! })],
-    };
+        string suffix = Fresh(procedure, ".dup");
+        return call with
+        {
+            Target = Renamed(call.Target, suffix),
+            Threw = Renamed(call.Threw, suffix),
+            Heap = [.. call.Heap.Select(h => h with { After = Renamed(h.After, suffix)! })],
+        };
+    }
 
-    private static IrVar? Renamed(IrProcedure procedure, IrVar? var) => var is null ? null : Fresh(procedure, var.Name + ".dup", var.Type) with { SourceName = var.SourceName };
+    private static IrVar? Renamed(IrVar? var, string suffix) => var is null ? null : var with { Name = var.Name + suffix };
 
     private static IrProcedure ReplaceBlock(IrProcedure procedure, int blockIndex, IrBlock block) =>
         procedure with { Blocks = procedure.Blocks.SetItem(blockIndex, block) };
