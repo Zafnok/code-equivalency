@@ -57,8 +57,8 @@ public static class PairGen
             Method.Where(m => Mutator.Sites(op, m) > 0).SelectMany(m =>
                 Gen.Int[0, Mutator.Sites(op, m) - 1].Select(site =>
                 {
-                    string original = Render(m);
-                    string mutant = Render(Mutator.Apply(op, m, site));
+                    string original = RenderMethod(m);
+                    string mutant = RenderMethod(Mutator.Apply(op, m, site));
                     // The introduced temporary is on the legacy side when the operator inlines it.
                     return op == MutationOperator.InlineTemporary ? (mutant, original, op) : (original, mutant, op);
                 })));
