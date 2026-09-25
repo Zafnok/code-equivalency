@@ -1,5 +1,5 @@
 # P2-018 A loaded project with source files that yields no procedures is a load failure, not an empty project
-Status: in-progress
+Status: done (PR #189)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-024
