@@ -60,9 +60,9 @@ public static class IrGen
     public static Gen<(IrProcedure Original, IrProcedure Renamed)> AcyclicRenamedPair { get; } =
         Programs(loops: false).Select(static p => (IrGenLowering.Lower(p), IrGenLowering.Lower(p, renamed: true)));
 
-    /// <summary>One procedure per validator rule, each breaking exactly that rule.</summary>
+    /// <summary>One procedure per validator rule, each breaking exactly that rule. Each has the heap map, which the heap-pair rules need.</summary>
     public static Gen<IrViolation> Violations { get; } =
-        Gen.Select(Procedure, Gen.Int[0, 9], static (procedure, rule) => Violate(procedure, rule));
+        Gen.Select(Programs(loops: true).Select(static p => IrGenLowering.Lower(p with { HasHeap = true })), Gen.Int[0, 11], static (procedure, rule) => Violate(procedure, rule));
 
     /// <summary>Inputs matching <paramref name="procedure"/>'s parameters (bitvector and Bool only).</summary>
     public static Gen<IrInputs> Inputs(IrProcedure procedure)
@@ -183,7 +183,7 @@ public static class IrGen
 
                     case IrCall call:
                         edits.Add(($"duplicate call {index.ToString(CultureInfo.InvariantCulture)} in {block.Id}", () =>
-                            InsertInstructions(procedure, blockIndex, index, call with { Target = Renamed(call.Target, ".dup"), Threw = Renamed(call.Threw, ".dup") })));
+                            InsertInstructions(procedure, blockIndex, index, Duplicate(call))));
                         break;
                     case IrBinary binary when !Commutative.Contains(binary.Op) && binary.A != binary.B:
                         edits.Add(($"swap operands of {binary.Target.Name}", () =>
@@ -219,6 +219,14 @@ public static class IrGen
         return ReplaceBlock(procedure, blockIndex, block with { Instructions = block.Instructions.InsertRange(index, instructions) });
     }
 
+    /// <summary>A copy of <paramref name="call"/> that defines fresh names; its heap versions are left unused.</summary>
+    private static IrCall Duplicate(IrCall call) => call with
+    {
+        Target = Renamed(call.Target, ".dup"),
+        Threw = Renamed(call.Threw, ".dup"),
+        Heap = [.. call.Heap.Select(static h => h with { After = Renamed(h.After, ".dup")! })],
+    };
+
     private static IrVar? Renamed(IrVar? var, string suffix) => var is null ? null : var with { Name = var.Name + suffix };
 
     private static IrProcedure ReplaceBlock(IrProcedure procedure, int blockIndex, IrBlock block) =>
@@ -233,6 +241,8 @@ public static class IrGen
         IrBlock Extra(params IrInstruction[] instructions) =>
             new(new IrBlockId(procedure.Blocks.Length), [.. instructions], new IrUnreachable());
         IrProcedure WithExtra(IrBlock block) => procedure with { Blocks = procedure.Blocks.Add(block) };
+        IrVar map = procedure.Parameters.Single(static p => p.Var.Type is IrMap).Var;
+        IrHeapPair Pair(string after) => new(map.Name, map, new IrVar(after, map.Type));
 
         return rule switch
         {
@@ -247,7 +257,9 @@ public static class IrGen
             6 => new(WithExtra(Extra(new IrBinary(new IrVar("bad", new IrBool()), IrBinaryOp.Add, a, a))), IrDiagnosticIds.OperandTypes),
             7 => new(WithExtra(new IrBlock(new IrBlockId(procedure.Blocks.Length), [], new IrGoto(new IrBlockId(9999)))), IrDiagnosticIds.MissingTarget),
             8 => new(WithExtra(Extra(new IrMapRead(bad, a, a))), IrDiagnosticIds.MapTypes),
-            _ => new(AddOut(procedure, new IrOut(a, a)), IrDiagnosticIds.ExitOuts),
+            9 => new(AddOut(procedure, new IrOut(a, a)), IrDiagnosticIds.ExitOuts),
+            10 => new(WithExtra(Extra(new IrCall(Target: null, Threw: null, new CallIdentity("Svc::F"), []) { Heap = [Pair("bad"), Pair("bad2")] })), IrDiagnosticIds.HeapPairRepeated),
+            _ => new(WithExtra(Extra(new IrCall(Target: null, Threw: null, new CallIdentity("Svc::F"), []) { Heap = [new IrHeapPair("field.Gen.none", a, bad)] })), IrDiagnosticIds.HeapPairMap),
         };
     }
 

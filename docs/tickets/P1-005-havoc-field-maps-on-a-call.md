@@ -1,5 +1,5 @@
 # P1-005 An `IrCall` reads and writes the heap
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M2-004, M3-001, M3-007, P1-003
@@ -120,3 +120,44 @@ Modelling `ref`/`out` arguments' effect on the heap beyond what M2-004 already d
 Purity attributes or a user-supplied "this callee is pure" config.
 
 ## Notes
+- Deviation: developed on the session's designated branch `claude/determined-feynman-o6ip4b` rather than a
+  `P1-005-*` branch cut by task-loop step 4; the harness pins the branch name.
+- Decision: the heap pair -> `IrHeapPair(string Map, IrVar Before, IrVar After)` in an `init` property
+  `IrCall.Heap` (default empty). `Map` names the by-ref parameter the pair versions, because a version's SSA name
+  (`field.C.x.7`, `$3`) does not say which map it is, and the validator's "repeats a map" and the encoder's per-map
+  function both need it. Alternatives: bare (before, after) tuples with the map traced back through phis, a new
+  positional constructor parameter (edits every existing `new IrCall`). Rule: 1, then 4.
+- Decision: text form -> ` heap("field.C.x" %before -> %after: <map type>, ...)` after `threw`, omitted when empty, so
+  a dump without heap pairs is byte-identical. Alternatives: `%after = %before` (reads like an assignment of the
+  wrong way round), the map as `%field.C.x` (the parser's first pass would take `%name:` for a definition). Rule: 5.
+- Decision: validator rules -> IR011 (a call's heap pairs repeat a map) and IR012 (a pair's map is not a `Ref`
+  parameter of map type, or its before/after is not of that type); an `after` that re-uses an SSA name is IR003,
+  since `after` is a definition like any other. Alternatives: one id for all three (the id table is one rule per id).
+  Rule: 2.
+- Decision: oracle shape -> `ICallOracle.Answer` gains the `IrHeapSlice(Map, Value)` list the call reads;
+  `IrCallResult.Heap` (init, default empty) holds the new value per slice, in order, and empty means unchanged, so
+  the oracles that predate this ticket keep their results. `IrCallRecord.Heap` records the slices the call read, so
+  a heap difference at a call is a trace difference in the interpreter too. Alternatives: a second oracle method
+  (the result and `threw` must see the heap as well), a nullable list. Rule: 1.
+- Decision: the maps H ranges over -> the union of the map names in either side's heap pairs, not every `field.*`/
+  `array.*` parameter. On frontend output the two sets agree whenever the side has a call (the lowerer pairs every
+  heap map at every call), and a side with no call has no H to build; keying on the IR's own pairs keeps the encoder
+  free of naming conventions and leaves hand-written and generated IR without pairs encoded exactly as before.
+  Alternatives: every `Ref` map parameter of either side (changes the encoding of every existing heap fixture and of
+  loop fragments' cut events). Rule: 3.
+- Decision: one-sided threading -> per side, per map in H, a "call-visible" version threaded through blocks like the
+  call counter: the shared input, then each call's `heap:` result. A call that pairs the map reads its `before` and
+  defines its `after`; one that does not reads the threaded version. A side without the map's parameter reports the
+  threaded version as its final value. The replay oracle threads the same chain. Alternatives: none that line H up
+  across sides without a whole-program view. Rule: 1.
+- Decision: encoder names -> `heap:<callee>(<arg sorts>)$<map>`, domain args, bv32 position, then H in name order;
+  `f:`/`threw:` gain the same H; a trace event's argument sequence is the arguments followed by H (H has the same
+  length on both sides, so the concatenation is injective). Alternatives: a separate `heap` field on the `Event`
+  datatype (changes every existing event term). Rule: 4.
+- Decision: lowering -> `SsaBuilder.Build` takes the heap variables and completes every call's pairs while it fills
+  the blocks, so a map first touched after a call still gets a pair at it; a heap input's initial store is placed at
+  the start of the entry block rather than wherever the first touch happened to be. Alternatives: a pre-scan of the
+  operation tree (would have to predict which accesses lower to a map). Rule: 4.
+- Decision: the lowering-oracle case -> a `Cell o` parameter whose instance field `G` the generator reads, writes,
+  and bumps through `o.Bump(k)` (`G = unchecked(G + k)`); the test oracle answers `Bump` by writing `field.Cell.G`.
+  Alternatives: a static `Cell` field (two map levels and another input to bind). Rule: 4.

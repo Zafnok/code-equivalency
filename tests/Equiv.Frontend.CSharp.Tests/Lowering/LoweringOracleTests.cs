@@ -269,7 +269,7 @@ public sealed class LoweringOracleTests
 
         private IrValue value = IrBitVecValue.FromSigned(32, initial);
 
-        public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position)
+        public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
         {
             if (callee == Setter)
             {

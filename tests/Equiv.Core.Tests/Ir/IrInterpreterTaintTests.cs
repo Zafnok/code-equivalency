@@ -297,7 +297,7 @@ public sealed class IrInterpreterTaintTests
     /// <summary>Answers every call with its first argument's bits (or 1 without arguments), and <c>threw</c> false.</summary>
     private sealed class Oracle : ICallOracle
     {
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position) => resultType switch
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap) => resultType switch
         {
             null => new IrCallResult(Value: null, Threw: false),
             IrBool => new IrCallResult(new IrBoolValue(arguments is [IrBitVecValue { Bits: 1 }, ..]), Threw: false),

@@ -14,7 +14,7 @@ public sealed class IrGenOracle : ICallOracle
     public static IrGenOracle Instance { get; } = new();
 
     /// <summary>Ignores <paramref name="position"/>: a stateless callee is one valid behaviour among many.</summary>
-    public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position)
+    public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
     {
         ArgumentNullException.ThrowIfNull(callee);
         ulong hash = 14695981039346656037;

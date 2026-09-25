@@ -22,7 +22,7 @@ public sealed class IrTextTests
           %t7: bool = overflows usub %a, %t0
           %t8: bv8 = trunc %a
           %t9: bv32 = call "Svc::F"(%a, %s) threw %t10: bool
-          call "Svc::Log"()
+          call "Svc::Log"() heap("m" %m -> %t15: map<bv8, map<bool, bv16>>, "field.C.x" %t12 -> %t16 "x": map<bv8, map<bool, bv16>>)
           %t11: map<bool, bv16> = mapread %m, %t8
           %t12: map<bv8, map<bool, bv16>> = mapwrite %m, %t8, %t11
           %t13: bv64 = opaque "dynamic" at "src/a.cs" 1:2-3:4
@@ -99,6 +99,17 @@ public sealed class IrTextTests
         IrProcedure parsed = IrText.Parse(dumped);
         Assert.Equal<IrInstruction>([wholeBody, expression], parsed.Blocks[0].Instructions);
         Assert.NotEqual(wholeBody, expression with { Reason = "lock" });
+    }
+
+    [Fact]
+    public void IrText_RoundTripsHeapPairs()
+    {
+        IrCall call = Assert.IsType<IrCall>(IrText.Parse(EveryConstruct).Blocks[0].Instructions[10]);
+        IrMap type = new(new IrBitVec(8), new IrMap(new IrBool(), new IrBitVec(16)));
+
+        Assert.Equal(
+            [new IrHeapPair("m", new IrVar("m", type), new IrVar("t15", type)), new IrHeapPair("field.C.x", new IrVar("t12", type), new IrVar("t16", type, "x"))],
+            call.Heap);
     }
 
     [Fact]

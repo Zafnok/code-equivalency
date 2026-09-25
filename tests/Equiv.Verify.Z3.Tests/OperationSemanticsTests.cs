@@ -126,6 +126,6 @@ public sealed class OperationSemanticsTests
 
     private sealed class NoAnswers : ICallOracle
     {
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position) => new(Value: null, Threw: false);
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap) => new(Value: null, Threw: false);
     }
 }
