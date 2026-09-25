@@ -1,5 +1,5 @@
 # P2-020 SDK warning NETSDK1086 (explicit implicit FrameworkReference) is not a project load failure
-Status: in-progress
+Status: done (PR #186)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-012
