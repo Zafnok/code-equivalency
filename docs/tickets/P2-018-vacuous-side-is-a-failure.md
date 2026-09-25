@@ -1,5 +1,5 @@
 # P2-018 A loaded project with source files that yields no procedures is a load failure, not an empty project
-Status: todo
+Status: in-progress
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-024
@@ -45,3 +45,25 @@ Fixing why ShortestPaths yields no procedures is P2-016, not this ticket.
 P2-016's root cause. Thresholds such as "suspiciously few procedures".
 
 ## Notes
+Decision: the check runs in `CSharpFrontend.Analyze` (`SkipVacuousProjects`), not the loader, because it
+needs `ProcedureEnumerator`'s output, which the loader never computes. Each of `legacy.Compilations` and
+`modern.Compilations` is re-partitioned right after loading, before matching: a compilation with zero
+enumerated procedures and at least one `BaseTypeDeclarationSyntax` in any of its syntax trees becomes a
+`SkippedProject(IsCSharp: true, Compilation: null)` with a new `LoadDiagnosticKind.NoProcedures` diagnostic;
+everything else flows through unchanged. `SkippedProject.Compilation` is passed as `null` rather than the
+(known-empty) compilation, since `Unverified`'s "own procedures" re-enumeration would find nothing anyway.
+
+Decision: `Name`/`AssemblyName` on the synthesised `SkippedProject` are both `compilation.AssemblyName!`
+(never null in practice for a loaded C# project's compilation; verified in a spike that removing the
+null-forgiving operator makes the nullable analyzer flag both call sites as errors). This mirrors the
+existing "no better name" cases in `MsBuildSolutionLoader.NeverOpened`.
+
+Decision: no `src/Equiv.Cli/*` change was needed. `CompareCommand.SkippedProjects`/`Report` already treat
+any `UnverifiedProject` with `IsCSharp: true` as an `error` notification and exit 4 (in both the regular and
+`--lower-only` paths), proven generically by the existing `ExitCodePrecedenceIsFourThenVerdicts` and
+`LowerOnlyExits4WhenACSharpProjectWasSkipped` tests. `NoProcedures_ExitsFour` here asserts the frontend's
+half of that contract: the vacuous project it reports carries `IsCSharp: true`.
+
+No toolchain surprises; gates run green locally on the touched project (`Equiv.Frontend.CSharp` /
+`Equiv.Frontend.CSharp.Tests`): build, `dotnet format --verify-no-changes`, and coverage
+(2199/2199 lines, 624/624 branches via `tools/check-coverage`).
