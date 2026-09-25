@@ -55,41 +55,6 @@ internal static class Mutator
         _ => null,
     };
 
-    private static IExpr? Commute(IExpr expr) => expr switch
-    {
-        Binary binary when binary.Op is "+" or "*" or "&" or "|" or "^" && binary.Left.CannotThrow && binary.Right.CannotThrow =>
-            binary with { Left = binary.Right, Right = binary.Left },
-        Relation relation when relation.Op is "==" or "!=" && relation.Left.CannotThrow && relation.Right.CannotThrow =>
-            relation with { Left = relation.Right, Right = relation.Left },
-        _ => null,
-    };
-
-    private static IExpr? FlipComparison(IExpr expr) => expr is Relation relation ? relation with { Op = Flips[relation.Op] } : null;
-
-    /// <summary>Literals are only ever right operands; a divisor never becomes zero, which would not compile.</summary>
-    private static IExpr? ChangeConstant(IExpr expr)
-    {
-        if (expr is not Binary { Right: Literal literal } binary)
-        {
-            return null;
-        }
-
-        long changed = literal.Value + (literal.Value == -1 && binary.Op is ("/" or "%") ? -1 : 1);
-        return binary with { Right = literal with { Value = literal.Type == typeof(int) ? unchecked((int)changed) : unchecked(changed) } };
-    }
-
-    private static IExpr? SwapArguments(IExpr expr) => expr switch
-    {
-        Binary binary when binary.Op is not ("<<" or ">>") => binary with { Left = binary.Right, Right = binary.Left },
-        Relation relation => relation with { Left = relation.Right, Right = relation.Left },
-        _ => null,
-    };
-
-    private static ImmutableArray<IStmt>? Reorder(ImmutableArray<IStmt> block, int i) =>
-        i + 1 < block.Length && block[i] is Assign first && block[i + 1] is Assign second && Independent(first, second)
-            ? block.SetItem(i, second).SetItem(i + 1, first)
-            : null;
-
     private static bool Independent(Assign first, Assign second) =>
         first.Value.CannotThrow && second.Value.CannotThrow
         && !string.Equals(first.Target, second.Target, StringComparison.Ordinal)
@@ -112,32 +77,6 @@ internal static class Mutator
             return null;
         }
     }
-
-    private static ImmutableArray<IStmt>? InvertIf(ImmutableArray<IStmt> block, int i) =>
-        block[i] is If branch ? block.SetItem(i, new If(new Unary("!", branch.Condition, IsChecked: false), branch.Else, branch.Then)) : null;
-
-    private static ImmutableArray<IStmt>? IntroduceTemporary(ImmutableArray<IStmt> block, int i)
-    {
-        (IExpr? value, IStmt? rewritten) = block[i] switch
-        {
-            Assign assign => (assign.Value, assign with { Value = new Name(assign.Value.Type, Temporary) }),
-            Store store => (store.Value, store with { Value = new Name(store.Value.Type, Temporary) }),
-            Return { Value: { } result } => (result, new Return(new Name(result.Type, Temporary))),
-            _ => ((IExpr?)null, (IStmt?)null),
-        };
-        return value is null ? null : block.SetItem(i, rewritten!).Insert(i, new Declare(Temporary, value));
-    }
-
-    private static ImmutableArray<IStmt>? DropNullCheck(ImmutableArray<IStmt> block, int i) =>
-        block[i] is If { Condition: NullTest test } branch ? block.RemoveAt(i).InsertRange(i, test.IsNull ? branch.Else : branch.Then) : null;
-
-    private static ImmutableArray<IStmt>? DropFieldWrite(ImmutableArray<IStmt> block, int i) =>
-        block[i] is Assign { Target: Field } ? block.RemoveAt(i) : null;
-
-    private static ImmutableArray<IStmt>? MoveThrow(ImmutableArray<IStmt> block, int i) =>
-        i + 1 < block.Length && ((IsEffect(block[i]) && Throws(block[i + 1])) || (Throws(block[i]) && IsEffect(block[i + 1])))
-            ? block.SetItem(i, block[i + 1]).SetItem(i + 1, block[i])
-            : null;
 
     private static bool IsEffect(IStmt statement) => statement is Assign { Target: Field } or Store;
 
@@ -167,6 +106,77 @@ internal static class Mutator
             MutationOperator.SwapArguments => new(SwapArguments, NoBlock, site),
             _ => new(NoExpr, MoveThrow, site),
         };
+
+        private static IExpr? Commute(IExpr expr) => expr switch
+        {
+            Binary binary when binary.Op is "+" or "*" or "&" or "|" or "^" && binary.Left.CannotThrow && binary.Right.CannotThrow =>
+                binary with { Left = binary.Right, Right = binary.Left },
+            Relation relation when relation.Op is "==" or "!=" && relation.Left.CannotThrow && relation.Right.CannotThrow =>
+                relation with { Left = relation.Right, Right = relation.Left },
+            _ => null,
+        };
+
+        private static IExpr? FlipComparison(IExpr expr) => expr is Relation relation ? relation with { Op = Flips[relation.Op] } : null;
+
+        /// <summary>Literals are only ever right operands; a divisor never becomes zero, which would not compile.</summary>
+        private static IExpr? ChangeConstant(IExpr expr)
+        {
+            if (expr is not Binary { Right: Literal literal } binary)
+            {
+                return null;
+            }
+
+            long changed = literal.Value + (literal.Value == -1 && binary.Op is ("/" or "%") ? -1 : 1);
+            return binary with { Right = literal with { Value = literal.Type == typeof(int) ? unchecked((int)changed) : unchecked(changed) } };
+        }
+
+        private static IExpr? SwapArguments(IExpr expr) => expr switch
+        {
+            Binary binary when binary.Op is not ("<<" or ">>") => binary with { Left = binary.Right, Right = binary.Left },
+            Relation relation => relation with { Left = relation.Right, Right = relation.Left },
+            _ => null,
+        };
+
+        private static ImmutableArray<IStmt>? Reorder(ImmutableArray<IStmt> block, int i) =>
+            i + 1 < block.Length && block[i] is Assign first && block[i + 1] is Assign second && Independent(first, second)
+                ? block.SetItem(i, second).SetItem(i + 1, first)
+                : null;
+
+        private static ImmutableArray<IStmt>? InvertIf(ImmutableArray<IStmt> block, int i) =>
+            block[i] is If branch
+                ? block.SetItem(i, new If(new Unary("!", branch.Condition, IsChecked: false), Then: branch.Else, Else: branch.Then))
+                : null;
+
+        private static ImmutableArray<IStmt>? IntroduceTemporary(ImmutableArray<IStmt> block, int i)
+        {
+            (IExpr? value, IStmt? rewritten) = block[i] switch
+            {
+                Assign assign => (assign.Value, assign with { Value = new Name(assign.Value.Type, Temporary) }),
+                Store store => (store.Value, store with { Value = new Name(store.Value.Type, Temporary) }),
+                Return { Value: { } result } => (result, new Return(new Name(result.Type, Temporary))),
+                _ => ((IExpr?)null, (IStmt?)null),
+            };
+            return value is null ? null : block.SetItem(i, rewritten!).Insert(i, new Declare(Temporary, value));
+        }
+
+        private static ImmutableArray<IStmt>? DropNullCheck(ImmutableArray<IStmt> block, int i)
+        {
+            if (block[i] is not If { Condition: NullTest test } branch)
+            {
+                return null;
+            }
+
+            ImmutableArray<IStmt> kept = test.IsNull ? branch.Else : branch.Then;
+            return block.RemoveAt(i).InsertRange(i, kept);
+        }
+
+        private static ImmutableArray<IStmt>? DropFieldWrite(ImmutableArray<IStmt> block, int i) =>
+            block[i] is Assign { Target: Field } ? block.RemoveAt(i) : null;
+
+        private static ImmutableArray<IStmt>? MoveThrow(ImmutableArray<IStmt> block, int i) =>
+            i + 1 < block.Length && ((IsEffect(block[i]) && Throws(block[i + 1])) || (Throws(block[i]) && IsEffect(block[i + 1])))
+                ? block.SetItem(i, block[i + 1]).SetItem(i + 1, block[i])
+                : null;
 
         public ImmutableArray<IStmt> Block(ImmutableArray<IStmt> block)
         {
