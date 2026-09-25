@@ -171,5 +171,9 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task UsingDeclaration() => Dump("static int M(System.IO.Stream s) { using System.IO.Stream t = s; return t.ReadByte(); }");
 
+    /// <summary>Ticket P2-003 acceptance criterion 1: a class-constrained type parameter's <c>default</c> is the null element of its sort, with its <c>isNull</c> shadow set.</summary>
+    [Fact]
+    public Task DefaultValueOfATypeParameter() => Dump("static T M<T>(bool has, T value) where T : class => has ? value : default;");
+
     private static Task Dump(string members) => Verify(IrText.Dump(Lowered.Method(members)));
 }
