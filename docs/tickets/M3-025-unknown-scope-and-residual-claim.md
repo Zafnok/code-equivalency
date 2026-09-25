@@ -70,3 +70,5 @@ Removing whole-body opaques (M4-001, M4-003, M4-008). Narrowing a timeout below 
 Project-level containment (M3-024).
 
 ## Notes
+- M4-001 removed the `foreach-enumerator` and `using` whole-body opaques (both now lower), so
+  criterion 1 applies to `lock` and `catch-filter` only, plus M4-001's new `field-initializer`.

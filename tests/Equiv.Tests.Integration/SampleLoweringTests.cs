@@ -94,11 +94,15 @@ public sealed partial class SampleLoweringTests
             .Select(static o => o.Kind);
 
     private static IEnumerable<IOperation> Cfg(IOperation body, CancellationToken cancellationToken) =>
-        body is IMethodBodyOperation method
-            ? ControlFlowGraph.Create(method, cancellationToken).Blocks
-                .SelectMany(static b => b.Operations.Concat(b.BranchValue is null ? [] : [b.BranchValue]))
-                .SelectMany(static o => o.DescendantsAndSelf())
-            : [];
+        (body switch
+        {
+            IMethodBodyOperation method => ControlFlowGraph.Create(method, cancellationToken),
+            IConstructorBodyOperation constructor => ControlFlowGraph.Create(constructor, cancellationToken), // lowered since ticket M4-001
+            _ => null,
+        })?.Blocks
+            .SelectMany(static b => b.Operations.Concat(b.BranchValue is null ? [] : [b.BranchValue]))
+            .SelectMany(static o => o.DescendantsAndSelf())
+        ?? [];
 
     private static string Solution(string sample, string side) =>
         Directory.GetFiles(Path.Combine(RepoRoot, "samples", sample, side), string.Equals(side, "legacy", StringComparison.Ordinal) ? "*.sln" : "*.slnx").Single();
