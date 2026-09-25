@@ -25,8 +25,10 @@ VERIFICATION-MODEL.md section 3; the `equiv-extend-ir` skill; M2-004 acceptance 
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. A `foreach` whose `IForEachLoopOperation.Collection` has an array type lowers with zero
-   `IrOpaque` nodes: the element read is an `IrMapRead` on that array's map, the bound is the
-   array's `length:<arr>` var, and the index is a bv32 SSA variable with a phi at the header.
+   `IrOpaque` nodes: the element read is the array's slice of its sort's `array.<Sort>` map read
+   at the array reference, then an `IrMapRead` of that slice at the index (P1-006), the bound is
+   `length.<Sort>` read at the same reference, and the index is a bv32 SSA variable with a phi at
+   the header.
 2. The pattern is recognised from the CFG and the operation tree together, never from syntax,
    and a `foreach` whose shape does not match stays as M4-001 lowers it.
 3. `foreach` over anything that is not an array stays as M4-001 lowers it.
@@ -38,11 +40,9 @@ VERIFICATION-MODEL.md section 3; the `equiv-extend-ir` skill; M2-004 acceptance 
 `foreach` over `string`, `Span<T>`, a user type with a `GetEnumerator` method, or
 `IEnumerable<T>`; collection expressions; `await foreach`.
 
-The element map this ticket reads inherits the M2-004 aliasing limit ADR 0015 names: it is
-keyed per array *variable*, so a `foreach` over an array that some other variable also
-holds sees its own slice. P1-006 closes that for every array access at once. Do not work
-around it here; if P1-006 has landed first, use the input names it introduces (acceptance
-criterion 1 above says `length:<arr>`, which M2-004 shipped as `length.<v>` and P1-006
-replaces again).
+The element and length maps this ticket reads are the ones P1-006 introduced: keyed by the
+array reference, so a `foreach` over an array that some other variable also holds sees the
+same elements. Build the accesses through the heap collaborator's array path rather than
+naming the maps here.
 
 ## Notes

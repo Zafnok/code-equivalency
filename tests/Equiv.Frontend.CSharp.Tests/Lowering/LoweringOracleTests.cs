@@ -26,7 +26,9 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 /// <see cref="IrInterpreter"/>, and must agree on the return value or thrown exception type for every input.
 /// CsCheck prints the seed on failure; <see cref="Seed"/> pins the run. The class's static auto-property
 /// <c>P</c> starts each run at the input's <c>B</c> in both; the IR's accessor calls are answered by
-/// <see cref="AutoPropertyOracle"/>, which keeps the value the compiled run's backing field would hold.
+/// <see cref="AutoPropertyOracle"/>, which keeps the value the compiled run's backing field would hold. The
+/// <c>int[]</c> parameters are two arrays, or one passed twice (ticket P1-006), and their final elements are compared
+/// along with the static field's final value.
 /// </summary>
 public sealed class LoweringOracleTests
 {
@@ -36,7 +38,19 @@ public sealed class LoweringOracleTests
 
     private const string FieldMap = $"field.Oracle.{LoweringOracleGen.Field}";
 
+    private const string ArraySort = "int[]";
+
+    private const string ElementMap = "array.int__";
+
+    private const string LengthMap = "length.int__";
+
+    private const string ArrayNulls = "null.int__";
+
     private static readonly IrSortValue Reference = new("System.String", 1);
+
+    private static readonly IrSortValue First = new(ArraySort, 1);
+
+    private static readonly IrSortValue Second = new(ArraySort, 2);
 
     /// <summary>The key a static field's map is read at: element 0 of its declaring type's sort.</summary>
     private static readonly IrSortValue Token = new("Oracle", 0);
@@ -50,7 +64,7 @@ public sealed class LoweringOracleTests
     {
         string source = $"public static class Oracle\n{{\n    public static int {LoweringOracleGen.Property} {{ get; set; }}\n    public static int {LoweringOracleGen.Field};\n{string.Concat(cases.Select(static (c, i) => c.Method.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n";
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.Field} = ", "public static void "])
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v["])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
@@ -87,8 +101,10 @@ public sealed class LoweringOracleTests
                 {
                     property.SetValue(null, input.B);
                     field.SetValue(null, input.A);
-                    string compiled = Compiled(method, input);
-                    string expected = string.Create(CultureInfo.InvariantCulture, $"{compiled} {LoweringOracleGen.Field}={(int)field.GetValue(null)!}");
+                    int[] u = [input.A, input.B];
+                    int[] v = input.Aliased ? u : [input.B, input.A];
+                    string compiled = Compiled(method, input, u, v);
+                    string expected = string.Create(CultureInfo.InvariantCulture, $"{compiled} {LoweringOracleGen.Field}={(int)field.GetValue(null)!} u={u[0]},{u[1]} v={v[0]},{v[1]}");
                     string actual = Interpreted(procedure, input);
                     Assert.True(
                         string.Equals(expected, actual, StringComparison.Ordinal),
@@ -105,11 +121,11 @@ public sealed class LoweringOracleTests
         }
     }
 
-    private static string Compiled(MethodInfo method, OracleInput input)
+    private static string Compiled(MethodInfo method, OracleInput input, int[] u, int[] v)
     {
         try
         {
-            object? result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s"]);
+            object? result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s", u, v]);
             return $"return {result}";
         }
         catch (TargetInvocationException exception)
@@ -126,15 +142,42 @@ public sealed class LoweringOracleTests
         "d" => IrBitVecValue.FromSigned(64, input.D),
         "e" => new IrBoolValue(input.E),
         "s" => Reference,
-        FieldMap => new IrMapValue(
-            (IrMap)parameter.Type,
-            IrBitVecValue.FromSigned(32, 0),
-            ImmutableDictionary<IrValue, IrValue>.Empty.Add(Token, IrBitVecValue.FromSigned(32, input.A))),
+        "u" => First,
+        "v" => V(input),
+        FieldMap => InitialField(input),
+        ElementMap => InitialArrays(input),
+        LengthMap => new IrMapValue((IrMap)parameter.Type, IrBitVecValue.FromSigned(32, 2), []),
+        ArrayNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), []),
         _ => new IrMapValue(
             (IrMap)parameter.Type,
             new IrBoolValue(input.SIsNull),
             []),
     };
+
+    /// <summary>The array <c>v</c> is bound to: <c>u</c>'s when the input aliases them.</summary>
+    private static IrSortValue V(OracleInput input) => input.Aliased ? First : Second;
+
+    private static IrMapValue InitialField(OracleInput input) => new(
+        new IrMap(Token.Type, new IrBitVec(32)),
+        IrBitVecValue.FromSigned(32, 0),
+        ImmutableDictionary<IrValue, IrValue>.Empty.Add(Token, IrBitVecValue.FromSigned(32, input.A)));
+
+    /// <summary><c>{ A, B }</c> and <c>{ B, A }</c>, as the compiled run's arrays start; an aliased <c>v</c> never reads the second.</summary>
+    private static IrMapValue InitialArrays(OracleInput input)
+    {
+        IrMapValue first = Elements(input.A, input.B);
+        return new(
+            new IrMap(First.Type, first.MapType),
+            Elements(0, 0),
+            ImmutableDictionary<IrValue, IrValue>.Empty.Add(First, first).Add(Second, Elements(input.B, input.A)));
+    }
+
+    private static IrMapValue Elements(int first, int second) => new(
+        new IrMap(new IrBitVec(32), new IrBitVec(32)),
+        IrBitVecValue.FromSigned(32, 0),
+        ImmutableDictionary<IrValue, IrValue>.Empty.Add(Index(0), IrBitVecValue.FromSigned(32, first)).Add(Index(1), IrBitVecValue.FromSigned(32, second)));
+
+    private static IrBitVecValue Index(int index) => IrBitVecValue.FromSigned(32, index);
 
     private static string Interpreted(IrProcedure procedure, OracleInput input)
     {
@@ -150,16 +193,29 @@ public sealed class LoweringOracleTests
             var other => other.ToString(),
         };
 
-        // Ticket M3-007: the field map is the only by-ref parameter, so when the body touches the field its final
-        // version is the run's one out; a body that never touches it leaves it at its initial value.
-        string final = (procedure.Parameters.Any(static p => p.Var.Name is FieldMap), run.Outs) switch
+        // Ticket M3-007: the final heap is the run's outs, one per by-ref map in parameter order; a map the body never
+        // touches is not a parameter and keeps its initial value. A run that neither returned nor threw has no outs.
+        ImmutableArray<string> maps = [.. procedure.Parameters.Where(static p => p.Kind == IrParameterKind.Ref).Select(static p => p.Var.Name)];
+        if (run.Outs.Length != maps.Length)
         {
-            (false, _) => input.A.ToString(CultureInfo.InvariantCulture),
-            (true, [IrMapValue map]) => ((IrBitVecValue)map.Read(Token)).TwosComplement.ToString(CultureInfo.InvariantCulture),
-            _ => $"outs {run.Outs.Length}",
-        };
-        return $"{outcome} {LoweringOracleGen.Field}={final}";
+            return $"{outcome} outs {run.Outs.Length}";
+        }
+
+        Dictionary<string, IrValue> heap = maps.Zip(run.Outs).ToDictionary(static e => e.First, static e => e.Second, StringComparer.Ordinal);
+        IrMapValue field = (IrMapValue)heap.GetValueOrDefault(FieldMap, InitialField(input));
+        IrMapValue arrays = (IrMapValue)heap.GetValueOrDefault(ElementMap, InitialArrays(input));
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{outcome} {LoweringOracleGen.Field}={Value(field, Token)} u={Array(arrays, First)} v={Array(arrays, V(input))}");
     }
+
+    private static string Array(IrMapValue arrays, IrSortValue array)
+    {
+        IrMapValue elements = (IrMapValue)arrays.Read(array);
+        return string.Create(CultureInfo.InvariantCulture, $"{Value(elements, Index(0))},{Value(elements, Index(1))}");
+    }
+
+    private static long Value(IrMapValue map, IrValue key) => ((IrBitVecValue)map.Read(key)).TwosComplement;
 
     /// <summary>
     /// Answers one run's accessor calls on <c>Oracle.P</c> as its backing field would: a getter returns the last value

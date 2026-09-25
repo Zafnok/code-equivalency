@@ -12,7 +12,8 @@ namespace Equiv.TestSupport;
 /// and counter-bounded <c>while</c> loops over <c>int</c>/<c>long</c>/<c>bool</c>, and <c>null</c> tests on
 /// the reference parameter <c>s</c>, and reads and writes of the class's static <c>int</c> auto-property <c>P</c>
 /// (ticket M3-010), and reads and writes of its static <c>int</c> field <c>F</c>, including <c>void</c> methods that end by
-/// writing it (ticket M3-007); built as a small AST and rendered to C#. Every expression reads a
+/// writing it (ticket M3-007), and reads and writes of the elements of the <c>int[]</c> parameters <c>u</c> and <c>v</c>,
+/// which an input may bind to one array (ticket P1-006); built as a small AST and rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
 /// loop counts to a literal bound, so every generated method terminates.
@@ -41,6 +42,9 @@ public static class LoweringOracleGen
     /// <summary>The static <c>int</c> field of the class the generated methods are compiled into.</summary>
     public const string Field = "F";
 
+    /// <summary>The <c>int[]</c> parameters, each two elements long; an input may pass one array as both.</summary>
+    public static readonly ImmutableArray<string> Arrays = ["u", "v"];
+
     public static Gen<OracleMethod> Method { get; } =
         Gen.OneOfConst(ReturnTypes).SelectMany(static type =>
             Gen.Select(Block(type, 2), type == typeof(void) ? FieldValue : ExprGen(type, Depth), (body, result) =>
@@ -54,7 +58,7 @@ public static class LoweringOracleGen
             }));
 
     public static Gen<OracleInput> Input { get; } =
-        Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, static (a, b, c, d, e, s) => new OracleInput(a, b, c, d, e, s));
+        Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, Gen.Bool, static (a, b, c, d, e, s, aliased) => new OracleInput(a, b, c, d, e, s, aliased));
 
     private static Gen<int> Int => Gen.Frequency((3, Gen.OneOfConst(IntEdges)), (1, Gen.Int[-16, 16]), (1, Gen.Int));
 
@@ -75,18 +79,21 @@ public static class LoweringOracleGen
                 (IStmt)new Compound(LocalName(type), op, ShiftCount(op, value, type), isChecked)));
         Gen<IStmt> property = ExprGen(typeof(int), Depth).Select(static value => (IStmt)new Assign(Property, value));
         Gen<IStmt> field = FieldValue.Select(static value => (IStmt)new Assign(Field, value));
+        // Index 2 is past the end of both arrays; a write's value is a field value for the same reason as a field's.
+        Gen<IStmt> element = Gen.Select(Gen.OneOfConst([.. Arrays]), Gen.Int[0, 2], FieldValue, static (array, index, value) =>
+            (IStmt)new Assign(Element(array, index), value));
         Gen<IStmt> step = Gen.Select(Gen.OneOfConst(typeof(int), typeof(long)), Gen.OneOfConst("++", "--"), Gen.Bool, static (type, op, isChecked) =>
             (IStmt)new Step(LocalName(type), op, isChecked));
         if (depth == 0)
         {
-            return Gen.Frequency((4, assign), (1, property), (1, field), (2, update), (1, step), (1, exit));
+            return Gen.Frequency((4, assign), (1, property), (1, field), (2, element), (2, update), (1, step), (1, exit));
         }
 
         Gen<IStmt> branch = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Block(returnType, depth - 1), static (condition, then, otherwise) =>
             (IStmt)new If(condition, then, otherwise));
         Gen<IStmt> loop = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Gen.Int[1, 3], static (condition, body, bound) =>
             (IStmt)new While(condition, body, bound));
-        return Gen.Frequency((3, assign), (1, property), (1, field), (2, update), (1, step), (2, branch), (2, loop), (1, exit));
+        return Gen.Frequency((3, assign), (1, property), (1, field), (2, element), (2, update), (1, step), (2, branch), (2, loop), (1, exit));
     }
 
     /// <summary>
@@ -100,6 +107,8 @@ public static class LoweringOracleGen
     /// <summary>A shift count is an <c>int</c>; a <c>long</c> target shifted by a <c>long</c> would not compile.</summary>
     private static IExpr ShiftCount(string op, IExpr value, Type type) =>
         op is "<<" or ">>" && type == typeof(long) ? new Conversion(typeof(int), value, IsChecked: false) : value;
+
+    private static string Element(string array, int index) => string.Create(CultureInfo.InvariantCulture, $"{array}[{index}]");
 
     private static string LocalName(Type type) => type switch
     {
@@ -121,7 +130,7 @@ public static class LoweringOracleGen
 
     private static string[] Names(Type type) => type switch
     {
-        _ when type == typeof(int) => ["a", "b", "x", Property, Field],
+        _ when type == typeof(int) => ["a", "b", "x", Property, Field, .. Arrays.SelectMany(static a => (string[])[Element(a, 0), Element(a, 1)])],
         _ when type == typeof(long) => ["c", "d", "y"],
         _ => ["e", "z"],
     };

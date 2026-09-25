@@ -20,6 +20,7 @@ public sealed class FixtureTests
         "heap-write-dropped", "heap-one-sided", "repeated-call",
         "parameters-swapped", "parameter-renamed", "heap-type-changed",
         "hard-multiplication",
+        "array-alias",
     ];
 
     [Theory]
@@ -77,6 +78,21 @@ public sealed class FixtureTests
 
         Assert.Equal(divergent.Counterexample.Old.Outcome, divergent.Counterexample.New.Outcome);
         Assert.NotEqual(divergent.Counterexample.Old.Outs, divergent.Counterexample.New.Outs);
+    }
+
+    /// <summary>
+    /// Ticket P1-006 acceptance criterion 3: the aliased-array procedure is Divergent against the variant that returns 2
+    /// only on distinct arrays, since one array passed twice makes it return 2 too, and Equivalent against itself.
+    /// </summary>
+    [Fact]
+    public void ArrayAliasDivergesOnDistinctArraysAndIsEquivalentToItself()
+    {
+        Fixture fixture = Fixture.Load("array-alias");
+
+        Divergent divergent = Assert.IsType<Divergent>(Verify(fixture));
+
+        Assert.Equal(new IrReturned(IrBitVecValue.FromSigned(32, 1)), divergent.Counterexample.Old.Outcome);
+        Assert.IsType<Equivalent>(Verify(fixture with { New = fixture.Old }));
     }
 
     [Fact]

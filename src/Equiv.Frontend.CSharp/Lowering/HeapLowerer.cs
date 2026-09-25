@@ -7,8 +7,9 @@ namespace Equiv.Frontend.CSharp.Lowering;
 
 /// <summary>
 /// Fields and array elements as SSA maps (ticket M2-004 acceptance criterion 6): one heap slice per
-/// field, keyed by its receiver, and one per array variable, keyed by a bv32 index and bounded by the
-/// variable's own length var; each starts at its <see cref="HeapInputs"/> input, versioned like any
+/// field, keyed by its receiver, and one per array sort, keyed by the array reference and then by a bv32
+/// index, bounded by the length map read at the same reference (ticket P1-006), so two variables holding
+/// one array share its elements; each starts at its <see cref="HeapInputs"/> input, versioned like any
 /// other SSA variable. <see cref="IrLowerer"/> reaches this through one instance (ticket P1-003).
 /// Lowering an operand, null-checking a dereferenced receiver, and resolving an lvalue to its SSA
 /// variable stay <see cref="IrLowerer"/>'s job, so this class calls back into it through the delegates
@@ -64,19 +65,20 @@ internal sealed class HeapLowerer(
             key = Const(HeapInputs.Token(field.Field), context);
         }
 
-        return new Access(Versioned(Inputs.Field(field.Field)), key, Length: null);
+        return new Access(Versioned(Inputs.Field(field.Field)), Array: null, key);
     }
 
     /// <summary>
-    /// An array element is a map from a bv32 index, bounded by the array variable's own length var. The
-    /// unsigned comparison catches a negative index too. Null when the array is not a plain variable,
-    /// the index is not bv32, or the array has several dimensions; nothing is emitted in that case.
+    /// An array element is the array's slice of its sort's map, read at the array reference, then a map from
+    /// a bv32 index, bounded by the length map read at the same reference. The unsigned comparison catches a
+    /// negative index too. Null when the array is not a plain variable, the index is not bv32, or the array
+    /// has several dimensions; nothing is emitted in that case.
     /// </summary>
     public Access? Element(IArrayElementReferenceOperation element, LoweringContext context)
     {
         if (element.Indices is not [{ Type: { } indexType }]
             || TypeMapper.Map(indexType) is not IrBitVec { Width: 32 }
-            || resolveTarget(element.ArrayReference) is not { } array)
+            || resolveTarget(element.ArrayReference) is null)
         {
             return null;
         }
@@ -84,37 +86,38 @@ internal sealed class HeapLowerer(
         IrVar reference = lower(element.ArrayReference, context);
         throwIfNull(element.ArrayReference, reference, context);
         IrVar index = lower(element.Indices[0], context);
-        return new Access(
-            Versioned(Inputs.Elements(array.Template.Name, TypeMapper.Map(element.Type!))),
-            index,
-            Inputs.Length(array.Template.Name));
+        return new Access(Versioned(Inputs.Elements((IrSort)reference.Type, TypeMapper.Map(element.Type!))), reference, index);
     }
 
-    /// <summary><c>a.Length</c> on an array variable is that variable's length var; every other property stays opaque.</summary>
+    /// <summary><c>a.Length</c> on an array variable is the length map read at its reference; every other property stays opaque.</summary>
     public IrVar? ArrayLength(IPropertyReferenceOperation property, LoweringContext context)
     {
         if (property is not { Property: { Name: "Length", ContainingType.SpecialType: SpecialType.System_Array }, Instance: { } instance }
-            || resolveTarget(instance) is not { } array)
+            || resolveTarget(instance) is null)
         {
             return null;
         }
 
-        throwIfNull(instance, lower(instance, context), context);
-        return Inputs.Length(array.Template.Name);
+        IrVar reference = lower(instance, context);
+        throwIfNull(instance, reference, context);
+        return Length(reference, context);
     }
 
     public IrVar ReadSlice(Access access, LoweringContext context)
     {
         Bounds(access, context);
-        return MapRead(ssa.Load(context.Current, access.Map), access.Key, context);
+        IrVar map = ssa.Load(context.Current, access.Map);
+        return MapRead(access.Array is { } array ? MapRead(map, array, context) : map, access.Key, context);
     }
 
+    /// <summary>A field's map is written at its key; an array's slice is read, written at the index, and written back.</summary>
     public void WriteSlice(Access access, IrVar value, LoweringContext context)
     {
         Bounds(access, context);
         IrVar map = ssa.Load(context.Current, access.Map);
-        IrVar updated = ssa.Temp(map.Type);
-        ssa.Emit(context.Current, new IrMapWrite(updated, map, access.Key, value));
+        IrVar updated = access.Array is { } array
+            ? MapWrite(map, array, MapWrite(MapRead(map, array, context), access.Key, value, context), context)
+            : MapWrite(map, access.Key, value, context);
         ssa.Store(context.Current, access.Map, updated);
     }
 
@@ -138,13 +141,23 @@ internal sealed class HeapLowerer(
         return variable;
     }
 
-    /// <summary>An index outside the array's own length var throws; a field access has no bound.</summary>
+    /// <summary>An index outside the array's length throws; a field access has no bound.</summary>
     private void Bounds(Access access, LoweringContext context)
     {
-        if (access.Length is { } length)
+        if (access.Array is { } array)
         {
-            throwIf(context, Emit(IrBinaryOp.Uge, access.Key, length, Bool, context), "System.IndexOutOfRangeException");
+            throwIf(context, Emit(IrBinaryOp.Uge, access.Key, Length(array, context), Bool, context), "System.IndexOutOfRangeException");
         }
+    }
+
+    /// <summary>The length of the array <paramref name="array"/> references, from its sort's length map.</summary>
+    private IrVar Length(IrVar array, LoweringContext context) => MapRead(Inputs.Length((IrSort)array.Type), array, context);
+
+    private IrVar MapWrite(IrVar map, IrVar key, IrVar value, LoweringContext context)
+    {
+        IrVar updated = ssa.Temp(map.Type);
+        ssa.Emit(context.Current, new IrMapWrite(updated, map, key, value));
+        return updated;
     }
 
     private IrVar Const(IrValue constant, LoweringContext context)
@@ -162,8 +175,9 @@ internal sealed class HeapLowerer(
     }
 
     /// <summary>
-    /// One access to a heap slice: the SSA variable holding the map's current version, the key, and the
-    /// bound the key must be under (an array variable's length var; null for a field).
+    /// One access to a heap slice: the SSA variable holding the map's current version, the array reference
+    /// whose slice of it is accessed (null for a field, whose map is keyed directly), and the key: a field's
+    /// receiver or an array's bv32 index, bounded by that array's length.
     /// </summary>
-    internal readonly record struct Access(SsaBuilder.Variable Map, IrVar Key, IrVar? Length);
+    internal readonly record struct Access(SsaBuilder.Variable Map, IrVar? Array, IrVar Key);
 }
