@@ -370,6 +370,8 @@ ticket id (not listed again here). P2-015 is a `corpus.ps1` finding from the sam
 - P2-020 (S) SDK warning NETSDK1086 (an explicit `FrameworkReference` the SDK already implies) is
   not a project load failure. Found in M3-028 on eshop-upgrade-assistant's modern side; the same
   class of bug as P2-012. Needs P2-012.
+- P2-021 (S) ShortestPaths' 6 legacy test projects are skipped with "doesn't list 'win' as a
+  RuntimeIdentifier" under `corpus.ps1 -Env`. Found in M3-031; split out of P2-016.
 
 ## M5 — Agent surface (MCP)
 

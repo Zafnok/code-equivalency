@@ -1,5 +1,5 @@
 # P2-016 `adapters-shortest-paths-dotnet`'s modern side loads zero procedures
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -43,3 +43,39 @@ finding if it is not already covered by an existing ticket.
 - Filed from M3-031's rerun; that ticket recorded the gap (`(no opaque)` census: `changedPairs 0`
   either way, since this is a pure-retarget agent pair) and moved on rather than debugging it, per
   the corpus-run skill's "record, don't fix" rule.
+- 2026-09-25 root cause (criterion 1): a product bug in `Equiv.Frontend.CSharp`, exposed by the
+  environment. Every legacy library project multi-targets (`net20;net40`, QuikGraph
+  `netstandard2.0;net35;net40`), and MSBuildWorkspace loads one compilation per flavour, all under
+  one assembly name. Each declaration was therefore on the legacy side 2-3 times, and
+  `StableIdentityMatcher` put all 396 shared identities in Ambiguous: 0 pairs, 0 Added (so modern
+  `procedures` 0, which counts pairs + Added), and legacy 5 = the net20-only `DotNet20.HashSet`
+  members (Removed). The census does not count Ambiguous, so nothing showed it. Reproduced with the
+  M3-031 worktree's `.corpus` and `-Env` (legacy 5, modern 0, 0 pairs; 15 legacy compilations).
+- Why M3-022 scored differently on the same commit: its box had no usable net20/net35 reference
+  assemblies (`.corpus/refasm/root` from an early `-Prepare`, and no `-Env`/`TargetFrameworkRootPath`
+  yet; P2-014 was filed from that run). Those flavours bound no corlib, so they never produced clean
+  duplicate identities, leaving one usable flavour per project. Once P2-014's `-Prepare` supplied
+  net20-net481 and `-Env` pointed at them, every flavour bound and the duplicates appeared. The
+  `NoWarn` difference is unrelated. Re-running today's code on M3-022's `.corpus` without `-Env`
+  skips nearly every legacy flavour (CS0518 "System.Object is not defined").
+- Decision: collapse target-framework flavours in the frontend, before matching: of the procedures
+  (and endpoints) that share an assembly name and an identity, keep only those from the last
+  compilation holding it (flavours load in `TargetFrameworks` order, conventionally ending at the
+  newest framework, the one nearest a migration's target). Duplicates within one compilation and
+  across assemblies (a linked file, e.g. ShortestPaths' `Test/Utils/*.cs`) stay Ambiguous. A
+  declaration only one flavour compiles stays that side's own. Keyed on assembly name because
+  `LoadedSolution` carries compilations only; `CodeLines` already dedupes flavours by file path.
+- ADR bar: no new ADR. VERIFICATION-MODEL section 4 reserves Ambiguous for overload mapping; a
+  per-flavour duplicate is not an overload, so this applies the spec to a case it did not spell
+  out. The matcher and its rule are unchanged (Size guard: loading, not matching semantics).
+- Criterion 3 rerun (2026-09-25, M3-031 worktree's `.corpus` and `-Env`, `--lower-only`): procedures
+  legacy 401 / modern 396, matchedPairs 396 (M3-022: 312), pairsWithoutOpaque 302, whole-body opaque
+  33, congruent 376, changedPairs 20 (11 without opaque), projectsSkipped legacy 6 / modern 0,
+  unverified 320 (the skipped test projects' procedures and their modern counterparts), exit 4 (the
+  skips). The 20 changed pairs are new information, since M3-031 could not see any pair; not
+  investigated here (nothing beyond the criteria).
+- P2-018's premise ("the modern side extracted 0 procedures") was a symptom of this bug: that side
+  extracted all its procedures, and they all went Ambiguous. Its general guard may still be wanted;
+  its Goal text is left as written.
+- Out of scope, filed as P2-021: the 6 legacy test projects' "doesn't list 'win' as a
+  RuntimeIdentifier".
