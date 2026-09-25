@@ -166,9 +166,9 @@ public static class IrGen
                 {
                     case IrMapWrite write:
                         {
-                            IrVar kept = new(write.Target.Name + ".kept", write.Value.Type);
-                            IrVar one = new(write.Target.Name + ".one", write.Value.Type);
-                            IrVar changed = new(write.Target.Name + ".changed", write.Value.Type);
+                            IrVar kept = new(write.Target.Name + Fresh(procedure, ".kept"), write.Value.Type);
+                            IrVar one = new(write.Target.Name + Fresh(procedure, ".one"), write.Value.Type);
+                            IrVar changed = new(write.Target.Name + Fresh(procedure, ".changed"), write.Value.Type);
                             edits.Add(($"drop map write {write.Target.Name}", () =>
                                 InsertInstructions(ReplaceInstruction(procedure, blockIndex, index, write with { Value = kept }), blockIndex, index, new IrMapRead(kept, write.Map, write.Key))));
                             edits.Add(($"change map write {write.Target.Name}", () =>
@@ -183,7 +183,7 @@ public static class IrGen
 
                     case IrCall call:
                         edits.Add(($"duplicate call {index.ToString(CultureInfo.InvariantCulture)} in {block.Id}", () =>
-                            InsertInstructions(procedure, blockIndex, index, call with { Target = Renamed(call.Target, ".dup"), Threw = Renamed(call.Threw, ".dup") })));
+                            InsertInstructions(procedure, blockIndex, index, call with { Target = Renamed(call.Target, Fresh(procedure, ".dup")), Threw = Renamed(call.Threw, Fresh(procedure, ".dup")) })));
                         break;
                     case IrBinary binary when !Commutative.Contains(binary.Op) && binary.A != binary.B:
                         edits.Add(($"swap operands of {binary.Target.Name}", () =>
@@ -217,6 +217,21 @@ public static class IrGen
     {
         IrBlock block = procedure.Blocks[blockIndex];
         return ReplaceBlock(procedure, blockIndex, block with { Instructions = block.Instructions.InsertRange(index, instructions) });
+    }
+
+    /// <summary>
+    /// <paramref name="suffix"/>, lengthened until no variable of <paramref name="procedure"/> contains it, so an edit of a
+    /// procedure that is already a mutant derives names no earlier edit used.
+    /// </summary>
+    private static string Fresh(IrProcedure procedure, string suffix)
+    {
+        string text = IrText.Dump(procedure);
+        while (text.Contains(suffix, StringComparison.Ordinal))
+        {
+            suffix += "m";
+        }
+
+        return suffix;
     }
 
     private static IrVar? Renamed(IrVar? var, string suffix) => var is null ? null : var with { Name = var.Name + suffix };

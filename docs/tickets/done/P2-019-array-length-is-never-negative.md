@@ -50,3 +50,8 @@ The encoder or lowering file the fix lands in, its tests, `tests/Equiv.Tests.Int
   (10.0.112) worked with `global.json` pinned to it locally only, and `.z3-feed` filled from the GitHub release (hash
   matches). On that SDK, `dotnet format analyzers` reports 13 CA1515/CA2007 findings in `Equiv.Verify.Z3.Tests`,
   identical before and after this change.
+- Deviation: this PR also fixes a test-generator bug from M3-025 (#187), at the user's request, because it turned
+  this PR's required `stryker (Equiv.Verify.Z3)` leg red. `LineScopedResidualClaimHolds` mutates a procedure that is
+  already a mutant, and `IrGen.Edits` gave new variables fixed suffixes (`.kept`, `.one`, `.changed`, `.dup`), so a
+  second edit of the same variable defined the same name twice (IR003). The test's random seed hit this in about half of
+  all runs under `CsCheck_Threads=1`. `IrGen.Fresh` now lengthens a suffix until the procedure does not use it yet.
