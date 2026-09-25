@@ -13,7 +13,8 @@ namespace Equiv.TestSupport;
 /// the reference parameter <c>s</c>, and reads and writes of the class's static <c>int</c> auto-property <c>P</c>
 /// (ticket M3-010), and reads and writes of its static <c>int</c> field <c>F</c>, including <c>void</c> methods that end by
 /// writing it (ticket M3-007), and reads and writes of the elements of the <c>int[]</c> parameters <c>u</c> and <c>v</c>,
-/// which an input may bind to one array (ticket P1-006) or bind <c>v</c> to <c>null</c> (ticket P2-017); built as a small AST and
+/// which an input may bind to one array (ticket P1-006) or bind <c>v</c> to <c>null</c> (ticket P2-017), and <c>foreach</c> loops
+/// that fold each element of the <c>List&lt;int&gt;</c> parameter <c>l</c> into <c>x</c> (ticket M4-001); built as a small AST and
 /// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
@@ -45,6 +46,9 @@ public static class LoweringOracleGen
 
     /// <summary>The <c>int[]</c> parameters, each two elements long; an input may pass one array as both, or <c>v</c> as <c>null</c>.</summary>
     public static readonly ImmutableArray<string> Arrays = ["u", "v"];
+
+    /// <summary>The <c>List&lt;int&gt;</c> parameter a generated <c>foreach</c> enumerates.</summary>
+    public const string List = "l";
 
     public static Gen<OracleMethod> Method { get; } =
         Gen.OneOfConst(ReturnTypes).SelectMany(static type =>
@@ -94,7 +98,10 @@ public static class LoweringOracleGen
             (IStmt)new If(condition, then, otherwise));
         Gen<IStmt> loop = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Gen.Int[1, 3], static (condition, body, bound) =>
             (IStmt)new While(condition, body, bound));
-        return Gen.Frequency((3, assign), (1, property), (1, field), (2, element), (2, update), (1, step), (2, branch), (2, loop), (1, exit));
+        // The element is as often a divisor or shift count, so a loop body also throws out through the `finally`.
+        Gen<IStmt> each = Gen.Select(Gen.OneOfConst(Arithmetic), Gen.Bool, Block(returnType, depth - 1), static (op, isChecked, body) =>
+            (IStmt)new ForEach(op, isChecked, body));
+        return Gen.Frequency((3, assign), (1, property), (1, field), (2, element), (2, update), (1, step), (2, branch), (2, loop), (2, each), (1, exit));
     }
 
     /// <summary>
@@ -207,6 +214,15 @@ public static class LoweringOracleGen
                     RenderBlock(loop.Body, text, indent + 1, ref loops);
                     text.Append(pad).Append("    ").Append(counter).Append("++;\n").Append(pad).Append("}\n");
                     break;
+                case ForEach each:
+                    string item = "w" + (loops++).ToString(CultureInfo.InvariantCulture);
+                    string inner = pad + "    ";
+                    text.Append(pad).Append("foreach (int ").Append(item).Append($" in {List})\n").Append(pad).Append("{\n")
+                        .Append(inner).Append(Open(each.IsChecked, inner)).Append("x ").Append(each.Op).Append("= ").Append(item).Append(";\n")
+                        .Append(Close(each.IsChecked, inner));
+                    RenderBlock(each.Body, text, indent + 1, ref loops);
+                    text.Append(pad).Append("}\n");
+                    break;
             }
         }
     }
@@ -265,6 +281,9 @@ public static class LoweringOracleGen
     internal sealed record Step(string Local, string Op, bool IsChecked) : IStmt;
 
     internal sealed record While(IExpr Condition, ImmutableArray<IStmt> Body, int Bound) : IStmt;
+
+    /// <summary><c>foreach (int w in l) { x op= w; Body }</c>.</summary>
+    internal sealed record ForEach(string Op, bool IsChecked, ImmutableArray<IStmt> Body) : IStmt;
 
     internal sealed record Return(IExpr? Value) : IStmt;
 
