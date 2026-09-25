@@ -188,7 +188,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
                 string reasons = Z3Backend.OpaqueReasons(causes);
                 return new Rung(
                     new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"an input reaches an opaque node: {reasons}"),
-                    new Unknown(UnknownReason.Opaque, reasons) { Causes = causes });
+                    new Unknown(UnknownReason.Opaque, reasons) { Causes = causes, Scope = OpaqueScope(encoding, looping) });
             }
 
             return looping
@@ -196,6 +196,15 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
                 : Proved(ProofMethod.Bounded, "no loop or self-call; every input checked", new Equivalent(ProofMethod.Bounded));
         });
     }
+
+    /// <summary>
+    /// The scope of rung 1's opaque Unknown, reached only once the first query of ADR 0014 was unsatisfiable (ADR 0029
+    /// decision 4). That query proved the pair on every input reaching no opaque node, which is the residual claim, but
+    /// only when the pair is acyclic: on a looping pair it ran on the unrolled procedures, so it says nothing past the
+    /// bound. A whole-body opaque is on every path, so it is always among the causes and the Unknown is the method's.
+    /// </summary>
+    private static UnknownScope OpaqueScope(ProductEncoding encoding, bool looping) =>
+        looping || encoding.Opaques.Any(static o => o.Node.WholeBody) ? UnknownScope.Method : UnknownScope.Line;
 
     /// <summary>Rung 1's last query: the unrolled pair agrees, so it is a proof exactly when no input reaches the bound.</summary>
     private Rung WithinBound(Context context, ProductEncoding encoding, int k, string bound)

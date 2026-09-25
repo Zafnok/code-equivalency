@@ -16,7 +16,8 @@ namespace Equiv.Cli;
 /// (ADR 0029; ticket M3-024). A matched pair the frontend could not lower (ticket P2-011) counts in
 /// <see cref="Procedures"/> and <see cref="MatchedPairs"/>, but has no body for any per-body count.
 /// <see cref="Changed"/> and <see cref="RuntimeChangeCalls"/> are per matched pair (ADR 0034; ticket M3-030). A pair is
-/// changed unless it is congruent.
+/// changed unless it is congruent. <see cref="UnknownByScope"/> is set only by a run that produced verdicts (ADR 0029
+/// decision 4; ticket M3-025).
 /// </summary>
 internal sealed record LoweringCensus(
     SideCounts Procedures,
@@ -29,6 +30,8 @@ internal sealed record LoweringCensus(
     ChangedPairCounts Changed,
     RuntimeChangeCalls RuntimeChangeCalls)
 {
+    public ScopeCounts? UnknownByScope { get; init; }
+
     public static LoweringCensus Compute(IReadOnlyList<(IrProcedure Old, IrProcedure New, bool Congruent)> pairs, int removed, int added, SideCounts? projectsSkipped = null, int unlowered = 0)
     {
         ArgumentNullException.ThrowIfNull(pairs);
@@ -92,8 +95,26 @@ internal sealed record LoweringCensus(
                 new SideCounts(legacyCalls.Pairs, modernCalls.Pairs)));
     }
 
-    /// <summary>The census as the SARIF run property: camel-cased keys, <c>opaqueByReason</c> sorted by reason.</summary>
-    public Dictionary<string, object> ToProperty() => new(StringComparer.Ordinal)
+    /// <summary>
+    /// The census as the SARIF run property: camel-cased keys, <c>opaqueByReason</c> sorted by reason, and
+    /// <c>unknownByScope</c> last, when set.
+    /// </summary>
+    public Dictionary<string, object> ToProperty()
+    {
+        Dictionary<string, object> property = Counts();
+        if (UnknownByScope is { } scopes)
+        {
+            property["unknownByScope"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["line"] = scopes.Line,
+                ["method"] = scopes.Method,
+            };
+        }
+
+        return property;
+    }
+
+    private Dictionary<string, object> Counts() => new(StringComparer.Ordinal)
     {
         ["procedures"] = Property(Procedures),
         ["matchedPairs"] = MatchedPairs,

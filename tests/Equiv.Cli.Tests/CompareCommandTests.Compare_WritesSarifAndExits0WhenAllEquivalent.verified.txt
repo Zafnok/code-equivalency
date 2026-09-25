@@ -161,6 +161,10 @@
               legacy: 0,
               modern: 0
             }
+          },
+          unknownByScope: {
+            line: 0,
+            method: 0
           }
         },
         analysedLinesOfCode: {

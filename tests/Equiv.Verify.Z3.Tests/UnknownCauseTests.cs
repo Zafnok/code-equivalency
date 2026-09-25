@@ -112,6 +112,50 @@ public sealed class UnknownCauseTests
         Assert.All(unknown.Causes, static c => Assert.Equal(new SourceSpan("T.cs", 7, 13, 7, 40), c.Span));
     }
 
+    /// <summary>
+    /// Ticket M3-025 criterion 3 (ADR 0029 decision 4): on an acyclic pair, an opaque Unknown after the first query found no
+    /// divergence off the opaque nodes is line-scoped.
+    /// </summary>
+    [Fact]
+    public void OpaqueOffPathUnknownIsLineScoped()
+    {
+        Unknown unknown = Assert.IsType<Unknown>(OpaqueAtLine("7"));
+
+        Assert.Equal(UnknownReason.Opaque, unknown.Reason);
+        Assert.Equal(UnknownScope.Line, unknown.Scope);
+    }
+
+    [Fact]
+    public void WholeBodyUnknownIsMethodScoped()
+    {
+        Unknown unknown = Assert.IsType<Unknown>(Verify(
+            """
+            proc "T::M(int)" (%a: bv32) entry B0
+            B0:
+              ret
+            """,
+            """
+            proc "T::M(int)" (%a: bv32) entry B0
+            B0:
+              opaque body "lock" at "New.cs" 7:9-7:20
+              ret
+            """));
+
+        Assert.Equal(UnknownReason.Opaque, unknown.Reason);
+        Assert.Equal(UnknownScope.Method, unknown.Scope);
+    }
+
+    /// <summary>On a looping pair the first query ran on the unrolled pair only, so it proves nothing past the bound.</summary>
+    [Fact]
+    public void LoopingOpaqueUnknownIsMethodScoped()
+    {
+        Fixture fixture = Fixture.Load("loops/loop-opaque");
+
+        Unknown unknown = Assert.IsType<Unknown>(new Z3Backend().Verify(fixture.Old, fixture.New, Options));
+
+        Assert.Equal(UnknownScope.Method, unknown.Scope);
+    }
+
     /// <summary>The backend end of criterion 9: the detail does not carry the line, so a moved opaque node baselines as unchanged.</summary>
     [Fact]
     public void MovingAnOpaqueNodeKeepsTheBaselineUnchanged()
