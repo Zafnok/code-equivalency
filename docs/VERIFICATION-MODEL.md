@@ -75,7 +75,9 @@ Exact record shapes, the text format and the validator rules are specified in ti
 M1-002 and pinned by its snapshot tests.
 
 Null: reference-typed values are a `Sort` plus a separate `Bool` "is null" shadow
-variable. A dereference lowers to a conditional `IrThrow(NullReferenceException)`.
+variable. A dereference lowers to a conditional `IrThrow(NullReferenceException)`, placed
+where the CLR checks it: at the field or element load or store, or at the call, after every
+operand evaluated before it (index, arguments, a stored value) (P2-017).
 
 Heap and nullness are inputs (M2-004). A procedure's parameter list is its C# parameters
 followed by the synthesised inputs its body needs, ordered by name: the receiver `this`,

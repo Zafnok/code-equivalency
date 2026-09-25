@@ -669,8 +669,8 @@ internal sealed class IrLowerer
     {
         if (heap.Slice(assignment.Target, context) is { } slice)
         {
-            // C# evaluates the target's receiver and index, then the value, and only then stores,
-            // so the bounds check comes after the value in an assignment but before a read.
+            // C# evaluates the target's receiver and index, then the value, and only then stores, so
+            // the null and bounds checks (made at the store) come after the value (ticket P2-017).
             IrVar written = Value(assignment.Value, context);
             heap.WriteSlice(slice, written, context);
             return written;
@@ -996,14 +996,14 @@ internal sealed class IrLowerer
             return Call(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges), adapted, returns, context);
         }
 
-        return Call(callee, Operands(invocation.Instance, invocation.Arguments, context), returns, context);
+        return Dispatch(invocation.Instance, callee, Operands(invocation.Instance, invocation.Arguments, context), returns, context);
     }
 
     /// <summary>
     /// The modern call's arguments under <paramref name="entry"/>'s adapter, or null, with nothing emitted, when it cannot
     /// address the legacy call's source arguments (<see cref="Plan"/>). The source arguments are evaluated in source order,
-    /// and the receiver of an instance call keeps its null check, which is the legacy call's guard; a static or extension
-    /// call has none, even when the modern member is an instance member (ADR 0020).
+    /// and then the receiver of an instance call is null-checked, as <see cref="Dispatch"/> checks the legacy call's
+    /// (ticket P2-017); a static or extension call has no check, even when the modern member is an instance member (ADR 0020).
     /// </summary>
     private ImmutableArray<IrVar>? Adapt(ApiEquivalence entry, IInvocationOperation invocation, LoweringContext context)
     {
@@ -1017,15 +1017,20 @@ internal sealed class IrLowerer
         foreach ((int position, _) in sources)
         {
             values[position] = Value(plan.Operands[position], context);
-            if (position == 0 && invocation.Instance is { Type.IsValueType: false } instance)
-            {
-                ThrowIfNull(instance, values[0], context);
-            }
         }
 
-        return [.. entry.Arguments.Select((item, i) => item.Source is { } source
-            ? Adapted(plan.Operands[source], values[source], plan.Targets[i], context)
-            : Const(TypeMapper.Constant(item.ConstantType!, item.Constant!)!, context))];
+        ImmutableArray<IrVar> adapted =
+        [
+            .. entry.Arguments.Select((item, i) => item.Source is { } source
+                ? Adapted(plan.Operands[source], values[source], plan.Targets[i], context)
+                : Const(TypeMapper.Constant(item.ConstantType!, item.Constant!)!, context)),
+        ];
+        if (invocation.Instance is { Type.IsValueType: false } instance)
+        {
+            ThrowIfNull(instance, values[0], context);
+        }
+
+        return adapted;
     }
 
     /// <summary>
@@ -1115,7 +1120,7 @@ internal sealed class IrLowerer
         }
 
         IrType? returns = value is null ? Map(property.Type!) : null;
-        return Call(Identity(accessor), value is null ? operands : [.. operands, value], returns, context);
+        return Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], returns, context);
     }
 
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
@@ -1123,21 +1128,26 @@ internal sealed class IrLowerer
 
     private CallIdentity Identity(IMethodSymbol method) => CallIdentityFactory.Of(method, renames, suppressedRuntimeChanges);
 
-    /// <summary>A member access's call operands: the receiver, null-checked unless it is a value type, then the arguments.</summary>
-    private ImmutableArray<IrVar> Operands(IOperation? instance, ImmutableArray<IArgumentOperation> arguments, LoweringContext context)
+    /// <summary>
+    /// A member access's call operands: the receiver, then the arguments. The receiver is null-checked at the call, by
+    /// <see cref="Dispatch"/>, not here.
+    /// </summary>
+    private ImmutableArray<IrVar> Operands(IOperation? instance, ImmutableArray<IArgumentOperation> arguments, LoweringContext context) =>
+        [.. Arguments(instance is null ? [] : [Value(instance, context)], arguments, context)];
+
+    /// <summary>
+    /// A call through <paramref name="receiver"/>, whose value is <paramref name="args"/>' first when it is not null: like
+    /// <c>callvirt</c>, it null-checks a receiver of a reference type at the call, after every argument, a setter's value
+    /// included (ticket P2-017).
+    /// </summary>
+    private IrVar? Dispatch(IOperation? receiver, CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, LoweringContext context)
     {
-        List<IrVar> receiver = [];
-        if (instance is not null)
+        if (receiver is not null && !receiver.Type!.IsValueType)
         {
-            IrVar value = Value(instance, context);
-            receiver.Add(value);
-            if (!instance.Type!.IsValueType)
-            {
-                ThrowIfNull(instance, value, context);
-            }
+            ThrowIfNull(receiver, args[0], context);
         }
 
-        return [.. Arguments(receiver, arguments, context)];
+        return Call(callee, args, returns, context);
     }
 
     /// <summary>The receiver, then the arguments in parameter order; each is evaluated in source order first.</summary>

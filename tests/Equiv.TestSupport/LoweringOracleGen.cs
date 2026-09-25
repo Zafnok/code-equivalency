@@ -13,7 +13,8 @@ namespace Equiv.TestSupport;
 /// the reference parameter <c>s</c>, and reads and writes of the class's static <c>int</c> auto-property <c>P</c>
 /// (ticket M3-010), and reads and writes of its static <c>int</c> field <c>F</c>, including <c>void</c> methods that end by
 /// writing it (ticket M3-007), and reads and writes of the elements of the <c>int[]</c> parameters <c>u</c> and <c>v</c>,
-/// which an input may bind to one array (ticket P1-006); built as a small AST and rendered to C#. Every expression reads a
+/// which an input may bind to one array (ticket P1-006) or bind <c>v</c> to <c>null</c> (ticket P2-017); built as a small AST and
+/// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
 /// loop counts to a literal bound, so every generated method terminates.
@@ -42,7 +43,7 @@ public static class LoweringOracleGen
     /// <summary>The static <c>int</c> field of the class the generated methods are compiled into.</summary>
     public const string Field = "F";
 
-    /// <summary>The <c>int[]</c> parameters, each two elements long; an input may pass one array as both.</summary>
+    /// <summary>The <c>int[]</c> parameters, each two elements long; an input may pass one array as both, or <c>v</c> as <c>null</c>.</summary>
     public static readonly ImmutableArray<string> Arrays = ["u", "v"];
 
     public static Gen<OracleMethod> Method { get; } =
@@ -58,7 +59,7 @@ public static class LoweringOracleGen
             }));
 
     public static Gen<OracleInput> Input { get; } =
-        Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, Gen.Bool, static (a, b, c, d, e, s, aliased) => new OracleInput(a, b, c, d, e, s, aliased));
+        Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, Gen.Enum<ArrayBinding>(), static (a, b, c, d, e, s, v) => new OracleInput(a, b, c, d, e, s, v));
 
     private static Gen<int> Int => Gen.Frequency((3, Gen.OneOfConst(IntEdges)), (1, Gen.Int[-16, 16]), (1, Gen.Int));
 

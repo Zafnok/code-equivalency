@@ -296,6 +296,9 @@ ticket id (not listed again here). P2-015 is a `corpus.ps1` finding from the sam
   modern 0; the 6 legacy test projects fail restore with "doesn't list 'win' as a
   RuntimeIdentifier". Found in M3-031 (2026-09-24); M3-022 reported 100% load rate and 312
   matched pairs for the same repo.
+- P2-017 (S) A dereference is null-checked where the CLR checks it, after the value, index or
+  arguments, not before them (a false-Equivalent path). Found in P1-006, not by a census. Needs
+  P1-006.
 
 ## M5 — Agent surface (MCP)
 

@@ -19,12 +19,12 @@ B0:
   %s.isNull.7 "s": bool = mapread %null.System.String, %s
   goto B1
 B1:
+  %$2: bv16 = const bv16 120
   br %s.isNull.7, B3, B4
 B3:
   throw "System.NullReferenceException"
 B4:
-  %$3: bv16 = const bv16 120
-  %$4: bool = call "System.String::Contains(char)"(%s, %$3) threw %$5: bool
+  %$4: bool = call "System.String::Contains(char)"(%s, %$2) threw %$5: bool
   br %$5, B5, B6
 B5:
   throw "System.Exception"
@@ -39,13 +39,13 @@ B0:
   %s.isNull.8 "s": bool = mapread %null.System.String, %s
   goto B1
 B1:
+  %$2: bv16 = const bv16 44
+  %$3: sort "System.StringSplitOptions" = const sort "System.StringSplitOptions" 890022063
   br %s.isNull.8, B3, B4
 B3:
   throw "System.NullReferenceException"
 B4:
-  %$3: bv16 = const bv16 44
-  %$4: sort "System.StringSplitOptions" = const sort "System.StringSplitOptions" 890022063
-  %$5: sort "string[]" = call "System.String::Split(char,System.StringSplitOptions)"(%s, %$3, %$4) threw %$6: bool
+  %$5: sort "string[]" = call "System.String::Split(char,System.StringSplitOptions)"(%s, %$2, %$3) threw %$6: bool
   br %$6, B5, B6
 B5:
   throw "System.Exception"
@@ -58,13 +58,13 @@ B0:
   %s.isNull.8 "s": bool = mapread %null.System.String, %s
   goto B1
 B1:
+  %$2: bv16 = const bv16 44
+  %$3: sort "System.StringSplitOptions" = const sort "System.StringSplitOptions" 890022063
   br %s.isNull.8, B3, B4
 B3:
   throw "System.NullReferenceException"
 B4:
-  %$3: bv16 = const bv16 44
-  %$4: sort "System.StringSplitOptions" = const sort "System.StringSplitOptions" 890022063
-  %$5: sort "string[]" = call "System.String::Split(char,System.StringSplitOptions)"(%s, %$3, %$4) threw %$6: bool
+  %$5: sort "string[]" = call "System.String::Split(char,System.StringSplitOptions)"(%s, %$2, %$3) threw %$6: bool
   br %$6, B5, B6
 B5:
   throw "System.Exception"
