@@ -79,7 +79,11 @@ public static class IrGen
     /// the start of a block (ADR 0014), drop or change a heap map write, or duplicate a call (ADR
     /// 0018; calls are not idempotent). An edit is kept only when some input (edge values plus
     /// random ones) makes the interpreter observe a difference; otherwise the generator discards it
-    /// and yields null.
+    /// and yields null. A caller may re-mutate an already-mutated procedure (a stacked pair): an edit's
+    /// derived variable name (<c>.dup</c>, <c>.kept</c>, ...) is fixed to the instruction it targets, so
+    /// re-selecting the same instruction on the second pass can collide with a name the first pass
+    /// already introduced. Rather than have every edit track uniqueness across stacking, a mutant that
+    /// turns out not to validate is discarded the same as one with no observable difference.
     /// </summary>
     public static Gen<IrMutant?> Mutation(IrProcedure procedure)
     {
@@ -94,6 +98,11 @@ public static class IrGen
         return Gen.Select(Gen.Int[0, edits.Count - 1], Inputs(procedure).Array[16], (index, random) =>
         {
             IrProcedure mutant = edits[index].Apply();
+            if (!IrValidator.Validate(mutant).IsEmpty)
+            {
+                return null;
+            }
+
             IrInputs? witness = edgeInputs.Concat(random).FirstOrDefault(input => Run(procedure, input) != Run(mutant, input));
             return witness is null ? null : new IrMutant(procedure, mutant, witness, edits[index].Description);
         });

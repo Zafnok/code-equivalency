@@ -20,6 +20,13 @@ internal enum LoadDiagnosticKind
     /// <summary>A project that is not C#; skipped with a warning.</summary>
     UnsupportedProject,
 
+    /// <summary>
+    /// A C# project that loaded, holds at least one syntax tree with a type declaration, and yielded zero
+    /// procedures after enumeration; skips the project (ADR 0029, ticket P2-018). A vacuous side must never look
+    /// like a clean one.
+    /// </summary>
+    NoProcedures,
+
     /// <summary>No C# project loaded; the only diagnostic that aborts the load.</summary>
     UnsupportedSolution,
 }
