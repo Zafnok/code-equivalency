@@ -1,5 +1,5 @@
 # M2-007 `runtime-changes.json` is complete against Microsoft's breaking-change pages, and every row says where it came from
-Status: todo
+Status: done (PR #173)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -59,3 +59,25 @@ Measuring anything (M3-032, M3-033). x87 floating-point rows (the table's header
 Changing how prefixes match. Suppression UX.
 
 ## Notes
+- Decision: `RuntimeChange` gains a `Source` (`RuntimeChangeSource` enum: Curated, Documented,
+  Measured); `RuntimeChangeTable.Parse(Stream)` is internal so the tests can feed it bad rows.
+- Decision: the review covers the version indexes (3.0, 3.1, 5.0 to 10), `fx-core` and
+  `unsupported-apis` (the porting page links it; every member there that throws on all platforms is
+  a row). Whole sections that are build-time or deployment by nature (SDK, MSBuild, deployment,
+  containers, install tool, code analysis) are left out of the file; source-incompatible entries in
+  the other sections are listed as `build-time only`.
+- Decision: one review line may carry several prefixes, separated by ` ; `.
+- Decision: the closed reason list is applied as the review file's header defines it. Changes
+  between two .NET versions where .NET 10 matches .NET Framework (for example TripleDES
+  FeedbackSize, the reverted WPF drag-and-drop and StatusStrip renderer changes) count as
+  `not reachable from .NET Framework code`; out-of-band packages (`System.Text.Json`,
+  `Microsoft.Extensions.*`, `DiagnosticSource`) and UI-rendering changes count as
+  `not a BCL member`.
+- Decision: family-wide prefixes follow M2-006's policy (flag the whole overload family when the
+  identity cannot tell the affected overload apart), for example `System.Text.Encoding::GetString(`
+  for the UTF-8 replacement change, because `Encoding.UTF8` calls bind to the base type.
+- Observed: the table has 13 curated rows, not the 14 the ticket's Goal mentions. It now has 364
+  rows (351 documented) from 620 reviewed entries. No sample or business-layer snapshot changed:
+  none of the samples calls a newly listed member.
+- Observed: locally, the `webapi-basic` integration tests fail to load the legacy sample because its
+  packages are not restored in this worktree. This is unrelated to this ticket.

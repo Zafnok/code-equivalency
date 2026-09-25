@@ -58,17 +58,42 @@ public sealed class RuntimeChangeTable
         Assembly assembly = typeof(RuntimeChangeTable).Assembly;
         using Stream stream = assembly.GetManifestResourceStream(ResourceName)
             ?? throw new InvalidOperationException($"embedded resource '{ResourceName}' not found");
+        return Parse(stream);
+    }
+
+    /// <summary>
+    /// Parses a table in the embedded resource's format. A row whose <c>source</c> is missing, or is
+    /// not <c>curated</c>, <c>documented</c> or <c>measured</c> (ADR 0035), is rejected with
+    /// <see cref="InvalidDataException"/>.
+    /// </summary>
+    internal static RuntimeChangeTable Parse(Stream stream)
+    {
         using JsonDocument document = JsonDocument.Parse(stream, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip });
 
         ImmutableArray<RuntimeChange>.Builder builder = ImmutableArray.CreateBuilder<RuntimeChange>();
         foreach (JsonElement element in document.RootElement.EnumerateArray())
         {
+            string member = element.GetProperty("member").GetString()!;
             builder.Add(new RuntimeChange(
-                element.GetProperty("member").GetString()!,
+                member,
                 element.GetProperty("reason").GetString()!,
-                new Uri(element.GetProperty("url").GetString()!, UriKind.Absolute)));
+                new Uri(element.GetProperty("url").GetString()!, UriKind.Absolute),
+                ParseSource(member, element)));
         }
 
         return new RuntimeChangeTable(builder.ToImmutable());
+    }
+
+    private static RuntimeChangeSource ParseSource(string member, JsonElement element)
+    {
+        string? source = element.TryGetProperty("source", out JsonElement value) ? value.GetString() : null;
+        return source switch
+        {
+            "curated" => RuntimeChangeSource.Curated,
+            "documented" => RuntimeChangeSource.Documented,
+            "measured" => RuntimeChangeSource.Measured,
+            null => throw new InvalidDataException($"runtime-changes row '{member}' has no source"),
+            _ => throw new InvalidDataException($"runtime-changes row '{member}' has unknown source '{source}'"),
+        };
     }
 }
