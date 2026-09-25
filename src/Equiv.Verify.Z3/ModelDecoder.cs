@@ -153,9 +153,14 @@ internal sealed class ModelDecoder
         };
     }
 
-    /// <summary>The shared inputs, in <see cref="ProductEncoding.Inputs"/> order.</summary>
+    /// <summary>
+    /// The shared inputs, in <see cref="ProductEncoding.Inputs"/> order. A <c>length.&lt;Sort&gt;</c> input gives 0 wherever
+    /// the model gives a negative length (ticket P2-019): the encoder assumes every length it reads is non-negative, so a
+    /// negative one is at a reference nothing reads, and 0 makes the input one a CLR caller can pass.
+    /// </summary>
     public IrInputs Inputs() =>
-        new([.. encoding.Inputs.Select(i => Decode(model.Eval(i.Term, completion: true), i.Shared.Type))]);
+        new([.. encoding.Inputs.Select(i => (i.Shared.Var.Name, Value: Decode(model.Eval(i.Term, completion: true), i.Shared.Type)))
+            .Select(static i => i.Name.StartsWith(ProductEncoder.LengthPrefix, StringComparison.Ordinal) ? NonNegative((IrMapValue)i.Value) : i.Value)]);
 
     public IrValue Decode(Expr value, IrType type) => type switch
     {
@@ -176,6 +181,13 @@ internal sealed class ModelDecoder
     };
 
     public ICallOracle Oracle(Side side) => new ModelOracle(this, side);
+
+    /// <summary><paramref name="lengths"/> with every negative length replaced by 0.</summary>
+    private static IrMapValue NonNegative(IrMapValue lengths) =>
+        new(lengths.MapType, NonNegative(lengths.Default), lengths.Entries.ToImmutableDictionary(static e => e.Key, static e => NonNegative(e.Value)));
+
+    private static IrValue NonNegative(IrValue length) =>
+        ((IrBitVecValue)length).TwosComplement < 0 ? new IrBitVecValue(32, 0) : length;
 
     private static IrRun Run(IrProcedure procedure, IrInputs inputs, ICallOracle oracle) =>
         IrInterpreter.Run(procedure, inputs, oracle, procedure.Blocks.Sum(static b => b.Instructions.Length + 1), IsAbstraction);

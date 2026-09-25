@@ -387,6 +387,81 @@ public sealed class Z3BackendTests
         Assert.IsType<Equivalent>(new Z3Backend().Verify(p, p, new VerificationOptions(3, 2_000, [])));
     }
 
+    /// <summary>
+    /// Ticket P2-019: no CLR array has a negative length, so a pair whose only divergence needs one is not Divergent. Each
+    /// old side reads <c>length.int__</c> at <c>u</c> and differs from the new side only when that length is negative:
+    /// <c>u[int.MinValue]</c>, whose unsigned bounds check passes only for a length above 2^31 (the shape M0-012's gate
+    /// found), and <c>u.Length &lt; 0</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("""
+        %i: bv32 = const bv32 -2147483648
+          %in: bool = ult %i, %l
+          br %in, B1, B2
+        B1:
+          %one: bv32 = const bv32 1
+          ret %one
+        B2:
+          throw "System.IndexOutOfRangeException"
+        """, """
+        throw "System.IndexOutOfRangeException"
+        """)]
+    [InlineData("""
+        %z: bv32 = const bv32 0
+          %n: bool = slt %l, %z
+          br %n, B1, B2
+        B1:
+          %one: bv32 = const bv32 1
+          ret %one
+        B2:
+          ret %z
+        """, """
+        %r: bv32 = const bv32 0
+          ret %r
+        """)]
+    public void ANegativeArrayLengthIsNeverAModel(string oldTail, string newTail)
+    {
+        (IrProcedure old, IrProcedure @new) = Fixture.Pair($"""
+            proc "T::M(int[])" (%u "u": sort "int[]", %length.int__: map<sort "int[]", bv32>) -> bv32 entry B0
+            B0:
+              %l: bv32 = mapread %length.int__, %u
+              {oldTail}
+            ---
+            proc "T::M(int[])" (%u "u": sort "int[]", %length.int__: map<sort "int[]", bv32>) -> bv32 entry B0
+            B0:
+              {newTail}
+            """);
+
+        Assert.IsType<Equivalent>(new Z3Backend().Verify(old, @new, Options));
+    }
+
+    /// <summary>
+    /// Ticket P2-019 criterion 1: a Divergent model reads a non-negative length at every reference, including those the
+    /// procedure never reads, so a replay that asks for another array's length gets a length a CLR array can have.
+    /// </summary>
+    [Fact]
+    public void ADivergentModelGivesEveryReferenceANonNegativeLength()
+    {
+        (IrProcedure old, IrProcedure @new) = Fixture.Pair("""
+            proc "T::M(int[])" (%u "u": sort "int[]", %length.int__: map<sort "int[]", bv32>) -> bv32 entry B0
+            B0:
+              %l: bv32 = mapread %length.int__, %u
+              ret %l
+            ---
+            proc "T::M(int[])" (%u "u": sort "int[]", %length.int__: map<sort "int[]", bv32>) -> bv32 entry B0
+            B0:
+              %l: bv32 = mapread %length.int__, %u
+              %one: bv32 = const bv32 1
+              %r: bv32 = add %l, %one
+              ret %r
+            """);
+
+        Divergent divergent = Assert.IsType<Divergent>(new Z3Backend().Verify(old, @new, Options));
+
+        IrMapValue lengths = Assert.IsType<IrMapValue>(divergent.Counterexample.Inputs.Arguments[1]);
+        Assert.All(lengths.Entries.Select(static e => e.Value).Prepend(lengths.Default), static v => Assert.True(Assert.IsType<IrBitVecValue>(v).TwosComplement >= 0, $"negative length {v}"));
+    }
+
     /// <summary>A procedure returning bitvector 1 of <paramref name="width"/> bits, or returning nothing when the width is 0.</summary>
     private static string Returning(int width) => width == 0
         ? "proc \"T::M()\" () entry B0\nB0:\n  ret\n"

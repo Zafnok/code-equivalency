@@ -38,10 +38,7 @@ public sealed class DifferentialSoundnessTests
     /// symptom in the failure's input line rather than by pair, so the nightly run skips every pair the bug shows in and
     /// not only the one it shrank to. Must be empty before M3-003 lands.
     /// </summary>
-    private static readonly ImmutableArray<(string Symptom, string Ticket)> Skips =
-    [
-        ("the model gives u the length -", "P2-019"),
-    ];
+    private static readonly ImmutableArray<(string Symptom, string Ticket)> Skips = [];
 
     private static int Pairs =>
         string.Equals(Environment.GetEnvironmentVariable("EQUIV_DIFFERENTIAL_BUDGET"), "nightly", StringComparison.OrdinalIgnoreCase) ? Budget.Nightly : Budget.PullRequest;
