@@ -1,5 +1,5 @@
 # P2-017 A dereference is null-checked where the CLR checks it: after the operands
-Status: in-progress
+Status: done (PR #169)
 Effort: S
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-006
