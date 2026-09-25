@@ -29,6 +29,27 @@ public sealed class IrRecordEqualityTests
     [Fact]
     public void Call() => AssertStructural(() => new IrCall(A, Threw: null, new CallIdentity("F"), [B]), c => c with { Args = [] });
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void Pure(int field) =>
+        AssertStructural(
+            () => new IrPure(A, [new IrPureThrow(new IrVar("f", new IrBool()), "E")], "dec.add", [A, B]),
+            p => field switch
+            {
+                0 => p with { Target = B },
+                1 => p with { Throws = [] },
+                2 => p with { Function = "dec.sub" },
+                3 => p with { Args = [B, A] },
+                _ => p with { RuntimeSensitive = true },
+            });
+
+    [Fact]
+    public void PureResult() => AssertStructural(() => new IrPureResult(One, [true, false]), r => r with { Threw = [true] });
+
     [Fact]
     public void CallHeap() =>
         AssertStructural(() => new IrCall(A, Threw: null, new CallIdentity("F"), [B]) { Heap = [new IrHeapPair("m", A, B)] }, c => c with { Heap = [] });

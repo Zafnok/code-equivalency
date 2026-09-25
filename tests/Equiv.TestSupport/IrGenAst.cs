@@ -50,6 +50,9 @@ internal static class IrGenAst
     /// <summary>Opaque call; <see cref="MayThrow"/> adds a threw flag and a throw edge.</summary>
     internal sealed record Call(int? Slot, string Callee, ImmutableArray<IExpr> Args, bool MayThrow) : IStmt;
 
+    /// <summary><c>slot = pure Function(args)</c> (ticket M4-002), each of <see cref="Throws"/> a flag branching to a throw of that type.</summary>
+    internal sealed record Pure(int Slot, string Function, ImmutableArray<IExpr> Args, ImmutableArray<string> Throws) : IStmt;
+
     internal sealed record If(ICond Condition, ImmutableArray<IStmt> Then, ImmutableArray<IStmt> Else) : IStmt;
 
     internal sealed record Switch(IExpr Scrutinee, ImmutableArray<(uint Value, ImmutableArray<IStmt> Body)> Cases, ImmutableArray<IStmt> Default) : IStmt;

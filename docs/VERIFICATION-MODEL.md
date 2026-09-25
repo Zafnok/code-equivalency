@@ -149,6 +149,20 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   Throwing any other expression is `IrOpaque` with reason `Throw`, because the thrown object's
   dynamic type is not known statically, and `throw;` is `IrOpaque` with reason `rethrow`.
 
+Floating-point, `decimal` and user-defined operators (ADR 0025, ticket M4-002) are `IrPure`
+applications of the functions one frontend catalogue lists: `f32.<op>` and `f64.<op>` (arithmetic,
+negation and comparisons, which never throw; `==` is `f64.eq`, not an equality of sort elements, since
+`NaN != NaN`), `dec.<op>` (overflow on `+ - * / %`, divide-by-zero on `/ %`), and `conv.<from>.<to>`
+for every numeric conversion to or from `float`, `double` or `decimal` (overflow for floating point
+to `decimal`, for `decimal` to an integral type, and for floating point to an integral type when
+checked). Unary `+` is its operand. A user-defined operator or conversion, including `string ==`, is
+`op:<call identity>`, which may throw any exception, as an opaque call may. Each exception flag
+branches to where that exact type goes, so `catch (OverflowException)` catches `dec.mul`'s overflow
+and `catch (DivideByZeroException)` does not. A floating-point to integer conversion, and on a legacy
+project whose floating point runs on x87 every function taking or yielding floating point, is
+runtime-sensitive. Lifted (nullable) operators, compound assignment and `++`/`--` on these types stay
+`IrOpaque`.
+
 Migration-specific normalisations (applied to both sides before matching):
 
 - `System.Web` vs `Microsoft.AspNetCore` attribute routes map to one route identity.

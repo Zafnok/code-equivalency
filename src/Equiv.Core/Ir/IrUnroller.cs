@@ -119,6 +119,7 @@ public static class IrUnroller
         },
         IrMapRead read => read with { Target = var(read.Target), Map = var(read.Map), Key = var(read.Key) },
         IrMapWrite write => write with { Target = var(write.Target), Map = var(write.Map), Key = var(write.Key), Value = var(write.Value) },
+        IrPure pure => pure with { Target = var(pure.Target), Throws = [.. pure.Throws.Select(t => t with { Flag = var(t.Flag) })], Args = [.. pure.Args.Select(var)] },
         _ => (IrOpaque)instruction with { Target = Optional(((IrOpaque)instruction).Target, var) },
     };
 

@@ -377,6 +377,8 @@ public static class IrValidator
             Maps(instruction.Map.Type is IrMap map
                 && (map.Key == instruction.Key.Type) & (map.Value == instruction.Value.Type) & (map == instruction.Target.Type));
 
+        public string? Visit(IrPure instruction) => Operands(instruction.Throws.All(static t => t.Flag.Type is IrBool));
+
         public string? Visit(IrOpaque instruction) => null;
 
         internal static string? Operands(bool ok) => ok ? null : IrDiagnosticIds.OperandTypes;

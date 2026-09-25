@@ -14,14 +14,17 @@ public static class IrInterpreter
     /// when <paramref name="stepBudget"/> steps are spent the run ends with <see cref="IrBudgetExhausted"/>.
     /// </summary>
     /// <param name="taint">
-    /// Marks the calls whose result and <c>threw</c> flag are abstractions (ADR 0026), which <c>IrPure</c> results will
-    /// also be once that instruction exists. Taint then flows through every instruction and phi, a tainted call's event
-    /// is tainted, and after a branch or switch on a tainted condition every later definition, trace event, final by-ref
-    /// value and the outcome are. <see cref="IrRun.Taint"/> records it; without a predicate it is
+    /// Marks the calls whose result and <c>threw</c> flag are abstractions (ADR 0026). With a predicate, every
+    /// <see cref="IrPure"/> result and flag is one too (ticket M4-002), whatever the predicate says. Taint then flows
+    /// through every instruction and phi, a tainted call's event is tainted, and after a branch or switch on a tainted
+    /// condition every later definition, trace event, final by-ref value and the outcome are. <see cref="IrRun.Taint"/>
+    /// records it, with each pure function reached as a source named by its function; without a predicate it is
     /// <see cref="IrTaint.None"/>. Taint never changes a value.
     /// </param>
+    /// <param name="pure">Answers <see cref="IrPure"/> applications; a run that reaches one without it fails.</param>
     /// <exception cref="ArgumentException">The procedure does not validate, or the inputs do not match its parameters.</exception>
-    public static IrRun Run(IrProcedure procedure, IrInputs inputs, ICallOracle oracle, int stepBudget, Func<CallIdentity, bool>? taint = null)
+    /// <exception cref="InvalidOperationException">An oracle answers with a value of the wrong type, or the run reaches an <see cref="IrPure"/> without <paramref name="pure"/>.</exception>
+    public static IrRun Run(IrProcedure procedure, IrInputs inputs, ICallOracle oracle, int stepBudget, Func<CallIdentity, bool>? taint = null, IPureOracle? pure = null)
     {
         ArgumentNullException.ThrowIfNull(procedure);
         ArgumentNullException.ThrowIfNull(inputs);
@@ -33,13 +36,13 @@ public static class IrInterpreter
         {
             { IsEmpty: false } => throw new ArgumentException($"Procedure is not valid IR: {diagnostics[0].Id} {diagnostics[0].Message}", nameof(procedure)),
             _ when !typesMatch => throw new ArgumentException("Inputs do not match the procedure's parameter types.", nameof(inputs)),
-            _ => new IrMachine(oracle, taint ?? (static _ => false)).Execute(procedure, inputs, stepBudget),
+            _ => new IrMachine(oracle, pure, taint).Execute(procedure, inputs, stepBudget),
         };
     }
 
     private readonly record struct IrJump(IrBlockId? Next, IrOutcome? Outcome, ImmutableArray<IrOut> Outs);
 
-    private sealed class IrMachine(ICallOracle oracle, Func<CallIdentity, bool> abstraction) : IIrInstructionVisitor<IrOutcome?>
+    private sealed class IrMachine(ICallOracle oracle, IPureOracle? pure, Func<CallIdentity, bool>? abstraction) : IIrInstructionVisitor<IrOutcome?>
     {
         private readonly Dictionary<string, IrValue> values = new(StringComparer.Ordinal);
         private readonly ImmutableArray<IrCallRecord>.Builder trace = ImmutableArray.CreateBuilder<IrCallRecord>();
@@ -118,13 +121,9 @@ public static class IrInterpreter
             ImmutableArray<IrHeapSlice> heap = [.. instruction.Heap.Select(h => new IrHeapSlice(h.Map, Get(h.Before)))];
             int position = trace.Count;
             trace.Add(new IrCallRecord(instruction.Callee, args) { Heap = heap });
-            if (abstraction(instruction.Callee))
+            if (abstraction?.Invoke(instruction.Callee) == true)
             {
-                data = true;
-                if (!sources.Contains(instruction.Callee))
-                {
-                    sources.Add(instruction.Callee);
-                }
+                Tainting(instruction.Callee);
             }
 
             if (data || control)
@@ -153,6 +152,29 @@ public static class IrInterpreter
             return instruction.Threw is null ? null : Set(instruction.Threw, new IrBoolValue(result.Threw));
         }
 
+        public IrOutcome? Visit(IrPure instruction)
+        {
+            IrPureResult result = (pure ?? throw new InvalidOperationException($"The run reached pure function {instruction.Function} without a pure oracle."))
+                .Answer(instruction, [.. instruction.Args.Select(Get)]);
+            if (result.Value.Type != instruction.Target.Type || result.Threw.Length != instruction.Throws.Length)
+            {
+                throw new InvalidOperationException($"Pure oracle answered {instruction.Function} with a value that is not of type {IrText.Type(instruction.Target.Type)} or not one flag per exception.");
+            }
+
+            if (abstraction is not null)
+            {
+                Tainting(new CallIdentity(instruction.Function));
+            }
+
+            Set(instruction.Target, result.Value);
+            for (int i = 0; i < instruction.Throws.Length; i++)
+            {
+                Set(instruction.Throws[i].Flag, new IrBoolValue(result.Threw[i]));
+            }
+
+            return null;
+        }
+
         public IrOutcome? Visit(IrMapRead instruction) =>
             Set(instruction.Target, ((IrMapValue)Get(instruction.Map)).Read(Get(instruction.Key)));
 
@@ -162,6 +184,16 @@ public static class IrInterpreter
         public IrOutcome? Visit(IrOpaque instruction) => new IrOpaqueReached(instruction.Reason, instruction.Span);
 
         private IrValue Get(IrVar var) => values[var.Name];
+
+        /// <summary>The instruction being executed defines abstractions: its definitions are tainted, and <paramref name="source"/> is recorded once.</summary>
+        private void Tainting(CallIdentity source)
+        {
+            data = true;
+            if (!sources.Contains(source))
+            {
+                sources.Add(source);
+            }
+        }
 
         private bool IsTainted(IrVar var) => tainted.Contains(var.Name);
 

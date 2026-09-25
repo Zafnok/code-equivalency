@@ -14,9 +14,10 @@ namespace Equiv.TestSupport;
 /// (ticket M3-010), and reads and writes of its static <c>int</c> field <c>F</c>, including <c>void</c> methods that end by
 /// writing it (ticket M3-007), and reads and writes of the elements of the <c>int[]</c> parameters <c>u</c> and <c>v</c>,
 /// which an input may bind to one array (ticket P1-006) or bind <c>v</c> to <c>null</c> (ticket P2-017), and <c>foreach</c> loops
-/// that fold each element of the <c>List&lt;int&gt;</c> parameter <c>l</c> into <c>x</c> (ticket M4-001), and reads and writes of the
-/// instance field <c>G</c> of the <c>Cell</c> parameter <c>o</c> around calls to <c>o.Bump(k)</c>, which adds <c>k</c> to it
-/// (ticket P1-005); built as a small AST and
+/// that fold each element of the <c>List&lt;int&gt;</c> parameter <c>l</c> into <c>x</c> (ticket M4-001), <c>decimal</c> arithmetic
+/// over the parameter <c>m</c> and <c>int</c> values converted to <c>decimal</c>, converted back to <c>int</c> or compared (ticket
+/// M4-002), and reads and writes of the instance field <c>G</c> of the <c>Cell</c> parameter <c>o</c> around calls to
+/// <c>o.Bump(k)</c>, which adds <c>k</c> to it (ticket P1-005); built as a small AST and
 /// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
@@ -29,6 +30,10 @@ public static class LoweringOracleGen
     private static readonly int[] IntEdges = [0, 1, 2, 3, 7, 31, 32, 33, -1, -2, int.MaxValue, int.MinValue];
 
     private static readonly long[] LongEdges = [0, 1, 2, 63, 64, -1, int.MaxValue, int.MinValue, long.MaxValue, long.MinValue];
+
+    private static readonly decimal[] DecimalEdges = [0m, 1m, -1m, 0.5m, 2.5m, 12345.678m, 0.0000000000000000000000000001m, decimal.MaxValue, decimal.MinValue];
+
+    private static readonly string[] DecimalArithmetic = ["+", "-", "*", "/", "%"];
 
     private static readonly string[] Arithmetic = ["+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>"];
 
@@ -82,7 +87,7 @@ public static class LoweringOracleGen
             }));
 
     public static Gen<OracleInput> Input { get; } =
-        Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, Gen.Enum<ArrayBinding>(), static (a, b, c, d, e, s, v) => new OracleInput(a, b, c, d, e, s, v));
+        Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, Gen.Enum<ArrayBinding>(), Gen.OneOfConst(DecimalEdges), static (a, b, c, d, e, s, v, m) => new OracleInput(a, b, c, d, e, s, v, m));
 
     private static Gen<int> Int => Gen.Frequency((3, Gen.OneOfConst(IntEdges)), (1, Gen.Int[-16, 16]), (1, Gen.Int));
 
@@ -173,7 +178,26 @@ public static class LoweringOracleGen
         Gen<IExpr> unary = Gen.Select(Gen.OneOfConst("-", "~"), Gen.Bool, ExprGen(type, depth - 1), static (op, isChecked, operand) => (IExpr)new Unary(op, operand, isChecked));
         Gen<IExpr> conversion = Gen.Select(Gen.Bool, ExprGen(other, depth - 1), (isChecked, operand) => (IExpr)new Conversion(type, operand, isChecked));
         Gen<IExpr> conditional = Gen.Select(ExprGen(typeof(bool), depth - 1), ExprGen(type, depth - 1), ExprGen(type, depth - 1), static (c, t, f) => (IExpr)new Conditional(c, t, f));
-        return Gen.Frequency((2, leaf), (5, binary), (1, unary), (1, conversion), (1, conditional));
+        Gen<IExpr> fromDecimal = Gen.Select(Gen.Bool, DecimalGen(depth - 1), (isChecked, operand) => (IExpr)new Conversion(type, operand, isChecked));
+        return Gen.Frequency((2, leaf), (5, binary), (1, unary), (1, conversion), (1, conditional), (type == typeof(int) ? 1 : 0, fromDecimal));
+    }
+
+    /// <summary>
+    /// A <c>decimal</c> expression (ticket M4-002): <c>m</c> or an <c>int</c> converted to <c>decimal</c>, and arithmetic over
+    /// them, which can divide by zero or overflow. It has no literal, so it is never a compile-time constant.
+    /// </summary>
+    private static Gen<IExpr> DecimalGen(int depth)
+    {
+        Gen<IExpr> leaf = Gen.Frequency(
+            (1, Gen.Const<IExpr>(new Name("m"))),
+            (1, ExprGen(typeof(int), 0).Select(static operand => (IExpr)new Conversion(typeof(decimal), operand, IsChecked: false))));
+        if (depth <= 0)
+        {
+            return leaf;
+        }
+
+        Gen<IExpr> binary = Gen.Select(Gen.OneOfConst(DecimalArithmetic), DecimalGen(depth - 1), DecimalGen(depth - 1), static (op, left, right) => (IExpr)new Binary(op, left, right, IsChecked: false));
+        return Gen.Frequency((2, leaf), (3, binary));
     }
 
     /// <summary>Shift counts are <c>int</c>; a literal divisor is never zero.</summary>
@@ -196,7 +220,8 @@ public static class LoweringOracleGen
             .SelectMany(t => Gen.Select(ExprGen(t.type, depth - 1), ExprGen(t.type, depth - 1), (l, r) => (IExpr)new Relation(t.op, l, r)));
         Gen<IExpr> logic = Gen.Select(Gen.OneOfConst(Logic), ExprGen(typeof(bool), depth - 1), ExprGen(typeof(bool), depth - 1), static (op, l, r) => (IExpr)new Relation(op, l, r));
         Gen<IExpr> not = ExprGen(typeof(bool), depth - 1).Select(static operand => (IExpr)new Unary("!", operand, IsChecked: false));
-        return Gen.Frequency((2, leaf), (3, relation), (2, logic), (1, not), (2, nullTest));
+        Gen<IExpr> decimals = Gen.Select(Gen.OneOfConst(Relations), DecimalGen(depth - 1), DecimalGen(depth - 1), static (op, l, r) => (IExpr)new Relation(op, l, r));
+        return Gen.Frequency((2, leaf), (3, relation), (2, logic), (1, not), (2, nullTest), (1, decimals));
     }
 
     private static void RenderBlock(ImmutableArray<IStmt> block, StringBuilder text, int indent, ref int loops)

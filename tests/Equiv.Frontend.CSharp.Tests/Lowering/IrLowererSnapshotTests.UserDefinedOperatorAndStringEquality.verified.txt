@@ -1,0 +1,15 @@
+﻿proc "C::M(C.Money,C.Money,string,string)" (%a "a": sort "C+Money", %b "b": sort "C+Money", %s "s": sort "System.String", %t "t": sort "System.String", %null.System.String: map<sort "System.String", bool>) -> bool entry B0
+B0:
+  %s.isNull.11 "s": bool = mapread %null.System.String, %s
+  %t.isNull.12 "t": bool = mapread %null.System.String, %t
+  goto B1
+B1:
+  %c.13 "c": sort "C+Money" = pure "op:C.Money::op_Addition(C.Money,C.Money)"(%a, %b) throws(%$5: bool "System.Exception")
+  br %$5, B3, B4
+B3:
+  throw "System.Exception"
+B4:
+  %$8: bool = pure "op:System.String::op_Equality(string,string)"(%s, %t) throws(%$9: bool "System.Exception")
+  br %$9, B3, B5
+B5:
+  ret %$8

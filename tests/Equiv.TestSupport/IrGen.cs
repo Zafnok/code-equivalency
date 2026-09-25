@@ -12,7 +12,7 @@ namespace Equiv.TestSupport;
 
 /// <summary>
 /// CsCheck generators for IR. Procedures come from a small structured language (sequence,
-/// if/else, switch, bounded counter loops, checked arithmetic, opaque calls, throws) lowered
+/// if/else, switch, bounded counter loops, checked arithmetic, opaque calls, pure functions, throws) lowered
 /// to SSA by <see cref="IrGenLowering"/>, so they are well formed by construction.
 /// </summary>
 public static class IrGen
@@ -108,7 +108,7 @@ public static class IrGen
         });
     }
 
-    public static IrRun Run(IrProcedure procedure, IrInputs inputs) => IrInterpreter.Run(procedure, inputs, IrGenOracle.Instance, StepBudget);
+    public static IrRun Run(IrProcedure procedure, IrInputs inputs) => IrInterpreter.Run(procedure, inputs, IrGenOracle.Instance, StepBudget, pure: IrGenOracle.Instance);
 
     private static Gen<ImmutableArray<IrValue>> Sequence(Gen<IrValue>[] values) =>
         values.Aggregate(
@@ -355,9 +355,15 @@ public static class IrGen
             Gen.Bool,
             static (s, callee, args, mayThrow) => (IStmt)new Call(s, callee, [.. args], mayThrow));
         Gen<IStmt> store = Gen.Select(Expression(1), Expression(1), static (k, v) => (IStmt)new Store(k, v));
+        Gen<IStmt> pure = Gen.Select(
+            slot,
+            Gen.OneOfConst("gen.f", "gen.g"),
+            Expression(1).Array[1, 2],
+            Gen.OneOfConst<ImmutableArray<string>>([], ["System.OverflowException"], ["System.DivideByZeroException", "System.OverflowException"]),
+            static (s, function, args, throws) => (IStmt)new Pure(s, function, [.. args], throws));
         if (depth == 0)
         {
-            return Gen.Frequency((4, assign), (1, check), (1, call), (1, store));
+            return Gen.Frequency((4, assign), (1, check), (1, call), (1, store), (1, pure));
         }
 
         Gen<ImmutableArray<IStmt>> body = Statements(depth - 1, loops);
@@ -370,6 +376,6 @@ public static class IrGen
             body,
             static (e, cases, fallback) => (IStmt)new Switch(e, [.. cases], fallback));
         Gen<IStmt> loop = Gen.Select(Gen.Int[0, 3], body, static (n, b) => (IStmt)new Loop(n, b));
-        return Gen.Frequency((4, assign), (1, check), (1, call), (1, store), (2, branch), (1, choice), (loops ? 1 : 0, loop));
+        return Gen.Frequency((4, assign), (1, check), (1, call), (1, store), (1, pure), (2, branch), (1, choice), (loops ? 1 : 0, loop));
     }
 }

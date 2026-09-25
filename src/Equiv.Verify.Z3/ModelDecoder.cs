@@ -19,10 +19,10 @@ namespace Equiv.Verify.Z3;
 /// are read with model completion. An element of an uninterpreted sort becomes <c>sort "S" n</c>: a literal
 /// keeps its own id, any other element gets the next free id. Both sides are then replayed in
 /// <see cref="IrInterpreter"/>, with a call oracle that answers from the model's call functions at the
-/// position the interpreter passes, and the replay must diverge on the observables the encoder compares. The oracle threads
-/// each heap map a call does not pair as the encoder does, and each call event is completed with the whole heap the call
-/// read (ticket P1-005). The replay
-/// taints every call whose identity starts with <see cref="OpaquePrefix"/> (ADR 0026; ticket M3-016): only a difference
+/// position the interpreter passes, and pure functions from the model's pure functions, and the replay must diverge on the
+/// observables the encoder compares. The oracle threads each heap map a call does not pair as the encoder does, and each
+/// call event is completed with the whole heap the call read (ticket P1-005). The replay taints every call whose identity
+/// starts with <see cref="OpaquePrefix"/> and every pure function (ADR 0026; tickets M3-016 and M4-002): only a difference
 /// in an observable that is untainted on both sides is real.
 /// </summary>
 internal sealed class ModelDecoder
@@ -72,8 +72,8 @@ internal sealed class ModelDecoder
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
         ModelOracle oldOracle = decoder.Oracle(Side.Old);
         ModelOracle newOracle = decoder.Oracle(Side.New);
-        IrRun oldRun = oldOracle.Complete(Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle));
-        IrRun newRun = newOracle.Complete(Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle));
+        IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, Budget(old));
+        IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, Budget(@new));
         Counterexample counterexample = new(inputs, oldRun, newRun);
         return EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls, oldOracle.Threaded, newOracle.Threaded) == Difference.Real
             ? new Divergent(counterexample)
@@ -96,8 +96,8 @@ internal sealed class ModelDecoder
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
         ModelOracle oldOracle = decoder.Oracle(Side.Old);
         ModelOracle newOracle = decoder.Oracle(Side.New);
-        IrRun oldRun = oldOracle.Complete(IrInterpreter.Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, stepBudget, IsAbstraction));
-        IrRun newRun = newOracle.Complete(IrInterpreter.Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, stepBudget, IsAbstraction));
+        IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, stepBudget);
+        IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, stepBudget);
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
         return complete && Diverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls, oldOracle.Threaded, newOracle.Threaded) ? new Counterexample(inputs, oldRun, newRun) : null;
     }
@@ -220,6 +220,13 @@ internal sealed class ModelDecoder
 
     public ModelOracle Oracle(Side side) => new(this, side);
 
+    /// <summary>
+    /// Replays <paramref name="procedure"/> with <paramref name="oracle"/> answering its calls and pure functions, with taint
+    /// (ADR 0026), and completes each call event with the heap the call read (ticket P1-005).
+    /// </summary>
+    private static IrRun Run(IrProcedure procedure, IrInputs inputs, ModelOracle oracle, int stepBudget) =>
+        oracle.Complete(IrInterpreter.Run(procedure, inputs, oracle, stepBudget, IsAbstraction, oracle));
+
     /// <summary><paramref name="lengths"/> with every negative length replaced by 0.</summary>
     private static IrMapValue NonNegative(IrMapValue lengths) =>
         new(lengths.MapType, NonNegative(lengths.Default), lengths.Entries.ToImmutableDictionary(static e => e.Key, static e => NonNegative(e.Value)));
@@ -227,8 +234,8 @@ internal sealed class ModelDecoder
     private static IrValue NonNegative(IrValue length) =>
         ((IrBitVecValue)length).TwosComplement < 0 ? new IrBitVecValue(32, 0) : length;
 
-    private static IrRun Run(IrProcedure procedure, IrInputs inputs, ICallOracle oracle) =>
-        IrInterpreter.Run(procedure, inputs, oracle, procedure.Blocks.Sum(static b => b.Instructions.Length + 1), IsAbstraction);
+    /// <summary>Enough steps to run an acyclic procedure once through.</summary>
+    private static int Budget(IrProcedure procedure) => procedure.Blocks.Sum(static b => b.Instructions.Length + 1);
 
     /// <summary>The tainting identities <paramref name="run"/> reached, as abstractions of <paramref name="side"/>; an <see cref="IrCall"/> has no span.</summary>
     private static IEnumerable<Abstraction> Abstractions(Codebase side, IrRun run) =>
@@ -294,9 +301,10 @@ internal sealed class ModelDecoder
     /// position and the heap at the call (ticket P1-005). The heap at the call is the slice the interpreter passes for a map
     /// the call pairs, else <see cref="Threaded"/>'s version, which starts at the shared input and takes each call's new
     /// version, as the encoder threads it. A map the call pairs that the encoding's heap does not range over (a replay of
-    /// the original procedures from a fragment's model) is left as it is.
+    /// the original procedures from a fragment's model) is left as it is. A pure function is answered from its result and
+    /// flag functions applied to the arguments (ticket M4-002).
     /// </summary>
-    internal sealed class ModelOracle : ICallOracle
+    internal sealed class ModelOracle : ICallOracle, IPureOracle
     {
         private readonly ModelDecoder decoder;
         private readonly Side side;
@@ -314,6 +322,16 @@ internal sealed class ModelDecoder
         public IReadOnlyDictionary<HeapMap, IrValue> Threaded => Heap.Zip(threaded).ToDictionary(static e => e.First, static e => e.Second);
 
         private ImmutableArray<HeapMap> Heap => decoder.encoding.Calls.Heap;
+
+        public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments)
+        {
+            Expr[] applied = [.. arguments.Select(decoder.Encode)];
+            PureEncoder pures = decoder.encoding.Pures;
+            IrValue value = decoder.Decode(decoder.model.Eval(decoder.context.MkApp(pures.ResultFunction(side, pure), applied), completion: true), pure.Target.Type);
+            return new IrPureResult(
+                value,
+                [.. pure.Throws.Select(t => decoder.model.Eval(decoder.context.MkApp(pures.ThrewFunction(side, pure, t.ExceptionType), applied), completion: true).IsTrue)]);
+        }
 
         public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
         {
