@@ -1,5 +1,5 @@
 # P2-002 `typeof(T)` is a shared synthesised input, not opaque
-Status: in-progress
+Status: done (PR #183)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-010
