@@ -505,7 +505,7 @@ public sealed class CompareCommandTests
         using TempFile modern = new();
         ProcedureIdentity ok = new("T::Ok()");
         ProcedureIdentity throwing = new("T::Throws()");
-        MatchResult matchResult = new MatchResult([Pair(ok)], [], [], [])
+        MatchResult matchResult = new([Pair(ok)], [], [], [])
         {
             LoweringFailures = [new LoweringFailure(throwing, throwing, new KeyNotFoundException("lowering bug"))],
         };
