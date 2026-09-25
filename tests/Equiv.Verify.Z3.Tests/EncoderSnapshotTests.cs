@@ -23,7 +23,7 @@ public sealed class EncoderSnapshotTests
 {
     public static TheoryData<string> Kinds =>
     [
-        "const", "binary", "overflows", "unary", "phi-branch", "switch", "branch-same-target", "call", "map", "literals", "opaque", "throw", "unreachable",
+        "const", "binary", "overflows", "unary", "phi-branch", "switch", "branch-same-target", "call", "map", "literals", "opaque", "pure", "throw", "unreachable",
     ];
 
     [Theory]
