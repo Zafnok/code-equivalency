@@ -1,5 +1,5 @@
 # M3-015 Bound fingerprints, congruence without the solver, and the callee pairs every verdict assumes
-Status: in-progress
+Status: done (PR #175)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-014, M3-001, M3-009, M3-024
