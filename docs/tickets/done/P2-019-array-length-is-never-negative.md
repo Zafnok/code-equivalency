@@ -1,5 +1,5 @@
 # P2-019 An array's length is never negative in a model
-Status: in-progress
+Status: done (PR #190)
 Effort: S
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M0-012
