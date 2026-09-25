@@ -109,6 +109,9 @@ public sealed class IrLowererTests
     [InlineData("static void M(int a, Exception e) { if (a < 0) throw e; }", "Throw")]
     [InlineData("static T M<T>() where T : new() => new T();", "TypeParameterObjectCreation")]
     [InlineData("static object M<T>() => typeof(T);", "TypeOf")]
+    [InlineData("static T M<T>() => default(T);", "DefaultValue")]
+    [InlineData("static T M<T>() where T : struct => default(T);", "DefaultValue")]
+    [InlineData("struct Point { public int X, Y; } static Point M() => default(Point);", "DefaultValue")]
     [InlineData("static C M(int a) { int b = 0; return new C(ref b); } C(ref int x) { }", "ref-argument")]
     [InlineData("static void M(int a) { ref int r = ref a; r = 1; }", "SimpleAssignment")]
     [InlineData("static int M(double d) => (int)d;", "Conversion")]
@@ -500,6 +503,21 @@ public sealed class IrLowererTests
 
         Assert.Empty(procedure.Parameters);
         Assert.Equal(new IrReturned(new IrBoolValue(Value: true)), Run(procedure));
+    }
+
+    /// <summary>
+    /// Ticket P2-003 acceptance criterion 2: a type parameter's <c>default</c> is the null element of its sort when the
+    /// parameter is constrained to <c>class</c>; Roslyn folds it to the constant <c>null</c>, so it needs no dedicated
+    /// lowering arm, the same path a closed reference type's <c>default</c> already took.
+    /// </summary>
+    [Fact]
+    public void DefaultOfAClassConstrainedTypeParameterIsTheNullElement()
+    {
+        IrProcedure procedure = Method("static T M<T>() where T : class => default(T);");
+
+        Assert.Empty(Opaques(procedure));
+        IrConst value = Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>());
+        Assert.Equal(new IrSortValue("T", 0), value.Value);
     }
 
     [Fact]
