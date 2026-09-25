@@ -372,6 +372,10 @@ ticket id (not listed again here). P2-015 is a `corpus.ps1` finding from the sam
   class of bug as P2-012. Needs P2-012.
 - P2-021 (S) ShortestPaths' 6 legacy test projects are skipped with "doesn't list 'win' as a
   RuntimeIdentifier" under `corpus.ps1 -Env`. Found in M3-031; split out of P2-016.
+- P2-022 (M) Compound assignment and `++`/`--` on `float`, `double` and `decimal`, and user-defined
+  compound and increment operators, apply M4-002's `IrPure` functions instead of being opaque
+  (reasons `CompoundAssignment`, `Increment`, `Decrement`). Found in M4-002 (`business-layer`
+  `Subtotal`'s `decimal +=`). Needs M4-002.
 
 ## M5 — Agent surface (MCP)
 
