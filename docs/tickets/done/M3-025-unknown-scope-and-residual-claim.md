@@ -1,5 +1,5 @@
 # M3-025 Every Unknown states its scope and residual claim; whole-body opaques point at their construct
-Status: in-progress
+Status: done (PR #187)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-016, M3-024
