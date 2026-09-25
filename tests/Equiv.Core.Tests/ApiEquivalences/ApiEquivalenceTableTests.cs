@@ -52,7 +52,7 @@ public sealed class ApiEquivalenceTableTests
             // a comment
             [
               { "id": "m", "legacy": "A::F()", "modern": "B::G()", "reason": "r", "url": "https://learn.microsoft.com/x",
-                "arguments": [{ "arg": 0 }, { "arg": 1, "unwrap": true }, { "arg": 2, "convertTo": "System.Object" }, { "const": 0, "type": "bv32" }] },
+                "arguments": [{ "arg": 0 }, { "arg": 1, "unwrap": true }, { "arg": 2, "convertTo": "System.Object" }, { "const": 0, "type": "bv32" }, { "arg": 3, "unwrap": false }] },
               { "id": "t", "legacyType": "A", "modernType": "B", "reason": "r", "url": "https://learn.microsoft.com/y" }
             ]
             """);
@@ -61,7 +61,7 @@ public sealed class ApiEquivalenceTableTests
         Assert.False(member.IsType);
         Assert.Equal(("m", "A::F()", "B::G()"), (member.Id, member.Legacy, member.Modern));
         Assert.Equal(
-            [new ApiArgument(0), new ApiArgument(1, Unwrap: true), new ApiArgument(2, ConvertTo: "System.Object"), new ApiArgument(Source: null, ConstantType: "bv32", Constant: "0")],
+            [new ApiArgument(0), new ApiArgument(1, Unwrap: true), new ApiArgument(2, ConvertTo: "System.Object"), new ApiArgument(Source: null, ConstantType: "bv32", Constant: "0"), new ApiArgument(3)],
             member.Arguments);
         ApiEquivalence type = table.Entries[1];
         Assert.True(type.IsType);
