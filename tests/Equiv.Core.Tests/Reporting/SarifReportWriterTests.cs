@@ -201,6 +201,38 @@ public sealed class SarifReportWriterTests
     private static Unknown OpaqueAtLine(int line) =>
         new(UnknownReason.Opaque, "new: Await") { Causes = [new UnknownCause(Codebase.Modern, "Await", new SourceSpan("New.cs", line, 9, line, 20))] };
 
+    /// <summary>Ticket M3-025 criterion 4 (ADR 0029 decision 4): a line-scoped Unknown states what it still proves.</summary>
+    [Fact]
+    public void LineScopeCarriesTheResidualClaim()
+    {
+        Result line = SarifReportWriter.Write([Fixtures.Result(OpaqueAtLine(7) with { Scope = UnknownScope.Line })]).Runs[0].Results[0];
+        Result method = SarifReportWriter.Write([Fixtures.Result(OpaqueAtLine(7))]).Runs[0].Results[0];
+
+        Assert.True(line.TryGetProperty("scope", out string? lineScope));
+        Assert.Equal("line", lineScope);
+        Assert.True(line.TryGetProperty("residualClaim", out string? claim));
+        Assert.Equal("equivalent unless a relatedLocation is reached", claim);
+        Assert.EndsWith(" It is equivalent on every input that reaches none of the related locations.", line.Message.Text, StringComparison.Ordinal);
+
+        Assert.True(method.TryGetProperty("scope", out string? methodScope));
+        Assert.Equal("method", methodScope);
+        Assert.False(method.TryGetProperty("residualClaim", out string? _));
+        Assert.EndsWith(": new: Await", method.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket M3-025 criterion 5: scope is not part of the fingerprint, so narrowing an Unknown to a line keeps it <c>unchanged</c>.</summary>
+    [Fact]
+    public void ScopeChangeKeepsTheBaselineUnchanged()
+    {
+        ProcedureIdentity identity = new("T::M()", new SourceSpan("New.cs", 2, 5, 2, 6));
+        SarifLog baseline = SarifReportWriter.Write([new VerificationResult(identity, OpaqueAtLine(7))]);
+
+        Result narrowed = SarifReportWriter.Write([new VerificationResult(identity, OpaqueAtLine(7) with { Scope = UnknownScope.Line })], baseline).Runs[0].Results[0];
+
+        Assert.Equal(BaselineState.Unchanged, narrowed.BaselineState);
+        Assert.Equal(baseline.Runs[0].Results[0].PartialFingerprints, narrowed.PartialFingerprints);
+    }
+
     [Fact]
     public void ResultWithoutALocationHasNoLocations()
     {

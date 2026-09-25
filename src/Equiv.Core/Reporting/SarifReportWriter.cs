@@ -208,6 +208,12 @@ public static class SarifReportWriter
                 break;
             case Unknown unknown:
                 sarifResult.SetProperty("unknownReason", Name(unknown.Reason));
+                sarifResult.SetProperty("scope", Name(unknown.Scope));
+                if (unknown.Scope == UnknownScope.Line)
+                {
+                    sarifResult.SetProperty("residualClaim", Unknown.ResidualClaim);
+                }
+
                 SetAbstractionProperties(sarifResult, unknown);
                 break;
         }
@@ -289,6 +295,9 @@ public static class SarifReportWriter
         _ => "unbound",
     };
 
+    /// <summary>The spelling VERIFICATION-MODEL.md section 6 uses for a scope: <c>line</c>, <c>method</c>.</summary>
+    internal static string Name(UnknownScope scope) => scope == UnknownScope.Line ? "line" : "method";
+
     internal static string Name(RungOutcome outcome) => outcome switch
     {
         RungOutcome.Proved => "proved",
@@ -340,6 +349,8 @@ public static class SarifReportWriter
         Divergent divergent when runtimeChange is not null =>
             $"{result.Identity.Value} diverges via a runtime-changed API ({runtimeChange.Reason} {runtimeChange.Url.OriginalString}): {CounterexampleText.Dump(divergent.Counterexample)}",
         Divergent divergent => $"{result.Identity.Value} diverges: {CounterexampleText.Dump(divergent.Counterexample)}",
+        Unknown { Scope: UnknownScope.Line } unknown =>
+            $"{result.Identity.Value} is unknown ({unknown.Reason}): {unknown.Detail}. It is equivalent on every input that reaches none of the related locations.",
         Unknown unknown => $"{result.Identity.Value} is unknown ({unknown.Reason}): {unknown.Detail}",
         Added => $"{result.Identity.Value} was added.",
         _ => $"{result.Identity.Value} was removed.",

@@ -440,6 +440,7 @@ internal sealed class IrTextParser
 
     private IrOpaque ParseOpaque(IrVar? target)
     {
+        bool wholeBody = AcceptWord("body");
         string reason = ExpectString();
         ExpectWord("at");
         string path = ExpectString();
@@ -449,7 +450,7 @@ internal sealed class IrTextParser
         ExpectSymbol("-");
         int endLine = ParseInt();
         ExpectSymbol(":");
-        return new IrOpaque(target, reason, new SourceSpan(path, startLine, startColumn, endLine, ParseInt()));
+        return new IrOpaque(target, reason, new SourceSpan(path, startLine, startColumn, endLine, ParseInt())) { WholeBody = wholeBody };
     }
 
     private IrTerminator ParseTerminator()

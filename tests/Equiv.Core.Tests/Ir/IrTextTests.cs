@@ -26,7 +26,7 @@ public sealed class IrTextTests
           %t11: map<bool, bv16> = mapread %m, %t8
           %t12: map<bv8, map<bool, bv16>> = mapwrite %m, %t8, %t11
           %t13: bv64 = opaque "dynamic" at "src/a.cs" 1:2-3:4
-          opaque "lock" at "src/a.cs" 5:6-7:8
+          opaque body "lock" at "src/a.cs" 5:6-7:8
           switch %a [bv32 1 -> B1, bv32 2 -> B2] default B3
         B1:
           goto B3
@@ -77,6 +77,28 @@ public sealed class IrTextTests
         IrCall parsed = Assert.IsType<IrCall>(IrText.Parse(dumped).Blocks[0].Instructions[0]);
         Assert.Equal(flagged, parsed.Callee);
         Assert.True(parsed.Callee.RuntimeChanged);
+    }
+
+    [Fact]
+    public void WholeBodyFlagRoundTripsInIrText()
+    {
+        SourceSpan span = new("a.cs", 1, 2, 3, 4);
+        IrOpaque wholeBody = new(Target: null, "lock", span) { WholeBody = true };
+        IrOpaque expression = new(Target: null, "dynamic", span);
+        IrProcedure p = new(
+            new ProcedureIdentity("P"),
+            [],
+            ReturnType: null,
+            [new IrBlock(new IrBlockId(0), [wholeBody, expression], new IrReturn(Value: null, []))],
+            new IrBlockId(0));
+
+        string dumped = IrText.Dump(p);
+        Assert.Contains("opaque body \"lock\" at", dumped, StringComparison.Ordinal);
+        Assert.Contains("opaque \"dynamic\" at", dumped, StringComparison.Ordinal);
+
+        IrProcedure parsed = IrText.Parse(dumped);
+        Assert.Equal<IrInstruction>([wholeBody, expression], parsed.Blocks[0].Instructions);
+        Assert.NotEqual(wholeBody, expression with { Reason = "lock" });
     }
 
     [Fact]

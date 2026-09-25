@@ -115,6 +115,7 @@
           baselineState: new,
           properties: {
             unknownReason: abstraction,
+            scope: method,
             candidateCounterexample: inputs(bv32 0) old(returned bv32 1 outs() trace()) new(returned bv32 2 outs() trace()),
             abstractions: [
               {

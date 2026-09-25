@@ -81,7 +81,8 @@
           },
           baselineState: new,
           properties: {
-            unknownReason: timeout
+            unknownReason: timeout,
+            scope: method
           }
         }
       ],
