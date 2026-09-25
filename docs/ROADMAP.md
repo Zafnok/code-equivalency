@@ -330,6 +330,10 @@ keys or quotas exist. It can run alongside M4 and M5.
   shared by both sides (ADRs 0015, 0018).
 - P1-006 (L) (promoted into M3) Array element and length maps keyed by the array value instead of the array
   variable, so two variables holding one array are one slice (ADR 0015).
+- P1-007 (M) Rung 1 inlines self-calls that read or write the heap. The self-call's heap pairs thread the heap
+  through the inlined copy. This removes the array-variable, synthesised-`Ref` and heap-write obstacles, which
+  are stale after M3-007 and P1-006. It needs P1-005 and P1-006, and M3-003 does not need it (it is precision,
+  not soundness).
 
 P1-005 and P1-006 are the two soundness limits ADR 0015 names. ADR 0018 moves both ahead
 of M3-003, so no build that reports sample verdicts carries them. Until they land, an
