@@ -162,6 +162,14 @@ public static class IrText
         public string Visit(IrMapWrite instruction) =>
             $"{Definition(instruction.Target)} = mapwrite {Use(instruction.Map)}, {Use(instruction.Key)}, {Use(instruction.Value)}";
 
+        /// <summary>
+        /// <c>%t: T = pure "f"(%a, %b)</c>, the function with a <c>!</c> suffix when <see cref="IrPure.RuntimeSensitive"/>, then
+        /// <c>throws(%f: bool "E", ...)</c> when it can throw (ticket M4-002).
+        /// </summary>
+        public string Visit(IrPure instruction) =>
+            $"{Definition(instruction.Target)} = pure {Quote(instruction.Function)}{(instruction.RuntimeSensitive ? "!" : string.Empty)}({string.Join(", ", instruction.Args.Select(Use))})"
+            + (instruction.Throws.IsEmpty ? string.Empty : $" throws({string.Join(", ", instruction.Throws.Select(static t => $"{Definition(t.Flag)} {Quote(t.ExceptionType)}"))})");
+
         public string Visit(IrOpaque instruction)
         {
             SourceSpan span = instruction.Span;

@@ -18,9 +18,10 @@ namespace Equiv.Verify.Z3;
 /// are read with model completion. An element of an uninterpreted sort becomes <c>sort "S" n</c>: a literal
 /// keeps its own id, any other element gets the next free id. Both sides are then replayed in
 /// <see cref="IrInterpreter"/>, with a call oracle that answers from the model's call functions at the
-/// position the interpreter passes, and the replay must diverge on the observables the encoder compares. The replay
-/// taints every call whose identity starts with <see cref="OpaquePrefix"/> (ADR 0026; ticket M3-016): only a difference
-/// in an observable that is untainted on both sides is real.
+/// position the interpreter passes, and pure functions from the model's pure functions, and the replay must diverge on the
+/// observables the encoder compares. The replay taints every call whose identity starts with <see cref="OpaquePrefix"/>
+/// and every pure function (ADR 0026; tickets M3-016 and M4-002): only a difference in an observable that is untainted on
+/// both sides is real.
 /// </summary>
 internal sealed class ModelDecoder
 {
@@ -67,8 +68,8 @@ internal sealed class ModelDecoder
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
-        IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), decoder.Oracle(Side.Old));
-        IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), decoder.Oracle(Side.New));
+        IrRun oldRun = decoder.Run(old, Bind(old, shared, inputs, static s => s.Old), Side.Old, Budget(old));
+        IrRun newRun = decoder.Run(@new, Bind(@new, shared, inputs, static s => s.New), Side.New, Budget(@new));
         Counterexample counterexample = new(inputs, oldRun, newRun);
         return EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls) == Difference.Real
             ? new Divergent(counterexample)
@@ -89,8 +90,8 @@ internal sealed class ModelDecoder
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
-        IrRun oldRun = IrInterpreter.Run(old, Bind(old, shared, inputs, static s => s.Old), decoder.Oracle(Side.Old), stepBudget, IsAbstraction);
-        IrRun newRun = IrInterpreter.Run(@new, Bind(@new, shared, inputs, static s => s.New), decoder.Oracle(Side.New), stepBudget, IsAbstraction);
+        IrRun oldRun = decoder.Run(old, Bind(old, shared, inputs, static s => s.Old), Side.Old, stepBudget);
+        IrRun newRun = decoder.Run(@new, Bind(@new, shared, inputs, static s => s.New), Side.New, stepBudget);
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
         return complete && Diverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls) ? new Counterexample(inputs, oldRun, newRun) : null;
     }
@@ -182,6 +183,13 @@ internal sealed class ModelDecoder
 
     public ICallOracle Oracle(Side side) => new ModelOracle(this, side);
 
+    /// <summary>Answers <see cref="IrPure"/> applications from the model: the side's result and flag functions applied to the arguments.</summary>
+    public IPureOracle Pure(Side side) => new ModelOracle(this, side);
+
+    /// <summary>Replays <paramref name="procedure"/> on <paramref name="side"/> from the model, with taint (ADR 0026).</summary>
+    private IrRun Run(IrProcedure procedure, IrInputs inputs, Side side, int stepBudget) =>
+        IrInterpreter.Run(procedure, inputs, Oracle(side), stepBudget, IsAbstraction, Pure(side));
+
     /// <summary><paramref name="lengths"/> with every negative length replaced by 0.</summary>
     private static IrMapValue NonNegative(IrMapValue lengths) =>
         new(lengths.MapType, NonNegative(lengths.Default), lengths.Entries.ToImmutableDictionary(static e => e.Key, static e => NonNegative(e.Value)));
@@ -189,8 +197,8 @@ internal sealed class ModelDecoder
     private static IrValue NonNegative(IrValue length) =>
         ((IrBitVecValue)length).TwosComplement < 0 ? new IrBitVecValue(32, 0) : length;
 
-    private static IrRun Run(IrProcedure procedure, IrInputs inputs, ICallOracle oracle) =>
-        IrInterpreter.Run(procedure, inputs, oracle, procedure.Blocks.Sum(static b => b.Instructions.Length + 1), IsAbstraction);
+    /// <summary>Enough steps to run an acyclic procedure once through.</summary>
+    private static int Budget(IrProcedure procedure) => procedure.Blocks.Sum(static b => b.Instructions.Length + 1);
 
     /// <summary>The tainting identities <paramref name="run"/> reached, as abstractions of <paramref name="side"/>; an <see cref="IrCall"/> has no span.</summary>
     private static IEnumerable<Abstraction> Abstractions(Codebase side, IrRun run) =>
@@ -265,9 +273,22 @@ internal sealed class ModelDecoder
         _ => throw new InvalidOperationException($"Encoder bug: the model gives a map in a shape the decoder does not read (store chain over a constant array expected): {value}"),
     };
 
-    /// <summary>Answers a call from the model: the side's result and <c>threw</c> functions applied to the arguments and position.</summary>
-    private sealed class ModelOracle(ModelDecoder decoder, Side side) : ICallOracle
+    /// <summary>
+    /// Answers a call from the model, the side's result and <c>threw</c> functions applied to the arguments and position,
+    /// and a pure function from its result and flag functions applied to the arguments.
+    /// </summary>
+    private sealed class ModelOracle(ModelDecoder decoder, Side side) : ICallOracle, IPureOracle
     {
+        public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments)
+        {
+            Expr[] applied = [.. arguments.Select(decoder.Encode)];
+            PureEncoder pures = decoder.encoding.Pures;
+            IrValue value = decoder.Decode(decoder.model.Eval(decoder.context.MkApp(pures.ResultFunction(side, pure), applied), completion: true), pure.Target.Type);
+            return new IrPureResult(
+                value,
+                [.. pure.Throws.Select(t => decoder.model.Eval(decoder.context.MkApp(pures.ThrewFunction(side, pure, t.ExceptionType), applied), completion: true).IsTrue)]);
+        }
+
         public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position)
         {
             ImmutableArray<IrType> types = [.. arguments.Select(static a => a.Type)];

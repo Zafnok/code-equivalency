@@ -214,6 +214,9 @@ internal sealed class IrGenLowering
             case Call call:
                 LowerCall(call);
                 break;
+            case Pure pure:
+                LowerPure(pure);
+                break;
             case If branch:
                 LowerIf(branch);
                 break;
@@ -299,6 +302,20 @@ internal sealed class IrGenLowering
         {
             env[slot] = target!;
         }
+    }
+
+    private void LowerPure(Pure pure)
+    {
+        ImmutableArray<IrVar> args = [.. pure.Args.Select(Lower)];
+        IrVar target = Temp(Bv32);
+        ImmutableArray<IrPureThrow> throws = [.. pure.Throws.Select(t => new IrPureThrow(Temp(Bool), t))];
+        Emit(new IrPure(target, throws, pure.Function, args));
+        foreach (IrPureThrow thrown in throws)
+        {
+            ThrowIf(thrown.Flag, thrown.ExceptionType);
+        }
+
+        env[pure.Slot] = target;
     }
 
     private void LowerIf(If branch)

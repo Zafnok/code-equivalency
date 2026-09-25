@@ -13,7 +13,8 @@ namespace Equiv.Verify.Z3;
 /// ADR 0021; ticket M3-001). Both sides are encoded over one set of inputs, the <see cref="SharedParameter"/>s
 /// of <see cref="Pair"/>. Every other SSA variable is a constant <c>old.&lt;name&gt;</c> or
 /// <c>new.&lt;name&gt;</c> fixed by a definitional equality; SSA makes that sound even for blocks no input
-/// reaches. Control flow is a Bool <c>reach</c> per block, and the call position a bv32 <c>cnt</c> per block.
+/// reaches. Control flow is a Bool <c>reach</c> per block, and the call position a bv32 <c>cnt</c> per block. Calls go through
+/// <see cref="TraceEncoder"/>, pure functions through <see cref="PureEncoder"/>.
 /// The ladder of ticket M3-002 encodes unrolled procedures and loop fragments with it; each is acyclic.
 /// </summary>
 internal static class ProductEncoder
@@ -118,9 +119,10 @@ internal static class ProductEncoder
             .SelectMany(static b => b.Instructions.OfType<IrCall>())
             .SelectMany(static c => c.Args.Select(static a => a.Type));
         TraceEncoder calls = new(sorts, argumentTypes, callIdentityMap);
+        PureEncoder pures = new(sorts, old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrPure>()));
         Dictionary<string, int> exceptionTypes = new(StringComparer.Ordinal);
-        SideEncoder oldSide = new(Side.Old, old, sorts, calls, Bound(inputs, static s => s.Old), exceptionTypes);
-        SideEncoder newSide = new(Side.New, @new, sorts, calls, Bound(inputs, static s => s.New), exceptionTypes);
+        SideEncoder oldSide = new(Side.Old, old, sorts, (calls, pures), Bound(inputs, static s => s.Old), exceptionTypes);
+        SideEncoder newSide = new(Side.New, @new, sorts, (calls, pures), Bound(inputs, static s => s.New), exceptionTypes);
 
         List<BoolExpr> equal =
         [
@@ -143,6 +145,7 @@ internal static class ProductEncoder
             [.. oldSide.Opaques, .. newSide.Opaques],
             sorts,
             calls,
+            pures,
             oldSide.Terms,
             newSide.Terms);
     }
@@ -181,6 +184,7 @@ internal static class ProductEncoder
         private readonly Side side;
         private readonly SortMapper sorts;
         private readonly TraceEncoder calls;
+        private readonly PureEncoder pures;
         private readonly Context context;
         private readonly Dictionary<string, Expr> inputs;
         private readonly Dictionary<string, Expr> constants = new(StringComparer.Ordinal);
@@ -197,13 +201,13 @@ internal static class ProductEncoder
             Side side,
             IrProcedure procedure,
             SortMapper sorts,
-            TraceEncoder calls,
+            (TraceEncoder Calls, PureEncoder Pures) functions,
             Dictionary<string, Expr> inputs,
             Dictionary<string, int> exceptionTypes)
         {
             this.side = side;
             this.sorts = sorts;
-            this.calls = calls;
+            (calls, pures) = functions;
             this.inputs = inputs;
             Procedure = procedure;
             context = sorts.Context;
@@ -380,6 +384,18 @@ internal static class ProductEncoder
                         break;
                     }
 
+                case IrPure pure:
+                    {
+                        (Expr result, ImmutableArray<BoolExpr> threw) = pures.Apply(side, pure, [.. pure.Args.Select(Var)]);
+                        Define(pure.Target, result);
+                        for (int i = 0; i < threw.Length; i++)
+                        {
+                            Define(pure.Throws[i].Flag, threw[i]);
+                        }
+
+                        break;
+                    }
+
                 case IrMapRead read:
                     Define(read.Target, context.MkSelect((ArrayExpr)Var(read.Map), Var(read.Key)));
                     AssumeLength(read);
@@ -539,6 +555,7 @@ internal static class ProductEncoder
         ImmutableArray<(Side Side, IrOpaque Node, BoolExpr Reach)> Opaques,
         SortMapper Sorts,
         TraceEncoder Calls,
+        PureEncoder Pures,
         SideTerms Old,
         SideTerms New);
 }

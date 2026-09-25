@@ -43,6 +43,7 @@ internal sealed class IrTextParser
             ["mapread"] = static (p, target) => new IrMapRead(target, p.ParseUse(), p.ParseNextUse()),
             ["mapwrite"] = static (p, target) => new IrMapWrite(target, p.ParseUse(), p.ParseNextUse(), p.ParseNextUse()),
             ["opaque"] = static (p, target) => p.ParseOpaque(target),
+            ["pure"] = static (p, target) => p.ParsePure(target),
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
     private static readonly FrozenDictionary<string, Func<IrTextParser, IrInstruction>> Statements =
@@ -437,6 +438,17 @@ internal sealed class IrTextParser
         IrVar? threw = AcceptWord("threw") ? ParseDefinition() : null;
         return new IrCall(target, threw, callee, args);
     }
+
+    private IrPure ParsePure(IrVar target)
+    {
+        string function = ExpectString();
+        bool runtimeSensitive = AcceptSymbol("!");
+        ImmutableArray<IrVar> args = ParseList("(", ")", ParseUse);
+        ImmutableArray<IrPureThrow> throws = AcceptWord("throws") ? ParseList("(", ")", ParsePureThrow) : [];
+        return new IrPure(target, throws, function, args) { RuntimeSensitive = runtimeSensitive };
+    }
+
+    private IrPureThrow ParsePureThrow() => new(ParseDefinition(), ExpectString());
 
     private IrOpaque ParseOpaque(IrVar? target)
     {

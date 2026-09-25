@@ -1,0 +1,58 @@
+﻿old.reach.B0
+(= old.cnt.B0 #x00000000)
+(= old.q
+   (|pure:dec.div(sort<System.Decimal>,sort<System.Decimal>)->sort<System.Decimal>|
+     in.a
+     in.b))
+(= old.z
+   (|pure.threw:dec.div(sort<System.Decimal>,sort<System.Decimal>):System.DivideByZeroException|
+     in.a
+     in.b))
+(= old.o
+   (|pure.threw:dec.div(sort<System.Decimal>,sort<System.Decimal>):System.OverflowException|
+     in.a
+     in.b))
+(= old.reach.B2 (or (and old.reach.B0 (not old.z))))
+(= old.cnt.B2 (bvadd old.cnt.B0 #x00000000))
+(= old.reach.B4 (or (and old.reach.B2 (not old.o))))
+(= old.cnt.B4 (bvadd old.cnt.B2 #x00000000))
+(= old.reach.B3 (or (and old.reach.B2 old.o)))
+(= old.cnt.B3 (bvadd old.cnt.B2 #x00000000))
+(= old.reach.B1 (or (and old.reach.B0 old.z)))
+(= old.cnt.B1 (bvadd old.cnt.B0 #x00000000))
+new.reach.B0
+(= new.cnt.B0 #x00000000)
+(= new.q
+   (|pure:dec.div(sort<System.Decimal>,sort<System.Decimal>)->sort<System.Decimal>|
+     in.a
+     in.b))
+(= new.z
+   (|pure.threw:dec.div(sort<System.Decimal>,sort<System.Decimal>):System.DivideByZeroException|
+     in.a
+     in.b))
+(= new.o
+   (|pure.threw:dec.div(sort<System.Decimal>,sort<System.Decimal>):System.OverflowException|
+     in.a
+     in.b))
+(= new.reach.B2 (or (and new.reach.B0 (not new.z))))
+(= new.cnt.B2 (bvadd new.cnt.B0 #x00000000))
+(= new.reach.B4 (or (and new.reach.B2 (not new.o))))
+(= new.cnt.B4 (bvadd new.cnt.B2 #x00000000))
+(= new.reach.B3 (or (and new.reach.B2 new.o)))
+(= new.cnt.B3 (bvadd new.cnt.B2 #x00000000))
+(= new.reach.B1 (or (and new.reach.B0 new.z)))
+(= new.cnt.B1 (bvadd new.cnt.B0 #x00000000))
+differs: (let ((a!1 (and (= (or false old.reach.B4) (or false new.reach.B4))
+                (= (ite old.reach.B4 old.q ret.none)
+                   (ite new.reach.B4 new.q ret.none))
+                (= (or false old.reach.B3 old.reach.B1)
+                   (or false new.reach.B3 new.reach.B1))
+                (= (ite old.reach.B3 2 (ite old.reach.B1 1 0))
+                   (ite new.reach.B3 2 (ite new.reach.B1 1 0)))
+                (= (seq.++ (as seq.empty (Seq Event)))
+                   (seq.++ (as seq.empty (Seq Event)))))))
+  (not a!1))
+opaque.old: (or false)
+opaque.new: (or false)
+unreachable.old: (or false)
+unreachable.new: (or false)

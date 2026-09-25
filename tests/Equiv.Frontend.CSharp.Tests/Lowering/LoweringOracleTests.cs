@@ -29,7 +29,9 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 /// <see cref="CompiledRunOracle"/>, which keeps the value the compiled run's backing field would hold. The
 /// <c>int[]</c> parameters are two arrays, one passed twice (ticket P1-006), or <c>u</c> and a null <c>v</c> (ticket P2-017), and their final elements are compared
 /// along with the static field's final value. The <c>List&lt;int&gt;</c> parameter is <c>{ A, B }</c>, and the IR's calls on its
-/// enumerator are answered by an enumerator of that list (ticket M4-001).
+/// enumerator are answered by an enumerator of that list (ticket M4-001). The <c>decimal</c> parameter is <c>M</c>, and the IR's
+/// pure <c>decimal</c> functions are answered by <see cref="DecimalOracle"/>, which applies <see cref="decimal"/>'s own operators
+/// (ticket M4-002).
 /// </summary>
 public sealed class LoweringOracleTests
 {
@@ -72,7 +74,7 @@ public sealed class LoweringOracleTests
     {
         string source = $"public static class Oracle\n{{\n    public static int {LoweringOracleGen.Property} {{ get; set; }}\n    public static int {LoweringOracleGen.Field};\n{string.Concat(cases.Select(static (c, i) => c.Method.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n";
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", "foreach ("])
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", "foreach (", "(decimal)", "((int)"])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
@@ -94,6 +96,7 @@ public sealed class LoweringOracleTests
             PropertyInfo property = oracle.GetProperty(LoweringOracleGen.Property)!;
             FieldInfo field = oracle.GetField(LoweringOracleGen.Field)!;
             HashSet<Equiv.Core.CallIdentity> callees = [];
+            HashSet<string> pures = new(StringComparer.Ordinal);
             SyntaxTree tree = compilation.SyntaxTrees[0];
             SemanticModel model = compilation.GetSemanticModel(tree);
             ImmutableArray<MethodDeclarationSyntax> declarations =
@@ -104,6 +107,7 @@ public sealed class LoweringOracleTests
                 IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty, []);
                 Assert.Empty(IrValidator.Validate(procedure));
                 callees.UnionWith(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee));
+                pures.UnionWith(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>().Select(static p => p.Function));
                 MethodInfo method = oracle.GetMethod(declarations[i].Identifier.Text)!;
                 foreach (OracleInput input in cases[i].Inputs)
                 {
@@ -120,14 +124,23 @@ public sealed class LoweringOracleTests
                 }
             }
 
-            // Ticket M3-010 acceptance criterion 6: the run reaches the getter as well as the setter; ticket M4-001: and a `foreach`.
-            Assert.Contains(CompiledRunOracle.Getter, callees);
-            Assert.Contains(CompiledRunOracle.MoveNext, callees);
+            AssertReached(callees, pures);
         }
         finally
         {
             context.Unload();
         }
+    }
+
+    /// <summary>
+    /// Ticket M3-010 acceptance criterion 6: the run reaches the getter as well as the setter; ticket M4-001: and a
+    /// <c>foreach</c>; ticket M4-002: and <c>decimal</c> arithmetic, its conversions both ways and a comparison, as pure functions.
+    /// </summary>
+    private static void AssertReached(HashSet<Equiv.Core.CallIdentity> callees, HashSet<string> pures)
+    {
+        Assert.Contains(CompiledRunOracle.Getter, callees);
+        Assert.Contains(CompiledRunOracle.MoveNext, callees);
+        Assert.Superset(new HashSet<string>(["conv.i32.dec", "conv.dec.i32", "dec.mul", "dec.div", "dec.lt"], StringComparer.Ordinal), pures);
     }
 
     /// <summary>The compiled run's <c>v</c>: <c>{ B, A }</c>, <paramref name="u"/> itself, or null.</summary>
@@ -142,7 +155,7 @@ public sealed class LoweringOracleTests
     {
         try
         {
-            object? result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s", u, v, List(input)]);
+            object? result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s", u, v, List(input), input.M]);
             return $"return {result}";
         }
         catch (TargetInvocationException exception)
@@ -208,8 +221,9 @@ public sealed class LoweringOracleTests
     private static string Interpreted(IrProcedure procedure, OracleInput input)
     {
         // By name, because the synthesised heap inputs (M2-004) are only there when the body needs them.
-        IrInputs arguments = new([.. procedure.Parameters.Select(p => Argument(p.Var, input))]);
-        IrRun run = IrInterpreter.Run(procedure, arguments, new CompiledRunOracle(input.B, List(input)), IrGen.StepBudget);
+        DecimalOracle decimals = new();
+        IrInputs arguments = new([.. procedure.Parameters.Select(p => string.Equals(p.Var.Name, "m", StringComparison.Ordinal) ? decimals.Element(input.M) : Argument(p.Var, input))]);
+        IrRun run = IrInterpreter.Run(procedure, arguments, new CompiledRunOracle(input.B, List(input)), IrGen.StepBudget, pure: decimals);
         string outcome = run.Outcome switch
         {
             IrReturned { Value: IrBitVecValue bits } => string.Create(CultureInfo.InvariantCulture, $"return {bits.TwosComplement}"),
@@ -242,6 +256,63 @@ public sealed class LoweringOracleTests
     }
 
     private static long Value(IrMapValue map, IrValue key) => ((IrBitVecValue)map.Read(key)).TwosComplement;
+
+    /// <summary>
+    /// Answers one run's pure <c>decimal</c> functions (ticket M4-002) with <see cref="decimal"/>'s own operators and
+    /// conversions. An element of <c>System.Decimal</c> stands for one value, bit for bit, so <c>1.0</c> and <c>1.00</c> are
+    /// two elements, as they are two values. A function that throws raises the flag of the exception's exact type, and its
+    /// value is then any value of its type.
+    /// </summary>
+    private sealed class DecimalOracle : Equiv.Core.IPureOracle
+    {
+        private readonly List<decimal> values = [];
+
+        public IrSortValue Element(decimal value)
+        {
+            int id = values.FindIndex(v => decimal.GetBits(v).AsSpan().SequenceEqual(decimal.GetBits(value)));
+            if (id < 0)
+            {
+                id = values.Count;
+                values.Add(value);
+            }
+
+            return new IrSortValue("System.Decimal", id + 1);
+        }
+
+        public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments)
+        {
+            Func<IrValue> apply = pure.Function switch
+            {
+                "conv.i32.dec" => () => Element(((IrBitVecValue)arguments[0]).TwosComplement),
+                "conv.dec.i32" => () => IrBitVecValue.FromSigned(32, (int)Value(arguments[0])),
+                "dec.add" => () => Element(Value(arguments[0]) + Value(arguments[1])),
+                "dec.sub" => () => Element(Value(arguments[0]) - Value(arguments[1])),
+                "dec.mul" => () => Element(Value(arguments[0]) * Value(arguments[1])),
+                "dec.div" => () => Element(Value(arguments[0]) / Value(arguments[1])),
+                "dec.rem" => () => Element(Value(arguments[0]) % Value(arguments[1])),
+                "dec.eq" => () => new IrBoolValue(Value(arguments[0]) == Value(arguments[1])),
+                "dec.ne" => () => new IrBoolValue(Value(arguments[0]) != Value(arguments[1])),
+                "dec.lt" => () => new IrBoolValue(Value(arguments[0]) < Value(arguments[1])),
+                "dec.le" => () => new IrBoolValue(Value(arguments[0]) <= Value(arguments[1])),
+                "dec.gt" => () => new IrBoolValue(Value(arguments[0]) > Value(arguments[1])),
+                "dec.ge" => () => new IrBoolValue(Value(arguments[0]) >= Value(arguments[1])),
+                _ => throw new InvalidOperationException($"The lowering oracle generates no {pure.Function}."),
+            };
+            try
+            {
+                return new IrPureResult(apply(), [.. pure.Throws.Select(static _ => false)]);
+            }
+            catch (ArithmeticException exception)
+            {
+                string thrown = exception.GetType().FullName!;
+                Assert.Contains(pure.Throws, t => string.Equals(t.ExceptionType, thrown, StringComparison.Ordinal));
+                IrValue any = pure.Target.Type is IrBitVec ? IrBitVecValue.FromSigned(32, 0) : Element(0m);
+                return new IrPureResult(any, [.. pure.Throws.Select(t => string.Equals(t.ExceptionType, thrown, StringComparison.Ordinal))]);
+            }
+        }
+
+        private decimal Value(IrValue element) => values[((IrSortValue)element).Id - 1];
+    }
 
     /// <summary>
     /// Answers one run's calls as the compiled run's callees would. An accessor call on <c>Oracle.P</c> acts as its backing

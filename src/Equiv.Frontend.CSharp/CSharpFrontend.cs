@@ -144,7 +144,8 @@ public sealed class CSharpFrontend : ILanguageFrontend
 
     /// <summary>
     /// The production lowering (M2-003): the legacy side with the API-equivalence entries <c>equiv.config.json</c> does not
-    /// suppress, the modern side with none (ADR 0020; ticket M3-009).
+    /// suppress, the modern side with none (ADR 0020; ticket M3-009), and the legacy side's floating point marked
+    /// runtime-sensitive when its project runs on x87 (ADR 0025; ticket M4-002).
     /// </summary>
     internal static (IrProcedure Body, ImmutableArray<string> EquivalencesApplied) LowerWithIrLowerer(IMethodSymbol symbol, Compilation compilation, EquivConfig config, bool legacy) =>
         IrLowerer.Lower(
@@ -152,7 +153,8 @@ public sealed class CSharpFrontend : ILanguageFrontend
             compilation,
             config.Renames,
             config.SuppressRuntimeChanges,
-            legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : []);
+            legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [],
+            legacy);
 
     /// <summary>
     /// <paramref name="skipped"/> (one side's skipped projects) as Core data. Each C# project's procedures are its own,

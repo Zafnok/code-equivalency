@@ -272,6 +272,7 @@ internal sealed class SsaBuilder
         IrCall c => c with { Target = c.Target is null ? null : Resolve(c.Target), Threw = Resolve(c.Threw!), Args = [.. c.Args.Select(Resolve)] },
         IrMapRead r => r with { Target = Resolve(r.Target), Map = Resolve(r.Map), Key = Resolve(r.Key) },
         IrMapWrite w => w with { Target = Resolve(w.Target), Map = Resolve(w.Map), Key = Resolve(w.Key), Value = Resolve(w.Value) },
+        IrPure p => p with { Target = Resolve(p.Target), Throws = [.. p.Throws.Select(t => t with { Flag = Resolve(t.Flag) })], Args = [.. p.Args.Select(Resolve)] },
         _ => Rewrite((IrOpaque)instruction),
     };
 
