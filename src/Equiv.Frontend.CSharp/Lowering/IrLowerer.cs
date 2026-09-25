@@ -1041,35 +1041,7 @@ internal sealed class IrLowerer
         ImmutableArray<ITypeSymbol?>.Builder targets = ImmutableArray.CreateBuilder<ITypeSymbol?>(items.Length);
         foreach (ApiArgument item in items)
         {
-            if (item.Source is not { } position)
-            {
-                if (TypeMapper.Constant(item.ConstantType!, item.Constant!) is null)
-                {
-                    return null;
-                }
-
-                targets.Add(null);
-                continue;
-            }
-
-            if ((uint)position >= (uint)sources.Length || (unwrapped[position] ?? item.Unwrap) != item.Unwrap)
-            {
-                return null;
-            }
-
-            unwrapped[position] = item.Unwrap;
-            if (item.Unwrap)
-            {
-                if (sources[position] is not IConversionOperation conversion || !conversion.GetConversion().IsImplicit)
-                {
-                    return null;
-                }
-
-                operands[position] = conversion.Operand;
-            }
-
-            ITypeSymbol? target = item.ConvertTo is { } name ? compilation.GetTypeByMetadataName(name) : null;
-            if ((item.ConvertTo is not null && target is null) || (target is not null && !IsImplicitCast(operands[position].Type, target)))
+            if (!Planned(item, sources, operands, unwrapped, out ITypeSymbol? target))
             {
                 return null;
             }
@@ -1078,6 +1050,44 @@ internal sealed class IrLowerer
         }
 
         return Array.TrueForAll(unwrapped, static u => u is not null) ? new AdapterPlan([.. operands], targets.MoveToImmutable()) : null;
+    }
+
+    /// <summary>
+    /// One adapter item of <see cref="Plan"/>: false when it cannot be addressed. A source item records whether its
+    /// argument is unwrapped in <paramref name="unwrapped"/> and, when it is, the conversion's operand in
+    /// <paramref name="operands"/>; <paramref name="target"/> is its <c>convertTo</c> type, or null.
+    /// </summary>
+    private bool Planned(ApiArgument item, ImmutableArray<IOperation> sources, IOperation[] operands, bool?[] unwrapped, out ITypeSymbol? target)
+    {
+        target = null;
+        if (item.Source is not { } position)
+        {
+            return TypeMapper.Constant(item.ConstantType!, item.Constant!) is not null;
+        }
+
+        if ((uint)position >= (uint)sources.Length || (unwrapped[position] ?? item.Unwrap) != item.Unwrap)
+        {
+            return false;
+        }
+
+        unwrapped[position] = item.Unwrap;
+        if (item.Unwrap)
+        {
+            if (sources[position] is not IConversionOperation conversion || !conversion.GetConversion().IsImplicit)
+            {
+                return false;
+            }
+
+            operands[position] = conversion.Operand;
+        }
+
+        if (item.ConvertTo is not { } name)
+        {
+            return true;
+        }
+
+        target = compilation.GetTypeByMetadataName(name);
+        return target is not null && IsImplicitCast(operands[position].Type, target);
     }
 
     /// <summary>Whether a value of <paramref name="from"/> converts to <paramref name="to"/> by an implicit identity, boxing or reference conversion.</summary>
@@ -1097,10 +1107,16 @@ internal sealed class IrLowerer
     /// 1 to 3): the getter with the receiver and index arguments, or, given <paramref name="value"/>, the setter with the
     /// value last and no result. A property with no accessor for the access stays opaque.
     /// </summary>
-    private IrVar? Accessor(IPropertyReferenceOperation property, IMethodSymbol? accessor, ImmutableArray<IrVar> operands, IrVar? value, LoweringContext context) =>
-        accessor is null
-            ? Opaque(property, property.Kind.ToString(), context)
-            : Call(Identity(accessor), value is null ? operands : [.. operands, value], value is null ? Map(property.Type!) : null, context);
+    private IrVar? Accessor(IPropertyReferenceOperation property, IMethodSymbol? accessor, ImmutableArray<IrVar> operands, IrVar? value, LoweringContext context)
+    {
+        if (accessor is null)
+        {
+            return Opaque(property, property.Kind.ToString(), context);
+        }
+
+        IrType? returns = value is null ? Map(property.Type!) : null;
+        return Call(Identity(accessor), value is null ? operands : [.. operands, value], returns, context);
+    }
 
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
     private static IMethodSymbol? Setter(IPropertySymbol property) => property.SetMethod is { IsInitOnly: false } setter ? setter : null;
