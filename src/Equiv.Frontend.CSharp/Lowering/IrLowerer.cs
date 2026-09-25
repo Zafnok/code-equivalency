@@ -485,6 +485,8 @@ internal sealed class IrLowerer
                 return Accessor(property, property.Property.GetMethod, Operands(property.Instance, property.Arguments, context), value: null, context);
             case IConversionOperation conversion:
                 return Convert(conversion, context);
+            case ITypeOfOperation typeOf when typeOf.TypeOperand is not ITypeParameterSymbol:
+                return heap.Inputs.TypeOf(typeOf.TypeOperand, typeOf.Type!);
             case IBinaryOperation binary:
                 return Binary(binary, context);
             case IUnaryOperation unary:
@@ -566,7 +568,7 @@ internal sealed class IrLowerer
 
         return unwrapped switch
         {
-            IObjectCreationOperation or IInstanceReferenceOperation => null,
+            IObjectCreationOperation or IInstanceReferenceOperation or ITypeOfOperation => null,
             _ when ShadowOf(unwrapped) is { } shadow => ssa.Load(context.Current, shadow),
             { ConstantValue.HasValue: true, ConstantValue.Value: null } => Const(new IrBoolValue(Value: true), context),
             _ => heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context),

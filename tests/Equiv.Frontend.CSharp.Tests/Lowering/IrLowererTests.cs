@@ -66,6 +66,7 @@ public sealed class IrLowererTests
     [InlineData("static void M(ref int a) { System.Threading.Interlocked.Increment(ref a); }", "ref-argument")]
     [InlineData("static void M(int a, Exception e) { if (a < 0) throw e; }", "Throw")]
     [InlineData("static T M<T>() where T : new() => new T();", "TypeParameterObjectCreation")]
+    [InlineData("static object M<T>() => typeof(T);", "TypeOf")]
     [InlineData("static C M(int a) { int b = 0; return new C(ref b); } C(ref int x) { }", "ref-argument")]
     [InlineData("static void M(int a) { ref int r = ref a; r = 1; }", "SimpleAssignment")]
     [InlineData("static int M(double d) => (int)d;", "Conversion")]
@@ -1265,5 +1266,29 @@ public sealed class IrLowererTests
         Assert.Empty(Calls(procedure));
         Assert.Empty(Opaques(procedure));
         Assert.Contains(procedure.Parameters, static p => p.Var.Name is "null.System.Object");
+    }
+
+    /// <summary>Ticket P2-002 acceptance criterion 1: <c>typeof(T)</c> for a closed <c>T</c> reads a shared <c>typeof.&lt;T&gt;</c> input, adding no trace event.</summary>
+    [Fact]
+    public void TypeOfIsAReadOfASharedInput()
+    {
+        IrProcedure procedure = Method("static Type M() => typeof(string);");
+
+        IrParameter parameter = Assert.Single(procedure.Parameters, static p => p.Var.Name is "typeof.System.String");
+        Assert.Equal(IrParameterKind.In, parameter.Kind);
+        Assert.Equal(new IrSort("System.Type"), parameter.Var.Type);
+        IrReturn ret = Assert.IsType<IrReturn>(Assert.Single(procedure.Blocks, static b => b.Terminator is IrReturn).Terminator);
+        Assert.Equal(parameter.Var, ret.Value);
+        Assert.Empty(Calls(procedure));
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary><c>typeof(T)</c> is never null, so an equality test against <c>null</c> is always false.</summary>
+    [Fact]
+    public void TypeOfIsNeverNull()
+    {
+        IrProcedure procedure = Method("static bool M() => typeof(string) == null;");
+
+        Assert.Equal(new IrReturned(new IrBoolValue(Value: false)), Run(procedure, new IrSortValue("System.Type", 1)));
     }
 }
