@@ -1,5 +1,5 @@
 # P2-003 `default(T)` is lowered, not opaque
-Status: in-progress
+Status: done (PR #193)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004
