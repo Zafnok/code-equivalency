@@ -18,6 +18,7 @@ public sealed class SamplesFixtureTests
             ["loop-bound-change"] = ["Divergent"],
             ["added-removed"] = ["Added", "Removed"],
             ["business-layer"] = ["Equivalent", "Divergent", "Unknown"],
+            ["api-drift"] = ["Equivalent", "Divergent"],
         };
 
     private static string SamplesRoot =>

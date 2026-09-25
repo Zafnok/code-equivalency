@@ -63,11 +63,11 @@ inferred, caller-sufficient contracts. Separately, ADR 0019 leaves a caller Equi
   specification.
 
 ## Consequences
-- P1-002 is reworded to cite this ADR. New tickets P1-008 (trace-mined invariants) and P1-009
+- P1-002 is reworded to cite this ADR. New tickets P1-009 (trace-mined invariants) and P1-010
   (contracts).
 - VERIFICATION-MODEL.md section 1 (modular verdicts) and section 6 (`proposedBy`, `contractsUsed`,
   the `+contract` suffix) change once this ADR is accepted.
 - The contract encoding must give each side its own call result, `threw` flag and heap. Reusing
   any shared function, the shared `threw` included, would silently turn the contract into an
-  equality assumption. P1-009's soundness
+  equality assumption. P1-010's soundness
   property targets exactly that mistake.

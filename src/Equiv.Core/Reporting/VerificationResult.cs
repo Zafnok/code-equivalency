@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 using Equiv.Core.Verdicts;
 
 namespace Equiv.Core.Reporting;
@@ -7,6 +9,10 @@ namespace Equiv.Core.Reporting;
 /// hand-off point between matching/verification and reporting (VERIFICATION-MODEL.md section 6);
 /// assembling a list of these from a <see cref="Matching.MatchResult"/> plus
 /// <see cref="IVerificationBackend"/> runs (including what an <see cref="Matching.MatchResult.Ambiguous"/>
-/// identity becomes) is CLI-orchestration, out of scope for this ticket.
+/// identity becomes) is CLI-orchestration, out of scope for this ticket. <see cref="EquivalencesApplied"/> carries the
+/// pair's <see cref="Matching.ProcedurePair.EquivalencesApplied"/> through to the report (ADR 0020; ticket M3-009).
 /// </summary>
-public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict);
+public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
+{
+    public ImmutableArray<string> EquivalencesApplied { get; init; } = [];
+}

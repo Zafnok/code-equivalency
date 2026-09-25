@@ -1,4 +1,4 @@
-# P1-010 Spike: would equality saturation close changed pairs that congruence and Z3 cannot?
+# P1-011 Spike: would equality saturation close changed pairs that congruence and Z3 cannot?
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.

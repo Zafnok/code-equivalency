@@ -55,4 +55,4 @@ check, and only an untainted one is reported with its model.
 - VERIFICATION-MODEL.md section 6 gains `properties.failureRefinement` once this ADR is accepted.
 - Unknown pairs other than `unbound` and `timeout` cost two more solver queries each. Each gets
   the pair's timeout, and the census reports the time spent on them.
-- Ticket P1-012.
+- Ticket P1-013.

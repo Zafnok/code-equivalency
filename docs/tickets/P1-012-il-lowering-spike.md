@@ -1,4 +1,4 @@
-# P1-011 Spike: how much of the opaque tail disappears if the fallback lowers from IL?
+# P1-012 Spike: how much of the opaque tail disappears if the fallback lowers from IL?
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.

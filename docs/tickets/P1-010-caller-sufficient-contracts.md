@@ -1,4 +1,4 @@
-# P1-009 Caller-sufficient callee contracts: a changed callee the caller cannot observe stops being an unproven assumption
+# P1-010 Caller-sufficient callee contracts: a changed callee the caller cannot observe stops being an unproven assumption
 Status: todo
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.

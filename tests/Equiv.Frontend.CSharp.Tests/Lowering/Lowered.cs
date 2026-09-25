@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 
+using Equiv.Core.ApiEquivalences;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Frontend.CSharp.Lowering;
@@ -19,8 +20,11 @@ internal static class Lowered
     public static IrProcedure Method(string members, string name = "M", bool allowErrors = false) =>
         Source($"using System;\nclass C\n{{\n{members}\n}}\n", name, allowErrors);
 
-    /// <summary>Lowers the method named <paramref name="name"/> (metadata name: <c>.ctor</c>, <c>get_P</c>) of class <c>C</c> in a whole compilation unit.</summary>
-    public static IrProcedure Source(string source, string name = "M", bool allowErrors = false, RenameMap? renames = null, ImmutableArray<string> suppressedRuntimeChanges = default)
+    /// <summary>
+    /// Lowers the method named <paramref name="name"/> (metadata name: <c>.ctor</c>, <c>get_P</c>) of class <c>C</c> in a whole
+    /// compilation unit; the overload with <paramref name="parameters"/> parameters when it is given.
+    /// </summary>
+    public static IrProcedure Source(string source, string name = "M", bool allowErrors = false, RenameMap? renames = null, ImmutableArray<string> suppressedRuntimeChanges = default, int? parameters = null)
     {
         Compilation compilation = RoslynTestCompilations.Compile(source);
         if (!allowErrors)
@@ -28,10 +32,25 @@ internal static class Lowered
             Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
         }
 
-        IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single();
+        IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>()
+            .Single(m => parameters is not { } count || m.Parameters.Length == count);
         IrProcedure procedure = IrLowerer.Lower(method, compilation, renames ?? RenameMap.Empty, suppressedRuntimeChanges.IsDefault ? [] : suppressedRuntimeChanges);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
+    }
+
+    /// <summary>
+    /// Lowers method <paramref name="name"/> of class <c>C</c> in a whole compilation unit as the legacy side, with
+    /// <paramref name="equivalences"/> applied (ticket M3-009), and returns the ids that fired.
+    /// </summary>
+    public static (IrProcedure Body, ImmutableArray<string> Applied) Legacy(string source, ImmutableArray<ApiEquivalence> equivalences, string name = "M")
+    {
+        Compilation compilation = RoslynTestCompilations.Compile(source);
+        Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+        IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single();
+        (IrProcedure procedure, ImmutableArray<string> applied) = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], equivalences);
+        Assert.Empty(IrValidator.Validate(procedure));
+        return (procedure, applied);
     }
 
     /// <summary>

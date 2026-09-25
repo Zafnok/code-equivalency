@@ -34,3 +34,7 @@ One lowering arm. `Nullable<T>`'s `HasValue` is a property read (M3-010), not th
 `??=` (P2-006).
 
 ## Notes
+- M4-001 added the reference-typed arm (a `using`/`foreach` `finally` needed it): `IIsNullOperation`
+  on a reference-typed operand already reads its nullness, so the two repro methods may already have
+  no `IsNull` opaque. What is left here is the snapshots, the branch-structure test, the coverage
+  row's tests, and a non-reference operand (`Nullable<T>`), which is still opaque `IsNull`.

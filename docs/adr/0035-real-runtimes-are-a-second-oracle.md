@@ -82,6 +82,6 @@ There is no reflection anywhere: the driver is generated source.
   section 6 (`replay`, `differentialTesting`, `proofMethod: observed`) and section 7 (a replay
   obligation). ARCHITECTURE.md gains `Equiv.Execute`, and the CLI section gains `--execute`.
 - Tickets: M3-032 (harness and `tools/runtime-diff`), M3-033 (measure the members the corpus
-  calls), M4-009 (replay), P1-007 (tested Unknowns), M5-002 (an MCP `probe` tool). M0-012 does
+  calls), M4-009 (replay), P1-008 (tested Unknowns), M5-002 (an MCP `probe` tool). M0-012 does
   not use this machinery: it runs generated net10 code in-process inside a test project, as the
   lowering oracle already does.

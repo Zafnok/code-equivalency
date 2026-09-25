@@ -1,4 +1,4 @@
-# P1-007 Tested Unknowns: differential execution on generated inputs, with a stated discovery probability
+# P1-008 Tested Unknowns: differential execution on generated inputs, with a stated discovery probability
 Status: todo
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.

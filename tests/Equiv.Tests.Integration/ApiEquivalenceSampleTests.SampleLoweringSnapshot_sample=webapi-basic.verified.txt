@@ -1,0 +1,64 @@
+﻿GET /api/orders/find/{id} [webapi.not-found, webapi.ok-of-int, webapi.type.action-result, webapi.type.not-found-result, webapi.type.ok-content-result]
+legacy:
+proc "Equiv.Samples.WebApiBasic.OrdersController::Find(int)" (%id "id": bv32, %cast.Microsoft.AspNetCore.Mvc.NotFoundResult.Microsoft.AspNetCore.Mvc.IActionResult: map<sort "Microsoft.AspNetCore.Mvc.NotFoundResult", sort "Microsoft.AspNetCore.Mvc.IActionResult">, %cast.Microsoft.AspNetCore.Mvc.OkObjectResult.Microsoft.AspNetCore.Mvc.IActionResult: map<sort "Microsoft.AspNetCore.Mvc.OkObjectResult", sort "Microsoft.AspNetCore.Mvc.IActionResult">, %cast.System.Int32.System.Object: map<bv32, sort "System.Object">, %this: sort "Equiv.Samples.WebApiBasic.OrdersController") -> sort "Microsoft.AspNetCore.Mvc.IActionResult" entry B0
+B0:
+  goto B1
+B1:
+  %$1: bv32 = const bv32 0
+  %$2: bool = slt %id, %$1
+  br %$2, B2, B3
+B2:
+  %$3: sort "Microsoft.AspNetCore.Mvc.NotFoundResult" = call "Microsoft.AspNetCore.Mvc.ControllerBase::NotFound()"(%this) threw %$4: bool
+  br %$4, B5, B6
+B3:
+  %$7: sort "System.Object" = mapread %cast.System.Int32.System.Object, %id
+  %$8: sort "Microsoft.AspNetCore.Mvc.OkObjectResult" = call "Microsoft.AspNetCore.Mvc.ControllerBase::Ok(object)"(%this, %$7) threw %$9: bool
+  br %$9, B5, B7
+B5:
+  throw "System.Exception"
+B6:
+  %$5: sort "Microsoft.AspNetCore.Mvc.IActionResult" = mapread %cast.Microsoft.AspNetCore.Mvc.NotFoundResult.Microsoft.AspNetCore.Mvc.IActionResult, %$3
+  ret %$5
+B7:
+  %$10: sort "Microsoft.AspNetCore.Mvc.IActionResult" = mapread %cast.Microsoft.AspNetCore.Mvc.OkObjectResult.Microsoft.AspNetCore.Mvc.IActionResult, %$8
+  ret %$10
+
+modern:
+proc "Equiv.Samples.WebApiBasic.OrdersController::Find(int)" (%id "id": bv32, %cast.Microsoft.AspNetCore.Mvc.NotFoundResult.Microsoft.AspNetCore.Mvc.IActionResult: map<sort "Microsoft.AspNetCore.Mvc.NotFoundResult", sort "Microsoft.AspNetCore.Mvc.IActionResult">, %cast.Microsoft.AspNetCore.Mvc.OkObjectResult.Microsoft.AspNetCore.Mvc.IActionResult: map<sort "Microsoft.AspNetCore.Mvc.OkObjectResult", sort "Microsoft.AspNetCore.Mvc.IActionResult">, %cast.System.Int32.System.Object: map<bv32, sort "System.Object">, %this: sort "Equiv.Samples.WebApiBasic.OrdersController") -> sort "Microsoft.AspNetCore.Mvc.IActionResult" entry B0
+B0:
+  goto B1
+B1:
+  %$1: bv32 = const bv32 0
+  %$2: bool = slt %id, %$1
+  br %$2, B2, B3
+B2:
+  %$3: sort "Microsoft.AspNetCore.Mvc.NotFoundResult" = call "Microsoft.AspNetCore.Mvc.ControllerBase::NotFound()"(%this) threw %$4: bool
+  br %$4, B5, B6
+B3:
+  %$7: sort "System.Object" = mapread %cast.System.Int32.System.Object, %id
+  %$8: sort "Microsoft.AspNetCore.Mvc.OkObjectResult" = call "Microsoft.AspNetCore.Mvc.ControllerBase::Ok(object)"(%this, %$7) threw %$9: bool
+  br %$9, B5, B7
+B5:
+  throw "System.Exception"
+B6:
+  %$5: sort "Microsoft.AspNetCore.Mvc.IActionResult" = mapread %cast.Microsoft.AspNetCore.Mvc.NotFoundResult.Microsoft.AspNetCore.Mvc.IActionResult, %$3
+  ret %$5
+B7:
+  %$10: sort "Microsoft.AspNetCore.Mvc.IActionResult" = mapread %cast.Microsoft.AspNetCore.Mvc.OkObjectResult.Microsoft.AspNetCore.Mvc.IActionResult, %$8
+  ret %$10
+
+
+GET /api/orders/{id} []
+legacy:
+proc "Equiv.Samples.WebApiBasic.OrdersController::Get(int)" (%id "id": bv32) -> bv32 entry B0
+B0:
+  goto B1
+B1:
+  ret %id
+
+modern:
+proc "Equiv.Samples.WebApiBasic.OrdersController::Get(int)" (%id "id": bv32) -> bv32 entry B0
+B0:
+  goto B1
+B1:
+  ret %id

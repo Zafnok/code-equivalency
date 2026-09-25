@@ -60,7 +60,7 @@ Tickets were added to every milestone they belong to:
 - M4-009: counterexample replay.
 - M4-010: mechanical seeds on the corpus.
 - M5-002: an MCP `probe` tool.
-- P1-007 to P1-012: tested Unknowns, trace-mined invariants, callee contracts, two measuring
+- P1-008 to P1-013: tested Unknowns, trace-mined invariants, callee contracts, two measuring
   spikes (equality saturation, IL lowering) and failure refinement.
 - P2-018: a vacuous side is a load failure.
 
@@ -403,27 +403,31 @@ keys or quotas exist. It can run alongside M4 and M5.
   shared by both sides (ADRs 0015, 0018).
 - P1-006 (L) (promoted into M3) Array element and length maps keyed by the array value instead of the array
   variable, so two variables holding one array are one slice (ADR 0015).
-- P1-007 (L) Tested Unknowns: with `--execute`, a constructible Unknown pair runs on generated
+- P1-007 (M) Rung 1 inlines self-calls that read or write the heap. The self-call's heap pairs thread the heap
+  through the inlined copy. This removes the array-variable, synthesised-`Ref` and heap-write obstacles, which
+  are stale after M3-007 and P1-006. It needs P1-005 and P1-006, and M3-003 does not need it (it is precision,
+  not soundness).
+- P1-008 (L) Tested Unknowns: with `--execute`, a constructible Unknown pair runs on generated
   inputs until the Good-Turing discovery probability (Böhme et al., FSE 2021) falls below a target.
   It stays EQ003 with `properties.differentialTesting`. An observed divergence is EQ002 with
   `proofMethod: observed` (ADR 0035 decision 3). Needs M4-009. This is the first post-MVP ticket:
   it gives the stated likelihood figure for code the solver cannot decide.
-- P1-008 (M) Trace-mined coupling invariants: `IrInterpreter` traces propose, P1-002's rung checks.
-  On by default because nothing leaves the machine (ADR 0036). Needs P1-002, P1-007.
-- P1-009 (L) Caller-sufficient relational callee contracts. A changed callee that the caller
+- P1-009 (M) Trace-mined coupling invariants: `IrInterpreter` traces propose, P1-002's rung checks.
+  On by default because nothing leaves the machine (ADR 0036). Needs P1-002, P1-008.
+- P1-010 (L) Caller-sufficient relational callee contracts. A changed callee that the caller
   cannot observe moves from `unprovenAssumptions` to `contractsUsed` (ADR 0036 decision 2). Needs
   M3-015, P1-005, P1-002.
-- P1-010 (M) Spike: would equality saturation (Peggy, egg) close changed pairs that congruence and
+- P1-011 (M) Spike: would equality saturation (Peggy, egg) close changed pairs that congruence and
   Z3 cannot? It measures on Git Extensions and writes an ADR only if the share is at least 5% of
   changed pairs. Needs M3-015, M4-004.
-- P1-011 (M) Spike: how much of the opaque tail disappears if the fallback lowers from IL
+- P1-012 (M) Spike: how much of the opaque tail disappears if the fallback lowers from IL
   (ICSharpCode.Decompiler's ILAst)? It measures, and writes an ADR against ADR 0003 only if the
   gain is at least 5% and compiler shape drift is small. Needs M4-001, M4-002, M4-004, P2-001.
-- P1-012 (M) Failure refinement: every Unknown reports whether the modern side can newly fail,
+- P1-013 (M) Failure refinement: every Unknown reports whether the modern side can newly fail,
   and whether it removed a failure (ADR 0037). Needs M3-016, M3-025.
 
-Order after M4-007: P1-007 first. Then P1-012 and the two spikes (cheap, and they decide their
-own futures). Then P1-001 → P1-002 → P1-008, and P1-009.
+Order after M4-007: P1-008 first. Then P1-013 and the two spikes (cheap, and they decide their
+own futures). Then P1-001 → P1-002 → P1-009, and P1-010.
 
 P1-005 and P1-006 are the two soundness limits ADR 0015 names. ADR 0018 moves both ahead
 of M3-003, so no build that reports sample verdicts carries them. Until they land, an
@@ -453,7 +457,7 @@ From the 2026-09-24 second-oracle review, unticketed until a result above asks f
 - Shadowing the residual in staging or production: generate a Scientist.NET experiment, or a
   Diffy configuration per routed endpoint, for each remaining Unknown. This is a new output
   surface beyond SARIF, so it needs an ADR against ADR 0006.
-- Coverage-guided generation for P1-007 (SharpFuzz): an ADR 0002 row, once plain generation's
+- Coverage-guided generation for P1-008 (SharpFuzz): an ADR 0002 row, once plain generation's
   discovery probability visibly plateaus.
 - A second solver (cvc5, BSD-3-Clause, as a separate process) cross-checking Equivalent
   verdicts, with Alethe proof certificates checked by Carcara. Low priority: M0-012 and M4-009

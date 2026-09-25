@@ -1,4 +1,4 @@
-# P1-012 Failure refinement: every Unknown says whether the modern side can fail where the legacy side does not
+# P1-013 Failure refinement: every Unknown says whether the modern side can fail where the legacy side does not
 Status: todo
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.

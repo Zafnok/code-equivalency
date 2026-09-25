@@ -1,8 +1,8 @@
-# P1-008 Trace-mined coupling invariants: execution proposes, Z3 decides
+# P1-009 Trace-mined coupling invariants: execution proposes, Z3 decides
 Status: todo
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: P1-002, P1-007; ADR 0036 accepted
+Depends on: P1-002, P1-008; ADR 0036 accepted
 
 ## Goal
 P1-002 lets a model propose a coupling invariant when rung 4 fails. This ticket adds a second,
@@ -47,7 +47,7 @@ the ladder wiring file P1-002 created, tests, one snapshot.
 More than 5 templates, or any template over three variables, is out of scope.
 
 ## Out of scope
-Traces from real runtimes (P1-007's machinery; IR traces suffice here). Non-lockstep alignment.
+Traces from real runtimes (P1-008's machinery; IR traces suffice here). Non-lockstep alignment.
 Disjunctive invariants.
 
 ## Notes

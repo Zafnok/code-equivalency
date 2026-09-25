@@ -26,9 +26,10 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 /// <see cref="IrInterpreter"/>, and must agree on the return value or thrown exception type for every input.
 /// CsCheck prints the seed on failure; <see cref="Seed"/> pins the run. The class's static auto-property
 /// <c>P</c> starts each run at the input's <c>B</c> in both; the IR's accessor calls are answered by
-/// <see cref="AutoPropertyOracle"/>, which keeps the value the compiled run's backing field would hold. The
+/// <see cref="CompiledRunOracle"/>, which keeps the value the compiled run's backing field would hold. The
 /// <c>int[]</c> parameters are two arrays, one passed twice (ticket P1-006), or <c>u</c> and a null <c>v</c> (ticket P2-017), and their final elements are compared
-/// along with the static field's final value.
+/// along with the static field's final value. The <c>List&lt;int&gt;</c> parameter is <c>{ A, B }</c>, and the IR's calls on its
+/// enumerator are answered by an enumerator of that list (ticket M4-001).
 /// </summary>
 public sealed class LoweringOracleTests
 {
@@ -46,7 +47,11 @@ public sealed class LoweringOracleTests
 
     private const string ArrayNulls = "null.int__";
 
+    private const string ListNulls = "null.System.Collections.Generic.List_1";
+
     private static readonly IrSortValue Reference = new("System.String", 1);
+
+    private static readonly IrSortValue ListReference = new("System.Collections.Generic.List`1", 1);
 
     private static readonly IrSortValue First = new(ArraySort, 1);
 
@@ -67,7 +72,7 @@ public sealed class LoweringOracleTests
     {
         string source = $"public static class Oracle\n{{\n    public static int {LoweringOracleGen.Property} {{ get; set; }}\n    public static int {LoweringOracleGen.Field};\n{string.Concat(cases.Select(static (c, i) => c.Method.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n";
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v["])
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", "foreach ("])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
@@ -88,7 +93,7 @@ public sealed class LoweringOracleTests
             Type oracle = context.LoadFromStream(image).GetType("Oracle")!;
             PropertyInfo property = oracle.GetProperty(LoweringOracleGen.Property)!;
             FieldInfo field = oracle.GetField(LoweringOracleGen.Field)!;
-            int getterCalls = 0;
+            HashSet<Equiv.Core.CallIdentity> callees = [];
             SyntaxTree tree = compilation.SyntaxTrees[0];
             SemanticModel model = compilation.GetSemanticModel(tree);
             ImmutableArray<MethodDeclarationSyntax> declarations =
@@ -98,7 +103,7 @@ public sealed class LoweringOracleTests
                 IMethodBodyOperation body = (IMethodBodyOperation)model.GetOperation(declarations[i], TestContext.Current.CancellationToken)!;
                 IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty, []);
                 Assert.Empty(IrValidator.Validate(procedure));
-                getterCalls += procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Count(static c => c.Callee == AutoPropertyOracle.Getter);
+                callees.UnionWith(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee));
                 MethodInfo method = oracle.GetMethod(declarations[i].Identifier.Text)!;
                 foreach (OracleInput input in cases[i].Inputs)
                 {
@@ -115,8 +120,9 @@ public sealed class LoweringOracleTests
                 }
             }
 
-            // Ticket M3-010 acceptance criterion 6: the run reaches the getter as well as the setter.
-            Assert.NotEqual(0, getterCalls);
+            // Ticket M3-010 acceptance criterion 6: the run reaches the getter as well as the setter; ticket M4-001: and a `foreach`.
+            Assert.Contains(CompiledRunOracle.Getter, callees);
+            Assert.Contains(CompiledRunOracle.MoveNext, callees);
         }
         finally
         {
@@ -136,7 +142,7 @@ public sealed class LoweringOracleTests
     {
         try
         {
-            object? result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s", u, v]);
+            object? result = method.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s", u, v, List(input)]);
             return $"return {result}";
         }
         catch (TargetInvocationException exception)
@@ -155,6 +161,8 @@ public sealed class LoweringOracleTests
         "s" => Reference,
         "u" => First,
         "v" => V(input),
+        "l" => ListReference,
+        ListNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), []),
         FieldMap => InitialField(input),
         ElementMap => InitialArrays(input),
         LengthMap => new IrMapValue((IrMap)parameter.Type, IrBitVecValue.FromSigned(32, 2), []),
@@ -164,6 +172,8 @@ public sealed class LoweringOracleTests
             new IrBoolValue(input.SIsNull),
             []),
     };
+
+    private static List<int> List(OracleInput input) => [input.A, input.B];
 
     /// <summary>The array <c>v</c> is bound to: <c>u</c>'s when the input aliases them, the null reference when it is null.</summary>
     private static IrSortValue V(OracleInput input) => input.V switch
@@ -199,7 +209,7 @@ public sealed class LoweringOracleTests
     {
         // By name, because the synthesised heap inputs (M2-004) are only there when the body needs them.
         IrInputs arguments = new([.. procedure.Parameters.Select(p => Argument(p.Var, input))]);
-        IrRun run = IrInterpreter.Run(procedure, arguments, new AutoPropertyOracle(input.B), IrGen.StepBudget);
+        IrRun run = IrInterpreter.Run(procedure, arguments, new CompiledRunOracle(input.B, List(input)), IrGen.StepBudget);
         string outcome = run.Outcome switch
         {
             IrReturned { Value: IrBitVecValue bits } => string.Create(CultureInfo.InvariantCulture, $"return {bits.TwosComplement}"),
@@ -234,15 +244,28 @@ public sealed class LoweringOracleTests
     private static long Value(IrMapValue map, IrValue key) => ((IrBitVecValue)map.Read(key)).TwosComplement;
 
     /// <summary>
-    /// Answers one run's accessor calls on <c>Oracle.P</c> as its backing field would: a getter returns the last value
-    /// set, starting from <c>initial</c>, and neither accessor throws. Within one run the history is a function of the
-    /// call position, so this is as deterministic as <see cref="Equiv.Core.ICallOracle"/> asks. No other call is generated.
+    /// Answers one run's calls as the compiled run's callees would. An accessor call on <c>Oracle.P</c> acts as its backing
+    /// field: a getter returns the last value set, starting from <c>initial</c>, and neither accessor throws. A call on the
+    /// list's enumerator (ticket M4-001) is made on a real enumerator of <paramref name="list"/>, one per
+    /// <c>GetEnumerator</c>, so a nested <c>foreach</c> has its own. Within one run the history is a function of the call
+    /// position, so this is as deterministic as <see cref="Equiv.Core.ICallOracle"/> asks. No other call is generated.
     /// </summary>
-    private sealed class AutoPropertyOracle(int initial) : Equiv.Core.ICallOracle
+    private sealed class CompiledRunOracle(int initial, List<int> list) : Equiv.Core.ICallOracle
     {
         public static readonly Equiv.Core.CallIdentity Getter = new($"Oracle::get_{LoweringOracleGen.Property}()");
 
+        public static readonly Equiv.Core.CallIdentity MoveNext = new("System.Collections.Generic.List`1.Enumerator::MoveNext()<int>");
+
         private static readonly Equiv.Core.CallIdentity Setter = new($"Oracle::set_{LoweringOracleGen.Property}(int)");
+
+        private static readonly Equiv.Core.CallIdentity GetEnumerator = new("System.Collections.Generic.List`1::GetEnumerator()<int>");
+
+        private static readonly Equiv.Core.CallIdentity Current = new("System.Collections.Generic.List`1.Enumerator::get_Current()<int>");
+
+        private static readonly Equiv.Core.CallIdentity Dispose = new("System.IDisposable::Dispose()");
+
+        /// <summary>Boxed, so each call advances the one enumerator and not a copy of the struct.</summary>
+        private readonly List<IEnumerator<int>> enumerators = [];
 
         private IrValue value = IrBitVecValue.FromSigned(32, initial);
 
@@ -254,8 +277,33 @@ public sealed class LoweringOracleTests
                 return new IrCallResult(Value: null, Threw: false);
             }
 
+            if (callee == GetEnumerator)
+            {
+                Assert.Equal(ListReference, arguments[0]);
+                enumerators.Add(list.GetEnumerator());
+                return new IrCallResult(new IrSortValue(((IrSort)resultType!).Name, enumerators.Count), Threw: false);
+            }
+
+            if (callee == MoveNext)
+            {
+                return new IrCallResult(new IrBoolValue(Enumerator(arguments).MoveNext()), Threw: false);
+            }
+
+            if (callee == Current)
+            {
+                return new IrCallResult(IrBitVecValue.FromSigned(32, Enumerator(arguments).Current), Threw: false);
+            }
+
+            if (callee == Dispose)
+            {
+                Enumerator(arguments).Dispose();
+                return new IrCallResult(Value: null, Threw: false);
+            }
+
             Assert.Equal(Getter, callee);
             return new IrCallResult(value, Threw: false);
         }
+
+        private IEnumerator<int> Enumerator(ImmutableArray<IrValue> arguments) => enumerators[((IrSortValue)arguments[0]).Id - 1];
     }
 }

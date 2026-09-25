@@ -14,7 +14,7 @@ namespace Equiv.Core.Configuration;
 public static class EquivConfigLoader
 {
     private static readonly FrozenSet<string> KnownProperties =
-        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "suppressRuntimeChanges" }.ToFrozenSet(StringComparer.Ordinal);
+        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "suppressRuntimeChanges", "suppressApiEquivalences" }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Parses <paramref name="json"/> and validates it against the schema. Throws <see cref="EquivConfigParseException"/>
@@ -43,9 +43,14 @@ public static class EquivConfigLoader
         ImmutableDictionary<string, string> callIdentityRenames = ReadRenameMap(root, "callIdentityRenames", diagnostics);
         int bound = ReadPositiveInt(root, "bound", EquivConfig.Default.Bound, EquivConfigDiagnosticIds.InvalidBound, diagnostics);
         int timeoutMs = ReadPositiveInt(root, "timeoutMs", EquivConfig.Default.TimeoutMs, EquivConfigDiagnosticIds.InvalidTimeout, diagnostics);
-        ImmutableArray<string> suppressRuntimeChanges = ReadStringArray(root, "suppressRuntimeChanges", diagnostics);
+        ImmutableArray<string> suppressRuntimeChanges = ReadStringArray(root, "suppressRuntimeChanges", EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry, diagnostics);
+        ImmutableArray<string> suppressApiEquivalences = ReadStringArray(root, "suppressApiEquivalences", EquivConfigDiagnosticIds.InvalidSuppressApiEquivalencesEntry, diagnostics);
 
-        EquivConfig config = new(renames, callIdentityRenames, bound, timeoutMs) { SuppressRuntimeChanges = suppressRuntimeChanges };
+        EquivConfig config = new(renames, callIdentityRenames, bound, timeoutMs)
+        {
+            SuppressRuntimeChanges = suppressRuntimeChanges,
+            SuppressApiEquivalences = suppressApiEquivalences,
+        };
         return new EquivConfigResult(config, diagnostics.ToImmutable());
     }
 
@@ -108,7 +113,7 @@ public static class EquivConfigLoader
         return map.ToImmutable();
     }
 
-    private static ImmutableArray<string> ReadStringArray(JsonElement root, string property, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    private static ImmutableArray<string> ReadStringArray(JsonElement root, string property, string diagnosticId, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
     {
         if (!root.TryGetProperty(property, out JsonElement element))
         {
@@ -117,7 +122,7 @@ public static class EquivConfigLoader
 
         if (element.ValueKind != JsonValueKind.Array)
         {
-            diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry, property, $"\"{property}\" must be an array of non-empty strings"));
+            diagnostics.Add(Diagnostic(diagnosticId, property, $"\"{property}\" must be an array of non-empty strings"));
             return [];
         }
 
@@ -129,7 +134,7 @@ public static class EquivConfigLoader
             string? value = item.ValueKind == JsonValueKind.String ? item.GetString() : null;
             if (string.IsNullOrWhiteSpace(value))
             {
-                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry, path, "value must be a non-empty string"));
+                diagnostics.Add(Diagnostic(diagnosticId, path, "value must be a non-empty string"));
             }
             else
             {

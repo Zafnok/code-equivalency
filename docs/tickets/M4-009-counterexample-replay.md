@@ -55,7 +55,7 @@ ARCHITECTURE.md (CLI).
 If you are writing object-graph construction for heap models, stop. That is later work.
 
 ## Out of scope
-Testing Unknown pairs (P1-007). Heap-carrying models. Multiple cultures on replay. Running any
+Testing Unknown pairs (P1-008). Heap-carrying models. Multiple cultures on replay. Running any
 code without `--execute`.
 
 ## Notes
