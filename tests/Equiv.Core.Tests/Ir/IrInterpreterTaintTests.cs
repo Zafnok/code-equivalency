@@ -284,7 +284,7 @@ public sealed class IrInterpreterTaintTests
                     Assert.Equal(plain, IrInterpreter.Run(procedure, input, IrGenOracle.Instance, IrGen.StepBudget, static _ => false) with { Taint = IrTaint.None });
                 },
                 iter: 200,
-                print: static s => IrText.Dump(s.Item1));
+                print: static s => IrText.Dump(s.p));
     }
 
     private static IrBitVecValue Bv(ulong bits) => new(32, bits);
