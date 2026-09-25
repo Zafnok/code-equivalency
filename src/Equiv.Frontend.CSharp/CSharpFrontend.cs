@@ -68,9 +68,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
         LoadedSolution legacy = LoadOrThrow(legacyPath, ct);
         LoadedSolution modern = LoadOrThrow(modernPath, ct);
 
-        EndpointOverrides overrides = EndpointOverrides.Build(
-            [.. legacy.Compilations.SelectMany(static compilation => EndpointDiscovery.Discover(compilation))],
-            [.. modern.Compilations.SelectMany(static compilation => EndpointDiscovery.Discover(compilation))]);
+        EndpointOverrides overrides = EndpointOverrides.Build(Endpoints(legacy.Compilations), Endpoints(modern.Compilations));
 
         (ImmutableArray<SideProcedure> legacyProcedures, ImmutableArray<ProcedureIdentity> legacyAmbiguous) = Procedures(legacy.Compilations, config.Renames, overrides);
         (ImmutableArray<SideProcedure> modernProcedures, ImmutableArray<ProcedureIdentity> modernAmbiguous) = Procedures(modern.Compilations, config.Renames, overrides);
@@ -217,27 +215,53 @@ public sealed class CSharpFrontend : ILanguageFrontend
         ImmutableArray<SideProcedure>.Builder procedures = ImmutableArray.CreateBuilder<SideProcedure>();
         ImmutableArray<ProcedureIdentity>.Builder forcedAmbiguous = ImmutableArray.CreateBuilder<ProcedureIdentity>();
 
-        foreach (Compilation compilation in compilations)
+        IEnumerable<(Compilation Compilation, EnumeratedProcedure Procedure)> enumerated = LastFlavour(
+            compilations.SelectMany(static compilation => ProcedureEnumerator.Enumerate(compilation).Select(procedure => (compilation, procedure))),
+            static procedure => procedure.Identity);
+        foreach ((Compilation compilation, EnumeratedProcedure procedure) in enumerated)
         {
-            foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))
+            SourceSpan span = ToSourceSpan(procedure.Location);
+            if (overrides.ForcedAmbiguous.Contains(procedure.Identity))
             {
-                SourceSpan span = ToSourceSpan(procedure.Location);
-                if (overrides.ForcedAmbiguous.Contains(procedure.Identity))
-                {
-                    forcedAmbiguous.Add(procedure.Identity with { Location = span });
-                    continue;
-                }
-
-                ProcedureIdentity renamed = RoslynIdentity.Of(procedure.Symbol, renames);
-                ProcedureIdentity identity = renamed == procedure.Identity && overrides.RenameTo.TryGetValue(procedure.Identity, out ProcedureIdentity? endpointIdentity)
-                    ? endpointIdentity
-                    : renamed;
-                procedures.Add(new SideProcedure(identity with { Location = span }, procedure.Symbol, compilation));
+                forcedAmbiguous.Add(procedure.Identity with { Location = span });
+                continue;
             }
+
+            ProcedureIdentity renamed = RoslynIdentity.Of(procedure.Symbol, renames);
+            ProcedureIdentity identity = renamed == procedure.Identity && overrides.RenameTo.TryGetValue(procedure.Identity, out ProcedureIdentity? endpointIdentity)
+                ? endpointIdentity
+                : renamed;
+            procedures.Add(new SideProcedure(identity with { Location = span }, procedure.Symbol, compilation));
         }
 
         return (procedures.ToImmutable(), forcedAmbiguous.ToImmutable());
     }
+
+    /// <summary>Every endpoint a side declares, each target-framework flavour of a project counted once (<see cref="LastFlavour"/>).</summary>
+    private static ImmutableArray<Endpoint> Endpoints(ImmutableArray<Compilation> compilations) =>
+    [
+        .. LastFlavour(
+            compilations.SelectMany(static compilation => EndpointDiscovery.Discover(compilation).Select(endpoint => (compilation, endpoint))),
+            static endpoint => endpoint).Select(static item => item.Item),
+    ];
+
+    /// <summary>
+    /// P2-016: a multi-targeted project loads once per target framework, every flavour under the same assembly name, so
+    /// without this each of its declarations would be on its side several times and never match (Ambiguous is for
+    /// overloads, VERIFICATION-MODEL.md section 4). Of the <paramref name="items"/> that share an assembly name and a
+    /// <paramref name="key"/>, only those from the last compilation holding that key are kept: flavours load in
+    /// <c>TargetFrameworks</c> order, which by convention ends at the newest framework, the one nearest a migration's
+    /// target. Duplicates within one compilation, and across assemblies (a linked file), are kept as they are.
+    /// </summary>
+    private static IEnumerable<(Compilation Compilation, T Item)> LastFlavour<T, TKey>(
+        IEnumerable<(Compilation Compilation, T Item)> items, Func<T, TKey> key) =>
+        items
+            .GroupBy(item => (item.Compilation.AssemblyName, Key: key(item.Item)))
+            .SelectMany(static group =>
+            {
+                Compilation last = group.Last().Compilation;
+                return group.Where(item => ReferenceEquals(item.Compilation, last));
+            });
 
     /// <summary>
     /// The endpoint rename map M2-005 acceptance criterion 3 describes, built from both sides'
