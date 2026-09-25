@@ -350,6 +350,22 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   straight-line integer methods, compile and run the C# in memory and run the IR via
   `IrInterpreter` (production code in Core, also used to replay counterexamples);
   outputs agree.
+- Differential soundness (property test, M0-012; `DifferentialSoundnessTests` in
+  `Equiv.Tests.Integration`): the two obligations above check the encoder against IR and
+  the lowering against IR, so neither sees a false Equivalent that enters between C# and
+  the verdict. This one closes that loop on generated code. `PairGen` generates a C#
+  method and a second one derived from it by one mutation operator, from a preserving
+  family or a changing family; both are compiled and run on the CLR, and the real
+  frontend and Z3 backend verify the pair. Over each pair and its inputs (CsCheck's, and
+  the model of a Divergent verdict):
+  1. if any input gives different observables (return value, exception type, field and
+     array state), the verdict is not Equivalent;
+  2. if the verdict is Divergent, replaying its model in C# gives different observables;
+  3. if the operator is preserving, the verdict is not Divergent.
+
+  Rule 1 is the soundness rule; rules 2 and 3 are the decoding and precision rules. A
+  changing operator can produce an equivalent mutant, so no rule assumes a mutant differs.
+  200 pairs per PR, 5,000 nightly.
 - Snapshot tests (Verify): IR dump and SARIF for every sample in `samples/`.
 - Congruence (property test, ADR 0024): whenever congruence reports Equivalent on a
   generated or sample pair, the solver on the same pair never reports Divergent.

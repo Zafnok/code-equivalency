@@ -13,7 +13,7 @@ are pinned in `Directory.Packages.props` (Central Package Management) and listed
 | Build | .NET 10 SDK | `TreatWarningsAsErrors`, `Nullable=enable`, `AnalysisLevel=latest-all`, `EnforceCodeStyleInBuild`, `Deterministic`, `ContinuousIntegrationBuild` in CI | yes |
 | Analyzers | Microsoft.CodeAnalysis.NetAnalyzers (built in), Meziantou.Analyzer | all rules on; severities only lowered in `.editorconfig` with a comment | yes |
 | Format | `dotnet format --verify-no-changes` | `.editorconfig` is the single style source | yes |
-| Unit/property/snapshot tests | xUnit v3 on Microsoft.Testing.Platform (`dotnet.config` `[dotnet.test:runner] name="Microsoft.Testing.Platform"`), CsCheck, Verify | | yes |
+| Unit/property/snapshot tests | xUnit v3 on Microsoft.Testing.Platform (`dotnet.config` `[dotnet.test:runner] name="Microsoft.Testing.Platform"`), CsCheck, Verify | includes the differential soundness gate (`DifferentialSoundnessTests`, VERIFICATION-MODEL.md section 7, M0-012): 200 generated C# pairs per PR in the Windows `gates` leg, which runs `Equiv.Tests.Integration`, and 5,000 in `mutation.yml`'s nightly `differential` job (`EQUIV_DIFFERENTIAL_BUDGET=nightly`; `EQUIV_DIFFERENTIAL_SEED` replays a failure's seed) | yes |
 | Coverage | coverlet.MTP → cobertura → `tools/check-coverage` (M0-003) | 100% line and branch per `src/` project; coverlet.MTP has no threshold flag, so the check is a small script over the cobertura XML | yes |
 | Architecture | ArchUnitNET (xUnit v3 package) | dependency edges from ARCHITECTURE.md, naming rules from CLAUDE.md | yes |
 | Integration | `Equiv.Tests.Integration` runs the CLI on every `samples/*` and compares SARIF snapshot | Windows runner only (needs VS Build Tools) | yes |

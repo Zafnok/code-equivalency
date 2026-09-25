@@ -1,5 +1,5 @@
 # M0-012 Differential soundness gate: generated C# pairs, executed on the CLR, never contradict the verdict
-Status: todo
+Status: done (PR #174)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-002, M3-007, P1-006
@@ -93,3 +93,37 @@ Running on .NET Framework 4.8 (that is ADR 0035's harness). Corpus code (M4-010)
 Coverage-guided generation.
 
 ## Notes
+- Decision: `SwapArguments` swaps the operands of a binary operator or comparison of one operand type (not a
+  shift). The construct set has no calls, so operands are the only arguments there are.
+- Decision: `InlineTemporary` is `IntroduceTemporary` with the sides swapped: the legacy method has the temporary.
+  Every operator is then its own enum member and is drawn on its own.
+- Decision: `ReorderIndependentStatements` and `Commute` act only where nothing involved can throw (no division,
+  no checked operation or conversion, no element read), since swapping two throwing operands changes which
+  exception wins; `MoveThrowAcrossSideEffect` swaps an `if` that throws with an adjacent write of `F` or `u[i]`.
+- Decision: each side is its own compilation of `class Oracle`, so both sides' static field is the one
+  `field.Oracle.F` input; both images load into one collectible `AssemblyLoadContext` per check.
+- Decision: a pair is lowered and verified once, memoised by its two sources (`PairRuntime.Analyse`), and the
+  three rule tests share it; they draw the same pairs because they share the seed.
+- Decision: a Divergent model is replayed from the shared inputs by name (legacy parameters, then the modern ones
+  the legacy side lacks, as `ProductEncoder.Pair` orders them). An array longer than three replays as three
+  elements, since no generated method reads index 3 or the length; a negative length is reported as a rule 2
+  failure, not replayed.
+- Decision: the nightly budget is a new `differential` job in `mutation.yml` (the workflow with the schedule),
+  on `windows-latest` like the per-PR run, gated on `github.event_name == 'schedule'`.
+- Deviation: two files beyond the Files list, `tests/Equiv.TestSupport/PairInput.cs` (the analyzers want one
+  top-level type per file) and `tests/Equiv.Tests.Integration/PairRuntime.cs` (compile, run and verify, shared
+  by `DifferentialSoundnessTests` and `PairGenTests`). Nine new files in all; nothing under `src/`.
+- Found: at 200 pairs every rule held (39 Divergent, 154 Equivalent, 7 Unknown, spread over both
+  families). At 5,000, rules 1 and 3 held and rule 2 failed once: a Divergent model gives `u` the length
+  `-2147483648`, because nothing constrains `length.<Sort>` to be non-negative. That is a false-Divergent
+  (precision) bug, not a rule 1 failure; it is filed as P2-019 and skipped by that symptom. With the
+  skip, 5,000 pairs pass all three rules (about 4 minutes locally). M3-003 now depends on P2-019.
+- Decision: the skip list matches a symptom in the failure's input line, not a pair. An exact-source
+  entry would skip only the pair CsCheck shrank to, and the nightly would still draw the unshrunk one.
+- Note: CsCheck puts one line before the printed failure, with the seed that replays it. The rest of
+  the message is what criterion 4 lists and nothing else. CsCheck shrinks these pairs poorly (5 shrinks
+  on the P2-019 case), because shrinking a generated method rarely keeps the mutation site.
+- Deviation: `tests/Equiv.Frontend.CSharp.Tests/Lowering/PairGenLoweringTests.cs` (tenth new file). Sonar's
+  ubuntu run does not run `Equiv.Tests.Integration`, so it saw 0% coverage on the new `Equiv.TestSupport`
+  code. The test asserts that every generated side compiles and lowers to valid IR with no `IrOpaque`,
+  which is the Design's claim that `PairGen` stays within lowered constructs, and it runs where Sonar measures.
