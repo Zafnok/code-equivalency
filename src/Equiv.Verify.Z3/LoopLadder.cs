@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -166,7 +166,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             if (diverges != Status.UNSATISFIABLE)
             {
                 return diverges == Status.SATISFIABLE
-                    ? Refuted(ProofMethod.Bounded, $"a divergence within {bound} iterations", ModelDecoder.Replay(context, divergence.Model, encoding, oldUnrolled, newUnrolled))
+                    ? Found(ModelDecoder.Replay(context, divergence.Model, encoding, oldUnrolled, newUnrolled), bound)
                     : TimedOut(Z3Backend.Timeout(divergence, options));
             }
 
@@ -200,6 +200,13 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             _ => TimedOut(Z3Backend.Timeout(cut, options)),
         };
     }
+
+    /// <summary>Rung 1's replayed divergence: a real one refutes the pair, one that depends on an abstraction ends the ladder Unknown (ADR 0026).</summary>
+    private static Rung Found(Verdict replayed, string bound) => replayed switch
+    {
+        Divergent divergent => Refuted(ProofMethod.Bounded, $"a divergence within {bound} iterations", divergent.Counterexample),
+        _ => new Rung(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"a divergence within {bound} iterations depends on an abstraction"), replayed),
+    };
 
     private static Rung TimedOut(string detail) =>
         new(new LadderStep(ProofMethod.Bounded, RungOutcome.Timeout, detail), Cause: UnknownReason.Timeout);

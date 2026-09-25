@@ -236,8 +236,8 @@ Every verdict on a matched pair with bodies also carries `properties.assumedCall
 catalogue entry fired (ADR 0020).
 
 A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
-and of `opaque:` calls are tainted, taint follows data, and a branch on a tainted value taints
-the rest of that side. The result is Divergent only when a compared observable differs and is
+and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the
+fragment's calls. Taint follows data, and a branch on a tainted value taints the rest of that side. The result is Divergent only when a compared observable differs and is
 untainted on both sides. Otherwise it is Unknown with reason `Abstraction`, carrying the model
 as `properties.candidateCounterexample` and the abstractions it depends on as
 `properties.abstractions`.

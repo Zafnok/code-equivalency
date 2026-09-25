@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Globalization;
 
 using Equiv.Core;
@@ -18,10 +18,15 @@ namespace Equiv.Verify.Z3;
 /// are read with model completion. An element of an uninterpreted sort becomes <c>sort "S" n</c>: a literal
 /// keeps its own id, any other element gets the next free id. Both sides are then replayed in
 /// <see cref="IrInterpreter"/>, with a call oracle that answers from the model's call functions at the
-/// position the interpreter passes, and the replay must diverge on the observables the encoder compares.
+/// position the interpreter passes, and the replay must diverge on the observables the encoder compares. The replay
+/// taints every call whose identity starts with <see cref="OpaquePrefix"/> (ADR 0026; ticket M3-016): only a difference
+/// in an observable that is untainted on both sides is real.
 /// </summary>
 internal sealed class ModelDecoder
 {
+    /// <summary>The identity prefix of a shared opaque fragment's call (ADR 0024), an abstraction the replay taints.</summary>
+    public const string OpaquePrefix = "opaque:";
+
     private readonly Context context;
     private readonly Model model;
     private readonly ProductEncoding encoding;
@@ -39,66 +44,113 @@ internal sealed class ModelDecoder
         }
     }
 
-    /// <summary>Decodes the model, replays both sides, and fails loudly if the replay does not diverge.</summary>
-    public static Counterexample Replay(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
+    /// <summary>How two replayed runs differ on the observables the encoder compares.</summary>
+    public enum Difference
+    {
+        /// <summary>They agree on every compared observable.</summary>
+        None,
+
+        /// <summary>They differ, but only in observables tainted on at least one side.</summary>
+        Abstract,
+
+        /// <summary>Some compared observable differs and is untainted on both sides.</summary>
+        Real,
+    }
+
+    /// <summary>
+    /// Decodes the model and replays both sides with taint. A real difference is <see cref="Divergent"/>; a difference
+    /// only in tainted observables is <see cref="UnknownReason.Abstraction"/>, carrying the replay as its candidate
+    /// counterexample; no difference fails loudly (an encoder bug).
+    /// </summary>
+    public static Verdict Replay(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
     {
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
         IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), decoder.Oracle(Side.Old));
         IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), decoder.Oracle(Side.New));
-        EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls);
-        return new Counterexample(inputs, oldRun, newRun);
+        Counterexample counterexample = new(inputs, oldRun, newRun);
+        return EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls) == Difference.Real
+            ? new Divergent(counterexample)
+            : Unknown.DependingOn(counterexample, [.. Abstractions(Codebase.Legacy, oldRun), .. Abstractions(Codebase.Modern, newRun)]);
     }
+
+    /// <summary>Whether <paramref name="callee"/> is an abstraction the replay taints.</summary>
+    public static bool IsAbstraction(CallIdentity callee) => callee.Value.StartsWith(OpaquePrefix, StringComparison.Ordinal);
 
     /// <summary>
     /// Replays <paramref name="old"/> and <paramref name="new"/>, whose parameters are those of the fragments the model
     /// satisfies, from the decoded inputs (ticket M3-002). A model of a loop obligation is a real counterexample only
     /// when this replay completes on both sides within <paramref name="stepBudget"/> steps without reaching an
-    /// <see cref="IrOpaque"/> and diverges; otherwise it returns null.
+    /// <see cref="IrOpaque"/> and diverges in an untainted observable; otherwise it returns null.
     /// </summary>
     public static Counterexample? TryReplay(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new, int stepBudget)
     {
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
-        IrRun oldRun = IrInterpreter.Run(old, Bind(old, shared, inputs, static s => s.Old), decoder.Oracle(Side.Old), stepBudget);
-        IrRun newRun = IrInterpreter.Run(@new, Bind(@new, shared, inputs, static s => s.New), decoder.Oracle(Side.New), stepBudget);
+        IrRun oldRun = IrInterpreter.Run(old, Bind(old, shared, inputs, static s => s.Old), decoder.Oracle(Side.Old), stepBudget, IsAbstraction);
+        IrRun newRun = IrInterpreter.Run(@new, Bind(@new, shared, inputs, static s => s.New), decoder.Oracle(Side.New), stepBudget, IsAbstraction);
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
         return complete && Diverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls) ? new Counterexample(inputs, oldRun, newRun) : null;
     }
 
-    /// <summary>A model whose replay does not diverge is an encoder bug: fail loudly, never report it as Divergent.</summary>
-    public static void EnsureDiverges(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
+    /// <summary>
+    /// A model whose replay agrees on every compared observable is an encoder bug: fail loudly, never report it as
+    /// Divergent. Otherwise returns how the runs differ.
+    /// </summary>
+    public static Difference EnsureDiverges(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
     {
-        if (!Diverges(old, @new, shared, inputs, oldRun, newRun, calls))
-        {
-            throw new InvalidOperationException(
+        Difference difference = Compare(old, @new, shared, inputs, oldRun, newRun, calls);
+        return difference != Difference.None
+            ? difference
+            : throw new InvalidOperationException(
                 $"Encoder bug: the solver found a divergence between {old.Identity.Value} and {@new.Identity.Value}, but the replay does not diverge. "
                 + $"Inputs: {string.Join(", ", shared.Select((s, i) => $"{s.Var.Name}={inputs.Arguments[i]}"))}. Old: {Describe(oldRun)}. New: {Describe(newRun)}.");
-        }
     }
 
+    /// <summary>True when the two runs differ in an observable the encoder compares that is untainted on both sides.</summary>
+    public static bool Diverges(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls) =>
+        Compare(old, @new, shared, inputs, oldRun, newRun, calls) == Difference.Real;
+
     /// <summary>
-    /// True when the two runs differ on an observable the encoder compares: outcome, call trace (legacy
-    /// identities renamed through the call-identity map), or the final value of a by-ref shared input
-    /// (<paramref name="shared"/>, valued by <paramref name="inputs"/>), a side without that parameter
-    /// standing for its unchanged input.
+    /// How the two runs differ on the observables the encoder compares: outcome, call trace (legacy identities renamed
+    /// through the call-identity map), and the final value of each by-ref shared input (<paramref name="shared"/>,
+    /// valued by <paramref name="inputs"/>), a side without that parameter standing for its unchanged input. A difference
+    /// is real when some differing observable is untainted on both sides (ADR 0026). Two returned values compare by the
+    /// values' taint, any other outcome difference by the path's. The trace compares its first differing event only,
+    /// since control taint can shift every later position.
     /// </summary>
-    public static bool Diverges(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
+    public static Difference Compare(IrProcedure old, IrProcedure @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, IrRun oldRun, IrRun newRun, TraceEncoder calls)
     {
+        List<bool> tainted = [];
         if (oldRun.Outcome != newRun.Outcome)
         {
-            return true;
+            tainted.Add(oldRun.Outcome is IrReturned && newRun.Outcome is IrReturned
+                ? oldRun.Taint.Value || newRun.Taint.Value
+                : oldRun.Taint.Outcome || newRun.Taint.Outcome);
         }
 
-        IEnumerable<IrCallRecord> oldTrace = oldRun.Trace.Select(r => r with { Callee = new CallIdentity(calls.Canonical(Side.Old, r.Callee)) });
-        IEnumerable<IrCallRecord> newTrace = newRun.Trace.Select(r => r with { Callee = new CallIdentity(r.Callee.Value) });
-        return !oldTrace.SequenceEqual(newTrace)
-            || shared
+        ImmutableArray<IrCallRecord> oldTrace = [.. oldRun.Trace.Select(r => r with { Callee = new CallIdentity(calls.Canonical(Side.Old, r.Callee)) })];
+        ImmutableArray<IrCallRecord> newTrace = [.. newRun.Trace.Select(static r => r with { Callee = new CallIdentity(r.Callee.Value) })];
+        int common = Math.Min(oldTrace.Length, newTrace.Length);
+        int first = Enumerable.Range(0, common).Where(i => oldTrace[i] != newTrace[i]).DefaultIfEmpty(common).First();
+        if (first < common || oldTrace.Length != newTrace.Length)
+        {
+            tainted.Add(oldRun.EventTainted(first) || newRun.EventTainted(first));
+        }
+
+        tainted.AddRange(shared
             .Select((s, i) => (Shared: s, Input: inputs.Arguments[i]))
-            .Any(s => s.Shared.ByRef
-                && Final(old, oldRun, s.Shared.Old, s.Input) != Final(@new, newRun, s.Shared.New, s.Input));
+            .Where(s => s.Shared.ByRef && Final(old, oldRun, s.Shared.Old, s.Input) != Final(@new, newRun, s.Shared.New, s.Input))
+            .Select(s => FinalTainted(old, oldRun, s.Shared.Old) || FinalTainted(@new, newRun, s.Shared.New)));
+
+        return tainted switch
+        {
+            [] => Difference.None,
+            _ when tainted.Contains(false) => Difference.Real,
+            _ => Difference.Abstract,
+        };
     }
 
     /// <summary>The shared inputs, in <see cref="ProductEncoding.Inputs"/> order.</summary>
@@ -126,7 +178,11 @@ internal sealed class ModelDecoder
     public ICallOracle Oracle(Side side) => new ModelOracle(this, side);
 
     private static IrRun Run(IrProcedure procedure, IrInputs inputs, ICallOracle oracle) =>
-        IrInterpreter.Run(procedure, inputs, oracle, procedure.Blocks.Sum(static b => b.Instructions.Length + 1));
+        IrInterpreter.Run(procedure, inputs, oracle, procedure.Blocks.Sum(static b => b.Instructions.Length + 1), IsAbstraction);
+
+    /// <summary>The tainting identities <paramref name="run"/> reached, as abstractions of <paramref name="side"/>; an <see cref="IrCall"/> has no span.</summary>
+    private static IEnumerable<Abstraction> Abstractions(Codebase side, IrRun run) =>
+        run.Taint.Sources.Select(s => new Abstraction(side, s, Span: null));
 
     /// <summary>One side's arguments, in its own parameter order, from the shared inputs it binds.</summary>
     private static IrInputs Bind(IrProcedure procedure, ImmutableArray<SharedParameter> shared, IrInputs inputs, Func<SharedParameter, IrParameter?> side)
@@ -141,12 +197,22 @@ internal sealed class ModelDecoder
     /// <summary>The final value of <paramref name="parameter"/> in <paramref name="run"/>, else (not by-ref on this side, or absent) <paramref name="input"/>.</summary>
     private static IrValue Final(IrProcedure procedure, IrRun run, IrParameter? parameter, IrValue input)
     {
-        int index = procedure.Parameters
+        int index = OutIndex(procedure, parameter);
+        return index < 0 ? input : run.Outs[index];
+    }
+
+    /// <summary>Whether the final value of <paramref name="parameter"/> is tainted; the unchanged input of a side without it never is.</summary>
+    private static bool FinalTainted(IrProcedure procedure, IrRun run, IrParameter? parameter)
+    {
+        int index = OutIndex(procedure, parameter);
+        return index >= 0 && run.OutTainted(index);
+    }
+
+    private static int OutIndex(IrProcedure procedure, IrParameter? parameter) =>
+        procedure.Parameters
             .Where(static p => p.Kind != IrParameterKind.In)
             .ToList()
             .FindIndex(p => p == parameter);
-        return index < 0 ? input : run.Outs[index];
-    }
 
     private static string Describe(IrRun run) =>
         $"{run.Outcome} outs [{string.Join(", ", run.Outs)}] trace [{string.Join(", ", run.Trace.Select(static c => $"{c.Callee.Value}({string.Join(", ", c.Arguments)})"))}]";

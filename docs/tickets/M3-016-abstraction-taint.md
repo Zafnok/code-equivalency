@@ -1,5 +1,5 @@
 # M3-016 Replay taint, and Unknown results that point at their lines
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-001, M3-014
@@ -78,3 +78,10 @@ necessary, stop.
 Emitting abstractions (M4-004, M4-002). Code Scanning upload (M3-004's `action.yml`).
 
 ## Notes
+- Decision: the taint predicate is an optional last parameter of `IrInterpreter.Run` (`Func<CallIdentity, bool>? taint = null`), so every existing caller is unchanged. Alternatives: an overload, a field on `ICallOracle`. Rule: 4.
+- Decision: `IrRun.Taint` is an `IrTaint(bool Outcome, bool Value, ImmutableArray<int> Outs, ImmutableArray<int> Trace, ImmutableArray<CallIdentity> Sources)`: the path's taint (which exit and exception, and the absence of an event past the end of the trace), the returned value's, the indices of tainted outs and events, and the tainting identities reached. It is an `init` property that defaults to `IrTaint.None` and takes part in `IrRun` equality. Keeping the path and the value apart matters: a dropped `log()` call after `return opaque(x)` is a real trace divergence even though the returned value is tainted. Alternatives: one flag per run (loses that case), bool arrays sized to the run. Rule: 1.
+- Decision: the trace event of a tainting call is itself tainted, which ADR 0026's list does not say. A shared fragment's event stands for the fragment's own calls, and a fragment with no calls has no events at all, so the same fragment on different arguments is not a real trace difference. VERIFICATION-MODEL section 6 is patched. Alternatives: taint only the result and `threw` (a false EQ002 once M4-004 lands). Rule: ADR 0026 (fills a gap).
+- Decision: `ModelDecoder.Replay` returns the `Verdict` (`Divergent`, or `Unknown.DependingOn(candidate, abstractions)`), and rung 1 ends the ladder on an Unknown(Abstraction) with an `Inconclusive` step. `ModelDecoder.Compare` returns `None`, `Abstract` or `Real`; `Diverges` is `Real`, so an induction base model whose divergence is tainted is not a counterexample. Alternatives: keep returning `Counterexample` and let the ladder re-classify. Rule: 4.
+- Decision: the `opaque:` prefix is `ModelDecoder.OpaquePrefix`, the only reader until M4-004 adds a writer. Rule: 4.
+- Decision: an abstraction is `Abstraction(Codebase Side, CallIdentity Identity, SourceSpan? Span)`, with a new `Codebase { Legacy, Modern }` in `Equiv.Core.Verdicts`. `IrCall` has no span, so replayed abstractions carry none until M4-004 emits `opaque:` calls from spanned `IrOpaque` nodes; SARIF writes `span` only when present. `properties.abstractions` is a list of `{identity, side, span?}` with `side` spelled `legacy`/`modern` as the census does. Alternatives: `ImmutableArray<SourceSpan>` per identity, adding a span to `IrCall` (an IR change outside the size guard). Rule: 1.
+- Decision: the property "with no taint predicate, results equal the M3-001 interpreter's" is `IrInterpreterTaintTests.TaintNeverChangesAValue`: over 200 generated procedures, a run without a predicate has `IrTaint.None`, and a run with a predicate (all, none or some callees) equals it once its taint is erased. The M3-001 values themselves stay pinned by the unchanged interpreter tests. Alternatives: a frozen copy of the M3-001 interpreter in the test project. Rule: 3.

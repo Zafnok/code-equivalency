@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
@@ -51,6 +51,7 @@ public sealed class VerdictTests
     [InlineData(UnknownReason.UnalignedLoop)]
     [InlineData(UnknownReason.Recursion)]
     [InlineData(UnknownReason.Unbound)]
+    [InlineData(UnknownReason.Abstraction)]
     public void EveryUnknownReasonRoundTripsThroughTheRecord(UnknownReason reason)
     {
         Assert.Equal(reason, new Unknown(reason, "detail").Reason);
@@ -86,6 +87,63 @@ public sealed class VerdictTests
         Assert.NotEqual<Verdict>(new Added(), new Removed());
         Assert.False(first.Equals(Null.Of<Verdict>()));
     }
+
+    [Fact]
+    public void DependingOnNamesEachIdentityOnceAndPointsAtEverySpannedAbstraction()
+    {
+        Counterexample candidate = new(new IrInputs([]), SampleRun, SampleRun);
+        SourceSpan span = new("New.cs", 4, 9, 4, 20);
+        ImmutableArray<Abstraction> abstractions =
+        [
+            new(Codebase.Legacy, new CallIdentity("opaque:a"), Span: null),
+            new(Codebase.Modern, new CallIdentity("opaque:b"), span),
+            new(Codebase.Modern, new CallIdentity("opaque:a"), Span: null),
+        ];
+
+        Unknown unknown = Unknown.DependingOn(candidate, abstractions);
+
+        Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
+        Assert.Equal("the divergence depends on opaque:a, opaque:b", unknown.Detail);
+        Assert.Same(candidate, unknown.Candidate);
+        Assert.Equal(abstractions, unknown.Abstractions);
+        Assert.Equal([new UnknownCause(Codebase.Modern, "abstraction opaque:b", span)], unknown.Causes);
+    }
+
+    [Fact]
+    public void AnUnknownHasNoCausesCandidateOrAbstractionsUnlessGiven()
+    {
+        Unknown unknown = new(UnknownReason.Timeout, "d");
+
+        Assert.Empty(unknown.Causes);
+        Assert.Null(unknown.Candidate);
+        Assert.Empty(unknown.Abstractions);
+    }
+
+    [Fact]
+    public void UnknownsCompareTheirCausesCandidateAndAbstractionsStructurally()
+    {
+        SourceSpan span = new("New.cs", 4, 9, 4, 20);
+        Unknown first = Full(span);
+        Unknown second = Full(span with { });
+
+        Assert.Equal(first, second);
+        Assert.Equal(first.GetHashCode(), second.GetHashCode());
+        Assert.NotEqual(first, second with { Reason = UnknownReason.Opaque });
+        Assert.NotEqual(first, second with { Detail = "other" });
+        Assert.NotEqual(first, second with { Causes = [] });
+        Assert.NotEqual(first, second with { Candidate = null });
+        Assert.NotEqual(first, second with { Abstractions = [] });
+        Assert.NotEqual(first, second with { Ladder = [new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, "x")] });
+        Assert.False(first.Equals(Null.Of<Unknown>()));
+    }
+
+    private static Unknown Full(SourceSpan span) =>
+        new(UnknownReason.Abstraction, "d")
+        {
+            Causes = [new UnknownCause(Codebase.Modern, "lambda", span)],
+            Candidate = new Counterexample(new IrInputs([]), SampleRun, SampleRun),
+            Abstractions = [new Abstraction(Codebase.Legacy, new CallIdentity("opaque:a"), span)],
+        };
 
     [Fact]
     public void AddedIsAVerdict()

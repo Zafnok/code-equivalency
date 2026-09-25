@@ -225,11 +225,33 @@ public sealed class SarifReportWriterTests
     [InlineData(UnknownReason.UnalignedLoop, "unaligned-loop")]
     [InlineData(UnknownReason.Recursion, "recursion")]
     [InlineData(UnknownReason.Unbound, "unbound")]
+    [InlineData(UnknownReason.Abstraction, "abstraction")]
     public void UnknownResultCarriesItsReason(UnknownReason reason, string name)
     {
         Result result = SarifReportWriter.Write([Fixtures.Result(new Unknown(reason, "detail"))]).Runs[0].Results[0];
 
         Assert.Equal(name, result.GetProperty<string>("unknownReason"));
+    }
+
+    /// <summary>
+    /// Ticket M3-016 criterion 4 (ADR 0026): an <see cref="UnknownReason.Abstraction"/> result carries its candidate
+    /// counterexample in the <see cref="CounterexampleText"/> rendering, and each abstraction with its identity, side
+    /// and, when known, span.
+    /// </summary>
+    [Fact]
+    public Task CandidateCounterexampleIsWritten()
+    {
+        Counterexample candidate = Fixtures.Counterexample();
+        Unknown unknown = Core.Verdicts.Unknown.DependingOn(
+            candidate,
+            [
+                new Abstraction(Codebase.Legacy, new CallIdentity("opaque:a"), Span: null),
+                new Abstraction(Codebase.Modern, new CallIdentity("opaque:b"), new SourceSpan("New.cs", 4, 9, 4, 20)),
+            ]);
+        VerificationResult result = Fixtures.Result(unknown);
+
+        Assert.Equal(CounterexampleText.Dump(candidate), SarifReportWriter.Write([result]).Runs[0].Results[0].GetProperty<string>("candidateCounterexample"));
+        return VerifyJson(Serialize(result));
     }
 
     [Fact]

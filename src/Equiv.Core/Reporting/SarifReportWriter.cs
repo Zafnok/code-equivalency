@@ -188,6 +188,7 @@ public static class SarifReportWriter
                 break;
             case Unknown unknown:
                 sarifResult.SetProperty("unknownReason", Name(unknown.Reason));
+                SetAbstractionProperties(sarifResult, unknown);
                 break;
         }
 
@@ -201,6 +202,49 @@ public static class SarifReportWriter
             }).ToList());
         }
     }
+
+    /// <summary>
+    /// An <see cref="UnknownReason.Abstraction"/> result's candidate counterexample, rendered as a Divergent's
+    /// <c>model</c> is, and the abstractions it depends on, each with its identity, side and, when known, source span
+    /// (ADR 0026). Both are left out when absent.
+    /// </summary>
+    private static void SetAbstractionProperties(Result sarifResult, Unknown unknown)
+    {
+        if (unknown.Candidate is { } candidate)
+        {
+            sarifResult.SetProperty("candidateCounterexample", CounterexampleText.Dump(candidate));
+        }
+
+        if (!unknown.Abstractions.IsEmpty)
+        {
+            sarifResult.SetProperty("abstractions", unknown.Abstractions.Select(static a => Describe(a)).ToList());
+        }
+    }
+
+    private static Dictionary<string, object> Describe(Abstraction abstraction)
+    {
+        Dictionary<string, object> described = new(StringComparer.Ordinal)
+        {
+            ["identity"] = abstraction.Identity.Value,
+            ["side"] = Name(abstraction.Side),
+        };
+        if (abstraction.Span is { } span)
+        {
+            described["span"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["path"] = span.Path,
+                ["startLine"] = span.StartLine,
+                ["startColumn"] = span.StartColumn,
+                ["endLine"] = span.EndLine,
+                ["endColumn"] = span.EndColumn,
+            };
+        }
+
+        return described;
+    }
+
+    /// <summary>The spelling the census uses for a side: <c>legacy</c>, <c>modern</c>.</summary>
+    internal static string Name(Codebase side) => side == Codebase.Legacy ? "legacy" : "modern";
 
     /// <summary>
     /// The spelling VERIFICATION-MODEL.md sections 1 and 5.1 use for a proof: <c>bounded</c>, <c>lockstep-induction</c>,
@@ -221,6 +265,7 @@ public static class SarifReportWriter
         UnknownReason.UnmatchedOverload => "unmatched-overload",
         UnknownReason.UnalignedLoop => "unaligned-loop",
         UnknownReason.Recursion => "recursion",
+        UnknownReason.Abstraction => "abstraction",
         _ => "unbound",
     };
 
