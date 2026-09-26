@@ -674,9 +674,11 @@ public sealed class IrLowererTests
     private static ImmutableArray<string> NullTests(IrProcedure procedure)
     {
         ImmutableArray<IrMapRead> reads = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>()];
+        // A fragment's threw flag (ticket M4-004) is not a null test.
+        HashSet<IrVar> threw = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>().Select(static o => o.Threw).OfType<IrVar>()];
         return
         [
-            .. procedure.Blocks.Select(static b => b.Terminator).OfType<IrBranch>().Select(branch =>
+            .. procedure.Blocks.Select(static b => b.Terminator).OfType<IrBranch>().Where(b => !threw.Contains(b.Cond)).Select(branch =>
                 reads.FirstOrDefault(r => r.Target == branch.Cond) is { } read
                     ? read.Key.SourceName is { Length: > 0 } key ? $"{read.Map.Name}[{key}]" : read.Map.Name
                     : branch.Cond.Name),
