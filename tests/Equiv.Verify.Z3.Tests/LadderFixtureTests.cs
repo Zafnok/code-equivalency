@@ -33,7 +33,10 @@ public sealed class LadderFixtureTests
 
         Verdict verdict = Verify(fixture);
 
-        Assert.Equal(fixture.Expected, Describe(verdict));
+        string described = Describe(verdict);
+        Assert.True(
+            string.Equals(fixture.Expected, described, StringComparison.Ordinal),
+            $"expected {fixture.Expected}, got {described}; ladder: {string.Join("; ", verdict.Ladder.Select(static s => $"{s.Rung} {s.Outcome}: {s.Detail}"))}");
         Assert.NotEmpty(verdict.Ladder);
         Assert.Equal(ProofMethod.Bounded, verdict.Ladder[0].Rung);
         if (verdict is Divergent divergent)
@@ -135,9 +138,13 @@ public sealed class LadderFixtureTests
         Assert.Equal((ProofMethod.Bounded, RungOutcome.Timeout), (verdict.Ladder[0].Rung, verdict.Ladder[0].Outcome));
     }
 
-    /// <summary>A fixture that expects a timeout (of any rung) gets 50 ms; every other one gets ten seconds.</summary>
+    /// <summary>
+    /// A fixture that expects a timeout (of any rung) gets 50 ms; every other one gets a minute per query. Rung 4 asks
+    /// Spacer up to three times, about a second each on a developer machine, and the Windows gates leg runs these beside
+    /// the property tests on four cores, where ten seconds once turned <c>fusion</c>'s proof into a timeout.
+    /// </summary>
     private static Verdict Verify(Fixture fixture) =>
-        new Z3Backend().Verify(fixture.Old, fixture.New, new VerificationOptions(3, fixture.Expected.StartsWith("Unknown(Timeout", StringComparison.Ordinal) || fixture.Expected.StartsWith("Unknown(ChcTimeout", StringComparison.Ordinal) ? 50 : 10_000, []));
+        new Z3Backend().Verify(fixture.Old, fixture.New, new VerificationOptions(3, fixture.Expected.StartsWith("Unknown(Timeout", StringComparison.Ordinal) || fixture.Expected.StartsWith("Unknown(ChcTimeout", StringComparison.Ordinal) ? 50 : 60_000, []));
 
     private static string Describe(Verdict verdict) => verdict switch
     {
