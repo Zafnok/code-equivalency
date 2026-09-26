@@ -1,0 +1,212 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "GET /api/orders/{id} is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrdersController.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 20,
+                  "endLine": 9,
+                  "endColumn": 23
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "GET /api/orders/{id}",
+                  "kind": "endpoint"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "GET /api/orders/{id}",
+            "resultFingerprint/v1": "14dd1b2ae99b721d38dbed338590022300368bff64f050b3b59656c44d0bdcb1"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "GET /api/orders/find/{id} is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrdersController.cs"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 34,
+                  "endLine": 12,
+                  "endColumn": 38
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "GET /api/orders/find/{id}",
+                  "kind": "endpoint"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "GET /api/orders/find/{id}",
+            "resultFingerprint/v1": "87cefe10c2c098c9aaf92741ec0e177cc1b00205c0ed278541078f273edbb6e7"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "webapi.not-found",
+              "webapi.ok-of-int",
+              "webapi.type.action-result",
+              "webapi.type.not-found-result",
+              "webapi.type.ok-content-result"
+            ]
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 2,
+            "modern": 2
+          },
+          "matchedPairs": 2,
+          "pairsWithoutOpaque": 2,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 1,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 1,
+          "changedPairsWithoutOpaque": 1,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 1
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 33,
+          "modern": 29
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,1113 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.Order::get_Id() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Order.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 25,
+                  "endLine": 7,
+                  "endColumn": 28
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.Order::get_Id()",
+            "resultFingerprint/v1": "f46fbf994212cc12b1f30b31bfb63cf0cd7429a149abafe3fc106c7cbc669148"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.Order::set_Id(int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Order.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 30,
+                  "endLine": 7,
+                  "endColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.Order::set_Id(int)",
+            "resultFingerprint/v1": "52ba03f839e1f2772577fba632374930f32e97753ed9b9e66847b27bcbf714d8"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.Order::get_CustomerName() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Order.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 38,
+                  "endLine": 9,
+                  "endColumn": 41
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.Order::get_CustomerName()",
+            "resultFingerprint/v1": "604ce6b46d181139016233bfc96ea2573533c34dabe1b4f3a725b16aed407a48"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.Order::set_CustomerName(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Order.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 43,
+                  "endLine": 9,
+                  "endColumn": 46
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.Order::set_CustomerName(string)",
+            "resultFingerprint/v1": "1b60d4ac8f7b7ea8993bf3b00b8b927a23c428e89a6de6da9a0fd423cf89f3b4"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.Order::get_Lines() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Order.cs"
+                },
+                "region": {
+                  "startLine": 11,
+                  "startColumn": 40,
+                  "endLine": 11,
+                  "endColumn": 43
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.Order::get_Lines()",
+            "resultFingerprint/v1": "8e94560478d0607e48b3e39026d9f5d2686bd868a117595109c6afb4f55e150d"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.Order::set_Lines(System.Collections.Generic.List<global::Equiv.Samples.BusinessLayer.OrderLine>) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Order.cs"
+                },
+                "region": {
+                  "startLine": 11,
+                  "startColumn": 45,
+                  "endLine": 11,
+                  "endColumn": 48
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.Order::set_Lines(System.Collections.Generic.List<global::Equiv.Samples.BusinessLayer.OrderLine>)",
+            "resultFingerprint/v1": "54af52212a44dfb643f2b5954296a3ccec2be4b688e311c6e99ab49e612bce8e"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderLine::get_Sku() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderLine.cs"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 29,
+                  "endLine": 5,
+                  "endColumn": 32
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderLine::get_Sku()",
+            "resultFingerprint/v1": "7c498f1c9197a69080ee7b4a6eece4ccd4080ecdbfe978ccf0f9f7e1fe32a038"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderLine::set_Sku(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderLine.cs"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 34,
+                  "endLine": 5,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderLine::set_Sku(string)",
+            "resultFingerprint/v1": "b1b1da703a056759f16eb8a4ff48fe7a9c3303702bff669cb6f4a4e43f9ccb98"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderLine::get_Quantity() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderLine.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 31,
+                  "endLine": 7,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderLine::get_Quantity()",
+            "resultFingerprint/v1": "c4ac4337cdcbb945733f11807c097fc6262c5d4902da3805b0a9d9cf6d8ad393"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderLine::set_Quantity(int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderLine.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 36,
+                  "endLine": 7,
+                  "endColumn": 39
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderLine::set_Quantity(int)",
+            "resultFingerprint/v1": "c453e81b8a601239f61ee73b2b34e12ba27508e152d93d50af3aa5a28d8700f4"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderLine::get_UnitPrice() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderLine.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 36,
+                  "endLine": 9,
+                  "endColumn": 39
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderLine::get_UnitPrice()",
+            "resultFingerprint/v1": "d3ae1720f4da910641c40b70d5892d3780923f0db592800662265ed5913c6647"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderLine::set_UnitPrice(decimal) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderLine.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 41,
+                  "endLine": 9,
+                  "endColumn": 44
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderLine::set_UnitPrice(decimal)",
+            "resultFingerprint/v1": "97a1e990087af8d10db28c166557e3f93aa6e64a548b682717137f6302597b19"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderLine::get_Discount() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderLine.cs"
+                },
+                "region": {
+                  "startLine": 11,
+                  "startColumn": 35,
+                  "endLine": 11,
+                  "endColumn": 38
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderLine::get_Discount()",
+            "resultFingerprint/v1": "18ec7dd19bfb2e05f70b6dc805f51d9ecd296aa379fd74d85f25e7b5160e19cc"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderLine::set_Discount(decimal) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderLine.cs"
+                },
+                "region": {
+                  "startLine": 11,
+                  "startColumn": 40,
+                  "endLine": 11,
+                  "endColumn": 43
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderLine::set_Discount(decimal)",
+            "resultFingerprint/v1": "3eed92adae1608c9acfd50abb443f6c84a92e7a47b8136183f02dfc08d98c31c"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::CustomerName(Equiv.Samples.BusinessLayer.Order) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 15,
+                  "startColumn": 23,
+                  "endLine": 15,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::CustomerName(Equiv.Samples.BusinessLayer.Order)",
+            "resultFingerprint/v1": "26504b224f7c1a5b4e77b91f0fd5641400ffbbb2963bbd49f90978c9e5f90ebb"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.BusinessLayer.Order::get_CustomerName()"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::Subtotal(Equiv.Samples.BusinessLayer.Order) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 20,
+                  "startColumn": 24,
+                  "endLine": 20,
+                  "endColumn": 32
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::Subtotal(Equiv.Samples.BusinessLayer.Order)",
+            "resultFingerprint/v1": "fb00593db6c756c84c53ce0c903c6c95ba1516302f1dbcede0836f3cd25d1317"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.BusinessLayer.Order::get_Lines()"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::SkusOver(Equiv.Samples.BusinessLayer.Order,int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 31,
+                  "startColumn": 29,
+                  "endLine": 31,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::SkusOver(Equiv.Samples.BusinessLayer.Order,int)",
+            "resultFingerprint/v1": "f06c626489c8e69e324e0cbf5d9cedc4ad6bcc179cf24bbde9671a631279253a"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.BusinessLayer.Order::get_Lines()"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::ParseQuantity(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 36,
+                  "startColumn": 20,
+                  "endLine": 36,
+                  "endColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::ParseQuantity(string)",
+            "resultFingerprint/v1": "688fd01ecab4f0138e0e2801f3b739d9eac854c4c847c238532ada20fa63436a"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::ConfirmAsync(System.Threading.Tasks.Task<global::Equiv.Samples.BusinessLayer.Order>) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 41,
+                  "startColumn": 27,
+                  "endLine": 41,
+                  "endColumn": 39
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::ConfirmAsync(System.Threading.Tasks.Task<global::Equiv.Samples.BusinessLayer.Order>)",
+            "resultFingerprint/v1": "9a6d99a75abe35cf9854103cf5b43c255767ccc1adb45ecb47d5ee267efd91c8"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::QuantityOf(object) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 47,
+                  "startColumn": 20,
+                  "endLine": 47,
+                  "endColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::QuantityOf(object)",
+            "resultFingerprint/v1": "ff1abad78f127727ccb6ae4d77f3c015083e36dfeace5d1113b2b7090fdeb0ad"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.BusinessLayer.OrderLine::get_Quantity()"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::Describe(Equiv.Samples.BusinessLayer.Order) is unknown (Opaque): old: InterpolatedString; new: InterpolatedString. It is equivalent on every input that reaches none of the related locations."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 59,
+                  "startColumn": 20,
+                  "endLine": 59,
+                  "endColumn": 64
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::Describe(Equiv.Samples.BusinessLayer.Order)",
+            "resultFingerprint/v1": "fba721d163e8e7630ba8416d69d256ab6c8fdee4a91bdbea08dfc6edd030022b"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 59,
+                  "startColumn": 20,
+                  "endLine": 59,
+                  "endColumn": 64
+                }
+              },
+              "message": {
+                "text": "InterpolatedString"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 59,
+                  "startColumn": 20,
+                  "endLine": 59,
+                  "endColumn": 64
+                }
+              },
+              "message": {
+                "text": "InterpolatedString"
+              }
+            }
+          ],
+          "baselineState": "new",
+          "properties": {
+            "unknownReason": "opaque",
+            "scope": "line",
+            "residualClaim": "equivalent unless a relatedLocation is reached",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "an input reaches an opaque node: old: InterpolatedString; new: InterpolatedString"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::Export(Equiv.Samples.BusinessLayer.Order) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 62,
+                  "startColumn": 23,
+                  "endLine": 62,
+                  "endColumn": 29
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::Export(Equiv.Samples.BusinessLayer.Order)",
+            "resultFingerprint/v1": "4e03d0ebd9670addd9876b8bc99230b3c0d6da95ebb1b62fc1da22f7f9fc9cb7"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.BusinessLayer.Order::get_Id()"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::Record() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 71,
+                  "startColumn": 20,
+                  "endLine": 71,
+                  "endColumn": 26
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::Record()",
+            "resultFingerprint/v1": "f1fdaf55083e95e53e9db0c78283b255213508e450dbc46c5f131b1bf00965d3"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::IsLarge(int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 80,
+                  "startColumn": 21,
+                  "endLine": 80,
+                  "endColumn": 28
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::IsLarge(int)",
+            "resultFingerprint/v1": "f4cadc795de725a30e0c8298c821b00cf7f88ecb970d2866f8e884908b9d518c"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::TotalQuantity(Equiv.Samples.BusinessLayer.Order) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 85,
+                  "startColumn": 20,
+                  "endLine": 85,
+                  "endColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::TotalQuantity(Equiv.Samples.BusinessLayer.Order)",
+            "resultFingerprint/v1": "1200268f0717808643d06a7fd9dc476b9ac47cd0fa21939f6277bf0d896081ee"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.BusinessLayer.Order::get_Lines()",
+              "Equiv.Samples.BusinessLayer.OrderLine::get_Quantity()"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::LineTotal(Equiv.Samples.BusinessLayer.OrderLine) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 96,
+                  "startColumn": 24,
+                  "endLine": 96,
+                  "endColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::LineTotal(Equiv.Samples.BusinessLayer.OrderLine)",
+            "resultFingerprint/v1": "bc944926f363bba21ff25345ebbd37b760ebf296f08c5c3ef0e8a1800a2d416e"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "assumedCallees": [
+              "Equiv.Samples.BusinessLayer.OrderLine::get_Discount()",
+              "Equiv.Samples.BusinessLayer.OrderLine::get_Quantity()",
+              "Equiv.Samples.BusinessLayer.OrderLine::get_UnitPrice()"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::Reserve(Equiv.Samples.BusinessLayer.Order,int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 101,
+                  "startColumn": 20,
+                  "endLine": 101,
+                  "endColumn": 27
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::Reserve(Equiv.Samples.BusinessLayer.Order,int)",
+            "resultFingerprint/v1": "5c22cb749a3a9d0d7028c33092453ce1c541ae04f24ec202d5b79bf969968624"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::RoundTotal(decimal) diverges: inputs(sort \"System.Decimal\" 0) old(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int)\"(sort \"System.Decimal\" 0, bv32 2))) new(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int,System.MidpointRounding)\"(sort \"System.Decimal\" 0, bv32 2, sort \"System.MidpointRounding\" 873244445)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 111,
+                  "startColumn": 24,
+                  "endLine": 111,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::RoundTotal(decimal)",
+            "resultFingerprint/v1": "51967f2e7dc5d254d54bd5c225b5d9d47911205e60d235553dbb1cdd7ebd4b2e"
+          },
+          "baselineState": "new",
+          "properties": {
+            "model": "inputs(sort \"System.Decimal\" 0) old(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int)\"(sort \"System.Decimal\" 0, bv32 2))) new(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int,System.MidpointRounding)\"(sort \"System.Decimal\" 0, bv32 2, sort \"System.MidpointRounding\" 873244445)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ]
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 28,
+            "modern": 28
+          },
+          "matchedPairs": 28,
+          "pairsWithoutOpaque": 7,
+          "pairsWholeBodyOpaque": 16,
+          "pairsCongruent": 24,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {
+            "CompoundAssignment": {
+              "legacy": 1,
+              "modern": 1
+            },
+            "DelegateCreation": {
+              "legacy": 1,
+              "modern": 1
+            },
+            "InterpolatedString": {
+              "legacy": 1,
+              "modern": 1
+            },
+            "async": {
+              "legacy": 1,
+              "modern": 1
+            },
+            "lock": {
+              "legacy": 1,
+              "modern": 1
+            },
+            "no-body": {
+              "legacy": 14,
+              "modern": 14
+            },
+            "ref-argument": {
+              "legacy": 1,
+              "modern": 1
+            },
+            "switch-pattern": {
+              "legacy": 1,
+              "modern": 1
+            }
+          },
+          "changedPairs": 4,
+          "changedPairsWithoutOpaque": 3,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 3,
+            "InterpolatedString": 1
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "unknownByScope": {
+            "line": 1,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 134,
+          "modern": 130
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        }
+      }
+    }
+  ]
+}

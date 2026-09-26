@@ -1,0 +1,205 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ApiDrift.Text::Parts(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Text.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 32,
+                  "endLine": 7,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ApiDrift.Text::Parts(string)",
+            "resultFingerprint/v1": "c3130e2def9732b0822f7b8015495e1d511b4d5b5a9f7ad40b45710d53185719"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.string-split-one-char"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.ApiDrift.Text::HasX(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Text.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 28,
+                  "endLine": 9,
+                  "endColumn": 32
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ApiDrift.Text::HasX(string)",
+            "resultFingerprint/v1": "abef246bad2517d8d4dfe9581bb196daee2635833c121b11111ed2789f59385a"
+          },
+          "baselineState": "new",
+          "properties": {
+            "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.string-contains-char"
+            ]
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 2,
+            "modern": 2
+          },
+          "matchedPairs": 2,
+          "pairsWithoutOpaque": 2,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 0,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 2,
+          "changedPairsWithoutOpaque": 2,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 2
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 26,
+          "modern": 20
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        }
+      }
+    }
+  ]
+}
