@@ -52,6 +52,11 @@ internal static partial class CompilationDiagnosticClassifier
     /// <c>Microsoft.AspNetCore.App</c> in a <c>Microsoft.NET.Sdk.Web</c> project) that the SDK already adds
     /// implicitly; redundant, not a load problem, and routinely left by upgrade tools
     /// (<see cref="RedundantImplicitFrameworkReference"/>).</description></item>
+    /// <item><description><c>NU1004</c>: a non-SDK .NET Framework project with <c>PackageReference</c> items, whose
+    /// implicit restore (triggered by opening it, distinct from the solution's own prior restore) asks for a
+    /// <c>RuntimeIdentifiers</c> entry because a package carries a <c>runtimes/win/...</c> asset. The packages are
+    /// already resolved from the restore the corpus skill ran first, so this changes nothing that reaches the
+    /// compilation (P2-021; <see cref="ProjectDoesNotListARuntimeIdentifier"/>).</description></item>
     /// </list>
     /// </summary>
     public static LoadDiagnosticKind ClassifyWorkspaceFailure(string message) =>
@@ -60,6 +65,7 @@ internal static partial class CompilationDiagnosticClassifier
         || ProjectReferenceResolvedForAFallbackFramework.IsMatch(message)
         || PackageHasAKnownVulnerability.IsMatch(message)
         || RedundantImplicitFrameworkReference.IsMatch(message)
+        || ProjectDoesNotListARuntimeIdentifier.IsMatch(message)
             ? LoadDiagnosticKind.WorkspaceWarning
             : LoadDiagnosticKind.WorkspaceFailure;
 
@@ -89,4 +95,10 @@ internal static partial class CompilationDiagnosticClassifier
         RegexOptions.CultureInvariant,
         matchTimeoutMilliseconds: 1000)]
     private static partial Regex RedundantImplicitFrameworkReference { get; }
+
+    [GeneratedRegex(
+        @"\bYour project file doesn't list '[^']*' as an? [""']RuntimeIdentifiers?[""']",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ProjectDoesNotListARuntimeIdentifier { get; }
 }
