@@ -176,7 +176,7 @@ public sealed class ApiEquivalenceLoweringTests
     public void AnOpaqueLegacyBodyHasTheModernReturnSort()
     {
         (IrProcedure body, ImmutableArray<string> applied) = Legacy(
-            WebApi + "class C : System.Web.Http.ApiController { async System.Threading.Tasks.Task<System.Web.Http.IHttpActionResult> M() => NotFound(); }",
+            WebApi + "class C : System.Web.Http.ApiController { System.Threading.Tasks.Task<System.Web.Http.IHttpActionResult> M() { lock (this) { } return System.Threading.Tasks.Task.FromResult<System.Web.Http.IHttpActionResult>(NotFound()); } }",
             Table);
 
         Assert.Single(Opaques(body));

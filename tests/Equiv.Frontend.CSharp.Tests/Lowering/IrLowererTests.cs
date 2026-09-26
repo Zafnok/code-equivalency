@@ -16,8 +16,8 @@ public sealed class IrLowererTests
     [Theory]
     [InlineData("static extern int M();", "M", "no-body")]
     [InlineData("static void M(object o) { lock (o) { } }", "M", "lock")]
-    [InlineData("static async System.Threading.Tasks.Task<int> M() { await System.Threading.Tasks.Task.Delay(0); return 1; }", "M", "async")]
-    [InlineData("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }", "M", "async")]
+    [InlineData("static System.Collections.Generic.IEnumerable<int> M() { yield return 1; }", "M", "iterator")]
+    [InlineData("static async System.Threading.Tasks.Task M(IAsyncDisposable d) { await using (d) { } }", "M", "await-using")]
     public void WholeBodyIsOneOpaque(string members, string name, string reason)
     {
         IrProcedure procedure = Method(members, name);
@@ -30,7 +30,7 @@ public sealed class IrLowererTests
     [Theory]
     [InlineData("static extern int M();", "M")]
     [InlineData("static void M(object o) { lock (o) { } }", "M")]
-    [InlineData("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }", "M")]
+    [InlineData("static System.Collections.Generic.IEnumerable<int> M() { yield return 1; }", "M")]
     public void WholeBodyOpaqueIsFlagged(string members, string name) =>
         Assert.True(Assert.Single(Opaques(Method(members, name))).WholeBody);
 
@@ -77,7 +77,7 @@ public sealed class IrLowererTests
     {
         IrProcedure procedure = Method("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }");
 
-        Assert.Equal("async", Assert.Single(Opaques(procedure)).Reason);
+        Assert.Empty(Opaques(procedure));
     }
 
     [Theory]
