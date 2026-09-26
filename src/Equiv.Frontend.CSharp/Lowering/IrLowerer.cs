@@ -272,12 +272,28 @@ internal sealed class IrLowerer
     private static IrProcedure Opaque(IMethodSymbol method, RenameMap renames, Catalogue catalogue, string reason, ImmutableArray<SourceSpan> spans)
     {
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
+        return Opaque(RoslynIdentity.Of(method, renames), parameters, returnType, reason, spans);
+    }
+
+    /// <summary>
+    /// <paramref name="lowered"/>'s signature over one whole-body <see cref="IrOpaque"/> with reason
+    /// <paramref name="reason"/> at <paramref name="span"/>: how the frontend marks both bodies of a pair it decides
+    /// without either one, such as one where exactly one side is <c>async</c> (ticket M4-006).
+    /// </summary>
+    public static IrProcedure Opaque(IrProcedure lowered, string reason, SourceSpan span)
+    {
+        ArgumentNullException.ThrowIfNull(lowered);
+        return Opaque(lowered.Identity, lowered.Parameters, lowered.ReturnType, reason, [span]);
+    }
+
+    private static IrProcedure Opaque(ProcedureIdentity identity, ImmutableArray<IrParameter> parameters, IrType? returnType, string reason, ImmutableArray<SourceSpan> spans)
+    {
         IrVar? value = returnType is null ? null : new IrVar("$0", returnType);
         IrBlock block = new(
             new IrBlockId(0),
             [.. spans[..^1].Select(span => new IrOpaque(Target: null, reason, span) { WholeBody = true }), new IrOpaque(value, reason, spans[^1]) { WholeBody = true }],
             new IrReturn(value, [.. parameters.Where(static p => p.Kind != IrParameterKind.In).Select(static p => new IrOut(p.Var, p.Var))]));
-        return new IrProcedure(RoslynIdentity.Of(method, renames), parameters, returnType, [block], block.Id);
+        return new IrProcedure(identity, parameters, returnType, [block], block.Id);
     }
 
     private static SourceSpan Span(SyntaxNode syntax) => CSharpFrontend.ToSourceSpan(syntax.GetLocation());
