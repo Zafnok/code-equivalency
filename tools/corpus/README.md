@@ -7,7 +7,7 @@ through the skill `.claude/skills/equiv-corpus-run`, not by hand.
 |---|---|
 | `poly-migrationbench-dotnet.csv` | Verbatim copy of Amazon's Poly-MigrationBench .NET list: 100 MIT or Apache-2.0 .NET Framework repos, each pinned at a commit where the build and unit tests pass. The columns are `repo,base_commit,license,num_cs_files,root_sln_or_csproj_files,verify_command`. |
 | `pairs.csv` | Public before-and-after migrations pinned by commit. Kind `human`: a person migrated it. Kind `tool`: raw output of .NET Upgrade Assistant or AWS Porting Assistant. |
-| `corpus.ps1` | Lists, selects, fetches and cleans pairs; computes ADR 0028's unchanged share; refreshes the upstream list; `-SeedMechanical` drives the seeder (ticket M4-010). |
+| `corpus.ps1` | Lists, selects, fetches and cleans pairs; computes ADR 0028's unchanged share; refreshes the upstream list; `-SeedMechanical` drives the seeder (ticket M4-010); `-RuntimeDiff` runs `tools/runtime-diff` on a census's `externalCallees` (ADR 0035, ticket M3-033). |
 | `migration-prompt.md` | The fixed prompt an agent gets when it migrates an agent pair. |
 | `seeds.md` | The catalogue of hand-written behaviour changes injected in `seeded` mode, used to measure recall. |
 | `seeder/` | Console tool (ticket M4-010) that applies M0-012's mutation operators to real methods on the modern side, at scale, by Roslyn syntax rewriting (`Equiv.TestSupport`'s `PairGen` shares its implementation for the differential soundness gate). `-SeedMechanical` copies the modern side to `.corpus/pairs/<slug>/seeded-mech/`, runs it, and writes `seeds.json` there. |
@@ -63,3 +63,15 @@ its `license` column), and none of their code is in this repository.
 renames `eShopLegacyMVC` to `eShop.MVC`) therefore scores 0% even where contents match. Read
 the unchanged share for such pairs with that in mind, and prefer the census's `pairsCongruent`
 (M3-015).
+
+## `-RuntimeDiff` (ADR 0035, ticket M3-033)
+
+`./tools/corpus/corpus.ps1 -RuntimeDiff <slug> [-Top 200]` reads the most recent `-lower-only`
+census SARIF under `.corpus/pairs/<slug>/runs/*census*/equiv.sarif`, takes the union of both
+sides' top `-Top` `loweringCensus.externalCallees` (already sorted by call-site count), and runs
+`tools/runtime-diff --member` on each distinct member. Reports land under
+`.corpus/runs/<slug>/runtime-diff/<member>.json`, one file per member; nothing is written outside
+`.corpus/`. A member whose identity carries an equiv-only `<T1,T2>` generic instantiation suffix
+has it stripped first, since `runtime-diff` resolves a member against real Roslyn symbols and
+knows nothing of that suffix. Run a census first (`equiv compare --lower-only`) if the command
+reports no census SARIF.
