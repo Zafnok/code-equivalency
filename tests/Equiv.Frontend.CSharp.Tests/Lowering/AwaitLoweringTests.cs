@@ -151,7 +151,7 @@ public sealed class AwaitLoweringTests
     public void ASynchronousForEachOrUsingInAnAsyncMethodIsLowered()
     {
         IrProcedure procedure = Method(
-            $"static async {Tasks}.Task<int> M(System.Collections.Generic.List<int> xs, IDisposable d) {{ int s = 0; using (d) {{ foreach (int x in xs) s += x; }} await {Tasks}.Task.Yield(); return s; }}");
+            $"static async {Tasks}.Task<int> M(System.Collections.Generic.List<int> xs, IDisposable d) {{ int s = 0; using (d) {{ foreach (int x in xs) s += x; }} using IDisposable e = d; await {Tasks}.Task.Yield(); return s; }}");
 
         Assert.Empty(Opaques(procedure));
     }
