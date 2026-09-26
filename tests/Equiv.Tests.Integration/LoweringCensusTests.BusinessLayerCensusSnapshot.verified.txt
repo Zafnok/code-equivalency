@@ -4,7 +4,7 @@
     modern: 28
   },
   matchedPairs: 28,
-  pairsWithoutOpaque: 7,
+  pairsWithoutOpaque: 8,
   pairsWholeBodyOpaque: 16,
   pairsCongruent: 24,
   projectsSkipped: {
@@ -35,10 +35,6 @@
     no-body: {
       legacy: 14,
       modern: 14
-    },
-    ref-argument: {
-      legacy: 1,
-      modern: 1
     },
     switch-pattern: {
       legacy: 1,

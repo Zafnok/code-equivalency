@@ -12,7 +12,7 @@ internal static class WholeBodyReasonOwners
     public static ImmutableSortedDictionary<string, string> Table { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["async"] = "M4-006",
-        ["lock"] = "M4-003",
+        ["lock"] = "M4-011",
         ["catch-filter"] = "M4-008",
         ["Block"] = "M4-008",
         ["no-body"] = "M4-008",

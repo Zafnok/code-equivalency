@@ -27,6 +27,10 @@ Since M4-002, `decimal` arithmetic is a set of pure functions both sides share (
 the same values, so the solver proves it Equivalent without modelling `decimal`. Its `Binary` and `Conversion` opaques
 leave the census.
 
+Since M4-003, `ref` and `out` arguments to locals and parameters are call outputs, so `ParseQuantity`'s `TryParse`
+lowers with no opaque and its `ref-argument` entry leaves the census. `Record`'s `lock` stays whole-body opaque: the CFG
+never initialises the `lockTaken` local it passes to `Monitor.Enter` by `ref` (ticket M4-011).
+
 Congruent results that call another matched procedure list it in `properties.assumedCallees`
 (ADR 0019). Every such callee here is itself Equivalent, so no result has `unprovenAssumptions`.
 
@@ -40,7 +44,7 @@ Congruent results that call another matched procedure list it in `properties.ass
 | `OrderService.QuantityOf(object)` | `is T t` pattern | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-005 |
 | `OrderService.Describe(Order)` | interpolated string | binding only | Unknown | Equivalent | none yet: not congruent, see above | none yet |
 | `OrderService.Export(Order)` | `using` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-001 |
-| `OrderService.Record()` | `lock` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-003 |
+| `OrderService.Record()` | `lock` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-011 |
 | `OrderService.IsLarge(int)` | integer comparison | unchanged | Equivalent (congruence) | Equivalent | M3-001 | M3-001 |
 | `OrderService.TotalQuantity(Order)` | `foreach` over `List<T>` | renamed local | Equivalent (congruence) | Equivalent | M3-015 (local names are not in the fingerprint) | M4-001 (with M3-010) |
 | `OrderService.LineTotal(OrderLine)` | `decimal` arithmetic | extracted variable | Equivalent (bounded) | Equivalent | M4-002 | M4-002 (with M3-010) |
