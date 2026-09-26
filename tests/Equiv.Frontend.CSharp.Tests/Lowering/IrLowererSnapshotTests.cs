@@ -59,6 +59,10 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task CompoundAssignment() => Dump("static byte M(byte b, int a, int n) { b += 1; a *= a; a <<= n; a /= n; return b; }");
 
+    /// <summary>Ticket P2-022: a <c>decimal</c> <c>+=</c> to a local, a <c>decimal</c> <c>/=</c> to a property, a postfix <c>double</c> <c>++</c>, a user-defined <c>+=</c>.</summary>
+    [Fact]
+    public Task PureCompoundAssignment() => Dump("struct Money { public static Money operator +(Money a, Money b) => a; } decimal P { get; set; } static double M(C c, decimal m, int i, double d, Money a, Money b) { m += i; c.P /= m; double e = d++; a += b; return e; }");
+
     [Fact]
     public Task IncrementAndDecrement() => Dump("static int M(int a, char c) { a++; --a; c--; return a + c; }");
 

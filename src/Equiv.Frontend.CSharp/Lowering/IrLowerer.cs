@@ -1040,64 +1040,109 @@ internal sealed class IrLowerer
     /// <c>x op= v</c> (ticket M2-004 acceptance criterion 9): read, promote to the operator's type, operate
     /// with the binary operator's exception edges, narrow back to the target type, write. A shift takes its
     /// operator type from the promoted target; every other operator from the right operand, which Roslyn has
-    /// already converted to it.
+    /// already converted to it. On <c>float</c>, <c>double</c> and <c>decimal</c> the operation is the binary
+    /// operator's catalogued function, and a static user-defined operator its <c>op:</c> function (ticket P2-022).
     /// </summary>
     private IrVar? Compound(ICompoundAssignmentOperation compound, LoweringContext context)
     {
+        UpdateSite site = new(compound, compound.Target, compound.IsChecked, IsPostfix: false);
         ITypeSymbol right = compound.Value.Type!;
+        if (PureCatalogue.IsCatalogued(compound.Target.Type!) && PureCatalogue.Binary(compound.OperatorKind, compound.Target.Type!, right) is { } entry)
+        {
+            return Update(site, old => Apply(entry, compound.IsChecked, [old, Value(compound.Value, context)], old.Type, context), context);
+        }
+
+        if (compound.OperatorMethod is { } method)
+        {
+            return IsExact(compound, method, [compound.Target, compound.Value])
+                ? Update(site, old => Operator(method, [old, Value(compound.Value, context)], context), context)
+                : Opaque(compound, compound.Kind.ToString(), context);
+        }
+
         (IrBitVec Type, bool Signed)? mappedRight = TypeMapper.Map(right) is IrBitVec bits ? (bits, TypeMapper.IsSigned(right)) : null;
         (IrBitVec Type, bool Signed)? operands = OperatorMapper.IsShiftKind(compound.OperatorKind)
             ? TypeMapper.Promote(compound.Target.Type!)
             : mappedRight;
-        return compound.OperatorMethod is null && operands is { } promoted
-            ? Update(new UpdateSite(compound, compound.Target, compound.IsChecked, IsPostfix: false), compound.OperatorKind, () => Value(compound.Value, context), promoted, context)
+        return operands is { } promoted
+            ? Update(site, compound.OperatorKind, () => Value(compound.Value, context), promoted, context)
             : Opaque(compound, compound.Kind.ToString(), context);
     }
 
-    /// <summary><c>x++</c>, <c>--x</c>: the right operand is a promoted <c>1</c>; postfix yields the value read.</summary>
+    /// <summary>
+    /// <c>x++</c>, <c>--x</c>: the right operand is a promoted <c>1</c>; postfix yields the value read. On <c>float</c>,
+    /// <c>double</c> and <c>decimal</c> it is <c>x += 1</c> or <c>x -= 1</c> with the literal's own constant, and a static
+    /// user-defined <c>op_Increment</c> or <c>op_Decrement</c> is its <c>op:</c> function (ticket P2-022).
+    /// </summary>
     private IrVar? Step(IIncrementOrDecrementOperation step, LoweringContext context)
     {
-        if (TypeMapper.Promote(step.Type!) is not { } promoted)
+        UpdateSite site = new(step, step.Target, step.IsChecked, step.IsPostfix);
+        BinaryOperatorKind kind = step.Kind == OperationKind.Increment ? BinaryOperatorKind.Add : BinaryOperatorKind.Subtract;
+        if (PureCatalogue.IsCatalogued(step.Type!))
         {
-            return Opaque(step, step.Kind.ToString(), context);
+            // Whatever Roslyn reports as the operator method: `decimal` `++` is `dec.add` of the literal `1m`.
+            PureCatalogue.Entry entry = PureCatalogue.Binary(kind, step.Type!, step.Type!)!;
+            return Update(site, old => Apply(entry, step.IsChecked, [old, Constant(step.Type!, 1, context)], old.Type, context), context);
         }
 
-        BinaryOperatorKind kind = step.Kind == OperationKind.Increment ? BinaryOperatorKind.Add : BinaryOperatorKind.Subtract;
-        return Update(new UpdateSite(step, step.Target, step.IsChecked, step.IsPostfix), kind, () => Const(new IrBitVecValue(promoted.Type.Width, 1), context), promoted, context);
+        return (step.OperatorMethod, TypeMapper.Promote(step.Type!)) switch
+        {
+            ({ } method, _) when IsExact(step, method, [step.Target]) => Update(site, old => Operator(method, [old], context), context),
+            (null, { } promoted) => Update(site, kind, () => Const(new IrBitVecValue(promoted.Type.Width, 1), context), promoted, context),
+            _ => Opaque(step, step.Kind.ToString(), context),
+        };
     }
 
     /// <summary>
-    /// Reads the target, evaluates <paramref name="operand"/> (C# reads a compound assignment's target first), operates
-    /// and writes back. The target is a local or parameter, or a property with a getter and a non-init setter, whose
-    /// receiver and index arguments are evaluated once for both accessor calls (ticket M3-010 acceptance criterion 2).
+    /// The bitvector <c>x op= v</c>: promotes the value read, operates with the binary operator's exception edges, narrows
+    /// back to the target's type, and throws in a <c>checked</c> context when the result does not fit.
     /// </summary>
     private IrVar? Update(UpdateSite site, BinaryOperatorKind kind, Func<IrVar> operand, (IrBitVec Type, bool Signed) promoted, LoweringContext context)
     {
-        (IOperation node, IOperation lvalue, bool isChecked, bool isPostfix) = site;
-        if (TypeMapper.Map(lvalue.Type!) is not IrBitVec narrow || Place(lvalue, context) is not { } place)
+        IOperation lvalue = site.Target;
+        if (TypeMapper.Map(lvalue.Type!) is not IrBitVec narrow)
         {
-            return Opaque(node, lvalue.Kind.ToString(), context);
+            return Opaque(site.Node, lvalue.Kind.ToString(), context);
+        }
+
+        bool targetSigned = TypeMapper.IsSigned(lvalue.Type!);
+        return Update(site, old =>
+        {
+            IrVar right = operand();
+            // Never null here: a shift takes operands of any two widths, and every other compound operator
+            // was given the right operand's own bitvector type.
+            IrBinaryOp op = OperatorMapper.Binary(kind, promoted.Signed, promoted.Type, right.Type)!.Value;
+            IrVar wide = Resize(old, promoted.Type, targetSigned, context);
+            IrVar computed = OperatorMapper.IsShift(op)
+                ? Shift(op, wide, right, promoted.Type, context)
+                : Arithmetic(op, wide, right, promoted.Signed, site.IsChecked, promoted.Type, context);
+            IrVar result = Resize(computed, narrow, promoted.Signed, context);
+            if (site.IsChecked && narrow != promoted.Type)
+            {
+                ThrowIfItDoesNotFit(computed, result, promoted.Signed, targetSigned, context);
+            }
+
+            return result;
+        }, context);
+    }
+
+    /// <summary>
+    /// Reads the target, applies <paramref name="operate"/> to the value read, which evaluates the right operand (C# reads
+    /// a compound assignment's target first) and branches on its exceptions before the write, and writes the result back.
+    /// The target is a local or parameter, or a property with a getter and a non-init setter, whose receiver and index
+    /// arguments are evaluated once for both accessor calls (ticket M3-010 acceptance criterion 2).
+    /// </summary>
+    private IrVar? Update(UpdateSite site, Func<IrVar, IrVar> operate, LoweringContext context)
+    {
+        if (Place(site.Target, context) is not { } place)
+        {
+            return Opaque(site.Node, site.Target.Kind.ToString(), context);
         }
 
         (Func<IrVar> read, Action<IrVar> write) = place;
         IrVar old = read();
-        IrVar right = operand();
-        // Never null here: a shift takes operands of any two widths, and every other compound operator
-        // was given the right operand's own bitvector type.
-        IrBinaryOp op = OperatorMapper.Binary(kind, promoted.Signed, promoted.Type, right.Type)!.Value;
-        bool targetSigned = TypeMapper.IsSigned(lvalue.Type!);
-        IrVar wide = Resize(old, promoted.Type, targetSigned, context);
-        IrVar computed = OperatorMapper.IsShift(op)
-            ? Shift(op, wide, right, promoted.Type, context)
-            : Arithmetic(op, wide, right, promoted.Signed, isChecked, promoted.Type, context);
-        IrVar result = Resize(computed, narrow, promoted.Signed, context);
-        if (isChecked && narrow != promoted.Type)
-        {
-            ThrowIfItDoesNotFit(computed, result, promoted.Signed, targetSigned, context);
-        }
-
+        IrVar result = operate(old);
         write(result);
-        return isPostfix ? old : result;
+        return site.IsPostfix ? old : result;
     }
 
     /// <summary>
@@ -1175,13 +1220,21 @@ internal sealed class IrLowerer
     private IrVar? UserDefined(IOperation operation, IMethodSymbol method, ImmutableArray<IOperation> operands, LoweringContext context)
     {
         ImmutableArray<IrVar> args = [.. operands.Select(o => Value(o, context))];
-        bool exact = SymbolEqualityComparer.Default.Equals(method.ReturnType, operation.Type)
-            && operands.Select(static o => o.Type).SequenceEqual(method.Parameters.Select(static p => p.Type), SymbolEqualityComparer.Default);
-        if (!exact)
-        {
-            return Opaque(operation, operation.Kind.ToString(), context);
-        }
+        return IsExact(operation, method, operands) ? Operator(method, args, context) : Opaque(operation, operation.Kind.ToString(), context);
+    }
 
+    /// <summary>
+    /// Whether <paramref name="method"/> takes exactly the types of <paramref name="operands"/> and yields the type of
+    /// <paramref name="operation"/>. A C# 14 instance compound or increment operator never is: it takes one operand fewer
+    /// and returns <c>void</c>.
+    /// </summary>
+    private static bool IsExact(IOperation operation, IMethodSymbol method, ImmutableArray<IOperation> operands) =>
+        SymbolEqualityComparer.Default.Equals(method.ReturnType, operation.Type)
+        && operands.Select(static o => o.Type).SequenceEqual(method.Parameters.Select(static p => p.Type), SymbolEqualityComparer.Default);
+
+    /// <summary>The <c>op:</c> function of a user-defined operator applied to <paramref name="args"/> (ticket M4-002).</summary>
+    private IrVar Operator(IMethodSymbol method, ImmutableArray<IrVar> args, LoweringContext context)
+    {
         CallIdentity identity = Identity(method);
         return Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, args, Map(method.ReturnType), context);
     }
