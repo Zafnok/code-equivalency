@@ -150,8 +150,12 @@ internal sealed class FragmentEncoder
             .Aggregate(input, (rest, e) =>
             {
                 IrOut? @out = Outs(e.Exit).FirstOrDefault(o => string.Equals(o.Param.Name, parameter?.Var.Name, StringComparison.Ordinal));
-                Expr? value = @out is not null ? Var(@out.Final) : threaded < 0 ? null : heapOut[e.Block][threaded];
-                return value is null ? rest : context.MkITE(reach[e.Block], value, rest);
+                if (@out is not null)
+                {
+                    return context.MkITE(reach[e.Block], Var(@out.Final), rest);
+                }
+
+                return threaded < 0 ? rest : context.MkITE(reach[e.Block], heapOut[e.Block][threaded], rest);
             });
     }
 

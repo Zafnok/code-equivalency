@@ -96,6 +96,58 @@ public sealed class SpacerRungTests
         Assert.Equal((ProofMethod.Chc, RungOutcome.Refuted, ChcMode.Integers), (rung.Step.Rung, rung.Step.Outcome, rung.Step.Mode));
     }
 
+    /// <summary>
+    /// An opaque node before the loop, on one side only: the one derivation of <c>bad</c> is the entry segment's own rule,
+    /// so no relation's fact holds its inputs and they come from a model of that rule, and its replay reaches the node,
+    /// which is Unknown(Opaque) with the node as the cause.
+    /// </summary>
+    [Fact]
+    public void AnOpaqueNodeBeforeTheLoopIsUnknownOpaqueThroughTheEntrysDerivation()
+    {
+        (IrProcedure old, IrProcedure @new) = Fixture.Pair("""
+            proc "T::Log(int)" (%n "n": bv32) -> bv32 entry B0
+            B0:
+              %z: bv32 = const bv32 0
+              %one: bv32 = const bv32 1
+              %early: bool = slt %n, %z
+              br %early, B3, B1
+            B3:
+              opaque "EarlyEffect" at "T.cs" 3:9-3:30
+              goto B1
+            B1:
+              %i "i": bv32 = phi [B0: %z, B3: %z, B2: %i1]
+              %c: bool = slt %i, %n
+              br %c, B2, B4
+            B2:
+              %i1 "i": bv32 = add %i, %one
+              goto B1
+            B4:
+              ret %i
+            ---
+            proc "T::Log(int)" (%n "n": bv32) -> bv32 entry B0
+            B0:
+              %z: bv32 = const bv32 0
+              %one: bv32 = const bv32 1
+              goto B1
+            B1:
+              %i "i": bv32 = phi [B0: %z, B2: %i1]
+              %c: bool = slt %i, %n
+              br %c, B2, B4
+            B2:
+              %i1 "i": bv32 = add %i, %one
+              goto B1
+            B4:
+              ret %i
+            """);
+
+        Rung rung = Prove(old, @new, Options);
+
+        Unknown unknown = Assert.IsType<Unknown>(rung.Verdict);
+        Assert.Equal(UnknownReason.Opaque, unknown.Reason);
+        Assert.Equal(Codebase.Legacy, Assert.Single(unknown.Causes).Side);
+        Assert.StartsWith("a derivation over the integers reaches an opaque node", rung.Step.Detail, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheReplayOracleRefusesACall() =>
         Assert.Throws<InvalidOperationException>(static () => SpacerRung.NoCalls.Instance.Answer(new CallIdentity("T::M()"), [], resultType: null, position: 0, []));

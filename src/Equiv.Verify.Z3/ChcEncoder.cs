@@ -118,7 +118,7 @@ internal sealed class ChcEncoder
 
         try
         {
-            Status status = fixedpoint.Query([bad]);
+            Status status = fixedpoint.Query(Bad);
             return new ChcAnswer(status, fixedpoint.GetAnswer(), fixedpoint.GetReasonUnknown());
         }
         catch (Z3Exception exception)
@@ -320,8 +320,11 @@ internal sealed class ChcEncoder
     private BoolExpr Rule(IEnumerable<BoolExpr> body, BoolExpr head) => context.MkImplies(context.MkAnd(body), head);
 
     /// <summary>The relation of <paramref name="a"/> and <paramref name="b"/> in <paramref name="system"/> applied to the inputs, the literals and the two states.</summary>
-    private BoolExpr Atom(Horn system, IrBlockId? a, IrBlockId? b, IEnumerable<Expr> oldState, IEnumerable<Expr> newState) =>
-        (BoolExpr)context.MkApp(system.Relations[(a, b)], [.. Carried, .. oldState, .. newState]);
+    private BoolExpr Atom(Horn system, IrBlockId? a, IrBlockId? b, IEnumerable<Expr> oldState, IEnumerable<Expr> newState)
+    {
+        Expr[] arguments = [.. Carried, .. oldState, .. newState];
+        return (BoolExpr)context.MkApp(system.Relations[(a, b)], arguments);
+    }
 
     /// <summary>
     /// <paramref name="system"/>'s relations, one per pair of cut points, and the product's rules: the entry step, then the
@@ -330,14 +333,30 @@ internal sealed class ChcEncoder
     /// </summary>
     private Horn Encode(Horn system)
     {
-        foreach (IrBlockId? a in old.Points)
+        foreach ((IrBlockId? a, IrBlockId? b) in Pairs())
         {
-            foreach (IrBlockId? b in @new.Points)
-            {
-                system.Relations.Add((a, b), context.MkFuncDecl($"inv.{Label(a)}.{Label(b)}", [.. Carried.Concat(old.Pre(a)).Concat(@new.Pre(b)).Select(static t => t.Sort)], context.BoolSort));
-            }
+            system.Relations.Add((a, b), context.MkFuncDecl($"inv.{Label(a)}.{Label(b)}", [.. Carried.Concat(old.Pre(a)).Concat(@new.Pre(b)).Select(static t => t.Sort)], context.BoolSort));
         }
 
+        EncodeEntries(system);
+        foreach ((IrBlockId? a, IrBlockId? b) in Pairs().Where(static p => p.Old is not null || p.New is not null))
+        {
+            EncodeSteps(system, a, b);
+        }
+
+        return system;
+    }
+
+    /// <summary>Every pair of an old and a new cut point, each side's headers in pre-order and then its exit.</summary>
+    private IEnumerable<(IrBlockId? Old, IrBlockId? New)> Pairs() => old.Points.SelectMany(a => @new.Points.Select(b => (a, b)));
+
+    /// <summary>
+    /// The entry step: both entry segments together, into the pair of cut points they reach; and <c>bad</c> when either
+    /// entry segment fails (<see cref="Failure"/>). The divergence query also records each entry rule that reaches
+    /// <c>bad</c> without a relation, for <see cref="DerivationInputs"/>.
+    /// </summary>
+    private void EncodeEntries(Horn system)
+    {
         Segment oldEntry = old.Entry;
         Segment newEntry = @new.Entry;
         BoolExpr[] start = [.. Start(system.Bounds)];
@@ -349,7 +368,7 @@ internal sealed class ChcEncoder
                 Step(system, body, oldExit.Target, newExit.Target, old.Moved(oldExit), @new.Moved(newExit));
                 if (!system.Overflows && oldExit.Target is null && newExit.Target is null)
                 {
-                    entryDivergence.Add(context.MkAnd([.. body, Differs(old.Observables(oldExit.Values), @new.Observables(newExit.Values))]));
+                    entryDivergence.Add(context.MkAnd(body.Append(Differs(old.Observables(oldExit.Values), @new.Observables(newExit.Values)))));
                 }
             }
         }
@@ -363,19 +382,6 @@ internal sealed class ChcEncoder
                 entryDivergence.Add(context.MkAnd(body));
             }
         }
-
-        foreach (IrBlockId? a in old.Points)
-        {
-            foreach (IrBlockId? b in @new.Points)
-            {
-                if (a is not null || b is not null)
-                {
-                    EncodeSteps(system, a, b);
-                }
-            }
-        }
-
-        return system;
     }
 
     /// <summary>
@@ -424,15 +430,13 @@ internal sealed class ChcEncoder
 
             if (oldExit.Continues || newSegment is null)
             {
-                BoolExpr waits = newSegment is null ? context.MkTrue() : context.MkAnd(newSegment.Formula, context.MkNot(newSegment.Continues));
-                Step(system, [.. pre, oldSegment!.Formula, oldExit.Reach, waits], oldExit.Target, b, old.Moved(oldExit), (@new.Pre(b), []));
+                Step(system, [.. pre, oldSegment!.Formula, oldExit.Reach, Waits(newSegment)], oldExit.Target, b, old.Moved(oldExit), (@new.Pre(b), []));
             }
         }
 
         foreach (SegmentExit newExit in newSegment?.Exits.Where(n => n.Continues || oldSegment is null) ?? [])
         {
-            BoolExpr waits = oldSegment is null ? context.MkTrue() : context.MkAnd(oldSegment.Formula, context.MkNot(oldSegment.Continues));
-            Step(system, [.. pre, newSegment!.Formula, newExit.Reach, waits], a, newExit.Target, (old.Pre(a), []), @new.Moved(newExit));
+            Step(system, [.. pre, newSegment!.Formula, newExit.Reach, Waits(oldSegment)], a, newExit.Target, (old.Pre(a), []), @new.Moved(newExit));
         }
 
         foreach (Segment segment in new[] { oldSegment, newSegment }.OfType<Segment>())
@@ -440,6 +444,10 @@ internal sealed class ChcEncoder
             system.Rules.Add(Rule([.. pre, segment.Formula, Failure(segment, system)], Bad));
         }
     }
+
+    /// <summary>What lets a side wait while the other steps alone: it has exited, or its own segment leaves its header.</summary>
+    private BoolExpr Waits(Segment? waiting) =>
+        waiting is null ? context.MkTrue() : context.MkAnd(waiting.Formula, context.MkNot(waiting.Continues));
 
     private void Step(Horn system, BoolExpr[] body, IrBlockId? a, IrBlockId? b, (IReadOnlyList<Expr> Terms, IEnumerable<BoolExpr> Post) oldState, (IReadOnlyList<Expr> Terms, IEnumerable<BoolExpr> Post) newState) =>
         system.Rules.Add(Rule([.. body, .. oldState.Post, .. newState.Post], Atom(system, a, b, oldState.Terms, newState.Terms)));
@@ -591,8 +599,8 @@ internal sealed class ChcEncoder
         /// <summary>The state an exit carries as a step's conclusion: a fresh constant per argument, each equal to the exit's value.</summary>
         public (IReadOnlyList<Expr> Terms, IEnumerable<BoolExpr> Post) Moved(SegmentExit exit)
         {
-            Expr[] post = [.. (exit.Target is null ? exitPart.Select(static p => (p.Name, p.Sort)) : parts[exit.Target].Select(v => (v.Name, chc.sorts.Sort(v.Type))))
-                .Select(p => chc.context.MkConst($"post.{Prefix}.{p.Item1}", p.Item2))];
+            Expr[] post = [.. (exit.Target is null ? exitPart.Select(static p => (p.Name, p.Sort)) : parts[exit.Target].Select(v => (v.Name, Sort: chc.sorts.Sort(v.Type))))
+                .Select(p => chc.context.MkConst($"post.{Prefix}.{p.Name}", p.Sort))];
             return (post, [.. post.Zip(exit.Values, chc.context.MkEq)]);
         }
 
@@ -639,10 +647,15 @@ internal sealed class ChcEncoder
         }
 
         /// <summary>The term a segment from <paramref name="header"/> reads for its state variable <paramref name="var"/>.</summary>
-        private Expr Slot(IrBlockId header, IrVar var) =>
-            inputs.TryGetValue(var.Name, out Expr? input) ? input
-            : constants.TryGetValue(var.Name, out IrValue? value) ? chc.sorts.Literal(value)
-            : pre[header][parts[header].IndexOf(var)];
+        private Expr Slot(IrBlockId header, IrVar var)
+        {
+            if (inputs.TryGetValue(var.Name, out Expr? input))
+            {
+                return input;
+            }
+
+            return constants.TryGetValue(var.Name, out IrValue? value) ? chc.sorts.Literal(value) : pre[header][parts[header].IndexOf(var)];
+        }
 
         /// <summary>A cut exit to <paramref name="target"/>: the carried values of the target's relation state.</summary>
         private SegmentExit Cut(FragmentEncoder encoder, IrBlockId block, IrBlockId target, ImmutableArray<IrVar> carried, IrBlockId? start)
@@ -662,12 +675,14 @@ internal sealed class ChcEncoder
             return
             [
                 chc.context.MkBool(exit is IrReturn),
-                .. Procedure.ReturnType is { } type
-                    ? [exit is IrReturn { Value: { } value } ? encoder.Term(value) : chc.context.MkConst($"{Prefix}.none", chc.sorts.Sort(type))]
-                    : Array.Empty<Expr>(),
+                .. Procedure.ReturnType is { } type ? [ReturnValue(encoder, exit, type)] : Array.Empty<Expr>(),
                 chc.context.MkInt(exit is IrThrow thrown ? chc.exceptionTypes[thrown.ExceptionType] : 0),
                 .. byRef.Select(p => outs.FirstOrDefault(o => string.Equals(o.Param.Name, p.Var.Name, StringComparison.Ordinal)) is { } @out ? encoder.Term(@out.Final) : inputs[p.Var.Name]),
             ];
         }
+
+        /// <summary>The value a return exit returns; a throw's is a constant nothing constrains, which no comparison reads.</summary>
+        private Expr ReturnValue(FragmentEncoder encoder, IrTerminator exit, IrType type) =>
+            exit is IrReturn { Value: { } value } ? encoder.Term(value) : chc.context.MkConst($"{Prefix}.none", chc.sorts.Sort(type));
     }
 }

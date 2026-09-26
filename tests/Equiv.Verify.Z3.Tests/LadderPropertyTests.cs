@@ -103,7 +103,7 @@ public sealed class LadderPropertyTests
     public void NoRungRefutesACallFreeProcedureAgainstItself()
     {
         CallFreeLooping.Sample(
-            static p => Assert.DoesNotContain(Independently((p, p), CallFreeOptions, count: 4), static r => r.Step.Outcome == RungOutcome.Refuted),
+            static p => Assert.DoesNotContain(Independently((p, p), CallFreeOptions), static r => r.Step.Outcome == RungOutcome.Refuted),
             iter: 10,
             print: IrText.Dump);
     }
@@ -117,7 +117,7 @@ public sealed class LadderPropertyTests
     public void NoRungProvesATerminatingCallFreeMutant()
     {
         Mutants(CallFreeLooping).Where(static m => Terminates(m.Original, m.Witness) && Terminates(m.Mutant, m.Witness)).Sample(
-            static m => Assert.DoesNotContain(Independently((m.Original, m.Mutant), CallFreeOptions, count: 4), static r => r.Step.Outcome == RungOutcome.Proved),
+            static m => Assert.DoesNotContain(Independently((m.Original, m.Mutant), CallFreeOptions), static r => r.Step.Outcome == RungOutcome.Proved),
             iter: 30,
             print: static m => $"{m.Description}\n{IrText.Dump(m.Original)}\n{IrText.Dump(m.Mutant)}");
     }
@@ -131,10 +131,11 @@ public sealed class LadderPropertyTests
     private static Gen<IrMutant> Mutants(Gen<IrProcedure> procedures) =>
         procedures.SelectMany(IrGen.Mutation).Where(static m => m is not null).Select(static m => m!);
 
-    /// <summary>The first <paramref name="count"/> rungs, each on its own, each refutation checked to replay.</summary>
-    private static IReadOnlyList<LoopLadder.Rung> Independently((IrProcedure Old, IrProcedure New) pair, VerificationOptions options, int count)
+    /// <summary>Every rung on its own, or the first <paramref name="count"/>, each refutation checked to replay.</summary>
+    private static IReadOnlyList<LoopLadder.Rung> Independently((IrProcedure Old, IrProcedure New) pair, VerificationOptions options, int count = 4)
     {
-        IReadOnlyList<LoopLadder.Rung> rungs = [.. new LoopLadder(static () => new Context(), options).Independently(pair.Old, pair.New).Take(count)];
+        IEnumerable<LoopLadder.Rung> all = new LoopLadder(static () => new Context(), options).Independently(pair.Old, pair.New);
+        IReadOnlyList<LoopLadder.Rung> rungs = [.. count < 4 ? all.Take(count) : all];
         Assert.Equal(count, rungs.Count);
         foreach (Divergent divergent in rungs.Select(static r => r.Verdict).OfType<Divergent>())
         {
