@@ -8,14 +8,12 @@ B1:
 B2:
   br %xs.isNull.38, B7, B8
 B3:
-  %s.44 "s": bv32 = phi [B10: %s.39, B29: %s.46]
-  %$8: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.40
-  br %$8, B11, B16
+  %s.45 "s": bv32 = phi [B10: %s.39, B29: %s.47]
+  br %$c0.isNull.41, B11, B16
 B4:
-  %$30: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.40
-  br %$30, B11, B28
+  br %$c0.isNull.41, B11, B28
 B5:
-  ret %s.44
+  ret %s.45
 B7:
   throw "System.NullReferenceException"
 B8:
@@ -27,8 +25,7 @@ B10:
   %$c0.isNull.41: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.40
   goto B3
 B11:
-  %$10: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.40
-  br %$10, B13, B12
+  br %$c0.isNull.41, B13, B12
 B12:
   %$12: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.40
   %$13: bool = mapread %null.System.IDisposable, %$12
@@ -44,8 +41,7 @@ B16:
   %$15: bool = call "System.Collections.IEnumerator::MoveNext()"(%$c0.40) threw %$16: bool
   br %$16, B17, B22
 B17:
-  %$18: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.40
-  br %$18, B19, B18
+  br %$c0.isNull.41, B19, B18
 B18:
   %$20: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.40
   %$21: bool = mapread %null.System.IDisposable, %$20
@@ -60,8 +56,7 @@ B21:
 B22:
   br %$15, B4, B23
 B23:
-  %$24: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.40
-  br %$24, B25, B24
+  br %$c0.isNull.41, B25, B24
 B24:
   %$26: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.40
   %$27: bool = mapread %null.System.IDisposable, %$26
@@ -74,8 +69,8 @@ B26:
 B27:
   goto B25
 B28:
-  %x.45 "x": bv32 = call "System.Collections.Generic.IEnumerator`1::get_Current()<int>"(%$c0.40) threw %$32: bool
+  %x.46 "x": bv32 = call "System.Collections.Generic.IEnumerator`1::get_Current()<int>"(%$c0.40) threw %$32: bool
   br %$32, B17, B29
 B29:
-  %s.46 "s": bv32 = add %s.44, %x.45
+  %s.47 "s": bv32 = add %s.45, %x.46
   goto B3

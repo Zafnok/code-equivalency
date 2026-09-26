@@ -14,6 +14,7 @@ recorded there too.
 |---|---|---|---|---|
 | Microsoft.CodeAnalysis.CSharp.Workspaces | 5.9.0 | Frontend.CSharp | MIT | Roslyn; the only complete C# semantic model |
 | Microsoft.CodeAnalysis.Workspaces.MSBuild | 5.9.0 | Frontend.CSharp | MIT | out-of-process build host; loads legacy csproj via VS Build Tools MSBuild (VS2026 layout fix merged May 2026, Roslyn PR 83477) |
+| Microsoft.CodeAnalysis.CSharp | 5.9.0 | tools/corpus/seeder | MIT | plain Roslyn parsing and syntax rewriting for the corpus seeder (ticket M4-010); no workspace or MSBuild needed since the tool never loads a project, only `.cs` files as text. Already restored transitively via Microsoft.CodeAnalysis.CSharp.Workspaces above; pinned to the same version here since the seeder references it directly |
 | Microsoft.Z3 | 5.1.0 | Verify.Z3 | MIT (confirmed 2026-09-24 from the published 5.1.0 nuspec: `<license type="expression">MIT</license>`, so `tools/licence-check` reads it as SPDX with no `policy.json` exception; upstream Z3Prover/z3 is MIT too) | official bindings, from the Z3Prover/z3 GitHub release nupkg through a hash-pinned local feed, not nuget.org, which lags at 4.12.2 (ADR 0030; ticket M3-027). Ships `libz3` for six platforms: win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64, so the Linux CI legs no longer need the PyPI wheel workaround 4.12.2 required. The linux-x64 native needs glibc 2.38+ (Ubuntu 24.04+); it does not need `libgomp` despite the nuspec description (checked from the ELF `NEEDED` entries: libstdc++, libm, libgcc_s, libc) |
 | Sarif.Sdk | 5.7.0 | Core, Cli | MIT | Microsoft's SARIF 2.1.0 object model (`SarifLog`, `Save`/`Load`). No bundled schema/rule validator — that is `Sarif.Multitool`(`.Library`), not added; M1-004 validates by SDK round-trip instead (see its ticket Notes). Cli does not `PackageReference` it directly, but M1-005 catches `Newtonsoft.Json.JsonException` (Sarif.Sdk's own JSON dependency, transitive through Core) around `SarifLog.Load` to turn a corrupt `--baseline` file into exit 3 instead of an unhandled crash |
 | System.CommandLine | 2.0.12 | Cli | MIT | standard .NET CLI parser; 3.0 is prerelease (rc.1) as of 2026-09-18, so pinned to the 2.0.x stable line |
@@ -37,3 +38,7 @@ recorded there too.
   adopted up front because Roslyn's build host now covers the case.
 - Boogie.ExecutionEngine 3.5.7: viable second backend (SymDiff approach); deferred.
 - Microsoft.NET.Test.Sdk / coverlet.collector: VSTest-era, not needed under MTP.
+- NuGet.Packaging, NuGet.ProjectModel, NuGet.Protocol, NuGet.Configuration (M3-029): the bare loader needs none.
+  It reads `project.assets.json` (NuGet's own resolution, written by `dotnet restore`), `nuget.config` and a v3
+  service index with `System.Text.Json`/`System.Xml.Linq`, and extracts a `.nupkg` with `System.IO.Compression`;
+  it resolves no package graph itself. The spike's NuGet.Packaging 6.14.0 also fails `vulnerable-packages` (NU1901).

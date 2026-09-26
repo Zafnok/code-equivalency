@@ -692,12 +692,8 @@ internal sealed class IrLowerer
                 return heap.ReadSlice(heap.Field(field, context), context);
             case IArrayElementReferenceOperation element:
                 return heap.Element(element, context) is { } read ? heap.ReadSlice(read, context) : Opaque(element, element.Kind.ToString(), context);
-            case IPropertyReferenceOperation property when heap.ArrayLength(property, context) is { } length:
-                return length;
-            case IPropertyReferenceOperation property when heap.AutoProperty(property, context) is { } backing:
-                return heap.ReadSlice(backing, context);
             case IPropertyReferenceOperation property:
-                return Accessor(property, property.Property.GetMethod, Operands(property.Instance, property.Arguments, context), value: null, context);
+                return Read(property, context);
             case IConversionOperation conversion:
                 return Convert(conversion, context);
             case ITypeOfOperation typeOf when typeOf.TypeOperand is not ITypeParameterSymbol:
@@ -720,8 +716,9 @@ internal sealed class IrLowerer
                 return Match(pattern, context);
             case IIsTypeOperation isType:
                 return TestType(isType.ValueOperand, isType.TypeOperand, context) is { } typeTest ? Passes(typeTest, context) : Opaque(isType, isType.Kind.ToString(), context);
-            case IIsNullOperation test when test.Operand.Type!.IsReferenceType:
-                // The null test the CFG makes of a `using` resource or a `foreach` enumerator before disposing it.
+            case IIsNullOperation test when test.Operand.Type is { IsReferenceType: true } or { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T }:
+                // The null test the CFG makes of a `using` resource or a `foreach` enumerator before disposing it, and of the
+                // operand of `?.` and `??` (ticket P2-008); a `Nullable<T>` is null when its null shadow says so, as a reference is.
                 return NullFlag(test.Operand, Value(test.Operand, context), context);
             case IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance } when !receiver.IsValueType:
                 // Of the containing type even where the reference is typed as the base, as in a `base(...)` initializer.
@@ -730,6 +727,16 @@ internal sealed class IrLowerer
                 return Opaque(operation, operation.Kind.ToString(), context);
         }
     }
+
+    /// <summary>
+    /// A property read: an array's <c>Length</c> is its length map (P1-006), an auto-property its backing field's map
+    /// (M4-008), and any other a call to the getter (M3-010).
+    /// </summary>
+    private IrVar? Read(IPropertyReferenceOperation property, LoweringContext context) =>
+        heap.ArrayLength(property, context)
+        ?? (heap.AutoProperty(property, context) is { } backing
+            ? heap.ReadSlice(backing, context)
+            : Accessor(property, property.Property.GetMethod, Operands(property.Instance, property.Arguments, context), value: null, context));
 
     private SsaBuilder.Variable Local(ILocalSymbol local) =>
         variables.TryGetValue(local, out SsaBuilder.Variable? variable)
@@ -768,8 +775,15 @@ internal sealed class IrLowerer
 
     private SsaBuilder.Variable? Shadow(SsaBuilder.Variable variable) => shadows.GetValueOrDefault(variable);
 
-    /// <summary>The shadow of the variable an lvalue names, or null when it names none or is not reference-typed.</summary>
-    private SsaBuilder.Variable? ShadowOf(IOperation lvalue) => Target(lvalue) is { } variable ? Shadow(variable) : null;
+    /// <summary>
+    /// The shadow of the variable an operand names, or null when it names none or is not reference-typed. A flow capture
+    /// names its own variable, whose shadow was set when it was captured (ticket P2-008), not the lvalue it may stand for.
+    /// </summary>
+    private SsaBuilder.Variable? ShadowOf(IOperation operand)
+    {
+        SsaBuilder.Variable? variable = operand is IFlowCaptureReferenceOperation reference ? Capture(reference.Id, reference.Type!) : Target(operand);
+        return variable is null ? null : Shadow(variable);
+    }
 
     /// <summary>
     /// Whether <paramref name="source"/> is null, or null when it provably is not. A <c>new</c> is never

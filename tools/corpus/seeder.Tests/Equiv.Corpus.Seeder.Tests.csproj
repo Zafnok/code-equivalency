@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Equiv.Corpus.Seeder.Tests</RootNamespace>
+    <AssemblyName>Equiv.Corpus.Seeder.Tests</AssemblyName>
+    <TestingPlatformCommandLineArguments>--coverlet-file-prefix $(MSBuildProjectName)</TestingPlatformCommandLineArguments>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="coverlet.MTP" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\seeder\Equiv.Corpus.Seeder.csproj" />
+  </ItemGroup>
+
+</Project>

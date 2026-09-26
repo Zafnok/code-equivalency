@@ -218,6 +218,15 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task DefaultValueOfATypeParameter() => Dump("static T M<T>(bool has, T value) where T : class => has ? value : default;");
 
+    /// <summary>Ticket P2-008 acceptance criterion 1: the CFG's <c>IsNull</c> of <c>?.</c> and <c>??</c> reads the operand's null shadow.</summary>
+    [Fact]
+    public Task NullConditionalLengthWithFallback() => Dump("static int M(string s) => s?.Length ?? 0;");
+
+    /// <summary>Ticket P2-008 acceptance criterion 1: <c>?.</c> on a property, then <c>??</c> with a string constant.</summary>
+    [Fact]
+    public Task NullConditionalPropertyWithFallback() => Dump("class Person { public string Name { get; } } static string M(Person p) => p?.Name ?? \"anonymous\";");
+
+
     /// <summary>Ticket M4-008 acceptance criterion 1: an arrow-bodied getter, lowered through its expression's graph.</summary>
     [Fact]
     public Task ArrowAccessor() => Dump("int f; int P => f * 2 + 1;", "get_P");

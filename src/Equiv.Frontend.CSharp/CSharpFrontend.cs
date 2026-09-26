@@ -33,7 +33,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
     private readonly Func<IMethodSymbol, Compilation, EquivConfig, bool, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> _lower;
 
     public CSharpFrontend()
-        : this(new MsBuildSolutionLoader(), new StableIdentityMatcher())
+        : this(CreateLoader(OperatingSystem.IsWindows()), new StableIdentityMatcher())
     {
     }
 
@@ -55,6 +55,12 @@ public sealed class CSharpFrontend : ILanguageFrontend
     }
 
     public string Language => "csharp";
+
+    /// <summary>
+    /// The loader for this OS (ADR 0031, M3-029): MSBuildWorkspace on Windows, where VS Build Tools load non-SDK projects;
+    /// elsewhere the composite loader, which gives non-SDK projects to the bare loader.
+    /// </summary>
+    internal static ISolutionLoader CreateLoader(bool isWindows) => isWindows ? new MsBuildSolutionLoader() : new CompositeSolutionLoader();
 
     public bool Supports(string path)
     {

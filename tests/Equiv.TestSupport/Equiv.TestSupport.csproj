@@ -12,6 +12,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Equiv.Core\Equiv.Core.csproj" />
+    <!-- M4-010: the mutation operators live in the corpus seeder tool; this is M0-012's PairGen sharing that one implementation. -->
+    <ProjectReference Include="..\..\tools\corpus\seeder\Equiv.Corpus.Seeder.csproj" />
   </ItemGroup>
 
 </Project>

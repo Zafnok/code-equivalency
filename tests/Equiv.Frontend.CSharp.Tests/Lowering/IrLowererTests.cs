@@ -104,7 +104,7 @@ public sealed class IrLowererTests
     [InlineData("static double? M(double? d) => -d;", "Unary")]
     [InlineData("static decimal? M(decimal? d) => +d;", "Unary")]
     [InlineData("static int? M(int? n) => ~n;", "Unary")]
-    [InlineData("static int M(int? n) => n ?? 0;", "IsNull")]
+    [InlineData("static string M<T>(T t) => t?.ToString() ?? \"\";", "IsNull")]
     [InlineData("static bool? M(bool? b) => !b;", "Unary")]
     public void UnsupportedConstructIsOpaqueWithItsName(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
@@ -133,6 +133,34 @@ public sealed class IrLowererTests
     [InlineData("static int M(int a, int b) { a >>>= b; return a; }", -8, 1, int.MaxValue - 3)]
     public void CompoundAssignmentReadsOperatesAndWrites(string members, int a, int b, int expected) =>
         Assert.Equal(new IrReturned(Bits(32, expected)), Run(Method(members), Bits(32, a), Bits(32, b)));
+
+    /// <summary>
+    /// Ticket P2-008 acceptance criterion 2: <c>s?.Length ?? 0</c> branches first on <c>s</c>'s null shadow, as
+    /// <c>s == null ? 0 : s.Length</c> does, and its <c>??</c> then branches on the null shadow of the <c>int?</c> the CFG
+    /// captures, not on an opaque. That second branch is the one the spelled-out form lacks (see the ticket's Deviation).
+    /// </summary>
+    [Fact]
+    public void NullConditionalBranchesAsTheExplicitNullTestDoes()
+    {
+        IrProcedure conditional = Method("static int M(string s) => s?.Length ?? 0;");
+        IrProcedure spelledOut = Method("static int M(string s) => s == null ? 0 : s.Length;");
+
+        ImmutableArray<string> tests = NullTests(conditional);
+
+        Assert.Equal("null.System.String[s]", tests[0]);
+        Assert.Equal("null.System.Nullable_1", tests[1]);
+        Assert.Equal("null.System.String[s]", NullTests(spelledOut)[0]);
+    }
+
+    /// <summary>Ticket P2-008: an <c>int?</c> operand of <c>??</c> is null when its null shadow says so; an unconstrained type parameter's stays opaque.</summary>
+    [Fact]
+    public void NullableOperandReadsItsNullShadow()
+    {
+        IrProcedure procedure = Method("static int M(int? n) => n ?? 0;");
+
+        Assert.DoesNotContain(Opaques(procedure), static o => string.Equals(o.Reason, "IsNull", StringComparison.Ordinal));
+        Assert.Contains(procedure.Parameters, static p => string.Equals(p.Var.Name, "null.System.Nullable_1", StringComparison.Ordinal));
+    }
 
     /// <summary>
     /// Ticket M4-001: an array's enumerator is the non-generic one, so the CFG unboxes <c>Current</c> and disposes through
@@ -642,6 +670,22 @@ public sealed class IrLowererTests
         Assert.Equal("ArrayCreation", Assert.Single(Opaques(Method(members))).Reason);
 
     /// <summary>A <c>new.&lt;Sort&gt;</c> input: allocation <c>k</c> of <paramref name="sort"/> is element <c>k + 1</c>.</summary>
+    /// <summary>
+    /// The map each branch's condition reads, in block order (with the key when it is a parameter), or its name when a
+    /// condition is not a map read.
+    /// </summary>
+    private static ImmutableArray<string> NullTests(IrProcedure procedure)
+    {
+        ImmutableArray<IrMapRead> reads = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>()];
+        return
+        [
+            .. procedure.Blocks.Select(static b => b.Terminator).OfType<IrBranch>().Select(branch =>
+                reads.FirstOrDefault(r => r.Target == branch.Cond) is { } read
+                    ? read.Key.SourceName is { Length: > 0 } key ? $"{read.Map.Name}[{key}]" : read.Map.Name
+                    : branch.Cond.Name),
+        ];
+    }
+
     private static IrMapValue Fresh(string sort) => new(
         new IrMap(new IrBitVec(32), new IrSort(sort)),
         new IrSortValue(sort, 99),

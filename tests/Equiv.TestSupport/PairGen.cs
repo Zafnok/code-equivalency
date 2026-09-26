@@ -1,8 +1,12 @@
 using System.Collections.Immutable;
+using System.Threading;
 
 using CsCheck;
 
-using Equiv.TestSupport.Mutations;
+using Equiv.Corpus.Seeder;
+
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 using static Equiv.TestSupport.Mutations.PairSyntax;
 
@@ -51,23 +55,36 @@ public static class PairGen
                 new Method(type, Locals, [.. body, type == typeof(void) ? new Assign(Field, result) : new Return(result)])))
         .Where(static m => Count(m.Body) < MaxStatements);
 
-    /// <summary>A legacy and a modern method, and the operator that derived one from the other.</summary>
+    /// <summary>
+    /// A legacy and a modern method, and the operator that derived one from the other. The mutation operators
+    /// themselves live in <c>Equiv.Corpus.Seeder</c> (ticket M4-010) and work on Roslyn syntax, so the generated
+    /// method is rendered to C# once and reparsed before <see cref="SyntaxMutator"/> sees it.
+    /// </summary>
     public static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Pair { get; } =
         Gen.Enum<MutationOperator>().SelectMany(static op =>
-            Method.Where(m => Mutator.Sites(op, m) > 0).SelectMany(m =>
-                Gen.Int[0, Mutator.Sites(op, m) - 1].Select(site =>
+            Method.Select(Rendered).Where(t => SyntaxMutator.Sites(op, t.Method) > 0).SelectMany(t =>
+                Gen.Int[0, SyntaxMutator.Sites(op, t.Method) - 1].Select(site =>
                 {
-                    string original = RenderMethod(m);
-                    string mutant = RenderMethod(Mutator.Apply(op, m, site));
+                    MethodDeclarationSyntax mutated = SyntaxMutator.Apply(op, t.Method, site)!;
+                    string mutant = t.Root.ReplaceNode(t.Method, mutated).ToFullString();
                     // The introduced temporary is on the legacy side when the operator inlines it.
-                    return op == MutationOperator.InlineTemporary ? (mutant, original, op) : (original, mutant, op);
+                    return op == MutationOperator.InlineTemporary ? (mutant, t.Source, op) : (t.Source, mutant, op);
                 })));
+
+    /// <summary>Renders <paramref name="method"/> and parses it back so <see cref="SyntaxMutator"/> can work on its Roslyn syntax.</summary>
+    private static (string Source, SyntaxNode Root, MethodDeclarationSyntax Method) Rendered(Method method)
+    {
+        string source = RenderMethod(method);
+        SyntaxNode root = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(source, cancellationToken: CancellationToken.None).GetRoot(CancellationToken.None);
+        MethodDeclarationSyntax declaration = root.DescendantNodes().OfType<MethodDeclarationSyntax>().Single();
+        return (source, root, declaration);
+    }
 
     public static Gen<PairInput> Input { get; } =
         Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, Int, Array, static (a, b, c, d, e, s, f, u) => new PairInput(a, b, c, d, e, s, f, u));
 
     /// <summary>Whether <paramref name="op"/> is in the preserving family: the two methods behave the same on every input.</summary>
-    public static bool IsPreserving(MutationOperator op) => op <= MutationOperator.InlineTemporary;
+    public static bool IsPreserving(MutationOperator op) => SyntaxMutator.IsPreserving(op);
 
     private static Gen<int> Int => Gen.Frequency((3, Gen.OneOfConst(IntEdges)), (1, Gen.Int[-16, 16]), (1, Gen.Int));
 

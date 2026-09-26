@@ -17,6 +17,7 @@ are pinned in `Directory.Packages.props` (Central Package Management) and listed
 | Coverage | coverlet.MTP → cobertura → `tools/check-coverage` (M0-003) | 100% line and branch per `src/` project (`Equiv.Core`, `Equiv.Cli`, `Equiv.Frontend.CSharp`, `Equiv.Verify.Z3`, and since M3-032 `Equiv.Execute`, whose child-process host is excluded and covered by `RuntimeDiffTests` on Windows); coverlet.MTP has no threshold flag, so the check is a small script over the cobertura XML | yes |
 | Architecture | ArchUnitNET (xUnit v3 package) | dependency edges from ARCHITECTURE.md, naming rules from CLAUDE.md | yes |
 | Integration | `Equiv.Tests.Integration` runs the CLI on every `samples/*` and compares SARIF snapshot | Windows runner only (needs VS Build Tools) | yes |
+| Linux parity | `parity` job (ci.yml, M3-029, ADR 0031): `parity-run` runs `equiv compare` on every `samples/*` pair on `windows-latest` and `ubuntu-latest` (`.github/scripts/parity-run.ps1`), then `parity` diffs the two SARIF files' `runs[0].results` (`.github/scripts/sarif-parity.ps1`) | rule id, level, message, logical locations and properties compared per sample; paths, URIs and anything rooted in the checkout ignored; any difference fails | yes |
 | Mutation | Stryker.NET 5 (`--test-runner mtp`) | `--break-at 90` per `src/` project, raised per milestone; blocking since M0-011. PRs run incrementally (`--since` the base commit the PR's merge ref was built on, M0-007), so the score a PR is held to is the score of the `src/` files it changed, tested against the whole new test suite; test-side changes (`tests/**`) are ignored by the diff (`.github/stryker-pr-config.json`: under the MTP runner Stryker 5.0.0 cannot tell which tests a changed test file holds, so any test edit re-ran every mutant of the project). The nightly schedule is a full sweep and is what catches a test edit that lets a mutant in an unchanged file survive. A project or PR with no mutants has no score and passes; a PR leg whose project has no changed `.cs` file skips Stryker for that reason | yes |
 | Code smells / duplication | SonarQube Cloud | Sonar "Sonar way" Quality Gate on new code (duplication, maintainability/reliability/security ratings); `continue-on-error` until calibrated against a few real PRs, then promoted (ADR 0009) | later |
 | Code smell backlog | `tools/sonar-triage` | Sonar's *overall* findings, which the new-code gate never sees, batched into GitHub issues labelled `sonar` by `sonar-triage.yml` (weekly + manual). Filing only; the fixes are ordinary PRs (ADR 0016) | no (reporting) |
@@ -31,8 +32,8 @@ are pinned in `Directory.Packages.props` (Central Package Management) and listed
 
 - `windows-latest`: full pipeline including integration tests (VS Build Tools present on
   hosted runners; the 4.8 targeting pack ships with VS).
-- `ubuntu-latest`: build, unit/property/snapshot, architecture, coverage, CodeQL. Integration
-  tests are skipped until the bare loader exists (post-MVP).
+- `ubuntu-latest`: build, unit/property/snapshot, architecture, coverage, CodeQL. `Equiv.Tests.Integration`
+  does not run here (M3-029 Out of scope); the `parity` job checks Linux against Windows end to end instead.
 
 ## Reusing a pass on unchanged code
 
@@ -54,7 +55,7 @@ path, add it to the script's keep list in the same PR.
 ## Required checks (M0-004)
 
 CI runs in `.github/workflows/`: `ci.yml` (gates on windows-latest + ubuntu-latest, plus
-`vulnerable-packages` and `gitleaks`), `codeql.yml`, `mutation.yml` (blocking since M0-011;
+`parity`, `vulnerable-packages` and `gitleaks`), `codeql.yml`, `mutation.yml` (blocking since M0-011;
 see Mutation row above), `sonar.yml` (M0-006, informational; see Code smells row above).
 Applying branch protection with these as required checks on GitHub
 is the user's action — this ticket only wires the workflows. Mark as required:
@@ -62,6 +63,7 @@ is the user's action — this ticket only wires the workflows. Mark as required:
 - `gates (windows-latest)`
 - `gates (ubuntu-latest)`
 - `vulnerable-packages`
+- `parity` (M3-029; `parity-run (windows-latest)` and `parity-run (ubuntu-latest)` feed it)
 - `gitleaks`
 - `analyze` (CodeQL)
 - `stryker (Equiv.Core, Equiv.Core.Tests)`, `stryker (Equiv.Cli, Equiv.Cli.Tests)`,
