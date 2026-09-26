@@ -998,17 +998,55 @@
               }
             ]
           }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::Discounted(decimal,decimal) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 116,
+                  "startColumn": 24,
+                  "endLine": 116,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::Discounted(decimal,decimal)",
+            "resultFingerprint/v1": "b22d63b77eccb0863ed845a2c8943ef77af7f1f595c3b870bc0d2e77c05e0858"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
         }
       ],
       "columnKind": "utf16CodeUnits",
       "properties": {
         "loweringCensus": {
           "procedures": {
-            "legacy": 28,
-            "modern": 28
+            "legacy": 29,
+            "modern": 29
           },
-          "matchedPairs": 28,
-          "pairsWithoutOpaque": 23,
+          "matchedPairs": 29,
+          "pairsWithoutOpaque": 25,
           "pairsWholeBodyOpaque": 2,
           "pairsCongruent": 24,
           "projectsSkipped": {
@@ -1016,10 +1054,6 @@
             "modern": 0
           },
           "opaqueByReason": {
-            "CompoundAssignment": {
-              "legacy": 1,
-              "modern": 1
-            },
             "DelegateCreation": {
               "legacy": 1,
               "modern": 1
@@ -1037,11 +1071,11 @@
               "modern": 1
             }
           },
-          "changedPairs": 4,
-          "changedPairsWithoutOpaque": 3,
+          "changedPairs": 5,
+          "changedPairsWithoutOpaque": 4,
           "changedPairsWholeBodyOpaque": 0,
           "changedReasonSets": {
-            "": 3,
+            "": 4,
             "InterpolatedString": 1
           },
           "runtimeChangeCalls": {
@@ -1064,8 +1098,8 @@
           }
         },
         "analysedLinesOfCode": {
-          "legacy": 134,
-          "modern": 130
+          "legacy": 139,
+          "modern": 135
         },
         "projectsNotBuilt": {
           "legacy": [],

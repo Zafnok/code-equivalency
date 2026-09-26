@@ -99,6 +99,8 @@ public sealed class LoweringOracleTests
             CompiledClass compiled = new(oracle);
             HashSet<Equiv.Core.CallIdentity> callees = [];
             HashSet<string> pures = new(StringComparer.Ordinal);
+            bool compoundAdd = false;
+            IrSortValue one = (IrSortValue)TypeMapper.Constant(compilation.GetSpecialType(SpecialType.System_Decimal), 1m);
             SyntaxTree tree = compilation.SyntaxTrees[0];
             SemanticModel model = compilation.GetSemanticModel(tree);
             ImmutableArray<MethodDeclarationSyntax> declarations =
@@ -110,11 +112,14 @@ public sealed class LoweringOracleTests
                 Assert.Empty(IrValidator.Validate(procedure));
                 callees.UnionWith(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee));
                 pures.UnionWith(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>().Select(static p => p.Function));
+                // Ticket P2-022: only a compound assignment or an increment writes a `dec.add` to `m`.
+                compoundAdd |= procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>()
+                    .Any(static p => p is { Function: "dec.add", Target.SourceName: "m" });
                 MethodInfo method = oracle.GetMethod(declarations[i].Identifier.Text)!;
                 foreach (OracleInput input in cases[i].Inputs)
                 {
                     string expected = compiled.Run(method, input);
-                    string actual = Interpreted(procedure, input);
+                    string actual = Interpreted(procedure, input, one);
                     Assert.True(
                         string.Equals(expected, actual, StringComparison.Ordinal),
                         $"{input}: C# {expected}, IR {actual}\n{cases[i].Method.Render("M")}\n{IrText.Dump(procedure)}");
@@ -122,6 +127,7 @@ public sealed class LoweringOracleTests
             }
 
             AssertReached(callees, pures);
+            Assert.True(compoundAdd);
         }
         finally
         {
@@ -331,10 +337,10 @@ public sealed class LoweringOracleTests
 
     private static IrBitVecValue Index(int index) => IrBitVecValue.FromSigned(32, index);
 
-    private static string Interpreted(IrProcedure procedure, OracleInput input)
+    private static string Interpreted(IrProcedure procedure, OracleInput input, IrSortValue one)
     {
         // By name, because the synthesised heap inputs (M2-004) are only there when the body needs them.
-        DecimalOracle decimals = new();
+        DecimalOracle decimals = new(one);
         IrInputs arguments = new([.. procedure.Parameters.Select(p => string.Equals(p.Var.Name, "m", StringComparison.Ordinal) ? decimals.Element(input.M) : Argument(p.Var, input))]);
         CompiledRunOracle oracle = new(input.B, List(input), InitialCell(input));
         IrRun run = IrInterpreter.Run(procedure, arguments, oracle, IrGen.StepBudget, pure: decimals);
@@ -378,9 +384,10 @@ public sealed class LoweringOracleTests
     /// Answers one run's pure <c>decimal</c> functions (ticket M4-002) with <see cref="decimal"/>'s own operators and
     /// conversions. An element of <c>System.Decimal</c> stands for one value, bit for bit, so <c>1.0</c> and <c>1.00</c> are
     /// two elements, as they are two values. A function that throws raises the flag of the exception's exact type, and its
-    /// value is then any value of its type.
+    /// value is then any value of its type. The literal <c>1m</c> of <c>m++</c> (ticket P2-022) is the constant element
+    /// <paramref name="one"/>.
     /// </summary>
-    private sealed class DecimalOracle : Equiv.Core.IPureOracle
+    private sealed class DecimalOracle(IrSortValue one) : Equiv.Core.IPureOracle
     {
         private readonly List<decimal> values = [];
 
@@ -428,7 +435,7 @@ public sealed class LoweringOracleTests
             }
         }
 
-        private decimal Value(IrValue element) => values[((IrSortValue)element).Id - 1];
+        private decimal Value(IrValue element) => element == one ? 1m : values[((IrSortValue)element).Id - 1];
     }
 
     /// <summary>

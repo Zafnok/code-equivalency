@@ -112,5 +112,11 @@ namespace Equiv.Samples.BusinessLayer
         {
             return Math.Round(total, 2);
         }
+
+        public decimal Discounted(decimal total, decimal rate)
+        {
+            total = total - total * rate;
+            return total;
+        }
     }
 }

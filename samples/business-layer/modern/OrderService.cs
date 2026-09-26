@@ -113,5 +113,11 @@ namespace Equiv.Samples.BusinessLayer
         {
             return Math.Round(total, 2, MidpointRounding.AwayFromZero);
         }
+
+        public decimal Discounted(decimal total, decimal rate)
+        {
+            total -= total * rate;
+            return total;
+        }
     }
 }
