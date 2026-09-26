@@ -24,7 +24,7 @@ B1:
 B3:
   throw "System.NullReferenceException"
 B4:
-  %$4: bool = call "System.String::Contains(char)"(%s, %$2) threw %$5: bool
+  %$4: bool = call "System.String::Contains(char)"@(%s, %$2) threw %$5: bool
   br %$5, B5, B6
 B5:
   throw "System.Exception"
@@ -64,7 +64,7 @@ B1:
 B3:
   throw "System.NullReferenceException"
 B4:
-  %$5: sort "string[]" = call "System.String::Split(char,System.StringSplitOptions)"(%s, %$2, %$3) threw %$6: bool
+  %$5: sort "string[]" = call "System.String::Split(char,System.StringSplitOptions)"@(%s, %$2, %$3) threw %$6: bool
   br %$6, B5, B6
 B5:
   throw "System.Exception"

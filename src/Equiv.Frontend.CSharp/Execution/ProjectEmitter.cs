@@ -12,8 +12,6 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// </summary>
 internal static class ProjectEmitter
 {
-    private const string ReferenceAssemblyAttribute = "System.Runtime.CompilerServices.ReferenceAssemblyAttribute";
-
     /// <summary>Emits <paramref name="compilation"/> into <paramref name="directory"/>; returns the first error, or null on success.</summary>
     public static string? Emit(Compilation compilation, string directory)
     {
@@ -32,7 +30,7 @@ internal static class ProjectEmitter
         List<(IAssemblySymbol Assembly, MetadataReference? Reference)> references =
             [.. compilation.SourceModule.ReferencedAssemblySymbols.Select(a => (a, compilation.GetMetadataReference(a)))];
         HashSet<string> packs = new(
-            references.Where(static r => IsReferenceAssembly(r.Assembly)).Select(static r => r.Reference).OfType<PortableExecutableReference>()
+            references.Where(static r => ReferenceAssemblies.IsReferenceAssembly(r.Assembly)).Select(static r => r.Reference).OfType<PortableExecutableReference>()
                 .Select(static r => r.FilePath).OfType<string>().Select(Folder),
             StringComparer.OrdinalIgnoreCase);
         foreach ((IAssemblySymbol _, MetadataReference? reference) in references)
@@ -60,9 +58,6 @@ internal static class ProjectEmitter
     /// folder for that name first.
     /// </summary>
     private static string FileName(Compilation compilation) => compilation.AssemblyName + ".dll";
-
-    private static bool IsReferenceAssembly(IAssemblySymbol assembly) =>
-        assembly.GetAttributes().Any(static a => string.Equals(a.AttributeClass!.ToDisplayString(), ReferenceAssemblyAttribute, StringComparison.Ordinal));
 
     private static string Folder(string path) => Path.GetDirectoryName(path)!;
 
