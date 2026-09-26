@@ -191,7 +191,7 @@ public sealed class IrTextTests
     [InlineData("proc \"P\n\"", 1, 6, "unterminated string")]
     [InlineData("proc \"P\\t\"", 1, 6, "unknown escape")]
     [InlineData("proc \"P\\", 1, 6, "unknown escape")]
-    [InlineData("proc @", 1, 6, "unexpected character")]
+    [InlineData("proc #", 1, 6, "unexpected character")]
     [InlineData("func", 1, 1, "expected 'proc' but found 'func'")]
     [InlineData("proc \"P\" (", 1, 11, "but found end of input")]
     [InlineData("proc \"P\" () -> bv12 entry B0", 1, 16, "unknown type 'bv12'")]

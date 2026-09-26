@@ -178,6 +178,48 @@ public sealed class LoweringCensusTests
     }
 
     [Fact]
+    public void Census_ListsExternalCalleesByCount()
+    {
+        // Legacy calls "N::B" twice and "N::A" once, plus a non-external call into the solution; modern calls "N::A" once.
+        IrProcedure legacy = Body("""
+            proc "T::M" (%a: bv32) -> bv32 entry B0
+            B0:
+              %v: bv32 = call "N::A"@(%a)
+              %w: bv32 = call "N::B"@(%a)
+              %x: bv32 = call "N::B"@(%a)
+              %y: bv32 = call "N::Solution"(%a)
+              ret %a
+            """);
+        IrProcedure modern = Body("""
+            proc "T::M" (%a: bv32) -> bv32 entry B0
+            B0:
+              %v: bv32 = call "N::A"@(%a)
+              ret %a
+            """);
+
+        LoweringCensus census = LoweringCensus.Compute([(legacy, modern, false)], removed: 0, added: 0);
+
+        Assert.Equal([new ExternalCallee("N::B", 2), new ExternalCallee("N::A", 1)], census.ExternalCallees.Legacy);
+        Assert.Equal([new ExternalCallee("N::A", 1)], census.ExternalCallees.Modern);
+    }
+
+    [Fact]
+    public void Census_ExcludesCallsIntoTheSolution()
+    {
+        IrProcedure body = Body("""
+            proc "T::M" (%a: bv32) -> bv32 entry B0
+            B0:
+              %x: bv32 = call "N::Solution"(%a)
+              ret %a
+            """);
+
+        LoweringCensus census = LoweringCensus.Compute([(body, body, true)], removed: 0, added: 0);
+
+        Assert.Empty(census.ExternalCallees.Legacy);
+        Assert.Empty(census.ExternalCallees.Modern);
+    }
+
+    [Fact]
     public void ProjectsSkippedAreCountedPerSide()
     {
         LoweringCensus census = LoweringCensus.Compute([], removed: 0, added: 0, projectsSkipped: new SideCounts(Legacy: 2, Modern: 1));
@@ -209,19 +251,20 @@ public sealed class LoweringCensusTests
                 WithoutOpaque: 1,
                 WholeBodyOpaque: 0,
                 new Dictionary<string, int>(StringComparer.Ordinal) { ["using"] = 1, [""] = 1 }.ToImmutableSortedDictionary(StringComparer.Ordinal)),
-            new RuntimeChangeCalls(new SideCounts(3, 2), new SideCounts(1, 1), new SideCounts(1, 2)));
+            new RuntimeChangeCalls(new SideCounts(3, 2), new SideCounts(1, 1), new SideCounts(1, 2)),
+            new ExternalCallees([new ExternalCallee("N::A", 2)], [new ExternalCallee("N::A", 1), new ExternalCallee("N::B", 1)]));
 
         Dictionary<string, object> property = census.ToProperty();
 
         Assert.Equal(
             [
                 "procedures", "matchedPairs", "pairsWithoutOpaque", "pairsWholeBodyOpaque", "pairsCongruent", "projectsSkipped", "opaqueByReason",
-                "changedPairs", "changedPairsWithoutOpaque", "changedPairsWholeBodyOpaque", "changedReasonSets", "runtimeChangeCalls",
+                "changedPairs", "changedPairsWithoutOpaque", "changedPairsWholeBodyOpaque", "changedReasonSets", "runtimeChangeCalls", "externalCallees",
             ],
             property.Keys,
             StringComparer.Ordinal);
         Assert.Equal(
-            """{"procedures":{"legacy":4,"modern":5},"matchedPairs":3,"pairsWithoutOpaque":2,"pairsWholeBodyOpaque":1,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{"Binary":{"legacy":0,"modern":1},"using":{"legacy":1,"modern":0}},"changedPairs":2,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1,"using":1},"runtimeChangeCalls":{"callSites":{"legacy":3,"modern":2},"distinctMembers":{"legacy":1,"modern":1},"pairsWithAny":{"legacy":1,"modern":2}}}""",
+            """{"procedures":{"legacy":4,"modern":5},"matchedPairs":3,"pairsWithoutOpaque":2,"pairsWholeBodyOpaque":1,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{"Binary":{"legacy":0,"modern":1},"using":{"legacy":1,"modern":0}},"changedPairs":2,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1,"using":1},"runtimeChangeCalls":{"callSites":{"legacy":3,"modern":2},"distinctMembers":{"legacy":1,"modern":1},"pairsWithAny":{"legacy":1,"modern":2}},"externalCallees":{"legacy":[{"member":"N::A","callSites":2}],"modern":[{"member":"N::A","callSites":1},{"member":"N::B","callSites":1}]}}""",
             Newtonsoft.Json.JsonConvert.SerializeObject(property));
     }
 

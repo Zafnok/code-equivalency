@@ -28,6 +28,22 @@ internal static class CallIdentityFactory
     }
 
     /// <summary>
+    /// As the three-argument overload, but also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
+    /// <paramref name="method"/>'s containing assembly is one of <paramref name="compilation"/>'s reference assemblies
+    /// (<see cref="ReferenceAssemblies.IsReferenceAssembly(IAssemblySymbol)"/>): the framework or .NET reference pack the
+    /// project compiled against, never the solution's own code (a <see cref="CompilationReference"/>, or the compilation's
+    /// own assembly) or a NuGet package (a <see cref="PortableExecutableReference"/> without the attribute).
+    /// </summary>
+    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
+    {
+        ArgumentNullException.ThrowIfNull(compilation);
+        return Of(method, renames, suppressedRuntimeChanges) with { External = IsExternal(method.ContainingAssembly, compilation) };
+    }
+
+    private static bool IsExternal(IAssemblySymbol assembly, Compilation compilation) =>
+        compilation.GetMetadataReference(assembly) is PortableExecutableReference && ReferenceAssemblies.IsReferenceAssembly(assembly);
+
+    /// <summary>
     /// The identity of an <c>await</c> whose awaiter is of type <paramref name="awaiter"/> (ticket M4-006): <c>await:</c> and
     /// the awaiter's name as a member identity spells its declaring type, with its type arguments as a generic callee's.
     /// </summary>

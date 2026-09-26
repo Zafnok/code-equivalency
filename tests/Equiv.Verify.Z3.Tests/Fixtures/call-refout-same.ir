@@ -1,0 +1,27 @@
+# Equivalent
+# M4-003: `int.TryParse(s, out var n) ? n : f` on both sides, the local named differently; each ref output is one shared function of the call's key.
+proc "C::M(string,int)" (%s: sort "System.String", %f: bv32) -> bv32 entry B0
+B0:
+  %ok: bool = call "System.Int32::TryParse(string,out int)"(%s) threw %t: bool refout(%n: bv32)
+  br %t, B1, B2
+B1:
+  throw "System.Exception"
+B2:
+  br %ok, B3, B4
+B3:
+  ret %n
+B4:
+  ret %f
+---
+proc "C::M(string,int)" (%s: sort "System.String", %f: bv32) -> bv32 entry B0
+B0:
+  %parsed: bool = call "System.Int32::TryParse(string,out int)"(%s) threw %u: bool refout(%value: bv32)
+  br %u, B1, B2
+B1:
+  throw "System.Exception"
+B2:
+  br %parsed, B3, B4
+B3:
+  ret %value
+B4:
+  ret %f

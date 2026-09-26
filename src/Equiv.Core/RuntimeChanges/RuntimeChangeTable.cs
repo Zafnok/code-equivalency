@@ -78,11 +78,23 @@ public sealed class RuntimeChangeTable
                 member,
                 element.GetProperty("reason").GetString()!,
                 new Uri(element.GetProperty("url").GetString()!, UriKind.Absolute),
-                ParseSource(member, element)));
+                ParseSource(member, element))
+            {
+                Witness = ParseWitness(element),
+            });
         }
 
         return new RuntimeChangeTable(builder.ToImmutable());
     }
+
+    private static RuntimeChangeWitness? ParseWitness(JsonElement element) =>
+        element.TryGetProperty("witness", out JsonElement witness) ? BuildWitness(witness) : null;
+
+    private static RuntimeChangeWitness BuildWitness(JsonElement witness) => new(
+        [.. witness.GetProperty("input").EnumerateArray().Select(static v => v.GetRawText())],
+        witness.GetProperty("culture").GetString()!,
+        witness.GetProperty("legacy").GetRawText(),
+        witness.GetProperty("modern").GetRawText());
 
     private static RuntimeChangeSource ParseSource(string member, JsonElement element)
     {

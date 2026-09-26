@@ -7,6 +7,10 @@ namespace Equiv.Core.RuntimeChanges;
 /// <c>Namespace.Type::Member(ParamType,...)</c> shape), <paramref name="Reason"/> is a one-sentence
 /// explanation of the behaviour difference, <paramref name="Url"/> links Microsoft's
 /// breaking-change or API documentation for it, and <paramref name="Source"/> says where the row
-/// came from (ADR 0035).
+/// came from (ADR 0035). <see cref="Witness"/> is set only on a <see cref="RuntimeChangeSource.Measured"/>
+/// row (ticket M3-033).
 /// </summary>
-public sealed record RuntimeChange(string Member, string Reason, Uri Url, RuntimeChangeSource Source);
+public sealed record RuntimeChange(string Member, string Reason, Uri Url, RuntimeChangeSource Source)
+{
+    public RuntimeChangeWitness? Witness { get; init; }
+}

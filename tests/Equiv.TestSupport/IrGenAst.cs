@@ -48,7 +48,7 @@ internal static class IrGenAst
     internal sealed record Checked(int Slot, IrOverflowOp Op, IExpr Left, IExpr Right) : IStmt;
 
     /// <summary>Opaque call; <see cref="MayThrow"/> adds a threw flag and a throw edge.</summary>
-    internal sealed record Call(int? Slot, string Callee, ImmutableArray<IExpr> Args, bool MayThrow) : IStmt;
+    internal sealed record Call(int? Slot, string Callee, ImmutableArray<IExpr> Args, bool MayThrow, int? RefSlot) : IStmt;
 
     /// <summary>
     /// An opaque fragment with a fingerprint (ticket M4-004), lowered as an <see cref="IrOpaque"/> that reads

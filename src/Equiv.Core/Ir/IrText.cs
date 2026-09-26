@@ -137,8 +137,12 @@ public static class IrText
 
         private static string Assigned(IrVar? target) => target is null ? string.Empty : Definition(target) + " = ";
 
-        /// <summary>A callee's quoted identity, with a <c>!</c> suffix when <see cref="CallIdentity.RuntimeChanged"/> (ticket M2-006).</summary>
-        private static string Callee(CallIdentity callee) => Quote(callee.Value) + (callee.RuntimeChanged ? "!" : string.Empty);
+        /// <summary>
+        /// A callee's quoted identity, with a <c>!</c> suffix when <see cref="CallIdentity.RuntimeChanged"/> (ticket M2-006)
+        /// and an <c>@</c> suffix when <see cref="CallIdentity.External"/> (ticket M3-033).
+        /// </summary>
+        private static string Callee(CallIdentity callee) =>
+            Quote(callee.Value) + (callee.RuntimeChanged ? "!" : string.Empty) + (callee.External ? "@" : string.Empty);
 
         public string Visit(IrConst instruction) => $"{Definition(instruction.Target)} = const {Value(instruction.Value)}";
 
@@ -156,6 +160,7 @@ public static class IrText
         public string Visit(IrCall instruction) =>
             $"{Assigned(instruction.Target)}call {Callee(instruction.Callee)}({string.Join(", ", instruction.Args.Select(Use))})"
             + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw))
+            + (instruction.RefOuts.IsEmpty ? string.Empty : $" refout({string.Join(", ", instruction.RefOuts.Select(Definition))})")
             + HeapPairs(instruction.Heap);
 
         private static string HeapPairs(ImmutableArray<IrHeapPair> heap) =>

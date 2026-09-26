@@ -60,7 +60,7 @@ Instructions:
 | `IrOverflows(var, overflowOp, a, b)` | Bool: would the checked operation overflow; `overflowOp` in SAdd, UAdd, SSub, USub, SMul, UMul, SDiv |
 | `IrUnary(var, op, a)` | negation, not, conversions with explicit target width and signedness |
 | `IrPhi(var, [(block, var)])` | SSA merge |
-| `IrCall(var?, threw?, callee identity, args, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005). Result, `threw` and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018) |
+| `IrCall(var?, threw?, callee identity, args, refouts, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `refouts` are the new versions of the call's `ref` and `out` arguments, in parameter order, each a definition; a `ref` argument's value at the call is also one of `args`, an `out` one's is not (M4-003). `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005). Result, `threw`, each ref output (one function per output index) and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018) |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
 | `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025) |
 | `IrOpaque(var?, reason, sourceSpan, fingerprint?, reads, threw?, heap)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024). A fingerprinted fragment has what that call needs: a `threw` flag the frontend branches on and the heap pairs an `IrCall` has; `reads` and each pair's `before` are uses, `threw` and each `after` definitions (M4-004) |
@@ -389,6 +389,16 @@ every lowered matched pair, congruent ones included: the `IrCall`s whose callee 
 matches, the distinct callee identities among them, and the pairs whose body on that side has at
 least one. Package version changes are not in the census; `tools/corpus/corpus.ps1 -Packages`
 computes them from each side's restore output.
+
+`externalCallees` (ADR 0035; ticket M3-033) is every BCL member a lowered body calls, not only the
+ones `RuntimeChangeTable` already lists: per side, over every lowered matched pair (congruent ones
+included, as `runtimeChangeCalls` counts), the distinct call identities whose target assembly is one
+of the framework reference assemblies the project compiled against (a reference assembly carries
+`ReferenceAssemblyAttribute`, as `ProjectEmitter` already tests for replay), never the solution's own
+code or a NuGet package. Each entry pairs a member with its call-site count, sorted by count
+descending then ordinally. `tools/corpus/corpus.ps1 -RuntimeDiff <slug>` takes the union of both
+sides' most-called entries and runs `tools/runtime-diff` on each; a member it finds divergent becomes
+a `runtime-changes.json` row with `source: measured` and a witness.
 
 Every run also writes `run.properties.analysedLinesOfCode`: `legacy` and `modern`, one count per
 codebase and never a total (ticket M3-014). The rule is the one in README's "Licence" section,

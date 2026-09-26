@@ -22,6 +22,7 @@ public sealed class FixtureTests
         "hard-multiplication",
         "array-alias",
         "call-heap-order", "call-heap-order-array", "call-heap-same", "call-reads-heap", "call-heap-one-sided",
+        "call-refout-same", "call-refout-index",
     ];
 
     [Theory]
