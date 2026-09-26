@@ -647,15 +647,12 @@ internal sealed class ChcEncoder
         }
 
         /// <summary>The term a segment from <paramref name="header"/> reads for its state variable <paramref name="var"/>.</summary>
-        private Expr Slot(IrBlockId header, IrVar var)
-        {
-            if (inputs.TryGetValue(var.Name, out Expr? input))
-            {
-                return input;
-            }
+        private Expr Slot(IrBlockId header, IrVar var) =>
+            inputs.TryGetValue(var.Name, out Expr? input) ? input : Local(header, var);
 
-            return constants.TryGetValue(var.Name, out IrValue? value) ? chc.sorts.Literal(value) : pre[header][parts[header].IndexOf(var)];
-        }
+        /// <summary>A state variable of <paramref name="header"/> that is no input: the literal a constant defines, else its relation argument.</summary>
+        private Expr Local(IrBlockId header, IrVar var) =>
+            constants.TryGetValue(var.Name, out IrValue? value) ? chc.sorts.Literal(value) : pre[header][parts[header].IndexOf(var)];
 
         /// <summary>A cut exit to <paramref name="target"/>: the carried values of the target's relation state.</summary>
         private SegmentExit Cut(FragmentEncoder encoder, IrBlockId block, IrBlockId target, ImmutableArray<IrVar> carried, IrBlockId? start)

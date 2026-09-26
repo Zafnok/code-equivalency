@@ -150,14 +150,16 @@ internal sealed class FragmentEncoder
             .Aggregate(input, (rest, e) =>
             {
                 IrOut? @out = Outs(e.Exit).FirstOrDefault(o => string.Equals(o.Param.Name, parameter?.Var.Name, StringComparison.Ordinal));
-                if (@out is not null)
-                {
-                    return context.MkITE(reach[e.Block], Var(@out.Final), rest);
-                }
-
-                return threaded < 0 ? rest : context.MkITE(reach[e.Block], heapOut[e.Block][threaded], rest);
+                return @out is not null ? context.MkITE(reach[e.Block], Var(@out.Final), rest) : Threaded(e.Block, threaded, rest);
             });
     }
+
+    /// <summary>
+    /// At exit <paramref name="block"/>, the version of heap map <paramref name="index"/> this side threads through its
+    /// calls, else <paramref name="rest"/>; a map it does not thread (<paramref name="index"/> below 0) is always
+    /// <paramref name="rest"/>.
+    /// </summary>
+    private Expr Threaded(IrBlockId block, int index, Expr rest) => index < 0 ? rest : context.MkITE(reach[block], heapOut[block][index], rest);
 
     private static ImmutableArray<IrOut> Outs(IrTerminator exit) => exit is IrReturn ret ? ret.Outs : ((IrThrow)exit).Outs;
 

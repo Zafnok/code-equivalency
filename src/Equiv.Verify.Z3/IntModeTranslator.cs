@@ -121,15 +121,13 @@ internal sealed class IntModeTranslator(Context context, bool wraps = false)
         (IntExpr)context.MkITE(context.MkGe(a, Int(0)), context.MkMod(a, b), context.MkUnaryMinus(context.MkMod((IntExpr)context.MkUnaryMinus(a), b)));
 
     /// <summary>The bits of <paramref name="a"/> read unsigned: a negative integer plus <c>2^width</c>.</summary>
-    private IntExpr Unsigned(IntExpr a, int width)
-    {
-        if (a is IntNum numeral)
-        {
-            return Int(numeral.BigInteger.Sign < 0 ? numeral.BigInteger + (BigInteger.One << width) : numeral.BigInteger);
-        }
+    private IntExpr Unsigned(IntExpr a, int width) =>
+        a is IntNum numeral
+            ? Int(Unsigned(numeral.BigInteger, width))
+            : (IntExpr)context.MkITE(context.MkGe(a, Int(0)), a, context.MkAdd(a, Int(BigInteger.One << width)));
 
-        return (IntExpr)context.MkITE(context.MkGe(a, Int(0)), a, context.MkAdd(a, Int(BigInteger.One << width)));
-    }
+    /// <summary>The bits of the integer <paramref name="value"/> read unsigned, as <see cref="Unsigned(IntExpr, int)"/> for a numeral.</summary>
+    private static BigInteger Unsigned(BigInteger value, int width) => value.Sign < 0 ? value + (BigInteger.One << width) : value;
 
     /// <summary>An unsigned reading within <c>[0, 2^width)</c> read signed again.</summary>
     private IntExpr Signed(ArithExpr unsigned, int width) =>
