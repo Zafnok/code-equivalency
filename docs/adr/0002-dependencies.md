@@ -37,3 +37,7 @@ recorded there too.
   adopted up front because Roslyn's build host now covers the case.
 - Boogie.ExecutionEngine 3.5.7: viable second backend (SymDiff approach); deferred.
 - Microsoft.NET.Test.Sdk / coverlet.collector: VSTest-era, not needed under MTP.
+- NuGet.Packaging, NuGet.ProjectModel, NuGet.Protocol, NuGet.Configuration (M3-029): the bare loader needs none.
+  It reads `project.assets.json` (NuGet's own resolution, written by `dotnet restore`), `nuget.config` and a v3
+  service index with `System.Text.Json`/`System.Xml.Linq`, and extracts a `.nupkg` with `System.IO.Compression`;
+  it resolves no package graph itself. The spike's NuGet.Packaging 6.14.0 also fails `vulnerable-packages` (NU1901).

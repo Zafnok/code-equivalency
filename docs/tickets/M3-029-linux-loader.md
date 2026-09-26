@@ -49,7 +49,12 @@ not production code.
   property the loader reads; a condition outside the supported grammar; a `<Target>` in the
   project or its followed imports that creates `Compile`, `Reference` or `ProjectReference` items;
   `<COMReference>`; a missing relative import that is not conditioned on `Exists`. A project that
-  loads approximately could give a wrong verdict. A skipped one gives none.
+  loads approximately could give a wrong verdict. A skipped one gives none. The same rule skips a project
+  for an item reference or metadata (`@(...)`, `%(...)`) in an item or condition the loader reads, for a
+  value the compiler would reject (`LangVersion`, `PlatformTarget`, `WarningLevel`,
+  `TargetFrameworkVersion`), for a target framework other than .NET Framework, and for a missing input: no
+  reference assemblies, a source file or `project.assets.json` that does not exist, or a reference to an
+  SDK-style project MSBuildWorkspace built no compilation for (see Notes, Deviation).
 - **References.** A HintPath comes first. HintPaths are written on Windows, so backslashes are
   always converted, and when the exact path does not exist it is matched case-insensitively.
   Framework assemblies come from `<root>/.NETFramework/v<x>/` in the
@@ -155,3 +160,52 @@ Linux.
   numbers in M3-028's Notes, and record the result in Notes.
 
 ## Notes
+- Decision: the cache variable -> `EQUIV_REFERENCE_ASSEMBLIES`, default `<local application data>/equiv/reference-assemblies`
+  (`~/.local/share/...` on Linux), layout `.NETFramework/v<x>/` as `tools/corpus/corpus.ps1 -Prepare` writes it, so a
+  prepared corpus cache can be reused. Packages are taken at 1.0.3, the version `corpus.ps1` pins. Alternatives:
+  `TargetFrameworkRootPath`, a cache under the solution. Rule: 1.
+- Decision: no new NuGet package. `project.assets.json`, `nuget.config` and the v3 service index are read with
+  `System.Text.Json`/`System.Xml.Linq`, and a `.nupkg` is extracted with `System.IO.Compression`; the package graph is
+  never resolved by the tool (a rejected-row in ADR 0002 records why). Alternatives: NuGet.ProjectModel, NuGet.Protocol,
+  NuGet.Configuration. Rule: 4.
+- Decision: a non-SDK project with `PackageReference` items and no assets file is skipped ("restore it first"), as
+  `ResolveNuGetPackageAssets` fails the build on Windows. Alternatives: run `dotnet restore` from the loader; load it
+  without packages. Rule: 1.
+- Decision: package sources come from the `nuget.config` files in the solution's directory and above (nearest wins;
+  `clear`, `add`, `remove`, `disabledPackageSources`, `repositoryPath`), else nuget.org. The user-level config is not
+  read. HTTP sources are v3 only; a local folder may be flat or v3. Alternatives: NuGet's full config hierarchy. Rule: 4.
+- Decision: the bare evaluator evaluates as the Windows loader does: the global properties Roslyn's build host passes
+  (`DesignTimeBuild`, `BuildingInsideVisualStudio`, ...), `OS=Windows_NT`, `MSBuildRuntimeType=Full`, environment
+  variables as properties, and the `Solution*` properties `*Undefined*` from `Microsoft.CSharp.targets` on.
+  Alternatives: the running OS's values. Rule: 1.
+- Decision: a property whose value or condition the evaluator cannot evaluate is not a skip by itself. It holds a value
+  naming the construct, and the project is skipped only when the loader reads it or evaluates something that depends on
+  it (the ticket's "in a property the loader reads"). An import's condition and path are always read. Alternatives:
+  skip on any unsupported construct anywhere. Rule: 1.
+- Decision: `Microsoft.Common.props` stands for `Directory.Build.props` and the restore's `obj/<project>.*.props`;
+  `Microsoft.CSharp.targets` for the `.user` file, `Directory.Build.targets` and `obj/<project>.*.targets`. Any other
+  tool-path import (for example `Microsoft.WebApplication.targets`) is replaced by nothing, as M3-028 found
+  MSBuildWorkspace tolerates it missing. Alternatives: import `Directory.Build.props` even without the Common.props
+  import. Rule: 1.
+- Decision: `obj/Debug/<moniker>.AssemblyAttributes.cs` is read from disk when a build left it, else written in memory as
+  `WriteCodeFragment` would, with the `FrameworkDisplayName` from `RedistList/FrameworkList.xml`. Alternatives: always
+  synthesise. Rule: 1.
+- Decision: facades: the `System.Runtime` (design-time) and `netstandard` expansions are independent, as the two MSBuild
+  targets are. A dependency is followed through the files beside a reference, never into the framework directory.
+  Alternatives: direct references only. Rule: 1.
+- Decision: SDK-style compilations are rebound to the bare compilations by assembly name, for a compilation reference and
+  for a reference to the built file. A non-SDK project MSBuildWorkspace opened only as a reference target is dropped
+  from its result and loaded by the bare loader. An SDK-style project that MSBuildWorkspace already skipped is not
+  rebound. Alternatives: rebind by project path. Rule: 1.
+- Decision: off Windows, `LoadedSolution.Solution` is MSBuildWorkspace's solution of the SDK-style projects (empty when
+  there are none); the bare compilations are not added to it, since nothing downstream reads it. Alternatives: add a
+  `ProjectInfo` per bare project. Rule: 4.
+- Decision: the parity job compares each sample's results as a multiset of canonical JSON strings (keys sorted, the
+  checkout root replaced, backslashes as slashes). Alternatives: ordered comparison. Rule: 3.
+- Decision: `ProjectPath.Resolve` returns an existing path as written, so on Windows it keeps the project's casing and
+  on Linux it returns the on-disk casing. The parity integration test compares paths ignoring case. Alternatives:
+  always the on-disk casing (a directory walk per path on Windows too). Rule: 4.
+- Deviation: the Design's "closed list" of never-approximate constructs is extended with the cases the Design now lists
+  after it (item references and metadata, compiler-rejected values, a non-.NET Framework target, missing inputs). Each
+  is something the bare evaluator cannot evaluate exactly or an input that is absent, so ADR 0029's rule (skip, never
+  approximate) applies unchanged; the ticket text is corrected above.
