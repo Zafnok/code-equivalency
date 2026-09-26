@@ -164,6 +164,29 @@ runs the solver and exits 0 unless loading fails. It cannot be combined with `--
 Output is always SARIF 2.1.0 (rules EQ001 to EQ006); the exact meaning of each verdict
 and of `baselineState` is in [docs/VERIFICATION-MODEL.md](docs/VERIFICATION-MODEL.md).
 
+A real `Divergent` result, from `equiv compare --legacy samples/added-branch/legacy/*.sln
+--modern samples/added-branch/modern/*.slnx` (ticket M3-003; see `samples/added-branch/README.md`),
+one result from `equiv.sarif`'s `runs[0].results`:
+
+```json
+{
+  "ruleId": "EQ002",
+  "level": "error",
+  "message": {
+    "text": "Equiv.Samples.AddedBranch.Doubler::Double(int) diverges: inputs(bv32 0) old(returned bv32 0 outs() trace()) new(returned bv32 4294967295 outs() trace())"
+  },
+  "properties": {
+    "model": "inputs(bv32 0) old(returned bv32 0 outs() trace()) new(returned bv32 4294967295 outs() trace())",
+    "ladderTrace": [
+      { "rung": "bounded", "outcome": "refuted", "detail": "a divergence within 3 iterations" }
+    ]
+  }
+}
+```
+
+The counterexample is `x = 0` (`bv32 0`): legacy returns `0`, modern returns `-1` (`bv32
+4294967295` two's-complement). The exit code is 1.
+
 ## Building and running the gates
 
 ```
