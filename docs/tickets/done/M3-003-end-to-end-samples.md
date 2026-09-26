@@ -72,7 +72,7 @@ Engine fixes. Packaging (M3-004). New samples.
 
 ## Notes
 
-Decision: `samples/*/expected.sarif.json` is a hand-rolled snapshot (a small normaliser in
+Deviation: `samples/*/expected.sarif.json` is a hand-rolled snapshot (a small normaliser in
 `SarifNormalizer.cs` plus a write-if-missing compare in the test), not a literal Verify
 snapshot, even though the ticket calls it one. Verify's public API (`UseFileName`,
 `UseDirectory`; `UseExtension`/`DerivePathInfo`/`UseFileNameConvention` do not exist on

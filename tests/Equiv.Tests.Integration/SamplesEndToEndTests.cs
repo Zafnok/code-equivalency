@@ -40,9 +40,10 @@ public sealed class SamplesEndToEndTests
         string expectedPath = Path.Combine(SamplesRoot, sample, "expected.sarif.json");
         if (!File.Exists(expectedPath))
         {
-            // First run for a new/changed sample: pin today's output. Reviewed like code in the PR diff, same as
-            // any other checked-in snapshot (ticket M3-003's Files list).
+            // First run for a new sample (or a deleted snapshot): write today's output, but still fail, as Verify does,
+            // so CI never passes a sample nobody has reviewed. Commit the file and it is reviewed like code in the PR diff.
             await File.WriteAllTextAsync(expectedPath, run.NormalizedSarif, TestContext.Current.CancellationToken);
+            Assert.Fail($"{sample}/expected.sarif.json was missing; wrote today's output. Review it, commit it, and re-run.");
         }
 
         string expected = await File.ReadAllTextAsync(expectedPath, TestContext.Current.CancellationToken);
