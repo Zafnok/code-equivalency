@@ -10,6 +10,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Equiv.Core\Equiv.Core.csproj" />
+    <!-- M4-009: the execute option replays each Divergent on both real runtimes (ADR 0035). -->
+    <ProjectReference Include="..\Equiv.Execute\Equiv.Execute.csproj" />
     <ProjectReference Include="..\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
     <ProjectReference Include="..\Equiv.Verify.Z3\Equiv.Verify.Z3.csproj" />
   </ItemGroup>
