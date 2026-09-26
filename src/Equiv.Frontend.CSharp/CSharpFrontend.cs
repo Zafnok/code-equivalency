@@ -7,6 +7,7 @@ using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Frontend.CSharp.Endpoints;
+using Equiv.Frontend.CSharp.Execution;
 using Equiv.Frontend.CSharp.Fingerprinting;
 using Equiv.Frontend.CSharp.Loading;
 using Equiv.Frontend.CSharp.Lowering;
@@ -24,7 +25,9 @@ namespace Equiv.Frontend.CSharp;
 /// each side's analysed lines (<see cref="CodeLines"/>, M3-014). Each lowered pair carries both bodies' bound fingerprints
 /// (<see cref="BodyFingerprinter"/>, M3-015). A pair whose lowering throws is a
 /// <see cref="LoweringFailure"/>, not the end of the run (P2-011). The legacy body is lowered with the enabled
-/// API-equivalence entries and the modern body with none; the pair lists the entries that fired (ADR 0020; M3-009).
+/// API-equivalence entries and the modern body with none; the pair lists the entries that fired (ADR 0020; M3-009). The
+/// analysis carries a <see cref="ReplayDriverFactory"/> over the loaded projects, which emits nothing until a replay asks
+/// (ticket M4-009).
 /// </summary>
 public sealed class CSharpFrontend : ILanguageFrontend
 {
@@ -99,8 +102,13 @@ public sealed class CSharpFrontend : ILanguageFrontend
         {
             LegacyNotBuilt = legacy.NotBuilt,
             ModernNotBuilt = modern.NotBuilt,
+            Replay = new ReplayDriverFactory(Targets(legacyByIdentity), Targets(modernByIdentity)),
         };
     }
+
+    /// <summary>Each procedure's symbol and compilation, for replay under <c>--execute</c> (ticket M4-009).</summary>
+    private static Dictionary<ProcedureIdentity, ReplayTarget> Targets(Dictionary<ProcedureIdentity, SideProcedure> byIdentity) =>
+        byIdentity.ToDictionary(static p => p.Key, static p => new ReplayTarget(p.Value.Symbol, p.Value.Compilation));
 
     /// <summary>
     /// Both bodies of every pair in <paramref name="pairs"/>, lowered. A pair whose lowering throws is left out and

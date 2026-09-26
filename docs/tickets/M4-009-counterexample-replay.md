@@ -1,5 +1,5 @@
 # M4-009 `--execute`: every Divergent's counterexample is replayed on both real runtimes
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-032, M3-003, M3-016

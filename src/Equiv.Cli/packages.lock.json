@@ -182,6 +182,12 @@
           "Sarif.Sdk": "[5.7.0, )"
         }
       },
+      "equiv.execute": {
+        "type": "Project",
+        "dependencies": {
+          "Equiv.Core": "[1.0.0, )"
+        }
+      },
       "equiv.frontend.csharp": {
         "type": "Project",
         "dependencies": {
