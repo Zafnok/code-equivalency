@@ -470,7 +470,15 @@ internal sealed class IrTextParser
         ExpectSymbol("-");
         int endLine = ParseInt();
         ExpectSymbol(":");
-        return new IrOpaque(target, reason, new SourceSpan(path, startLine, startColumn, endLine, ParseInt())) { WholeBody = wholeBody };
+        SourceSpan span = new(path, startLine, startColumn, endLine, ParseInt());
+        return new IrOpaque(target, reason, span)
+        {
+            WholeBody = wholeBody,
+            Fingerprint = AcceptWord("fragment") ? ExpectString() : null,
+            Reads = AcceptWord("reads") ? ParseList("(", ")", ParseUse) : [],
+            Threw = AcceptWord("threw") ? ParseDefinition() : null,
+            Heap = AcceptWord("heap") ? ParseList("(", ")", ParseHeapPair) : [],
+        };
     }
 
     private IrTerminator ParseTerminator()

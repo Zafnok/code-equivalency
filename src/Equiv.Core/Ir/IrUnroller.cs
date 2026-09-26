@@ -120,7 +120,15 @@ public static class IrUnroller
         IrMapRead read => read with { Target = var(read.Target), Map = var(read.Map), Key = var(read.Key) },
         IrMapWrite write => write with { Target = var(write.Target), Map = var(write.Map), Key = var(write.Key), Value = var(write.Value) },
         IrPure pure => pure with { Target = var(pure.Target), Throws = [.. pure.Throws.Select(t => t with { Flag = var(t.Flag) })], Args = [.. pure.Args.Select(var)] },
-        _ => (IrOpaque)instruction with { Target = Optional(((IrOpaque)instruction).Target, var) },
+        _ => Rewrite((IrOpaque)instruction, var),
+    };
+
+    private static IrOpaque Rewrite(IrOpaque opaque, Func<IrVar, IrVar> var) => opaque with
+    {
+        Target = Optional(opaque.Target, var),
+        Reads = [.. opaque.Reads.Select(var)],
+        Threw = Optional(opaque.Threw, var),
+        Heap = [.. opaque.Heap.Select(h => h with { Before = var(h.Before), After = var(h.After) })],
     };
 
     /// <summary>Renames the variables <paramref name="terminator"/> reads (not the parameters its outs name) and retargets its edges.</summary>

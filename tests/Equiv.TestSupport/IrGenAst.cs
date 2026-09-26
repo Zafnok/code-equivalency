@@ -50,6 +50,13 @@ internal static class IrGenAst
     /// <summary>Opaque call; <see cref="MayThrow"/> adds a threw flag and a throw edge.</summary>
     internal sealed record Call(int? Slot, string Callee, ImmutableArray<IExpr> Args, bool MayThrow) : IStmt;
 
+    /// <summary>
+    /// An opaque fragment with a fingerprint (ticket M4-004), lowered as an <see cref="IrOpaque"/> that reads
+    /// <see cref="Reads"/>, may throw, and reads and writes the heap as a call does; the same fingerprint on both sides of a
+    /// pair is one shared call.
+    /// </summary>
+    internal sealed record Fragment(int? Slot, string Fingerprint, ImmutableArray<IExpr> Reads) : IStmt;
+
     /// <summary><c>slot = pure Function(args)</c> (ticket M4-002), each of <see cref="Throws"/> a flag branching to a throw of that type.</summary>
     internal sealed record Pure(int Slot, string Function, ImmutableArray<IExpr> Args, ImmutableArray<string> Throws) : IStmt;
 
