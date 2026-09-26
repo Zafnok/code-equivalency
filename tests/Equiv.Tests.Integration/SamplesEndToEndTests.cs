@@ -18,9 +18,8 @@ namespace Equiv.Tests.Integration;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("Console")]
-public sealed class SamplesEndToEndTests
+public sealed partial class SamplesEndToEndTests
 {
-    private static readonly Regex ExitCodePattern = new(@"Exit code:\s*(?<code>\d+)", RegexOptions.Compiled | RegexOptions.ExplicitCapture, TimeSpan.FromSeconds(1));
     private static readonly ConcurrentDictionary<string, Lazy<SampleRun>> Cache = new(StringComparer.Ordinal);
 
     private static string SamplesRoot =>
@@ -227,6 +226,9 @@ public sealed class SamplesEndToEndTests
             Console.SetError(originalError);
         }
     }
+
+    [GeneratedRegex(@"Exit code:\s*(?<code>\d+)", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ExitCodePattern { get; }
 
     private sealed record SampleRun(int ExitCode, string Json, string NormalizedSarif, SarifLog Log);
 }
