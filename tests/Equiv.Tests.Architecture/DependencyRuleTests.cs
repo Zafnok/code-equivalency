@@ -19,15 +19,16 @@ public sealed class DependencyRuleTests
             Assembly.Load("Equiv.Core"),
             Assembly.Load("Equiv.Frontend.CSharp"),
             Assembly.Load("Equiv.Verify.Z3"),
-            Assembly.Load("Equiv.Cli"))
+            Assembly.Load("Equiv.Cli"),
+            Assembly.Load("Equiv.Execute"))
         .Build();
 
     [Fact]
     public void CoreDoesNotDependOnOtherEquivComponents()
     {
         IArchRule rule = Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Core(\.|$)")
-            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^(Equiv\.Frontend|Equiv\.Verify|Equiv\.Cli)(\.|$)"))
-            .Because("Equiv.Core is the shared contract; ARCHITECTURE.md forbids it depending on the frontend, backend, or CLI.");
+            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^(Equiv\.Frontend|Equiv\.Verify|Equiv\.Cli|Equiv\.Execute)(\.|$)"))
+            .Because("Equiv.Core is the shared contract; ARCHITECTURE.md forbids it depending on the frontend, backend, runner, or CLI.");
 
         rule.Check(SystemArchitecture);
     }
@@ -61,6 +62,32 @@ public sealed class DependencyRuleTests
         IArchRule rule = Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Verify\.Z3(\.|$)")
             .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Frontend\.CSharp(\.|$)"))
             .Because("Only Equiv.Cli is allowed to depend on both the frontend and the backend.");
+
+        rule.Check(SystemArchitecture);
+    }
+
+    [Fact]
+    public void Execute_ReferencesOnlyCore()
+    {
+        Assert.Equal(
+            ["Equiv.Core"],
+            Assembly.Load("Equiv.Execute").GetReferencedAssemblies().Select(static a => a.Name!).Where(static n => n.StartsWith("Equiv.", StringComparison.Ordinal)),
+            StringComparer.Ordinal);
+
+        IArchRule rule = Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Execute(\.|$)")
+            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(
+                @"^(Equiv\.Frontend|Equiv\.Verify|Equiv\.Cli)(\.|$)|^Microsoft\.CodeAnalysis(\.|$)|^Microsoft\.Z3(\.|$)"))
+            .Because("ADR 0035: Equiv.Execute runs drivers the frontend compiled and depends on Equiv.Core only.");
+
+        rule.Check(SystemArchitecture);
+    }
+
+    [Fact]
+    public void ExecutionContractStartsNoProcesses()
+    {
+        IArchRule rule = Types(includeReferenced: true).That().ResideInNamespace("Equiv.Core.Execution")
+            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespace("System.Diagnostics"))
+            .Because("ADR 0035: the execution contract is records only; Equiv.Execute owns the processes (ticket M3-032).");
 
         rule.Check(SystemArchitecture);
     }
