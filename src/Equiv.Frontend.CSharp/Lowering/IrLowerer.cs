@@ -658,8 +658,11 @@ internal sealed class IrLowerer
     /// The shadow of the variable an operand names, or null when it names none or is not reference-typed. A flow capture
     /// names its own variable, whose shadow was set when it was captured (ticket P2-008), not the lvalue it may stand for.
     /// </summary>
-    private SsaBuilder.Variable? ShadowOf(IOperation operand) =>
-        (operand is IFlowCaptureReferenceOperation reference ? Capture(reference.Id, reference.Type!) : Target(operand)) is { } variable ? Shadow(variable) : null;
+    private SsaBuilder.Variable? ShadowOf(IOperation operand)
+    {
+        SsaBuilder.Variable? variable = operand is IFlowCaptureReferenceOperation reference ? Capture(reference.Id, reference.Type!) : Target(operand);
+        return variable is null ? null : Shadow(variable);
+    }
 
     /// <summary>
     /// Whether <paramref name="source"/> is null, or null when it provably is not. A <c>new</c> is never
