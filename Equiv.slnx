@@ -19,6 +19,8 @@
   <Folder Name="/tools/">
     <Project Path="tools/check-coverage/check-coverage.csproj" />
     <Project Path="tools/check-coverage.Tests/check-coverage.Tests.csproj" />
+    <Project Path="tools/corpus/seeder/Equiv.Corpus.Seeder.csproj" />
+    <Project Path="tools/corpus/seeder.Tests/Equiv.Corpus.Seeder.Tests.csproj" />
     <Project Path="tools/licence-check/licence-check.csproj" />
     <Project Path="tools/licence-check.Tests/licence-check.Tests.csproj" />
     <Project Path="tools/runtime-diff/runtime-diff.csproj" />

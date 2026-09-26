@@ -32,6 +32,7 @@
     ./tools/corpus/corpus.ps1 -PrepareAgent madelson/DistributedLock
     ./tools/corpus/corpus.ps1 -Unchanged gitextensions-8522
     ./tools/corpus/corpus.ps1 -Packages gitextensions-8522    # after both sides are restored
+    ./tools/corpus/corpus.ps1 -SeedMechanical gitextensions-8522 -Count 300 -Seed 1
     ./tools/corpus/corpus.ps1 -Env | Invoke-Expression     # before any restore or run of equiv
     ./tools/corpus/corpus.ps1 -Refresh                     # dry run against upstream main
     ./tools/corpus/corpus.ps1 -Refresh -Apply -UpstreamRef <sha>
@@ -46,12 +47,20 @@ param(
     # Deterministic choice of agent-pair repos: the ones nearest the quantiles of num_cs_files,
     # followed by every other repo in order of distance, so a failed repo has a fixed replacement.
     [Parameter(ParameterSetName = 'Select', Mandatory)] [switch]$Select,
-    [Parameter(ParameterSetName = 'Select')] [int]$Count = 3,
+    [Parameter(ParameterSetName = 'Select')]
+    [Parameter(ParameterSetName = 'SeedMechanical')]
+    [int]$Count = 3,
 
     # A pairs.csv slug, or a Poly-MigrationBench repo as owner/name.
     [Parameter(ParameterSetName = 'Fetch', Mandatory)] [string]$Fetch,
     [Parameter(ParameterSetName = 'PrepareAgent', Mandatory)] [string]$PrepareAgent,
     [Parameter(ParameterSetName = 'Unchanged', Mandatory)] [string]$Unchanged,
+
+    # Ticket M4-010: mechanical seeds (M0-012's operators) on the modern side, into .corpus/pairs/<slug>/seeded-mech/.
+    # -Count defaults to 300 here (shared with -Select's $Count, whose own default of 3 is unrelated); -Seed
+    # defaults to a fresh Get-Random draw, printed in seeds.json so the run can be replayed.
+    [Parameter(ParameterSetName = 'SeedMechanical', Mandatory)] [string]$SeedMechanical,
+    [Parameter(ParameterSetName = 'SeedMechanical')] [int]$Seed,
 
     # ADR 0034's packageVersionChanges: NuGet packages whose resolved version differs between the
     # sides, and those on one side only, from each side's restore output (never source text).
@@ -404,6 +413,68 @@ switch ($PSCmdlet.ParameterSetName) {
         $pair.PSObject.Properties | ForEach-Object { $data[$_.Name] = $_.Value }
         $data.modernSolution = Join-Path $modernRoot $relative
         Write-PairJson -Slug $slug -Data $data
+    }
+
+    'SeedMechanical' {
+        Assert-CorpusIgnored
+        $slug = Resolve-Slug $SeedMechanical
+        $pair = Read-PairJson $slug
+        if (-not $pair.modernSolution) { throw "'$SeedMechanical' has no modern side yet." }
+        $effectiveCount = if ($PSBoundParameters.ContainsKey('Count')) { $Count } else { 300 }
+        $effectiveSeed = if ($PSBoundParameters.ContainsKey('Seed')) { $Seed } else { Get-Random }
+
+        $modernDir = Split-Path -Parent $pair.modernSolution
+        $seededDir = Join-Path (Get-PairDir $slug) 'seeded-mech'
+        if (Test-Path -LiteralPath $seededDir) { Remove-Item -LiteralPath $seededDir -Recurse -Force }
+        Show-Step "copy    $modernDir -> $seededDir"
+        Copy-Item -LiteralPath $modernDir -Destination $seededDir -Recurse
+
+        # Weight towards methods a prior run's SARIF already reports changed (ADR 0034: an EQ001 result whose
+        # proofMethod is "congruence" is unchanged; every other result is changed), if any run exists yet.
+        $changedPath = $null
+        $runsDir = Join-Path (Get-PairDir $slug) 'runs'
+        if (Test-Path -LiteralPath $runsDir) {
+            $latestSarif = Get-ChildItem -LiteralPath $runsDir -Filter 'equiv.sarif' -Recurse -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($latestSarif) {
+                $log = Get-Content -LiteralPath $latestSarif.FullName -Raw | ConvertFrom-Json
+                $changed = [System.Collections.Generic.List[string]]::new()
+                foreach ($result in $log.runs[0].results) {
+                    $identity = $result.partialFingerprints.'procedureIdentity/v1'
+                    if (-not $identity) { continue }
+                    $isCongruentEquivalent = ($result.ruleId -eq 'EQ001') -and $result.properties -and ($result.properties.proofMethod -eq 'congruence')
+                    if (-not $isCongruentEquivalent) { [void]$changed.Add($identity) }
+                }
+
+                # ConvertTo-Json collapses a 0- or 1-element array to a bare scalar on PowerShell 5.1 (no
+                # -AsArray there), which the seeder's `string[]` deserialiser would reject; build the array
+                # text by hand instead so it round-trips at every count.
+                $escaped = @($changed | ForEach-Object { '"' + ($_ -replace '\\', '\\\\' -replace '"', '\"') + '"' })
+                $changedPath = Join-Path ([IO.Path]::GetTempPath()) "equiv-seeder-changed-$slug.json"
+                [IO.File]::WriteAllText($changedPath, ('[' + ($escaped -join ',') + ']'), (New-Object Text.UTF8Encoding $false))
+                Show-Step "weighting toward $($changed.Count) changed identities from $($latestSarif.FullName)"
+            }
+        }
+
+        if (-not $changedPath) { Show-Step "no prior run found for '$slug'; every method weighs the same" }
+
+        $manifest = Join-Path $seededDir 'seeds.json'
+        $seederArgs = @('--root', $seededDir, '--manifest', $manifest, '--count', $effectiveCount, '--seed', $effectiveSeed)
+        if ($changedPath) { $seederArgs += @('--changed', $changedPath) }
+        dotnet run --project (Join-Path $PSScriptRoot 'seeder') -c Release -- @seederArgs
+        if ($LASTEXITCODE -ne 0) { throw "seeder failed with exit $LASTEXITCODE" }
+
+        # A best-effort whole-copy build, on top of the seeder's own per-seed compile check: the seeder never
+        # loads the real project (Roslyn syntax rewriting only, no MSBuild), so a seed that is locally compilable
+        # but breaks a cross-file reference elsewhere still slips through. A failure here is a finding to act
+        # on by hand (drop the offending entries from seeds.json and re-run), not something this script recovers
+        # from automatically.
+        Show-Step "build   $($pair.modernSolution -replace [regex]::Escape($modernDir), $seededDir)"
+        $seededSolution = $pair.modernSolution -replace [regex]::Escape($modernDir), $seededDir
+        dotnet build $seededSolution --no-restore 2>&1 | ForEach-Object { Show-Step $_ }
+        if ($LASTEXITCODE -ne 0) { Show-Step "warning: $seededDir does not build; inspect seeds.json and drop the offending entries" }
+
+        Get-Content -LiteralPath $manifest -Raw | Write-Output
     }
 
     'Unchanged' {

@@ -128,6 +128,12 @@ dotnet_diagnostic.MA0041.severity = none
 [tests/**.cs]
 dotnet_diagnostic.CA1707.severity = none
 
+# M4-010: the corpus seeder's tests live under tools/, not tests/ (it is a tools/ console
+# project, per the check-coverage/licence-check precedent), but its test names follow the same
+# Scenario_ExpectedOutcome convention as the rule above.
+[tools/corpus/seeder.Tests/**.cs]
+dotnet_diagnostic.CA1707.severity = none
+
 #### Core EditorConfig Options ####
 
 # Indentation and spacing
@@ -553,3 +559,21 @@ dotnet_diagnostic.MA0185.severity = none
 # message goes to stderr before the process exits non-zero.
 [src/Equiv.Cli/Program.cs]
 dotnet_diagnostic.CA1031.severity = none
+
+# M4-010: MutationOperator and SyntaxMutator cross an assembly boundary on purpose (Equiv.TestSupport's
+# PairGen, and the tests that reference MutationOperator directly, all live in other assemblies;
+# tools/corpus/seeder is a console project, which is exactly the shape CA1515 assumes has no public
+# API to keep). They have to stay public: making them internal and granting InternalsVisibleTo
+# instead would also expose this project's top-level Program class to those assemblies, which
+# collided with Equiv.TestSupport's own unrelated IrGenAst.Program.
+[tools/corpus/seeder/MutationOperator.cs]
+dotnet_diagnostic.CA1515.severity = none
+
+[tools/corpus/seeder/SyntaxMutator.cs]
+dotnet_diagnostic.CA1515.severity = none
+
+# M4-010: MethodSeeder.Seed draws mechanical seeds reproducibly from a given -Seed value (so a run
+# can be replayed and so Seeder_IsDeterministicForASeed can assert it); it is not used for anything
+# security-sensitive, so CA5394's cryptographic-RNG advice does not apply.
+[tools/corpus/seeder/MethodSeeder.cs]
+dotnet_diagnostic.CA5394.severity = none

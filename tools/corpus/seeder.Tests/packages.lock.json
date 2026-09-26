@@ -14,12 +14,6 @@
           "Microsoft.Testing.Platform": "2.2.2"
         }
       },
-      "CsCheck": {
-        "type": "Direct",
-        "requested": "[4.9.1, )",
-        "resolved": "4.9.1",
-        "contentHash": "rEmuFiG19sF8U4Ef/S79cu9HW4pUGraoCTkmYs0z7SvsGqGAVO3wCjxQPS0KQvPa1g2/w1wBbnAP6cDZKBFEcA=="
-      },
       "Meziantou.Analyzer": {
         "type": "Direct",
         "requested": "[3.0.290, )",
@@ -32,20 +26,6 @@
         "resolved": "8.0.0",
         "contentHash": "AJy/KVjXgUbgjf6HiI8wAk4DSSq0SCmvXQF8aU6IB+pnIQq+YJvofvMczug2hqO8yEvnQY557ryew66KPpyCsA=="
       },
-      "Verify.XunitV3": {
-        "type": "Direct",
-        "requested": "[33.1.4, )",
-        "resolved": "33.1.4",
-        "contentHash": "C2Qc3oGUipD8aBbG76dm73OGThJX7KNXpRYznHvdb3kphnD2AVBIRZRWNoQw9OvE+SN9zXHdPi4Hdl5Cg0EXvg==",
-        "dependencies": {
-          "Argon": "0.37.0",
-          "DiffEngine": "20.5.1",
-          "Microsoft.Bcl.AsyncInterfaces": "10.0.12",
-          "SimpleInfoName": "3.2.0",
-          "Verify": "33.1.4",
-          "xunit.v3.extensibility.core": "4.0.1"
-        }
-      },
       "xunit.v3": {
         "type": "Direct",
         "requested": "[4.0.1, )",
@@ -55,24 +35,6 @@
           "xunit.v3.mtp-v2": "[4.0.1]"
         }
       },
-      "Argon": {
-        "type": "Transitive",
-        "resolved": "0.37.0",
-        "contentHash": "fJpWfnU8MurN+5tTyINxFTn83Twh1iOVLb99VyG/59qcQQm2kGC2hvntyHP6ZmVJ6afm6VCz4EcuTYSR/WpCdQ=="
-      },
-      "DiffEngine": {
-        "type": "Transitive",
-        "resolved": "20.5.1",
-        "contentHash": "0P1YWymI2g5XB0f5pEv+PmNhWjHDY170yBhCU3qC7+sU36ZnvlU6rx5YP7YAImHkTuPMtTi0X8vF6UAjf0wH1g==",
-        "dependencies": {
-          "EmptyFiles": "8.19.0"
-        }
-      },
-      "EmptyFiles": {
-        "type": "Transitive",
-        "resolved": "8.19.0",
-        "contentHash": "ZQrJZYWh2VG0PXpyorNHmjmlt/cJTEcPxna0H2rYK9BHh4cI0wAM7IGwdYxihBVSPrh/ISHEeP+ZqfSdduQ9Sw=="
-      },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
         "resolved": "2.23.0",
@@ -80,8 +42,8 @@
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "vHPomsJPqUvf1ExdzCCSEUMQqloONPTBMGqNqBUdr4UgSTs9bCzH1oLkuS6WgUgIu+xqWngQbjelUBNlDuzLWQ=="
+        "resolved": "6.0.0",
+        "contentHash": "UcSjPsst+DfAdJGVDsu346FX0ci0ah+lw3WRtn18NUwEqRt70HaOQ7lI72vy3+1LxtqI3T5GWwV39rQSrCzAeg=="
       },
       "Microsoft.CodeAnalysis.Analyzers": {
         "type": "Transitive",
@@ -95,16 +57,6 @@
         "dependencies": {
           "Microsoft.CodeAnalysis.Analyzers": "5.9.0-1.26328.17"
         }
-      },
-      "Microsoft.Diagnostics.Tracing.EventRegister": {
-        "type": "Transitive",
-        "resolved": "1.1.28",
-        "contentHash": "VXTPYySeOmpMFejW2t4uau3t5h92LYKT9zM3kR06qeUNM9vQxG3S5nB6EhuKyf+F7Ze92Y6614MvjkxH14NJkQ=="
-      },
-      "Microsoft.Diagnostics.Tracing.TraceEvent": {
-        "type": "Transitive",
-        "resolved": "3.1.3",
-        "contentHash": "0i45LzMkHfWKcDZxzyGbE0TiRVRNvr8k+Snrgf1OT/8txwBi6opm3G8rCB7OAM6G4m61Jzd+ZaJ6YAyRGlE9TQ=="
       },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
@@ -222,30 +174,10 @@
         "resolved": "5.0.0",
         "contentHash": "dDoKi0PnDz31yAyETfRntsLArTlVAVzUzCIvvEDsDsucrl33Dl8pIJG06ePTJTI3tGpeyHS9Cq7Foc/s4EeKcg=="
       },
-      "Newtonsoft.Json": {
-        "type": "Transitive",
-        "resolved": "13.0.3",
-        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
-      },
-      "SimpleInfoName": {
-        "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "K8ivHRbPWfncijk62Dan/r/z55gwq3aFzqB6yFlD9X0bbpIaacHyHH2cpcIdz0FECUpERUZTwxts0z4gRWpQpA=="
-      },
       "System.Security.AccessControl": {
         "type": "Transitive",
         "resolved": "6.0.1",
         "contentHash": "IQ4NXP/B3Ayzvw0rDQzVTYsCKyy0Jp9KI6aYcK7UnGVlR9+Awz++TIPCQtPYfLJfOpm8ajowMR09V7quD3sEHw=="
-      },
-      "Verify": {
-        "type": "Transitive",
-        "resolved": "33.1.4",
-        "contentHash": "Vs7lK1KyRlf4awNXXnTUIZT2CJ5uF6I35uoxZVfQ5kKUBwnE0XXFvY9lGzlfVZzk+/ekZ0A3B1h8lhaZfWG5FA==",
-        "dependencies": {
-          "Argon": "0.37.0",
-          "DiffEngine": "20.5.1",
-          "SimpleInfoName": "3.2.0"
-        }
       },
       "xunit.analyzers": {
         "type": "Transitive",
@@ -315,31 +247,10 @@
           "xunit.v3.runner.common": "[4.0.1]"
         }
       },
-      "equiv.core": {
-        "type": "Project",
-        "dependencies": {
-          "Sarif.Sdk": "[5.7.0, )"
-        }
-      },
       "equiv.corpus.seeder": {
         "type": "Project",
         "dependencies": {
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )"
-        }
-      },
-      "equiv.testsupport": {
-        "type": "Project",
-        "dependencies": {
-          "CsCheck": "[4.9.1, )",
-          "Equiv.Core": "[1.0.0, )",
-          "Equiv.Corpus.Seeder": "[1.0.0, )"
-        }
-      },
-      "equiv.verify.z3": {
-        "type": "Project",
-        "dependencies": {
-          "Equiv.Core": "[1.0.0, )",
-          "Microsoft.Z3": "[5.1.0, )"
         }
       },
       "Microsoft.CodeAnalysis.CSharp": {
@@ -350,23 +261,6 @@
         "dependencies": {
           "Microsoft.CodeAnalysis.Analyzers": "5.9.0-1.26328.17",
           "Microsoft.CodeAnalysis.Common": "[5.9.0]"
-        }
-      },
-      "Microsoft.Z3": {
-        "type": "CentralTransitive",
-        "requested": "[5.1.0, )",
-        "resolved": "5.1.0",
-        "contentHash": "92riy8vpsJWbo/aa6ru2uQ70oCY6EX0zv7JJTKPE83efPz2RjpIIxCPhAVI8YJZyCxx/3cvt+Yw8DnTIoUuvDQ=="
-      },
-      "Sarif.Sdk": {
-        "type": "CentralTransitive",
-        "requested": "[5.7.0, )",
-        "resolved": "5.7.0",
-        "contentHash": "UVBzw+EDLcdj0DLyxypTtGiNqaP3+Zm3RAP3rHoo20jaEzKv9JFvBLOq6chjV9IuKEGcDMgFnB1D+4DmSLjU8w==",
-        "dependencies": {
-          "Microsoft.Diagnostics.Tracing.EventRegister": "1.1.28",
-          "Microsoft.Diagnostics.Tracing.TraceEvent": "3.1.3",
-          "Newtonsoft.Json": "13.0.3"
         }
       }
     }

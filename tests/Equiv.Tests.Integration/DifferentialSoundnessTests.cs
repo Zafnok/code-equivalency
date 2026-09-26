@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using CsCheck;
 
 using Equiv.Core.Verdicts;
+using Equiv.Corpus.Seeder;
 using Equiv.TestSupport;
 
 using Xunit;
