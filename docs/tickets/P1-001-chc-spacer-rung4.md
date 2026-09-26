@@ -1,5 +1,5 @@
 # P1-001 Loop ladder rung 4: constrained Horn clauses via Z3 Spacer
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, max effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-003
