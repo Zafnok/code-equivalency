@@ -47,3 +47,5 @@ Congruent results that call another matched procedure list it in `properties.ass
 | `OrderService.Reserve(Order, int)` | guard `throw new ArgumentNullException` | inverted guard | Equivalent (bounded) | Equivalent | M3-010 | M3-010 (the `order == null` conversion) |
 | `OrderService.RoundTotal(decimal)` | `Math.Round` overloads | real divergence | Divergent | Divergent | M3-001 | stays Divergent through M4-002: `Math.Round` is a call, not a pure function, so the divergence is untainted (M3-016) |
 | 14 auto-property accessors of `Order` and `OrderLine` | auto-property | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M3-010 |
+
+Exit code: 1 (`RoundTotal`'s Divergent result; `Describe`'s Unknown does not by itself change the exit code).

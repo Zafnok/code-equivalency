@@ -11,3 +11,5 @@ a bound of `k = 2` iterations.
 | Procedure | Verdict |
 |---|---|
 | `Summation.SumUpTo(int)` | Divergent — counterexample `n = 1`, provable at bounded unrolling `k = 2` (rung 1) |
+
+Exit code: 1 (a new Divergent result).
