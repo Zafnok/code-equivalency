@@ -1,5 +1,5 @@
 # M4-008 The remaining whole-body opaques: accessors, auto-properties, `catch` filters and bare `catch`
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-003, M3-010, M3-025
@@ -73,3 +73,32 @@ exception object's members beyond its type (they stay expression-level opaque). 
 with `required` semantics.
 
 ## Notes
+- Decision: a caller reads and writes an auto-property as its backing field's map when no override can replace
+  it (not `virtual`, not `override`) and neither accessor has a body; otherwise it still calls the accessors
+  (M3-010). Criterion 2 needs this: a call is uninterpreted, so a set-then-get through calls is never provably
+  a field write-then-read. Compound and captured writes take the same path, so one property is never half
+  inlined and half called.
+- Decision: the backing field's map is `field.<Type>.<Property>`, named from `IFieldSymbol.AssociatedSymbol`, so
+  the C# 14 `field` keyword and a bodiless accessor of the same property share it, and a field `P` on the other
+  side is the same slice.
+- Decision: a constructor is a sequence of CFGs (`ControlFlowGraph.Create` of each `IFieldInitializerOperation` /
+  `IPropertyInitializerOperation`, then the constructor's), each exit going on to the next entry; flow captures
+  and switch chains are per graph. Initializers of a partial type spread over files are ordered by file path,
+  since C# leaves that order unspecified.
+- Decision: a `when` filter is copied to each raise site, keyed by its true and false exits, like a `finally`
+  copy. It runs before the finallys between the throw and its handler, as .NET's first pass does; an exception
+  raised inside the copy goes to its false exit.
+- Decision: a struct's auto-property accessor is an expression-level `InstanceReference` opaque, as a struct's
+  `this` is everywhere else (M4-001).
+- Decision: the lowering oracle keeps `P` as the auto-property (now a `field.Oracle.P` map, its final value
+  compared) and adds `Q`, a property with accessor bodies, so M3-010's getter and setter calls stay exercised;
+  `AccessorsAgreeWithCompiledCSharp` checks `get_P`, `set_P` and the arrow getter `R` against the compiled class.
+- Deviation: `no-body` is not gone from the code. A record's primary constructor has no operation (the writes
+  of its positional properties are in no operation tree), so it stays one whole-body opaque with reason `no-body`,
+  as do `extern` and abstract members. No sample holds one, so `WholeBodyReasonOwners` drops the row as criterion
+  5 says, but a corpus record would surface an unowned reason; it needs a follow-up ticket.
+- business-layer: `pairsWholeBodyOpaque` 16 -> 2 (only `async` and `lock` left), `pairsWithoutOpaque` 8 -> 22; its
+  SARIF loses the auto-property getters from `assumedCallees`, verdicts unchanged. The sample already held
+  auto-properties, so criterion 6 needed no sample change.
+- Toolchain: in a fresh worktree `webapi-basic` fails to load until the samples are restored (`build.ps1`'s
+  "restore samples" step: MSBuild `-t:Restore` for legacy, `dotnet restore` for modern).
