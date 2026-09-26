@@ -302,7 +302,7 @@ public sealed class CompareCommandTests
         Assert.Equal(["EQ004", "EQ005"], run.Results.Select(static r => r.RuleId), StringComparer.Ordinal);
         Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Equal(
-            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":1,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}}}""",
+            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":1,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}},"externalCallees":{"legacy":[],"modern":[]}}""",
             census);
         Assert.True(run.TryGetSerializedPropertyValue("analysedLinesOfCode", out string? _));
     }
@@ -537,7 +537,7 @@ public sealed class CompareCommandTests
         Assert.Equal([throwing.Value], run.GetProperty<List<string>>("unverified"), StringComparer.Ordinal);
         Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Equal(
-            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":2,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}}""" + (lowerOnly ? "}" : ""","unknownByScope":{"line":0,"method":0}}"""),
+            """{"procedures":{"legacy":2,"modern":2},"matchedPairs":2,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}},"externalCallees":{"legacy":[],"modern":[]}""" + (lowerOnly ? "}" : ""","unknownByScope":{"line":0,"method":0}}"""),
             census);
         Invocation invocation = Assert.Single(run.Invocations);
         Assert.False(invocation.ExecutionSuccessful);
@@ -918,6 +918,39 @@ public sealed class CompareCommandTests
         Assert.Contains("modern: unbound at a.cs 3:5; modern: unbound at a.cs 4:1", result.Message.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket M4-006 acceptance criterion 2: a pair the frontend marked <c>async-mismatch</c> is Unknown with that detail, both
+    /// marks as related locations, without calling the backend, even when the bound fingerprints agree.
+    /// </summary>
+    [Fact]
+    public void AsyncMismatchIsUnknown()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        BodyFingerprint fingerprint = new("same", RuntimeSensitive: false);
+        ProcedurePair pair = Pair(PairIdentity) with
+        {
+            OldBody = MismatchBody(PairIdentity, new SourceSpan("old.cs", 7, 20, 7, 21)),
+            NewBody = MismatchBody(PairIdentity, new SourceSpan("new.cs", 9, 32, 9, 33)),
+            OldFingerprint = fingerprint,
+            NewFingerprint = fingerprint,
+        };
+        FakeBackend backend = new(NoVerdicts);
+        InMemoryReportSink sink = new();
+
+        int exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink);
+
+        Assert.Equal(ExitCodes.UnknownPresent, exitCode);
+        Assert.Empty(backend.Calls);
+        Result result = Assert.Single(sink.Log!.Runs[0].Results);
+        Assert.Equal("EQ003", result.RuleId);
+        Assert.Equal("opaque", result.GetProperty<string>("unknownReason"));
+        Assert.Contains("async-mismatch", result.Message.Text, StringComparison.Ordinal);
+        Assert.Equal(["old.cs", "new.cs"], result.RelatedLocations.Select(static l => l.PhysicalLocation.ArtifactLocation.Uri.OriginalString), StringComparer.Ordinal);
+    }
+
     /// <summary>Ticket M3-009 acceptance criterion 4: a pair's applied catalogue entries reach its SARIF result, whatever the verdict.</summary>
     [Fact]
     public void ThePairsEquivalencesAppliedReachTheResult()
@@ -1291,6 +1324,13 @@ public sealed class CompareCommandTests
         IrProcedure body = IrText.Parse($"proc \"{identity}\" () entry B0\nB0:\n{calls}  ret\n");
         return new ProcedurePair(new ProcedureIdentity(identity), new ProcedureIdentity(identity), body, body);
     }
+
+    private static IrProcedure MismatchBody(ProcedureIdentity identity, SourceSpan span) => new(
+        identity,
+        [],
+        ReturnType: null,
+        [new IrBlock(new IrBlockId(0), [new IrOpaque(Target: null, Unknown.AsyncMismatchReason, span) { WholeBody = true }], new IrReturn(Value: null, []))],
+        new IrBlockId(0));
 
     private static IrProcedure UnboundBody(ProcedureIdentity identity) => new(
         identity,

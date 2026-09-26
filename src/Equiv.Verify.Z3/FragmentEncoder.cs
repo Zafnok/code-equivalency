@@ -390,17 +390,23 @@ internal sealed class FragmentEncoder
     }
 
     /// <summary>
-    /// Defines a call's result, <c>threw</c> flag and the <c>after</c> of each heap pair, replaces every entry of
+    /// Defines a call's result, <c>threw</c> flag, ref outputs (ticket M4-003) and the <c>after</c> of each heap pair, replaces every entry of
     /// <paramref name="heap"/> with the call's new version of that map (ticket P1-005), and returns its trace event.
     /// </summary>
     private Expr EncodeCall(IrCall call, TraceEncoder trace, BitVecExpr position, Expr[] heap)
     {
         IrHeapPair?[] pairs = [.. trace.Heap.Select(m => call.Heap.FirstOrDefault(h => string.Equals(h.Map, m.Name, StringComparison.Ordinal) && h.Before.Type == m.Type))];
         ImmutableArray<Expr> read = [.. pairs.Select((p, i) => p is null ? heap[i] : Var(p.Before))];
-        (Expr? result, BoolExpr threw, Expr @event, ImmutableArray<Expr> written) = trace.Call(side, call, [.. call.Args.Select(a => (a.Type, Var(a)))], position, read);
+        (Expr? result, BoolExpr threw, Expr @event, ImmutableArray<Expr> written, ImmutableArray<Expr> refOuts) =
+            trace.Call(side, call, [.. call.Args.Select(a => (a.Type, Var(a)))], position, read);
         if (call.Target is not null)
         {
             Define(call.Target, result!);
+        }
+
+        for (int i = 0; i < refOuts.Length; i++)
+        {
+            Define(call.RefOuts[i], refOuts[i]);
         }
 
         if (call.Threw is not null)

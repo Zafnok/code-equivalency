@@ -289,15 +289,22 @@ internal sealed class IrGenLowering
 
     private void LowerCall(Call call)
     {
-        ImmutableArray<IrVar> args = [.. call.Args.Select(Lower)];
+        ImmutableArray<IrVar> args = [.. call.Args.Select(Lower), .. call.RefSlot is int passed ? [env[passed]] : Array.Empty<IrVar>()];
         IrVar? target = call.Slot is null ? null : Temp(Bv32);
         IrVar? threw = call.MayThrow ? Temp(Bool) : null;
+        ImmutableArray<IrVar> refOuts = call.RefSlot is int output ? [Version(output)] : [];
         ImmutableArray<IrHeapPair> pairs = heap is null ? [] : [new IrHeapPair(heap.Var.Name, env[Heap], Version(Heap))];
-        Emit(new IrCall(target, threw, new CallIdentity(call.Callee), args) { Heap = pairs });
+        Emit(new IrCall(target, threw, new CallIdentity(call.Callee), args) { RefOuts = refOuts, Heap = pairs });
         foreach (IrHeapPair pair in pairs)
         {
             env[Heap] = pair.After;
         }
+
+        if (call.RefSlot is int written)
+        {
+            env[written] = refOuts[0];
+        }
+
         if (threw is not null)
         {
             ThrowIf(threw, "System.Exception");

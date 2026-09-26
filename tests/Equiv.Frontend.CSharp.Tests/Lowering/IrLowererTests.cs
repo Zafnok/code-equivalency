@@ -16,8 +16,8 @@ public sealed class IrLowererTests
     [Theory]
     [InlineData("static extern int M();", "M", "no-body")]
     [InlineData("static void M(object o) { lock (o) { } }", "M", "lock")]
-    [InlineData("static async System.Threading.Tasks.Task<int> M() { await System.Threading.Tasks.Task.Delay(0); return 1; }", "M", "async")]
-    [InlineData("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }", "M", "async")]
+    [InlineData("static System.Collections.Generic.IEnumerable<int> M() { yield return 1; }", "M", "iterator")]
+    [InlineData("static async System.Threading.Tasks.Task M(IAsyncDisposable d) { await using (d) { } }", "M", "await-using")]
     public void WholeBodyIsOneOpaque(string members, string name, string reason)
     {
         IrProcedure procedure = Method(members, name);
@@ -30,7 +30,7 @@ public sealed class IrLowererTests
     [Theory]
     [InlineData("static extern int M();", "M")]
     [InlineData("static void M(object o) { lock (o) { } }", "M")]
-    [InlineData("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }", "M")]
+    [InlineData("static System.Collections.Generic.IEnumerable<int> M() { yield return 1; }", "M")]
     public void WholeBodyOpaqueIsFlagged(string members, string name) =>
         Assert.True(Assert.Single(Opaques(Method(members, name))).WholeBody);
 
@@ -77,22 +77,22 @@ public sealed class IrLowererTests
     {
         IrProcedure procedure = Method("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }");
 
-        Assert.Equal("async", Assert.Single(Opaques(procedure)).Reason);
+        Assert.Empty(Opaques(procedure));
     }
 
     [Theory]
     [InlineData("static int M(int[,] a) => a[0, 1];", "ArrayElementReference")]
     [InlineData("static int M(int[][] a) => a[0][1];", "ArrayElementReference")]
     [InlineData("static int M(int[] a, long i) => a[i];", "ArrayElementReference")]
-    [InlineData("static bool M(string s) => int.TryParse(s, out _);", "ref-argument")]
-    [InlineData("static void M(ref int a) { System.Threading.Interlocked.Increment(ref a); }", "ref-argument")]
+    [InlineData("static int f; static void M() { System.Threading.Interlocked.Increment(ref f); }", "ref-argument")]
+    [InlineData("static void M(int[] a) { System.Threading.Interlocked.Increment(ref a[0]); }", "ref-argument")]
     [InlineData("static void M(int a, Exception e) { if (a < 0) throw e; }", "Throw")]
     [InlineData("static T M<T>() where T : new() => new T();", "TypeParameterObjectCreation")]
     [InlineData("static object M<T>() => typeof(T);", "TypeOf")]
     [InlineData("static T M<T>() => default(T);", "DefaultValue")]
     [InlineData("static T M<T>() where T : struct => default(T);", "DefaultValue")]
     [InlineData("struct Point { public int X, Y; } static Point M() => default(Point);", "DefaultValue")]
-    [InlineData("static C M(int a) { int b = 0; return new C(ref b); } C(ref int x) { }", "ref-argument")]
+    [InlineData("static C M(int[] a) => new C(ref a[0]); C(ref int x) { }", "ref-argument")]
     [InlineData("static void M(int a) { ref int r = ref a; r = 1; }", "SimpleAssignment")]
     [InlineData("static int? M(double? d) => (int?)d;", "Conversion")]
     [InlineData("static double? M(int i) => i;", "Conversion")]
@@ -264,10 +264,7 @@ public sealed class IrLowererTests
     [Theory]
     [InlineData("int f; void M(int a) { f += a; }", "FieldReference")]
     [InlineData("static void M(int[] xs) { xs[0]++; }", "ArrayElementReference")]
-    [InlineData("static void M(double d) { d += 1; }", "CompoundAssignment")]
-    [InlineData("static void M(double d) { d++; }", "Increment")]
     [InlineData("enum E { A } static void M(E e) { e += 1; }", "ParameterReference")]
-    [InlineData("struct S { public static int operator +(int a, S b) => 0; } static void M(int a, S s) { a += s; }", "CompoundAssignment")]
     public void CompoundAssignmentToAnUnsupportedTargetIsOpaque(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
 
@@ -1186,16 +1183,16 @@ public sealed class IrLowererTests
         Assert.Equal("undefined", opaque.Reason);
     }
 
-    /// <summary>Ticket P2-009: the census's <c>undefined</c> was the read of an <c>out</c> argument of a <c>ref-argument</c> opaque.</summary>
+    /// <summary>
+    /// Ticket P2-009: the census's <c>undefined</c> was the read of an <c>out</c> argument of a <c>ref-argument</c> opaque.
+    /// Since ticket M4-003 only a call with a <c>ref</c> to a field or an array element, or with one variable written twice,
+    /// is that opaque.
+    /// </summary>
     [Theory]
-    [InlineData("static int M(string s, int f) => int.TryParse(s, out var n) ? n : f;", 2)]
-    [InlineData("static int M(string s) { int.TryParse(s, out int n); return n; }", 2)]
-    [InlineData("static int M(ref int a) { System.Threading.Interlocked.Exchange(ref a, 1); return a; }", 2)]
-    [InlineData("static string M(System.Collections.Generic.Dictionary<int, string> d) { d.TryGetValue(1, out string v); return v.Trim(); }", 2)]
+    [InlineData("static int f; static int M() { P(ref f, out int n); return n; } static void P(ref int a, out int b) => b = a;", 2)]
     [InlineData("static int M() { int x; P(out x, out x); return x; } static void P(out int a, out int b) => a = b = 0;", 2)]
-    [InlineData("static bool M(string s) => int.TryParse(s, out _);", 1)]
     [InlineData("static int M(int[] a) { System.Threading.Interlocked.Exchange(ref a[0], 1); return a.Length; }", 1)]
-    [InlineData("static C M() { int b = 0; C c = new C(ref b); return b > 0 ? c : null; } C(ref int x) { }", 2)]
+    [InlineData("static C M(int[] a, int b) { C c = new C(ref a[0], out b); return b > 0 ? c : null; } C(ref int x, out int y) => y = x;", 2)]
     public void AVariableWrittenByARefArgumentOpaqueIsDefined(string members, int opaques) =>
         AssertDefined(Method(members), "ref-argument", opaques);
 
@@ -1212,6 +1209,55 @@ public sealed class IrLowererTests
     {
         Assert.DoesNotContain(Opaques(procedure), static o => o.Reason is "undefined");
         Assert.Equal(opaques, Opaques(procedure).Count(o => string.Equals(o.Reason, reason, StringComparison.Ordinal)));
+    }
+
+    /// <summary>Ticket M4-003: <c>ref</c> and <c>out</c> arguments to locals and parameters lower with no opaque.</summary>
+    [Theory]
+    [InlineData("static int M(string s, int f) => int.TryParse(s, out var n) ? n : f;")]
+    [InlineData("static int M(string s) { int.TryParse(s, out int n); return n; }")]
+    [InlineData("static bool M(string s) => int.TryParse(s, out _);")]
+    [InlineData("static int M(ref int a) { System.Threading.Interlocked.Exchange(ref a, 1); return a; }")]
+    [InlineData("static string M(System.Collections.Generic.Dictionary<int, string> d) { d.TryGetValue(1, out string v); return v.Trim(); }")]
+    [InlineData("static C M() { int b = 0; C c = new C(ref b); return b > 0 ? c : null; } C(ref int x) { }")]
+    public void TryParseLowersWithoutOpaque(string members) => Assert.Empty(Opaques(Method(members)));
+
+    /// <summary>Ticket M4-003: an <c>out</c> argument passes nothing and is the call's output after it.</summary>
+    [Fact]
+    public void OutArgumentIsACallOutput()
+    {
+        IrProcedure procedure = Method("static int M(string s) { int.TryParse(s, out int n); return n; }");
+
+        IrCall call = Assert.Single(Calls(procedure));
+        Assert.Equal(["s"], call.Args.Select(static a => a.Name), StringComparer.Ordinal);
+        IrVar output = Assert.Single(call.RefOuts);
+        Assert.Equal(new IrBitVec(32), output.Type);
+        Assert.Equal(Bits(32, 7), Assert.IsType<IrReturned>(RunWith(procedure, new RefOutOracle(Bits(32, 7)), Reference(1))).Value);
+    }
+
+    /// <summary>
+    /// Ticket M4-003: a <c>ref</c> argument passes its value at the call, after the arguments that follow it are evaluated,
+    /// and takes the call's output.
+    /// </summary>
+    [Fact]
+    public void RefArgumentIsPassedAndReturned()
+    {
+        IrProcedure procedure = Method("static int M(int a) { P(ref a, a = 5); return a; } static void P(ref int x, int y) { }");
+        RefOutOracle oracle = new(Bits(32, 9));
+
+        Assert.Equal(Bits(32, 9), Assert.IsType<IrReturned>(RunWith(procedure, oracle, Bits(32, 1))).Value);
+        Assert.Equal([Bits(32, 5), Bits(32, 5)], Assert.Single(oracle.Arguments));
+    }
+
+    [Theory]
+    [InlineData("static int f; static void M() { System.Threading.Interlocked.Increment(ref f); }")]
+    [InlineData("int f; void M() { System.Threading.Interlocked.Increment(ref f); }")]
+    [InlineData("static int M(int[] a) => System.Threading.Interlocked.Increment(ref a[0]);")]
+    public void RefToAFieldStaysOpaque(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Equal("ref-argument", Assert.Single(Opaques(procedure)).Reason);
+        Assert.Empty(Calls(procedure));
     }
 
     [Fact]
@@ -1488,10 +1534,30 @@ public sealed class IrLowererTests
         Assert.Equal(new IrReturned(new IrBoolValue(Value: false)), Run(procedure, new IrSortValue("System.Type", 1)));
     }
 
+    /// <summary>Runs <paramref name="procedure"/> with <paramref name="arguments"/> and every heap input after them empty, so nothing is null.</summary>
+    private static IrOutcome RunWith(IrProcedure procedure, Equiv.Core.ICallOracle oracle, params IrValue[] arguments) =>
+        IrInterpreter.Run(
+            procedure,
+            new IrInputs([.. arguments, .. procedure.Parameters.Skip(arguments.Length).Select(static p => new IrMapValue((IrMap)p.Var.Type, new IrBoolValue(Value: false), []))]),
+            oracle,
+            Equiv.TestSupport.IrGen.StepBudget).Outcome;
+
+    /// <summary>Answers every call with no value, the same value for each of its <c>ref</c> and <c>out</c> outputs, and records each call's arguments.</summary>
+    private sealed class RefOutOracle(IrValue output) : Equiv.Core.ICallOracle
+    {
+        public List<ImmutableArray<IrValue>> Arguments { get; } = [];
+
+        public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
+        {
+            Arguments.Add(arguments);
+            return new IrCallResult(resultType is IrBool ? new IrBoolValue(Value: true) : null, Threw: false) { RefOuts = [.. refOuts.Select(_ => output)] };
+        }
+    }
+
     /// <summary>Answers <c>C::Bump(int)</c> as the compiled method does: it adds its argument to the receiver's <c>g</c>.</summary>
     private sealed class BumpOracle : Equiv.Core.ICallOracle
     {
-        public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
+        public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
         {
             Assert.Equal("C::Bump(int)", callee.Value);
             return new IrCallResult(Value: null, Threw: false) { Heap = [.. heap.Select(h => h.Map is "field.C.g" ? Bumped((IrMapValue)h.Value, arguments) : h.Value)] };

@@ -20,6 +20,7 @@
       .corpus/pairs/<slug>/pair.json           resolved solution paths for one pair
       .corpus/pairs/<slug>/modern/             agent pairs only: the copy an agent migrates
       .corpus/pairs/<slug>/runs/               raw SARIF and logs written by the equiv-corpus-run skill
+      .corpus/runs/<slug>/runtime-diff/        tools/runtime-diff reports on the census's externalCallees (-RuntimeDiff)
 
     The skill .claude/skills/equiv-corpus-run/SKILL.md says when to use each switch.
 
@@ -28,6 +29,7 @@
     ./tools/corpus/corpus.ps1 -List
     ./tools/corpus/corpus.ps1 -Select -Count 3
     ./tools/corpus/corpus.ps1 -Fetch gitextensions-8522
+    ./tools/corpus/corpus.ps1 -RuntimeDiff gitextensions-8522 -Top 200
     ./tools/corpus/corpus.ps1 -Fetch madelson/DistributedLock
     ./tools/corpus/corpus.ps1 -PrepareAgent madelson/DistributedLock
     ./tools/corpus/corpus.ps1 -Unchanged gitextensions-8522
@@ -73,6 +75,12 @@ param(
 
     # Reads one equiv SARIF log and prints the numbers a SUMMARY.md needs (never source text).
     [Parameter(ParameterSetName = 'Metrics', Mandatory)] [string]$Metrics,
+
+    # ADR 0035 decision 1 (M3-033): runs tools/runtime-diff on the union of both sides' top-N
+    # externalCallees from a pair's most recent census SARIF. Reports land under
+    # .corpus/runs/<slug>/runtime-diff/, never under .corpus/pairs/ (that tree is census input, not output).
+    [Parameter(ParameterSetName = 'RuntimeDiff', Mandatory)] [string]$RuntimeDiff,
+    [Parameter(ParameterSetName = 'RuntimeDiff')] [int]$Top = 200,
 
     # Re-download the Poly-MigrationBench .NET list and report what changed. Writes only with -Apply.
     [Parameter(ParameterSetName = 'Refresh', Mandatory)] [switch]$Refresh,
@@ -605,6 +613,67 @@ switch ($PSCmdlet.ParameterSetName) {
             if ($null -eq $reason) { $reason = ($_.message.text -split '[\s:(]')[0] }
             [string]$reason
         } | Group-Object | Sort-Object Count -Descending | ForEach-Object { Show-Step ("  {0} {1}" -f $_.Name, $_.Count) }
+    }
+
+    'RuntimeDiff' {
+        # ADR 0035 decision 1 (M3-033): the most-called BCL members a pair's lowered bodies call, from the
+        # census (M3-030/M3-033's externalCallees), run for real on both runtimes.
+        $slug = Resolve-Slug $RuntimeDiff
+        $runsDir = Join-Path (Get-PairDir $slug) 'runs'
+        $sarif = @(Get-ChildItem -LiteralPath $runsDir -Directory -Filter '*census*' -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            ForEach-Object { Join-Path $_.FullName 'equiv.sarif' } |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            Select-Object -First 1)
+        if ($sarif.Count -eq 0) { throw "no census SARIF under $runsDir\*census*\equiv.sarif; run a -lower-only census first" }
+        Show-Step "census  $($sarif[0])"
+
+        # changedReasonSets keys "no opaque" as "" (ADR 0034); externalCallees never does, but the same
+        # replace is harmless and keeps this in step with -Metrics's parsing.
+        $text = (Get-Content -LiteralPath $sarif[0] -Raw) -replace '([{,]\s*)""(\s*:)', '$1"(no opaque)"$2'
+        $census = ($text | ConvertFrom-Json).runs[0].properties.loweringCensus
+        if ($null -eq $census -or -not $census.PSObject.Properties['externalCallees']) {
+            throw "no loweringCensus.externalCallees in $($sarif[0]); needs M3-033"
+        }
+
+        # A generic method's identity carries an equiv-only <T1,T2> instantiation suffix (CallIdentityFactory);
+        # runtime-diff resolves --member against real Roslyn symbols and knows nothing of it.
+        $strip = { param($m) $m -replace '<[^>]*>$', '' }
+        $legacyTop = @($census.externalCallees.legacy | Select-Object -First $Top | ForEach-Object { & $strip $_.member })
+        $modernTop = @($census.externalCallees.modern | Select-Object -First $Top | ForEach-Object { & $strip $_.member })
+        $members = @($legacyTop + $modernTop | Sort-Object -Unique)
+        Show-Step ("members {0} distinct (top {1} of {2} legacy, top {1} of {3} modern)" -f
+            $members.Count, $Top, $legacyTop.Count, $modernTop.Count)
+
+        $outDir = Join-Path (Join-Path $CorpusRoot 'runs') (Join-Path $slug 'runtime-diff')
+        New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+        $runtimeDiffProject = Join-Path $RepoRoot 'tools/runtime-diff'
+        dotnet build $runtimeDiffProject -c Release -v:m 2>&1 | ForEach-Object { Show-Step $_ }
+        if ($LASTEXITCODE -ne 0) { throw "failed to build $runtimeDiffProject" }
+
+        # runtime-diff's own usage error ("no public member matches") is a per-member finding, not a
+        # script failure, and it goes to stderr; under $ErrorActionPreference = 'Stop', Windows PowerShell
+        # 5.1 would otherwise promote that line to a terminating NativeCommandError (as Invoke-Git guards
+        # against for git). $LASTEXITCODE, checked after each call, is the real signal.
+        $previousErrorAction = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $index = 0
+            foreach ($member in $members) {
+                $index++
+                $safe = ($member -replace '[^A-Za-z0-9_.-]', '_')
+                $out = Join-Path $outDir "$safe.json"
+                Show-Step ("[{0}/{1}] runtime-diff --member `"{2}`"" -f $index, $members.Count, $member)
+                dotnet run --project $runtimeDiffProject -c Release --no-build -- --member $member --seed 0 --cases 64 --out $out 2>&1 |
+                    ForEach-Object { "$_" } | ForEach-Object { Show-Step "  $_" }
+            }
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorAction
+        }
+        $global:LASTEXITCODE = 0 # a member's own divergence (exit 1) or no-match (exit 3) is a finding, not a script failure
+        Show-Step "reports: $outDir"
     }
 
     'Clean' {

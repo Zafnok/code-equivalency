@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 
+using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.RuntimeChanges;
 
@@ -16,8 +17,9 @@ namespace Equiv.Cli;
 /// (ADR 0029; ticket M3-024). A matched pair the frontend could not lower (ticket P2-011) counts in
 /// <see cref="Procedures"/> and <see cref="MatchedPairs"/>, but has no body for any per-body count.
 /// <see cref="Changed"/> and <see cref="RuntimeChangeCalls"/> are per matched pair (ADR 0034; ticket M3-030). A pair is
-/// changed unless it is congruent. <see cref="UnknownByScope"/> is set only by a run that produced verdicts (ADR 0029
-/// decision 4; ticket M3-025).
+/// changed unless it is congruent. <see cref="ExternalCallees"/> is every BCL member a lowered body calls, not only the
+/// ones <see cref="RuntimeChangeTable"/> already lists (ADR 0035; ticket M3-033). <see cref="UnknownByScope"/> is set
+/// only by a run that produced verdicts (ADR 0029 decision 4; ticket M3-025).
 /// </summary>
 internal sealed record LoweringCensus(
     SideCounts Procedures,
@@ -28,7 +30,8 @@ internal sealed record LoweringCensus(
     SideCounts ProjectsSkipped,
     ImmutableSortedDictionary<string, SideCounts> OpaqueByReason,
     ChangedPairCounts Changed,
-    RuntimeChangeCalls RuntimeChangeCalls)
+    RuntimeChangeCalls RuntimeChangeCalls,
+    ExternalCallees ExternalCallees)
 {
     public ScopeCounts? UnknownByScope { get; init; }
 
@@ -36,63 +39,13 @@ internal sealed record LoweringCensus(
     {
         ArgumentNullException.ThrowIfNull(pairs);
 
-        RuntimeChangeTable table = RuntimeChangeTable.Load();
-        SortedDictionary<string, SideCounts> byReason = new(StringComparer.Ordinal);
-        SortedDictionary<string, int> reasonSets = new(StringComparer.Ordinal);
-        int withoutOpaque = 0;
-        int wholeBodyOpaque = 0;
-        int changed = 0;
-        int changedWithoutOpaque = 0;
-        int changedWholeBodyOpaque = 0;
-        int congruent = 0;
-        RuntimeChangeTally legacyCalls = new();
-        RuntimeChangeTally modernCalls = new();
+        Accumulator accumulator = new();
         foreach ((IrProcedure old, IrProcedure @new, bool isCongruent) in pairs)
         {
-            ImmutableHashSet<string> oldReasons = Reasons(old);
-            ImmutableHashSet<string> newReasons = Reasons(@new);
-            int noOpaque = oldReasons.IsEmpty && newReasons.IsEmpty ? 1 : 0;
-            int wholeBody = IsWholeBodyOpaque(old) || IsWholeBodyOpaque(@new) ? 1 : 0;
-            withoutOpaque += noOpaque;
-            wholeBodyOpaque += wholeBody;
-
-            foreach (string reason in oldReasons.Union(newReasons))
-            {
-                SideCounts counts = byReason.GetValueOrDefault(reason, new SideCounts(0, 0));
-                byReason[reason] = new SideCounts(
-                    counts.Legacy + (oldReasons.Contains(reason) ? 1 : 0),
-                    counts.Modern + (newReasons.Contains(reason) ? 1 : 0));
-            }
-
-            legacyCalls.Add(old, table);
-            modernCalls.Add(@new, table);
-
-            if (isCongruent)
-            {
-                congruent++;
-                continue;
-            }
-
-            changed++;
-            changedWithoutOpaque += noOpaque;
-            changedWholeBodyOpaque += wholeBody;
-            string reasonSet = string.Join('+', oldReasons.Union(newReasons).Order(StringComparer.Ordinal));
-            reasonSets[reasonSet] = reasonSets.GetValueOrDefault(reasonSet) + 1;
+            accumulator.Add(old, @new, isCongruent);
         }
 
-        return new LoweringCensus(
-            new SideCounts(pairs.Count + unlowered + removed, pairs.Count + unlowered + added),
-            pairs.Count + unlowered,
-            withoutOpaque,
-            wholeBodyOpaque,
-            congruent,
-            projectsSkipped ?? new SideCounts(0, 0),
-            byReason.ToImmutableSortedDictionary(StringComparer.Ordinal),
-            new ChangedPairCounts(changed, changedWithoutOpaque, changedWholeBodyOpaque, reasonSets.ToImmutableSortedDictionary(StringComparer.Ordinal)),
-            new RuntimeChangeCalls(
-                new SideCounts(legacyCalls.CallSites, modernCalls.CallSites),
-                new SideCounts(legacyCalls.Members.Count, modernCalls.Members.Count),
-                new SideCounts(legacyCalls.Pairs, modernCalls.Pairs)));
+        return accumulator.Build(pairs.Count, removed, added, projectsSkipped ?? new SideCounts(0, 0), unlowered);
     }
 
     /// <summary>
@@ -135,6 +88,11 @@ internal sealed record LoweringCensus(
             ["distinctMembers"] = Property(RuntimeChangeCalls.DistinctMembers),
             ["pairsWithAny"] = Property(RuntimeChangeCalls.PairsWithAny),
         },
+        ["externalCallees"] = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["legacy"] = ExternalCalleeList(ExternalCallees.Legacy),
+            ["modern"] = ExternalCalleeList(ExternalCallees.Modern),
+        },
     };
 
     internal static Dictionary<string, object> Property(SideCounts counts) => new(StringComparer.Ordinal)
@@ -143,11 +101,82 @@ internal sealed record LoweringCensus(
         ["modern"] = counts.Modern,
     };
 
+    private static List<Dictionary<string, object>> ExternalCalleeList(ImmutableArray<ExternalCallee> callees) =>
+        [.. callees.Select(static c => new Dictionary<string, object>(StringComparer.Ordinal) { ["member"] = c.Member, ["callSites"] = c.CallSites })];
+
     private static ImmutableHashSet<string> Reasons(IrProcedure body) =>
         [.. body.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>().Select(static o => o.Reason)];
 
     /// <summary>The shape a frontend gives a body it could not lower at all: one block whose only instruction is an <see cref="IrOpaque"/>.</summary>
     private static bool IsWholeBodyOpaque(IrProcedure body) => body.Blocks is [{ Instructions: [IrOpaque] }];
+
+    /// <summary>The running state <see cref="Compute"/> folds each pair into, kept off that method to stay under MA0051.</summary>
+    private sealed class Accumulator
+    {
+        private readonly RuntimeChangeTable table = RuntimeChangeTable.Load();
+        private readonly SortedDictionary<string, SideCounts> byReason = new(StringComparer.Ordinal);
+        private readonly SortedDictionary<string, int> reasonSets = new(StringComparer.Ordinal);
+        private readonly RuntimeChangeTally legacyCalls = new();
+        private readonly RuntimeChangeTally modernCalls = new();
+        private readonly ExternalCalleeTally legacyExternal = new();
+        private readonly ExternalCalleeTally modernExternal = new();
+        private int withoutOpaque;
+        private int wholeBodyOpaque;
+        private int changed;
+        private int changedWithoutOpaque;
+        private int changedWholeBodyOpaque;
+        private int congruent;
+
+        public void Add(IrProcedure old, IrProcedure @new, bool isCongruent)
+        {
+            ImmutableHashSet<string> oldReasons = Reasons(old);
+            ImmutableHashSet<string> newReasons = Reasons(@new);
+            int noOpaque = oldReasons.IsEmpty && newReasons.IsEmpty ? 1 : 0;
+            int wholeBody = IsWholeBodyOpaque(old) || IsWholeBodyOpaque(@new) ? 1 : 0;
+            withoutOpaque += noOpaque;
+            wholeBodyOpaque += wholeBody;
+
+            foreach (string reason in oldReasons.Union(newReasons))
+            {
+                SideCounts counts = byReason.GetValueOrDefault(reason, new SideCounts(0, 0));
+                byReason[reason] = new SideCounts(
+                    counts.Legacy + (oldReasons.Contains(reason) ? 1 : 0),
+                    counts.Modern + (newReasons.Contains(reason) ? 1 : 0));
+            }
+
+            legacyCalls.Add(old, table);
+            modernCalls.Add(@new, table);
+            legacyExternal.Add(old);
+            modernExternal.Add(@new);
+
+            if (isCongruent)
+            {
+                congruent++;
+                return;
+            }
+
+            changed++;
+            changedWithoutOpaque += noOpaque;
+            changedWholeBodyOpaque += wholeBody;
+            string reasonSet = string.Join('+', oldReasons.Union(newReasons).Order(StringComparer.Ordinal));
+            reasonSets[reasonSet] = reasonSets.GetValueOrDefault(reasonSet) + 1;
+        }
+
+        public LoweringCensus Build(int matched, int removed, int added, SideCounts projectsSkipped, int unlowered) => new(
+            new SideCounts(matched + unlowered + removed, matched + unlowered + added),
+            matched + unlowered,
+            withoutOpaque,
+            wholeBodyOpaque,
+            congruent,
+            projectsSkipped,
+            byReason.ToImmutableSortedDictionary(StringComparer.Ordinal),
+            new ChangedPairCounts(changed, changedWithoutOpaque, changedWholeBodyOpaque, reasonSets.ToImmutableSortedDictionary(StringComparer.Ordinal)),
+            new RuntimeChangeCalls(
+                new SideCounts(legacyCalls.CallSites, modernCalls.CallSites),
+                new SideCounts(legacyCalls.Members.Count, modernCalls.Members.Count),
+                new SideCounts(legacyCalls.Pairs, modernCalls.Pairs)),
+            new ExternalCallees(legacyExternal.ToImmutableArray(), modernExternal.ToImmutableArray()));
+    }
 
     /// <summary>One side's running <see cref="RuntimeChangeCalls"/> counts.</summary>
     private sealed class RuntimeChangeTally
@@ -170,6 +199,31 @@ internal sealed record LoweringCensus(
             Members.UnionWith(matched);
             Pairs += matched.Length > 0 ? 1 : 0;
         }
+    }
+
+    /// <summary>One side's running <see cref="ExternalCallees"/> tally: call-site counts per distinct external callee.</summary>
+    private sealed class ExternalCalleeTally
+    {
+        private readonly Dictionary<string, int> callSites = new(StringComparer.Ordinal);
+
+        /// <summary>Counts <paramref name="body"/>'s calls whose <see cref="CallIdentity.External"/> is set.</summary>
+        public void Add(IrProcedure body)
+        {
+            foreach (string member in body.Blocks
+                .SelectMany(static b => b.Instructions)
+                .OfType<IrCall>()
+                .Where(static call => call.Callee.External)
+                .Select(static call => call.Callee.Value))
+            {
+                callSites[member] = callSites.GetValueOrDefault(member) + 1;
+            }
+        }
+
+        public ImmutableArray<ExternalCallee> ToImmutableArray() =>
+            [.. callSites
+                .Select(static e => new ExternalCallee(e.Key, e.Value))
+                .OrderByDescending(static e => e.CallSites)
+                .ThenBy(static e => e.Member, StringComparer.Ordinal)];
     }
 }
 

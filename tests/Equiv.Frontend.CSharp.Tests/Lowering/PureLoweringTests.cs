@@ -182,12 +182,172 @@ public sealed class PureLoweringTests
     [InlineData("static double? M(double? a) => -a;", "Unary")]
     [InlineData("static Money? M(Money? a, Money? b) => a + b;", "Binary")]
     [InlineData("static int? M(Money? a) => (int?)a;", "Conversion")]
-    [InlineData("static double M(double a) { a += 1.5; return a; }", "CompoundAssignment")]
     public void LiftedOrWidenedOperatorsStayOpaque(string members, string reason)
     {
         IrProcedure procedure = Lowered.Source($"using System;\nstruct Money {{ public static Money operator +(Money a, Money b) => a; public static explicit operator int(Money m) => 0; }}\nclass C\n{{\n{members}\n}}\n");
 
         Assert.Contains(Lowered.Opaques(procedure), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
+    }
+
+    public static TheoryData<string, string, bool> CompoundOperators()
+    {
+        TheoryData<string, string, bool> data = [];
+        foreach (string type in (string[])["float", "double", "decimal"])
+        {
+            foreach (string op in (string[])["+", "-", "*", "/", "%"])
+            {
+                foreach (bool isChecked in (bool[])[false, true])
+                {
+                    data.Add(type, op, isChecked);
+                }
+            }
+        }
+
+        return data;
+    }
+
+    /// <summary>Ticket P2-022 criteria 1 and 2: <c>x op= y</c> applies the function <c>x = x op y</c> does, on an x87 legacy side too.</summary>
+    [Theory]
+    [MemberData(nameof(CompoundOperators))]
+    public void CompoundAssignmentMatchesItsBinaryOperator(string type, string op, bool isChecked)
+    {
+        string context = isChecked ? "checked" : "unchecked";
+        IrProcedure compound = X87Legacy($"class C {{ static {type} M({type} x, {type} y) {{ {context} {{ x {op}= y; }} return x; }} }}");
+        IrProcedure expanded = X87Legacy($"class C {{ static {type} M({type} x, {type} y) {{ {context} {{ x = x {op} y; }} return x; }} }}");
+
+        IrPure pure = Assert.Single(Pures(compound));
+        IrPure binary = Assert.Single(Pures(expanded));
+        Assert.Equal(binary.Function, pure.Function);
+        Assert.Equal(binary.Throws.Select(static t => t.ExceptionType), pure.Throws.Select(static t => t.ExceptionType), StringComparer.Ordinal);
+        Assert.Equal(binary.RuntimeSensitive, pure.RuntimeSensitive);
+        Assert.Equal(!string.Equals(type, "decimal", StringComparison.Ordinal), pure.RuntimeSensitive);
+        Assert.Equal<IrVar>([compound.Parameters[0].Var, compound.Parameters[1].Var], pure.Args);
+        Assert.Empty(Lowered.Opaques(compound));
+    }
+
+    /// <summary>Ticket P2-022 criterion 3: a flag branches to its throw before the target is written.</summary>
+    [Theory]
+    [InlineData("+=", "OverflowException", true)]
+    [InlineData("/=", "DivideByZeroException", true, false)]
+    [InlineData("/=", "OverflowException", false, true)]
+    public void ACompoundOverflowLeavesTheTargetUnwritten(string op, string caught, params bool[] flags)
+    {
+        IrProcedure local = Lowered.Method($"static decimal M(decimal a, decimal b) {{ try {{ a {op} b; }} catch ({caught}) {{ }} return a; }}");
+        Assert.Equal(new IrReturned(Element(1)), Run(local, new Answers(Element(3), flags)));
+        Assert.Equal(new IrReturned(Element(3)), Run(local, new Answers(Element(3), [.. flags.Select(static _ => false)])));
+
+        IrProcedure property = Lowered.Method($"static decimal F; static decimal P {{ get {{ return F; }} set {{ F = value; }} }} static void M(decimal b) {{ P {op} b; }}");
+        Accessors accessors = new();
+        IrRun thrown = IrInterpreter.Run(property, new IrInputs([Element(2)]), accessors, 100, pure: new Answers(Element(3), flags));
+        Assert.Equal(new IrThrew($"System.{caught}"), thrown.Outcome);
+        Assert.Equal(["C::get_P()"], thrown.Trace.Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        IrRun written = IrInterpreter.Run(property, new IrInputs([Element(2)]), accessors, 100, pure: new Answers(Element(3), [.. flags.Select(static _ => false)]));
+        Assert.Equal(["C::get_P()", "C::set_P(decimal)"], written.Trace.Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        Assert.Equal(Element(3), written.Trace[1].Arguments[0]);
+    }
+
+    /// <summary>Ticket P2-022 criterion 4: <c>++</c> and <c>--</c> add or subtract the literal <c>1</c>; postfix yields the value read.</summary>
+    [Theory]
+    [InlineData("float", "System.Single", "1f", "f32")]
+    [InlineData("double", "System.Double", "1d", "f64")]
+    [InlineData("decimal", Decimal, "1m", "dec")]
+    public void IncrementIsAddingTheLiteralOne(string type, string sort, string one, string code)
+    {
+        foreach ((string body, string op, string symbol, bool postfix) in (ReadOnlySpan<(string, string, string, bool)>)[("x++", "add", "+", true), ("++x", "add", "+", false), ("x--", "sub", "-", true), ("--x", "sub", "-", false)])
+        {
+            IrProcedure step = Lowered.Method($"static {type} M({type} x) => {body};");
+            IrProcedure expanded = Lowered.Method($"static {type} M({type} x) => x {symbol} {one};");
+
+            IrPure pure = Assert.Single(Pures(step));
+            IrPure binary = Assert.Single(Pures(expanded));
+            Assert.Equal($"{code}.{op}", pure.Function);
+            Assert.Equal(binary.Function, pure.Function);
+            Assert.Equal(binary.Throws.Select(static t => t.ExceptionType), pure.Throws.Select(static t => t.ExceptionType), StringComparer.Ordinal);
+            Assert.Equal(ConstantOf(expanded, binary.Args[1]), ConstantOf(step, pure.Args[1]));
+            Assert.Equal(step.Parameters[0].Var, pure.Args[0]);
+            Assert.Equal(new IrReturned(postfix ? Element(1, sort) : Element(9, sort)), Run(step, new Answers(Element(9, sort), false, false), Element(1, sort)));
+        }
+    }
+
+    [Fact]
+    public void DecimalIncrementHasTheOverflowFlag()
+    {
+        IrPure pure = Assert.Single(Pures(Lowered.Method("static decimal M(decimal m) => ++m;")));
+
+        Assert.Equal("dec.add", pure.Function);
+        Assert.Equal(PureCatalogue.Overflow, Assert.Single(pure.Throws).ExceptionType);
+    }
+
+    /// <summary>Ticket P2-022 criterion 5: a static user-defined <c>+</c>, <c>++</c> or <c>--</c> is its <c>op:</c> function.</summary>
+    [Fact]
+    public void UserDefinedCompoundAndIncrementAreTheirOpFunctions()
+    {
+        IrProcedure procedure = Lowered.Source("""
+            struct Money
+            {
+                public static Money operator +(Money a, Money b) => a;
+                public static Money operator ++(Money a) => a;
+                public static Money operator --(Money a) => a;
+            }
+            class C { static Money M(Money a, Money b) { a += b; a++; return --a; } }
+            """);
+
+        ImmutableArray<IrPure> pures = Pures(procedure);
+        Assert.Equal(["op:Money::op_Addition(Money,Money)", "op:Money::op_Increment(Money)", "op:Money::op_Decrement(Money)"], pures.Select(static p => p.Function), StringComparer.Ordinal);
+        Assert.All(pures, static p => Assert.Equal(PureCatalogue.AnyException, Assert.Single(p.Throws).ExceptionType));
+        Assert.All(pures, static p => Assert.False(p.RuntimeSensitive));
+        Assert.Equal<IrVar>([procedure.Parameters[0].Var, procedure.Parameters[1].Var], pures[0].Args);
+        Assert.Equal<IrVar>([pures[0].Target], pures[1].Args);
+        Assert.Equal<IrVar>([pures[1].Target], pures[2].Args);
+        Assert.Empty(Lowered.Opaques(procedure));
+        Assert.Empty(Lowered.Calls(procedure));
+        // A `decimal` target whose operator is user-defined is not the catalogue's `dec.add`.
+        Assert.Equal(
+            ["op:Money::op_Addition(decimal,Money)"],
+            Functions("struct Money { public static decimal operator +(decimal a, Money b) => a; } class C { static decimal M(decimal m, Money b) { m += b; return m; } }"));
+    }
+
+    /// <summary>Ticket P2-022 criterion 6.</summary>
+    [Theory]
+    [InlineData("static decimal? M(decimal? m) { m += 1; return m; }", "CompoundAssignment")]
+    [InlineData("static decimal? M(decimal? m) { m++; return m; }", "Increment")]
+    [InlineData("static double? M(double? d) { d--; return d; }", "Decrement")]
+    [InlineData("static Money? M(Money? a, Money b) { a += b; return a; }", "CompoundAssignment")]
+    [InlineData("static Money? M(Money? a) { a++; return a; }", "Increment")]
+    [InlineData("static Wrapper M(Wrapper w, Money b) { w += b; return w; }", "CompoundAssignment")]
+    [InlineData("static Counter M(Counter c, Counter d) { c += d; return c; }", "CompoundAssignment")]
+    [InlineData("static Counter M(Counter c) { c++; return c; }", "Increment")]
+    [InlineData("static Counter M(Counter c) { --c; return c; }", "Decrement")]
+    [InlineData("static decimal M(decimal[] a) { a[0] += 1m; return a[0]; }", "ArrayElementReference")]
+    public void LiftedConvertedOrInstanceCompoundOperatorsStayOpaque(string members, string reason)
+    {
+        IrProcedure procedure = Lowered.Source($$"""
+            using System;
+            struct Money
+            {
+                public static Money operator +(Money a, Money b) => a;
+                public static Money operator ++(Money a) => a;
+            }
+            struct Wrapper
+            {
+                public static implicit operator Money(Wrapper w) => default;
+                public static implicit operator Wrapper(Money m) => default;
+            }
+            class Counter
+            {
+                public static Counter operator +(Counter a, Counter b) => a;
+                public void operator +=(Counter other) { }
+                public void operator ++() { }
+                public void operator --() { }
+            }
+            class C
+            {
+            {{members}}
+            }
+            """);
+
+        Assert.Contains(Lowered.Opaques(procedure), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
+        Assert.DoesNotContain(Pures(procedure), static p => p.Function.StartsWith(PureCatalogue.OperatorPrefix, StringComparison.Ordinal) || p.Function.Contains(".add", StringComparison.Ordinal) || p.Function.Contains(".sub", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -247,6 +407,15 @@ public sealed class PureLoweringTests
         return IrLowerer.Lower(method, compilation, RenameMap.Empty, [], [], legacy).Body;
     }
 
+    private static IrProcedure X87Legacy(string source)
+    {
+        Compilation compilation = Compilation(source);
+        return Lower(compilation.WithOptions(compilation.Options.WithPlatform(Platform.X86)), legacy: true);
+    }
+
+    private static IrValue ConstantOf(IrProcedure procedure, IrVar var) =>
+        procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>().Single(c => c.Target == var).Value;
+
     private static ImmutableArray<string> Sensitivity(IrProcedure procedure) =>
         [.. Pures(procedure).Select(static p => $"{p.Function}:{p.RuntimeSensitive}")];
 
@@ -266,9 +435,16 @@ public sealed class PureLoweringTests
         public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments) => new(value, [.. flags.Take(pure.Throws.Length)]);
     }
 
+    /// <summary>A static property's getter yields element 1; its setter yields nothing.</summary>
+    private sealed class Accessors : ICallOracle
+    {
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts) =>
+            new(resultType is null ? null : Element(1), Threw: false);
+    }
+
     private sealed class NoCalls : ICallOracle
     {
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap) =>
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts) =>
             throw new InvalidOperationException($"Unexpected call {callee.Value}.");
     }
 }

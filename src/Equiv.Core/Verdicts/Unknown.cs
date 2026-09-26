@@ -24,6 +24,13 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
     /// </summary>
     public const string UnboundOpaqueReason = "unbound";
 
+    /// <summary>
+    /// The detail of a pair where exactly one side is <c>async</c>, whose exception timing differs (ticket M4-006), and the
+    /// reason of the whole-body <c>IrOpaque</c> a frontend gives both its bodies: <see cref="UnknownReason.Opaque"/>, decided
+    /// without the solver.
+    /// </summary>
+    public const string AsyncMismatchReason = "async-mismatch";
+
     public ImmutableArray<UnknownCause> Causes { get; init; } = [];
 
     public UnknownScope Scope { get; init; }

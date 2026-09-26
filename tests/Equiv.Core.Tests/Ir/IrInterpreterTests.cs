@@ -189,6 +189,36 @@ public sealed class IrInterpreterTests
         Assert.Throws<InvalidOperationException>(() => Run(p, new HeapOracle([Bv(1)]), Bv(1), empty));
     }
 
+    private const string RefOutCall = """
+        (%n: bv32) -> bv32 entry B0
+        B0:
+          %ok: bool = call "TryParse"(%n) refout(%n.1: bv32, %b: bool)
+          br %b, B1, B2
+        B1:
+          ret %n.1
+        B2:
+          ret %n
+        """;
+
+    [Fact]
+    public void ACallsRefOutputsAreItsAnswers()
+    {
+        IrProcedure p = IrText.Parse(Header + RefOutCall);
+        ScriptedOracle oracle = new((_, _, _) => new IrCallResult(new IrBoolValue(Value: true), Threw: false) { RefOuts = [Bv(9), new IrBoolValue(Value: true)] });
+
+        Assert.Equal(new IrReturned(Bv(9)), Run(p, oracle, Bv(1)).Outcome);
+        Assert.Equal([(ImmutableArray<IrType>)[new IrBitVec(32), new IrBool()]], oracle.RefOuts);
+    }
+
+    [Fact]
+    public void RefOutputsThatDoNotFitTheCallAreAnError()
+    {
+        IrProcedure p = IrText.Parse(Header + RefOutCall);
+
+        Assert.Throws<InvalidOperationException>(() => Run(p, Answers42, Bv(1)));
+        Assert.Throws<InvalidOperationException>(() => Run(p, new ScriptedOracle(static (_, _, _) => new IrCallResult(new IrBoolValue(Value: true), Threw: false) { RefOuts = [Bv(9), Bv(1)] }), Bv(1)));
+    }
+
     [Fact]
     public void MapsReadWhatWasWritten()
     {
@@ -313,7 +343,7 @@ public sealed class IrInterpreterTests
     {
         public ImmutableArray<IrHeapSlice> Heap { get; private set; } = [];
 
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
         {
             Heap = heap;
             return new IrCallResult(Value: null, Threw: false) { Heap = answer };
@@ -324,9 +354,12 @@ public sealed class IrInterpreterTests
     {
         public List<int> Positions { get; } = [];
 
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
+        public List<ImmutableArray<IrType>> RefOuts { get; } = [];
+
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
         {
             Positions.Add(position);
+            RefOuts.Add(refOuts);
             return answer(callee, arguments, resultType);
         }
     }

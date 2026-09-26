@@ -59,6 +59,10 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task CompoundAssignment() => Dump("static byte M(byte b, int a, int n) { b += 1; a *= a; a <<= n; a /= n; return b; }");
 
+    /// <summary>Ticket P2-022: a <c>decimal</c> <c>+=</c> to a local, a <c>decimal</c> <c>/=</c> to a property, a postfix <c>double</c> <c>++</c>, a user-defined <c>+=</c>.</summary>
+    [Fact]
+    public Task PureCompoundAssignment() => Dump("struct Money { public static Money operator +(Money a, Money b) => a; } decimal F; decimal P { get { return F; } set { F = value; } } static double M(C c, decimal m, int i, double d, Money a, Money b) { m += i; c.P /= m; double e = d++; a += b; return e; }");
+
     [Fact]
     public Task IncrementAndDecrement() => Dump("static int M(int a, char c) { a++; --a; c--; return a + c; }");
 
@@ -187,6 +191,10 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task OutArgumentOfAnOpaqueCall() => Dump("static int M(string s, int fallback) => int.TryParse(s, out var n) ? n : fallback;");
 
+    /// <summary>Ticket M4-003: a reference-typed <c>out</c> argument is a call output, and its variable's nullness asks the <c>null.*</c> map.</summary>
+    [Fact]
+    public Task TryGetValue() => Dump("static string M(System.Collections.Generic.Dictionary<int, string> d, string f) => d.TryGetValue(1, out string v) ? v : f;");
+
     [Fact]
     public Task ForEachOverList() => Dump("static int M(System.Collections.Generic.List<int> l) { int s = 0; foreach (int x in l) s += x; return s; }");
 
@@ -201,6 +209,25 @@ public sealed class IrLowererSnapshotTests
 
     [Fact]
     public Task UsingDeclaration() => Dump("static int M(System.IO.Stream s) { using System.IO.Stream t = s; return t.ReadByte(); }");
+
+    /// <summary>
+    /// Ticket M4-006: an async action is its synchronous body returning the task's result; each <c>await</c> is a call on
+    /// its awaitable with a threw edge, after the awaitable's null check, and the heap is threaded through it as any call's.
+    /// </summary>
+    [Fact]
+    public Task AsyncControllerAction() => Dump("""
+        interface IOrders { System.Threading.Tasks.Task<Order> FindAsync(int id); }
+        class Order { public int Status; }
+        IOrders orders;
+        int served;
+        async System.Threading.Tasks.Task<int> M(int id)
+        {
+            Order order = await orders.FindAsync(id).ConfigureAwait(false);
+            if (order == null) return 404;
+            served = served + 1;
+            return order.Status;
+        }
+        """);
 
     /// <summary>Ticket P1-005: a call with one field map live, first touched after it; the read takes the call's new version.</summary>
     [Fact]

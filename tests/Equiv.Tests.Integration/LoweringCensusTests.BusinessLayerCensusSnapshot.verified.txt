@@ -1,21 +1,17 @@
 ﻿{
   procedures: {
-    legacy: 28,
-    modern: 28
+    legacy: 29,
+    modern: 29
   },
-  matchedPairs: 28,
-  pairsWithoutOpaque: 22,
-  pairsWholeBodyOpaque: 2,
+  matchedPairs: 29,
+  pairsWithoutOpaque: 26,
+  pairsWholeBodyOpaque: 1,
   pairsCongruent: 24,
   projectsSkipped: {
     legacy: 0,
     modern: 0
   },
   opaqueByReason: {
-    CompoundAssignment: {
-      legacy: 1,
-      modern: 1
-    },
     DelegateCreation: {
       legacy: 1,
       modern: 1
@@ -24,24 +20,16 @@
       legacy: 1,
       modern: 1
     },
-    async: {
-      legacy: 1,
-      modern: 1
-    },
     lock: {
-      legacy: 1,
-      modern: 1
-    },
-    ref-argument: {
       legacy: 1,
       modern: 1
     }
   },
-  changedPairs: 4,
-  changedPairsWithoutOpaque: 3,
+  changedPairs: 5,
+  changedPairsWithoutOpaque: 4,
   changedPairsWholeBodyOpaque: 0,
   changedReasonSets: {
-    : 3,
+    : 4,
     InterpolatedString: 1
   },
   runtimeChangeCalls: {
@@ -57,5 +45,115 @@
       legacy: 0,
       modern: 0
     }
+  },
+  externalCallees: {
+    legacy: [
+      {
+        member: System.IDisposable::Dispose(),
+        callSites: 10
+      },
+      {
+        member: System.Collections.Generic.List`1.Enumerator::MoveNext()<Equiv.Samples.BusinessLayer.OrderLine>,
+        callSites: 2
+      },
+      {
+        member: System.Collections.Generic.List`1.Enumerator::get_Current()<Equiv.Samples.BusinessLayer.OrderLine>,
+        callSites: 2
+      },
+      {
+        member: System.Collections.Generic.List`1::GetEnumerator()<Equiv.Samples.BusinessLayer.OrderLine>,
+        callSites: 2
+      },
+      {
+        member: System.ArgumentNullException::.ctor(string),
+        callSites: 1
+      },
+      {
+        member: System.IO.StringWriter::.ctor(),
+        callSites: 1
+      },
+      {
+        member: System.IO.StringWriter::ToString(),
+        callSites: 1
+      },
+      {
+        member: System.IO.TextWriter::Write(int),
+        callSites: 1
+      },
+      {
+        member: System.Int32::TryParse(string,out int),
+        callSites: 1
+      },
+      {
+        member: System.Linq.Enumerable::Select`2(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, string>)<Equiv.Samples.BusinessLayer.OrderLine,string>,
+        callSites: 1
+      },
+      {
+        member: System.Linq.Enumerable::ToList`1(System.Collections.Generic.IEnumerable<string>)<string>,
+        callSites: 1
+      },
+      {
+        member: System.Linq.Enumerable::Where`1(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, bool>)<Equiv.Samples.BusinessLayer.OrderLine>,
+        callSites: 1
+      },
+      {
+        member: System.Math::Round(decimal,int),
+        callSites: 1
+      }
+    ],
+    modern: [
+      {
+        member: System.IDisposable::Dispose(),
+        callSites: 10
+      },
+      {
+        member: System.Collections.Generic.List`1.Enumerator::MoveNext()<Equiv.Samples.BusinessLayer.OrderLine>,
+        callSites: 2
+      },
+      {
+        member: System.Collections.Generic.List`1.Enumerator::get_Current()<Equiv.Samples.BusinessLayer.OrderLine>,
+        callSites: 2
+      },
+      {
+        member: System.Collections.Generic.List`1::GetEnumerator()<Equiv.Samples.BusinessLayer.OrderLine>,
+        callSites: 2
+      },
+      {
+        member: System.ArgumentNullException::.ctor(string),
+        callSites: 1
+      },
+      {
+        member: System.IO.StringWriter::.ctor(),
+        callSites: 1
+      },
+      {
+        member: System.IO.StringWriter::ToString(),
+        callSites: 1
+      },
+      {
+        member: System.IO.TextWriter::Write(int),
+        callSites: 1
+      },
+      {
+        member: System.Int32::TryParse(string,out int),
+        callSites: 1
+      },
+      {
+        member: System.Linq.Enumerable::Select`2(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, string>)<Equiv.Samples.BusinessLayer.OrderLine,string>,
+        callSites: 1
+      },
+      {
+        member: System.Linq.Enumerable::ToList`1(System.Collections.Generic.IEnumerable<string>)<string>,
+        callSites: 1
+      },
+      {
+        member: System.Linq.Enumerable::Where`1(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, bool>)<Equiv.Samples.BusinessLayer.OrderLine>,
+        callSites: 1
+      },
+      {
+        member: System.Math::Round(decimal,int,System.MidpointRounding),
+        callSites: 1
+      }
+    ]
   }
 }

@@ -17,7 +17,9 @@ public interface ICallOracle
     /// type <paramref name="resultType"/> when <paramref name="resultType"/> is non-null.
     /// <paramref name="position"/> is the number of calls the run has made before this one. <paramref name="heap"/> is
     /// the value of each heap map the call reads and writes (ticket P1-005); <see cref="IrCallResult.Heap"/> is either
-    /// empty, leaving every one unchanged, or one value of the same type per entry, in order.
+    /// empty, leaving every one unchanged, or one value of the same type per entry, in order. <paramref name="refOuts"/> is
+    /// the type of each <c>ref</c> or <c>out</c> argument the call writes, in parameter order (ticket M4-003);
+    /// <see cref="IrCallResult.RefOuts"/> is one value of that type per entry.
     /// </summary>
-    IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap);
+    IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts);
 }

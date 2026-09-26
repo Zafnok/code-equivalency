@@ -135,7 +135,7 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
     {
         public static NoCalls Instance { get; } = new();
 
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap) =>
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts) =>
             throw new InvalidOperationException($"Rung 4 replays only procedures that make no call, yet one calls {callee?.Value}.");
     }
 }

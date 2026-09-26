@@ -6,6 +6,7 @@ using Equiv.Core.ApiEquivalences;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Endpoints;
 using Equiv.Frontend.CSharp.Execution;
 using Equiv.Frontend.CSharp.Fingerprinting;
@@ -138,6 +139,14 @@ public sealed class CSharpFrontend : ILanguageFrontend
             {
                 (IrProcedure oldBody, ImmutableArray<string> oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true);
                 (IrProcedure newBody, ImmutableArray<string> newApplied) = _lower(modern.Symbol, modern.Compilation, config, false);
+                if (legacy.Symbol.IsAsync != modern.Symbol.IsAsync)
+                {
+                    // Ticket M4-006: a sync method throws to its caller and an async one into its task, so the pair is decided
+                    // from the two signatures, before either body: both are one opaque the CLI makes Unknown without the solver.
+                    oldBody = IrLowerer.Opaque(oldBody, Unknown.AsyncMismatchReason, ToSourceSpan(legacy.Symbol.Locations[0]));
+                    newBody = IrLowerer.Opaque(newBody, Unknown.AsyncMismatchReason, ToSourceSpan(modern.Symbol.Locations[0]));
+                }
+
                 lowered.Add(pair with
                 {
                     OldBody = oldBody,

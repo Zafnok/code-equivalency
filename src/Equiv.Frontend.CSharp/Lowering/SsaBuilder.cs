@@ -292,6 +292,7 @@ internal sealed class SsaBuilder
             Target = c.Target is null ? null : Resolve(c.Target),
             Threw = Resolve(c.Threw!),
             Args = [.. c.Args.Select(Resolve)],
+            RefOuts = [.. c.RefOuts.Select(Resolve)],
             Heap = [.. c.Heap.Select(h => h with { Before = Resolve(h.Before) })],
         },
         IrMapRead r => r with { Target = Resolve(r.Target), Map = Resolve(r.Map), Key = Resolve(r.Key) },

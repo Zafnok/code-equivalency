@@ -225,6 +225,39 @@ public sealed class CSharpFrontendTests
         Assert.NotEqual(changed.OldFingerprint, changed.NewFingerprint);
     }
 
+    /// <summary>
+    /// Ticket M4-006 acceptance criterion 2: when exactly one side is <c>async</c>, both bodies are one whole-body opaque
+    /// with reason <c>async-mismatch</c> at the method's name, keeping its signature; when both are, neither is.
+    /// </summary>
+    [Fact]
+    public void AnAsyncMismatchMakesBothBodiesOneOpaque()
+    {
+        const string Task = "System.Threading.Tasks.Task";
+        Compilation legacyCompilation = RoslynTestCompilations.Compile(
+            $"namespace N {{ public class C {{ public {Task} Sync({Task} t) => t; public async {Task} Both({Task} t) {{ await t; }} }} }}");
+        Compilation modernCompilation = RoslynTestCompilations.Compile(
+            $"namespace N {{ public class C {{ public async {Task} Sync({Task} t) {{ await t; }} public async {Task} Both({Task} t) {{ await t; }} }} }}");
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+
+        ProcedurePair mismatched = result.Pairs.Single(static p => p.New.Value.Contains("::Sync(", StringComparison.Ordinal));
+        foreach (IrProcedure body in (IrProcedure[])[mismatched.OldBody!, mismatched.NewBody!])
+        {
+            IrOpaque opaque = Assert.IsType<IrOpaque>(Assert.Single(Assert.Single(body.Blocks).Instructions));
+            Assert.Equal("async-mismatch", opaque.Reason);
+            Assert.True(opaque.WholeBody);
+            Assert.Equal(opaque.Span.StartColumn + "Sync".Length, opaque.Span.EndColumn);
+            Assert.Empty(IrValidator.Validate(body));
+        }
+
+        Assert.Equal("t", mismatched.NewBody!.Parameters[0].Var.Name);
+        ProcedurePair both = result.Pairs.Single(static p => p.New.Value.Contains("::Both(", StringComparison.Ordinal));
+        Assert.DoesNotContain(both.OldBody!.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
+    }
+
     [Fact]
     public void LowersBothBodiesOfEveryMatchedPair()
     {

@@ -186,6 +186,19 @@
               "modern": 0
             }
           },
+          "externalCallees": {
+            "legacy": [],
+            "modern": [
+              {
+                "member": "System.String::Contains(char)",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::Split(char,System.StringSplitOptions)",
+                "callSites": 1
+              }
+            ]
+          },
           "unknownByScope": {
             "line": 0,
             "method": 0

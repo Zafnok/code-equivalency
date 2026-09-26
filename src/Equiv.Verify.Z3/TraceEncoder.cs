@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -15,7 +16,8 @@ namespace Equiv.Verify.Z3;
 /// <c>threw</c> flag are uninterpreted functions of its arguments, its position and the heap at the call, one pair per
 /// callee identity and signature, shared by both sides, except that a <see cref="CallIdentity.RuntimeChanged"/>
 /// callee gets one pair per side. So is the new version of each heap map, one <c>heap:</c> function per callee, signature
-/// and map (ticket P1-005). The heap at a call is one value per <see cref="Heap"/> map, in that order. A legacy identity
+/// and map (ticket P1-005), and the new value of each <c>ref</c> or <c>out</c> argument, one <c>refout:</c> function per
+/// callee, signature and output index (ticket M4-003). The heap at a call is one value per <see cref="Heap"/> map, in that order. A legacy identity
 /// in the config's call-identity map is renamed to its modern counterpart first. A trace is a <c>Seq</c> of
 /// <c>event(callee, args)</c>, whose <c>args</c> are the arguments followed by the heap at the call (as long on both
 /// sides, so the concatenation is injective), boxed in a <c>Value</c> datatype with one injective constructor per IR
@@ -58,10 +60,11 @@ internal sealed class TraceEncoder
     public ImmutableArray<HeapMap> Heap { get; }
 
     /// <summary>
-    /// The result, <c>threw</c> flag, trace event and new heap (one term per <see cref="Heap"/> map) of <paramref name="call"/>
-    /// on <paramref name="side"/> at <paramref name="position"/>, given the heap <paramref name="heap"/> at the call.
+    /// The result, <c>threw</c> flag, trace event, new heap (one term per <see cref="Heap"/> map) and ref outputs (one term per
+    /// <see cref="IrCall.RefOuts"/> entry, ticket M4-003) of <paramref name="call"/> on <paramref name="side"/> at
+    /// <paramref name="position"/>, given the heap <paramref name="heap"/> at the call.
     /// </summary>
-    public (Expr? Result, BoolExpr Threw, Expr Event, ImmutableArray<Expr> Heap) Call(
+    public (Expr? Result, BoolExpr Threw, Expr Event, ImmutableArray<Expr> Heap, ImmutableArray<Expr> RefOuts) Call(
         Side side, IrCall call, ImmutableArray<(IrType Type, Expr Term)> args, BitVecExpr position, ImmutableArray<Expr> heap)
     {
         ImmutableArray<IrType> types = [.. args.Select(static a => a.Type)];
@@ -71,7 +74,12 @@ internal sealed class TraceEncoder
         IEnumerable<(IrType Type, Expr Term)> read = args.Concat(Heap.Zip(heap, static (m, term) => (m.Type, term)));
         SeqExpr boxed = context.MkConcat([context.MkEmptySeq(values), .. read.Select(a => context.MkUnit(context.MkApp(boxes[SortMapper.Name(a.Type)], a.Term)))]);
         Expr @event = context.MkApp(eventConstructor, context.MkInt(Callee(Canonical(side, call.Callee))), boxed);
-        return (result, threw, @event, [.. Heap.Select((_, i) => context.MkApp(HeapFunction(side, call.Callee, types, i), applied))]);
+        return (
+            result,
+            threw,
+            @event,
+            [.. Heap.Select((_, i) => context.MkApp(HeapFunction(side, call.Callee, types, i), applied))],
+            [.. call.RefOuts.Select((r, i) => context.MkApp(RefOutFunction(side, call.Callee, types, i, r.Type), applied))]);
     }
 
     /// <summary>The trace of one side: its blocks' events in reverse postorder, each block's only when it is reached.</summary>
@@ -98,6 +106,13 @@ internal sealed class TraceEncoder
     /// <summary>The function giving the new version of <see cref="Heap"/> map <paramref name="map"/> after a call, created on first use.</summary>
     public FuncDecl HeapFunction(Side side, CallIdentity callee, ImmutableArray<IrType> argumentTypes, int map) =>
         Function("heap", side, callee, argumentTypes, sorts.Sort(Heap[map].Type), "$" + Heap[map].Name + ":" + SortMapper.Name(Heap[map].Type));
+
+    /// <summary>
+    /// The function giving the new value of a call's <paramref name="index"/>th <c>ref</c> or <c>out</c> argument, of type
+    /// <paramref name="type"/> (ticket M4-003), created on first use. It takes what the result function takes.
+    /// </summary>
+    public FuncDecl RefOutFunction(Side side, CallIdentity callee, ImmutableArray<IrType> argumentTypes, int index, IrType type) =>
+        Function("refout", side, callee, argumentTypes, sorts.Sort(type), "$" + index.ToString(CultureInfo.InvariantCulture) + ":" + SortMapper.Name(type));
 
     /// <summary>The identity both sides' traces use for <paramref name="callee"/>: a legacy identity is renamed through the call-identity map.</summary>
     public string Canonical(Side side, CallIdentity callee) =>

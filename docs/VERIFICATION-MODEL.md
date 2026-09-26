@@ -60,7 +60,7 @@ Instructions:
 | `IrOverflows(var, overflowOp, a, b)` | Bool: would the checked operation overflow; `overflowOp` in SAdd, UAdd, SSub, USub, SMul, UMul, SDiv |
 | `IrUnary(var, op, a)` | negation, not, conversions with explicit target width and signedness |
 | `IrPhi(var, [(block, var)])` | SSA merge |
-| `IrCall(var?, threw?, callee identity, args, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005). Result, `threw` and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018) |
+| `IrCall(var?, threw?, callee identity, args, refouts, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `refouts` are the new versions of the call's `ref` and `out` arguments, in parameter order, each a definition; a `ref` argument's value at the call is also one of `args`, an `out` one's is not (M4-003). `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005). Result, `threw`, each ref output (one function per output index) and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018) |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
 | `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025) |
 | `IrOpaque(var?, reason, sourceSpan, fingerprint?, reads)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024) |
@@ -155,6 +155,25 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   records the constructor call and then lowers to `IrThrow("T")` on T's static type (M2-004).
   Throwing any other expression is `IrOpaque` with reason `Throw`, because the thrown object's
   dynamic type is not known statically, and `throw;` is `IrOpaque` with reason `rethrow`.
+
+An `async` method (ticket M4-006) is lowered as the synchronous body its CFG already is, over the original
+operations, never over the compiler's state machine. `await e` is `IrCall(await:<awaiter type>, [e])`: its result is
+the awaited value and its `threw` flag branches as any call's. The awaiter type is spelled as a member identity spells
+its declaring type, with its type arguments as a generic callee's; a reference-typed `e` whose `GetAwaiter` is an
+instance method is null-checked first, as a `callvirt` receiver is. The procedure returns the task's result: the type
+argument of a generic task-like return type, nothing for `Task`, `ValueTask` or `void`. Why this is sound for a pair
+where both sides are `async`: every observable of section 1 happens in the same order whether or not the body is
+suspended at an `await` (the heap is threaded through the call, so what other code does meanwhile is a havoc both sides
+share), and an exception thrown anywhere in the body, before the first `await` or after one, is caught by the method's
+builder and stored in the returned task as it is, faulted (cancelled for `OperationCanceledException`), the same way on
+both sides; so a throw of type `T` in the IR stands for exactly the task a caller observes. Two awaits are two calls at
+different trace positions (ADR 0018), so awaiting one task twice is not forced to yield one value, and a real awaitable
+that is not idempotent is modelled. `ConfigureAwait(false)` is an ordinary call whose result is what is awaited. A pair
+where exactly one side is `async` is Unknown with detail `async-mismatch`, without the solver: a synchronous method
+throws to its caller at the call, an `async` one into its task, which the caller sees only when it awaits, so their
+exception timing differs. Iterators (`yield`, async or not), `await foreach` and `await using` stay whole-body opaque with
+reasons `iterator`, `await-foreach` and `await-using`: their desugaring is a state machine or awaits calls the CFG does
+not show.
 
 Floating-point, `decimal` and user-defined operators (ADR 0025, ticket M4-002) are `IrPure`
 applications of the functions one frontend catalogue lists: `f32.<op>` and `f64.<op>` (arithmetic,
@@ -379,6 +398,16 @@ every lowered matched pair, congruent ones included: the `IrCall`s whose callee 
 matches, the distinct callee identities among them, and the pairs whose body on that side has at
 least one. Package version changes are not in the census; `tools/corpus/corpus.ps1 -Packages`
 computes them from each side's restore output.
+
+`externalCallees` (ADR 0035; ticket M3-033) is every BCL member a lowered body calls, not only the
+ones `RuntimeChangeTable` already lists: per side, over every lowered matched pair (congruent ones
+included, as `runtimeChangeCalls` counts), the distinct call identities whose target assembly is one
+of the framework reference assemblies the project compiled against (a reference assembly carries
+`ReferenceAssemblyAttribute`, as `ProjectEmitter` already tests for replay), never the solution's own
+code or a NuGet package. Each entry pairs a member with its call-site count, sorted by count
+descending then ordinally. `tools/corpus/corpus.ps1 -RuntimeDiff <slug>` takes the union of both
+sides' most-called entries and runs `tools/runtime-diff` on each; a member it finds divergent becomes
+a `runtime-changes.json` row with `source: measured` and a witness.
 
 Every run also writes `run.properties.analysedLinesOfCode`: `legacy` and `modern`, one count per
 codebase and never a total (ticket M3-014). The rule is the one in README's "Licence" section,

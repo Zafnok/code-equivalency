@@ -150,7 +150,7 @@ public sealed class SpacerRungTests
 
     [Fact]
     public void TheReplayOracleRefusesACall() =>
-        Assert.Throws<InvalidOperationException>(static () => SpacerRung.NoCalls.Instance.Answer(new CallIdentity("T::M()"), [], resultType: null, position: 0, []));
+        Assert.Throws<InvalidOperationException>(static () => SpacerRung.NoCalls.Instance.Answer(new CallIdentity("T::M()"), [], resultType: null, position: 0, [], []));
 
     private static Rung Prove(IrProcedure old, IrProcedure @new, VerificationOptions options) =>
         new SpacerRung(static () => new Context(), options).Prove(old, @new);

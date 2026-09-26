@@ -2196,5 +2196,26 @@
     "source": "documented",
     "reason": "Always throws (usually PlatformNotSupportedException) on .NET, where the member works on .NET Framework.",
     "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/unsupported-apis#systemxml"
+  },
+  {
+    "member": "System.IO.Path::Combine(string,string)",
+    "source": "measured",
+    "reason": "Combine no longer validates its arguments against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns the combined string unchanged.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+    "witness": { "input": ["\u0000", "i"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000\\i" }
+  },
+  {
+    "member": "System.IO.Path::GetDirectoryName(string)",
+    "source": "measured",
+    "reason": "GetDirectoryName no longer validates its argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getdirectoryname",
+    "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "" }
+  },
+  {
+    "member": "System.IO.StreamReader::.ctor(string)",
+    "source": "measured",
+    "reason": "Opening a path with characters the file system itself rejects throws IOException on .NET 10, where .NET Framework's own upfront character validation threw ArgumentException first.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.streamreader.-ctor",
+    "witness": { "input": ["ä\"̈9aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
   }
 ]
