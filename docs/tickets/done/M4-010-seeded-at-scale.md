@@ -1,5 +1,5 @@
 # M4-010 Seeded at scale: mechanical seeds on corpus methods, so seeded recall is measured over hundreds of changes, not a handful
-Status: in-progress
+Status: done (PR #212)
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M0-012
