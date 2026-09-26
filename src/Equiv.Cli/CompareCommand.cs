@@ -384,6 +384,17 @@ internal static class CompareCommand
                 continue;
             }
 
+            // Ticket M4-006: exactly one side is async, so exception timing differs; the frontend made both bodies one opaque.
+            ImmutableArray<UnknownCause> mismatch = [.. AsyncMismatch(Codebase.Legacy, old), .. AsyncMismatch(Codebase.Modern, @new)];
+            if (!mismatch.IsEmpty)
+            {
+                results.Add(new VerificationResult(pair.New, new Unknown(UnknownReason.Opaque, Unknown.AsyncMismatchReason) { Causes = mismatch })
+                {
+                    EquivalencesApplied = pair.EquivalencesApplied,
+                });
+                continue;
+            }
+
             // ADR 0024: identical bound code is Equivalent without the solver.
             if (IsCongruent(pair, old, @new))
             {
@@ -488,6 +499,14 @@ internal static class CompareCommand
             .OfType<IrOpaque>()
             .Where(static o => string.Equals(o.Reason, Unknown.UnboundOpaqueReason, StringComparison.Ordinal))
             .Select(o => string.Create(CultureInfo.InvariantCulture, $"{side}: unbound at {o.Span.Path} {o.Span.StartLine}:{o.Span.StartColumn}"));
+
+    /// <summary>Each <see cref="Unknown.AsyncMismatchReason"/> opaque in <paramref name="body"/>, as a cause on <paramref name="side"/>.</summary>
+    private static IEnumerable<UnknownCause> AsyncMismatch(Codebase side, IrProcedure body) =>
+        body.Blocks
+            .SelectMany(static b => b.Instructions)
+            .OfType<IrOpaque>()
+            .Where(static o => string.Equals(o.Reason, Unknown.AsyncMismatchReason, StringComparison.Ordinal))
+            .Select(o => new UnknownCause(side, o.Reason, o.Span));
 
     private static int DecideExitCode(List<VerificationResult> results, SarifLog log, string? failOn)
     {

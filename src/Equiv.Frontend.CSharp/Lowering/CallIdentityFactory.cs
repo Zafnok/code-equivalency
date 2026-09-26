@@ -24,13 +24,15 @@ internal static class CallIdentityFactory
     public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
     {
         ArgumentNullException.ThrowIfNull(method);
-        string identity = RoslynIdentity.Of(method, renames).Value;
-        ImmutableArray<ITypeSymbol> typeArguments = [.. TypeArguments(method.ContainingType), .. method.TypeArguments];
-        string value = typeArguments.IsEmpty
-            ? identity
-            : $"{identity}<{string.Join(',', typeArguments.Select(static t => t.ToDisplayString()))}>";
-        return Of(value, suppressedRuntimeChanges);
+        return Of(Constructed(RoslynIdentity.Of(method, renames).Value, [.. TypeArguments(method.ContainingType), .. method.TypeArguments]), suppressedRuntimeChanges);
     }
+
+    /// <summary>
+    /// The identity of an <c>await</c> whose awaiter is of type <paramref name="awaiter"/> (ticket M4-006): <c>await:</c> and
+    /// the awaiter's name as a member identity spells its declaring type, with its type arguments as a generic callee's.
+    /// </summary>
+    public static CallIdentity Await(INamedTypeSymbol awaiter, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges) =>
+        Of(Constructed("await:" + RoslynIdentity.TypeName(awaiter, renames), [.. TypeArguments(awaiter)]), suppressedRuntimeChanges);
 
     /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be.</summary>
     public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges)
@@ -77,6 +79,10 @@ internal static class CallIdentityFactory
         { Parameter.IsParams: true } => null,
         _ => [argument.Value],
     };
+
+    /// <summary><paramref name="identity"/>, suffixed with <c>&lt;typeArgs&gt;</c> when there are any.</summary>
+    private static string Constructed(string identity, ImmutableArray<ITypeSymbol> typeArguments) =>
+        typeArguments.IsEmpty ? identity : $"{identity}<{string.Join(',', typeArguments.Select(static t => t.ToDisplayString()))}>";
 
     private static IEnumerable<ITypeSymbol> TypeArguments(INamedTypeSymbol? type) =>
         type is null ? [] : TypeArguments(type.ContainingType).Concat(type.TypeArguments);

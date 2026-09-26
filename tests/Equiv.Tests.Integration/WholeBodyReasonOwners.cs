@@ -11,7 +11,6 @@ internal static class WholeBodyReasonOwners
 {
     public static ImmutableSortedDictionary<string, string> Table { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
-        ["async"] = "M4-006",
         ["lock"] = "M4-011",
         // Not a lowering gap: erroneous code is Unknown(Unbound) by design (ADR 0029 decision 2), so it never goes away.
         ["unbound"] = "M3-024",

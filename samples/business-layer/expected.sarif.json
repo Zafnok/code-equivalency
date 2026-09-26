@@ -1046,8 +1046,8 @@
             "modern": 29
           },
           "matchedPairs": 29,
-          "pairsWithoutOpaque": 25,
-          "pairsWholeBodyOpaque": 2,
+          "pairsWithoutOpaque": 26,
+          "pairsWholeBodyOpaque": 1,
           "pairsCongruent": 24,
           "projectsSkipped": {
             "legacy": 0,
@@ -1059,10 +1059,6 @@
               "modern": 1
             },
             "InterpolatedString": {
-              "legacy": 1,
-              "modern": 1
-            },
-            "async": {
               "legacy": 1,
               "modern": 1
             },
