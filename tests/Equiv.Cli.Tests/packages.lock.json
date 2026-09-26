@@ -425,6 +425,7 @@
         "type": "Project",
         "dependencies": {
           "Equiv.Core": "[1.0.0, )",
+          "Equiv.Execute": "[1.0.0, )",
           "Equiv.Frontend.CSharp": "[1.0.0, )",
           "Equiv.Verify.Z3": "[1.0.0, )",
           "System.CommandLine": "[2.0.12, )"
@@ -434,6 +435,12 @@
         "type": "Project",
         "dependencies": {
           "Sarif.Sdk": "[5.7.0, )"
+        }
+      },
+      "equiv.execute": {
+        "type": "Project",
+        "dependencies": {
+          "Equiv.Core": "[1.0.0, )"
         }
       },
       "equiv.frontend.csharp": {

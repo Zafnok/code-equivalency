@@ -274,6 +274,32 @@ untainted on both sides. Otherwise it is Unknown with reason `Abstraction`, carr
 as `properties.candidateCounterexample` and the abstractions it depends on as
 `properties.abstractions`.
 
+With `equiv compare --execute`, every Divergent is also replayed on the two real runtimes, the
+second oracle of ADR 0035 (decision 2; ticket M4-009). Its model's inputs are bound back to each
+side's parameters by the product's pairing rule (ADR 0021) and become C# arguments of the M3-032
+generator types: a `bool`, an integer, a `char` or an enum from its bitvector; a `string` from its
+sort element, `null` where the model's `null.<Sort>` map holds it and otherwise `"s<id>"`, so that
+equal elements are equal strings; a `float`, `double` or `decimal` as the number `id`; any other
+reference type only as `null`. A static method is called directly, and an instance method on
+`new T()`, which needs a public parameterless constructor. Each side's project is emitted with its
+references beside it, and a driver calls the legacy method once on .NET Framework 4.8 and the
+modern method once on .NET 10, under the invariant culture. The result carries
+`properties.replay`:
+- `reproduced`: the two canonical outcomes (M3-032's canonical form) differ;
+- `not-reproduced`: they are equal, and `properties.replayOutcomes` gives both (`kind`, `value`).
+  The model and the CLR disagree; in a corpus run that is a soundness or modelling finding and
+  gets a ticket;
+- `not-constructible`, with `properties.replayReason`: the method is not public, generic, an
+  accessor other than a getter, or takes a parameter by reference; the receiver has no public
+  parameterless constructor or the model makes it null; a parameter's type has no generator; the
+  model has a synthesised input other than `this` and `null.*` (a heap map, a cast or type-test
+  map, `typeof`, `new`), since replay builds no object graphs; a project does not emit
+  (`emit-failed`); the model's two runs end alike, so the divergence is in the call trace, which a
+  driver does not observe; or a side gives no comparable outcome.
+
+Replay never changes the verdict, the rule id, the fingerprint or the exit code, and a run without
+`--execute` runs no code and writes no `replay`.
+
 An Unknown result lists every reached opaque node and every abstraction it depends on as a
 `relatedLocation` whose message is the reason, each line once, legacy side first and then in source order. Its
 primary location is the first of them on the modern side, else the procedure (ADR 0027). `partialFingerprints` do

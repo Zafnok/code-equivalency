@@ -32,8 +32,8 @@ non-null `item`, and `line` is a read of the `cast` map, so the method lowers wi
 opaque leaves the census.
 
 Since P2-022, compound assignment and `++`/`--` on `decimal` apply the binary operator's function. `Subtotal`'s
-`subtotal += line.UnitPrice * line.Quantity` is `dec.add`, so it lowers with no opaque, its `CompoundAssignment` opaque
-leaves the census, and its congruent result now lists the two getters its operand calls in `assumedCallees`.
+`subtotal += line.UnitPrice * line.Quantity` is `dec.add`, so it lowers with no opaque and its `CompoundAssignment`
+opaque leaves the census.
 `Discounted` is the rewrite the IDE0054 analyzer makes: the legacy side writes `total = total - total * rate`, the modern
 side `total -= total * rate`. The sources differ, so it is not congruent, and the solver proves it from the shared
 `dec.mul` and `dec.sub`. Before P2-022 the modern side's `CompoundAssignment` opaque made it Unknown.

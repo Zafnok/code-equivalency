@@ -22,7 +22,7 @@ public sealed class DriverFactory : IExecutionDriverFactory
 {
     private const string AssemblyName = "EquivDriver";
 
-    private const string AppConfig = """
+    internal const string AppConfig = """
         <?xml version="1.0" encoding="utf-8"?>
         <configuration>
           <startup>
@@ -31,7 +31,7 @@ public sealed class DriverFactory : IExecutionDriverFactory
         </configuration>
         """;
 
-    private const string RuntimeConfig = """
+    internal const string RuntimeConfig = """
         {
           "runtimeOptions": {
             "tfm": "net10.0",

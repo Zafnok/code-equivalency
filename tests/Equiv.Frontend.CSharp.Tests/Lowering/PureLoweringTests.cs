@@ -236,7 +236,7 @@ public sealed class PureLoweringTests
         Assert.Equal(new IrReturned(Element(1)), Run(local, new Answers(Element(3), flags)));
         Assert.Equal(new IrReturned(Element(3)), Run(local, new Answers(Element(3), [.. flags.Select(static _ => false)])));
 
-        IrProcedure property = Lowered.Method($"static decimal P {{ get; set; }} static void M(decimal b) {{ P {op} b; }}");
+        IrProcedure property = Lowered.Method($"static decimal F; static decimal P {{ get {{ return F; }} set {{ F = value; }} }} static void M(decimal b) {{ P {op} b; }}");
         Accessors accessors = new();
         IrRun thrown = IrInterpreter.Run(property, new IrInputs([Element(2)]), accessors, 100, pure: new Answers(Element(3), flags));
         Assert.Equal(new IrThrew($"System.{caught}"), thrown.Outcome);

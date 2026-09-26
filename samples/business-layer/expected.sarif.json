@@ -530,10 +530,7 @@
           },
           "baselineState": "new",
           "properties": {
-            "proofMethod": "congruence",
-            "assumedCallees": [
-              "Equiv.Samples.BusinessLayer.Order::get_CustomerName()"
-            ]
+            "proofMethod": "congruence"
           }
         },
         {
@@ -564,12 +561,7 @@
           },
           "baselineState": "new",
           "properties": {
-            "proofMethod": "congruence",
-            "assumedCallees": [
-              "Equiv.Samples.BusinessLayer.Order::get_Lines()",
-              "Equiv.Samples.BusinessLayer.OrderLine::get_Quantity()",
-              "Equiv.Samples.BusinessLayer.OrderLine::get_UnitPrice()"
-            ]
+            "proofMethod": "congruence"
           }
         },
         {
@@ -600,10 +592,7 @@
           },
           "baselineState": "new",
           "properties": {
-            "proofMethod": "congruence",
-            "assumedCallees": [
-              "Equiv.Samples.BusinessLayer.Order::get_Lines()"
-            ]
+            "proofMethod": "congruence"
           }
         },
         {
@@ -696,10 +685,7 @@
           },
           "baselineState": "new",
           "properties": {
-            "proofMethod": "congruence",
-            "assumedCallees": [
-              "Equiv.Samples.BusinessLayer.OrderLine::get_Quantity()"
-            ]
+            "proofMethod": "congruence"
           }
         },
         {
@@ -804,10 +790,7 @@
           },
           "baselineState": "new",
           "properties": {
-            "proofMethod": "congruence",
-            "assumedCallees": [
-              "Equiv.Samples.BusinessLayer.Order::get_Id()"
-            ]
+            "proofMethod": "congruence"
           }
         },
         {
@@ -900,11 +883,7 @@
           },
           "baselineState": "new",
           "properties": {
-            "proofMethod": "congruence",
-            "assumedCallees": [
-              "Equiv.Samples.BusinessLayer.Order::get_Lines()",
-              "Equiv.Samples.BusinessLayer.OrderLine::get_Quantity()"
-            ]
+            "proofMethod": "congruence"
           }
         },
         {
@@ -942,11 +921,6 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ],
-            "assumedCallees": [
-              "Equiv.Samples.BusinessLayer.OrderLine::get_Discount()",
-              "Equiv.Samples.BusinessLayer.OrderLine::get_Quantity()",
-              "Equiv.Samples.BusinessLayer.OrderLine::get_UnitPrice()"
             ]
           }
         },
@@ -1072,8 +1046,8 @@
             "modern": 29
           },
           "matchedPairs": 29,
-          "pairsWithoutOpaque": 10,
-          "pairsWholeBodyOpaque": 16,
+          "pairsWithoutOpaque": 24,
+          "pairsWholeBodyOpaque": 2,
           "pairsCongruent": 24,
           "projectsSkipped": {
             "legacy": 0,
@@ -1095,10 +1069,6 @@
             "lock": {
               "legacy": 1,
               "modern": 1
-            },
-            "no-body": {
-              "legacy": 14,
-              "modern": 14
             },
             "ref-argument": {
               "legacy": 1,

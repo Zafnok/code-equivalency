@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 
+using Equiv.Core.Execution;
 using Equiv.Core.Verdicts;
 
 namespace Equiv.Core.Reporting;
@@ -13,7 +14,8 @@ namespace Equiv.Core.Reporting;
 /// pair's <see cref="Matching.ProcedurePair.EquivalencesApplied"/> through to the report (ADR 0020; ticket M3-009).
 /// <see cref="AssumedCallees"/> are the matched callee pairs the verdict assumed equivalent, sorted, and
 /// <see cref="UnprovenAssumptions"/> the ones among them whose own result in the run is not Equivalent (ADR 0019; ticket M3-015).
-/// Neither is part of the result's fingerprint.
+/// Neither is part of the result's fingerprint. <see cref="Replay"/> is a Divergent's replay on both real runtimes under
+/// <c>--execute</c> (ADR 0035 decision 2; ticket M4-009), null otherwise; it is never part of the fingerprint either.
 /// </summary>
 public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
 {
@@ -22,4 +24,6 @@ public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verd
     public ImmutableArray<string> AssumedCallees { get; init; } = [];
 
     public ImmutableArray<string> UnprovenAssumptions { get; init; } = [];
+
+    public ReplayResult? Replay { get; init; }
 }

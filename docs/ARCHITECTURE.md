@@ -14,7 +14,7 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
                                          no Z3)
                                             ^
                                             |
-                                      Equiv.Execute
+        Equiv.Cli ------------------> Equiv.Execute
                                   (driver processes live here;
                                    no Roslyn, no Z3; ADR 0035)
 ```
@@ -77,7 +77,7 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 
 - `equiv compare --legacy <path.sln> --modern <path.sln> [--baseline prev.sarif]
   [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
-  [--dry-run] [--lower-only]`.
+  [--dry-run] [--lower-only] [--execute]`.
 - Every run prints the analysed line count of each codebase and writes both to
   `run.properties.analysedLinesOfCode`: two numbers, never a total (README "Licence"). The frontend
   counts them from the files it loaded. `--dry-run` loads both sides, prints the route and the
@@ -85,6 +85,14 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 - `--lower-only` loads, matches and lowers, writes the lowering census and the Added and
   Removed results, never calls the backend, and exits 0 unless a project was skipped (exit 4)
   (ADR 0027). It cannot be combined with `--baseline` or `--fail-on` (exit 3).
+- `--execute` replays every Divergent's model on both real runtimes (ADR 0035 decision 2; ticket
+  M4-009). It prints `note: --execute runs code from both solutions on this machine` on stderr,
+  and on an OS other than Windows it exits 3, because the legacy side needs .NET Framework 4.8.
+  The frontend's analysis carries an `IReplayDriverFactory` (`Equiv.Core.Execution`) over the
+  projects it loaded; the C# one emits them and compiles a driver per side, and `Equiv.Execute`'s
+  `Replayer` runs them. The result gains `properties.replay` (VERIFICATION-MODEL.md section 6);
+  the verdict, rule id, fingerprint and exit code never change. Without `--execute`, no user code
+  runs.
 - Router: inspects inputs, rejects mismatched or unsupported languages (exit 3), else
   selects the frontend. One frontend in the MVP; the router exists from day one so that
   Java is a new project, not a refactor.
