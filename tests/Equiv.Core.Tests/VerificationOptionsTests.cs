@@ -35,6 +35,18 @@ public sealed class VerificationOptionsTests
         Assert.NotEqual(a, b);
     }
 
+    /// <summary>Ticket P1-001: <c>--chc-int-mode</c> is on unless turned off, and two options differing in it are unequal.</summary>
+    [Fact]
+    public void ChcIntModeIsOnByDefaultAndPartOfEquality()
+    {
+        VerificationOptions a = new(3, 5000, []);
+
+        Assert.True(a.ChcIntMode);
+        Assert.NotEqual(a, a with { ChcIntMode = false });
+        Assert.Equal(a with { ChcIntMode = false }, new VerificationOptions(3, 5000, []) { ChcIntMode = false });
+        Assert.Equal((a with { ChcIntMode = false }).GetHashCode(), new VerificationOptions(3, 5000, []) { ChcIntMode = false }.GetHashCode());
+    }
+
     [Fact]
     public void OptionsAreNotEqualToNull()
     {

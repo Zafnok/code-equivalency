@@ -52,9 +52,35 @@ public sealed class VerdictTests
     [InlineData(UnknownReason.Recursion)]
     [InlineData(UnknownReason.Unbound)]
     [InlineData(UnknownReason.Abstraction)]
+    [InlineData(UnknownReason.ChcTimeout)]
+    [InlineData(UnknownReason.ChcSpurious)]
     public void EveryUnknownReasonRoundTripsThroughTheRecord(UnknownReason reason)
     {
         Assert.Equal(reason, new Unknown(reason, "detail").Reason);
+    }
+
+    /// <summary>Ticket P1-001: a rung 4 proof carries the coupling invariant Spacer found; no other proof has one.</summary>
+    [Fact]
+    public void AChcEquivalentCarriesItsInvariant()
+    {
+        Equivalent proved = new(ProofMethod.Chc) { Invariant = "(= old.i new.i)" };
+
+        Assert.Equal("(= old.i new.i)", proved.Invariant);
+        Assert.Null(new Equivalent(ProofMethod.Chc).Invariant);
+        Assert.Equal(proved, new Equivalent(ProofMethod.Chc) { Invariant = "(= old.i new.i)" });
+        Assert.NotEqual(proved, proved with { Invariant = "true" });
+    }
+
+    /// <summary>Ticket P1-001: the rung 4 step records whether Spacer ran over integers or bitvectors; no other step does.</summary>
+    [Fact]
+    public void ALadderStepCarriesTheChcModeItRanIn()
+    {
+        LadderStep step = new(ProofMethod.Chc, RungOutcome.Proved, "d") { Mode = ChcMode.Integers };
+
+        Assert.Equal(ChcMode.Integers, step.Mode);
+        Assert.Null(new LadderStep(ProofMethod.Bounded, RungOutcome.Proved, "d").Mode);
+        Assert.Equal(step, step with { });
+        Assert.NotEqual(step, step with { Mode = ChcMode.BitVectors });
     }
 
     [Fact]

@@ -323,6 +323,7 @@ public sealed class SarifReportWriterTests
     [InlineData(ProofMethod.Bounded, "bounded")]
     [InlineData(ProofMethod.LockstepInduction, "lockstep-induction")]
     [InlineData(ProofMethod.KInduction, "k-induction")]
+    [InlineData(ProofMethod.Chc, "chc")]
     [InlineData(ProofMethod.Congruence, "congruence")]
     public void EquivalentResultCarriesItsProofMethodAndNoBoundUnlessBounded(ProofMethod method, string name)
     {
@@ -330,6 +331,43 @@ public sealed class SarifReportWriterTests
 
         Assert.Equal(name, result.GetProperty<string>("proofMethod"));
         Assert.False(result.TryGetProperty("boundedBy", out int _));
+        Assert.False(result.TryGetProperty("invariant", out string? _));
+        Assert.False(result.TryGetProperty("chcMode", out string? _));
+    }
+
+    /// <summary>Ticket P1-001 criterion 1: a rung 4 proof shows the invariant Spacer found, and the mode it ran in.</summary>
+    [Fact]
+    public void AChcEquivalentCarriesItsInvariantAndMode()
+    {
+        Equivalent proved = new(ProofMethod.Chc)
+        {
+            Invariant = "old B1 / new B1: (= old.i new.i)",
+            Ladder = [new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, "b"), new LadderStep(ProofMethod.Chc, RungOutcome.Proved, "p") { Mode = ChcMode.Integers }],
+        };
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(proved)]).Runs[0].Results[0];
+
+        Assert.Equal("old B1 / new B1: (= old.i new.i)", result.GetProperty<string>("invariant"));
+        Assert.Equal("int", result.GetProperty<string>("chcMode"));
+    }
+
+    /// <summary>Ticket P1-001 criterion 4: whatever rung 4 concluded, the result says which mode it ran in.</summary>
+    [Fact]
+    public void EveryVerdictRungFourReachedCarriesItsMode()
+    {
+        Verdict timedOut = new Unknown(UnknownReason.ChcTimeout, "d")
+        {
+            Ladder = [new LadderStep(ProofMethod.Chc, RungOutcome.Timeout, "t") { Mode = ChcMode.BitVectors }],
+        };
+        Verdict notApplicable = new Unknown(UnknownReason.UnalignedLoop, "d")
+        {
+            Ladder = [new LadderStep(ProofMethod.Chc, RungOutcome.NotApplicable, "a side makes a call")],
+        };
+
+        Result[] results = [.. SarifReportWriter.Write([Fixtures.Result(timedOut), Fixtures.Result(notApplicable)]).Runs[0].Results];
+
+        Assert.Equal("bitvector", results[0].GetProperty<string>("chcMode"));
+        Assert.False(results[1].TryGetProperty("chcMode", out string? _));
     }
 
     [Fact]
@@ -348,6 +386,8 @@ public sealed class SarifReportWriterTests
     [InlineData(UnknownReason.Recursion, "recursion")]
     [InlineData(UnknownReason.Unbound, "unbound")]
     [InlineData(UnknownReason.Abstraction, "abstraction")]
+    [InlineData(UnknownReason.ChcTimeout, "chc-timeout")]
+    [InlineData(UnknownReason.ChcSpurious, "chc-spurious")]
     public void UnknownResultCarriesItsReason(UnknownReason reason, string name)
     {
         Result result = SarifReportWriter.Write([Fixtures.Result(new Unknown(reason, "detail"))]).Runs[0].Results[0];

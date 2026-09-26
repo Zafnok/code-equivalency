@@ -14,7 +14,8 @@ public enum UnknownReason
 
     /// <summary>
     /// Loops the ladder's rungs 1 to 3 could not decide: they do not align (loop count, nesting or header state
-    /// differs), or they align and neither induction rung proved them (ticket M3-002; rung 4 is P1-001).
+    /// differs), or they align and neither induction rung proved them (ticket M3-002), and rung 4 does not apply because
+    /// a side makes a call or applies a pure function (ticket P1-001). Rung 4 decides every other such pair.
     /// </summary>
     UnalignedLoop,
 
@@ -32,4 +33,13 @@ public enum UnknownReason
     /// the solver may interpret in a way no real run does (ADR 0026). The result carries the candidate counterexample.
     /// </summary>
     Abstraction,
+
+    /// <summary>Rung 4's Spacer query neither found a coupling invariant nor a derivation in time (ticket P1-001).</summary>
+    ChcTimeout,
+
+    /// <summary>
+    /// Rung 4's Spacer query found a derivation, but replaying its inputs through both procedures does not diverge, so it
+    /// is an artefact of the encoding (ticket P1-001). The detail carries both replayed runs.
+    /// </summary>
+    ChcSpurious,
 }
