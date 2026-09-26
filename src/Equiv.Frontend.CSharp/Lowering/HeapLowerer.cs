@@ -1,6 +1,7 @@
-using Equiv.Core.Ir;
+﻿using Equiv.Core.Ir;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Operations;
 
 namespace Equiv.Frontend.CSharp.Lowering;
@@ -58,6 +59,7 @@ internal sealed class HeapLowerer(
     {
         IFieldReferenceOperation field => Field(field, context),
         IArrayElementReferenceOperation element => Element(element, context),
+        IPropertyReferenceOperation property => AutoProperty(property, context),
         _ => null,
     };
 
@@ -65,12 +67,47 @@ internal sealed class HeapLowerer(
     /// A field is a map from its receiver, or from its declaring type's token when it is static. A receiver of a
     /// reference type is null-checked where the slice is read or written, not here (ticket P2-017).
     /// </summary>
-    public Access Field(IFieldReferenceOperation field, LoweringContext context)
+    public Access Field(IFieldReferenceOperation field, LoweringContext context) => Member(field.Field, field.Instance, context);
+
+    /// <summary>
+    /// An auto-property whose accessors no override can replace is its backing field (ticket M4-008): its map is read and
+    /// written where the accessors would be called, so a caller sees what they would do. Null, with nothing emitted, for
+    /// any other property.
+    /// </summary>
+    public Access? AutoProperty(IPropertyReferenceOperation property, LoweringContext context) =>
+        Inlined(property.Property) is { } field ? Member(field, property.Instance, context) : null;
+
+    /// <summary>
+    /// The map of <paramref name="field"/> at <paramref name="receiver"/>, or at its type's token when that is null; a
+    /// receiver that is <c>this</c> is never null, so nothing is null-checked.
+    /// </summary>
+    public Access Backing(IFieldSymbol field, IrVar? receiver, LoweringContext context) =>
+        new(Versioned(Inputs.Field(field)), Array: null, receiver ?? Const(Inputs.Token(field), context), Dereferenced: null);
+
+    /// <summary>The backing field the compiler declares for <paramref name="property"/>, or null when it has none.</summary>
+    public static IFieldSymbol? BackingField(IPropertySymbol property) =>
+        property.ContainingType.GetMembers().OfType<IFieldSymbol>().FirstOrDefault(f => SymbolEqualityComparer.Default.Equals(f.AssociatedSymbol, property));
+
+    /// <summary>
+    /// The backing field of a property that is neither virtual nor an override and whose accessors have no body, or null:
+    /// a property with a body, or one an override may replace, is called.
+    /// </summary>
+    private static IFieldSymbol? Inlined(IPropertySymbol property) =>
+        !property.IsVirtual && !property.IsOverride && Bodiless(property.GetMethod) && Bodiless(property.SetMethod) ? BackingField(property) : null;
+
+    private static bool Bodiless(IMethodSymbol? accessor) =>
+        accessor is null || accessor.DeclaringSyntaxReferences.All(static r => r.GetSyntax() is AccessorDeclarationSyntax { Body: null, ExpressionBody: null });
+
+    /// <summary>
+    /// A field is a map from its receiver, or from its declaring type's token when it is static. A receiver of a
+    /// reference type is null-checked where the slice is read or written, not here (ticket P2-017).
+    /// </summary>
+    private Access Member(IFieldSymbol field, IOperation? instance, LoweringContext context)
     {
-        SsaBuilder.Variable map = Versioned(Inputs.Field(field.Field));
-        if (field.Instance is not { } instance)
+        SsaBuilder.Variable map = Versioned(Inputs.Field(field));
+        if (instance is null)
         {
-            return new Access(map, Array: null, Const(Inputs.Token(field.Field), context), Dereferenced: null);
+            return new Access(map, Array: null, Const(Inputs.Token(field), context), Dereferenced: null);
         }
 
         IOperation? dereferenced = instance.Type!.IsValueType ? null : instance;

@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.Loader;
@@ -25,8 +25,9 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 /// methods are compiled into one in-memory assembly and run by reflection, lowered and run by
 /// <see cref="IrInterpreter"/>, and must agree on the return value or thrown exception type for every input.
 /// CsCheck prints the seed on failure; <see cref="Seed"/> pins the run. The class's static auto-property
-/// <c>P</c> starts each run at the input's <c>B</c> in both; the IR's accessor calls are answered by
-/// <see cref="CompiledRunOracle"/>, which keeps the value the compiled run's backing field would hold. The
+/// <c>P</c> starts each run at the input's <c>B</c> in both, as its backing field's map in the IR, and its final value is
+/// compared (ticket M4-008); its static property <c>Q</c>, whose accessors have bodies, starts at <c>B</c> too, and the IR's
+/// calls to them are answered by <see cref="CompiledRunOracle"/>, which keeps the value the compiled run's field would hold. The
 /// <c>int[]</c> parameters are two arrays, one passed twice (ticket P1-006), or <c>u</c> and a null <c>v</c> (ticket P2-017), and their final elements are compared
 /// along with the static field's final value and the final <c>G</c> of the <c>Cell</c> parameter <c>o</c>, which starts at the input's <c>B</c> and which
 /// the IR's calls to <c>o.Bump</c> change as the compiled method does (ticket P1-005). The <c>List&lt;int&gt;</c> parameter is <c>{ A, B }</c>, and the IR's calls on its
@@ -41,6 +42,8 @@ public sealed class LoweringOracleTests
     private const string Seed = "000000000000";
 
     private const string FieldMap = $"field.Oracle.{LoweringOracleGen.Field}";
+
+    private const string PropertyMap = $"field.Oracle.{LoweringOracleGen.Property}";
 
     private const string ArraySort = "int[]";
 
@@ -80,23 +83,15 @@ public sealed class LoweringOracleTests
 
     private static void Check((OracleMethod Method, OracleInput[] Inputs)[] cases)
     {
-        string source = $"public static class Oracle\n{{\n    public static int {LoweringOracleGen.Property} {{ get; set; }}\n    public static int {LoweringOracleGen.Field};\n{string.Concat(cases.Select(static (c, i) => c.Method.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n{LoweringOracleGen.CellSource}";
+        string source = Source(cases.Select(static c => c.Method));
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", "foreach (", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = "])
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", "foreach (", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = "])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
 
-        CSharpCompilation compilation = CSharpCompilation.Create(
-            "Oracle",
-            [CSharpSyntaxTree.ParseText(source, path: "Oracle.cs", cancellationToken: TestContext.Current.CancellationToken)],
-            RoslynTestCompilations.References,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        using MemoryStream image = new();
-        EmitResult emitted = compilation.Emit(image, cancellationToken: TestContext.Current.CancellationToken);
-        Assert.True(emitted.Success, string.Join('\n', emitted.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error)));
-        image.Position = 0;
-
+        (CSharpCompilation compilation, MemoryStream image) = Emit(source);
+        using MemoryStream disposed = image;
         AssemblyLoadContext context = new("lowering-oracle", isCollectible: true);
         try
         {
@@ -134,10 +129,87 @@ public sealed class LoweringOracleTests
         }
     }
 
+    /// <summary>
+    /// Ticket M4-008: the auto-property's getter and setter and the arrow-bodied property's getter, lowered from their
+    /// symbols, agree with the compiled accessors on the static state each input sets: <c>F</c> at <c>A</c> and <c>P</c> at <c>B</c>.
+    /// </summary>
+    [Fact]
+    public void AccessorsAgreeWithCompiledCSharp() =>
+        LoweringOracleGen.Input.Array[InputsPerCase].Sample(static inputs => CheckAccessors(inputs), seed: Seed, iter: 1, print: static inputs => $"{inputs.Length} inputs");
+
+    private static void CheckAccessors(OracleInput[] inputs)
+    {
+        (CSharpCompilation compilation, MemoryStream image) = Emit(Source([]));
+        using MemoryStream disposed = image;
+        AssemblyLoadContext context = new("lowering-oracle-accessors", isCollectible: true);
+        try
+        {
+            Type oracle = context.LoadFromStream(image).GetType("Oracle")!;
+            INamedTypeSymbol type = compilation.GetTypeByMetadataName("Oracle")!;
+            IrProcedure get = Accessor(type, compilation, $"get_{LoweringOracleGen.Property}");
+            IrProcedure set = Accessor(type, compilation, $"set_{LoweringOracleGen.Property}");
+            IrProcedure arrow = Accessor(type, compilation, $"get_{LoweringOracleGen.ArrowProperty}");
+            PropertyInfo property = oracle.GetProperty(LoweringOracleGen.Property)!;
+            PropertyInfo arrowProperty = oracle.GetProperty(LoweringOracleGen.ArrowProperty)!;
+            FieldInfo field = oracle.GetField(LoweringOracleGen.Field)!;
+            foreach (OracleInput input in inputs)
+            {
+                field.SetValue(null, input.A);
+                property.SetValue(null, input.B);
+                Assert.Equal(new IrReturned(IrBitVecValue.FromSigned(32, (int)property.GetValue(null)!)), RunAccessor(get, input).Outcome);
+                Assert.Equal(new IrReturned(IrBitVecValue.FromSigned(32, (int)arrowProperty.GetValue(null)!)), RunAccessor(arrow, input).Outcome);
+                property.SetValue(null, input.A);
+                IrRun written = RunAccessor(set, input);
+                Assert.Equal(new IrReturned(Value: null), written.Outcome);
+                Assert.Equal((int)property.GetValue(null)!, Value((IrMapValue)Assert.Single(written.Outs), Token));
+            }
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    /// <summary>An accessor lowered from its symbol, with no opaque and no call left in it.</summary>
+    private static IrProcedure Accessor(INamedTypeSymbol type, CSharpCompilation compilation, string name)
+    {
+        IrProcedure procedure = IrLowerer.Lower(type.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation, RenameMap.Empty, []);
+        Assert.Empty(IrValidator.Validate(procedure));
+        Assert.DoesNotContain(procedure.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque or IrCall);
+        return procedure;
+    }
+
+    /// <summary>An accessor's run: <c>value</c> is the input's <c>A</c>, and the static maps start as <see cref="Argument"/> sets them.</summary>
+    private static IrRun RunAccessor(IrProcedure procedure, OracleInput input) =>
+        IrInterpreter.Run(
+            procedure,
+            new IrInputs([.. procedure.Parameters.Select(p => string.Equals(p.Var.Name, "value", StringComparison.Ordinal) ? IrBitVecValue.FromSigned(32, input.A) : Argument(p.Var, input))]),
+            IrGenOracle.Instance,
+            IrGen.StepBudget);
+
+    /// <summary>The class the generated methods are compiled into, then the <c>Cell</c> class.</summary>
+    private static string Source(IEnumerable<OracleMethod> methods) =>
+        $"public static class Oracle\n{{\n{LoweringOracleGen.ClassMembers}{string.Concat(methods.Select(static (m, i) => m.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n{LoweringOracleGen.CellSource}";
+
+    private static (CSharpCompilation Compilation, MemoryStream Image) Emit(string source)
+    {
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            "Oracle",
+            [CSharpSyntaxTree.ParseText(source, path: "Oracle.cs", cancellationToken: TestContext.Current.CancellationToken)],
+            RoslynTestCompilations.References,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        MemoryStream image = new();
+        EmitResult emitted = compilation.Emit(image, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(emitted.Success, string.Join('\n', emitted.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error)));
+        image.Position = 0;
+        return (compilation, image);
+    }
+
     /// <summary>The compiled class's static state and the <c>Cell</c> type, reset from each input before a method runs.</summary>
     private sealed class CompiledClass(Type oracle)
     {
         private readonly PropertyInfo property = oracle.GetProperty(LoweringOracleGen.Property)!;
+        private readonly PropertyInfo called = oracle.GetProperty(LoweringOracleGen.CalledProperty)!;
         private readonly FieldInfo field = oracle.GetField(LoweringOracleGen.Field)!;
         private readonly Type cellType = oracle.Assembly.GetType(LoweringOracleGen.CellType)!;
 
@@ -146,6 +218,7 @@ public sealed class LoweringOracleTests
         {
             FieldInfo cellField = cellType.GetField(LoweringOracleGen.CellField)!;
             property.SetValue(null, input.B);
+            called.SetValue(null, input.B);
             field.SetValue(null, input.A);
             int[] u = [input.A, input.B];
             int[]? v = Bind(input, u);
@@ -154,7 +227,7 @@ public sealed class LoweringOracleTests
             string compiled = Compiled(method, input, u, v, cell);
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"{compiled} {LoweringOracleGen.Field}={(int)field.GetValue(null)!} u={u[0]},{u[1]} v={(v is null ? "null" : $"{v[0]},{v[1]}")} {LoweringOracleGen.CellField}={(int)cellField.GetValue(cell)!}");
+                $"{compiled} {LoweringOracleGen.Field}={(int)field.GetValue(null)!} {LoweringOracleGen.Property}={(int)property.GetValue(null)!} u={u[0]},{u[1]} v={(v is null ? "null" : $"{v[0]},{v[1]}")} {LoweringOracleGen.CellField}={(int)cellField.GetValue(cell)!}");
         }
     }
 
@@ -205,6 +278,7 @@ public sealed class LoweringOracleTests
         ListNulls or CellNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), []),
         CellMap => InitialCell(input),
         FieldMap => InitialField(input),
+        PropertyMap => InitialProperty(input),
         ElementMap => InitialArrays(input),
         LengthMap => new IrMapValue((IrMap)parameter.Type, IrBitVecValue.FromSigned(32, 2), []),
         ArrayNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), ImmutableDictionary<IrValue, IrValue>.Empty.Add(Null, new IrBoolValue(Value: true))),
@@ -229,6 +303,11 @@ public sealed class LoweringOracleTests
         ArrayBinding.Null => Null,
         _ => Second,
     };
+
+    private static IrMapValue InitialProperty(OracleInput input) => new(
+        new IrMap(Token.Type, new IrBitVec(32)),
+        IrBitVecValue.FromSigned(32, 0),
+        ImmutableDictionary<IrValue, IrValue>.Empty.Add(Token, IrBitVecValue.FromSigned(32, input.B)));
 
     private static IrMapValue InitialField(OracleInput input) => new(
         new IrMap(Token.Type, new IrBitVec(32)),
@@ -279,11 +358,12 @@ public sealed class LoweringOracleTests
 
         Dictionary<string, IrValue> heap = maps.Zip(run.Outs).ToDictionary(static e => e.First, static e => e.Second, StringComparer.Ordinal);
         IrMapValue field = (IrMapValue)heap.GetValueOrDefault(FieldMap, InitialField(input));
+        IrMapValue property = (IrMapValue)heap.GetValueOrDefault(PropertyMap, InitialProperty(input));
         IrMapValue arrays = (IrMapValue)heap.GetValueOrDefault(ElementMap, InitialArrays(input));
         IrMapValue cells = (IrMapValue)heap.GetValueOrDefault(CellMap, oracle.Cells);
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{outcome} {LoweringOracleGen.Field}={Value(field, Token)} u={Array(arrays, First)} v={(input.V == ArrayBinding.Null ? "null" : Array(arrays, V(input)))} {LoweringOracleGen.CellField}={Value(cells, CellReference)}");
+            $"{outcome} {LoweringOracleGen.Field}={Value(field, Token)} {LoweringOracleGen.Property}={Value(property, Token)} u={Array(arrays, First)} v={(input.V == ArrayBinding.Null ? "null" : Array(arrays, V(input)))} {LoweringOracleGen.CellField}={Value(cells, CellReference)}");
     }
 
     private static string Array(IrMapValue arrays, IrSortValue array)
@@ -364,11 +444,11 @@ public sealed class LoweringOracleTests
     /// </summary>
     private sealed class CompiledRunOracle(int initial, List<int> list, IrMapValue cells) : Equiv.Core.ICallOracle
     {
-        public static readonly Equiv.Core.CallIdentity Getter = new($"Oracle::get_{LoweringOracleGen.Property}()");
+        public static readonly Equiv.Core.CallIdentity Getter = new($"Oracle::get_{LoweringOracleGen.CalledProperty}()");
 
         public static readonly Equiv.Core.CallIdentity MoveNext = new("System.Collections.Generic.List`1.Enumerator::MoveNext()<int>");
 
-        private static readonly Equiv.Core.CallIdentity Setter = new($"Oracle::set_{LoweringOracleGen.Property}(int)");
+        private static readonly Equiv.Core.CallIdentity Setter = new($"Oracle::set_{LoweringOracleGen.CalledProperty}(int)");
 
         private static readonly Equiv.Core.CallIdentity GetEnumerator = new("System.Collections.Generic.List`1::GetEnumerator()<int>");
 

@@ -4,7 +4,6 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.FlowAnalysis;
-using Microsoft.CodeAnalysis.Operations;
 
 namespace Equiv.Frontend.CSharp.Lowering;
 
@@ -12,26 +11,26 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// Where an exception raised in a block goes (ticket M2-004 acceptance criterion 4). Walking out from
 /// the block, each enclosing <c>Try</c> region offers either its <c>catch</c> clauses, when its parent
 /// is a <c>TryAndCatch</c>, or its <c>finally</c>, when its parent is a <c>TryAndFinally</c>. The first
-/// <c>catch</c> whose type the thrown type converts to implicitly wins; every <c>finally</c> passed on
-/// the way runs first, in the order it is passed. An exception with no known type -- an opaque call's
+/// <c>catch</c> whose type the thrown type converts to implicitly wins; a bare <c>catch</c>, which Roslyn gives the type
+/// <c>object</c>, is one every thrown type converts to, in its place in source order (ticket M4-008). A <c>catch</c> with a
+/// <c>when</c> filter is a candidate that may decline, so the walk goes on past it. Every <c>finally</c> passed on the way to
+/// a handler runs first, in the order it is passed. An exception with no known type -- an opaque call's
 /// <c>threw</c> flag -- matches any <c>catch</c>, so more than one candidate makes the route unknown.
 /// </summary>
 internal static class ExceptionRegions
 {
     /// <summary>
-    /// The route an exception of <paramref name="thrown"/> takes out of <paramref name="block"/>:
-    /// the finallys to run, the catch region that handles it (null when it leaves the procedure), and
-    /// whether an unknown type could have gone to more than one catch. A null <paramref name="thrown"/>
-    /// means the type is unknown.
+    /// The route an exception of <paramref name="thrown"/> takes out of <paramref name="block"/>: the clauses that may
+    /// take it, in the order they are tried, each with the finallys that run before its handler; the finallys that run
+    /// when none takes it (null when an unfiltered <c>catch</c> always does); and whether an unknown type could have gone
+    /// to more than one catch. A null <paramref name="thrown"/> means the type is unknown.
     /// </summary>
-    public static (ImmutableArray<ControlFlowRegion> Finallys, ControlFlowRegion? Handler, bool Ambiguous) Route(
-        CSharpCompilation compilation,
-        BasicBlock block,
-        ITypeSymbol? thrown)
+    public static ExceptionRoute Route(CSharpCompilation compilation, BasicBlock block, ITypeSymbol? thrown)
     {
         ImmutableArray<ControlFlowRegion>.Builder finallys = ImmutableArray.CreateBuilder<ControlFlowRegion>();
-        ControlFlowRegion? handler = null;
-        int candidates = 0;
+        ImmutableArray<Candidate>.Builder candidates = ImmutableArray.CreateBuilder<Candidate>();
+        bool caught = false;
+        int clauses = 0;
         for (ControlFlowRegion? region = block.EnclosingRegion; region is not null; region = region.EnclosingRegion)
         {
             if (region.Kind != ControlFlowRegionKind.Try)
@@ -39,9 +38,10 @@ internal static class ExceptionRegions
                 continue;
             }
 
-            if (region.EnclosingRegion is { Kind: ControlFlowRegionKind.TryAndFinally } wrapper)
+            ControlFlowRegion wrapper = region.EnclosingRegion!;
+            if (wrapper.Kind == ControlFlowRegionKind.TryAndFinally)
             {
-                if (handler is null)
+                if (!caught)
                 {
                     finallys.Add(wrapper.NestedRegions.First(static n => n.Kind == ControlFlowRegionKind.Finally));
                 }
@@ -49,38 +49,30 @@ internal static class ExceptionRegions
                 continue;
             }
 
-            candidates += MatchCatches(compilation, region.EnclosingRegion!, thrown, ref handler);
-        }
-
-        return (finallys.ToImmutable(), handler, thrown is null && candidates > 1);
-    }
-
-    /// <summary>
-    /// Counts <paramref name="wrapper"/>'s <c>catch</c> regions and, when <paramref name="handler"/> is
-    /// still unset, assigns it the first whose type an exception of <paramref name="thrown"/> converts
-    /// to implicitly (or the first at all, when <paramref name="thrown"/> is unknown).
-    /// </summary>
-    private static int MatchCatches(CSharpCompilation compilation, ControlFlowRegion wrapper, ITypeSymbol? thrown, ref ControlFlowRegion? handler)
-    {
-        int candidates = 0;
-        foreach (ControlFlowRegion candidate in wrapper.NestedRegions.Where(static n => n.Kind == ControlFlowRegionKind.Catch))
-        {
-            candidates++;
-            if (handler is null && (thrown is null || compilation.ClassifyConversion(thrown, candidate.ExceptionType!).IsImplicit))
+            foreach (ControlFlowRegion clause in wrapper.NestedRegions.Where(static n => n.Kind is ControlFlowRegionKind.Catch or ControlFlowRegionKind.FilterAndHandler))
             {
-                handler = candidate;
+                clauses++;
+                if (!caught && (thrown is null || compilation.ClassifyConversion(thrown, clause.ExceptionType!).IsImplicit))
+                {
+                    candidates.Add(new Candidate(finallys.ToImmutable(), clause));
+                    caught = clause.Kind == ControlFlowRegionKind.Catch;
+                }
             }
         }
 
-        return candidates;
+        return new ExceptionRoute(candidates.ToImmutable(), caught ? null : finallys.ToImmutable(), thrown is null && clauses > 1);
     }
 
-    /// <summary>The innermost <c>finally</c> region a block sits in, or null when it is in none.</summary>
-    public static ControlFlowRegion? EnclosingFinally(BasicBlock block)
+    /// <summary>
+    /// The innermost region a block sits in that is never lowered in place but copied: a <c>finally</c>, onto each path
+    /// that leaves its <c>try</c>, or a <c>when</c> filter, onto each place an exception it may take is raised (ticket
+    /// M4-008). Null when it is in neither.
+    /// </summary>
+    public static ControlFlowRegion? EnclosingCopied(BasicBlock block)
     {
         for (ControlFlowRegion? region = block.EnclosingRegion; region is not null; region = region.EnclosingRegion)
         {
-            if (region.Kind == ControlFlowRegionKind.Finally)
+            if (region.Kind is ControlFlowRegionKind.Finally or ControlFlowRegionKind.Filter)
             {
                 return region;
             }
@@ -89,20 +81,19 @@ internal static class ExceptionRegions
         return null;
     }
 
-    /// <summary>
-    /// A <c>catch</c> this ticket does not lower: one with a <c>when</c> filter (a
-    /// <c>FilterAndHandler</c> region), or a bare <c>catch</c>, which Roslyn gives the type
-    /// <c>object</c> because no source type was written.
-    /// </summary>
-    public static bool HasUnsupportedCatch(ControlFlowRegion region) =>
-        region.Kind == ControlFlowRegionKind.FilterAndHandler
-        || (region.Kind == ControlFlowRegionKind.Catch && region.ExceptionType!.SpecialType == SpecialType.System_Object)
-        || region.NestedRegions.Any(HasUnsupportedCatch);
+    /// <summary>A clause's handler: the clause itself for a <c>catch</c>, the <c>catch</c> inside it for a filtered one.</summary>
+    public static ControlFlowRegion Handler(ControlFlowRegion clause) =>
+        clause.Kind == ControlFlowRegionKind.Catch ? clause : clause.NestedRegions.First(static n => n.Kind == ControlFlowRegionKind.Catch);
+
+    /// <summary>A filtered clause's <c>when</c> filter.</summary>
+    public static ControlFlowRegion Filter(ControlFlowRegion clause) => clause.NestedRegions.First(static n => n.Kind == ControlFlowRegionKind.Filter);
+
+    /// <summary>A clause that may take the exception, and the finallys that run before its handler does.</summary>
+    internal sealed record Candidate(ImmutableArray<ControlFlowRegion> Finallys, ControlFlowRegion Clause);
 
     /// <summary>
-    /// The same test on one <c>catch</c> clause of the operation tree, which gives the whole-body opaque its span (ADR 0029
-    /// decision 3).
+    /// The clauses tried in order, and the finallys run when every one declines, or null when an unfiltered <c>catch</c>
+    /// among them always takes it.
     /// </summary>
-    public static bool IsUnsupported(ICatchClauseOperation clause) =>
-        clause.Filter is not null || clause.ExceptionType.SpecialType == SpecialType.System_Object;
+    internal sealed record ExceptionRoute(ImmutableArray<Candidate> Candidates, ImmutableArray<ControlFlowRegion>? Uncaught, bool Ambiguous);
 }

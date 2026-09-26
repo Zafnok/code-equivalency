@@ -1,4 +1,4 @@
-﻿proc "C::M(C.Person)" (%p "p": sort "C+Person", %null.C_Person: map<sort "C+Person", bool>, %null.System.String: map<sort "System.String", bool>) -> sort "System.String" entry B0
+﻿proc "C::M(C.Person)" (%p "p": sort "C+Person", ref %field.C_Person.Name: map<sort "C+Person", sort "System.String">, %null.C_Person: map<sort "C+Person", bool>, %null.System.String: map<sort "System.String", bool>) -> sort "System.String" entry B0
 B0:
   %p.isNull.20 "p": bool = mapread %null.C_Person, %p
   goto B1
@@ -11,8 +11,8 @@ B3:
   %$c1.isNull.24: bool = const bool true
   goto B4
 B4:
-  %$c1.25: sort "System.String" = phi [B12: %$c1.21, B3: %$c1.23]
-  %$c1.isNull.26: bool = phi [B12: %$c1.isNull.22, B3: %$c1.isNull.24]
+  %$c1.25: sort "System.String" = phi [B10: %$c1.21, B3: %$c1.23]
+  %$c1.isNull.26: bool = phi [B10: %$c1.isNull.22, B3: %$c1.isNull.24]
   br %$c1.isNull.26, B6, B5
 B5:
   goto B7
@@ -22,14 +22,10 @@ B6:
   goto B7
 B7:
   %$c2.29: sort "System.String" = phi [B5: %$c1.25, B6: %$c2.27]
-  ret %$c2.29
+  ret %$c2.29 outs(%field.C_Person.Name = %field.C_Person.Name)
 B9:
-  throw "System.NullReferenceException"
+  throw "System.NullReferenceException" outs(%field.C_Person.Name = %field.C_Person.Name)
 B10:
-  %$c1.21: sort "System.String" = call "C.Person::get_Name()"(%p) threw %$8: bool
-  br %$8, B11, B12
-B11:
-  throw "System.Exception"
-B12:
+  %$c1.21: sort "System.String" = mapread %field.C_Person.Name, %p
   %$c1.isNull.22: bool = mapread %null.System.String, %$c1.21
   goto B4

@@ -14,11 +14,7 @@ public sealed class IrLowererTests
     private static readonly IrBitVecValue Zero32 = Bits(32, 0);
 
     [Theory]
-    [InlineData("static int s; static C() { s = 1; }", ".cctor", "ConstructorBodyOperation")]
-    [InlineData("int M => 1;", "get_M", "Block")]
-    [InlineData("int M { get; }", "get_M", "no-body")]
-    [InlineData("static int M(int n) { try { return n; } catch { return 0; } }", "M", "catch-filter")]
-    [InlineData("static int M(int n) { try { return n; } catch (Exception) when (n > 0) { return 0; } }", "M", "catch-filter")]
+    [InlineData("static extern int M();", "M", "no-body")]
     [InlineData("static void M(object o) { lock (o) { } }", "M", "lock")]
     [InlineData("static async System.Threading.Tasks.Task<int> M() { await System.Threading.Tasks.Task.Delay(0); return 1; }", "M", "async")]
     [InlineData("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }", "M", "async")]
@@ -32,8 +28,7 @@ public sealed class IrLowererTests
     }
 
     [Theory]
-    [InlineData("static int s; static C() { s = 1; }", ".cctor")]
-    [InlineData("int M => 1;", "get_M")]
+    [InlineData("static extern int M();", "M")]
     [InlineData("static void M(object o) { lock (o) { } }", "M")]
     [InlineData("static async System.Threading.Tasks.Task M() { await System.Threading.Tasks.Task.Delay(0); }", "M")]
     public void WholeBodyOpaqueIsFlagged(string members, string name) =>
@@ -49,26 +44,11 @@ public sealed class IrLowererTests
     /// </summary>
     [Theory]
     [InlineData("static void M(object o, object p)\n{\n    int x = 0;\n    lock (o) { x++; }\n    lock (p) { }\n}", "lock", 7, 5, 7, 22)]
-    [InlineData("static int M(int n)\n{\n    try { return n; }\n    catch (ArgumentException) { return 1; }\n    catch (Exception) when (n > 0) { return 0; }\n}", "catch-filter", 8, 5, 8, 49)]
-    [InlineData("static int M(int n)\n{\n    try { return n; }\n    catch (ArgumentException) { return 1; }\n    catch { return 0; }\n}", "catch-filter", 8, 5, 8, 24)]
     public void WholeBodyOpaqueSpanIsTheConstructNotTheBody(string members, string reason, int startLine, int startColumn, int endLine, int endColumn)
     {
         IrOpaque opaque = Assert.Single(Opaques(Method(members)));
 
         Assert.Equal(reason, opaque.Reason);
-        Assert.True(opaque.WholeBody);
-        Assert.Equal((startLine, startColumn, endLine, endColumn), (opaque.Span.StartLine, opaque.Span.StartColumn, opaque.Span.EndLine, opaque.Span.EndColumn));
-    }
-
-    /// <summary>A constructor that leaves out its type's initializers points at the first of them (ticket M3-025 criterion 1).</summary>
-    [Theory]
-    [InlineData("class C\n{\n    int g;\n    int f = 1;\n    int P { get; } = 2;\n    C() { }\n}", 4, 9, 4, 14)]
-    [InlineData("class C\n{\n    C() { }\n    int P { get; } = 2;\n}", 4, 5, 4, 24)]
-    public void WholeBodyOpaqueSpanIsTheFirstOmittedInitializer(string source, int startLine, int startColumn, int endLine, int endColumn)
-    {
-        IrOpaque opaque = Assert.Single(Opaques(Source(source, ".ctor")));
-
-        Assert.Equal("field-initializer", opaque.Reason);
         Assert.True(opaque.WholeBody);
         Assert.Equal((startLine, startColumn, endLine, endColumn), (opaque.Span.StartLine, opaque.Span.StartColumn, opaque.Span.EndLine, opaque.Span.EndColumn));
     }
@@ -206,16 +186,6 @@ public sealed class IrLowererTests
         Assert.Equal(receiver, Assert.Single(Assert.Single(Calls(procedure)).Args));
     }
 
-    /// <summary>Out of scope for ticket M4-001: Roslyn binds a primary constructor with base arguments to its type declaration.</summary>
-    [Fact]
-    public void APrimaryConstructorWithBaseArgumentsIsOneOpaque()
-    {
-        IrProcedure procedure = Source("class B(int n) { } class C(int p) : B(p) { }", ".ctor", parameters: 1);
-
-        Assert.Single(procedure.Blocks);
-        Assert.Equal("ConstructorBodyOperation", Assert.Single(Opaques(procedure)).Reason);
-    }
-
     [Fact]
     public void AStructsThisIsOpaque() =>
         Assert.Equal("InstanceReference", Assert.Single(Opaques(Source("struct C { int f; int M() => f; }"))).Reason);
@@ -244,18 +214,18 @@ public sealed class IrLowererTests
         Assert.Equal("C::.ctor(int)", Assert.Single(Calls(procedure)).Callee.Value);
     }
 
-    /// <summary>Ticket M4-001 acceptance criterion 3: instance initializers are not in the constructor's operation tree.</summary>
+    /// <summary>Ticket M4-008: a constructor runs the instance initializers its operation tree leaves out.</summary>
     [Theory]
     [InlineData("class C { int f = 1; C() { } }")]
     [InlineData("class C { int P { get; } = 1; C() { } }")]
-    [InlineData("class C { event Action E = null; C() { E?.Invoke(); } }")]
+    [InlineData("class C { event Action E = null; C() { } }")]
     [InlineData("class B { } class C : B { int f = 1; C() : base() { } }")]
-    public void ConstructorInATypeWithFieldInitializersIsOpaque(string source)
+    public void ConstructorInATypeWithFieldInitializersRunsThem(string source)
     {
         IrProcedure procedure = Source($"using System;\n{source}", ".ctor");
 
-        Assert.Single(procedure.Blocks);
-        Assert.Equal("field-initializer", Assert.Single(Opaques(procedure)).Reason);
+        Assert.Empty(Opaques(procedure));
+        Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapWrite>());
     }
 
     [Theory]
@@ -889,7 +859,7 @@ public sealed class IrLowererTests
     [InlineData("static void M(int[] o, int n) { o[0] = checked(n + 1); }")]
     [InlineData("static int M(int[] o, int n) => o[checked(n + 1)];")]
     [InlineData("void G(int i) { } static void M(C o, int n) { o.G(checked(n + 1)); }")]
-    [InlineData("int P { get; set; } static void M(C o, int n) { o.P = checked(n + 1); }")]
+    [InlineData("public virtual int P { get; set; } static void M(C o, int n) { o.P = checked(n + 1); }")]
     [InlineData("int this[int i] => i; static int M(C o, int n) => o[checked(n + 1)];")]
     public void ANullTargetIsCheckedAfterItsOperands(string members)
     {
@@ -906,7 +876,7 @@ public sealed class IrLowererTests
     [Fact]
     public void ACompoundAssignmentToANullReceiversPropertyThrowsBeforeTheValue()
     {
-        IrProcedure procedure = Method("int P { get; set; } static void M(C o, int n) { o.P += checked(n + 1); }");
+        IrProcedure procedure = Method("public virtual int P { get; set; } static void M(C o, int n) { o.P += checked(n + 1); }");
 
         Assert.Equal(new IrThrew("System.NullReferenceException"), Run(procedure, [.. procedure.Parameters.Select(p => NullTarget(p.Var, int.MaxValue))]));
     }
@@ -1371,7 +1341,7 @@ public sealed class IrLowererTests
     [Fact]
     public void PropertyReadIsACallToTheGetter()
     {
-        IrProcedure procedure = Method("int P { get; set; } static int M(C c) => c.P;");
+        IrProcedure procedure = Method("public virtual int P { get; set; } static int M(C c) => c.P;");
 
         IrCall call = Assert.Single(Calls(procedure));
         Assert.Equal("C::get_P()", call.Callee.Value);
@@ -1384,7 +1354,7 @@ public sealed class IrLowererTests
     [Fact]
     public void PropertyWriteIsACallToTheSetter()
     {
-        IrProcedure procedure = Method("static int P { get; set; } static void M(int a) { P = a; }");
+        IrProcedure procedure = Method("static int p; static int P { get => p; set => p = value; } static void M(int a) { P = a; }");
 
         IrCall call = Assert.Single(Calls(procedure));
         Assert.Equal("C::set_P(int)", call.Callee.Value);
@@ -1401,7 +1371,7 @@ public sealed class IrLowererTests
     [InlineData("void M(C c, int a) { c.P <<= a; }", false)]
     public void CompoundAssignmentToAPropertyGetsOperatesAndSets(string member, bool isChecked)
     {
-        IrProcedure procedure = Method($"int P {{ get; set; }} {member}");
+        IrProcedure procedure = Method($"public virtual int P {{ get; set; }} {member}");
 
         ImmutableArray<IrCall> calls = Calls(procedure);
         Assert.Equal(["C::get_P()", "C::set_P(int)"], calls.Select(static c => c.Callee.Value), StringComparer.Ordinal);
@@ -1417,7 +1387,7 @@ public sealed class IrLowererTests
     [InlineData("void M(C c, bool b, int a) { c.P += b ? a : 0; }", "C::get_P(),C::set_P(int)")]
     public void APropertyCapturedAsAnAssignmentTargetIsWrittenByItsAccessors(string member, string callees)
     {
-        IrProcedure procedure = Method($"int P {{ get; set; }} {member}");
+        IrProcedure procedure = Method($"public virtual int P {{ get; set; }} {member}");
 
         ImmutableArray<IrCall> calls = Calls(procedure);
         Assert.Equal(callees, string.Join(',', calls.Select(static c => c.Callee.Value)));
@@ -1441,7 +1411,7 @@ public sealed class IrLowererTests
     /// opaque), so the init-only case that binds is the initializer itself, which is out of this ticket's scope.
     /// </summary>
     [Theory]
-    [InlineData("class D { public int P { get; init; } } static D M() => new D { P = 1 };")]
+    [InlineData("class D { public virtual int P { get; init; } } static D M() => new D { P = 1 };")]
     [InlineData("static int f; static ref int P => ref f; static void M() { P = 1; }")]
     [InlineData("static int f; static ref int P => ref f; static void M() { P++; }")]
     [InlineData("static int f; static ref int P => ref f; static void M(int a) { P += a; }")]
