@@ -12,18 +12,19 @@ using ProductEncoding = Equiv.Verify.Z3.ProductEncoder.ProductEncoding;
 namespace Equiv.Verify.Z3;
 
 /// <summary>
-/// The loop ladder, rungs 1 to 3 (VERIFICATION-MODEL.md section 5.1; ADR 0008; ticket M3-002). Rung 1 always runs:
-/// both sides unrolled <c>k</c> times (<see cref="VerificationOptions.Bound"/>) and self-calls inlined <c>k</c> deep
+/// The loop ladder, rungs 1 to 4 (VERIFICATION-MODEL.md section 5.1; ADR 0008; tickets M3-002 and P1-001). Rung 1 always
+/// runs: both sides unrolled <c>k</c> times (<see cref="VerificationOptions.Bound"/>) and self-calls inlined <c>k</c> deep
 /// (<see cref="IrUnroller.Unroll"/>), then the M3-001 product query. The unrolled procedures run exactly as the
 /// originals on the inputs they do not cut off, so a divergence is real (<see cref="Divergent"/>, replayed) and so
 /// is a reachable opaque (<see cref="UnknownReason.Opaque"/>). No divergence proves the pair only when no input
 /// reaches the bound, which is every acyclic pair (<see cref="ProofMethod.Bounded"/>, with
 /// <see cref="Equivalent.BoundedBy"/> when a loop or self-call existed). Otherwise rung 2
-/// (<see cref="LockstepInduction"/>) and rung 3 (<see cref="KInduction"/>) try for an unbounded proof, and a pair
-/// none of them decides is Unknown: <see cref="UnknownReason.Opaque"/> when a failed obligation reached an opaque,
+/// (<see cref="LockstepInduction"/>) and rung 3 (<see cref="KInduction"/>) try for an unbounded proof. A pair none of
+/// them decides is Unknown: <see cref="UnknownReason.Opaque"/> when a failed obligation reached an opaque,
 /// <see cref="UnknownReason.Recursion"/> when a side calls itself, <see cref="UnknownReason.UnalignedLoop"/> when the
-/// loops do not align or an induction failed, and <see cref="UnknownReason.Timeout"/> when only the solver gave up.
-/// Every verdict lists the rungs it ran in <see cref="Verdict.Ladder"/>.
+/// loops do not align or an induction failed, and <see cref="UnknownReason.Timeout"/> when only the solver gave up;
+/// except that a pair that would be UnalignedLoop goes to rung 4 (<see cref="SpacerRung"/>) first, which decides it
+/// whenever neither side calls. Every verdict lists the rungs it ran in <see cref="Verdict.Ladder"/>.
 /// </summary>
 internal sealed class LoopLadder(Func<Context> createContext, VerificationOptions options)
 {
@@ -47,6 +48,11 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             {
                 rungs.Add(new KInduction(this, lockstep).Prove());
             }
+
+            if (rungs[^1].Verdict is null && UndecidedReason(rungs, recursive) == UnknownReason.UnalignedLoop)
+            {
+                rungs.Add(new SpacerRung(createContext, options).Prove(old, @new));
+            }
         }
 
         Verdict verdict = rungs[^1].Verdict ?? Undecided(rungs, recursive);
@@ -55,7 +61,8 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
 
     /// <summary>
     /// Every rung on its own, whatever the others found (VERIFICATION-MODEL.md section 7: the soundness harness runs
-    /// against every rung independently); k-induction runs whenever the loops align one to one.
+    /// against every rung independently); k-induction runs whenever the loops align one to one, and rung 4 whenever
+    /// neither side calls.
     /// </summary>
     public IReadOnlyList<Rung> Independently(IrProcedure old, IrProcedure @new)
     {
@@ -63,7 +70,13 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         IrLoopAnalysis newShape = IrLoopAnalysis.Of(@new);
         bool looping = oldShape.IsSelfRecursive || newShape.IsSelfRecursive || !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
         LockstepInduction lockstep = new(this, old, @new, oldShape, newShape);
-        return [Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible), lockstep.Prove(), new KInduction(this, lockstep).Prove(force: true)];
+        return
+        [
+            Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible),
+            lockstep.Prove(),
+            new KInduction(this, lockstep).Prove(force: true),
+            new SpacerRung(createContext, options).Prove(old, @new),
+        ];
     }
 
     /// <summary>

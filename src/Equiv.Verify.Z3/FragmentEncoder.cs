@@ -18,19 +18,27 @@ namespace Equiv.Verify.Z3;
 /// the call position a bv32 <c>cnt</c> per block. Calls go through <see cref="TraceEncoder"/>, pure functions through
 /// <see cref="PureEncoder"/>. When a heap pair names a map, the version of every such map a call reads when it does not
 /// pair it is a term per block too, <c>heap.&lt;i&gt;</c>: the shared input, replaced by each call's new version (ticket
-/// P1-005). <see cref="ProductEncoder"/> asserts two of these, one per side, into one query; the fragment's
-/// <see cref="Assertions"/> and its interface (<see cref="Terms"/>, <see cref="Exits"/>) are also what a constrained Horn
-/// clause needs (ticket P1-001).
+/// P1-005). <see cref="ProductEncoder"/> asserts two of these, one per side, into one query.
+/// <para>
+/// Rung 4 of the loop ladder (ticket P1-001) conjoins them into constrained Horn clauses instead, reading the fragment's
+/// interface from <see cref="Terms"/> and <see cref="Exits"/>. Its fragments make no call and apply no pure function, so it
+/// gives no call encoders, and then there are no positions, no heap threading and no trace. When the sorts are
+/// integers (<see cref="SortMapper.Integers"/>), an operation <see cref="IntModeTranslator"/> models exactly is defined
+/// as such and its overflow condition, where the block holding it is reached, joins <see cref="Overflow"/>; any other
+/// result, and every bitvector read from a map, is only assumed within its bounds.
+/// </para>
 /// </summary>
 internal sealed class FragmentEncoder
 {
     private readonly Side side;
     private readonly SortMapper sorts;
-    private readonly TraceEncoder calls;
-    private readonly PureEncoder pures;
+    private readonly TraceEncoder? calls;
+    private readonly PureEncoder? pures;
+    private readonly IntModeTranslator? integers;
     private readonly Context context;
     private readonly IReadOnlyDictionary<string, Expr> inputs;
     private readonly Dictionary<string, Expr> constants = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Expr> literals = new(StringComparer.Ordinal);
     private readonly Dictionary<IrBlockId, BoolExpr> reach = [];
     private readonly Dictionary<IrBlockId, BitVecExpr> countOut = [];
     private readonly ImmutableArray<Expr> heapInputs;
@@ -41,26 +49,30 @@ internal sealed class FragmentEncoder
     private readonly List<BoolExpr> assertions = [];
     private readonly List<(Side Side, IrOpaque Node, BoolExpr Reach)> opaques = [];
     private readonly List<BoolExpr> unreachable = [];
+    private readonly List<BoolExpr> overflows = [];
 
     /// <param name="side">Names the constants <c>old.</c> or <c>new.</c> and picks the side's runtime-sensitive functions.</param>
     /// <param name="procedure">An acyclic procedure.</param>
     /// <param name="sorts">The sorts and literals of the context the terms live in.</param>
-    /// <param name="functions">The call and pure-function encoders both sides share.</param>
+    /// <param name="functions">The call and pure-function encoders both sides share, or null for a fragment without either.</param>
     /// <param name="inputs">The term each parameter of <paramref name="procedure"/> is bound to, by name.</param>
     /// <param name="heapInputs">The shared input of each map <see cref="TraceEncoder.Heap"/> ranges over, in its order.</param>
     /// <param name="exceptionTypes">Exception type names to the ids both sides use for them; new names are added.</param>
+    /// <exception cref="InvalidOperationException">The fragment calls or applies a pure function and <paramref name="functions"/> is null.</exception>
     public FragmentEncoder(
         Side side,
         IrProcedure procedure,
         SortMapper sorts,
-        (TraceEncoder Calls, PureEncoder Pures) functions,
+        (TraceEncoder Calls, PureEncoder Pures)? functions,
         IReadOnlyDictionary<string, Expr> inputs,
         ImmutableArray<Expr> heapInputs,
         Dictionary<string, int> exceptionTypes)
     {
         this.side = side;
         this.sorts = sorts;
-        (calls, pures) = functions;
+        calls = functions?.Calls;
+        pures = functions?.Pures;
+        integers = sorts.Integers;
         this.inputs = inputs;
         this.heapInputs = heapInputs;
         Procedure = procedure;
@@ -77,10 +89,12 @@ internal sealed class FragmentEncoder
             .Where(static e => e.Exit is IrThrow)
             .Reverse()
             .Aggregate((IntExpr)context.MkInt(0), (rest, e) => (IntExpr)context.MkITE(reach[e.Block], context.MkInt(Intern(exceptionTypes, ((IrThrow)e.Exit).ExceptionType)), rest));
-        Trace = calls.Trace(events);
+        Trace = calls?.Trace(events);
         BoolExpr[] opaqueDisjuncts = [context.MkFalse(), .. opaques.Select(static o => o.Reach).Distinct()];
         Opaque = context.MkOr(opaqueDisjuncts);
         BoolExpr[] unreachableDisjuncts = [context.MkFalse(), .. unreachable];
+        BoolExpr[] overflowDisjuncts = [context.MkFalse(), .. overflows];
+        Overflow = context.MkOr(overflowDisjuncts);
         Terms = new SideTerms(
             inputs.Concat(constants).ToDictionary(static t => t.Key, static t => t.Value, StringComparer.Ordinal),
             reach,
@@ -93,17 +107,27 @@ internal sealed class FragmentEncoder
 
     public IReadOnlyList<(Side Side, IrOpaque Node, BoolExpr Reach)> Opaques => opaques;
 
+    /// <summary>Every block that returns or throws, with its terminator, in reverse postorder.</summary>
+    public IReadOnlyList<(IrBlockId Block, IrTerminator Exit)> Exits => exits;
+
     public BoolExpr Returned { get; }
 
     public BoolExpr Threw { get; }
 
     public IntExpr ExceptionType { get; }
 
-    public SeqExpr Trace { get; }
+    /// <summary>The call trace, or null for a fragment encoded without call encoders.</summary>
+    public SeqExpr? Trace { get; }
 
     public BoolExpr Opaque { get; }
 
+    /// <summary>Some exactly modelled integer operation in a reached block overflows; false unless the sorts are integers.</summary>
+    public BoolExpr Overflow { get; }
+
     public SideTerms Terms { get; }
+
+    /// <summary>The term of <paramref name="var"/>: its input, or its constant (created on first use).</summary>
+    public Expr Term(IrVar var) => Var(var);
 
     /// <summary>The value returned, or <paramref name="none"/> (shared by both sides) when no return is reached.</summary>
     public Expr ReturnValue(Expr none) =>
@@ -119,7 +143,7 @@ internal sealed class FragmentEncoder
     /// </summary>
     public Expr Final(IrParameter? parameter, IrVar shared, Expr input)
     {
-        int threaded = calls.Heap.IndexOf(new TraceEncoder.HeapMap(shared.Name, shared.Type));
+        int threaded = Heap.IndexOf(new TraceEncoder.HeapMap(shared.Name, shared.Type));
         return exits
             .AsEnumerable()
             .Reverse()
@@ -146,6 +170,9 @@ internal sealed class FragmentEncoder
 
     private static string Label(IrBlockId block) => "B" + block.Value.ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>The maps the heap at a call ranges over; none without call encoders.</summary>
+    private ImmutableArray<TraceEncoder.HeapMap> Heap => calls?.Heap ?? [];
+
     private BoolExpr Any(IEnumerable<(IrBlockId Block, IrTerminator Exit)> blocks)
     {
         BoolExpr[] disjuncts = [context.MkFalse(), .. blocks.Select(e => reach[e.Block])];
@@ -170,36 +197,43 @@ internal sealed class FragmentEncoder
         return constant;
     }
 
+    /// <summary>An operand as <see cref="IntModeTranslator"/> needs it: the literal a constant holds, so a product by it is linear.</summary>
+    private IntExpr Operand(IrVar var) => (IntExpr)literals.GetValueOrDefault(var.Name, Var(var));
+
     private void Assert(BoolExpr assertion) => assertions.Add(assertion);
 
     private void EncodeBlock(IrBlock block, bool entry)
     {
         BoolExpr reached = context.MkBoolConst(Name("reach." + Label(block.Id)));
-        BitVecExpr count = context.MkBVConst(Name("cnt." + Label(block.Id)), 32);
+        BitVecExpr? count = calls is null ? null : context.MkBVConst(Name("cnt." + Label(block.Id)), 32);
         reach.Add(block.Id, reached);
         List<(IrBlockId From, BoolExpr Taken)> predecessors = incoming.GetValueOrDefault(block.Id, []);
-        Expr[] heap = [.. calls.Heap.Select((m, i) => context.MkConst(Name($"heap.{i.ToString(CultureInfo.InvariantCulture)}.{Label(block.Id)}"), sorts.Sort(m.Type)))];
+        Expr[] heap = [.. Heap.Select((m, i) => context.MkConst(Name($"heap.{i.ToString(CultureInfo.InvariantCulture)}.{Label(block.Id)}"), sorts.Sort(m.Type)))];
         if (entry)
         {
             Assert(reached);
-            Assert(context.MkEq(count, context.MkBV(0, 32)));
+            AssertAll(count is null ? [] : [context.MkEq(count, context.MkBV(0, 32))]);
             AssertAll(heap.Select((h, i) => context.MkEq(h, heapInputs[i])));
         }
         else
         {
             Assert(context.MkEq(reached, context.MkOr(predecessors.Select(static p => p.Taken))));
-            Assert(context.MkEq(count, Merge(predecessors, p => countOut[p.From])));
+            AssertAll(count is null ? [] : [context.MkEq(count, Merge(predecessors, p => countOut[p.From]))]);
             AssertAll(heap.Select((h, i) => context.MkEq(h, Merge(predecessors, p => heapOut[p.From][i]))));
         }
 
         List<Expr> blockEvents = [];
         foreach (IrInstruction instruction in block.Instructions)
         {
-            EncodeInstruction(instruction, predecessors, reached, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)), blockEvents, heap);
+            EncodeInstruction(instruction, predecessors, reached, count, blockEvents, heap);
         }
 
         events.Add((reached, blockEvents));
-        countOut.Add(block.Id, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)));
+        if (count is not null)
+        {
+            countOut.Add(block.Id, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)));
+        }
+
         heapOut.Add(block.Id, heap);
         EncodeTerminator(block, reached);
     }
@@ -214,34 +248,36 @@ internal sealed class FragmentEncoder
     private void AssertAll(IEnumerable<BoolExpr> assertions) => assertions.ToList().ForEach(Assert);
 
     /// <summary>
-    /// Encodes one instruction. <paramref name="heap"/> is the version of each heap map a call reads when it does not pair
-    /// it; a call replaces every entry with its new version (ticket P1-005).
+    /// Encodes one instruction of a block whose calls so far are <paramref name="blockEvents"/>, whose first call has
+    /// position <paramref name="count"/>, and which <paramref name="reached"/> says is reached. <paramref name="heap"/> is
+    /// the version of each heap map a call reads when it does not pair it; a call replaces every entry with its new version
+    /// (ticket P1-005).
     /// </summary>
-    private void EncodeInstruction(IrInstruction instruction, List<(IrBlockId From, BoolExpr Taken)> predecessors, BoolExpr reached, BitVecExpr position, List<Expr> blockEvents, Expr[] heap)
+    private void EncodeInstruction(IrInstruction instruction, List<(IrBlockId From, BoolExpr Taken)> predecessors, BoolExpr reached, BitVecExpr? count, List<Expr> blockEvents, Expr[] heap)
     {
         switch (instruction)
         {
             case IrConst constant:
-                Define(constant.Target, sorts.Literal(constant.Value));
+                EncodeConstant(constant);
                 break;
             case IrBinary binary:
-                Define(binary.Target, Binary(binary.Op, Var(binary.A), Var(binary.B)));
+                EncodeBinary(binary, reached);
                 break;
-            case IrOverflows overflows:
-                Define(overflows.Target, context.MkNot(ProductEncoder.NoOverflow[overflows.Op](context, (BitVecExpr)Var(overflows.A), (BitVecExpr)Var(overflows.B))));
+            case IrOverflows check:
+                EncodeOverflows(check);
                 break;
             case IrUnary unary:
-                Define(unary.Target, Unary(unary));
+                EncodeUnary(unary, reached);
                 break;
             case IrPhi phi:
                 Define(phi.Target, Merge([.. predecessors.Where(p => phi.Incoming.Any(i => i.From == p.From))], p => Var(phi.Incoming.First(i => i.From == p.From).Value)));
                 break;
             case IrCall call:
-                blockEvents.Add(EncodeCall(call, position, heap));
+                blockEvents.Add(EncodeCall(call, Functions(call.Callee.Value).Calls, context.MkBVAdd(count!, context.MkBV(blockEvents.Count, 32)), heap));
                 break;
             case IrPure pure:
                 {
-                    (Expr result, ImmutableArray<BoolExpr> threw) = pures.Apply(side, pure, [.. pure.Args.Select(Var)]);
+                    (Expr result, ImmutableArray<BoolExpr> threw) = Functions(pure.Function).Pures.Apply(side, pure, [.. pure.Args.Select(Var)]);
                     Define(pure.Target, result);
                     for (int i = 0; i < threw.Length; i++)
                     {
@@ -254,6 +290,7 @@ internal sealed class FragmentEncoder
             case IrMapRead read:
                 Define(read.Target, context.MkSelect((ArrayExpr)Var(read.Map), Var(read.Key)));
                 AssumeLength(read);
+                Bounded(read.Target);
                 break;
             case IrMapWrite write:
                 Define(write.Target, context.MkStore((ArrayExpr)Var(write.Map), Var(write.Key), Var(write.Value)));
@@ -264,15 +301,97 @@ internal sealed class FragmentEncoder
         }
     }
 
+    /// <summary>A constant, remembered so that an integer-mode product by it stays linear.</summary>
+    private void EncodeConstant(IrConst constant)
+    {
+        Expr literal = sorts.Literal(constant.Value);
+        literals[constant.Target.Name] = literal;
+        Define(constant.Target, literal);
+    }
+
+    private void EncodeBinary(IrBinary binary, BoolExpr reached)
+    {
+        if (integers is not null && binary.A.Type is IrBitVec { Width: var width } && binary.Op is not (IrBinaryOp.Eq or IrBinaryOp.Ne))
+        {
+            Integer(binary.Target, integers.Binary(binary.Op, Operand(binary.A), Operand(binary.B), width), reached);
+        }
+        else
+        {
+            Define(binary.Target, Binary(binary.Op, Var(binary.A), Var(binary.B)));
+        }
+    }
+
+    /// <summary>A checked operation's overflow flag; in integer mode a product of two unknowns leaves the flag free.</summary>
+    private void EncodeOverflows(IrOverflows check)
+    {
+        if (integers is null)
+        {
+            Define(check.Target, context.MkNot(ProductEncoder.NoOverflow[check.Op](context, (BitVecExpr)Var(check.A), (BitVecExpr)Var(check.B))));
+        }
+        else if (integers.Overflows(check.Op, Operand(check.A), Operand(check.B), ((IrBitVec)check.A.Type).Width) is { } overflowed)
+        {
+            Define(check.Target, overflowed);
+        }
+    }
+
+    private void EncodeUnary(IrUnary unary, BoolExpr reached)
+    {
+        if (integers is not null && unary.Op != IrUnaryOp.BoolNot)
+        {
+            (Expr value, BoolExpr? overflow) = integers.Unary(unary.Op, Operand(unary.A), ((IrBitVec)unary.A.Type).Width, ((IrBitVec)unary.Target.Type).Width);
+            Integer(unary.Target, (value, overflow), reached);
+        }
+        else
+        {
+            Define(unary.Target, Unary(unary));
+        }
+    }
+
+    /// <summary>The call encoders, which a fragment that calls <paramref name="what"/> needs.</summary>
+    private (TraceEncoder Calls, PureEncoder Pures) Functions(string what) =>
+        calls is null
+            ? throw new InvalidOperationException($"{Procedure.Identity.Value} reaches {what}, but its fragment is encoded without calls or pure functions.")
+            : (calls, pures!);
+
+    /// <summary>
+    /// An integer-mode result: defined when <see cref="IntModeTranslator"/> models it, else only bounded; its overflow
+    /// condition, if any, counts where <paramref name="reached"/> holds.
+    /// </summary>
+    private void Integer(IrVar target, (Expr? Value, BoolExpr? Overflow) result, BoolExpr reached)
+    {
+        if (result.Value is null)
+        {
+            Bounded(target);
+        }
+        else
+        {
+            Define(target, result.Value);
+        }
+
+        if (result.Overflow is { } overflow)
+        {
+            overflows.Add(context.MkAnd(reached, overflow));
+        }
+    }
+
+    /// <summary>In integer mode, a bitvector <paramref name="target"/> nothing defines exactly is assumed within its bounds.</summary>
+    private void Bounded(IrVar target)
+    {
+        if (integers is not null && target.Type is IrBitVec { Width: var width })
+        {
+            Assert(integers.InRange(Var(target), width));
+        }
+    }
+
     /// <summary>
     /// Defines a call's result, <c>threw</c> flag and the <c>after</c> of each heap pair, replaces every entry of
     /// <paramref name="heap"/> with the call's new version of that map (ticket P1-005), and returns its trace event.
     /// </summary>
-    private Expr EncodeCall(IrCall call, BitVecExpr position, Expr[] heap)
+    private Expr EncodeCall(IrCall call, TraceEncoder trace, BitVecExpr position, Expr[] heap)
     {
-        IrHeapPair?[] pairs = [.. calls.Heap.Select(m => call.Heap.FirstOrDefault(h => string.Equals(h.Map, m.Name, StringComparison.Ordinal) && h.Before.Type == m.Type))];
+        IrHeapPair?[] pairs = [.. trace.Heap.Select(m => call.Heap.FirstOrDefault(h => string.Equals(h.Map, m.Name, StringComparison.Ordinal) && h.Before.Type == m.Type))];
         ImmutableArray<Expr> read = [.. pairs.Select((p, i) => p is null ? heap[i] : Var(p.Before))];
-        (Expr? result, BoolExpr threw, Expr @event, ImmutableArray<Expr> written) = calls.Call(side, call, [.. call.Args.Select(a => (a.Type, Var(a)))], position, read);
+        (Expr? result, BoolExpr threw, Expr @event, ImmutableArray<Expr> written) = trace.Call(side, call, [.. call.Args.Select(a => (a.Type, Var(a)))], position, read);
         if (call.Target is not null)
         {
             Define(call.Target, result!);
@@ -306,7 +425,9 @@ internal sealed class FragmentEncoder
     {
         if (read.Map.Name.StartsWith(ProductEncoder.LengthPrefix, StringComparison.Ordinal))
         {
-            Assert(context.MkBVSGE((BitVecExpr)Var(read.Target), context.MkBV(0, 32)));
+            Assert(integers is null
+                ? context.MkBVSGE((BitVecExpr)Var(read.Target), context.MkBV(0, 32))
+                : context.MkGe((IntExpr)Var(read.Target), context.MkInt(0)));
         }
     }
 

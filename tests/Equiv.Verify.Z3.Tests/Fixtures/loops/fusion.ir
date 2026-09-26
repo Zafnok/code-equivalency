@@ -1,0 +1,68 @@
+# Equivalent(chc)
+# Loop fusion: count the i below n inside [low, high), then count every i below n, and return the difference,
+# against one loop counting both. Two loops against one do not align; nothing overflows, and rung 4 proves it over
+# the integers, the old side's second loop running alone after the new side has returned.
+proc "T::Outside(int,int,int)" (%n "n": bv32, %low "low": bv32, %high "high": bv32) -> bv32 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  goto B1
+B1:
+  %i "i": bv32 = phi [B0: %z, B4: %i1]
+  %in "inside": bv32 = phi [B0: %z, B4: %in1]
+  %c: bool = slt %i, %n
+  br %c, B2, B5
+B2:
+  %ge: bool = sge %i, %low
+  %lt: bool = slt %i, %high
+  %w: bool = and %ge, %lt
+  br %w, B3, B4
+B3:
+  %in2 "inside": bv32 = add %in, %one
+  goto B4
+B4:
+  %in1 "inside": bv32 = phi [B2: %in, B3: %in2]
+  %i1 "i": bv32 = add %i, %one
+  goto B1
+B5:
+  goto B6
+B6:
+  %j "j": bv32 = phi [B5: %z, B7: %j1]
+  %t "total": bv32 = phi [B5: %z, B7: %t1]
+  %d: bool = slt %j, %n
+  br %d, B7, B8
+B7:
+  %t1 "total": bv32 = add %t, %one
+  %j1 "j": bv32 = add %j, %one
+  goto B6
+B8:
+  %r: bv32 = sub %t, %in
+  ret %r
+---
+proc "T::Outside(int,int,int)" (%n "n": bv32, %low "low": bv32, %high "high": bv32) -> bv32 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  goto B1
+B1:
+  %i "i": bv32 = phi [B0: %z, B4: %i1]
+  %in "inside": bv32 = phi [B0: %z, B4: %in1]
+  %t "total": bv32 = phi [B0: %z, B4: %t1]
+  %c: bool = slt %i, %n
+  br %c, B2, B5
+B2:
+  %ge: bool = sge %i, %low
+  %lt: bool = slt %i, %high
+  %w: bool = and %ge, %lt
+  br %w, B3, B4
+B3:
+  %in2 "inside": bv32 = add %in, %one
+  goto B4
+B4:
+  %in1 "inside": bv32 = phi [B2: %in, B3: %in2]
+  %t1 "total": bv32 = add %t, %one
+  %i1 "i": bv32 = add %i, %one
+  goto B1
+B5:
+  %r: bv32 = sub %t, %in
+  ret %r

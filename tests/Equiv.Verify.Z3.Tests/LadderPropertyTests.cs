@@ -37,13 +37,15 @@ public sealed class LadderPropertyTests
     }
 
     /// <summary>
-    /// <c>Verify(P, Mutate(P))</c> is never Equivalent for 200 kept mutants of looping procedures, and every Divergent
-    /// verdict carries a replay whose two runs differ and complete.
+    /// <c>Verify(P, Mutate(P))</c> is never Equivalent for 200 kept mutants of looping procedures whose witness input makes
+    /// both runs terminate, and every Divergent verdict carries a replay whose two runs differ and complete. Every rung
+    /// proves partial equivalence (VERIFICATION-MODEL.md section 5.1), so a mutant that differs only by not terminating
+    /// (a flipped loop guard that never exits) may be Equivalent; rung 4 proves such pairs (ticket P1-001).
     /// </summary>
     [Fact]
     public void ALoopingMutantIsNeverEquivalentAndEveryDivergenceReplays()
     {
-        Mutants().Sample(
+        Mutants().Where(static m => Terminates(m.Original, m.Witness) && Terminates(m.Mutant, m.Witness)).Sample(
             static m =>
             {
                 Verdict verdict = new Z3Backend().Verify(m.Original, m.Mutant, Options);
@@ -71,7 +73,7 @@ public sealed class LadderPropertyTests
             static pair =>
             {
                 IReadOnlyList<LoopLadder.Rung> rungs = new LoopLadder(static () => new Context(), Options).Independently(pair.Old, pair.New);
-                Assert.Equal(3, rungs.Count);
+                Assert.Equal(4, rungs.Count);
                 bool proved = rungs.Any(static r => r.Step.Outcome == RungOutcome.Proved);
                 Assert.False(proved && rungs.Any(static r => r.Step.Outcome == RungOutcome.Refuted), string.Join("; ", rungs.Select(static r => r.Step)));
                 foreach (Divergent divergent in rungs.Select(static r => r.Verdict).OfType<Divergent>())
@@ -85,6 +87,8 @@ public sealed class LadderPropertyTests
 
     private static Gen<IrMutant> Mutants() =>
         IrGen.Procedure.Where(static p => !IrLoopAnalysis.Of(p).Loops.IsEmpty).SelectMany(IrGen.Mutation).Where(static m => m is not null).Select(static m => m!);
+
+    private static bool Terminates(IrProcedure procedure, IrInputs inputs) => IrGen.Run(procedure, inputs).Outcome is IrReturned or IrThrew;
 
     private static void AssertReplays(Divergent divergent)
     {

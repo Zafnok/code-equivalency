@@ -20,6 +20,7 @@ public sealed class LadderFixtureTests
         "nested-aligned", "nesting-changed", "late-divergence", "late-divergence-beyond", "constant-loop-prefix-change",
         "phis-reordered", "state-unpaired", "irreducible", "loop-opaque", "loop-hard",
         "recursion-aligned", "recursion-divergent", "recursion-heap",
+        "trip-count-changed", "chc-spurious", "chc-overflow-bitvectors", "fusion", "counter-shape",
     ];
 
     [Theory]
@@ -132,9 +133,9 @@ public sealed class LadderFixtureTests
         Assert.Equal((ProofMethod.Bounded, RungOutcome.Timeout), (verdict.Ladder[0].Rung, verdict.Ladder[0].Outcome));
     }
 
-    /// <summary>A fixture that expects a timeout gets 50 ms; every other one gets ten seconds.</summary>
+    /// <summary>A fixture that expects a timeout (of any rung) gets 50 ms; every other one gets ten seconds.</summary>
     private static Verdict Verify(Fixture fixture) =>
-        new Z3Backend().Verify(fixture.Old, fixture.New, new VerificationOptions(3, string.Equals(fixture.Expected, "Unknown(Timeout)", StringComparison.Ordinal) ? 50 : 10_000, []));
+        new Z3Backend().Verify(fixture.Old, fixture.New, new VerificationOptions(3, fixture.Expected is "Unknown(Timeout)" or "Unknown(ChcTimeout)" ? 50 : 10_000, []));
 
     private static string Describe(Verdict verdict) => verdict switch
     {
@@ -148,6 +149,7 @@ public sealed class LadderFixtureTests
     {
         ProofMethod.Bounded => "bounded",
         ProofMethod.LockstepInduction => "lockstep-induction",
-        _ => "k-induction",
+        ProofMethod.KInduction => "k-induction",
+        _ => "chc",
     };
 }
