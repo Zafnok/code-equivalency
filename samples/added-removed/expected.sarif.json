@@ -1,0 +1,209 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.AddedRemoved.Calculator::Add(int,int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calculator.cs"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 20,
+                  "endLine": 5,
+                  "endColumn": 23
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.AddedRemoved.Calculator::Add(int,int)",
+            "resultFingerprint/v1": "22e4fa9e30f899e218cdeb9a75b2be5062adce24c0596dd1228b50271d9a0841"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ004",
+          "kind": "informational",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.AddedRemoved.Calculator::ModernOnly(int) was added."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Calculator.cs"
+                },
+                "region": {
+                  "startLine": 10,
+                  "startColumn": 16,
+                  "endLine": 10,
+                  "endColumn": 26
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.AddedRemoved.Calculator::ModernOnly(int)",
+            "resultFingerprint/v1": "f82768f5fdef12a21c6432f554cb051373aafbad7fb937c317254a52a00d4d0b"
+          },
+          "baselineState": "new"
+        },
+        {
+          "ruleId": "EQ005",
+          "kind": "informational",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.AddedRemoved.Calculator::LegacyOnly(int) was removed."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calculator.cs"
+                },
+                "region": {
+                  "startLine": 10,
+                  "startColumn": 20,
+                  "endLine": 10,
+                  "endColumn": 30
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.AddedRemoved.Calculator::LegacyOnly(int)",
+            "resultFingerprint/v1": "4d397b9b11841ea04339a1765bfe327e18ff3d8c8db741c24a4e1d4d3b6a355b"
+          },
+          "baselineState": "new"
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 2,
+            "modern": 2
+          },
+          "matchedPairs": 1,
+          "pairsWithoutOpaque": 1,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 1,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 0,
+          "changedPairsWithoutOpaque": 0,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {},
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 31,
+          "modern": 24
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        }
+      }
+    }
+  ]
+}

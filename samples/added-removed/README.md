@@ -12,3 +12,5 @@ identity, each with a `physicalLocation` pointing at its declaring file and line
 | `Calculator.Add(int, int)` | Equivalent |
 | `Calculator.LegacyOnly(int)` | Removed |
 | `Calculator.ModernOnly(int)` | Added |
+
+Exit code: 0 (no Divergent or Unknown result; Added and Removed do not affect the exit code).

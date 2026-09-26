@@ -1,0 +1,215 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.Identical.Calculator::Add(int,int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calculator.cs"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 20,
+                  "endLine": 5,
+                  "endColumn": 23
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.Identical.Calculator::Add(int,int)",
+            "resultFingerprint/v1": "602152755a4a782f73bd5e15bb54126a8340da6e49a78c7184f977756d28beca"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.Identical.Calculator::Max(int,int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calculator.cs"
+                },
+                "region": {
+                  "startLine": 10,
+                  "startColumn": 20,
+                  "endLine": 10,
+                  "endColumn": 23
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.Identical.Calculator::Max(int,int)",
+            "resultFingerprint/v1": "34b40ba4c5e7b08279c7a8e6d41eb607392826c2325d83307518c0c9e287a558"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.Identical.Calculator::SumTo(int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calculator.cs"
+                },
+                "region": {
+                  "startLine": 20,
+                  "startColumn": 20,
+                  "endLine": 20,
+                  "endColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.Identical.Calculator::SumTo(int)",
+            "resultFingerprint/v1": "31da49f7a01fcac1d3e78ced974f482177536db19108ba6fd598851936e1e169"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 3,
+            "modern": 3
+          },
+          "matchedPairs": 3,
+          "pairsWithoutOpaque": 3,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 3,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 0,
+          "changedPairsWithoutOpaque": 0,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {},
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 44,
+          "modern": 37
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        }
+      }
+    }
+  ]
+}

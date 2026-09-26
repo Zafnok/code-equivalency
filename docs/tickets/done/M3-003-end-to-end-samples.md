@@ -1,5 +1,5 @@
 # M3-003 End to end on all samples
-Status: todo
+Status: done (PR #202)
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M0-012, M2-004, M2-005, M2-006, M2-007, M3-002, M3-007, M3-009, M3-013, M3-014, M3-015, M3-016, M3-024, M3-025, P1-005, P1-006, P2-019 (ADR 0018: no sample
@@ -71,3 +71,21 @@ mark the assertion `Skip` with the reason, and file a ticket.
 Engine fixes. Packaging (M3-004). New samples.
 
 ## Notes
+
+Deviation: `samples/*/expected.sarif.json` is a hand-rolled snapshot (a small normaliser in
+`SarifNormalizer.cs` plus a write-if-missing compare in the test), not a literal Verify
+snapshot, even though the ticket calls it one. Verify's public API (`UseFileName`,
+`UseDirectory`; `UseExtension`/`DerivePathInfo`/`UseFileNameConvention` do not exist on
+`VerifySettings`) always bakes a `.verified.` infix into the filename and cannot produce a
+bare `expected.sarif.json`, which the ticket names exactly. Confirmed against the installed
+Verify 33.1.4 XML docs before choosing this over asking.
+
+Decision: each sample README's exit code (needed for criterion 3's per-directory assertion)
+is a `Exit code: N (...)` line, parsed by the test via regex, added to every sample's
+README except `callee-changed`'s (already had one).
+
+Toolchain note: `dotnet test` alone does not restore `samples/**/legacy`'s PackageReference
+projects (`webapi-basic`, `api-drift`); only `build.ps1 -Integration`'s "restore samples"
+step (MSBuild.exe `-t:Restore` for legacy, `dotnet restore` for modern) does. Running
+`Equiv.Tests.Integration` from a fresh clone without that step fails those two samples with
+`FrontendLoadException`/no SARIF written, not a clear "restore first" message.

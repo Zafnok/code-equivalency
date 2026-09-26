@@ -19,3 +19,5 @@ observed, body opaque), not serialized responses.
 |---|---|---|
 | `OrdersController.Get(int)` (`GET /api/orders/{id}`) | Equivalent | none |
 | `OrdersController.Find(int)` (`GET /api/orders/find/{id}`) | Equivalent | `webapi.not-found`, `webapi.ok-of-int`, `webapi.type.action-result`, `webapi.type.not-found-result`, `webapi.type.ok-content-result` |
+
+Exit code: 0 (no Divergent or Unknown result).

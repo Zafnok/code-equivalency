@@ -11,3 +11,5 @@ everything anyway), so this must verify exactly like `identical`.
 | `Calculator.Add(int, int)` | Equivalent |
 | `Calculator.Max(int, int)` | Equivalent |
 | `Calculator.SumTo(int)` | Equivalent — unbounded, by lockstep induction (rung 2); `sum`/`i` renamed to `total`/`k` |
+
+Exit code: 0 (no Divergent or Unknown result).

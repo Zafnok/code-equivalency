@@ -8,3 +8,5 @@ unaffected, so this is the smallest possible counterexample-bearing sample.
 | Procedure | Verdict |
 |---|---|
 | `Doubler.Double(int)` | Divergent — counterexample `x = 0` (legacy returns `0`, modern returns `-1`) |
+
+Exit code: 1 (a new Divergent result).

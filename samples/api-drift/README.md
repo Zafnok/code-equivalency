@@ -18,3 +18,5 @@ which is the real behaviour change: the legacy call throws `ArgumentNullExceptio
 |---|---|---|
 | `Text.Parts(string)` | Equivalent | `bcl.string-split-one-char` |
 | `Text.HasX(string)` | Divergent (on a null `s` only) | `bcl.string-contains-char` |
+
+Exit code: 1 (a new Divergent result).

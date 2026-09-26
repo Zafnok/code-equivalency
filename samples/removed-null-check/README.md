@@ -11,3 +11,5 @@ sides throw.
 | Procedure | Verdict |
 |---|---|
 | `Greeter.Greet(string)` | Divergent — counterexample `name = null` (legacy throws `ArgumentNullException`, modern throws `NullReferenceException`) |
+
+Exit code: 1 (a new Divergent result).

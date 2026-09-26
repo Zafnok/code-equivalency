@@ -148,6 +148,7 @@ internal static class CompareCommand
 
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));
         results.AddRange(matchResult.Removed.Select(static identity => new VerificationResult(identity, new Removed())));
+        results.AddRange(matchResult.Ambiguous.Select(static identity => new VerificationResult(identity, new Unknown(UnknownReason.UnmatchedOverload, AmbiguousDetail(identity)))));
 
         (List<Notification> skippedProjectNotifications, List<ProcedureIdentity> skippedProjectProcedures) = SkippedProjects(matchResult);
         List<Notification> notifications = [.. pairFailures, .. skippedProjectNotifications];
@@ -403,6 +404,13 @@ internal static class CompareCommand
             },
         };
     }
+
+    /// <summary>
+    /// M1-003's deferred call: an identity present more than once on a side that also has it (<see cref="StableIdentityMatcher"/>)
+    /// is a group of overloads the matcher cannot choose among, so it is <see cref="UnknownReason.UnmatchedOverload"/> rather
+    /// than a pair.
+    /// </summary>
+    private static string AmbiguousDetail(ProcedureIdentity identity) => $"{identity.Value} matches more than one overload with this identity";
 
     /// <summary>Each <see cref="Unknown.UnboundOpaqueReason"/> opaque in <paramref name="body"/>, as <c>side: unbound at path line:column</c>.</summary>
     private static IEnumerable<string> UnboundCauses(string side, IrProcedure body) =>

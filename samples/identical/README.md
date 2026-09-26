@@ -11,3 +11,5 @@ reported as a difference.
 | `Calculator.Add(int, int)` | Equivalent |
 | `Calculator.Max(int, int)` | Equivalent |
 | `Calculator.SumTo(int)` | Equivalent — unbounded, by lockstep induction (rung 2, VERIFICATION-MODEL.md section 5.1) |
+
+Exit code: 0 (no Divergent or Unknown result).
