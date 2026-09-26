@@ -27,6 +27,10 @@ Since M4-002, `decimal` arithmetic is a set of pure functions both sides share (
 the same values, so the solver proves it Equivalent without modelling `decimal`. Its `Binary` and `Conversion` opaques
 leave the census.
 
+Since M4-005, `QuantityOf`'s `item is OrderLine line` is a read of the `istype.System.Object.<OrderLine>` predicate at a
+non-null `item`, and `line` is a read of the `cast` map, so the method lowers with no opaque and its `switch-pattern`
+opaque leaves the census.
+
 Congruent results that call another matched procedure list it in `properties.assumedCallees`
 (ADR 0019). Every such callee here is itself Equivalent, so no result has `unprovenAssumptions`.
 

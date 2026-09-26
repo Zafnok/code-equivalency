@@ -1,5 +1,5 @@
 # M4-005 Type tests, `as` and downcasts
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-010
@@ -43,3 +43,19 @@ No `Equiv.Core` change. About 150 lines of lowering at most.
 Recursive and property patterns, list patterns, generic type tests on open type parameters.
 
 ## Notes
+- Decision: a test is modelled when both types are reference types, neither is a type parameter, and
+  `Compilation.ClassifyConversion` finds a reference or identity conversion between them. That is the reading of
+  "known to be unrelated": no reference conversion exists (such as two sealed classes, or a pair only a user-defined
+  conversion relates). Such a test is opaque (`IsType`, `switch-pattern` or `Conversion`), not constant false.
+- Decision: IR has no select, so `x as T`, and a downcast of a value that may be null, choose between the cast and
+  `null` (element 0, as the `null` literal lowers) with a branch and a join on a fresh `$select<n>` variable. A null
+  `(T)x` is `null`, not the cast of `x`, so `(T)x` and `x as T` agree whenever the test passes or `x` is null.
+- Decision: `x as T`'s nullness is the negation of the test, recorded when it is lowered and read by `Nullness`. That
+  function no longer unwraps an `as` to its operand's shadow, which was wrong even when the `as` stayed opaque. A
+  downcast keeps its operand's nullness.
+- Decision: a `var` declaration pattern (`MatchesNull`) stays `switch-pattern`: it is not a type test.
+- Observation: an `as` whose conversion is implicit (`s as object`) is still an M3-010 upcast, because `IsCast` runs
+  first. That over-approximates its nullness as M3-010 already does; it does not read `istype`.
+- Observation: `samples/business-layer/expected.sarif.json` (M3-003) embeds the lowering census too, so it changes with
+  `BusinessLayerCensusSnapshot`: `pairsWithoutOpaque` 7 to 8, and `switch-pattern` is gone. `QuantityOf` was already
+  Equivalent by congruence; its verdict does not change.

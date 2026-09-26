@@ -1,0 +1,70 @@
+﻿proc "C::M(object)" (%o "o": sort "System.Object", %cast.System.Object.System.ArgumentException: map<sort "System.Object", sort "System.ArgumentException">, %cast.System.Object.System.String: map<sort "System.Object", sort "System.String">, %istype.System.Object.System.ArgumentException: map<sort "System.Object", bool>, %istype.System.Object.System.Exception: map<sort "System.Object", bool>, %istype.System.Object.System.IComparable: map<sort "System.Object", bool>, %istype.System.Object.System.String: map<sort "System.Object", bool>, %null.System.Object: map<sort "System.Object", bool>) -> bv32 entry B0
+B0:
+  %o.isNull.45 "o": bool = mapread %null.System.Object, %o
+  goto B1
+B1:
+  goto B2
+B2:
+  %$5: bool = mapread %istype.System.Object.System.String, %o
+  %s.46 "s": sort "System.String" = mapread %cast.System.Object.System.String, %o
+  %s.isNull.47 "s": bool = const bool false
+  %$8: bool = boolnot %o.isNull.45
+  %$9: bool = and %$8, %$5
+  br %$9, B3, B4
+B3:
+  br %s.isNull.47, B15, B16
+B4:
+  %$16: bool = mapread %istype.System.Object.System.Exception, %o
+  %$17: bool = boolnot %o.isNull.45
+  %$18: bool = and %$17, %$16
+  br %$18, B5, B6
+B5:
+  %$19: bv32 = const bv32 1
+  ret %$19
+B6:
+  %$24: bool = mapread %istype.System.Object.System.IComparable, %o
+  %$25: bool = boolnot %o.isNull.45
+  %$26: bool = and %$25, %$24
+  br %$26, B7, B8
+B7:
+  %$c2.52: bv32 = const bv32 2
+  goto B13
+B8:
+  %$30: bool = mapread %istype.System.Object.System.ArgumentException, %o
+  %e.48 "e": sort "System.ArgumentException" = mapread %cast.System.Object.System.ArgumentException, %o
+  %e.isNull.49 "e": bool = const bool false
+  %$33: bool = boolnot %o.isNull.45
+  %$34: bool = and %$33, %$30
+  br %$34, B9, B10
+B9:
+  br %e.isNull.49, B15, B19
+B10:
+  %$39: bool = const bool true
+  br %$39, B11, B12
+B11:
+  %$c2.50: bv32 = const bv32 0
+  goto B13
+B12:
+  %$41: sort "System.Runtime.CompilerServices.SwitchExpressionException" = call "System.Runtime.CompilerServices.SwitchExpressionException::.ctor()"() threw %$42: bool
+  br %$42, B17, B21
+B13:
+  %$c2.53: bv32 = phi [B11: %$c2.50, B20: %$c2.51, B7: %$c2.52]
+  ret %$c2.53
+B15:
+  throw "System.NullReferenceException"
+B16:
+  %$12: bv32 = call "System.String::get_Length()"(%s.46) threw %$13: bool
+  br %$13, B17, B18
+B17:
+  throw "System.Exception"
+B18:
+  ret %$12
+B19:
+  %$c2.51: bv32 = call "System.Exception::get_HResult()"(%e.48) threw %$38: bool
+  br %$38, B17, B20
+B20:
+  goto B13
+B21:
+  goto B22
+B22:
+  throw "System.Runtime.CompilerServices.SwitchExpressionException"

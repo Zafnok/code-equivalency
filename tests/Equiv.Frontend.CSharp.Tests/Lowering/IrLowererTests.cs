@@ -116,7 +116,6 @@ public sealed class IrLowererTests
     [InlineData("static void M(int a) { ref int r = ref a; r = 1; }", "SimpleAssignment")]
     [InlineData("static int? M(double? d) => (int?)d;", "Conversion")]
     [InlineData("static double? M(int i) => i;", "Conversion")]
-    [InlineData("static string M(object o) => (string)o;", "Conversion")]
     [InlineData("static int M(object o) => (int)o;", "Conversion")]
     [InlineData("static System.Collections.Generic.IEnumerable<object> M(System.Collections.Generic.IEnumerable<string> s) => s;", "Conversion")]
     [InlineData("struct S { public static implicit operator int(S s) => 0; } static int? M(S? s) => s;", "Conversion")]
