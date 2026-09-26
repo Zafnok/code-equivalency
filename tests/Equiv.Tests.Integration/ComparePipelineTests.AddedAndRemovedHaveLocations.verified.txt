@@ -188,6 +188,7 @@
               modern: 0
             }
           },
+          externalCallees: {},
           unknownByScope: {
             line: 0,
             method: 0

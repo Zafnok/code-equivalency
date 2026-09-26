@@ -1088,6 +1088,108 @@
               "modern": 0
             }
           },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.IDisposable::Dispose()",
+                "callSites": 10
+              },
+              {
+                "member": "System.Collections.Generic.List`1.Enumerator::MoveNext()<Equiv.Samples.BusinessLayer.OrderLine>",
+                "callSites": 2
+              },
+              {
+                "member": "System.Collections.Generic.List`1.Enumerator::get_Current()<Equiv.Samples.BusinessLayer.OrderLine>",
+                "callSites": 2
+              },
+              {
+                "member": "System.Collections.Generic.List`1::GetEnumerator()<Equiv.Samples.BusinessLayer.OrderLine>",
+                "callSites": 2
+              },
+              {
+                "member": "System.ArgumentNullException::.ctor(string)",
+                "callSites": 1
+              },
+              {
+                "member": "System.IO.StringWriter::.ctor()",
+                "callSites": 1
+              },
+              {
+                "member": "System.IO.StringWriter::ToString()",
+                "callSites": 1
+              },
+              {
+                "member": "System.IO.TextWriter::Write(int)",
+                "callSites": 1
+              },
+              {
+                "member": "System.Linq.Enumerable::Select`2(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, string>)<Equiv.Samples.BusinessLayer.OrderLine,string>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Linq.Enumerable::ToList`1(System.Collections.Generic.IEnumerable<string>)<string>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Linq.Enumerable::Where`1(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, bool>)<Equiv.Samples.BusinessLayer.OrderLine>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Math::Round(decimal,int)",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.IDisposable::Dispose()",
+                "callSites": 10
+              },
+              {
+                "member": "System.Collections.Generic.List`1.Enumerator::MoveNext()<Equiv.Samples.BusinessLayer.OrderLine>",
+                "callSites": 2
+              },
+              {
+                "member": "System.Collections.Generic.List`1.Enumerator::get_Current()<Equiv.Samples.BusinessLayer.OrderLine>",
+                "callSites": 2
+              },
+              {
+                "member": "System.Collections.Generic.List`1::GetEnumerator()<Equiv.Samples.BusinessLayer.OrderLine>",
+                "callSites": 2
+              },
+              {
+                "member": "System.ArgumentNullException::.ctor(string)",
+                "callSites": 1
+              },
+              {
+                "member": "System.IO.StringWriter::.ctor()",
+                "callSites": 1
+              },
+              {
+                "member": "System.IO.StringWriter::ToString()",
+                "callSites": 1
+              },
+              {
+                "member": "System.IO.TextWriter::Write(int)",
+                "callSites": 1
+              },
+              {
+                "member": "System.Linq.Enumerable::Select`2(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, string>)<Equiv.Samples.BusinessLayer.OrderLine,string>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Linq.Enumerable::ToList`1(System.Collections.Generic.IEnumerable<string>)<string>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Linq.Enumerable::Where`1(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, bool>)<Equiv.Samples.BusinessLayer.OrderLine>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Math::Round(decimal,int,System.MidpointRounding)",
+                "callSites": 1
+              }
+            ]
+          },
           "unknownByScope": {
             "line": 1,
             "method": 0

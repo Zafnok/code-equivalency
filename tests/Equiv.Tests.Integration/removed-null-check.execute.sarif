@@ -143,6 +143,24 @@
               "modern": 0
             }
           },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.ArgumentNullException::.ctor(string)",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::ToUpper()",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.String::ToUpper()",
+                "callSites": 1
+              }
+            ]
+          },
           "unknownByScope": {
             "line": 0,
             "method": 0

@@ -1688,7 +1688,7 @@ internal sealed class IrLowerer
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
     private static IMethodSymbol? Setter(IPropertySymbol property) => property.SetMethod is { IsInitOnly: false } setter ? setter : null;
 
-    private CallIdentity Identity(IMethodSymbol method) => CallIdentityFactory.Of(method, renames, suppressedRuntimeChanges);
+    private CallIdentity Identity(IMethodSymbol method) => CallIdentityFactory.Of(method, compilation, renames, suppressedRuntimeChanges);
 
     /// <summary>
     /// A member access's call operands: the receiver, then the arguments. The receiver is null-checked at the call, by

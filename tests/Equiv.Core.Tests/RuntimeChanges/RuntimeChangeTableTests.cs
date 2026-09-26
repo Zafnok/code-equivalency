@@ -118,6 +118,36 @@ public sealed class RuntimeChangeTableTests
         Assert.Equal(expected, Assert.Single(table.Rows).Source);
     }
 
+    /// <summary>Ticket M3-033: a measured row carries the input, culture and both canonical outcomes that proved it.</summary>
+    [Fact]
+    public void MeasuredRowHasAWitness()
+    {
+        RuntimeChangeTable table = Parse("""
+            [{
+                "member": "A::B(",
+                "reason": "r",
+                "url": "https://learn.microsoft.com/x",
+                "source": "measured",
+                "witness": { "input": ["ss", "sharp-s"], "culture": "invariant", "legacy": 0, "modern": -1 }
+            }]
+            """);
+
+        RuntimeChangeWitness witness = Assert.Single(table.Rows).Witness!;
+        Assert.Equal(["\"ss\"", "\"sharp-s\""], witness.Input);
+        Assert.Equal("invariant", witness.Culture);
+        Assert.Equal("0", witness.Legacy);
+        Assert.Equal("-1", witness.Modern);
+    }
+
+    /// <summary>A curated or documented row has no witness: only a measured row was proved with one.</summary>
+    [Fact]
+    public void ACuratedRowHasNoWitness()
+    {
+        RuntimeChangeTable table = Parse("""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "source": "curated" }]""");
+
+        Assert.Null(Assert.Single(table.Rows).Witness);
+    }
+
     [Fact]
     public void ReviewFileAndTableAgree()
     {
