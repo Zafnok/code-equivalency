@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 
@@ -10,8 +10,9 @@ namespace Equiv.TestSupport;
 /// Generators for the lowering oracle (VERIFICATION-MODEL.md section 7, tickets M2-003 and M2-004):
 /// straight-line code plus <c>if</c>/<c>else</c>, early returns, compound assignment, <c>++</c>/<c>--</c>
 /// and counter-bounded <c>while</c> loops over <c>int</c>/<c>long</c>/<c>bool</c>, and <c>null</c> tests on
-/// the reference parameter <c>s</c>, and reads and writes of the class's static <c>int</c> auto-property <c>P</c>
-/// (ticket M3-010), and reads and writes of its static <c>int</c> field <c>F</c>, including <c>void</c> methods that end by
+/// the reference parameter <c>s</c>, and reads and writes of the class's static <c>int</c> auto-property <c>P</c>, which
+/// lowers to its backing field's map (ticket M4-008), and of its static <c>int</c> property <c>Q</c>, whose accessors have
+/// bodies and are called (ticket M3-010), and reads and writes of its static <c>int</c> field <c>F</c>, including <c>void</c> methods that end by
 /// writing it (ticket M3-007), and reads and writes of the elements of the <c>int[]</c> parameters <c>u</c> and <c>v</c>,
 /// which an input may bind to one array (ticket P1-006) or bind <c>v</c> to <c>null</c> (ticket P2-017), and <c>foreach</c> loops
 /// that fold each element of the <c>List&lt;int&gt;</c> parameter <c>l</c> into <c>x</c> (ticket M4-001), <c>decimal</c> arithmetic
@@ -48,6 +49,20 @@ public static class LoweringOracleGen
 
     /// <summary>The static <c>int</c> auto-property of the class the generated methods are compiled into.</summary>
     public const string Property = "P";
+
+    /// <summary>The static <c>int</c> property, with accessor bodies, of the class the generated methods are compiled into.</summary>
+    public const string CalledProperty = "Q";
+
+    /// <summary>The static <c>int</c> arrow-bodied property that reads <see cref="Field"/> and <see cref="Property"/>.</summary>
+    public const string ArrowProperty = "R";
+
+    /// <summary>
+    /// The members of the class the generated methods are compiled into, other than the methods: <see cref="Property"/>,
+    /// <see cref="CalledProperty"/> over the field <c>q</c>, <see cref="ArrowProperty"/> and <see cref="Field"/>.
+    /// </summary>
+    public const string ClassMembers =
+        $"    public static int {Property} {{ get; set; }}\n    public static int {CalledProperty} {{ get => q; set => q = value; }}\n    private static int q;\n" +
+        $"    public static int {ArrowProperty} => unchecked({Field} + {Property});\n    public static int {Field};\n";
 
     /// <summary>The static <c>int</c> field of the class the generated methods are compiled into.</summary>
     public const string Field = "F";
@@ -112,7 +127,7 @@ public static class LoweringOracleGen
         Gen<IStmt> update = Gen.OneOfConst(typeof(int), typeof(long)).SelectMany(static type =>
             Gen.Select(Gen.OneOfConst(Arithmetic), Gen.Bool, ExprGen(type == typeof(int) ? typeof(int) : typeof(long), Depth - 1), (op, isChecked, value) =>
                 (IStmt)new Compound(LocalName(type), op, ShiftCount(op, value, type), isChecked)));
-        Gen<IStmt> property = ExprGen(typeof(int), Depth).Select(static value => (IStmt)new Assign(Property, value));
+        Gen<IStmt> property = Gen.Select(Gen.OneOfConst(Property, CalledProperty), ExprGen(typeof(int), Depth), static (name, value) => (IStmt)new Assign(name, value));
         Gen<IStmt> field = FieldValue.Select(static value => (IStmt)new Assign(Field, value));
         // Ticket P1-005: an instance field written and read around a call that writes it.
         Gen<IStmt> cell = FieldValue.Select(static value => (IStmt)new Assign(CellAccess, value));
@@ -173,7 +188,7 @@ public static class LoweringOracleGen
 
     private static string[] Names(Type type) => type switch
     {
-        _ when type == typeof(int) => ["a", "b", "x", Property, Field, CellAccess, .. Arrays.SelectMany(static a => (string[])[Element(a, 0), Element(a, 1)])],
+        _ when type == typeof(int) => ["a", "b", "x", Property, CalledProperty, Field, CellAccess, .. Arrays.SelectMany(static a => (string[])[Element(a, 0), Element(a, 1)])],
         _ when type == typeof(long) => ["c", "d", "y"],
         _ => ["e", "z"],
     };
