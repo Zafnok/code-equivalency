@@ -455,7 +455,9 @@ Moved from M4 by the 2026-09-24 census (`docs/runs/2026-09-24-census-verdict.md`
 under ADR 0028's 5% bar (now 5% of Git Extensions' 315 changed pairs = 16). Ticket files and ids
 are unchanged; a later census that shows more changed pairs can move any of these back into M4.
 
-- M4-003 (M) `ref`/`out` call arguments and `lock`. 8 changed pairs (2.5%). Needs P1-005.
+- M4-003 (M) `ref`/`out` call arguments and `lock`. 8 changed pairs (2.5%). Needs P1-005. `lock` split out
+  to M4-011.
+- M4-011 (S) `lock` through its `try`/`finally`: the CFG's `lockTaken` local starts at `false`. Needs M4-003.
 - M4-005 (M) Type tests and downcasts. 13 changed pairs (4.1%). Needs M3-010.
 - M4-006 (M) `await` as a call. 9 changed pairs (2.9%). Needs M4-001.
 - M4-008 (M) The remaining whole-body opaques: arrow-bodied and auto-property accessors, `catch`

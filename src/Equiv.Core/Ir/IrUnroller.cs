@@ -115,6 +115,7 @@ public static class IrUnroller
             Target = Optional(call.Target, var),
             Threw = Optional(call.Threw, var),
             Args = [.. call.Args.Select(var)],
+            RefOuts = [.. call.RefOuts.Select(var)],
             Heap = [.. call.Heap.Select(h => h with { Before = var(h.Before), After = var(h.After) })],
         },
         IrMapRead read => read with { Target = var(read.Target), Map = var(read.Map), Key = var(read.Key) },

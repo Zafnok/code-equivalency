@@ -156,6 +156,7 @@ public static class IrText
         public string Visit(IrCall instruction) =>
             $"{Assigned(instruction.Target)}call {Callee(instruction.Callee)}({string.Join(", ", instruction.Args.Select(Use))})"
             + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw))
+            + (instruction.RefOuts.IsEmpty ? string.Empty : $" refout({string.Join(", ", instruction.RefOuts.Select(Definition))})")
             + (instruction.Heap.IsEmpty ? string.Empty : $" heap({string.Join(", ", instruction.Heap.Select(static h => $"{Quote(h.Map)} {Use(h.Before)} -> {Definition(h.After)}"))})");
 
         public string Visit(IrMapRead instruction) =>

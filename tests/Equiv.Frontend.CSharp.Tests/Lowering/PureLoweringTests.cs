@@ -438,13 +438,13 @@ public sealed class PureLoweringTests
     /// <summary>A static property's getter yields element 1; its setter yields nothing.</summary>
     private sealed class Accessors : ICallOracle
     {
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap) =>
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts) =>
             new(resultType is null ? null : Element(1), Threw: false);
     }
 
     private sealed class NoCalls : ICallOracle
     {
-        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap) =>
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts) =>
             throw new InvalidOperationException($"Unexpected call {callee.Value}.");
     }
 }

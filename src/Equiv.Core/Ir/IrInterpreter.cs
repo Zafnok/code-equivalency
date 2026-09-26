@@ -130,12 +130,22 @@ public static class IrInterpreter
             {
                 taintedEvents.Add(position);
             }
-            IrCallResult result = oracle.Answer(instruction.Callee, args, instruction.Target?.Type, position, heap);
+            IrCallResult result = oracle.Answer(instruction.Callee, args, instruction.Target?.Type, position, heap, [.. instruction.RefOuts.Select(static r => r.Type)]);
             if (instruction.Target is not null)
             {
                 Set(instruction.Target, result.Value?.Type == instruction.Target.Type
                     ? result.Value
                     : throw new InvalidOperationException($"Call oracle answered {instruction.Callee.Value} with a value that is not of type {IrText.Type(instruction.Target.Type)}."));
+            }
+
+            if (!result.RefOuts.Select(static v => v.Type).SequenceEqual(instruction.RefOuts.Select(static r => r.Type)))
+            {
+                throw new InvalidOperationException($"Call oracle answered {instruction.Callee.Value} with ref and out values that are not one per output, of the output's type.");
+            }
+
+            foreach ((IrVar output, IrValue value) in instruction.RefOuts.Zip(result.RefOuts))
+            {
+                Set(output, value);
             }
 
             ImmutableArray<IrValue> after = result.Heap.IsEmpty ? [.. heap.Select(static h => h.Value)] : result.Heap;

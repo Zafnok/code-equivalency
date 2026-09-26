@@ -1046,7 +1046,7 @@
             "modern": 29
           },
           "matchedPairs": 29,
-          "pairsWithoutOpaque": 25,
+          "pairsWithoutOpaque": 26,
           "pairsWholeBodyOpaque": 1,
           "pairsCongruent": 24,
           "projectsSkipped": {
@@ -1063,10 +1063,6 @@
               "modern": 1
             },
             "lock": {
-              "legacy": 1,
-              "modern": 1
-            },
-            "ref-argument": {
               "legacy": 1,
               "modern": 1
             }

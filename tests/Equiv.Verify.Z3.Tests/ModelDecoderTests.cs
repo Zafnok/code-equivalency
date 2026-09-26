@@ -188,7 +188,7 @@ public sealed class ModelDecoderTests
         Assert.Equal(Status.SATISFIABLE, solver.Check());
         ModelDecoder decoder = new(context, solver.Model, encoding);
 
-        IrCallResult result = decoder.Oracle(ProductEncoder.Side.Old).Answer(new CallIdentity("F"), [], resultType: null, 0, [new IrHeapSlice("field.C.x", Heap)]);
+        IrCallResult result = decoder.Oracle(ProductEncoder.Side.Old).Answer(new CallIdentity("F"), [], resultType: null, 0, [new IrHeapSlice("field.C.x", Heap)], []);
 
         Assert.Equal([Heap], result.Heap);
     }

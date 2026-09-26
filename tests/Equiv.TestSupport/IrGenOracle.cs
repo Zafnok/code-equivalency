@@ -15,11 +15,15 @@ public sealed class IrGenOracle : ICallOracle, IPureOracle
     public static IrGenOracle Instance { get; } = new();
 
     /// <summary>Ignores <paramref name="position"/>: a stateless callee is one valid behaviour among many.</summary>
-    public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
+    /// <remarks>Each ref or out value is the hash re-mixed with its index (ticket M4-003).</remarks>
+    public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
     {
         ArgumentNullException.ThrowIfNull(callee);
         ulong hash = Hash(callee.Value, arguments);
-        return new IrCallResult(Value(hash, resultType), (hash >> 61) == 0);
+        return new IrCallResult(Value(hash, resultType), (hash >> 61) == 0)
+        {
+            RefOuts = [.. refOuts.Select((type, i) => Value((hash ^ (ulong)(i + 1)) * 1099511628211, type)!)],
+        };
     }
 
     public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments)

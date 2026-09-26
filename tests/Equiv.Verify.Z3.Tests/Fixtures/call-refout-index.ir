@@ -1,0 +1,11 @@
+# Divergent
+# M4-003: the same call with two out arguments; old returns the first, new the second. One function per output index keeps them apart.
+proc "C::M(int)" (%a: bv32) -> bv32 entry B0
+B0:
+  call "C::Split(int,out int,out int)"(%a) refout(%lo: bv32, %hi: bv32)
+  ret %lo
+---
+proc "C::M(int)" (%a: bv32) -> bv32 entry B0
+B0:
+  call "C::Split(int,out int,out int)"(%a) refout(%lo: bv32, %hi: bv32)
+  ret %hi
