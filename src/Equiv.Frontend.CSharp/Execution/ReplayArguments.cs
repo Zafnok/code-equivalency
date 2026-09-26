@@ -55,9 +55,9 @@ internal static class ReplayArguments
             }
         }
 
-        foreach (IrParameter parameter in @new.Parameters.Where(p => !newValues.ContainsKey(p.Var.Name)))
+        foreach (IrParameter parameter in @new.Parameters)
         {
-            if (!Take(values, parameter, newValues))
+            if (!newValues.ContainsKey(parameter.Var.Name) && !Take(values, parameter, newValues))
             {
                 return null;
             }
@@ -123,27 +123,21 @@ internal static class ReplayArguments
             .. body.Parameters.Select(static p => p.Var.Name)
                 .Where(static n => IrParameterNames.IsSynthesised(n) && !string.Equals(n, IrParameterNames.Receiver, StringComparison.Ordinal) && !n.StartsWith(NullPrefix, StringComparison.Ordinal)),
         ];
-        return method switch
-        {
-            _ when !IsPublic(method) => "not public",
-            { MethodKind: not (MethodKind.Ordinary or MethodKind.PropertyGet) } => "not a method or a property getter",
-            _ when method.IsGenericMethod || method.ContainingType.IsGenericType => "generic",
-            _ when method.Parameters.FirstOrDefault(static p => p.RefKind != RefKind.None) is { } byRef => $"{byRef.Name} is passed by reference",
-            _ when constrained.Length > 0 => $"the model constrains {string.Join(", ", constrained)}",
-            { IsStatic: false } => ReceiverObstacle(method.ContainingType, values, nullness),
-            _ => null,
-        };
+        return !IsPublic(method) ? "not public"
+            : method.MethodKind is not (MethodKind.Ordinary or MethodKind.PropertyGet) ? "not a method or a property getter"
+            : method.IsGenericMethod || method.ContainingType.IsGenericType ? "generic"
+            : method.Parameters.FirstOrDefault(static p => p.RefKind != RefKind.None) is { } byRef ? $"{byRef.Name} is passed by reference"
+            : constrained.Length > 0 ? $"the model constrains {string.Join(", ", constrained)}"
+            : method.IsStatic ? null
+            : ReceiverObstacle(method.ContainingType, values, nullness);
     }
 
     private static string? ReceiverObstacle(INamedTypeSymbol type, Dictionary<string, IrValue> values, IReadOnlyDictionary<string, IrValue> nullness)
     {
         bool constructible = !type.IsAbstract && (type.IsValueType || type.InstanceConstructors.Any(static c => c.Parameters.IsEmpty && c.DeclaredAccessibility == Accessibility.Public));
-        if (!constructible)
-        {
-            return $"{type.ToDisplayString()} has no public parameterless constructor";
-        }
-
-        return values.GetValueOrDefault(IrParameterNames.Receiver) is IrSortValue receiver && IsNull(receiver, nullness) ? "the model's receiver is null" : null;
+        return !constructible
+            ? $"{type.ToDisplayString()} has no public parameterless constructor"
+            : values.GetValueOrDefault(IrParameterNames.Receiver) is IrSortValue receiver && IsNull(receiver, nullness) ? "the model's receiver is null" : null;
     }
 
     private static bool IsPublic(ISymbol symbol) =>

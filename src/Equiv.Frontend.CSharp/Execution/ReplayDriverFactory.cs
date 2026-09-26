@@ -35,6 +35,13 @@ internal sealed class ReplayDriverFactory(
         ArgumentNullException.ThrowIfNull(pair);
         ArgumentNullException.ThrowIfNull(counterexample);
 
+        // A driver observes only the outcome; by-ref parameters and heap maps are never constructible, so a divergence
+        // whose runs end alike is in the call trace.
+        if (counterexample.Old.Outcome == counterexample.New.Outcome)
+        {
+            return ReplayPlan.NotConstructible("the divergence is in the call trace, which replay does not observe");
+        }
+
         ReplayTarget old = legacy[pair.Old];
         ReplayTarget @new = modern[pair.New];
         if (ReplayArguments.Bind(pair.OldBody!, pair.NewBody!, counterexample.Inputs) is not var (oldValues, newValues))

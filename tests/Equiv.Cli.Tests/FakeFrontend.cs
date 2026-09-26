@@ -1,5 +1,6 @@
 using Equiv.Core;
 using Equiv.Core.Configuration;
+using Equiv.Core.Execution;
 using Equiv.Core.Matching;
 
 namespace Equiv.Cli.Tests;
@@ -7,6 +8,7 @@ namespace Equiv.Cli.Tests;
 /// <summary>
 /// A frontend with a configurable <see cref="Supports"/> predicate and a canned <see cref="Analyze"/> result or exception.
 /// Without a canned <see cref="MatchResult"/> it matches nothing; without canned <see cref="AnalysedLines"/> it counts 0 on both sides.
+/// <paramref name="replay"/> is the analysis's replay factory (ticket M4-009); without one it cannot replay.
 /// </summary>
 internal sealed class FakeFrontend(
     string language,
@@ -14,7 +16,8 @@ internal sealed class FakeFrontend(
     MatchResult? matchResult = null,
     FrontendLoadException? throwOnAnalyze = null,
     AnalysedLines? lines = null,
-    string[]? legacyNotBuilt = null) : ILanguageFrontend
+    string[]? legacyNotBuilt = null,
+    IReplayDriverFactory? replay = null) : ILanguageFrontend
 {
     public int AnalyzeCallCount { get; private set; }
 
@@ -27,6 +30,6 @@ internal sealed class FakeFrontend(
         AnalyzeCallCount++;
         return throwOnAnalyze is not null
             ? throw throwOnAnalyze
-            : new FrontendAnalysis(matchResult ?? new MatchResult([], [], [], []), lines ?? new AnalysedLines(0, 0)) { LegacyNotBuilt = [.. legacyNotBuilt ?? []] };
+            : new FrontendAnalysis(matchResult ?? new MatchResult([], [], [], []), lines ?? new AnalysedLines(0, 0)) { LegacyNotBuilt = [.. legacyNotBuilt ?? []], Replay = replay };
     }
 }

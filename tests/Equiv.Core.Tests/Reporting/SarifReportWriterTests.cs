@@ -1,5 +1,6 @@
 ﻿using System.Linq;
 
+using Equiv.Core.Execution;
 using Equiv.Core.Ir;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
@@ -374,6 +375,42 @@ public sealed class SarifReportWriterTests
 
         Assert.Equal(CounterexampleText.Dump(candidate), SarifReportWriter.Write([result]).Runs[0].Results[0].GetProperty<string>("candidateCounterexample"));
         return VerifyJson(Serialize(result));
+    }
+
+    /// <summary>
+    /// Ticket M4-009: a replayed Divergent carries <c>replay</c>, with both canonical outcomes when it did not reproduce and
+    /// the reason when it could not be built. The fingerprint never moves with it.
+    /// </summary>
+    [Fact]
+    public void ReplayIsWrittenAndNeverMovesTheFingerprint()
+    {
+        ExecutionInput input = new(["null"]);
+        VerificationResult plain = Fixtures.Result(new Divergent(Fixtures.Counterexample()));
+        Result reproduced = SarifReportWriter.Write([plain with { Replay = ReplayResult.Reproduced }]).Runs[0].Results[0];
+        Result notReproduced = SarifReportWriter.Write(
+        [
+            plain with
+            {
+                Replay = ReplayResult.NotReproduced(
+                    new ExecutionOutcome(input, "invariant", OutcomeKind.Threw, "\"System.Exception\""),
+                    new ExecutionOutcome(input, "invariant", OutcomeKind.Returned, "1")),
+            },
+        ]).Runs[0].Results[0];
+        Result notConstructible = SarifReportWriter.Write([plain with { Replay = ReplayResult.NotConstructible("emit-failed") }]).Runs[0].Results[0];
+        Result none = SarifReportWriter.Write([plain]).Runs[0].Results[0];
+
+        Assert.Equal("reproduced", reproduced.GetProperty<string>("replay"));
+        Assert.False(reproduced.TryGetProperty("replayOutcomes", out Dictionary<string, Dictionary<string, string>>? _));
+        Assert.Equal("not-reproduced", notReproduced.GetProperty<string>("replay"));
+        Dictionary<string, Dictionary<string, string>> outcomes = notReproduced.GetProperty<Dictionary<string, Dictionary<string, string>>>("replayOutcomes");
+        Assert.Equal(("threw", "\"System.Exception\""), (outcomes["legacy"]["kind"], outcomes["legacy"]["value"]));
+        Assert.Equal(("returned", "1"), (outcomes["modern"]["kind"], outcomes["modern"]["value"]));
+        Assert.Equal("not-constructible", notConstructible.GetProperty<string>("replay"));
+        Assert.Equal("emit-failed", notConstructible.GetProperty<string>("replayReason"));
+        Assert.False(none.TryGetProperty("replay", out string? _));
+        Assert.All(
+            [reproduced, notReproduced, notConstructible],
+            r => Assert.Equal(none.PartialFingerprints["resultFingerprint/v1"], r.PartialFingerprints["resultFingerprint/v1"]));
     }
 
     [Fact]
