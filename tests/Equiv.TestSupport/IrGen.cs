@@ -243,7 +243,7 @@ public static class IrGen
         return suffix;
     }
 
-    /// <summary>A copy of <paramref name="call"/> that defines fresh names; its heap versions are left unused.</summary>
+    /// <summary>A copy of <paramref name="call"/> that defines fresh names; its heap versions and ref outputs are left unused.</summary>
     private static IrCall Duplicate(IrProcedure procedure, IrCall call)
     {
         string suffix = Fresh(procedure, ".dup");
@@ -251,6 +251,7 @@ public static class IrGen
         {
             Target = Renamed(call.Target, suffix),
             Threw = Renamed(call.Threw, suffix),
+            RefOuts = [.. call.RefOuts.Select(r => Renamed(r, suffix)!)],
             Heap = [.. call.Heap.Select(h => h with { After = Renamed(h.After, suffix)! })],
         };
     }
@@ -353,7 +354,8 @@ public static class IrGen
             Gen.OneOfConst("Svc::F", "Svc::G"),
             Expression(1).Array[0, 2],
             Gen.Bool,
-            static (s, callee, args, mayThrow) => (IStmt)new Call(s, callee, [.. args], mayThrow));
+            Gen.Frequency((3, Gen.Const((int?)null)), (1, slot.Select(static s => (int?)s))),
+            static (s, callee, args, mayThrow, refSlot) => (IStmt)new Call(s, callee, [.. args], mayThrow, refSlot));
         Gen<IStmt> store = Gen.Select(Expression(1), Expression(1), static (k, v) => (IStmt)new Store(k, v));
         Gen<IStmt> pure = Gen.Select(
             slot,
