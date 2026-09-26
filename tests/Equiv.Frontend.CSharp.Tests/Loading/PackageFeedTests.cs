@@ -74,6 +74,7 @@ public sealed class PackageFeedTests : IDisposable
     [InlineData("2.0.0-Beta1+sha.1", "2.0.0-Beta1")]
     [InlineData(" 3 ", "3.0.0")]
     [InlineData("1.x", "1.x.0")]
+    [InlineData("-rc", ".0.0-rc")]
     public void NormalizeVersionMatchesNuGet(string version, string expected) =>
         Assert.Equal(expected, PackageFeed.NormalizeVersion(version));
 
@@ -96,6 +97,22 @@ public sealed class PackageFeedTests : IDisposable
             StringComparer.Ordinal);
         Assert.Equal(package, File.ReadAllBytes(Path.Combine(target, "A.1.0.0.nupkg")));
         Assert.False(File.Exists(Path.Combine(_fixture.Root, "packages", "escape.txt")));
+
+        // A second extraction over the first replaces the files.
+        PackageFeed.Extract(BareFixture.Package(("lib/net45/A.dll", [9])), target, "A.1.0.0.nupkg");
+        Assert.Equal([9], File.ReadAllBytes(Path.Combine(target, "lib", "net45", "A.dll")));
+    }
+
+    [Fact]
+    public async Task AServiceIndexWithoutAFlatContainerAndAFlatFolderPackageAreHandled()
+    {
+        _fixture.WriteBytes(Path.Combine("feed", "Both.1.0.0.nupkg"), [1]);
+        _fixture.WriteBytes(Path.Combine("feed", "both", "1.0.0", "both.1.0.0.nupkg"), [2]);
+        PackageFeed feed = new(
+            ["https://search-only.example/index.json", Path.Combine(_fixture.Root, "feed")],
+            static (_, _) => Task.FromResult<byte[]?>("""{ "resources": [ { "@id": "https://x.example/q", "@type": "SearchQueryService" } ] }"""u8.ToArray()));
+
+        Assert.Equal([1], await feed.DownloadAsync("Both", "1.0.0", TestContext.Current.CancellationToken));
     }
 
     public void Dispose() => _fixture.Dispose();

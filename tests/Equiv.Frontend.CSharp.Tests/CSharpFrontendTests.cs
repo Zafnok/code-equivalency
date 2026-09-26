@@ -92,6 +92,26 @@ public sealed class CSharpFrontendTests
     }
 
     [Fact]
+    public void AVacuousProjectIsSkippedWhateverItsOtherTreesHoldAndItsNeighboursStay()
+    {
+        // A vacuous project needs only one tree with a type declaration; an attributes-only tree beside it changes
+        // nothing. A project with procedures in the same side is kept.
+        Compilation vacuous = RoslynTestCompilations.Compile("namespace N { public class Empty { public int X; } }", "Vacuous")
+            .AddSyntaxTrees(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText("[assembly: System.Reflection.AssemblyTitle(\"X\")]", cancellationToken: TestContext.Current.CancellationToken));
+        Compilation real = RoslynTestCompilations.Compile("namespace R { public class C { public int M() { return 1; } } }", "Real");
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [vacuous, real], [], [])
+            : new LoadedSolution(null!, [real], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+
+        Assert.Equal("Vacuous", Assert.Single(result.LegacySkipped).Name);
+        Assert.Equal("R.C::M()", Assert.Single(result.Pairs).Old.Value);
+        Assert.Empty(result.Removed);
+    }
+
+    [Fact]
     public void ProjectWithOnlyAssemblyAttributes_IsNotSkipped()
     {
         // P2-018 acceptance criterion 3: a project with no type declaration at all was never going to yield

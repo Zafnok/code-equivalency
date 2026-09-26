@@ -21,8 +21,6 @@ internal sealed class MsBuildEvaluator
     /// <summary>The value MSBuild gives the <c>Solution*</c> properties when a project is evaluated on its own.</summary>
     public const string Undefined = "*Undefined*";
 
-    private static readonly FrozenSet<string> ReadItemTypes = FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "Compile", "Reference", "ProjectReference", "PackageReference", "COMReference");
-
     private static readonly FrozenSet<string> CreatedItemTypes = FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "Compile", "Reference", "ProjectReference");
 
     private static readonly FrozenSet<string> PathItemTypes = FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "Compile", "ProjectReference");
@@ -183,7 +181,7 @@ internal sealed class MsBuildEvaluator
         PropertyValue path = _properties.Expand(raw);
         if (path.ToolPath)
         {
-            ToolPathImport(raw);
+            ToolPathImport(path.Text);
             return;
         }
 
@@ -301,7 +299,7 @@ internal sealed class MsBuildEvaluator
         List<EvaluatedItem> items = [];
         foreach ((XElement group, string directory) in _itemGroups)
         {
-            List<XElement> read = [.. group.Elements().Where(static e => ReadItemTypes.Contains(e.Name.LocalName))];
+            List<XElement> read = [.. group.Elements().Where(static e => IsRead(e.Name.LocalName))];
             if (read.Count == 0 || !MsBuildCondition.Evaluate(Condition(group), _properties, directory))
             {
                 continue;
@@ -368,6 +366,10 @@ internal sealed class MsBuildEvaluator
 
         return metadata.ToImmutable();
     }
+
+    /// <summary>The item types the loader reads; every other item is never evaluated.</summary>
+    private static bool IsRead(string itemType) =>
+        itemType.ToUpperInvariant() is "COMPILE" or "REFERENCE" or "PROJECTREFERENCE" or "PACKAGEREFERENCE" or "COMREFERENCE";
 
     private static string Condition(XElement element) => element.Attribute("Condition")?.Value ?? string.Empty;
 }

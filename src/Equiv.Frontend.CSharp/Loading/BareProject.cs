@@ -12,8 +12,9 @@ namespace Equiv.Frontend.CSharp.Loading;
 /// </summary>
 internal sealed record BareProject(string Name, string Path, string AssemblyName, bool IsCSharp, Compilation? Compilation, ImmutableArray<LoadDiagnostic> Diagnostics)
 {
+    /// <remarks>A project in another language never has a compilation.</remarks>
     public bool IsSkipped =>
-        !IsCSharp || Compilation is null || Diagnostics.Any(static d => d.Kind is LoadDiagnosticKind.WorkspaceFailure or LoadDiagnosticKind.UnresolvedReference);
+        Compilation is null || Diagnostics.Any(static d => d.Kind is LoadDiagnosticKind.WorkspaceFailure or LoadDiagnosticKind.UnresolvedReference);
 
     public SkippedProject ToSkipped() => new(Name, AssemblyName, IsCSharp, Diagnostics, Compilation);
 }

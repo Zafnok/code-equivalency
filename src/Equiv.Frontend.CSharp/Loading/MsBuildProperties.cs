@@ -107,7 +107,7 @@ internal sealed class MsBuildProperties
         }
 
         return unsupported is not null ? PropertyValue.Poisoned(unsupported)
-            : toolPath ? new PropertyValue(string.Empty, $"MSBuild's tool path in '{text}'", ToolPath: true)
+            : toolPath ? new PropertyValue(expanded.ToString(), $"MSBuild's tool path in '{text}'", ToolPath: true)
             : new PropertyValue(expanded.ToString());
     }
 

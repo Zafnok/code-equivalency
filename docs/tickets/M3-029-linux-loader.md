@@ -209,3 +209,23 @@ Linux.
   after it (item references and metadata, compiler-rejected values, a non-.NET Framework target, missing inputs). Each
   is something the bare evaluator cannot evaluate exactly or an input that is absent, so ADR 0029's rule (skip, never
   approximate) applies unchanged; the ticket text is corrected above.
+
+### eShop check (Pitfalls), by hand on Linux
+Run 36218130428 on `ubuntu-latest`, from the throwaway branch `spike/M3-029-eshop` (not merged). A probe links
+`src/Equiv.Frontend.CSharp/Loading/*.cs` and loads both sides of `eshop-upgrade-assistant` (fetched with
+`corpus.ps1 -Fetch`) through `CompositeSolutionLoader`, as `equiv` does off Windows. `corpus.ps1 -Prepare` was not run,
+so equiv fetched the net472 reference assemblies itself, and it restored the legacy side's `packages.config` packages
+itself; only the modern side got a `dotnet restore`. status / sources / generated / references / errors, against
+M3-028's Windows reference:
+
+| Project | Windows (M3-028) | Linux, this loader |
+|---|---|---|
+| legacy eShopLegacy.Common | loaded 8/0/12/0 | loaded 8/0/12/0 |
+| legacy eShopLegacy.Utilities | loaded 3/0/11/0 | loaded 3/0/11/0 |
+| legacy eShopLegacyMVC | loaded 28/0/81/0 | loaded 28/0/81/0 |
+| modern eShopLegacy.Utilities | loaded 3/0/115/0 | loaded 3/0/115/0 |
+| modern eShopLegacyMVC | skipped (UnresolvedReference CS0234) 28/10/322/97 | skipped (UnresolvedReference CS0234) 28/10/322/97 |
+
+The legacy source counts include `obj/Debug/.NETFramework,Version=v4.7.2.AssemblyAttributes.cs`, which the bare
+loader writes in memory on Linux (the probe printed it as 7+1). No "Mono MSBuild" warning appeared, so no non-SDK
+project reached Roslyn's build host.

@@ -61,6 +61,18 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task AProjectPathInTheSolutionIsMatchedIgnoringCase()
+    {
+        Legacy("Legacy", """<ItemGroup><Compile Include="Code.cs" /></ItemGroup>""", "public class L { }");
+        string solution = _fixture.Write(Path.Combine("sln", "side.sln"), BareFixture.Solution(@"LEGACY\legacy.csproj"));
+
+        LoadedSolution loaded = await _fixture.Loader().LoadAsync(solution, TestContext.Current.CancellationToken);
+
+        // The assembly name is the project file's name: as written where the file system ignores case, as on disk elsewhere.
+        Assert.Equal("Legacy", Assert.Single(loaded.Compilations).AssemblyName, ignoreCase: true);
+    }
+
+    [Fact]
     public async Task ANonSdkProjectBindsAgainstASkippedSdkProjectsCompilationToo()
     {
         string modern = _fixture.Write(Path.Combine("sln", "Modern", "Modern.csproj"), SdkProject);
@@ -86,7 +98,7 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
     {
         (string modern, string legacy) = ModernReferencingLegacy(bareHelper: "public class Helper { public static int Value() { return 1; } }");
 
-        LoadedSolution loaded = await LoadWithMsBuildCopy(modern, legacy, copyHelper: "public class Helper { public static string Value() { return null; } }");
+        LoadedSolution loaded = await LoadWithMsBuildCopy(modern, legacy, copyHelper: "public class Helper { public static string Value() { return null; } } class Broken { int X() { return \"s\"; } }");
 
         Assert.Equal(["Modern", "Legacy"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
         Compilation bare = loaded.Compilations[1];
@@ -117,11 +129,12 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
     {
         (string modern, string legacy) = ModernReferencingLegacy(bareHelper: "public class Helper { public static string Value() { return null; } }");
 
-        LoadedSolution loaded = await LoadWithMsBuildCopy(modern, legacy, copyHelper: "public class Helper { public static int Value() { return 1; } }");
+        LoadedSolution loaded = await LoadWithMsBuildCopy(modern, legacy, copyHelper: "public class Helper { public static int Value() { return 1; } }", withNeighbour: true);
 
-        Assert.Equal(["Modern", "Legacy"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
-        LoadDiagnostic error = Assert.Single(loaded.Diagnostics);
-        Assert.Equal((LoadDiagnosticKind.CompilerError, "CS0029", "Modern"), (error.Kind, error.Id, error.Project));
+        Assert.Equal(["Modern", "Other", "Legacy"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
+        Assert.Equal(
+            [(LoadDiagnosticKind.CompilerError, "CS0029", "Other"), (LoadDiagnosticKind.CompilerError, "CS0029", "Modern")],
+            loaded.Diagnostics.Select(static d => (d.Kind, d.Id, d.Project)));
     }
 
     [Fact]
@@ -163,13 +176,14 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
                 new LoadDiagnostic(LoadDiagnosticKind.WorkspaceFailure, string.Empty, "Modern", "the build host failed"),
                 new LoadDiagnostic(LoadDiagnosticKind.UnresolvedReference, "CS0246", "Modern", "missing type"),
                 new LoadDiagnostic(LoadDiagnosticKind.UnsupportedProject, string.Empty, "Tool", "not C#"),
+                new LoadDiagnostic(LoadDiagnosticKind.WorkspaceFailure, string.Empty, "Tool", "and it failed too"),
             ]);
 
         LoadedSolution loaded = await _fixture.Loader(sdk).LoadAsync(solution, TestContext.Current.CancellationToken);
 
         Assert.Equal("Legacy", Assert.Single(loaded.Compilations).AssemblyName);
         Assert.Equal(
-            [("Modern", true, 2), ("Tool", false, 1), ("Native", false, 1)],
+            [("Modern", true, 2), ("Tool", false, 2), ("Native", false, 1)],
             loaded.Skipped.Select(static s => (s.Name, s.IsCSharp, s.Diagnostics.Length)));
         Assert.Empty(loaded.Solution.Projects);
     }
@@ -211,13 +225,18 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
     }
 
     /// <summary>Loads a solution of <paramref name="modern"/> alone, whose MSBuildWorkspace copy of <paramref name="legacy"/> holds <paramref name="copyHelper"/>.</summary>
-    private Task<LoadedSolution> LoadWithMsBuildCopy(string modern, string legacy, string copyHelper)
+    private Task<LoadedSolution> LoadWithMsBuildCopy(string modern, string legacy, string copyHelper, bool withNeighbour = false)
     {
-        string solution = _fixture.Write(Path.Combine("sln", "side.sln"), BareFixture.Solution(@"Modern\Modern.csproj"));
+        string other = _fixture.Write(Path.Combine("sln", "Other", "Other.csproj"), SdkProject);
+        string solution = _fixture.Write(Path.Combine("sln", "side.sln"), BareFixture.Solution([@"Modern\Modern.csproj", .. withNeighbour ? [@"Other\Other.csproj"] : Array.Empty<string>()]));
         return _fixture.Loader(SdkLoader([], (ws, _) =>
             {
                 ProjectId copy = AddProject(ws, "Legacy", legacy, copyHelper, []);
                 AddProject(ws, "Modern", modern, "public class M { public Helper Instance; public int Get() { return Helper.Value(); } }", [], copy);
+                if (withNeighbour)
+                {
+                    AddProject(ws, "Other", other, "public class O { int X() { return \"s\"; } }", []);
+                }
             }))
             .LoadAsync(solution, TestContext.Current.CancellationToken);
     }

@@ -38,7 +38,7 @@ internal sealed class BareReferenceRebinder(IReadOnlyDictionary<string, Compilat
     {
         Compilation? target = reference switch
         {
-            CompilationReference { Compilation.AssemblyName: { } name } project when bareByAssemblyName.TryGetValue(name, out Compilation? bare) => bare == project.Compilation ? null : bare,
+            CompilationReference { Compilation.AssemblyName: { } name } when bareByAssemblyName.TryGetValue(name, out Compilation? bare) => bare,
             CompilationReference project => Rebind(project.Compilation) is { } inner && inner != project.Compilation ? inner : null,
             PortableExecutableReference { FilePath: { } path } when bareByAssemblyName.TryGetValue(Path.GetFileNameWithoutExtension(path), out Compilation? bare) => bare,
             _ => null,

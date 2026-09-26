@@ -99,9 +99,20 @@ public sealed class MsBuildPropertiesTests
     {
         PropertyValue value = Properties().Expand($@"$({name})\Microsoft.CSharp.targets");
 
-        Assert.True(value.ToolPath);
-        Assert.Equal($@"MSBuild's tool path in '$({name})\Microsoft.CSharp.targets'", value.Unsupported);
+        Assert.Equal(new PropertyValue(@"\Microsoft.CSharp.targets", $@"MSBuild's tool path in '$({name})\Microsoft.CSharp.targets'", ToolPath: true), value);
         Assert.Equal(new PropertyValue(string.Empty, $"MSBuild's tool path $({name})", ToolPath: true), Properties()[name]);
+    }
+
+    [Fact]
+    public void TwoToolPathsInOneValueAreStillAToolPath() =>
+        Assert.True(Properties().Expand("$(MSBuildToolsPath)$(MSBuildBinPath)").ToolPath);
+
+    [Fact]
+    public void EmptyAndPoisonedValuesHaveNoText()
+    {
+        Assert.Equal(string.Empty, PropertyValue.Empty.Text);
+        Assert.Null(PropertyValue.Empty.Unsupported);
+        Assert.Equal(new PropertyValue(string.Empty, "x"), PropertyValue.Poisoned("x"));
     }
 
     [Fact]

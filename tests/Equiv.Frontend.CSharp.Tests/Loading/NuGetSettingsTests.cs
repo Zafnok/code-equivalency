@@ -28,7 +28,9 @@ public sealed class NuGetSettingsTests : IDisposable
                 <add key="outer" value="https://outer.example/v3/index.json" />
                 <add key="mirror" value="https://old.example/v3/index.json" />
                 <add key="gone" value="https://gone.example/v3/index.json" />
+                <add key="reenabled" value="https://again.example/v3/index.json" />
               </packageSources>
+              <disabledPackageSources><add key="reenabled" value="true" /></disabledPackageSources>
               <config><add key="repositoryPath" value="outer-packages" /></config>
             </configuration>
             """);
@@ -43,7 +45,7 @@ public sealed class NuGetSettingsTests : IDisposable
               </packageSources>
               <disabledPackageSources>
                 <add key="off" value="true" />
-                <add key="outer" value="false" />
+                <add key="reenabled" value="false" />
                 <clear />
               </disabledPackageSources>
               <config><add key="repositoryPath" value="..\lib" /><add key="other" value="x" /></config>
@@ -53,7 +55,7 @@ public sealed class NuGetSettingsTests : IDisposable
         NuGetSettings settings = NuGetSettings.Read(Path.Combine(_fixture.Root, "sln"));
 
         Assert.Equal(
-            ["https://outer.example/v3/index.json", "https://mirror.example/v3/index.json", Path.Combine(_fixture.Root, "feed")],
+            ["https://outer.example/v3/index.json", "https://again.example/v3/index.json", "https://mirror.example/v3/index.json", Path.Combine(_fixture.Root, "feed")],
             settings.Sources,
             StringComparer.Ordinal);
         Assert.Equal(Path.Combine(_fixture.Root, "lib"), settings.RepositoryPath);

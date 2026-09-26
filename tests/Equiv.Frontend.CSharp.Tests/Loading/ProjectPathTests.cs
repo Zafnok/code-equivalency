@@ -58,16 +58,19 @@ public sealed class ProjectPathTests : IDisposable
 
     [Theory]
     [InlineData("*.cs", "a.cs|b.cs")]
-    [InlineData("**/*.cs", "a.cs|b.cs|sub/c.cs|sub/deep/d.cs")]
-    [InlineData(@"sub\**\*.cs", "sub/c.cs|sub/deep/d.cs")]
+    [InlineData("**/*.cs", "a.cs|b.cs|sub/c.cs|sub/deep/d.cs|sub/deep/xb.cs")]
+    [InlineData(@"sub\**\*.cs", "sub/c.cs|sub/deep/d.cs|sub/deep/xb.cs")]
     [InlineData(@"SUB\*.CS", "sub/c.cs")]
     [InlineData("?.cs", "a.cs|b.cs")]
-    [InlineData("sub/**", "sub/c.cs|sub/deep/d.cs|sub/e.txt")]
+    [InlineData("sub/**", "sub/c.cs|sub/deep/d.cs|sub/deep/xb.cs|sub/e.txt")]
     [InlineData("missing/*.cs", "")]
+    [InlineData("*/c.cs", "sub/c.cs")]
+    [InlineData("**/b.cs", "b.cs")]
+    [InlineData("**/xb.cs", "sub/deep/xb.cs")]
     [InlineData("a.cs/*.cs", "")]
     public void GlobMatchesMsBuildWildcards(string spec, string expected)
     {
-        foreach (string file in (string[])["a.cs", "b.cs", "ab.cs.txt", "sub/c.cs", "sub/deep/d.cs", "sub/e.txt"])
+        foreach (string file in (string[])["a.cs", "b.cs", "ab.cs.txt", "sub/c.cs", "sub/deep/d.cs", "sub/e.txt", "sub/deep/xb.cs"])
         {
             _fixture.Write(Path.Combine("src", file), string.Empty);
         }

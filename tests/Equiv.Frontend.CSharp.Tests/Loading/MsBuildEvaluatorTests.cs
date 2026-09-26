@@ -21,6 +21,9 @@ public sealed class MsBuildEvaluatorTests : IDisposable
                 <Skipped Condition="'$(Configuration)' == 'Release'">yes</Skipped>
                 <Seen Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">yes</Seen>
                 <Design>$(DesignTimeBuild);$(BuildingInsideVisualStudio);$(OS);$(MSBuildRuntimeType)</Design>
+                <Host>$(BuildProjectReferences);$(BuildingProject);$(ProvideCommandLineArgs);$(SkipCompilerExecution);$(ContinueOnError);$(ShouldUnsetParentConfigurationAndPlatform)</Host>
+                <Self>$(MSBuildProjectFile)|$(MSBuildProjectExtension)|$(MSBuildProjectFullPath)|$(MSBuildProjectDirectory)</Self>
+                <BuildingProject>true</BuildingProject>
               </PropertyGroup>
               <Import Project="first.props" />
               <PropertyGroup Condition="false"><Order>never</Order></PropertyGroup>
@@ -32,6 +35,9 @@ public sealed class MsBuildEvaluatorTests : IDisposable
         Assert.Equal(string.Empty, project.Properties.Read("Skipped"));
         Assert.Equal("yes", project.Properties.Read("Seen"));
         Assert.Equal("true;true;Windows_NT;Full", project.Properties.Read("Design"));
+        Assert.Equal("false;false;true;true;ErrorAndContinue;false", project.Properties.Read("Host"));
+        string path = Path.Combine(_fixture.Root, "p", "P.csproj");
+        Assert.Equal($"P.csproj|.csproj|{path}|{Path.GetDirectoryName(path)}", project.Properties.Read("Self"));
         Assert.Equal("P", project.Properties.Read("MSBuildProjectName"));
         Assert.Equal(Path.Combine(_fixture.Root, "p"), project.Directory);
     }
@@ -44,12 +50,13 @@ public sealed class MsBuildEvaluatorTests : IDisposable
             """);
         EvaluatedProject project = Evaluate("""
               <Import Project="build\inner.props" />
-              <PropertyGroup><Outer>$(MSBuildThisFile)</Outer></PropertyGroup>
+              <PropertyGroup><Outer>$(MSBuildThisFile)|$(MSBuildThisFileName)|$(MSBuildThisFileFullPath)|$(MSBuildThisFileDirectory)</Outer></PropertyGroup>
             """);
 
         string inner = Path.Combine(_fixture.Root, "p", "build", "inner.props");
         Assert.Equal($"{Path.GetDirectoryName(inner)}{Path.DirectorySeparatorChar}|inner.props|inner|{inner}", project.Properties.Read("Inner"));
-        Assert.Equal("P.csproj", project.Properties.Read("Outer"));
+        string self = Path.Combine(_fixture.Root, "p", "P.csproj");
+        Assert.Equal($"P.csproj|P|{self}|{Path.GetDirectoryName(self)}{Path.DirectorySeparatorChar}", project.Properties.Read("Outer"));
     }
 
     [Fact]
@@ -116,6 +123,7 @@ public sealed class MsBuildEvaluatorTests : IDisposable
     [Fact]
     public void RelativeImportsAreFollowedOnceAndMissingOnesConditionedOnExistsAreIgnored()
     {
+        _fixture.Write(Path.Combine("p", "grouped.props"), """<Project><PropertyGroup><Grouped>yes</Grouped></PropertyGroup></Project>""");
         _fixture.Write(Path.Combine("p", "once.props"), """<Project><PropertyGroup><Count>$(Count)x</Count></PropertyGroup></Project>""");
         _fixture.Write(Path.Combine("p", "parts", "a.props"), """<Project><PropertyGroup><Parts>$(Parts)a</Parts></PropertyGroup></Project>""");
         _fixture.Write(Path.Combine("p", "parts", "b.props"), """<Project><PropertyGroup><Parts>$(Parts)b</Parts></PropertyGroup></Project>""");
@@ -127,11 +135,12 @@ public sealed class MsBuildEvaluatorTests : IDisposable
               <Import Project="missing.targets" Condition="'$(Unset)' == '' and !Exists('elsewhere')" />
               <Import Project="skipped.targets" Condition="false" />
               <ImportGroup Condition="false"><Import Project="never.targets" /></ImportGroup>
-              <ImportGroup><Import Project="once.props" /><Other /></ImportGroup>
+              <ImportGroup><Import Project="once.props" /><Other /><Import Project="grouped.props" /></ImportGroup>
             """);
 
         Assert.Equal("x", project.Properties.Read("Count"));
         Assert.Equal("ab", project.Properties.Read("Parts"));
+        Assert.Equal("yes", project.Properties.Read("Grouped"));
     }
 
     [Theory]
@@ -144,6 +153,7 @@ public sealed class MsBuildEvaluatorTests : IDisposable
     [Theory]
     [InlineData("""<Choose><When Condition="true" /></Choose>""", "<Choose>")]
     [InlineData("""<Import Project="missing.targets" />""", "the missing import 'missing.targets'")]
+    [InlineData("""<Import />""", "the missing import ''")]
     [InlineData("""<Import Project="missing.targets" Condition="'$(Unset)' == ''" />""", "the missing import 'missing.targets'")]
     [InlineData("""<Import Project="$([MSBuild]::GetPathOfFileAbove('x.props'))" />""", "the property function $([MSBuild]::GetPathOfFileAbove('x.props'))")]
     [InlineData("""<Import Project="x.props" Condition="'a' =~ 'b'" />""", "a condition outside the supported grammar: \"'a' =~ 'b'\"")]
@@ -157,6 +167,18 @@ public sealed class MsBuildEvaluatorTests : IDisposable
     [InlineData("""<ItemGroup><Reference Include="A"><HintPath>$([System.IO.Path]::Combine('a','b'))</HintPath></Reference></ItemGroup>""", "the property function $([System.IO.Path]::Combine('a','b'))")]
     public void AConstructTheEvaluatorCannotEvaluateExactlyThrowsNamingIt(string body, string construct) =>
         Assert.Equal(construct, Assert.Throws<UnsupportedConstructException>(() => Evaluate(body)).Construct);
+
+    [Fact]
+    public void AnImportWhosePathExpandsToAToolPathIsReplacedByItsBuiltInKnowledge()
+    {
+        EvaluatedProject project = Evaluate("""
+              <PropertyGroup><CSharpTargets>$(MSBuildToolsPath)\Microsoft.CSharp.targets</CSharpTargets></PropertyGroup>
+              <Import Project="$(CSharpTargets)" />
+              <PropertyGroup><AfterTargets>$(SolutionName)</AfterTargets></PropertyGroup>
+            """);
+
+        Assert.Equal(MsBuildEvaluator.Undefined, project.Properties.Read("AfterTargets"));
+    }
 
     [Fact]
     public void ATargetThatCreatesOtherItemsIsHarmless()
@@ -234,7 +256,7 @@ public sealed class MsBuildEvaluatorTests : IDisposable
                   <Private>True</Private>
                   <EmbedInteropTypes Condition="false">True</EmbedInteropTypes>
                 </Reference>
-                <Reference Include="System;System.Core" />
+                <Reference Include=" System; ;System.Core " />
                 <Reference Include="Gone" />
                 <Reference Remove="gone" />
                 <ProjectReference Include="..\Lib\Lib.csproj"><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference>

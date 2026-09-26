@@ -22,6 +22,18 @@ public sealed class NetStandardShimsTests : IDisposable
     }
 
     [Fact]
+    public void DotnetRootWinsOverThePath()
+    {
+        string rooted = Shims(Path.Combine(_fixture.Root, "rooted"), "10.0.100");
+        string onPath = Path.Combine(_fixture.Root, "onpath");
+        Shims(onPath, "10.0.100");
+        _fixture.Write(Path.Combine("onpath", "dotnet"), string.Empty);
+        _fixture.Write(Path.Combine("onpath", "dotnet.exe"), string.Empty);
+
+        Assert.Equal(rooted, NetStandardShims.Find(name => name switch { "DOTNET_ROOT" => Path.Combine(_fixture.Root, "rooted"), "PATH" => onPath, _ => null }));
+    }
+
+    [Fact]
     public void WithoutDotnetRootTheDotnetOnThePathIsUsed()
     {
         string dotnet = Path.Combine(_fixture.Root, "dotnet");
@@ -40,9 +52,13 @@ public sealed class NetStandardShimsTests : IDisposable
         string target = _fixture.Write(Path.Combine("dotnet", "dotnet"), string.Empty);
         string bin = Path.Combine(_fixture.Root, "bin");
         Directory.CreateDirectory(bin);
+        string hop = Path.Combine(_fixture.Root, "hop");
+        Directory.CreateDirectory(hop);
         try
         {
-            File.CreateSymbolicLink(Path.Combine(bin, "dotnet"), target);
+            // Two links, as /usr/bin/dotnet -> /etc/alternatives/dotnet -> the installation: only the final target has the SDKs.
+            File.CreateSymbolicLink(Path.Combine(hop, "dotnet"), target);
+            File.CreateSymbolicLink(Path.Combine(bin, "dotnet"), Path.Combine(hop, "dotnet"));
         }
         catch (IOException)
         {

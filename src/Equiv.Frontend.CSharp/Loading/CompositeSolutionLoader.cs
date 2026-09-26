@@ -188,7 +188,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
                     .. exception.Diagnostics
                         .Where(static d => d.Kind != LoadDiagnosticKind.UnsupportedSolution)
                         .GroupBy(static d => d.Project, StringComparer.Ordinal)
-                        .Select(static g => new SkippedProject(g.Key, g.Key, IsCSharp: g.Any(static d => d.Kind != LoadDiagnosticKind.UnsupportedProject), [.. g], Compilation: null)),
+                        .Select(static g => new SkippedProject(g.Key, g.Key, IsCSharp: !g.Any(static d => d.Kind == LoadDiagnosticKind.UnsupportedProject), [.. g], Compilation: null)),
                 ]);
         }
         finally

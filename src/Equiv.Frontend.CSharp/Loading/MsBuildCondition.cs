@@ -68,7 +68,7 @@ internal sealed class MsBuildCondition
     {
         if (op is "==" or "!=")
         {
-            bool equal = Number(left) is { } l && Number(right) is { } r ? l == r
+            bool equal = Number(left) is { } l && Number(right) is { } r ? l.CompareTo(r) == 0
                 : Boolean(left) is { } lb && Boolean(right) is { } rb ? lb == rb
                 : string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
             return equal == string.Equals(op, "==", StringComparison.Ordinal);

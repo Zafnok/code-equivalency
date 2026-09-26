@@ -31,14 +31,18 @@ internal sealed class BareProjectLoader(
     /// <summary>Every project loaded so far, in the order each finished, including those only reached by reference.</summary>
     public IReadOnlyList<BareProject> Projects => _loaded;
 
-    public async Task<BareProject> LoadAsync(string projectPath, CancellationToken ct)
+    /// <summary>
+    /// The project at <paramref name="projectPath"/>, loaded once. Null while that project is still loading: a
+    /// reference cycle, whose closing reference is left out, as MSBuild leaves it out.
+    /// </summary>
+    public async Task<BareProject?> LoadAsync(string projectPath, CancellationToken ct)
     {
         if (_projects.TryGetValue(projectPath, out BareProject? known))
         {
-            return known ?? Failed(projectPath, "it is part of a project reference cycle");
+            return known;
         }
 
-        _projects[projectPath] = null;
+        _projects.Add(projectPath, value: null);
         BareProject project = await OpenAsync(projectPath, ct).ConfigureAwait(false);
         _projects[projectPath] = project;
         _loaded.Add(project);
@@ -88,7 +92,7 @@ internal sealed class BareProjectLoader(
             return Failed(project.Path, $"no reference assemblies for {moniker} are cached in '{referenceAssemblies.Root}' or found on {string.Join(", ", feed.Sources)}");
         }
 
-        (ProjectAssets? assets, string assetsFile) = await PackageAssetsAsync(project, moniker, ct).ConfigureAwait(false);
+        (ProjectAssets? assets, string? assetsFile) = await PackageAssetsAsync(project, moniker, ct).ConfigureAwait(false);
         if (assets is null)
         {
             return Failed(project.Path, $"it has PackageReference items but no '{assetsFile}'; restore it first (dotnet restore)");
@@ -145,11 +149,11 @@ internal sealed class BareProjectLoader(
     /// The PackageReference assets NuGet's restore resolved (none without PackageReference items), and the assets file
     /// looked at; null assets when the file is missing.
     /// </summary>
-    private static async Task<(ProjectAssets? Assets, string AssetsFile)> PackageAssetsAsync(EvaluatedProject project, string moniker, CancellationToken ct)
+    private static async Task<(ProjectAssets? Assets, string? AssetsFile)> PackageAssetsAsync(EvaluatedProject project, string moniker, CancellationToken ct)
     {
         if (!project.OfType("PackageReference").Any())
         {
-            return (new ProjectAssets([], []), string.Empty);
+            return (new ProjectAssets([], []), null);
         }
 
         string assetsFile = project.Properties.Read("ProjectAssetsFile").Trim() is { Length: > 0 } file
@@ -171,7 +175,7 @@ internal sealed class BareProjectLoader(
         {
             Compilation? target = sdkProjects.TryGetValue(reference.Include, out Compilation? sdk) ? sdk
                 : SdkStyleProject.IsSdkStyleFile(reference.Include) ? throw new UnsupportedConstructException($"the reference to the SDK-style project '{reference.Include}', for which MSBuildWorkspace built no compilation")
-                : (await LoadAsync(reference.Include, ct).ConfigureAwait(false)).Compilation;
+                : (await LoadAsync(reference.Include, ct).ConfigureAwait(false))?.Compilation;
             if (target is not null)
             {
                 references.Add(target.ToMetadataReference([.. (reference.Metadatum("Aliases") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)]));

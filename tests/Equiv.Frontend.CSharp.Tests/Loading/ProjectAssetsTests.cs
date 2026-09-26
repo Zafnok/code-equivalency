@@ -38,7 +38,9 @@ public sealed class ProjectAssetsTests : IDisposable
     [InlineData(".NETFramework,Version=v4.7.2")]
     [InlineData("Empty")]
     public void AMissingTargetIsAnError(string framework) =>
-        Assert.Throws<KeyNotFoundException>(() => ProjectAssets.Read(Json(_fixture.Root, _fixture.Root), framework));
+        Assert.Equal(
+            $"project.assets.json has no target for '{framework}'",
+            Assert.Throws<KeyNotFoundException>(() => ProjectAssets.Read(Json(_fixture.Root, _fixture.Root), framework)).Message);
 
     [Fact]
     public void MalformedJsonIsAnError() =>

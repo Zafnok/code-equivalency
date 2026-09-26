@@ -207,6 +207,46 @@ public sealed class BareProjectLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task WithoutReferenceAssembliesTheProjectIsSkippedNamingTheCacheAndTheSources()
+    {
+        string bad = Legacy("Bad", """<ItemGroup><Compile Include="Code.cs" /></ItemGroup>""", frameworkVersion: "v9.9");
+        string good = Legacy("Good", """<ItemGroup><Compile Include="Code.cs" /></ItemGroup>""");
+
+        SkippedProject skipped = Assert.Single((await Load(Solution(good, bad))).Skipped);
+
+        Assert.Equal(
+            $"the bare loader skipped '{bad}': no reference assemblies for .NETFramework,Version=v9.9 are cached in '{_fixture.ReferenceAssemblies}' or found on {NuGetSettings.NuGetOrg}",
+            Assert.Single(skipped.Diagnostics).Message);
+    }
+
+    [Fact]
+    public async Task TheFrameworkDefaultsToDotNetFramework40AndMayBeNamedExplicitly()
+    {
+        _fixture.Framework("v4.0");
+        string defaulted = Legacy("Defaulted", """<ItemGroup><Compile Include="Code.cs" /></ItemGroup>""", frameworkVersion: string.Empty);
+        string named = Legacy("Named", """<PropertyGroup><TargetFrameworkIdentifier>.NETFramework</TargetFrameworkIdentifier></PropertyGroup><ItemGroup><Compile Include="Code.cs" /></ItemGroup>""");
+
+        LoadedSolution loaded = await Load(Solution(defaulted, named));
+
+        Assert.Equal(["Defaulted", "Named"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
+        Assert.Contains("v4.0", ((PortableExecutableReference)loaded.Compilations[0].References.First()).FilePath, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WithoutCommonPropsTheAttributeFileGoesUnderObjAndANamelessFrameworkListGivesNoDisplayName()
+    {
+        _fixture.Write(Path.Combine(_fixture.ReferenceAssemblies, ".NETFramework", "v4.8", "RedistList", "FrameworkList.xml"), "<FileList />");
+        string project = Legacy("App", """<ItemGroup><Compile Include="Code.cs" /></ItemGroup>""");
+        string[] lines = await File.ReadAllLinesAsync(project, TestContext.Current.CancellationToken);
+        await File.WriteAllLinesAsync(project, lines.Where(static l => !l.Contains("Microsoft.Common.props", StringComparison.Ordinal)), TestContext.Current.CancellationToken);
+
+        SyntaxTree attributes = Assert.Single((await Load(Solution(project))).Compilations).SyntaxTrees.Last();
+
+        Assert.Equal(Path.Combine(Path.GetDirectoryName(project)!, "obj", "Debug", ".NETFramework,Version=v4.8.AssemblyAttributes.cs"), attributes.FilePath);
+        Assert.Contains("FrameworkDisplayName = \"\"", attributes.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AMissingOrMalformedProjectFileOrAnotherLanguageIsSkipped()
     {
         string good = Legacy("Good", """<ItemGroup><Compile Include="Code.cs" /></ItemGroup>""");
@@ -223,6 +263,7 @@ public sealed class BareProjectLoaderTests : IDisposable
         Assert.Equal($"the bare loader skipped '{gone}': the project file '{gone}' does not exist", loaded.Skipped[0].Diagnostics[0].Message);
         Assert.StartsWith($"the bare loader skipped '{malformed}': a project file it imports is not well-formed XML: ", loaded.Skipped[1].Diagnostics[0].Message, StringComparison.Ordinal);
         Assert.Equal("project type '.vbproj' is not supported; only C# is", loaded.Skipped[2].Diagnostics[0].Message);
+        Assert.All(loaded.Skipped, static s => Assert.Equal((string.Empty, s.Name), (s.Diagnostics[0].Id, s.Diagnostics[0].Project)));
     }
 
     [Fact]
@@ -262,6 +303,7 @@ public sealed class BareProjectLoaderTests : IDisposable
         SolutionLoadException exception = await Assert.ThrowsAsync<SolutionLoadException>(() => Load(Solution(bad)));
 
         Assert.Equal([LoadDiagnosticKind.UnsupportedSolution, LoadDiagnosticKind.WorkspaceFailure], exception.Diagnostics.Select(static d => d.Kind));
+        Assert.Equal(new LoadDiagnostic(LoadDiagnosticKind.UnsupportedSolution, string.Empty, string.Empty, "the solution contains no C# project that loads"), exception.Diagnostics[0]);
     }
 
     [Fact]

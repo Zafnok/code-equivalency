@@ -98,6 +98,7 @@ public sealed class AssemblyReferencesTests : IDisposable
     [InlineData("v4.7.2", "netstandard", "", "Uses.dll|netstandard.dll")]
     [InlineData("v4.7.2", "netstandard", "<ImplicitlyExpandNETStandardFacades>false</ImplicitlyExpandNETStandardFacades>", "Uses.dll")]
     [InlineData("v4.6.1", "netstandard", "", "Uses.dll|System.Shim.dll|netstandard.dll")]
+    [InlineData("v4.7.1", "netstandard", "", "Uses.dll|netstandard.dll")]
     [InlineData("v4.6", "netstandard", "", "Uses.dll")]
     public void AReferenceThatDependsOnSystemRuntimeOrNetStandardPullsInFacades(string frameworkVersion, string dependency, string property, string expected)
     {
@@ -105,6 +106,8 @@ public sealed class AssemblyReferencesTests : IDisposable
         string shims = Path.Combine(_fixture.Root, "shims");
         _fixture.Library(Path.Combine("shims", "netstandard.dll"), "netstandard", "public class StandardType { }");
         _fixture.Library(Path.Combine("shims", "System.Shim.dll"), "System.Shim", "public class Shim { }");
+        _fixture.Write(Path.Combine("shims", "readme.txt"), "not an assembly");
+        _fixture.Write(Path.Combine(framework, "Facades", "readme.txt"), "not an assembly");
         string facade = Path.Combine(framework, "Facades", dependency + ".dll");
         string type = string.Equals(dependency, "netstandard", StringComparison.Ordinal) ? "StandardType" : "RuntimeType";
         _fixture.Library(Path.Combine("p", "lib", "Uses.dll"), "Uses", $"public class Uses : {type} {{ }}", facade);
@@ -115,6 +118,53 @@ public sealed class AssemblyReferencesTests : IDisposable
             shims: shims);
 
         Assert.Equal(expected, Names(references));
+    }
+
+    [Fact]
+    public void WithoutTheSdksShimsANetStandardDependencyBefore471AddsNothing()
+    {
+        string framework = _fixture.Framework("v4.6.1");
+        _fixture.Library(Path.Combine("p", "lib", "Uses.dll"), "Uses", "public class Uses : StandardType { }", Path.Combine(framework, "Facades", "netstandard.dll"));
+
+        ImmutableArray<ResolvedReference> references = Resolve(
+            """<PropertyGroup><NoStdLib>true</NoStdLib><AddAdditionalExplicitAssemblyReferences>false</AddAdditionalExplicitAssemblyReferences></PropertyGroup><ItemGroup><Reference Include="lib\Uses.dll" /></ItemGroup>""",
+            "v4.6.1");
+
+        Assert.Equal("Uses.dll", Names(references));
+    }
+
+    [Fact]
+    public void AFrameworkAssemblyThatDependsOnSystemRuntimeExpandsNothing()
+    {
+        string framework = _fixture.Framework();
+        _fixture.Library(Path.Combine(framework, "System.Web.dll"), "System.Web", "public class Page : RuntimeType { }", Path.Combine(framework, "Facades", "System.Runtime.dll"));
+
+        ImmutableArray<ResolvedReference> references = Resolve(
+            """<PropertyGroup><NoStdLib>true</NoStdLib><AddAdditionalExplicitAssemblyReferences>false</AddAdditionalExplicitAssemblyReferences></PropertyGroup><ItemGroup><Reference Include="System.Web" /></ItemGroup>""");
+
+        Assert.Equal("System.Web.dll", Names(references));
+    }
+
+    [Fact]
+    public void TheFrameworkBeatsItsFacadesAndTheFacadesBeatAFileOfTheSameName()
+    {
+        string framework = _fixture.Framework();
+        _fixture.Library(Path.Combine(framework, "Dup.dll"), "Dup", "public class InFramework { }");
+        _fixture.Library(Path.Combine(framework, "Facades", "Dup.dll"), "Dup", "public class InFacades { }");
+        _fixture.Library(Path.Combine(framework, "Facades", "Two.dll"), "Two", "public class InFacades { }");
+        _fixture.Write(Path.Combine("p", "Two"), "a file named like the reference");
+        Directory.CreateDirectory(Path.Combine(_fixture.Root, "p", "folder"));
+
+        ImmutableArray<ResolvedReference> references = Resolve("""
+              <PropertyGroup><NoStdLib>true</NoStdLib><AddAdditionalExplicitAssemblyReferences>false</AddAdditionalExplicitAssemblyReferences></PropertyGroup>
+              <ItemGroup>
+                <Reference Include="Dup" />
+                <Reference Include="Two" />
+                <Reference Include="Folder"><HintPath>folder</HintPath></Reference>
+              </ItemGroup>
+            """);
+
+        Assert.Equal([Path.Combine(framework, "Dup.dll"), Path.Combine(framework, "Facades", "Two.dll")], references.Select(static r => r.Path), StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
