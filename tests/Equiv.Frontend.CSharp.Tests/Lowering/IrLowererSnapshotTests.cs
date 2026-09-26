@@ -156,16 +156,16 @@ public sealed class IrLowererSnapshotTests
     public Task DoWhileLoop() => Dump("static int M(int n) { int s = 0; do { s += n; n--; } while (n > 0); return s; }");
 
     [Fact]
-    public Task InstancePropertyRead() => Dump("int P { get; set; } static int M(C c) => c.P;");
+    public Task InstancePropertyRead() => Dump("public virtual int P { get; set; } static int M(C c) => c.P;");
 
     [Fact]
-    public Task StaticPropertyWrite() => Dump("static int P { get; set; } static void M(int a) { P = a; }");
+    public Task StaticPropertyWrite() => Dump("static int p; static int P { get => p; set => p = value; } static void M(int a) { P = a; }");
 
     [Fact]
     public Task IndexerRead() => Dump("int this[int i] => i; static int M(C c, int i) => c[i];");
 
     [Fact]
-    public Task CompoundAssignmentToAProperty() => Dump("int P { get; set; } static int M(C c, int a) => checked(c.P += a);");
+    public Task CompoundAssignmentToAProperty() => Dump("public virtual int P { get; set; } static int M(C c, int a) => checked(c.P += a);");
 
     [Fact]
     public Task BoxingAnInt() => Dump("static object M(int a) => a;");
@@ -218,5 +218,27 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task DefaultValueOfATypeParameter() => Dump("static T M<T>(bool has, T value) where T : class => has ? value : default;");
 
-    private static Task Dump(string members) => Verify(IrText.Dump(Lowered.Method(members)));
+    /// <summary>Ticket M4-008 acceptance criterion 1: an arrow-bodied getter, lowered through its expression's graph.</summary>
+    [Fact]
+    public Task ArrowAccessor() => Dump("int f; int P => f * 2 + 1;", "get_P");
+
+    /// <summary>Ticket M4-008 acceptance criterion 2: an auto-property's setter writes its backing field's map at the receiver.</summary>
+    [Fact]
+    public Task AutoPropertySetter() => Dump("int P { get; set; }", "set_P");
+
+    /// <summary>Ticket M4-008 acceptance criterion 4: a false filter passes the exception to the bare <c>catch</c> after it.</summary>
+    [Fact]
+    public Task CatchWithAFalseFilter() =>
+        Dump("static int M(int a, int b) { try { return a / b; } catch (DivideByZeroException) when (a > 0) { return 1; } catch { return 2; } }");
+
+    /// <summary>Ticket M4-008 acceptance criterion 4: the filter's own division by zero goes to its false exit.</summary>
+    [Fact]
+    public Task FilterThatThrows() =>
+        Dump("static int M(int a, int b) { try { return a / b; } catch (DivideByZeroException) when (10 / a > 0) { return 1; } }");
+
+    /// <summary>Ticket M4-008: the initializers' graphs, then the constructor's, its base call first.</summary>
+    [Fact]
+    public Task ConstructorWithFieldInitializers() => Dump("int f = 1; int P { get; } = 2; C(int a) { f = a; }", ".ctor");
+
+    private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }

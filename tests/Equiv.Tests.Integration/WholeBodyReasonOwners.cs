@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 
 namespace Equiv.Tests.Integration;
 
@@ -13,15 +13,6 @@ internal static class WholeBodyReasonOwners
     {
         ["async"] = "M4-006",
         ["lock"] = "M4-003",
-        ["catch-filter"] = "M4-008",
-        ["Block"] = "M4-008",
-        ["no-body"] = "M4-008",
-
-        // Constructors M4-001 left whole-body: one that omits its type's field initializers, a static constructor, and a
-        // primary constructor with base arguments (ADR 0029 clarification, 2026-09-25).
-        ["field-initializer"] = "M4-008",
-        ["ConstructorBodyOperation"] = "M4-008",
-
         // Not a lowering gap: erroneous code is Unknown(Unbound) by design (ADR 0029 decision 2), so it never goes away.
         ["unbound"] = "M3-024",
     }.ToImmutableSortedDictionary(StringComparer.Ordinal);

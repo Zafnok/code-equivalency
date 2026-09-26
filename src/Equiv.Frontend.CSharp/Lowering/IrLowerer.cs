@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
@@ -46,6 +46,7 @@ internal sealed class IrLowerer
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captures = [];
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captureTargets = [];
     private readonly Dictionary<CaptureId, PropertyAccess> propertyTargets = [];
+    private readonly Dictionary<CaptureId, HeapLowerer.Access> sliceTargets = [];
     private HashSet<CaptureId> assignedCaptures = [];
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
     private readonly Dictionary<IOperation, IrVar> tryCastNulls = [];
@@ -68,13 +69,13 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
-    /// Lowers <paramref name="method"/>'s first declaration. An instance constructor is lowered like a method, its base or
-    /// <c>this</c> initializer first, unless it leaves out the field initializers C# runs ahead of it (reason
-    /// <c>field-initializer</c>, ticket M4-001). Any other body that is not an <see cref="IMethodBodyOperation"/> (a static or
-    /// primary constructor, an arrow-bodied property, an auto-accessor) is one whole-body <see cref="IrOpaque"/>.
-    /// A call to a member listed in <paramref name="suppressedRuntimeChanges"/> is not flagged runtime-changed. A method
-    /// whose bound code is erroneous is one whole-body <see cref="IrOpaque"/> per cause, with reason
-    /// <see cref="Unknown.UnboundOpaqueReason"/> (ADR 0029 decision 2), and is not lowered further.
+    /// Lowers <paramref name="method"/>'s first declaration. A constructor, static or instance, primary or not, runs the
+    /// field and property initializers of its kind in declaration order and then its body, its base or <c>this</c>
+    /// initializer first; one that chains to <c>this(...)</c> runs no initializers, since the constructor it calls runs them
+    /// (ticket M4-008). An arrow-bodied property or indexer accessor lowers its expression's graph, and an accessor with no
+    /// body reads or writes its backing field's map. A call to a member listed in <paramref name="suppressedRuntimeChanges"/>
+    /// is not flagged runtime-changed. A method whose bound code is erroneous is one whole-body <see cref="IrOpaque"/> per
+    /// cause, with reason <see cref="Unknown.UnboundOpaqueReason"/> (ADR 0029 decision 2), and is not lowered further.
     /// </summary>
     public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges) =>
         Lower(method, compilation, renames, suppressedRuntimeChanges, []).Body;
@@ -94,36 +95,47 @@ internal sealed class IrLowerer
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
-        ImmutableArray<SourceSpan> unbound = UnboundCauses(syntax, model, operation);
+        ImmutableArray<Initializer> initializers = operation is IConstructorBodyOperation ? Initializers(method, syntax, compilation) : [];
+        ImmutableArray<SourceSpan> unbound =
+            [.. UnboundCauses(syntax, model, operation), .. initializers.SelectMany(static i => UnboundCauses(i.Syntax, i.Model, i.Operation))];
         IrProcedure procedure = (unbound.IsEmpty, operation) switch
         {
             (false, _) => Opaque(method, renames, entries, Unknown.UnboundOpaqueReason, unbound),
-            (true, IMethodBodyOperation body) => Lower(body, model, renames, suppressedRuntimeChanges, entries),
-            (true, IConstructorBodyOperation body) when method.MethodKind == MethodKind.Constructor && syntax is ConstructorDeclarationSyntax declaration =>
-                OmittedFieldInitializer(method, declaration) is { } initializer
-                    ? Opaque(method, renames, entries, "field-initializer", [Span(initializer)])
-                    : Lower(body, model, renames, suppressedRuntimeChanges, entries),
-            _ => Opaque(method, renames, entries, operation?.Kind.ToString() ?? "no-body", [Span(syntax)]),
+            (true, IMethodBodyOperation body) => Lower(method, body, [ControlFlowGraph.Create(body)], model, renames, suppressedRuntimeChanges, entries),
+            (true, IBlockOperation body) => Lower(method, body, [ControlFlowGraph.Create(body)], model, renames, suppressedRuntimeChanges, entries),
+            (true, IConstructorBodyOperation body) =>
+                Lower(method, body, [.. initializers.Select(static i => Graph(i.Operation!)), ControlFlowGraph.Create(body)], model, renames, suppressedRuntimeChanges, entries),
+            _ when method.AssociatedSymbol is IPropertySymbol property && HeapLowerer.BackingField(property) is { } field =>
+                AutoAccessor(method, field, model, Span(syntax), renames, suppressedRuntimeChanges, entries),
+            // No operation to lower: an `extern` method, or a record's primary constructor, whose writes of its positional
+            // properties no operation holds.
+            _ => Opaque(method, renames, entries, "no-body", [Span(syntax)]),
         };
         return (procedure, [.. entries.Applied]);
     }
 
     /// <summary>
-    /// Lowers <paramref name="body"/> as it is bound. It does not check for erroneous code; the symbol overload does, and
-    /// is the one the frontend uses. Erroneous constructs reaching here lower to named opaques (<c>Invalid</c>, <c>rethrow</c>).
+    /// Lowers <paramref name="body"/> as it is bound, without the initializers a constructor runs ahead of it. It does not
+    /// check for erroneous code; the symbol overload does, and is the one the frontend uses. Erroneous constructs reaching
+    /// here lower to named opaques (<c>Invalid</c>, <c>rethrow</c>).
     /// </summary>
     public static IrProcedure Lower(IMethodBodyBaseOperation body, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(model);
-        return Lower(body, model, renames, suppressedRuntimeChanges, new Catalogue([]));
-    }
-
-    private static IrProcedure Lower(IMethodBodyBaseOperation body, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue)
-    {
         IMethodSymbol method = (IMethodSymbol)model.GetDeclaredSymbol(body.Syntax)!;
         // A constructor's graph starts with its initializer: a call to the base or `this` constructor on `this`.
         ControlFlowGraph graph = body is IConstructorBodyOperation constructor ? ControlFlowGraph.Create(constructor) : ControlFlowGraph.Create((IMethodBodyOperation)body);
+        return Lower(method, body, [graph], model, renames, suppressedRuntimeChanges, new Catalogue([]));
+    }
+
+    /// <summary>
+    /// Lowers <paramref name="graphs"/> in order, each one's exit going on to the next one's entry and the last one's
+    /// returning: a constructor's initializers and then its body (ticket M4-008), or just the body.
+    /// </summary>
+    private static IrProcedure Lower(
+        IMethodSymbol method, IOperation body, ImmutableArray<ControlFlowGraph> graphs, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue)
+    {
         SourceSpan span = Span(body.Syntax);
         // `async` is checked first: an `await`'s state machine is not modelled (ticket M4-006), and
         // checking it ahead of the other whole-body cases keeps an async method from being classified
@@ -136,8 +148,6 @@ internal sealed class IrLowerer
         {
             _ when method.IsAsync => ("async", span),
             _ when body.Descendants().FirstOrDefault(static o => o is ILockOperation) is { } @lock => ("lock", Span(@lock.Syntax)),
-            _ when ExceptionRegions.HasUnsupportedCatch(graph.Root) =>
-                ("catch-filter", Span(body.Descendants().OfType<ICatchClauseOperation>().First(ExceptionRegions.IsUnsupported).Syntax)),
             _ => null,
         };
         if (wholeBody is { } opaque)
@@ -146,31 +156,61 @@ internal sealed class IrLowerer
         }
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
-        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, catalogue, returnType, catalogue.X87) { compilation = (CSharpCompilation)model.Compilation, cfg = graph };
-        ImmutableArray<IrBlock> blocks = lowerer.LowerBlocks(method, parameters, span);
-        IrProcedure procedure = new(
-            RoslynIdentity.Of(method, renames),
-            [.. parameters, .. lowerer.heap.Inputs.Parameters],
-            returnType,
-            blocks,
-            new IrBlockId(0));
+        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, catalogue, returnType, catalogue.X87) { compilation = (CSharpCompilation)model.Compilation };
+        return lowerer.Procedure(method, parameters, lowerer.LowerBlocks(method, parameters, span, graphs));
+    }
+
+    /// <summary>
+    /// An accessor with no body (ticket M4-008): a getter reads, and a setter or init accessor writes, the map of the
+    /// property's backing field, at the receiver, or at the type's token when it is static, as a field is lowered.
+    /// </summary>
+    private static IrProcedure AutoAccessor(
+        IMethodSymbol method, IFieldSymbol field, SemanticModel model, SourceSpan span, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue)
+    {
+        (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
+        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, catalogue, returnType, catalogue.X87) { compilation = (CSharpCompilation)model.Compilation };
+        return lowerer.Procedure(method, parameters, lowerer.LowerAccessor(field, parameters, span));
+    }
+
+    /// <summary>The procedure: the C# parameters, then the heap inputs the lowering used.</summary>
+    private IrProcedure Procedure(IMethodSymbol method, ImmutableArray<IrParameter> parameters, ImmutableArray<IrBlock> blocks)
+    {
+        IrProcedure procedure = new(RoslynIdentity.Of(method, renames), [.. parameters, .. heap.Inputs.Parameters], returnType, blocks, new IrBlockId(0));
         Debug.Assert(IrValidator.Validate(procedure).IsEmpty, "lowered IR must validate");
         return procedure;
     }
 
     /// <summary>
-    /// The first instance field or property initializer C# runs ahead of <paramref name="constructor"/>'s body but its
-    /// operation tree leaves out, or null: none is left out when it chains to <c>this(...)</c>, which runs them itself, or
-    /// its type declares none. The whole-body opaque points at it (ADR 0029 decision 3).
+    /// The field and property initializers <paramref name="constructor"/> runs ahead of its body, in declaration order: its
+    /// type's static ones for a static constructor, its instance ones otherwise, and none when it chains to <c>this(...)</c>,
+    /// which runs them itself. A <c>const</c> has no initializer that runs. The declarations of a partial type in several
+    /// files are ordered by file path, since C# leaves their order unspecified.
     /// </summary>
-    private static SyntaxNode? OmittedFieldInitializer(IMethodSymbol constructor, ConstructorDeclarationSyntax declaration) =>
-        declaration.Initializer is { RawKind: (int)SyntaxKind.ThisConstructorInitializer }
-            ? null
-            : constructor.ContainingType.GetMembers()
-                .Where(static m => !m.IsStatic)
+    private static ImmutableArray<Initializer> Initializers(IMethodSymbol constructor, SyntaxNode syntax, Compilation compilation) =>
+        syntax is ConstructorDeclarationSyntax { Initializer.RawKind: (int)SyntaxKind.ThisConstructorInitializer }
+            ? []
+            : [.. constructor.ContainingType.GetMembers()
+                .Where(m => m.IsStatic == constructor.IsStatic && m is not IFieldSymbol { IsConst: true })
                 .SelectMany(static m => m.DeclaringSyntaxReferences)
-                .Select(static r => r.GetSyntax())
-                .FirstOrDefault(static s => s is VariableDeclaratorSyntax { Initializer: not null } or PropertyDeclarationSyntax { Initializer: not null });
+                .Select(static r => r.GetSyntax() switch
+                {
+                    VariableDeclaratorSyntax { Initializer: { } initializer } => initializer,
+                    PropertyDeclarationSyntax { Initializer: { } initializer } => initializer,
+                    _ => null,
+                })
+                .OfType<EqualsValueClauseSyntax>()
+                .OrderBy(static i => i.SyntaxTree.FilePath, StringComparer.Ordinal)
+                .ThenBy(static i => i.SpanStart)
+                .Select(i =>
+                {
+                    SemanticModel model = compilation.GetSemanticModel(i.SyntaxTree);
+                    return new Initializer(i, model, model.GetOperation(i));
+                })];
+
+    /// <summary>An initializer's graph: one assignment of its value to the field or property it initializes.</summary>
+    private static ControlFlowGraph Graph(IOperation initializer) => initializer is IFieldInitializerOperation field
+        ? ControlFlowGraph.Create(field)
+        : ControlFlowGraph.Create((IPropertyInitializerOperation)initializer);
 
     /// <summary>
     /// The C# parameters. One declared <c>@this</c> has the name <c>this</c>, which is the receiver's (ADR 0021), so it is
@@ -229,13 +269,59 @@ internal sealed class IrLowerer
 
     private static SourceSpan Span(SyntaxNode syntax) => CSharpFrontend.ToSourceSpan(syntax.GetLocation());
 
-    private ImmutableArray<IrBlock> LowerBlocks(IMethodSymbol method, ImmutableArray<IrParameter> parameters, SourceSpan span)
+    private ImmutableArray<IrBlock> LowerBlocks(IMethodSymbol method, ImmutableArray<IrParameter> parameters, SourceSpan span, ImmutableArray<ControlFlowGraph> graphs)
     {
         bodySpan = span;
         receiver = method.ContainingType;
+        heap = NewHeap();
+        IrBlockId start = ssa.NewBlock();
+        LoweringContext entry = new([], [], handlerExit: null) { Current = start };
+
+        ImmutableArray<(SsaBuilder.Variable, IrVar)>.Builder outs = ImmutableArray.CreateBuilder<(SsaBuilder.Variable, IrVar)>();
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            SsaBuilder.Variable variable = Declare(method.Parameters[i], parameters[i].Var, method.Parameters[i].Type);
+            ssa.Store(start, variable, parameters[i].Var);
+            if (Shadow(variable) is { } shadow)
+            {
+                ssa.Store(start, shadow, heap.MapRead(heap.Inputs.Nulls((IrSort)parameters[i].Var.Type), parameters[i].Var, entry));
+            }
+
+            if (parameters[i].Kind != IrParameterKind.In)
+            {
+                outs.Add((variable, parameters[i].Var));
+            }
+        }
+
+        for (int i = 0; i < graphs.Length; i++)
+        {
+            IrBlockId? next = i < graphs.Length - 1 ? ssa.NewBlock() : null;
+            LowerGraph(graphs[i], start, next);
+            start = next!;
+        }
+
+        outs.AddRange(heap.Outs());
+
+        // Every call reads and writes every field and array slice the body touches, including one first touched after it (ticket P1-005).
+        return ssa.Build(new IrBlockId(0), outs.ToImmutable(), [.. heap.CallHeap()], bodySpan);
+    }
+
+    private HeapLowerer NewHeap() =>
+        new(ssa, Value, ThrowIfNull, Target, (context, condition, exceptionType) => ThrowIf(condition, exceptionType, context), catalogue.Sorts);
+
+    /// <summary>
+    /// Lowers one graph whose entry is <paramref name="start"/> and whose exit goes on to <paramref name="next"/>, or
+    /// returns when that is null. Flow captures and switch chains are each graph's own.
+    /// </summary>
+    private void LowerGraph(ControlFlowGraph graph, IrBlockId start, IrBlockId? next)
+    {
+        cfg = graph;
         chains = SwitchChains.Find(cfg);
         exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, bodySpan, Fill);
-        heap = new HeapLowerer(ssa, Value, ThrowIfNull, Target, (context, condition, exceptionType) => ThrowIf(condition, exceptionType, context), catalogue.Sorts);
+        captures.Clear();
+        captureTargets.Clear();
+        propertyTargets.Clear();
+        sliceTargets.Clear();
         assignedCaptures =
         [
             .. cfg.Blocks
@@ -247,42 +333,51 @@ internal sealed class IrLowerer
                 .OfType<IFlowCaptureReferenceOperation>()
                 .Select(static r => r.Id),
         ];
-        // A `finally` is never lowered in place: it is copied onto each path that leaves its `try`.
+        // A `finally` or a `when` filter is never lowered in place: it is copied onto each path that runs it.
         ImmutableArray<BasicBlock> reachable =
-            [.. cfg.Blocks.Where(b => b.IsReachable && !chains.IsAbsorbed(b.Ordinal) && ExceptionRegions.EnclosingFinally(b) is null)];
+            [.. cfg.Blocks.Where(b => b.IsReachable && !chains.IsAbsorbed(b.Ordinal) && ExceptionRegions.EnclosingCopied(b) is null)];
         Dictionary<int, IrBlockId> blockIds = [];
         foreach (BasicBlock block in reachable)
         {
-            blockIds[block.Ordinal] = ssa.NewBlock();
+            blockIds[block.Ordinal] = block.Kind == BasicBlockKind.Entry ? start : ssa.NewBlock();
         }
 
-        LoweringContext context = new(blockIds, blockIds, handlerExit: null);
-
-        ImmutableArray<(SsaBuilder.Variable, IrVar)>.Builder outs = ImmutableArray.CreateBuilder<(SsaBuilder.Variable, IrVar)>();
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            SsaBuilder.Variable variable = Declare(method.Parameters[i], parameters[i].Var, method.Parameters[i].Type);
-            ssa.Store(context.Current, variable, parameters[i].Var);
-            if (Shadow(variable) is { } shadow)
-            {
-                ssa.Store(context.Current, shadow, heap.MapRead(heap.Inputs.Nulls((IrSort)parameters[i].Var.Type), parameters[i].Var, context));
-            }
-
-            if (parameters[i].Kind != IrParameterKind.In)
-            {
-                outs.Add((variable, parameters[i].Var));
-            }
-        }
-
+        LoweringContext context = new(blockIds, blockIds, handlerExit: null) { Continuation = next };
         foreach (BasicBlock block in reachable)
         {
             Fill(block, context);
         }
+    }
 
-        outs.AddRange(heap.Outs());
+    /// <summary>
+    /// The one block of an accessor with no body (ticket M4-008). A struct's <c>this</c> is not modelled, so there the
+    /// access is opaque, as reading <c>this</c> anywhere in a struct is.
+    /// </summary>
+    private ImmutableArray<IrBlock> LowerAccessor(IFieldSymbol field, ImmutableArray<IrParameter> parameters, SourceSpan span)
+    {
+        heap = NewHeap();
+        IrBlockId start = ssa.NewBlock();
+        LoweringContext context = new([], [], handlerExit: null) { Current = start };
+        IrVar? value = returnType is null ? null : ssa.Temp(returnType);
+        if (!field.IsStatic && field.ContainingType.IsValueType)
+        {
+            ssa.Emit(start, new IrOpaque(value, nameof(OperationKind.InstanceReference), span));
+        }
+        else
+        {
+            HeapLowerer.Access access = heap.Backing(field, field.IsStatic ? null : heap.Inputs.This(field.ContainingType), context);
+            if (value is null)
+            {
+                heap.WriteSlice(access, parameters[^1].Var, context);
+            }
+            else
+            {
+                value = heap.ReadSlice(access, context);
+            }
+        }
 
-        // Every call reads and writes every field and array slice the body touches, including one first touched after it (ticket P1-005).
-        return ssa.Build(new IrBlockId(0), outs.ToImmutable(), [.. heap.CallHeap()], bodySpan);
+        ssa.Terminate(start, new IrReturn(value, []));
+        return ssa.Build(start, [.. heap.Outs()], [.. heap.CallHeap()], span);
     }
 
     private void Fill(BasicBlock block, LoweringContext context)
@@ -299,6 +394,13 @@ internal sealed class IrLowerer
 
     private void Terminate(BasicBlock block, LoweringContext context)
     {
+        if (block.Kind == BasicBlockKind.Exit && context.Continuation is { } continuation)
+        {
+            // An initializer's exit goes on to the next initializer or the constructor's body (ticket M4-008).
+            ssa.Terminate(context.Current, new IrGoto(continuation));
+            return;
+        }
+
         if (block.Kind == BasicBlockKind.Exit)
         {
             // Reached by a Regular fall-through: a void method's end, or erroneous code in a non-void one.
@@ -350,14 +452,17 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// A two-way branch. <c>if (c) throw;</c> is one block whose fall-through is the rethrow, which names no
-    /// block (ticket P2-010), so the rethrow gets a block of its own and is opaque as it is anywhere else.
+    /// block (ticket P2-010), so the rethrow gets a block of its own and is opaque as it is anywhere else. A <c>when</c>
+    /// filter's last block falls through, when the filter is false, to its copy's structured-exception-handling exit
+    /// (ticket M4-008).
     /// </summary>
     private void Branch(BasicBlock block, ControlFlowBranch conditional, ControlFlowBranch fallThrough, LoweringContext context)
     {
         IrVar condition = Value(block.BranchValue!, context);
         IrBlockId jump = exceptions.Destination(conditional, context);
-        IrBlockId? rethrow = fallThrough.Semantics == ControlFlowBranchSemantics.Regular ? null : ssa.NewBlock();
-        IrBlockId next = rethrow ?? exceptions.Destination(fallThrough, context);
+        IrBlockId? declined = fallThrough.Semantics == ControlFlowBranchSemantics.StructuredExceptionHandling ? context.HandlerExit : null;
+        IrBlockId? rethrow = fallThrough.Semantics == ControlFlowBranchSemantics.Regular || declined is not null ? null : ssa.NewBlock();
+        IrBlockId next = rethrow ?? declined ?? exceptions.Destination(fallThrough, context);
         ssa.Terminate(context.Current, block.ConditionKind == ControlFlowConditionKind.WhenTrue
             ? new IrBranch(condition, jump, next)
             : new IrBranch(condition, next, jump));
@@ -525,6 +630,14 @@ internal sealed class IrLowerer
 
     private void Statement(IOperation operation, LoweringContext context)
     {
+        if (operation is IFlowCaptureOperation { Value: IPropertyReferenceOperation autoProperty } backed && assignedCaptures.Contains(backed.Id)
+            && heap.AutoProperty(autoProperty, context) is { } slice)
+        {
+            // An auto-property is its backing field's map (ticket M4-008), so, as for a field, its receiver is evaluated here.
+            sliceTargets[backed.Id] = slice;
+            return;
+        }
+
         if (operation is IFlowCaptureOperation { Value: IPropertyReferenceOperation property } assigned && assignedCaptures.Contains(assigned.Id))
         {
             // The CFG captures a property an assignment writes when the value branches: its receiver and index
@@ -581,6 +694,8 @@ internal sealed class IrLowerer
                 return heap.Element(element, context) is { } read ? heap.ReadSlice(read, context) : Opaque(element, element.Kind.ToString(), context);
             case IPropertyReferenceOperation property when heap.ArrayLength(property, context) is { } length:
                 return length;
+            case IPropertyReferenceOperation property when heap.AutoProperty(property, context) is { } backing:
+                return heap.ReadSlice(backing, context);
             case IPropertyReferenceOperation property:
                 return Accessor(property, property.Property.GetMethod, Operands(property.Instance, property.Arguments, context), value: null, context);
             case IConversionOperation conversion:
@@ -800,7 +915,10 @@ internal sealed class IrLowerer
 
     private IrVar? Assign(ISimpleAssignmentOperation assignment, LoweringContext context)
     {
-        if (heap.Slice(assignment.Target, context) is { } slice)
+        HeapLowerer.Access? captured = assignment.Target is IFlowCaptureReferenceOperation reference && sliceTargets.TryGetValue(reference.Id, out HeapLowerer.Access access)
+            ? access
+            : null;
+        if ((captured ?? heap.Slice(assignment.Target, context)) is { } slice)
         {
             // C# evaluates the target's receiver and index, then the value, and only then stores, so
             // the null and bounds checks (made at the store) come after the value (ticket P2-017).
@@ -1101,6 +1219,11 @@ internal sealed class IrLowerer
         if (Target(lvalue) is { } target)
         {
             return (() => ssa.Load(context.Current, target), value => ssa.Store(context.Current, target, value));
+        }
+
+        if (lvalue is IPropertyReferenceOperation auto && heap.AutoProperty(auto, context) is { } slice)
+        {
+            return (() => heap.ReadSlice(slice, context), value => heap.WriteSlice(slice, value, context));
         }
 
         return PropertyTarget(lvalue, context) is { } property
@@ -1445,6 +1568,9 @@ internal sealed class IrLowerer
 
     /// <summary>A property an assignment writes, and its receiver and index arguments, evaluated once.</summary>
     private sealed record PropertyAccess(IPropertyReferenceOperation Reference, ImmutableArray<IrVar> Operands);
+
+    /// <summary>A field or property initializer a constructor runs, with its model and its operation (null only when it does not bind).</summary>
+    private sealed record Initializer(EqualsValueClauseSyntax Syntax, SemanticModel Model, IOperation? Operation);
 
     /// <summary>Each source argument's operand as an adapter takes it, and each adapter item's <c>convertTo</c> type, if any.</summary>
     private sealed record AdapterPlan(ImmutableArray<IOperation> Operands, ImmutableArray<ITypeSymbol?> Targets);

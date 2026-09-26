@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using CsCheck;
 
@@ -89,7 +89,7 @@ public sealed class CongruenceSoundnessTests
 
     private static CSharpCompilation Compile(OracleMethod[] methods)
     {
-        string source = $"public static class Oracle\n{{\n    public static int {LoweringOracleGen.Property} {{ get; set; }}\n    public static int {LoweringOracleGen.Field};\n{string.Concat(methods.Select(static (m, i) => m.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n{LoweringOracleGen.CellSource}";
+        string source = $"public static class Oracle\n{{\n{LoweringOracleGen.ClassMembers}{string.Concat(methods.Select(static (m, i) => m.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n{LoweringOracleGen.CellSource}";
         CSharpCompilation compilation = CSharpCompilation.Create(
             "Oracle",
             [CSharpSyntaxTree.ParseText(source, path: "Oracle.cs", cancellationToken: TestContext.Current.CancellationToken)],
