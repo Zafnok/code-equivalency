@@ -39,6 +39,9 @@ internal sealed class TestWorkspace() : Workspace(MefHostServices.DefaultHost, "
             metadataReferences: referenceCoreLibrary ? [CoreLibrary] : []));
     }
 
+    /// <summary>Adds a project exactly as given, for tests that need project references or metadata references of their own.</summary>
+    public void AddProject(ProjectInfo project) => OnProjectAdded(project);
+
     public void Raise(WorkspaceDiagnosticKind kind, string message)
     {
         OnWorkspaceFailed(new WorkspaceDiagnostic(kind, message));

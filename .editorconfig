@@ -502,6 +502,19 @@ dotnet_naming_style.s_camelcase.capitalization = camel_case
 dotnet_diagnostic.CA1064.severity = none
 dotnet_diagnostic.CA1032.severity = none
 
+# M3-029: UnsupportedConstructException is internal for the same reason as SolutionLoadException above: the bare
+# loader throws it while evaluating MSBuild and catches it in the same assembly (BareProjectLoader), turning it into a
+# skipped project. It never crosses an assembly boundary, so CA1064 and CA1032 protect no catch site.
+[src/Equiv.Frontend.CSharp/Loading/UnsupportedConstructException.cs]
+dotnet_diagnostic.CA1064.severity = none
+dotnet_diagnostic.CA1032.severity = none
+
+# M3-029: NuGet's flat container addresses a package by its lower-cased id and version
+# (<base>/<id lower-cased>/<version lower-cased>/<id>.<version>.nupkg), the same genuinely-lower-case convention as the
+# NuGet package cache path under tools/licence-check below, not a value compared case-insensitively.
+[src/Equiv.Frontend.CSharp/Loading/PackageFeed.cs]
+dotnet_diagnostic.CA1308.severity = none
+
 # M2-005: RouteTemplate.Normalize lower-cases a route it builds for output (HTTP route convention is
 # lower-case), not a value compared case-insensitively, so CA1308's ToUpperInvariant advice (aimed at
 # comparison/normalisation keys, where lower-casing can lose information for some cultures) does not

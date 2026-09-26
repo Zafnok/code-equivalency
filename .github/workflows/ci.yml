@@ -104,6 +104,70 @@ jobs:
           path: ${{ runner.temp }}/ci-pass
           key: ${{ env.PASS_KEY_PREFIX }}-${{ steps.fp.outputs.hash }}
 
+  # ADR 0031 (M3-029): Linux must produce the same SARIF results as Windows. Each leg runs `equiv compare` on every
+  # samples/* pair (Windows through MSBuildWorkspace and VS Build Tools, Ubuntu through the bare loader for the
+  # non-SDK sides); `parity` diffs the two, ignoring paths.
+  parity-run:
+    name: parity-run (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      EQUIV_REFERENCE_ASSEMBLIES: ${{ github.workspace }}/.reference-assemblies
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .z3-feed
+          key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
+
+      # The bare loader fetches Microsoft.NETFramework.ReferenceAssemblies.<tfm> on first use (M3-029); the samples
+      # need net48 only, so one cached copy keeps the leg off nuget.org.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .reference-assemblies
+          key: reference-assemblies-1.0.3-${{ runner.os }}
+
+      - name: Fetch Microsoft.Z3 (ADR 0030)
+        shell: pwsh
+        run: ./tools/z3-feed/fetch.ps1
+
+      - run: dotnet restore --locked-mode
+
+      - name: Compare every sample
+        shell: pwsh
+        run: ./.github/scripts/parity-run.ps1 -OutDir parity/${{ runner.os }}
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: parity-${{ runner.os }}
+          path: parity/${{ runner.os }}
+          if-no-files-found: error
+
+  parity:
+    needs: parity-run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: parity-*
+          path: parity
+
+      - name: Diff the SARIF results of Windows and Ubuntu
+        shell: pwsh
+        run: ./.github/scripts/sarif-parity.ps1 -Left parity/parity-Windows -Right parity/parity-Linux
+
   vulnerable-packages:
     runs-on: ubuntu-latest
     permissions:
