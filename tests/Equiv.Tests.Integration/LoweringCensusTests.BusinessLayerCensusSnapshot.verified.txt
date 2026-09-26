@@ -4,8 +4,8 @@
     modern: 30
   },
   matchedPairs: 30,
-  pairsWithoutOpaque: 24,
-  pairsWholeBodyOpaque: 2,
+  pairsWithoutOpaque: 25,
+  pairsWholeBodyOpaque: 1,
   pairsCongruent: 24,
   projectsSkipped: {
     legacy: 0,
@@ -17,10 +17,6 @@
       modern: 2
     },
     InterpolatedString: {
-      legacy: 1,
-      modern: 1
-    },
-    async: {
       legacy: 1,
       modern: 1
     },

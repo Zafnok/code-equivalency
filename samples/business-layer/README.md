@@ -38,6 +38,10 @@ opaque leaves the census.
 side `total -= total * rate`. The sources differ, so it is not congruent, and the solver proves it from the shared
 `dec.mul` and `dec.sub`. Before P2-022 the modern side's `CompoundAssignment` opaque made it Unknown.
 
+Since M4-006, an `async` method is its synchronous body returning the task's result, and each `await` is a call on its
+awaitable. `ConfirmAsync`'s `await pending` is a call `await:System.Runtime.CompilerServices.TaskAwaiter`1<...Order>`
+after `pending`'s null check, so it lowers with no opaque and its whole-body `async` opaque leaves the census.
+
 Since M4-004, a fragment the lowerer leaves opaque carries its bound fingerprint and the variables it reads, and a
 fingerprint on both sides of a pair is one shared call `opaque:<fingerprint>` (ADR 0024 decision 2). `CappedLineCount`
 counts the lines with the same lambda on both sides and spells its integer guard `cap < 1` on the legacy side and

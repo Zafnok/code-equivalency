@@ -1,5 +1,5 @@
 # M4-006 `await` in async methods as a call
-Status: todo
+Status: done (PR #221)
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M4-001
@@ -43,3 +43,19 @@ the CFG, stop: Roslyn's CFG for an async method is over the original operations.
 Sync-to-async migrations (they are `async-mismatch`). `ValueTask` pooling. Iterators.
 
 ## Notes
+- Decision: where `async-mismatch` is decided -> the frontend, which alone sees both symbols, replaces both bodies of a pair
+  with exactly one `async` side by one whole-body `IrOpaque` with reason `Unknown.AsyncMismatchReason`, and `CompareCommand`
+  turns that into `Unknown(Opaque, "async-mismatch")` before congruence and the backend, as it does `unbound`.
+  Alternatives: an `IsAsync` flag on `ProcedurePair` (a Core change beyond the one string), leaving it to the backend (calls
+  it). Rule: 4.
+- Decision: the await's identity -> `await:` + the awaiter type's name as a member identity spells its type (rename map,
+  `` `n `` arity) + `<type arguments>` when constructed, as `CallIdentityFactory` suffixes a generic callee. Alternatives:
+  Roslyn's display string, the awaitable's type. Rule: 1.
+- Decision: a reference-typed awaitable whose `GetAwaiter` is an instance method is null-checked before the call, as a
+  `callvirt` receiver is (P2-017). Alternatives: no check (the call's `threw` of unknown type covers it). Rule: 1.
+- Decision: an async method's IR return type -> the one type argument of its generic task-like return type; none for
+  `Task`, `ValueTask`, `void` or any other non-generic one. Alternatives: the task's sort. Rule: 1.
+- Decision: whole-body reasons `iterator` (any method with `yield`, async or not), `await-foreach`, `await-using`, each
+  spanning the first offending construct (ADR 0029 decision 3); iterators are checked first. The await forms are only
+  looked for in an `async` method, so an async lambda in a sync method does not make it whole-body opaque. Rule: 5.
+- Decision: `async-mismatch` wins over `unbound`: it is decided from the two signatures before either body. Rule: 4.
