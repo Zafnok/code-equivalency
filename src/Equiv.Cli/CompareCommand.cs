@@ -4,10 +4,12 @@ using System.Globalization;
 
 using Equiv.Core;
 using Equiv.Core.Configuration;
+using Equiv.Core.Execution;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
+using Equiv.Execute;
 
 using Microsoft.CodeAnalysis.Sarif;
 
@@ -37,11 +39,12 @@ internal static class CompareCommand
         failOnOption.AcceptOnlyFromAmong("divergent", "unknown");
         Option<bool> dryRunOption = new("--dry-run");
         Option<bool> lowerOnlyOption = new("--lower-only");
+        Option<bool> executeOption = new("--execute");
         Option<bool> chcIntModeOption = new("--chc-int-mode") { DefaultValueFactory = _ => true };
 
         Command command = new("compare")
         {
-            legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, chcIntModeOption,
+            legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption,
         };
 
         command.SetAction(parseResult => Run(
@@ -54,6 +57,7 @@ internal static class CompareCommand
                 parseResult.GetValue(failOnOption),
                 parseResult.GetValue(dryRunOption),
                 parseResult.GetValue(lowerOnlyOption),
+                parseResult.GetValue(executeOption),
                 parseResult.GetValue(chcIntModeOption)),
             frontends,
             backend,
@@ -62,16 +66,27 @@ internal static class CompareCommand
         return command;
     }
 
+    /// <summary>
+    /// The pipeline. <paramref name="execution"/> is where <c>--execute</c> runs, <see cref="ExecutionEnvironment.Current"/>
+    /// when null; without <c>--execute</c> nothing reads it (ADR 0035; ticket M4-009).
+    /// </summary>
     public static int Run(
         CompareOptions options,
         IReadOnlyList<ILanguageFrontend> frontends,
         IVerificationBackend backend,
-        IReportSink sink)
+        IReportSink sink,
+        ExecutionEnvironment? execution = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(frontends);
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(sink);
+
+        ExecutionEnvironment? executing = options.Execute ? execution ?? ExecutionEnvironment.Current : null;
+        if (!StartExecuting(executing))
+        {
+            return ExitCodes.UsageError;
+        }
 
         if (!File.Exists(options.LegacyPath) || !File.Exists(options.ModernPath))
         {
@@ -115,7 +130,7 @@ internal static class CompareCommand
 
         // Two numbers, never a total: the licence measures each codebase on its own (ticket M3-014).
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"analysed lines of code: legacy={analysis.Lines.Legacy} modern={analysis.Lines.Modern}"));
-        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, sink);
+        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, sink, executing);
     }
 
     /// <summary>
@@ -124,7 +139,7 @@ internal static class CompareCommand
     /// Added and Removed results, no backend call, exit 0 unless a C# project was skipped.
     /// </summary>
     private static int Report(
-        CompareOptions options, FrontendAnalysis analysis, EquivConfig config, IVerificationBackend backend, SarifLog? baseline, IReportSink sink)
+        CompareOptions options, FrontendAnalysis analysis, EquivConfig config, IVerificationBackend backend, SarifLog? baseline, IReportSink sink, ExecutionEnvironment? execution)
     {
         MatchResult matchResult = analysis.Match;
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered = Lowered(matchResult);
@@ -142,7 +157,7 @@ internal static class CompareCommand
             options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config, options.ChcIntMode);
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
-        List<VerificationResult> results = WithAssumptions(verified, lowered, matchResult);
+        List<VerificationResult> results = Replayed(WithAssumptions(verified, lowered, matchResult), lowered, analysis.Replay, execution);
         if (!options.LowerOnly)
         {
             census = census with { UnknownByScope = ScopeCounts.Of(results) };
@@ -183,6 +198,60 @@ internal static class CompareCommand
             (false, false, true) => ExitCodes.Success,
             _ => DecideExitCode(results, log, options.FailOn),
         };
+    }
+
+    /// <summary>
+    /// ADR 0035's consequences for <c>--execute</c>: it needs Windows, else the run stops with exit 3, and it says on stderr that
+    /// it runs the solutions' code. Without <c>--execute</c> (<paramref name="executing"/> null) it does nothing.
+    /// </summary>
+    private static bool StartExecuting(ExecutionEnvironment? executing)
+    {
+        switch (executing)
+        {
+            case null:
+                return true;
+            case { IsWindows: false }:
+                Console.Error.WriteLine(ExecutionEnvironment.NeedsWindows);
+                return false;
+            default:
+                Console.Error.WriteLine(ExecutionEnvironment.Note);
+                return true;
+        }
+    }
+
+    /// <summary>
+    /// ADR 0035 decision 2 (ticket M4-009): every Divergent's model replayed on both real runtimes, recorded as the result's
+    /// <see cref="VerificationResult.Replay"/>. The verdict, and with it the rule id, the fingerprint and the exit code, is
+    /// never changed. Projects and drivers are emitted into a temporary folder that is deleted afterwards. Without
+    /// <c>--execute</c> (<paramref name="execution"/> null), or from a frontend that cannot replay, nothing is replayed.
+    /// </summary>
+    private static List<VerificationResult> Replayed(
+        List<VerificationResult> results,
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered,
+        IReplayDriverFactory? factory,
+        ExecutionEnvironment? execution)
+    {
+        if (execution is null || factory is null)
+        {
+            return results;
+        }
+
+        Dictionary<string, ProcedurePair> pairs = lowered.ToDictionary(static p => p.Pair.New.Value, static p => p.Pair, StringComparer.Ordinal);
+        Replayer replayer = new(execution.Host);
+        string directory = Directory.CreateTempSubdirectory("equiv-execute-").FullName;
+        try
+        {
+            return
+            [
+                .. results.Select(result => result.Verdict is Divergent divergent
+                    ? result with { Replay = replayer.Replay(factory.Create(pairs[result.Identity.Value], divergent.Counterexample, directory)) }
+                    : result),
+            ];
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     /// <summary>

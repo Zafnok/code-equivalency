@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Linq;
 
 using Equiv.Core.Ir;
@@ -44,10 +44,14 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// <summary>Whether each value of <paramref name="sort"/> is null; equal references are equally null.</summary>
     public IrVar Nulls(IrSort sort) => Input($"null.{Part(sort.Name)}", new IrMap(sort, Bool));
 
-    /// <summary>One heap slice per field, from the receiver (a static field's is the type's token) to the field's value.</summary>
+    /// <summary>
+    /// One heap slice per field, from the receiver (a static field's is the type's token) to the field's value. A
+    /// property's backing field is named for the property, so both sides agree whatever the compiler calls it, and an
+    /// auto-property is one slice with a field of its name on the other side (ticket M4-008).
+    /// </summary>
     public IrVar Field(IFieldSymbol field) =>
         Input(
-            $"field.{Part(TypeMapper.MetadataName(field.ContainingType, sorts))}.{Part(field.Name)}",
+            $"field.{Part(TypeMapper.MetadataName(field.ContainingType, sorts))}.{Part((field.AssociatedSymbol as IPropertySymbol)?.Name ?? field.Name)}",
             new IrMap(Receiver(field), TypeMapper.Map(field.Type, sorts)));
 
     /// <summary>The token a static field's map is keyed by: element 0 of its declaring type's sort.</summary>

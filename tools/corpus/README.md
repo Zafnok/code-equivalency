@@ -7,19 +7,22 @@ through the skill `.claude/skills/equiv-corpus-run`, not by hand.
 |---|---|
 | `poly-migrationbench-dotnet.csv` | Verbatim copy of Amazon's Poly-MigrationBench .NET list: 100 MIT or Apache-2.0 .NET Framework repos, each pinned at a commit where the build and unit tests pass. The columns are `repo,base_commit,license,num_cs_files,root_sln_or_csproj_files,verify_command`. |
 | `pairs.csv` | Public before-and-after migrations pinned by commit. Kind `human`: a person migrated it. Kind `tool`: raw output of .NET Upgrade Assistant or AWS Porting Assistant. |
-| `corpus.ps1` | Lists, selects, fetches and cleans pairs; computes ADR 0028's unchanged share; refreshes the upstream list. |
+| `corpus.ps1` | Lists, selects, fetches and cleans pairs; computes ADR 0028's unchanged share; refreshes the upstream list; `-SeedMechanical` drives the seeder (ticket M4-010). |
 | `migration-prompt.md` | The fixed prompt an agent gets when it migrates an agent pair. |
-| `seeds.md` | The catalogue of behaviour changes injected in `seeded` mode, used to measure recall. |
+| `seeds.md` | The catalogue of hand-written behaviour changes injected in `seeded` mode, used to measure recall. |
+| `seeder/` | Console tool (ticket M4-010) that applies M0-012's mutation operators to real methods on the modern side, at scale, by Roslyn syntax rewriting (`Equiv.TestSupport`'s `PairGen` shares its implementation for the differential soundness gate). `-SeedMechanical` copies the modern side to `.corpus/pairs/<slug>/seeded-mech/`, runs it, and writes `seeds.json` there. |
 
 ## Nothing third-party is committed
 
 `corpus.ps1` writes only under `<repo>/.corpus/`, which `.gitignore` excludes. It throws before
-fetching anything if that stops being true. Checkouts, agent migrations, seeded copies and raw SARIF
-all live there. The only files a run commits are `docs/runs/<date>-<mode>-<slug>/SUMMARY.md`, and
-those hold numbers, reason names and procedure identities, never source text (see
-`docs/runs/README.md`). Several pairs are GPL or LGPL (Git Extensions, OpenRA, Duplicati at that
-commit). Cloning and analysing them locally is fine. Copying their code into this BUSL repository is
-not.
+fetching anything if that stops being true. Checkouts, agent migrations, seeded copies (including
+mechanical ones under `.corpus/pairs/<slug>/seeded-mech/`, ticket M4-010) and raw SARIF all live
+there. The only files a run commits are `docs/runs/<date>-<mode>-<slug>/SUMMARY.md`, and those hold
+numbers, reason names and procedure identities, never source text (see `docs/runs/README.md`); a
+mechanical seed's manifest (`seeded-mech/seeds.json`) quotes the seeded method's identity, file and
+line from third-party code, so it stays in `.corpus/` too, same as `seeds.json` for the hand-written
+seeds. Several pairs are GPL or LGPL (Git Extensions, OpenRA, Duplicati at that commit). Cloning and
+analysing them locally is fine. Copying their code into this BUSL repository is not.
 
 ## Provenance and regeneration of the Poly-MigrationBench list
 

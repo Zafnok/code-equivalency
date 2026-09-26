@@ -35,6 +35,15 @@ public sealed class CSharpFrontendTests
     public void SupportsOnlySlnAndSlnx(string path, bool expected) =>
         Assert.Equal(expected, new CSharpFrontend(new StubLoader(_ => throw new InvalidOperationException()), new StableIdentityMatcher()).Supports(path));
 
+    /// <summary>M3-029 acceptance criterion 1: MSBuildWorkspace on Windows, the composite (bare for non-SDK projects) elsewhere.</summary>
+    [Fact]
+    public void NonWindowsRoutesToTheCompositeLoader()
+    {
+        Assert.IsType<CompositeSolutionLoader>(CSharpFrontend.CreateLoader(isWindows: false));
+        Assert.IsType<MsBuildSolutionLoader>(CSharpFrontend.CreateLoader(isWindows: true));
+        Assert.Equal("csharp", new CSharpFrontend().Language);
+    }
+
     [Fact]
     public void SupportsRejectsANullPath() =>
         Assert.Throws<ArgumentNullException>("path", () => new CSharpFrontend(new StubLoader(_ => throw new InvalidOperationException()), new StableIdentityMatcher()).Supports(null!));
@@ -80,6 +89,26 @@ public sealed class CSharpFrontendTests
             skipped.Diagnostics,
             StringComparer.Ordinal);
         Assert.Equal(["N.Empty::M()"], skipped.Procedures.Select(static i => i.Value), StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void AVacuousProjectIsSkippedWhateverItsOtherTreesHoldAndItsNeighboursStay()
+    {
+        // A vacuous project needs only one tree with a type declaration; an attributes-only tree beside it changes
+        // nothing. A project with procedures in the same side is kept.
+        Compilation vacuous = RoslynTestCompilations.Compile("namespace N { public class Empty { public int X; } }", "Vacuous")
+            .AddSyntaxTrees(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText("[assembly: System.Reflection.AssemblyTitle(\"X\")]", cancellationToken: TestContext.Current.CancellationToken));
+        Compilation real = RoslynTestCompilations.Compile("namespace R { public class C { public int M() { return 1; } } }", "Real");
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [vacuous, real], [], [])
+            : new LoadedSolution(null!, [real], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+
+        Assert.Equal("Vacuous", Assert.Single(result.LegacySkipped).Name);
+        Assert.Equal("R.C::M()", Assert.Single(result.Pairs).Old.Value);
+        Assert.Empty(result.Removed);
     }
 
     [Fact]

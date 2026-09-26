@@ -5,6 +5,9 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
 
+    <!-- tools/corpus/seeder (M4-010): plain Roslyn syntax rewriting, no workspace/MSBuild -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+
     <!-- Equiv.Verify.Z3 -->
     <PackageVersion Include="Microsoft.Z3" Version="5.1.0" />
 

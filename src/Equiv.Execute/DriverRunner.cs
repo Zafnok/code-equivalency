@@ -15,7 +15,8 @@ internal sealed class DriverRunner(IDriverHost host, TimeSpan caseTimeout)
         Side(drivers.Modern, request),
         Side(drivers.Modern, request));
 
-    private List<ExecutionOutcome> Side(string driver, ExecutionRequest request)
+    /// <summary>One run of <paramref name="driver"/> over <paramref name="request"/>'s cases, in one process while it answers.</summary>
+    public List<ExecutionOutcome> Side(string driver, ExecutionRequest request)
     {
         List<ExecutionOutcome> outcomes = [];
         IDriverSession? session = null;

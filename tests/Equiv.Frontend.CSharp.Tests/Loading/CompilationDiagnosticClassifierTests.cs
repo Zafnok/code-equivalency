@@ -103,6 +103,27 @@ public sealed class CompilationDiagnosticClassifierTests
                 @"Msbuild failed when processing the file 'C:\x\Desktop.csproj' with message: A FrameworkReference for 'Microsoft.WindowsDesktop.App' was included in the project. This is implicitly referenced by the .NET SDK and you do not typically need to reference it from your project."));
     }
 
+    [Fact]
+    public void ClassifyWorkspaceFailure_MissingRuntimeIdentifierIsAWarning()
+    {
+        // NU1004: a non-SDK .NET Framework project's implicit restore wants a RuntimeIdentifiers entry for a
+        // package with a runtimes/win/... asset (P2-021). The corpus skill's own restore already resolved the
+        // packages, so this never reaches the compilation.
+        Assert.Equal(
+            LoadDiagnosticKind.WorkspaceWarning,
+            CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(
+                @"Msbuild failed when processing the file 'C:\x\Programmerare.ShortestPaths.Test.csproj' with message: Your project file doesn't list 'win' as a ""RuntimeIdentifier"". You should add 'win' to the 'RuntimeIdentifiers' property in your project file and then re-run NuGet restore."));
+    }
+
+    [Fact]
+    public void ClassifyWorkspaceFailure_MissingRuntimeIdentifierIsAWarningWithSingleQuotedWording()
+    {
+        Assert.Equal(
+            LoadDiagnosticKind.WorkspaceWarning,
+            CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(
+                @"Msbuild failed when processing the file 'C:\x\A.csproj' with message: Your project file doesn't list 'win-x64' as a 'RuntimeIdentifier'. You should add 'win-x64' to the 'RuntimeIdentifiers' property in your project file and then re-run NuGet restore."));
+    }
+
     [Theory]
     [InlineData("error MSB4019: The imported project was not found")]
     [InlineData("warning MSB32701: not the same code")]
@@ -110,6 +131,7 @@ public sealed class CompilationDiagnosticClassifierTests
     [InlineData("Package 'Old.Widgets' 2.1.0 has a known vulnerability, but not the exact wording")]
     [InlineData("a ProjectReference was resolved, but not against a target framework at all")]
     [InlineData("A FrameworkReference for 'Microsoft.AspNetCore.App' was included in the project, but it could not be resolved")]
+    [InlineData("Your project file doesn't reference a RuntimeIdentifier at all")]
     public void ClassifyWorkspaceFailure_AnythingElseIsAFailure(string message)
     {
         Assert.Equal(LoadDiagnosticKind.WorkspaceFailure, CompilationDiagnosticClassifier.ClassifyWorkspaceFailure(message));

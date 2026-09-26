@@ -48,6 +48,6 @@ internal static class RuntimeComparison
 
     private static bool Comparable(ExecutionOutcome outcome) => outcome.Kind is OutcomeKind.Returned or OutcomeKind.Threw;
 
-    private static bool Same(ExecutionOutcome a, ExecutionOutcome b) =>
+    public static bool Same(ExecutionOutcome a, ExecutionOutcome b) =>
         a.Kind == b.Kind && string.Equals(a.Canonical, b.Canonical, StringComparison.Ordinal);
 }

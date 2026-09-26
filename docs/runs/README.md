@@ -6,7 +6,10 @@ holding only `SUMMARY.md`. A run over several pairs also writes
 
 What may be committed here: counts, percentages, opaque and Unknown reason names, rule ids,
 `proofMethod` and `scope` values, seed ids, procedure identities (namespace, type and member names),
-upstream commit SHAs, tool and model names, and wall-clock times.
+upstream commit SHAs, tool and model names, and wall-clock times. This applies equally to the
+mechanical seeds ticket M4-010 adds: the SUMMARY records counts (seeds applied, dropped, reported per
+verdict), seed ids, procedure identities and the unconfirmed list's size, never the seeded method's
+source; that stays in `.corpus/pairs/<slug>/seeded-mech/seeds.json`.
 
 What may not: source text, snippets, file contents, counterexample values, SARIF files, or anything
 else copied from a corpus repository. Those stay in `.corpus/`, which git ignores (ADR 0028). The

@@ -33,7 +33,21 @@ internal static partial class SolutionBuildConfiguration
         ImmutableArray<SolutionProject> notBuilt = [.. projects.Where(p => !built.Contains(p.Guid))];
         return kept.IsEmpty || notBuilt.IsEmpty
             ? null
-            : new SolutionFilter(FilterJson(solutionPath, kept), [.. notBuilt.Select(static p => p.Name)]);
+            : new SolutionFilter(FilterJson(solutionPath, kept.Select(p => FullPath(solutionPath, p.Path))), [.. notBuilt.Select(static p => p.Name)]);
+    }
+
+    /// <summary>
+    /// The full paths of the projects the <c>.sln</c> at <paramref name="solutionPath"/> builds, and the names of those it
+    /// does not (M3-029). As for <see cref="Filter"/>, a solution that builds none of its projects opens them all.
+    /// </summary>
+    public static (ImmutableArray<string> Built, ImmutableArray<string> NotBuilt) Partition(string solutionPath, string solutionText)
+    {
+        ImmutableArray<SolutionProject> projects = Projects(solutionText);
+        HashSet<string> built = Built(solutionText);
+        ImmutableArray<SolutionProject> kept = [.. projects.Where(p => built.Contains(p.Guid))];
+        return kept.IsEmpty
+            ? ([.. projects.Select(p => FullPath(solutionPath, p.Path))], [])
+            : ([.. kept.Select(p => FullPath(solutionPath, p.Path))], [.. projects.Where(p => !built.Contains(p.Guid)).Select(static p => p.Name)]);
     }
 
     /// <summary>Every project entry that is not a solution folder.</summary>
@@ -64,11 +78,14 @@ internal static partial class SolutionBuildConfiguration
             StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>A solution filter naming the solution and the projects to open, both as absolute paths.</summary>
-    private static string FilterJson(string solutionPath, ImmutableArray<SolutionProject> projects)
+    /// <summary>A project path from a <c>.sln</c> entry, made absolute against the solution's directory.</summary>
+    private static string FullPath(string solutionPath, string projectPath) =>
+        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(solutionPath))!, projectPath.Replace('\\', Path.DirectorySeparatorChar)));
+
+    /// <summary>A solution filter naming the solution and the projects to open (<paramref name="projectPaths"/>), both as absolute paths.</summary>
+    internal static string FilterJson(string solutionPath, IEnumerable<string> projectPaths)
     {
         string fullSolutionPath = Path.GetFullPath(solutionPath);
-        string directory = Path.GetDirectoryName(fullSolutionPath)!;
         using MemoryStream stream = new();
         using (Utf8JsonWriter writer = new(stream))
         {
@@ -76,9 +93,9 @@ internal static partial class SolutionBuildConfiguration
             writer.WriteStartObject("solution");
             writer.WriteString("path", fullSolutionPath);
             writer.WriteStartArray("projects");
-            foreach (SolutionProject project in projects)
+            foreach (string projectPath in projectPaths)
             {
-                writer.WriteStringValue(Path.GetFullPath(Path.Combine(directory, project.Path.Replace('\\', Path.DirectorySeparatorChar))));
+                writer.WriteStringValue(projectPath);
             }
 
             writer.WriteEndArray();

@@ -1,5 +1,6 @@
 ﻿using System.Collections.Immutable;
 
+using Equiv.Core.Execution;
 using Equiv.Core.Matching;
 using Equiv.Core.RuntimeChanges;
 using Equiv.Core.Verdicts;
@@ -136,6 +137,7 @@ public static class SarifReportWriter
         SetListProperty(sarifResult, "equivalencesApplied", result.EquivalencesApplied);
         SetListProperty(sarifResult, "assumedCallees", result.AssumedCallees);
         SetListProperty(sarifResult, "unprovenAssumptions", result.UnprovenAssumptions);
+        SetReplayProperties(sarifResult, result.Replay);
 
         SetLocations(sarifResult, result);
         return sarifResult;
@@ -279,6 +281,42 @@ public static class SarifReportWriter
 
         return described;
     }
+
+    /// <summary>
+    /// A Divergent's replay on both real runtimes (ADR 0035 decision 2; ticket M4-009): <c>replay</c> is <c>reproduced</c>,
+    /// <c>not-reproduced</c> with both canonical outcomes as <c>replayOutcomes</c>, or <c>not-constructible</c> with
+    /// <c>replayReason</c>. Left out when the run did not replay.
+    /// </summary>
+    private static void SetReplayProperties(Result sarifResult, ReplayResult? replay)
+    {
+        switch (replay)
+        {
+            case null:
+                return;
+            case { Status: ReplayStatus.Reproduced }:
+                sarifResult.SetProperty("replay", "reproduced");
+                break;
+            case { Legacy: { } legacy, Modern: { } modern }:
+                sarifResult.SetProperty("replay", "not-reproduced");
+                sarifResult.SetProperty("replayOutcomes", new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["legacy"] = Describe(legacy),
+                    ["modern"] = Describe(modern),
+                });
+                break;
+            default:
+                sarifResult.SetProperty("replay", "not-constructible");
+                sarifResult.SetProperty("replayReason", replay.Reason);
+                break;
+        }
+    }
+
+    /// <summary>An outcome's kind and its canonical JSON text, as the driver wrote it.</summary>
+    private static Dictionary<string, string> Describe(ExecutionOutcome outcome) => new(StringComparer.Ordinal)
+    {
+        ["kind"] = outcome.Kind == OutcomeKind.Threw ? "threw" : "returned",
+        ["value"] = outcome.Canonical,
+    };
 
     /// <summary>The spelling the census uses for a side: <c>legacy</c>, <c>modern</c>.</summary>
     internal static string Name(Codebase side) => side == Codebase.Legacy ? "legacy" : "modern";

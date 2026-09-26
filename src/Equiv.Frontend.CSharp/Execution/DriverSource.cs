@@ -21,19 +21,24 @@ internal static class DriverSource
 {
     private static readonly SymbolDisplayFormat Qualified = SymbolDisplayFormat.FullyQualifiedFormat;
 
-    public static string Generate(IMethodSymbol method)
+    /// <summary>
+    /// The driver for <paramref name="method"/>. With <paramref name="constructReceiver"/>, an instance method's receiver is
+    /// <c>new T()</c> rather than an argument read from the case line (ticket M4-009's replay).
+    /// </summary>
+    public static string Generate(IMethodSymbol method, bool constructReceiver = false)
     {
         List<string> declarations = [];
         List<string> arguments = [];
         string? receiver = null;
+        int slot = 1;
         if (DriverFactory.HasReceiver(method))
         {
-            receiver = Declare(method.ContainingType, declarations);
+            receiver = constructReceiver ? Construct(method.ContainingType, declarations) : Declare(method.ContainingType, declarations, slot++);
         }
 
         foreach (IParameterSymbol parameter in method.Parameters)
         {
-            arguments.Add(Declare(parameter.Type, declarations));
+            arguments.Add(Declare(parameter.Type, declarations, slot++));
         }
 
         ITypeSymbol? result = Result(method);
@@ -61,10 +66,17 @@ internal static class DriverSource
         ? $"Returned({canonical})"
         : $"NotComparable({SymbolDisplay.FormatLiteral(result.ToDisplayString(), quote: true)})";
 
-    /// <summary>Declares the next argument, decoded from its slot in the case line (slot 0 is the culture); returns its name.</summary>
-    private static string Declare(ITypeSymbol type, List<string> declarations)
+    /// <summary>Declares the receiver as a new instance of <paramref name="type"/>; it takes no slot in the case line.</summary>
+    private static string Construct(ITypeSymbol type, List<string> declarations)
     {
-        int slot = declarations.Count + 1;
+        string display = type.ToDisplayString(Qualified);
+        declarations.Add($"{display} self = new {display}();");
+        return "self";
+    }
+
+    /// <summary>Declares the argument in <paramref name="slot"/> of the case line (slot 0 is the culture); returns its name.</summary>
+    private static string Declare(ITypeSymbol type, List<string> declarations, int slot)
+    {
         string name = $"p{(slot - 1).ToString(CultureInfo.InvariantCulture)}";
         string value = $"a[{slot.ToString(CultureInfo.InvariantCulture)}]";
         string display = type.ToDisplayString(Qualified);

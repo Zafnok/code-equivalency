@@ -8,17 +8,15 @@ B1:
 B2:
   br %xs.isNull.41, B8, B9
 B3:
-  %s.47 "s": bv32 = phi [B11: %s.42, B5: %s.48]
-  %$8: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.43
-  br %$8, B12, B17
+  %s.48 "s": bv32 = phi [B11: %s.42, B5: %s.49]
+  br %$c0.isNull.44, B12, B17
 B4:
-  %$30: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.43
-  br %$30, B12, B29
+  br %$c0.isNull.44, B12, B29
 B5:
-  %s.48 "s": bv32 = add %s.47, %x.46
+  %s.49 "s": bv32 = add %s.48, %x.47
   goto B3
 B6:
-  ret %s.47
+  ret %s.48
 B8:
   throw "System.NullReferenceException"
 B9:
@@ -30,8 +28,7 @@ B11:
   %$c0.isNull.44: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.43
   goto B3
 B12:
-  %$10: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.43
-  br %$10, B14, B13
+  br %$c0.isNull.44, B14, B13
 B13:
   %$12: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.43
   %$13: bool = mapread %null.System.IDisposable, %$12
@@ -47,8 +44,7 @@ B17:
   %$15: bool = call "System.Collections.IEnumerator::MoveNext()"(%$c0.43) threw %$16: bool
   br %$16, B18, B23
 B18:
-  %$18: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.43
-  br %$18, B20, B19
+  br %$c0.isNull.44, B20, B19
 B19:
   %$20: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.43
   %$21: bool = mapread %null.System.IDisposable, %$20
@@ -63,8 +59,7 @@ B22:
 B23:
   br %$15, B4, B24
 B24:
-  %$24: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.43
-  br %$24, B26, B25
+  br %$c0.isNull.44, B26, B25
 B25:
   %$26: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.43
   %$27: bool = mapread %null.System.IDisposable, %$26
@@ -77,9 +72,9 @@ B27:
 B28:
   goto B26
 B29:
-  %x.46 "x": bv32 = call "System.Collections.Generic.IEnumerator`1::get_Current()<int>"(%$c0.43) threw %$32: bool
+  %x.47 "x": bv32 = call "System.Collections.Generic.IEnumerator`1::get_Current()<int>"(%$c0.43) threw %$32: bool
   br %$32, B18, B30
 B30:
   %$34: bv32 = const bv32 0
-  %$35: bool = slt %x.46, %$34
+  %$35: bool = slt %x.47, %$34
   br %$35, B24, B5

@@ -83,7 +83,8 @@ What exists today:
   identity normalisation with rename maps; `equiv.config.json` loader; stable identity
   matcher; SARIF 2.1.0 writer with fingerprint-based `baselineState`; the
   runtime-changes table (EQ006).
-- `Equiv.Frontend.CSharp` — `MSBuildWorkspace` loader, symbol enumeration, endpoint
+- `Equiv.Frontend.CSharp` — `MSBuildWorkspace` loader (and, off Windows, a bare loader for
+  non-SDK projects, M3-029), symbol enumeration, endpoint
   discovery (Web API 2 / MVC 5 / ASP.NET Core attribute routes), and lowering from
   Roslyn's CFG to IR. Coverage per `OperationKind` is in
   [docs/tickets/IOPERATION-COVERAGE.md](docs/tickets/IOPERATION-COVERAGE.md).
@@ -225,7 +226,9 @@ docs/       everything above; docs/runs/ holds corpus-run summaries
 .claude/    skills that encode the workflow for coding agents
 ```
 
-## Prerequisites (Windows dev box, MVP)
+## Prerequisites
+
+### Windows dev box
 
 - .NET 10 SDK (the exact patch is pinned in `global.json`).
 - Visual Studio 2026 **Build Tools** with workload ".NET desktop build tools" and the
@@ -245,9 +248,28 @@ docs/       everything above; docs/runs/ holds corpus-run summaries
   and is the quickest check that the box is set up.
 - Git, Docker Desktop (for the container packaging milestone), GitHub CLI.
 
-The engine itself is cross-platform; only loading legacy `.csproj` files needs Windows
-until the Linux loader exists (ADR 0031, tickets M3-028 and M3-029). CI runs the full pipeline on `windows-latest`
-and everything except the integration tests on `ubuntu-latest`.
+### Linux
+
+Off Windows, `equiv` loads legacy (non-SDK) `.csproj` files with its own bare loader and SDK-style ones through
+MSBuildWorkspace on the .NET SDK (ADR 0031, ticket M3-029). A Linux host needs:
+
+- the **.NET 10 SDK**, not only the runtime: SDK-style projects are evaluated by its MSBuild.
+- **network access to the package sources** the solution's `nuget.config` names (nuget.org when it names none),
+  or a pre-filled cache. `equiv` restores `packages.config` packages into the folder their HintPaths expect, and
+  fetches the .NET Framework reference assemblies (`Microsoft.NETFramework.ReferenceAssemblies.<tfm>`, about
+  110 MB per framework version) on first use into `$EQUIV_REFERENCE_ASSEMBLIES`, by default
+  `~/.local/share/equiv/reference-assemblies`. A version already in that folder (layout
+  `.NETFramework/v4.8/...`, as `tools/corpus/corpus.ps1 -Prepare` writes it) is never fetched again.
+- a **`dotnet restore`** of any legacy project that uses `<PackageReference>`: the bare loader reads the
+  `project.assets.json` it writes, exactly as Visual Studio's `ResolveNuGetPackageAssets` does.
+
+No Mono, nuget.exe or MSBuild.exe is needed. A legacy project that uses MSBuild the bare loader cannot evaluate
+exactly (`<Choose>`, a property function in a property it reads, a target that adds `Compile` or `Reference`
+items, a COM reference, ...) is skipped with a notification naming the construct (exit 4), never loaded
+approximately (ADR 0029).
+
+CI runs the full pipeline on `windows-latest`, everything except the integration tests on `ubuntu-latest`, and a
+`parity` job that fails when `equiv compare` gives different SARIF results on the two for any sample.
 
 Linux hosts need **glibc 2.38 or newer** (Ubuntu 24.04+): the `Microsoft.Z3` 5.1.0 native
 (from the official Z3Prover/z3 GitHub release, ADR 0030) is built against it. Debian 12,
