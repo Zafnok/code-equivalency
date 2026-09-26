@@ -103,6 +103,32 @@ public sealed class IrTextTests
         Assert.NotEqual(wholeBody, expression with { Reason = "lock" });
     }
 
+    /// <summary>Ticket M4-004: a fragment's fingerprint, reads, flag and heap pairs round-trip, each written only when present.</summary>
+    [Fact]
+    public void IrText_RoundTripsAFragment()
+    {
+        const string Text = """
+            proc "P" (%a: bv32, ref %field.C.x: map<bv32, bv32>) -> bv32 entry B0
+            B0:
+              %r: bv32 = opaque "DelegateCreation" at "a.cs" 1:2-3:4 fragment "0f" reads(%a, %a) threw %t: bool heap("field.C.x" %field.C.x -> %x1: map<bv32, bv32>)
+              opaque "Lambda" at "a.cs" 5:6-7:8 reads(%a)
+              ret %r outs(%field.C.x = %x1)
+            """;
+
+        IrProcedure parsed = IrText.Parse(Text);
+        IrOpaque fragment = Assert.IsType<IrOpaque>(parsed.Blocks[0].Instructions[0]);
+        IrOpaque bare = Assert.IsType<IrOpaque>(parsed.Blocks[0].Instructions[1]);
+
+        Assert.Equal("0f", fragment.Fingerprint);
+        Assert.Equal(["a", "a"], fragment.Reads.Select(static r => r.Name), StringComparer.Ordinal);
+        Assert.Equal(new IrVar("t", new IrBool()), fragment.Threw);
+        Assert.Equal("x1", Assert.Single(fragment.Heap).After.Name);
+        Assert.Null(bare.Fingerprint);
+        Assert.Null(bare.Threw);
+        Assert.Equal(parsed, IrText.Parse(IrText.Dump(parsed)));
+        Assert.Empty(IrValidator.Validate(parsed));
+    }
+
     [Fact]
     public void IrText_RoundTripsHeapPairs()
     {
