@@ -26,11 +26,15 @@ internal static class ProjectPath
         }
 
         string full = Full(baseDirectory, path);
-        if (File.Exists(full) || Directory.Exists(full))
-        {
-            return full;
-        }
+        return File.Exists(full) || Directory.Exists(full) ? full : MatchIgnoringCase(full);
+    }
 
+    /// <summary>
+    /// The existing path that <paramref name="full"/> names when each segment is matched ignoring case, or null. Only a
+    /// case-sensitive file system gets here from <see cref="Resolve"/>; it is tested directly on every OS.
+    /// </summary>
+    internal static string? MatchIgnoringCase(string full)
+    {
         string root = Path.GetPathRoot(full)!;
         string current = root;
         foreach (string segment in full[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))

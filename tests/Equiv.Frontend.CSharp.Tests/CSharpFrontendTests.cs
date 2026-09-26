@@ -35,6 +35,15 @@ public sealed class CSharpFrontendTests
     public void SupportsOnlySlnAndSlnx(string path, bool expected) =>
         Assert.Equal(expected, new CSharpFrontend(new StubLoader(_ => throw new InvalidOperationException()), new StableIdentityMatcher()).Supports(path));
 
+    /// <summary>M3-029 acceptance criterion 1: MSBuildWorkspace on Windows, the composite (bare for non-SDK projects) elsewhere.</summary>
+    [Fact]
+    public void NonWindowsRoutesToTheCompositeLoader()
+    {
+        Assert.IsType<CompositeSolutionLoader>(CSharpFrontend.CreateLoader(isWindows: false));
+        Assert.IsType<MsBuildSolutionLoader>(CSharpFrontend.CreateLoader(isWindows: true));
+        Assert.Equal("csharp", new CSharpFrontend().Language);
+    }
+
     [Fact]
     public void SupportsRejectsANullPath() =>
         Assert.Throws<ArgumentNullException>("path", () => new CSharpFrontend(new StubLoader(_ => throw new InvalidOperationException()), new StableIdentityMatcher()).Supports(null!));

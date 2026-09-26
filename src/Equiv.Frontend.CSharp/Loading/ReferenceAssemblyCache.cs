@@ -18,10 +18,7 @@ internal sealed class ReferenceAssemblyCache(string root)
     public static string DefaultRoot(Func<string, string?> environment) =>
         environment(RootVariable) is { Length: > 0 } configured
             ? configured
-            : Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify) is { Length: > 0 } local ? local : Path.GetTempPath(),
-                "equiv",
-                "reference-assemblies");
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify), "equiv", "reference-assemblies");
 
     /// <summary>The directory holding the reference assemblies for <paramref name="frameworkVersion"/> (<c>v4.8</c>), or null when no source has them.</summary>
     public async Task<string?> DirectoryAsync(string frameworkVersion, PackageFeed feed, CancellationToken ct)

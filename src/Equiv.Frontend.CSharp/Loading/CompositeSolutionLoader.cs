@@ -47,7 +47,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
         LoadedSolution sdk = sdkStyle.IsEmpty
             ? new LoadedSolution(EmptySolution(), [], [], [])
             : await LoadSdkStyleAsync(fullPath, sdkStyle, whole: nonSdk.IsEmpty, ct).ConfigureAwait(false);
-        (HashSet<string> dropped, Dictionary<string, string> nameByAssembly, Dictionary<string, Compilation> sdkByPath) = Opened(sdk, directory);
+        (HashSet<string> dropped, ImmutableArray<string> droppedPaths, Dictionary<string, string> nameByAssembly, Dictionary<string, Compilation> sdkByPath) = Opened(sdk, directory);
 
         NuGetSettings settings = NuGetSettings.Read(directory);
         PackageFeed feed = new(settings.Sources, _get);
@@ -58,7 +58,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
             feed,
             NetStandardShims.Find(_environment),
             sdkByPath);
-        foreach (string project in nonSdk)
+        foreach (string project in nonSdk.Concat(droppedPaths))
         {
             await bare.LoadAsync(project, ct).ConfigureAwait(false);
         }
@@ -88,13 +88,14 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
     }
 
     /// <summary>
-    /// What MSBuildWorkspace opened: the names of the non-SDK projects it opened anyway, as targets of an SDK-style
-    /// project's reference, which are the bare loader's and are dropped; each SDK-style project's name by assembly name;
-    /// and each SDK-style project's compilation by path, for non-SDK projects that reference it.
+    /// What MSBuildWorkspace opened: the names and paths of the non-SDK projects it opened anyway, as targets of an
+    /// SDK-style project's reference, which are dropped and loaded by the bare loader instead; each SDK-style project's
+    /// name by assembly name; and each SDK-style project's compilation by path, for non-SDK projects that reference it.
     /// </summary>
-    private static (HashSet<string> Dropped, Dictionary<string, string> NameByAssembly, Dictionary<string, Compilation> ByPath) Opened(LoadedSolution sdk, string directory)
+    private static (HashSet<string> Dropped, ImmutableArray<string> DroppedPaths, Dictionary<string, string> NameByAssembly, Dictionary<string, Compilation> ByPath) Opened(LoadedSolution sdk, string directory)
     {
         HashSet<string> dropped = new(StringComparer.Ordinal);
+        ImmutableArray<string>.Builder droppedPaths = ImmutableArray.CreateBuilder<string>();
         Dictionary<string, string> nameByAssembly = new(StringComparer.Ordinal);
         Dictionary<string, Compilation> byPath = new(StringComparer.OrdinalIgnoreCase);
         foreach (Project project in sdk.Solution.Projects)
@@ -102,6 +103,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
             if (!IsSdkStyle(directory, project.FilePath!))
             {
                 dropped.Add(project.Name);
+                droppedPaths.Add(Path.GetFullPath(project.FilePath!));
                 continue;
             }
 
@@ -113,7 +115,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
             }
         }
 
-        return (dropped, nameByAssembly, byPath);
+        return (dropped, droppedPaths.ToImmutable(), nameByAssembly, byPath);
     }
 
     /// <summary>
