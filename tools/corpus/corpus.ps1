@@ -303,8 +303,8 @@ function Get-ResolvedPackages([string]$Dir) {
         if (-not $versions.ContainsKey($key)) { $versions[$key] = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::OrdinalIgnoreCase) }
         [void]$versions[$key].Add($Version)
     }
-    $files = @(Get-ChildItem -LiteralPath $Dir -Recurse -File -Include 'project.assets.json', 'packages.config' -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' })
+    $files = @(Get-ChildItem -LiteralPath $Dir -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -in 'project.assets.json', 'packages.config' -and $_.FullName -notmatch '[\\/]\.git[\\/]' })
     foreach ($file in $files) {
         if ($file.Name -eq 'packages.config') {
             ([xml](Get-Content -LiteralPath $file.FullName -Raw)).packages.package | Where-Object { $_ } |
