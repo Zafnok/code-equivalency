@@ -1,5 +1,5 @@
 # P2-015 `corpus.ps1 -Packages` scans every file, not just restore output
-Status: in-progress
+Status: done (PR #213)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
