@@ -358,6 +358,16 @@ matches, the distinct callee identities among them, and the pairs whose body on 
 least one. Package version changes are not in the census; `tools/corpus/corpus.ps1 -Packages`
 computes them from each side's restore output.
 
+`externalCallees` (ADR 0035; ticket M3-033) is every BCL member a lowered body calls, not only the
+ones `RuntimeChangeTable` already lists: per side, over every lowered matched pair (congruent ones
+included, as `runtimeChangeCalls` counts), the distinct call identities whose target assembly is one
+of the framework reference assemblies the project compiled against (a reference assembly carries
+`ReferenceAssemblyAttribute`, as `ProjectEmitter` already tests for replay), never the solution's own
+code or a NuGet package. Each entry pairs a member with its call-site count, sorted by count
+descending then ordinally. `tools/corpus/corpus.ps1 -RuntimeDiff <slug>` takes the union of both
+sides' most-called entries and runs `tools/runtime-diff` on each; a member it finds divergent becomes
+a `runtime-changes.json` row with `source: measured` and a witness.
+
 Every run also writes `run.properties.analysedLinesOfCode`: `legacy` and `modern`, one count per
 codebase and never a total (ticket M3-014). The rule is the one in README's "Licence" section,
 applied identically to both sides. It counts the lines that hold part of a C# token, in every C#

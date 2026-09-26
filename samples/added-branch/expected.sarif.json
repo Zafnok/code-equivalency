@@ -142,6 +142,10 @@
               "modern": 0
             }
           },
+          "externalCallees": {
+            "legacy": [],
+            "modern": []
+          },
           "unknownByScope": {
             "line": 0,
             "method": 0
