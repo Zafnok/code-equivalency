@@ -1079,7 +1079,7 @@ internal sealed class IrLowerer
         BinaryOperatorKind kind = step.Kind == OperationKind.Increment ? BinaryOperatorKind.Add : BinaryOperatorKind.Subtract;
         if (PureCatalogue.IsCatalogued(step.Type!))
         {
-            // Whatever Roslyn reports as the operator method: `decimal` `++` is `dec.add` of the literal `1m`.
+            // The catalogue decides before the operator method, which Roslyn may report for a decimal increment.
             PureCatalogue.Entry entry = PureCatalogue.Binary(kind, step.Type!, step.Type!)!;
             return Update(site, old => Apply(entry, step.IsChecked, [old, Constant(step.Type!, 1, context)], old.Type, context), context);
         }
