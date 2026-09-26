@@ -9,14 +9,9 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="coverlet.MTP" />
-    <PackageReference Include="TngTech.ArchUnitNET.xUnitV3" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Equiv.Core\Equiv.Core.csproj" />
-    <ProjectReference Include="..\..\src\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
-    <ProjectReference Include="..\..\src\Equiv.Verify.Z3\Equiv.Verify.Z3.csproj" />
-    <ProjectReference Include="..\..\src\Equiv.Cli\Equiv.Cli.csproj" />
     <ProjectReference Include="..\..\src\Equiv.Execute\Equiv.Execute.csproj" />
   </ItemGroup>
 

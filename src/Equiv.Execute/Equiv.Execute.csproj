@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ADR 0035: the runner of the second oracle. It references Equiv.Core only (Equiv.Tests.Architecture enforces it). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Equiv.Core\Equiv.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equiv.Execute.Tests" />
+    <!-- M3-032: the Windows integration tests drive the runner against real drivers. -->
+    <InternalsVisibleTo Include="Equiv.Tests.Integration" />
+  </ItemGroup>
+
+</Project>

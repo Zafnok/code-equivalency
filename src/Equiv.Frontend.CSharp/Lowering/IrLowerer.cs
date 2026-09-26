@@ -48,6 +48,8 @@ internal sealed class IrLowerer
     private readonly Dictionary<CaptureId, PropertyAccess> propertyTargets = [];
     private HashSet<CaptureId> assignedCaptures = [];
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
+    private readonly Dictionary<IOperation, IrVar> tryCastNulls = [];
+    private int selects;
     private HeapLowerer heap = null!;
     private ExceptionLowerer exceptions = null!;
     private SwitchChains chains = null!;
@@ -415,8 +417,9 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
-    /// A pattern test (acceptance criterion 2): a constant pattern is an equality, a discard is <c>true</c>,
-    /// and every other pattern is opaque, which is how a pattern switch beyond constant cases stops here.
+    /// A pattern test (acceptance criterion 2): a constant pattern is an equality, a discard is <c>true</c>, a type
+    /// pattern and a declaration pattern (not <c>var</c>) are a type test (ticket M4-005), the latter binding its variable
+    /// through the cast map, and every other pattern is opaque, which is how a pattern switch beyond these stops here.
     /// </summary>
     private IrVar? Match(IIsPatternOperation pattern, LoweringContext context) => pattern.Pattern switch
     {
@@ -425,8 +428,93 @@ internal sealed class IrLowerer
         IConstantPatternOperation { Value: { Type: { } type, ConstantValue: { HasValue: true, Value: { } constant } } }
             when TypeMapper.Map(type) is IrBitVec or IrBool && TypeMapper.Map(pattern.Value.Type!) == TypeMapper.Map(type) =>
             Emit(IrBinaryOp.Eq, Value(pattern.Value, context), Constant(type, constant, context), Bool, context),
+        ITypePatternOperation typed when TestType(pattern.Value, typed.MatchedType, context) is { } test =>
+            Passes(test, context),
+        IDeclarationPatternOperation { MatchesNull: false } declaration when TestType(pattern.Value, declaration.MatchedType!, context) is { } test =>
+            Bind(declaration, test, context),
         _ => Opaque(pattern, "switch-pattern", context),
     };
+
+    /// <summary>
+    /// <c>x is T t</c>: the test, and <c>t</c> is the cast of <c>x</c>, never null. It is written whether or not the test
+    /// passes; C# never reads it when it fails.
+    /// </summary>
+    private IrVar Bind(IDeclarationPatternOperation declaration, TypeTest test, LoweringContext context)
+    {
+        if (declaration.DeclaredSymbol is ILocalSymbol local)
+        {
+            SsaBuilder.Variable variable = Local(local);
+            ssa.Store(context.Current, variable, CastOf(test, context));
+            ssa.Store(context.Current, Shadow(variable)!, Const(new IrBoolValue(Value: false), context));
+        }
+
+        return Passes(test, context);
+    }
+
+    /// <summary>
+    /// The type test of <paramref name="operand"/> against <paramref name="type"/> (ticket M4-005), with the operand lowered,
+    /// or null, with nothing emitted, when it is not modelled: either type is a value type or a type parameter (an
+    /// unboxing, a generic test), or no reference conversion relates them (types known to be unrelated).
+    /// </summary>
+    private TypeTest? TestType(IOperation operand, ITypeSymbol type, LoweringContext context)
+    {
+        if (operand.Type is not { IsReferenceType: true, TypeKind: not TypeKind.TypeParameter } from
+            || type is not { IsReferenceType: true, TypeKind: not TypeKind.TypeParameter }
+            || compilation.ClassifyConversion(from, type) is not { Exists: true } conversion
+            || !(conversion.IsReference || conversion.IsIdentity))
+        {
+            return null;
+        }
+
+        IrVar value = Value(operand, context);
+        return new TypeTest(from, type, value, Nullness(operand, value, context), heap.MapRead(heap.Inputs.IsType(from, type), value, context));
+    }
+
+    /// <summary>Whether the test passes: the operand is not null and <c>istype</c> holds of it.</summary>
+    private IrVar Passes(TypeTest test, LoweringContext context) =>
+        test.OperandIsNull is { } isNull ? Emit(IrBinaryOp.And, EmitUnary(IrUnaryOp.BoolNot, isNull, context), test.IsType, Bool, context) : test.IsType;
+
+    /// <summary>The operand converted to the tested type: a read of <c>cast.&lt;From&gt;.&lt;To&gt;</c>, as M3-010 lowers an upcast.</summary>
+    private IrVar CastOf(TypeTest test, LoweringContext context) => heap.MapRead(heap.Inputs.Cast(test.From, test.To), test.Value, context);
+
+    /// <summary>
+    /// <c>x as T</c>: the cast when the test passes, <c>null</c> otherwise. Its nullness is recorded as the test's negation,
+    /// which <see cref="Nullness"/> reads.
+    /// </summary>
+    private IrVar TryCast(IConversionOperation conversion, TypeTest test, LoweringContext context)
+    {
+        IrVar passes = Passes(test, context);
+        tryCastNulls[conversion] = EmitUnary(IrUnaryOp.BoolNot, passes, context);
+        return Select(passes, CastOf(test, context), Constant(conversion.Type!, value: null, context), context);
+    }
+
+    /// <summary>
+    /// <c>(T)x</c> for a reference <c>T</c>: throws <c>System.InvalidCastException</c> when the test fails on a non-null
+    /// <c>x</c>, and passes a null <c>x</c> through as <c>null</c>.
+    /// </summary>
+    private IrVar Downcast(IConversionOperation conversion, TypeTest test, LoweringContext context)
+    {
+        IrVar fits = test.OperandIsNull is { } isNull ? Emit(IrBinaryOp.Or, isNull, test.IsType, Bool, context) : test.IsType;
+        ThrowIf(EmitUnary(IrUnaryOp.BoolNot, fits, context), "System.InvalidCastException", context);
+        IrVar cast = CastOf(test, context);
+        return test.OperandIsNull is { } wasNull ? Select(wasNull, Constant(conversion.Type!, value: null, context), cast, context) : cast;
+    }
+
+    /// <summary><paramref name="condition"/> <c>?</c> <paramref name="then"/> <c>:</c> <paramref name="otherwise"/>, as a branch and a join.</summary>
+    private IrVar Select(IrVar condition, IrVar then, IrVar otherwise, LoweringContext context)
+    {
+        SsaBuilder.Variable selected = new(new IrVar($"$select{selects++.ToString(CultureInfo.InvariantCulture)}", then.Type));
+        IrBlockId yes = ssa.NewBlock();
+        IrBlockId no = ssa.NewBlock();
+        IrBlockId join = ssa.NewBlock();
+        ssa.Terminate(context.Current, new IrBranch(condition, yes, no));
+        ssa.Store(yes, selected, then);
+        ssa.Terminate(yes, new IrGoto(join));
+        ssa.Store(no, selected, otherwise);
+        ssa.Terminate(no, new IrGoto(join));
+        context.Current = join;
+        return ssa.Load(join, selected);
+    }
 
     private void OpaqueExit(string reason, LoweringContext context)
     {
@@ -515,6 +603,8 @@ internal sealed class IrLowerer
                 return CreateArray(creation, context);
             case IIsPatternOperation pattern:
                 return Match(pattern, context);
+            case IIsTypeOperation isType:
+                return TestType(isType.ValueOperand, isType.TypeOperand, context) is { } typeTest ? Passes(typeTest, context) : Opaque(isType, isType.Kind.ToString(), context);
             case IIsNullOperation test when test.Operand.Type!.IsReferenceType:
                 // The null test the CFG makes of a `using` resource or a `foreach` enumerator before disposing it.
                 return NullFlag(test.Operand, Value(test.Operand, context), context);
@@ -573,15 +663,16 @@ internal sealed class IrLowerer
     /// </summary>
     private IrVar? Nullness(IOperation source, IrVar value, LoweringContext context)
     {
-        // A cast-map conversion's result is a value of its own, whose nullness is not tied to the operand's.
+        // A cast-map conversion's result is a value of its own, whose nullness is not tied to the operand's; an `as`'s is its failed test.
         IOperation unwrapped = source;
-        while (unwrapped is IConversionOperation conversion && !IsCast(conversion))
+        while (unwrapped is IConversionOperation conversion && !IsCast(conversion) && !conversion.IsTryCast)
         {
             unwrapped = conversion.Operand;
         }
 
         return unwrapped switch
         {
+            _ when tryCastNulls.TryGetValue(unwrapped, out IrVar? failed) => failed,
             IObjectCreationOperation or IArrayCreationOperation or IInstanceReferenceOperation or ITypeOfOperation => null,
             _ when ShadowOf(unwrapped) is { } shadow => ssa.Load(context.Current, shadow),
             { ConstantValue.HasValue: true, ConstantValue.Value: null } => Const(new IrBoolValue(Value: true), context),
@@ -747,7 +838,7 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// An implicit reference or boxing conversion between different IR types is a read of its <c>cast.&lt;From&gt;.&lt;To&gt;</c>
-    /// map (ticket M3-010), and an identity conversion is its operand (ticket M4-001). A numeric conversion to or from
+    /// map (ticket M3-010), <c>as</c> and a downcast are a type test (ticket M4-005), and an identity conversion is its operand (ticket M4-001). A numeric conversion to or from
     /// floating point or <c>decimal</c> is a <c>conv</c> function and a user-defined conversion its <c>op:</c> function
     /// (ticket M4-002). Otherwise integral to integral only: extension follows the source's signedness; a checked
     /// narrowing throws when the value does not fit.
@@ -757,6 +848,12 @@ internal sealed class IrLowerer
         if (IsCast(conversion))
         {
             return heap.MapRead(heap.Inputs.Cast(conversion.Operand.Type!, conversion.Type!), Value(conversion.Operand, context), context);
+        }
+
+        if ((conversion.IsTryCast || conversion.GetConversion() is { IsExplicit: true, IsReference: true })
+            && TestType(conversion.Operand, conversion.Type!, context) is { } test)
+        {
+            return conversion.IsTryCast ? TryCast(conversion, test, context) : Downcast(conversion, test, context);
         }
 
         if (conversion.GetConversion().IsIdentity)
@@ -1342,6 +1439,9 @@ internal sealed class IrLowerer
 
     /// <summary>The operation <see cref="Update"/> rewrites, the lvalue it reads and writes, and how: checked, and whether it yields the value read.</summary>
     private sealed record UpdateSite(IOperation Node, IOperation Target, bool IsChecked, bool IsPostfix);
+
+    /// <summary>A type test (ticket M4-005): the types, the operand's value, whether it is null (null when provably not) and its <c>istype</c> read.</summary>
+    private sealed record TypeTest(ITypeSymbol From, ITypeSymbol To, IrVar Value, IrVar? OperandIsNull, IrVar IsType);
 
     /// <summary>A property an assignment writes, and its receiver and index arguments, evaluated once.</summary>
     private sealed record PropertyAccess(IPropertyReferenceOperation Reference, ImmutableArray<IrVar> Operands);

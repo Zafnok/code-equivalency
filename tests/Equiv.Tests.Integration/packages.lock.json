@@ -448,6 +448,12 @@
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )"
         }
       },
+      "equiv.execute": {
+        "type": "Project",
+        "dependencies": {
+          "Equiv.Core": "[1.0.0, )"
+        }
+      },
       "equiv.frontend.csharp": {
         "type": "Project",
         "dependencies": {

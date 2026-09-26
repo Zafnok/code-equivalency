@@ -1,5 +1,5 @@
 # M3-032 `Equiv.Execute` and `tools/runtime-diff`: call a BCL member on .NET Framework 4.8 and on .NET 10, and compare
-Status: todo
+Status: done (PR #210)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M2-007; ADR 0035 accepted
@@ -76,10 +76,11 @@ VERIFICATION-MODEL.md section 3 (runtime-changed APIs); ARCHITECTURE.md (compone
 3. `DriverFactory` produces drivers that compile for `net48` and `net10.0`. On Windows,
    `String::ToUpper()` under `tr-TR` with input `"i"` returns the same on both runtimes. The
    case exists to prove the plumbing, and its expected value is recorded.
-   `String::IndexOf(String)` with inputs `("\r\n", "\n")` under `en-US` differs: it is
-   Microsoft's documented ICU vs NLS example (1 on .NET Framework, -1 on .NET 5 and later). The
-   first is `ToUpper_TurkishI_Agrees`, the second `IndexOf_NewlineInCrLf_Diverges`, both
-   integration tests.
+   `String::IndexOf(String)` with inputs `("ss", "ß")` under `en-US` differs: NLS expands `ß` to
+   `ss` and ICU does not (0 on .NET Framework, -1 on .NET 10). The first is
+   `ToUpper_TurkishI_Agrees`, the second `IndexOf_SharpSInSs_Diverges`, both integration tests.
+   (Corrected in the PR: Microsoft's documented example, `("\r\n", "\n")`, returns 1 on both
+   runtimes on current Windows ICU; see Notes.)
 4. A member whose outcome differs between two runs of the .NET 10 side only is reported as
    `Nondeterministic` on the modern side, not as a divergence. The test uses
    `String::GetHashCode()`.
@@ -102,7 +103,7 @@ VERIFICATION-MODEL.md section 3 (runtime-changed APIs); ARCHITECTURE.md (compone
 automatically.
 
 ## Tests
-`ToUpper_TurkishI_Agrees`, `IndexOf_NewlineInCrLf_Diverges`, `GetHashCode_IsNondeterministicOnModernOnly`,
+`ToUpper_TurkishI_Agrees`, `IndexOf_SharpSInSs_Diverges`, `GetHashCode_IsNondeterministicOnModernOnly`,
 `UnsupportedParameter_IsNotConstructible`, `NonWindows_ExitsThree`, `Runner_TimesOutACase`,
 `Runner_RunsEachInputTwicePerSide`, `Canonical_FormatsEveryOutcomeKind` (unit, with a fake
 process), `Execute_ReferencesOnlyCore` (architecture).
@@ -116,3 +117,52 @@ User assemblies. `--execute` in `equiv compare`. Writing `runtime-changes.json` 
 Coverage-guided fuzzing. Linux.
 
 ## Notes
+- Deviation: criterion 3's divergent example. On Windows 11 build 26200 with .NET 10.0.12,
+  `"\r\n".IndexOf("\n")` returns 1 under both `en-US` and the invariant culture, as .NET Framework
+  4.8 does, so the documented ICU vs NLS example no longer diverges. ICU is active in the same
+  driver: `"ss".IndexOf("ß")` is 0 on .NET Framework and -1 on .NET 10. The integration test uses
+  that pair and is renamed `IndexOf_SharpSInSs_Diverges`; criterion 3 and the Tests list are
+  corrected. The ADRs and the spec are unchanged.
+- Decision: `IExecutionDriverFactory` also has `Resolve(member)`, which returns an
+  `ExecutionSignature` per overload present on both runtimes. The input generators live in
+  `Equiv.Execute`, which cannot see Roslyn, so they need the parameter types in Core's terms:
+  `ExecutionParameter` and `ExecutionTypeKind`. `ExecutionDrivers` holds the two driver paths.
+  All of them are records, an enum or the interface, as the Design asks.
+- Decision: `ExecutionTypeKind` members are named `Signed32`, `Binary64`, `Text` and so on,
+  because CA1720 rejects members named after the types (`Int32`, `Double`, `String`).
+- Decision: an overload present on one runtime only is not run and is not listed. Its behaviour
+  has nothing to be compared with.
+- Decision: an enum's defined values are the union of both runtimes' values, so a member added
+  on one side is still generated.
+- Decision: the invariant culture is spelled `invariant` on the wire and in the report, since
+  `""` reads as a missing value.
+- Decision: a case that gets no answer is `NotComparable` with the value `"no answer"`. That
+  covers the per-case timeout (10 s), the memory limit (1 GiB of private bytes, polled every
+  20 ms, since .NET Framework has no `GCHeapHardLimit`) and a crashed driver. The process is
+  then dropped and the next case starts a new one.
+- Decision: nondeterminism on one side is reported, but it does not change the exit code. Only
+  a divergence gives exit 1, per the Design's exit codes. No member matching `--member` is a
+  usage error (exit 3).
+- Decision: the legacy driver is C# 7.3, the newest language version a .NET Framework 4.8
+  project defaults to. The modern driver uses the latest version.
+- Decision: the legacy references are the targeting pack's DLLs that
+  `RedistList/FrameworkList.xml` names, without `Facades`. The `v4.8` folder also holds native
+  DLLs (`System.EnterpriseServices.Thunk.dll`, `System.EnterpriseServices.Wrapper.dll`), and
+  Roslyn rejects them with CS0009 and CS1509. The Facades only forward types.
+- Decision: `DriverFactory.Create` writes each driver's source beside it as `EquivDriver.cs`, so
+  whoever reads a witness can see what ran. The unit tests also read it.
+- Decision: the generators use SplitMix64, not `System.Random`. A seed then gives the same
+  inputs on every .NET version, and CA5394 does not fire.
+- Decision: `.github/workflows/mutation.yml` gains the `Equiv.Execute` leg, although it is not
+  in the Files list. QUALITY-GATES.md requires a leg and a required check for every new `src/`
+  project, and adding it as a required check in the ruleset is the user's action.
+- Decision: `Equiv.Tests.Architecture` also gains `ExecutionContractStartsNoProcesses`, the proof
+  for criterion 2's "no `System.Diagnostics.Process`". Core may no longer depend on
+  `Equiv.Execute` either.
+- Observed on the first local runs (the corpus measurement is M3-033):
+  - `String::IndexOf(string)` with 100 cases: 65 of 500 divergent. The first witness is
+    `("ss", "ß")`.
+  - `String::ToUpper(CultureInfo)` with a null culture throws `ArgumentNullException` on .NET
+    Framework. .NET 10 uses the current culture instead.
+  - `String::GetHashCode()`: 45 of 50 cases were nondeterministic on the modern side only. The 5
+    null receivers throw on both sides.

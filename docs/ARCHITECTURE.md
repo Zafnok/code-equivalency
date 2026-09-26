@@ -12,6 +12,11 @@ pair to a verification backend, and emits SARIF plus an exit code.
 Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv.Cli
                 (Roslyn lives here)     (no Roslyn,      (Z3 lives here)
                                          no Z3)
+                                            ^
+                                            |
+                                      Equiv.Execute
+                                  (driver processes live here;
+                                   no Roslyn, no Z3; ADR 0035)
 ```
 
 `Equiv.Core` is the contract. It owns:
@@ -55,6 +60,18 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   `api-equivalences.json` catalogue (ADR 0020). The functions also take the heap at the call
   and the call's position in the trace, because callees are stateful (ADR 0018). A verdict
   that relies on a matched callee pair names it in the SARIF (ADR 0019).
+
+`Equiv.Execute` runs code on the two real runtimes, the second oracle of ADR 0035. It references
+`Equiv.Core` only (an architecture test enforces it):
+
+- `Equiv.Core.Execution` holds the contract: `ExecutionRequest`, `ExecutionOutcome` and
+  `IExecutionDriverFactory`. They are records and one interface, with no process code.
+- `Equiv.Frontend.CSharp` implements `IExecutionDriverFactory` (`DriverFactory`). It resolves a
+  member against the .NET Framework 4.8 targeting pack and the .NET 10 reference pack, and emits one
+  driver program per runtime with Roslyn.
+- `Equiv.Execute` generates inputs and runs each driver as a child process, twice per side. It
+  compares the canonical outcomes. `tools/runtime-diff` (M3-032) is a thin console over it and
+  `DriverFactory`. It is Windows-only, because the legacy side needs .NET Framework 4.8.
 
 `Equiv.Cli`:
 
@@ -108,3 +125,4 @@ paths -> router -> loader(legacy) -> symbols --+
 | `ILanguageFrontend` | C# | Java (Eclipse JDT sidecar) reusing everything else |
 | `IVerificationBackend` | Z3 direct encoding | Boogie IVL (SymDiff-style) when loop invariants are needed |
 | `IReportSink` | SARIF file | SARIF upload to GitHub Code Scanning / SonarQube |
+| `IExecutionDriverFactory` | C# drivers for .NET Framework 4.8 and .NET 10 (ADR 0035) | drivers for user assemblies (M4-009) |
