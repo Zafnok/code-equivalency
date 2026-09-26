@@ -117,9 +117,15 @@ public static class SyntaxMutator
 
     // -- ReorderIndependentStatements: swap two adjacent simple assignments that cannot interact. --
 
+    /// <summary>
+    /// Both statements must be simple <c>name = value;</c> assignments: the target itself must be a bare identifier,
+    /// never <c>u[i]</c> or <c>obj.Field</c>, because evaluating those can throw (index out of range, null reference)
+    /// and swapping them would move that exception across the other statement's effect.
+    /// </summary>
     private static bool IsIndependentAssignmentPair(StatementSyntax first, StatementSyntax second) =>
         TryAssignment(first, out AssignmentExpressionSyntax? a) && TryAssignment(second, out AssignmentExpressionSyntax? b)
-        && IsSimple(a!.Right) && IsSimple(b!.Right)
+        && a!.Left is IdentifierNameSyntax && b!.Left is IdentifierNameSyntax
+        && IsSimple(a.Right) && IsSimple(b.Right)
         && !string.Equals(TargetName(a.Left), TargetName(b.Left), StringComparison.Ordinal)
         && !Reads(a.Right).Contains(TargetName(b.Left)) && !Reads(b.Right).Contains(TargetName(a.Left));
 
