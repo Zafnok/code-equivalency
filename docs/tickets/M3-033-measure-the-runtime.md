@@ -1,5 +1,5 @@
 # M3-033 Measure the runtime: every BCL member the corpus calls, run on both runtimes, and measured rows for the ones that differ
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-032, M3-030
@@ -61,3 +61,73 @@ NuGet packages' members: package drift is ADR 0034's `packageVersionChanges`, an
 packages is later work.
 
 ## Notes
+
+- Decision: `CallIdentity` gains `External` (bool, default false; `src/Equiv.Core/CallIdentity.cs`),
+  computed only where a real `IMethodSymbol` and `Compilation` are both available — the general
+  `IrLowerer.Identity(method)` path. The API-equivalence-adapted call (`entry.Modern`, a bare string
+  identity, `IrLowerer.cs` line ~1457) keeps `External = false`: there is no symbol there to classify,
+  and the 14 curated/documented rows already cover the members that path can rewrite to.
+- Decision: reused `ProjectEmitter.IsReferenceAssembly`'s `ReferenceAssemblyAttribute` check (M4-009)
+  instead of duplicating it, via a new shared `Equiv.Frontend.CSharp.ReferenceAssemblies` internal
+  helper. "External" = `compilation.GetMetadataReference(method.ContainingAssembly)` is a
+  `PortableExecutableReference` carrying that attribute — a `CompilationReference` (the solution's own
+  code) or a `PortableExecutableReference` without it (a NuGet package) are both excluded, matching
+  the ticket's Out of scope.
+- Decision: `IrText`'s call syntax gained a second, independent suffix marker `@` (round-tripping
+  `CallIdentity.External`, parsed after the existing `!` for `RuntimeChanged`), so
+  `LoweringCensusTests`'s IR-text fixtures can express an external call without a real Roslyn
+  compilation. `@` was added to the parser's symbol-character allowlist.
+- Decision: `externalCallees` entries sort by call-site count descending, then member name
+  ordinally, per the acceptance criterion ("sorted by count, then ordinally").
+- Decision: `-RuntimeDiff <slug>` resolves the pair's most recently modified `*census*` run directory
+  under `.corpus/pairs/<slug>/runs/` and reads its `equiv.sarif`, rather than taking a raw SARIF path,
+  matching the `-Packages`/`-Unchanged` slug-based convention already in `corpus.ps1`.
+- Decision: a generic method's `CallIdentity` carries an equiv-only `<T1,T2>` instantiation suffix
+  (`CallIdentityFactory`, for a constructed generic). `-RuntimeDiff` strips it with
+  `-replace '<[^>]*>$', ''` before calling `runtime-diff --member`, since `runtime-diff` resolves a
+  member against real Roslyn symbols and knows nothing of that suffix. The stripped identity still
+  fails to resolve when it names concrete non-BCL type arguments in its *parameter list* (e.g.
+  `ConcurrentDictionary<IHub,ILifetimeScope>::TryAdd(IHub,ILifetimeScope)`); `runtime-diff` itself
+  reports the corresponding open generic as `not constructible (generic)`. Not a bug: this is
+  exactly the class of member the ticket's Out of scope and `tools/runtime-diff/README.md`'s "What
+  runs" section already exclude.
+- Decision: `RuntimeChange` gains an optional init-only `Witness` (`RuntimeChangeWitness`: `Input`,
+  `Culture`, `Legacy`, `Modern`, each the raw JSON text `tools/runtime-diff`'s own report already
+  writes), set only for `source: measured` rows. `RuntimeChangeTable.Parse` reads it when present.
+- Decision: `System.String::GetHashCode()` diverged only in `nondeterministic.modern` on
+  `pmb-tomasjohansson__adapters-shortest-paths-dotnet` (315 of 320 cases) — exactly acceptance
+  criterion 5's shape. It already has a curated row (`System.String::GetHashCode(`), so it gets no
+  second row: `RuntimeChangeTableTests.EveryRowHasASource` rejects a duplicate `Member` string, and
+  criterion 4's "no existing row covers" guard is read as taking precedence over criterion 5's "gets a
+  row too" for a member that is already covered. `docs/runs/2026-09-26-runtime-diff/SUMMARY.md` lists
+  it under "Divergent members" with "Already covered? Yes" instead.
+- Toolchain: the `.corpus/refasm` reused from a sibling worktree (see below) had a stale `refasm/root/.NETFramework/vX`
+  + `refasm/obj/` layout from an older `-Prepare` implementation. `corpus.ps1`'s current `-Env` expects
+  `$CorpusRoot/refasm/.NETFramework/vX` directly; moved `root/.NETFramework` up a level and deleted
+  `obj/` (a stale `-Prepare` scratch project) to fix "the reference assemblies for .NETFramework,Version=vX
+  were not found" on `pmb-shiningrush__serviceant` (targets v4.5.2).
+- Toolchain: `gitextensions-8522`'s `--lower-only` census threw a `NullReferenceException` while
+  lowering `CommonTestUtils.ConfigureJoinableTaskFactoryAttribute::AfterTest` on the first attempt
+  (contained by P2-011: exit 5, one `LoweringFailure`, everything else still counted) and completed with
+  no lowering failures on an identical retry. This matches the flakiness M3-031's Notes already
+  recorded for a different method on the same pair (`ICSharpCode.TextEditor.TextAreaClipboardHandler::Paste`,
+  2026-09-24): not reproduced with a fixed cause, not fixed here (Out of scope: this ticket is measurement,
+  not the frontend), and the census this run used for `-RuntimeDiff` is from the run that completed
+  cleanly.
+- Note: reused the corpus already fetched and, for the three agent pairs, already migrated in the
+  sibling worktree `real-pair-census-e1bae3` (the same repo, a different git worktree) instead of
+  re-cloning and re-running the agent migrations, to avoid redoing that work. Only the absolute paths
+  baked into each `pair.json` needed rewriting to this worktree's path; the checkouts, migrated
+  sources and reference-assembly cache all worked unmodified. `pmb-chrismckelt__webminder`, prepared
+  there but not part of the 2026-09-24 census, was left out.
+- Decision: `-RuntimeDiff`'s per-member `dotnet run` calls run under `$ErrorActionPreference =
+  'Continue'` (restored in a `finally`), mirroring `Invoke-Git`'s existing guard. Windows PowerShell
+  5.1 promotes any stderr line — including `runtime-diff`'s own "no public member matches" usage
+  message — to a terminating `NativeCommandError` under the script's `$ErrorActionPreference =
+  'Stop'`, which would otherwise abort the whole run partway through a pair's member list.
+- Observed, real corpus run (`docs/runs/2026-09-26-runtime-diff/SUMMARY.md`): of 4677/4705 (legacy/modern)
+  `externalCallees` on `gitextensions-8522`, 131 of its top 200-per-side union do not resolve on both runtimes —
+  127 of those are `System.Windows.Forms.*`/`System.Drawing.*`, because `Equiv.Frontend.CSharp.Execution.DriverFactory`
+  (M3-032) targets the BCL only. Git Extensions' most-called external members are therefore mostly
+  untestable by `runtime-diff` today. No ticket filed: `DriverFactory`'s referenced-assembly scope is
+  M3-032's, and this ticket's Size guard forbids touching its engine.

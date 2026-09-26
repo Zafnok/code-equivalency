@@ -955,3 +955,13 @@ One line per entry: `- <title> — <url> — row: <prefix>[ ; <prefix>...]` or
 
 - System.String::GetHashCode( — https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0 — row: System.String::GetHashCode(
 - System.Text.Encoding::get_Default( — https://learn.microsoft.com/en-us/dotnet/api/system.text.encoding.default?view=net-10.0 — row: System.Text.Encoding::get_Default(
+
+## Measured (ADR 0035, ticket M3-033)
+
+Rows added from `tools/runtime-diff` runs against the corpus (`docs/runs/2026-09-26-runtime-diff/SUMMARY.md`),
+not from a compatibility page: the behaviour change predates .NET Core 3.0, the earliest release this
+review covers, so no page above names it. Each row's witness is in `runtime-changes.json` itself.
+
+- Path.Combine no longer validates its arguments — https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine — row: System.IO.Path::Combine(string,string)
+- Path.GetDirectoryName no longer validates its argument — https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getdirectoryname — row: System.IO.Path::GetDirectoryName(string)
+- StreamReader's constructor throws IOException, not ArgumentException, for a path with characters the file system rejects — https://learn.microsoft.com/en-us/dotnet/api/system.io.streamreader.-ctor — row: System.IO.StreamReader::.ctor(string)
