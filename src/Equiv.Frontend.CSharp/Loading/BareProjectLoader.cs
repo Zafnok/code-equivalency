@@ -25,7 +25,8 @@ internal sealed class BareProjectLoader(
     string? netStandardShims,
     IReadOnlyDictionary<string, Compilation> sdkProjects)
 {
-    private readonly Dictionary<string, BareProject?> _projects = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, BareProject> _projects = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _started = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<BareProject> _loaded = [];
 
     /// <summary>Every project loaded so far, in the order each finished, including those only reached by reference.</summary>
@@ -37,14 +38,14 @@ internal sealed class BareProjectLoader(
     /// </summary>
     public async Task<BareProject?> LoadAsync(string projectPath, CancellationToken ct)
     {
-        if (_projects.TryGetValue(projectPath, out BareProject? known))
+        // A project already started and not yet in _projects is still loading: known stays null.
+        if (_projects.TryGetValue(projectPath, out BareProject? known) || !_started.Add(projectPath))
         {
             return known;
         }
 
-        _projects.Add(projectPath, value: null);
         BareProject project = await OpenAsync(projectPath, ct).ConfigureAwait(false);
-        _projects[projectPath] = project;
+        _projects.Add(projectPath, project);
         _loaded.Add(project);
         return project;
     }
