@@ -31,6 +31,10 @@ Since M4-003, `ref` and `out` arguments to locals and parameters are call output
 lowers with no opaque and its `ref-argument` entry leaves the census. `Record`'s `lock` stays whole-body opaque: the CFG
 never initialises the `lockTaken` local it passes to `Monitor.Enter` by `ref` (ticket M4-011).
 
+Since M4-005, `QuantityOf`'s `item is OrderLine line` is a read of the `istype.System.Object.<OrderLine>` predicate at a
+non-null `item`, and `line` is a read of the `cast` map, so the method lowers with no opaque and its `switch-pattern`
+opaque leaves the census.
+
 Congruent results that call another matched procedure list it in `properties.assumedCallees`
 (ADR 0019). Every such callee here is itself Equivalent, so no result has `unprovenAssumptions`.
 

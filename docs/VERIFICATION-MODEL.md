@@ -86,7 +86,8 @@ field touched, `array.<Sort>` from an array reference to its elements by bv32 in
 `length.<Sort>` from an array reference to its length, per array sort indexed, keyed by the
 reference like `null.<Sort>` so that two variables holding one array share its elements (P1-006), and one
 `cast.<From>.<To>` map from `<From>`'s IR type to `<To>`'s sort per implicit reference or boxing
-conversion between different IR types (M3-010), one `typeof.<T>` input of `System.Type` sort
+conversion between different IR types (M3-010), one `istype.<From>.<To>` map from `<From>`'s sort to Bool per
+reference type test (M4-005), one `typeof.<T>` input of `System.Type` sort
 per closed type `T` a body reads with `typeof(T)` (P2-002), and one `new.<Sort>` from bv32 to an
 array sort per array sort a body creates (P2-001). An array creation `new T[n]` (one `int` dimension)
 throws `System.OverflowException` when `n` is negative, then reads its reference from `new.<Sort>` at
@@ -97,7 +98,13 @@ sides' k-th creations of a sort are one reference; nothing keeps it apart from t
 reach, which only adds inputs, never removes a real run. A cast map is an uninterpreted function with no
 trace event: the same operand always converts to the same value. The converted value's nullness is
 read from `null.<To>` like any value's, not tied to the operand's, which over-approximates (a real
-upcast of a non-null value is never null). `typeof(T)` for an open generic or method type parameter
+upcast of a non-null value is never null). A type test of a reference `x` against a reference type `T` (`x is T`,
+a type or declaration pattern, `x as T`, a downcast `(T)x`) is `!isNull(x) && istype.<From>.<T>[x]`: `istype` is a
+free predicate per pair of types, shared by both sides by name, and nothing ties it to the type hierarchy. `x is T t`
+binds `t` to `cast.<From>.<T>[x]`, never null; `x as T` is that cast when the test passes and `null` otherwise, and
+its nullness is the test's negation; `(T)x` branches to `IrThrow("System.InvalidCastException")` when the test fails
+on a non-null `x`, is `null` for a null `x`, and the cast otherwise. Unboxing, a test of or against a type parameter,
+and a test between types no reference conversion relates stay opaque. `typeof(T)` for an open generic or method type parameter
 `T` stays `IrOpaque("TypeOf")`; for a closed `T` it reads `typeof.<T>` directly, is never null and
 adds no trace event. The product
 encoding (M3-001, ADR 0021) shares the C# parameters by position, because that is how a caller
@@ -108,7 +115,7 @@ is the one definition). A C# parameter whose name would be synthesised, which ca
 is spelled with a leading `$` in IR (`$this`; its source name stays `this`). No C# identifier contains `$`, so
 that name is never another parameter's (M3-007). A value's shadow is a `mapread` of `null.<Sort>`,
 so equal references are equally null; `new` sets the shadow to false instead. `this`,
-`null.*`, `cast.*`, `length.*`, `typeof.*` and `new.*` are `In`, because nothing changes them, except
+`null.*`, `cast.*`, `istype.*`, `length.*`, `typeof.*` and `new.*` are `In`, because nothing changes them, except
 that `length.<Sort>` is `Ref` in a body that creates an array of that sort (P2-001; ADR 0018 clarification). No CLR array has a
 negative length, so the encoder assumes every read of a `length.*` input is non-negative, whether or not the read is
 reached (the CLR never reads a null reference's length, so this drops no input a caller can pass), and the model
