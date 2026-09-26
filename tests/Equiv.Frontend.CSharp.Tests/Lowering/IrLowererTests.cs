@@ -264,10 +264,7 @@ public sealed class IrLowererTests
     [Theory]
     [InlineData("int f; void M(int a) { f += a; }", "FieldReference")]
     [InlineData("static void M(int[] xs) { xs[0]++; }", "ArrayElementReference")]
-    [InlineData("static void M(double d) { d += 1; }", "CompoundAssignment")]
-    [InlineData("static void M(double d) { d++; }", "Increment")]
     [InlineData("enum E { A } static void M(E e) { e += 1; }", "ParameterReference")]
-    [InlineData("struct S { public static int operator +(int a, S b) => 0; } static void M(int a, S s) { a += s; }", "CompoundAssignment")]
     public void CompoundAssignmentToAnUnsupportedTargetIsOpaque(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
 

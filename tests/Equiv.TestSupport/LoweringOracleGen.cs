@@ -17,7 +17,8 @@ namespace Equiv.TestSupport;
 /// which an input may bind to one array (ticket P1-006) or bind <c>v</c> to <c>null</c> (ticket P2-017), and <c>foreach</c> loops
 /// that fold each element of the <c>List&lt;int&gt;</c> parameter <c>l</c> into <c>x</c> (ticket M4-001), <c>decimal</c> arithmetic
 /// over the parameter <c>m</c> and <c>int</c> values converted to <c>decimal</c>, converted back to <c>int</c> or compared (ticket
-/// M4-002), and reads and writes of the instance field <c>G</c> of the <c>Cell</c> parameter <c>o</c> around calls to
+/// M4-002), updated with <c>m op= </c> a <c>decimal</c> expression and with <c>m++</c>, <c>++m</c>, <c>m--</c> and <c>--m</c>
+/// (ticket P2-022), and reads and writes of the instance field <c>G</c> of the <c>Cell</c> parameter <c>o</c> around calls to
 /// <c>o.Bump(k)</c>, which adds <c>k</c> to it (ticket P1-005); built as a small AST and
 /// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
@@ -35,6 +36,9 @@ public static class LoweringOracleGen
     private static readonly decimal[] DecimalEdges = [0m, 1m, -1m, 0.5m, 2.5m, 12345.678m, 0.0000000000000000000000000001m, decimal.MaxValue, decimal.MinValue];
 
     private static readonly string[] DecimalArithmetic = ["+", "-", "*", "/", "%"];
+
+    /// <summary>The increments and decrements of <c>m</c> a <c>decimal</c> expression may be (ticket P2-022).</summary>
+    private static readonly string[] DecimalSteps = ["(m++)", "(++m)", "(m--)", "(--m)"];
 
     private static readonly string[] Arithmetic = ["+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>"];
 
@@ -131,9 +135,12 @@ public static class LoweringOracleGen
             (IStmt)new Assign(Element(array, index), value));
         Gen<IStmt> step = Gen.Select(Gen.OneOfConst(typeof(int), typeof(long)), Gen.OneOfConst("++", "--"), Gen.Bool, static (type, op, isChecked) =>
             (IStmt)new Step(LocalName(type), op, isChecked));
+        // Ticket P2-022: a compound assignment to the decimal parameter.
+        Gen<IStmt> decimals = Gen.Select(Gen.OneOfConst(DecimalArithmetic), Gen.Bool, DecimalGen(Depth - 1), static (op, isChecked, value) =>
+            (IStmt)new Compound("m", op, value, isChecked));
         if (depth == 0)
         {
-            return Gen.Frequency((4, assign), (1, property), (1, field), (1, cell), (1, bump), (2, element), (2, update), (1, step), (1, exit));
+            return Gen.Frequency((4, assign), (1, property), (1, field), (1, cell), (1, bump), (2, element), (2, update), (1, step), (1, decimals), (1, exit));
         }
 
         Gen<IStmt> branch = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Block(returnType, depth - 1), static (condition, then, otherwise) =>
@@ -143,7 +150,7 @@ public static class LoweringOracleGen
         // The element is as often a divisor or shift count, so a loop body also throws out through the `finally`.
         Gen<IStmt> each = Gen.Select(Gen.OneOfConst(Arithmetic), Gen.Bool, Block(returnType, depth - 1), static (op, isChecked, body) =>
             (IStmt)new ForEach(op, isChecked, body));
-        return Gen.Frequency((3, assign), (1, property), (1, field), (1, cell), (1, bump), (2, element), (2, update), (1, step), (2, branch), (2, loop), (2, each), (1, exit));
+        return Gen.Frequency((3, assign), (1, property), (1, field), (1, cell), (1, bump), (2, element), (2, update), (1, step), (1, decimals), (2, branch), (2, loop), (2, each), (1, exit));
     }
 
     /// <summary>
@@ -198,13 +205,15 @@ public static class LoweringOracleGen
     }
 
     /// <summary>
-    /// A <c>decimal</c> expression (ticket M4-002): <c>m</c> or an <c>int</c> converted to <c>decimal</c>, and arithmetic over
-    /// them, which can divide by zero or overflow. It has no literal, so it is never a compile-time constant.
+    /// A <c>decimal</c> expression (ticket M4-002): <c>m</c>, an increment or decrement of <c>m</c> (ticket P2-022), or an
+    /// <c>int</c> converted to <c>decimal</c>, and arithmetic over them, which can divide by zero or overflow. It has no literal,
+    /// so it is never a compile-time constant.
     /// </summary>
     private static Gen<IExpr> DecimalGen(int depth)
     {
         Gen<IExpr> leaf = Gen.Frequency(
             (1, Gen.Const<IExpr>(new Name("m"))),
+            (1, Gen.OneOfConst(DecimalSteps).Select(static step => (IExpr)new Name(step))),
             (1, ExprGen(typeof(int), 0).Select(static operand => (IExpr)new Conversion(typeof(decimal), operand, IsChecked: false))));
         if (depth <= 0)
         {

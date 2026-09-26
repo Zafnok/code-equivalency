@@ -1,10 +1,10 @@
 ﻿{
   procedures: {
-    legacy: 28,
-    modern: 28
+    legacy: 29,
+    modern: 29
   },
-  matchedPairs: 28,
-  pairsWithoutOpaque: 22,
+  matchedPairs: 29,
+  pairsWithoutOpaque: 24,
   pairsWholeBodyOpaque: 2,
   pairsCongruent: 24,
   projectsSkipped: {
@@ -12,10 +12,6 @@
     modern: 0
   },
   opaqueByReason: {
-    CompoundAssignment: {
-      legacy: 1,
-      modern: 1
-    },
     DelegateCreation: {
       legacy: 1,
       modern: 1
@@ -37,11 +33,11 @@
       modern: 1
     }
   },
-  changedPairs: 4,
-  changedPairsWithoutOpaque: 3,
+  changedPairs: 5,
+  changedPairsWithoutOpaque: 4,
   changedPairsWholeBodyOpaque: 0,
   changedReasonSets: {
-    : 3,
+    : 4,
     InterpolatedString: 1
   },
   runtimeChangeCalls: {

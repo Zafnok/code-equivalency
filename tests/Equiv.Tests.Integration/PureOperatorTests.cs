@@ -19,7 +19,8 @@ namespace Equiv.Tests.Integration;
 /// <summary>
 /// Ticket M4-002 end to end (ADR 0025): C# with floating-point, <c>decimal</c> and user-defined operators, lowered to
 /// <see cref="IrPure"/> and verified by Z3. Unchanged arithmetic is provable, and exact exception types keep a
-/// <c>catch</c> from being silently ignored. These need the frontend together with the solver, which is why they live here.
+/// <c>catch</c> from being silently ignored. Ticket P2-022: compound assignment and <c>++</c>/<c>--</c> apply the same
+/// functions, so they are proved equal to their expanded forms. These need the frontend together with the solver, which is why they live here.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class PureOperatorTests
@@ -97,12 +98,57 @@ public sealed class PureOperatorTests
     [Fact]
     public void BusinessLayerLineTotalIsEquivalent()
     {
-        MatchResult match = new CSharpFrontend().Analyze(Solution("legacy", "*.sln"), Solution("modern", "*.slnx"), EquivConfig.Default, TestContext.Current.CancellationToken).Match;
-        ProcedurePair lineTotal = match.Pairs.Single(static p => p.New.Value.Contains("OrderService::LineTotal(", StringComparison.Ordinal));
+        ProcedurePair lineTotal = BusinessLayerPair("OrderService::LineTotal(");
         VerificationOptions options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, EquivConfig.Default.CallIdentityRenames);
 
         Assert.DoesNotContain(lineTotal.OldBody!.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
         Assert.IsType<Equivalent>(new Z3Backend().Verify(lineTotal.OldBody!, lineTotal.NewBody!, options));
+    }
+
+    /// <summary>
+    /// Ticket P2-022 criterion 7: <c>x op= y</c> against <c>x = x op y</c>. The sources differ, so nothing here is congruent,
+    /// and the solver proves each pair from the shared function.
+    /// </summary>
+    [Theory]
+    [InlineData("static decimal M(decimal x, decimal y) { x += y; return x; }", "static decimal M(decimal x, decimal y) { x = x + y; return x; }")]
+    [InlineData("static decimal M(decimal x, decimal y) { x -= y; return x; }", "static decimal M(decimal x, decimal y) { x = x - y; return x; }")]
+    [InlineData("static decimal M(decimal x, int y) { x /= y; return x; }", "static decimal M(decimal x, int y) { x = x / y; return x; }")]
+    [InlineData("static double M(double x, double y) { x *= y; return x; }", "static double M(double x, double y) { x = x * y; return x; }")]
+    [InlineData("static double M(double x, double y) { x %= y; return x; }", "static double M(double x, double y) { x = x % y; return x; }")]
+    [InlineData("static decimal M(decimal m) { m++; return m; }", "static decimal M(decimal m) { m = m + 1m; return m; }")]
+    [InlineData("struct Money { public static Money operator +(Money a, Money b) => a; } static Money M(Money a, Money b) { a += b; return a; }", "struct Money { public static Money operator +(Money a, Money b) => a; } static Money M(Money a, Money b) { a = a + b; return a; }")]
+    public void CompoundAssignmentIsEquivalentToItsExpandedForm(string compound, string expanded)
+    {
+        Assert.IsType<Equivalent>(Verify($"class C {{ {expanded} }}", $"class C {{ {compound} }}"));
+    }
+
+    /// <summary>
+    /// Ticket P2-022 criterion 9: <c>Discounted</c> writes <c>total = total - total * rate</c> on the legacy side and
+    /// <c>total -= total * rate</c> on the modern one. Its fingerprints differ, so it is not congruent, and the solver proves it.
+    /// </summary>
+    [Fact]
+    public void BusinessLayerDiscountedIsEquivalent()
+    {
+        ProcedurePair discounted = BusinessLayerPair("OrderService::Discounted(");
+        VerificationOptions options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, EquivConfig.Default.CallIdentityRenames);
+
+        Assert.NotEqual(discounted.OldFingerprint, discounted.NewFingerprint);
+        Assert.DoesNotContain(discounted.OldBody!.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
+        Assert.DoesNotContain(discounted.NewBody!.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
+        Assert.IsType<Equivalent>(new Z3Backend().Verify(discounted.OldBody!, discounted.NewBody!, options));
+    }
+
+    /// <summary>Ticket P2-022 criterion 10: <c>Subtotal</c>'s <c>decimal</c> <c>+=</c> is <c>dec.add</c>, so neither side has an opaque.</summary>
+    [Fact]
+    public void BusinessLayerSubtotalHasNoOpaque()
+    {
+        ProcedurePair subtotal = BusinessLayerPair("OrderService::Subtotal(");
+
+        foreach (IrProcedure body in (IrProcedure[])[subtotal.OldBody!, subtotal.NewBody!])
+        {
+            Assert.DoesNotContain(body.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
+            Assert.Contains(body.Blocks.SelectMany(static b => b.Instructions), static i => i is IrPure { Function: "dec.add" });
+        }
     }
 
     private static Verdict Verify(string legacy, string modern) =>
@@ -121,6 +167,10 @@ public sealed class PureOperatorTests
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }
+
+    private static ProcedurePair BusinessLayerPair(string member) =>
+        new CSharpFrontend().Analyze(Solution("legacy", "*.sln"), Solution("modern", "*.slnx"), EquivConfig.Default, TestContext.Current.CancellationToken)
+            .Match.Pairs.Single(p => p.New.Value.Contains(member, StringComparison.Ordinal));
 
     private static string Solution(string side, string pattern) =>
         Directory.GetFiles(Path.Combine(SamplesRoot, "business-layer", side), pattern).Single();
