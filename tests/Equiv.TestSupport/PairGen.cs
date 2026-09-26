@@ -56,13 +56,36 @@ public static class PairGen
         .Where(static m => Count(m.Body) < MaxStatements);
 
     /// <summary>
+    /// A generated method with one more statement, <c>x = ((System.Func&lt;int, int&gt;)(v =&gt; v op e))(e');</c>, somewhere
+    /// before its last (ticket M4-004): a lambda the lowerer leaves an opaque fragment, which is one shared call when both
+    /// sides have it, so a mutation lands either outside the fragment or inside it. <c>e</c> is a parameter, the field or an
+    /// array element, never a local: the <c>RenameLocals</c> operator does not rename inside a lambda.
+    /// </summary>
+    private static Gen<Method> FragmentMethod { get; } =
+        Gen.Select(
+            Method,
+            Gen.Select(
+                Gen.OneOfConst(Arithmetic),
+                Gen.Bool,
+                Gen.OneOfConst<IExpr>(new Name(typeof(int), "a"), new Name(typeof(int), "b"), new Name(typeof(int), Field), new Element(0)),
+                Flat(typeof(int)),
+                static (op, isChecked, right, argument) => new Fragment(new Binary(op, new Name(typeof(int), "v"), right, isChecked), argument)),
+            Gen.Int[0, MaxStatements],
+            static (method, fragment, at) => method with { Body = method.Body.Insert(at % method.Body.Length, new Assign("x", fragment)) });
+
+    /// <summary>
     /// A legacy and a modern method, and the operator that derived one from the other. The mutation operators
     /// themselves live in <c>Equiv.Corpus.Seeder</c> (ticket M4-010) and work on Roslyn syntax, so the generated
     /// method is rendered to C# once and reparsed before <see cref="SyntaxMutator"/> sees it.
     /// </summary>
-    public static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Pair { get; } =
-        Gen.Enum<MutationOperator>().SelectMany(static op =>
-            Method.Select(Rendered).Where(t => SyntaxMutator.Sites(op, t.Method) > 0).SelectMany(t =>
+    public static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Pair { get; } = Pairs(Method);
+
+    /// <summary>As <see cref="Pair"/>, over methods that also call a lambda (ticket M4-004).</summary>
+    public static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> FragmentPair { get; } = Pairs(FragmentMethod);
+
+    private static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Pairs(Gen<Method> methods) =>
+        Gen.Enum<MutationOperator>().SelectMany(op =>
+            methods.Select(Rendered).Where(t => SyntaxMutator.Sites(op, t.Method) > 0).SelectMany(t =>
                 Gen.Int[0, SyntaxMutator.Sites(op, t.Method) - 1].Select(site =>
                 {
                     MethodDeclarationSyntax mutated = SyntaxMutator.Apply(op, t.Method, site)!;

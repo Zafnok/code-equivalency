@@ -1036,16 +1036,54 @@
               }
             ]
           }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.BusinessLayer.OrderService::CappedLineCount(Equiv.Samples.BusinessLayer.Order,int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/OrderService.cs"
+                },
+                "region": {
+                  "startLine": 122,
+                  "startColumn": 20,
+                  "endLine": 122,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.BusinessLayer.OrderService::CappedLineCount(Equiv.Samples.BusinessLayer.Order,int)",
+            "resultFingerprint/v1": "c23a64246a49801694860bd62d3e9edb6476e14a3b5821fc7e377556e63572eb"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
         }
       ],
       "columnKind": "utf16CodeUnits",
       "properties": {
         "loweringCensus": {
           "procedures": {
-            "legacy": 29,
-            "modern": 29
+            "legacy": 30,
+            "modern": 30
           },
-          "matchedPairs": 29,
+          "matchedPairs": 30,
           "pairsWithoutOpaque": 24,
           "pairsWholeBodyOpaque": 2,
           "pairsCongruent": 24,
@@ -1055,8 +1093,8 @@
           },
           "opaqueByReason": {
             "DelegateCreation": {
-              "legacy": 1,
-              "modern": 1
+              "legacy": 2,
+              "modern": 2
             },
             "InterpolatedString": {
               "legacy": 1,
@@ -1075,11 +1113,12 @@
               "modern": 1
             }
           },
-          "changedPairs": 5,
+          "changedPairs": 6,
           "changedPairsWithoutOpaque": 4,
           "changedPairsWholeBodyOpaque": 0,
           "changedReasonSets": {
             "": 4,
+            "DelegateCreation": 1,
             "InterpolatedString": 1
           },
           "runtimeChangeCalls": {
@@ -1102,8 +1141,8 @@
           }
         },
         "analysedLinesOfCode": {
-          "legacy": 139,
-          "modern": 135
+          "legacy": 148,
+          "modern": 144
         },
         "projectsNotBuilt": {
           "legacy": [],

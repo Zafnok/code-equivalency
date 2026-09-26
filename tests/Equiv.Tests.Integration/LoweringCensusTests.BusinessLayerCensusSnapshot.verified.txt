@@ -1,9 +1,9 @@
 ﻿{
   procedures: {
-    legacy: 29,
-    modern: 29
+    legacy: 30,
+    modern: 30
   },
-  matchedPairs: 29,
+  matchedPairs: 30,
   pairsWithoutOpaque: 24,
   pairsWholeBodyOpaque: 2,
   pairsCongruent: 24,
@@ -13,8 +13,8 @@
   },
   opaqueByReason: {
     DelegateCreation: {
-      legacy: 1,
-      modern: 1
+      legacy: 2,
+      modern: 2
     },
     InterpolatedString: {
       legacy: 1,
@@ -33,11 +33,12 @@
       modern: 1
     }
   },
-  changedPairs: 5,
+  changedPairs: 6,
   changedPairsWithoutOpaque: 4,
   changedPairsWholeBodyOpaque: 0,
   changedReasonSets: {
     : 4,
+    DelegateCreation: 1,
     InterpolatedString: 1
   },
   runtimeChangeCalls: {
