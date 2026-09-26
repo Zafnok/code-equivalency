@@ -1,5 +1,5 @@
 # P2-021 ShortestPaths' legacy test projects fail to load: "doesn't list 'win' as a RuntimeIdentifier"
-Status: in-progress
+Status: done (PR #217)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
