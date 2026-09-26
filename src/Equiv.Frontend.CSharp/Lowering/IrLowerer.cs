@@ -472,7 +472,7 @@ internal sealed class IrLowerer
 
     /// <summary>Whether the test passes: the operand is not null and <c>istype</c> holds of it.</summary>
     private IrVar Passes(TypeTest test, LoweringContext context) =>
-        test.IsNull is { } isNull ? Emit(IrBinaryOp.And, EmitUnary(IrUnaryOp.BoolNot, isNull, context), test.IsType, Bool, context) : test.IsType;
+        test.OperandIsNull is { } isNull ? Emit(IrBinaryOp.And, EmitUnary(IrUnaryOp.BoolNot, isNull, context), test.IsType, Bool, context) : test.IsType;
 
     /// <summary>The operand converted to the tested type: a read of <c>cast.&lt;From&gt;.&lt;To&gt;</c>, as M3-010 lowers an upcast.</summary>
     private IrVar CastOf(TypeTest test, LoweringContext context) => heap.MapRead(heap.Inputs.Cast(test.From, test.To), test.Value, context);
@@ -494,10 +494,10 @@ internal sealed class IrLowerer
     /// </summary>
     private IrVar Downcast(IConversionOperation conversion, TypeTest test, LoweringContext context)
     {
-        IrVar fits = test.IsNull is { } isNull ? Emit(IrBinaryOp.Or, isNull, test.IsType, Bool, context) : test.IsType;
+        IrVar fits = test.OperandIsNull is { } isNull ? Emit(IrBinaryOp.Or, isNull, test.IsType, Bool, context) : test.IsType;
         ThrowIf(EmitUnary(IrUnaryOp.BoolNot, fits, context), "System.InvalidCastException", context);
         IrVar cast = CastOf(test, context);
-        return test.IsNull is { } wasNull ? Select(wasNull, Constant(conversion.Type!, value: null, context), cast, context) : cast;
+        return test.OperandIsNull is { } wasNull ? Select(wasNull, Constant(conversion.Type!, value: null, context), cast, context) : cast;
     }
 
     /// <summary><paramref name="condition"/> <c>?</c> <paramref name="then"/> <c>:</c> <paramref name="otherwise"/>, as a branch and a join.</summary>
@@ -1441,7 +1441,7 @@ internal sealed class IrLowerer
     private sealed record UpdateSite(IOperation Node, IOperation Target, bool IsChecked, bool IsPostfix);
 
     /// <summary>A type test (ticket M4-005): the types, the operand's value, whether it is null (null when provably not) and its <c>istype</c> read.</summary>
-    private sealed record TypeTest(ITypeSymbol From, ITypeSymbol To, IrVar Value, IrVar? IsNull, IrVar IsType);
+    private sealed record TypeTest(ITypeSymbol From, ITypeSymbol To, IrVar Value, IrVar? OperandIsNull, IrVar IsType);
 
     /// <summary>A property an assignment writes, and its receiver and index arguments, evaluated once.</summary>
     private sealed record PropertyAccess(IPropertyReferenceOperation Reference, ImmutableArray<IrVar> Operands);
