@@ -252,7 +252,7 @@ Equivalent or finds a counterexample wins, and `proofMethod` names it.
 | 1 | Bounded unrolling, k iterations, `assume false` on the last back edge; self-calls inlined k deep | Divergent with a concrete trace; Equivalent (`boundedBy: k`) only when no input reaches the bound | always; runs first because counterexamples surface at small k | M3-002 |
 | 2 | Lockstep relational induction (mutual summaries): align loop pairs by position in the loop nesting forest and pair each header's state; cut both sides at every header and prove, from equal inputs and from each pair of equal header states, that both sides reach the same next header with equal states or leave with equal observables | **unbounded** Equivalent | both sides have the same loop forest and pairable header states; covers unchanged and cosmetically changed loops | M3-002 |
 | 3 | k-induction: rung 2 with k prior iterations assumed equal | unbounded Equivalent | bodies agree only after warm-up | M3-002 |
-| 4 | Constrained Horn clauses solved by Z3 Spacer: each loop is a recursive predicate, Z3 synthesises the coupling invariant | unbounded Equivalent, or Unknown(chc-timeout) | loops do not align (loop to LINQ, fusion, iterator rewrite) | P1-001 |
+| 4 | Constrained Horn clauses solved by Z3 Spacer: each side is cut at every loop header, one relation per pair of cut points, and Z3 synthesises the coupling invariant | unbounded Equivalent (the invariant in `properties.invariant`), Divergent when a derivation replays, or Unknown(chc-timeout, chc-spurious) | loops do not align (loop to LINQ, fusion, iterator rewrite), and neither side calls or applies a pure function | P1-001 |
 | 5 | LLM-proposed coupling invariant checked by Z3; a wrong guess can never yield Equivalent | unbounded Equivalent, or Unknown(no-invariant) | rung 4 timed out | P1-002 |
 
 Recursion is handled by rung 2 with the recursive call as the induction point
@@ -263,7 +263,8 @@ shared (section 1, ADR 0019), so `Recursion` means only a self-call that no rung
 Rung 1's result is a proof only when no input reaches the bound; otherwise it only refutes, and rungs 2 and 3
 decide. A pair with loops or a self-call that no rung decides is Unknown: `Opaque` when a failed obligation reaches
 an `IrOpaque`, `Recursion` when a side calls itself, `UnalignedLoop` when the loops do not align or neither
-induction proves them, `Timeout` when only the solver gave up. A header's state is its phis plus every other value
+induction proves them and rung 4 does not apply, `ChcTimeout` when Spacer gave up, `ChcSpurious` when Spacer's
+derivation does not replay to a divergence, `Timeout` when only the solver gave up. A header's state is its phis plus every other value
 live on entry to it (loop-invariant values, heap maps, values used after the loop). A rung 2 obligation's model is a
 counterexample only when it comes from the base (real inputs) and replays to a divergence through the original
 procedures; a step's model may start from an unreachable state. Every result lists the rungs it ran, with their
@@ -271,20 +272,41 @@ outcomes, in `properties.ladderTrace`. Partial equivalence is what every
 rung proves; termination is compared separately as an observable only when both sides
 have a syntactic termination argument (bounded counters), otherwise not claimed.
 
+Rung 4 (ticket P1-001) follows Felsing et al., "Automating regression verification" (ASE 2014). Each side is cut
+at every loop header, so its cut points are its entry, its headers and its exit, and there is one relation per pair
+of an old and a new cut point, over the shared inputs, the sort literals and both sides' states there (at the exit:
+returned, value, exception type, by-ref finals). A step runs one segment on one side or both: both step when both
+segments return to their header or both leave it, otherwise only the side that loops steps, and a side that has
+exited waits. Every pair of terminating runs is then one path of steps, so no loop pairing is needed. The query's
+`bad` is two exited states whose observables differ, or a segment that reaches an `IrOpaque`. Rung 4 does not apply
+to a pair either side of which calls or applies a pure function, since a call trace is no relation Spacer can infer.
+
+Rung 4 asks over the integers first (`--chc-int-mode`, default on): a bitvector is the integer its bits denote read
+signed, and an operation is exact (add, sub, neg, a product or quotient by a constant, comparisons, extensions,
+truncation) or any integer within bounds (bitwise operations, shifts, a product of two unknowns). An invariant Spacer
+finds over the integers is a proof over the bitvectors when it also solves the clauses read with wrap-around
+arithmetic, which an SMT check decides rule by rule. Otherwise it stands only when a second Spacer query proves that
+no exact operation of either side can overflow, since only then is every bitvector run an integer run; failing both,
+rung 4 asks over the bitvectors. `properties.chcMode` names the arithmetic the answer holds in: `int` or `bitvector`.
+Every derivation is replayed through the original procedures (a value the integers allow may be one no bitvector
+run computes): a divergence is Divergent, an opaque node reached is `Opaque`, and anything else is `ChcSpurious`
+with both runs in the detail.
+
 ## 6. Verdict semantics and SARIF mapping
 
 | Verdict | SARIF `level` | `kind` | ruleId |
 |---|---|---|---|
 | Equivalent | none | `pass` | EQ001 |
 | Divergent | `error` | `fail` | EQ002 (counterexample in `properties.model` and in `message`) |
-| Unknown | none (rule default `warning`) | `open` | EQ003 (reason in `properties.unknownReason`: timeout, opaque, unmatched-overload, unaligned-loop, recursion, abstraction, unbound) |
+| Unknown | none (rule default `warning`) | `open` | EQ003 (reason in `properties.unknownReason`: timeout, opaque, unmatched-overload, unaligned-loop, recursion, abstraction, unbound, chc-timeout, chc-spurious) |
 | Added | none (rule default `note`) | `informational` | EQ004 |
 | Removed | none (rule default `note`) | `informational` | EQ005 |
 | Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link in `message`) |
 
 Every verdict on a matched pair with bodies also carries `properties.assumedCallees` and
 `properties.unprovenAssumptions` (ADR 0019), and `properties.equivalencesApplied` when a
-catalogue entry fired (ADR 0020).
+catalogue entry fired (ADR 0020). A result whose ladder reached rung 4 carries `properties.chcMode`, and an
+Equivalent by `chc` carries Spacer's coupling invariant in `properties.invariant` (section 5.1).
 
 A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
 and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the

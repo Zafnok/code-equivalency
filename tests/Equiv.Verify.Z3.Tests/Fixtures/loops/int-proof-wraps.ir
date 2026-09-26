@@ -1,0 +1,28 @@
+# Divergent(chc, bitvector)
+# Five increments of i from x against none: over the integers i ends above x, so Spacer proves the pair there, but i
+# wraps around once x is within five of the maximum. That invariant fails with wrap-around arithmetic and the overflow
+# query finds the wrap, so rung 4 asks over the bitvectors, whose derivation replays to the divergence. Five iterations
+# are more than rung 1's bound.
+proc "T::Grows(int)" (%x "x": bv32) -> bool entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  %five: bv32 = const bv32 5
+  goto B1
+B1:
+  %i "i": bv32 = phi [B0: %x, B2: %i1]
+  %k "k": bv32 = phi [B0: %z, B2: %k1]
+  %c: bool = slt %k, %five
+  br %c, B2, B3
+B2:
+  %i1 "i": bv32 = add %i, %one
+  %k1 "k": bv32 = add %k, %one
+  goto B1
+B3:
+  %g: bool = sgt %i, %x
+  ret %g
+---
+proc "T::Grows(int)" (%x "x": bv32) -> bool entry B0
+B0:
+  %t: bool = const bool true
+  ret %t

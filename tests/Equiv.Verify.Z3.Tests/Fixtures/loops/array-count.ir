@@ -1,0 +1,90 @@
+# Equivalent(chc, bitvector)
+# samples/loop-to-linq as the C# frontend lowers it: a for loop counting the positive elements against a
+# pre-incremented while loop. Spacer's invariant over the integers (old.i = new.index + 1, equal counts) holds with
+# wrap-around arithmetic too, which proves the pair over the bitvectors with no proof that the count cannot overflow.
+proc "Equiv.Samples.LoopToLinq.Readings::CountPositive(int[])" (%values "values": sort "int[]", ref %array.int__: map<sort "int[]", map<bv32, bv32>>, %length.int__: map<sort "int[]", bv32>, %null.int__: map<sort "int[]", bool>) -> bv32 entry B0
+B0:
+  %values.isNull.28 "values": bool = mapread %null.int__, %values
+  goto B1
+B1:
+  %count.29 "count": bv32 = const bv32 0
+  goto B2
+B2:
+  %i.30 "i": bv32 = const bv32 0
+  goto B3
+B3:
+  %i.31 "i": bv32 = phi [B2: %i.30, B6: %i.39]
+  %count.35 "count": bv32 = phi [B2: %count.29, B6: %count.43]
+  br %values.isNull.28, B9, B10
+B4:
+  br %values.isNull.28, B9, B11
+B5:
+  %$21: bv32 = const bv32 1
+  %count.37 "count": bv32 = add %count.35, %$21
+  goto B6
+B6:
+  %count.43 "count": bv32 = phi [B13: %count.35, B5: %count.37]
+  %$24: bv32 = const bv32 1
+  %i.39 "i": bv32 = add %i.31, %$24
+  goto B3
+B7:
+  ret %count.35 outs(%array.int__ = %array.int__)
+B9:
+  throw "System.NullReferenceException" outs(%array.int__ = %array.int__)
+B10:
+  %$7: bv32 = mapread %length.int__, %values
+  %$8: bool = slt %i.31, %$7
+  br %$8, B4, B7
+B11:
+  %$13: bv32 = mapread %length.int__, %values
+  %$14: bool = uge %i.31, %$13
+  br %$14, B12, B13
+B12:
+  throw "System.IndexOutOfRangeException" outs(%array.int__ = %array.int__)
+B13:
+  %$16: map<bv32, bv32> = mapread %array.int__, %values
+  %$17: bv32 = mapread %$16, %i.31
+  %$18: bv32 = const bv32 0
+  %$19: bool = sgt %$17, %$18
+  br %$19, B5, B6
+---
+proc "Equiv.Samples.LoopToLinq.Readings::CountPositive(int[])" (%values "values": sort "int[]", ref %array.int__: map<sort "int[]", map<bv32, bv32>>, %length.int__: map<sort "int[]", bv32>, %null.int__: map<sort "int[]", bool>) -> bv32 entry B0
+B0:
+  %values.isNull.27 "values": bool = mapread %null.int__, %values
+  goto B1
+B1:
+  %count.28 "count": bv32 = const bv32 0
+  %index.29 "index": bv32 = const bv32 4294967295
+  goto B2
+B2:
+  %index.30 "index": bv32 = phi [B1: %index.29, B11: %index.31, B4: %index.31]
+  %count.35 "count": bv32 = phi [B1: %count.28, B11: %count.35, B4: %count.37]
+  %$4: bv32 = const bv32 1
+  %index.31 "index": bv32 = add %index.30, %$4
+  br %values.isNull.27, B7, B8
+B3:
+  br %values.isNull.27, B7, B9
+B4:
+  %$23: bv32 = const bv32 1
+  %count.37 "count": bv32 = add %count.35, %$23
+  goto B2
+B5:
+  ret %count.35 outs(%array.int__ = %array.int__)
+B7:
+  throw "System.NullReferenceException" outs(%array.int__ = %array.int__)
+B8:
+  %$9: bv32 = mapread %length.int__, %values
+  %$10: bool = slt %index.31, %$9
+  br %$10, B3, B5
+B9:
+  %$15: bv32 = mapread %length.int__, %values
+  %$16: bool = uge %index.31, %$15
+  br %$16, B10, B11
+B10:
+  throw "System.IndexOutOfRangeException" outs(%array.int__ = %array.int__)
+B11:
+  %$18: map<bv32, bv32> = mapread %array.int__, %values
+  %$19: bv32 = mapread %$18, %index.31
+  %$20: bv32 = const bv32 0
+  %$21: bool = sgt %$19, %$20
+  br %$21, B4, B2

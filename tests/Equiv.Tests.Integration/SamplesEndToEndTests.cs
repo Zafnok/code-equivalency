@@ -124,6 +124,20 @@ public sealed partial class SamplesEndToEndTests
         Assert.Contains(ladder, static step => string.Equals(step["rung"], "bounded", StringComparison.Ordinal) && string.Equals(step["outcome"], "refuted", StringComparison.Ordinal));
     }
 
+    /// <summary>Ticket P1-001 criterion 1: rung 4 proves both unaligned-loop samples, with Spacer's invariant and the arithmetic it holds in.</summary>
+    [Theory]
+    [InlineData("loop-to-linq", "::CountPositive(", "bitvector")]
+    [InlineData("loop-fusion", "::CountOutside(", "int")]
+    public void UnalignedLoopSamplesAreEquivalentByChcWithTheirInvariant(string sample, string member, string chcMode)
+    {
+        Result result = Single(sample, member);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("chc", result.GetProperty<string>("proofMethod"));
+        Assert.Equal(chcMode, result.GetProperty<string>("chcMode"));
+        Assert.False(string.IsNullOrWhiteSpace(result.GetProperty<string>("invariant")));
+    }
+
     [Fact]
     public void WebApiBasic_MatchesByEndpointAndFindCarriesTheEquivalencesApplied()
     {

@@ -189,9 +189,10 @@ public static class SarifReportWriter
 
     /// <summary>
     /// The verdict's payload as result properties: a Divergent's counterexample (<c>model</c>), an Equivalent's
-    /// <c>proofMethod</c> and, for a bounded proof over a loop, <c>boundedBy</c>, an Unknown's <c>unknownReason</c>,
-    /// and the <c>ladderTrace</c> of every rung the backend attempted (VERIFICATION-MODEL.md sections 1 and 5.1;
-    /// ticket M3-002).
+    /// <c>proofMethod</c> and, for a bounded proof over a loop, <c>boundedBy</c>, and for a rung 4 proof the coupling
+    /// <c>invariant</c>, an Unknown's <c>unknownReason</c>, the <c>ladderTrace</c> of every rung the backend attempted
+    /// (VERIFICATION-MODEL.md sections 1 and 5.1; ticket M3-002), and the <c>chcMode</c> rung 4 ran in when it ran
+    /// (ticket P1-001).
     /// </summary>
     private static void SetVerdictProperties(Result sarifResult, Verdict verdict)
     {
@@ -205,6 +206,11 @@ public static class SarifReportWriter
                 if (equivalent.BoundedBy is { } bound)
                 {
                     sarifResult.SetProperty("boundedBy", bound);
+                }
+
+                if (equivalent.Invariant is { } invariant)
+                {
+                    sarifResult.SetProperty("invariant", invariant);
                 }
 
                 break;
@@ -228,6 +234,11 @@ public static class SarifReportWriter
                 ["outcome"] = Name(s.Outcome),
                 ["detail"] = s.Detail,
             }).ToList());
+        }
+
+        if (verdict.Ladder.FirstOrDefault(static s => s.Mode is not null)?.Mode is { } mode)
+        {
+            sarifResult.SetProperty("chcMode", Name(mode));
         }
     }
 
@@ -312,13 +323,14 @@ public static class SarifReportWriter
 
     /// <summary>
     /// The spelling VERIFICATION-MODEL.md sections 1 and 5.1 use for a proof: <c>bounded</c>, <c>lockstep-induction</c>,
-    /// <c>k-induction</c>, <c>congruence</c>.
+    /// <c>k-induction</c>, <c>chc</c>, <c>congruence</c>.
     /// </summary>
     internal static string Name(ProofMethod method) => method switch
     {
         ProofMethod.Bounded => "bounded",
         ProofMethod.LockstepInduction => "lockstep-induction",
         ProofMethod.KInduction => "k-induction",
+        ProofMethod.Chc => "chc",
         _ => "congruence",
     };
 
@@ -330,8 +342,13 @@ public static class SarifReportWriter
         UnknownReason.UnalignedLoop => "unaligned-loop",
         UnknownReason.Recursion => "recursion",
         UnknownReason.Abstraction => "abstraction",
+        UnknownReason.ChcTimeout => "chc-timeout",
+        UnknownReason.ChcSpurious => "chc-spurious",
         _ => "unbound",
     };
+
+    /// <summary>The spelling VERIFICATION-MODEL.md section 5.1 uses for rung 4's theory: <c>int</c>, <c>bitvector</c>.</summary>
+    internal static string Name(ChcMode mode) => mode == ChcMode.Integers ? "int" : "bitvector";
 
     /// <summary>The spelling VERIFICATION-MODEL.md section 6 uses for a scope: <c>line</c>, <c>method</c>.</summary>
     internal static string Name(UnknownScope scope) => scope == UnknownScope.Line ? "line" : "method";

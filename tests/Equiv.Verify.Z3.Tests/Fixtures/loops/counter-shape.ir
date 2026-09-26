@@ -1,0 +1,33 @@
+# Equivalent(chc, bitvector)
+# Counting to n with i from 0 against a pre-incremented k from -1, returning the count: equal, but the counters
+# start apart, so rung 2's base fails and rung 3 does not run. Rung 4 finds old.i = new.k + 1 over the integers,
+# which holds with wrap-around arithmetic too.
+proc "T::Count(int)" (%n "n": bv32) -> bv32 entry B0
+B0:
+  %z: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  goto B1
+B1:
+  %i "i": bv32 = phi [B0: %z, B2: %i1]
+  %c: bool = slt %i, %n
+  br %c, B2, B3
+B2:
+  %i1 "i": bv32 = add %i, %one
+  goto B1
+B3:
+  ret %i
+---
+proc "T::Count(int)" (%n "n": bv32) -> bv32 entry B0
+B0:
+  %m: bv32 = const bv32 -1
+  %one: bv32 = const bv32 1
+  goto B1
+B1:
+  %k "k": bv32 = phi [B0: %m, B2: %k1]
+  %k1 "k": bv32 = add %k, %one
+  %c: bool = slt %k1, %n
+  br %c, B2, B3
+B2:
+  goto B1
+B3:
+  ret %k1

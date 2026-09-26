@@ -40,10 +40,11 @@ internal static class CompareCommand
         Option<bool> dryRunOption = new("--dry-run");
         Option<bool> lowerOnlyOption = new("--lower-only");
         Option<bool> executeOption = new("--execute");
+        Option<bool> chcIntModeOption = new("--chc-int-mode") { DefaultValueFactory = _ => true };
 
         Command command = new("compare")
         {
-            legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption,
+            legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption,
         };
 
         command.SetAction(parseResult => Run(
@@ -56,7 +57,8 @@ internal static class CompareCommand
                 parseResult.GetValue(failOnOption),
                 parseResult.GetValue(dryRunOption),
                 parseResult.GetValue(lowerOnlyOption),
-                parseResult.GetValue(executeOption)),
+                parseResult.GetValue(executeOption),
+                parseResult.GetValue(chcIntModeOption)),
             frontends,
             backend,
             new FileReportSink(parseResult.GetValue(outOption)!)));
@@ -152,7 +154,7 @@ internal static class CompareCommand
         List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(static f => PairFailure("Lowering", f.Old, f.New, f.Exception))];
         List<ProcedureIdentity> unverifiedPairs = [.. matchResult.LoweringFailures.Select(static f => f.New)];
         (List<VerificationResult> verified, List<Notification> verifyFailures, List<ProcedureIdentity> unverifiedVerified) =
-            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config);
+            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config, options.ChcIntMode);
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
         List<VerificationResult> results = Replayed(WithAssumptions(verified, lowered, matchResult), lowered, analysis.Replay, execution);
@@ -367,9 +369,9 @@ internal static class CompareCommand
     /// verified. <see cref="OperationCanceledException"/> and <see cref="OutOfMemoryException"/> propagate unchanged.
     /// </summary>
     private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) Verified(
-        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config)
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config, bool chcIntMode)
     {
-        VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames);
+        VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames) { ChcIntMode = chcIntMode };
         List<VerificationResult> results = [];
         List<Notification> failures = [];
         List<ProcedureIdentity> unverified = [];

@@ -9,7 +9,8 @@ namespace Equiv.Verify.Z3.Tests;
 /// <summary>
 /// Every fixture under <c>Fixtures/loops/</c> takes the verdict path its first comment line names (ticket M3-002
 /// criteria 1 and 3): <c>Equivalent(&lt;proofMethod&gt;)</c>, <c>Divergent(&lt;rung that refuted it&gt;)</c> with a
-/// counterexample whose replay diverges, or <c>Unknown(&lt;reason&gt;)</c>.
+/// counterexample whose replay diverges, or <c>Unknown(&lt;reason&gt;)</c>; once rung 4 ran, the arithmetic its answer
+/// holds in follows (<c>, int</c> or <c>, bitvector</c>; ticket P1-001 criterion 4).
 /// </summary>
 public sealed class LadderFixtureTests
 {
@@ -20,6 +21,8 @@ public sealed class LadderFixtureTests
         "nested-aligned", "nesting-changed", "late-divergence", "late-divergence-beyond", "constant-loop-prefix-change",
         "phis-reordered", "state-unpaired", "irreducible", "loop-opaque", "loop-hard",
         "recursion-aligned", "recursion-divergent", "recursion-heap",
+        "trip-count-changed", "chc-spurious", "chc-overflow-bitvectors", "fusion", "counter-shape", "array-count",
+        "int-proof-wraps",
     ];
 
     [Theory]
@@ -30,7 +33,10 @@ public sealed class LadderFixtureTests
 
         Verdict verdict = Verify(fixture);
 
-        Assert.Equal(fixture.Expected, Describe(verdict));
+        string described = Describe(verdict);
+        Assert.True(
+            string.Equals(fixture.Expected, described, StringComparison.Ordinal),
+            $"expected {fixture.Expected}, got {described}; ladder: {string.Join("; ", verdict.Ladder.Select(static s => $"{s.Rung} {s.Outcome}: {s.Detail}"))}");
         Assert.NotEmpty(verdict.Ladder);
         Assert.Equal(ProofMethod.Bounded, verdict.Ladder[0].Rung);
         if (verdict is Divergent divergent)
@@ -132,22 +138,34 @@ public sealed class LadderFixtureTests
         Assert.Equal((ProofMethod.Bounded, RungOutcome.Timeout), (verdict.Ladder[0].Rung, verdict.Ladder[0].Outcome));
     }
 
-    /// <summary>A fixture that expects a timeout gets 50 ms; every other one gets ten seconds.</summary>
+    /// <summary>
+    /// A fixture that expects a timeout (of any rung) gets 50 ms; every other one gets a minute per query. Rung 4 asks
+    /// Spacer up to three times, about a second each on a developer machine, and the Windows gates leg runs these beside
+    /// the property tests on four cores, where ten seconds once turned <c>fusion</c>'s proof into a timeout.
+    /// </summary>
     private static Verdict Verify(Fixture fixture) =>
-        new Z3Backend().Verify(fixture.Old, fixture.New, new VerificationOptions(3, string.Equals(fixture.Expected, "Unknown(Timeout)", StringComparison.Ordinal) ? 50 : 10_000, []));
+        new Z3Backend().Verify(fixture.Old, fixture.New, new VerificationOptions(3, fixture.Expected.StartsWith("Unknown(Timeout", StringComparison.Ordinal) || fixture.Expected.StartsWith("Unknown(ChcTimeout", StringComparison.Ordinal) ? 50 : 60_000, []));
 
     private static string Describe(Verdict verdict) => verdict switch
     {
-        Equivalent equivalent => $"Equivalent({Name(equivalent.Method)})",
-        Divergent => $"Divergent({Name(verdict.Ladder[^1].Rung)})",
-        Unknown unknown => $"Unknown({unknown.Reason})",
+        Equivalent equivalent => $"Equivalent({Name(equivalent.Method)}{Mode(verdict)})",
+        Divergent => $"Divergent({Name(verdict.Ladder[^1].Rung)}{Mode(verdict)})",
+        Unknown unknown => $"Unknown({unknown.Reason}{Mode(verdict)})",
         _ => verdict.GetType().Name,
+    };
+
+    private static string Mode(Verdict verdict) => verdict.Ladder.LastOrDefault(static s => s.Mode is not null)?.Mode switch
+    {
+        ChcMode.Integers => ", int",
+        ChcMode.BitVectors => ", bitvector",
+        _ => "",
     };
 
     private static string Name(ProofMethod method) => method switch
     {
         ProofMethod.Bounded => "bounded",
         ProofMethod.LockstepInduction => "lockstep-induction",
-        _ => "k-induction",
+        ProofMethod.KInduction => "k-induction",
+        _ => "chc",
     };
 }

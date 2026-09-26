@@ -10,12 +10,14 @@ namespace Equiv.Core.Reporting;
 /// A deterministic text rendering of a <see cref="Counterexample"/>, reusing
 /// <see cref="IrText"/>'s value/quoting rules so the same literal always renders the same way.
 /// Used for the SARIF result message and for <c>properties.model</c> (VERIFICATION-MODEL.md
-/// section 6, EQ002) and, via <see cref="ResultFingerprint"/>, for the baseline fingerprint.
+/// section 6, EQ002) and, via <see cref="ResultFingerprint"/>, for the baseline fingerprint, and by a backend that states
+/// a replay in an Unknown's detail (rung 4's spurious derivation, ticket P1-001).
 /// </summary>
-internal static class CounterexampleText
+public static class CounterexampleText
 {
     public static string Dump(Counterexample counterexample)
     {
+        ArgumentNullException.ThrowIfNull(counterexample);
         StringBuilder text = new();
         text.Append("inputs(").Append(Values(counterexample.Inputs.Arguments)).Append(") ")
             .Append("old(").Append(Run(counterexample.Old)).Append(") ")

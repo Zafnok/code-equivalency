@@ -1,0 +1,183 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.LoopToLinq.Readings::CountPositive(int[]) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Readings.cs"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 20,
+                  "endLine": 5,
+                  "endColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.LoopToLinq.Readings::CountPositive(int[])",
+            "resultFingerprint/v1": "4d820a112e1434ebbc061a42b25d40cc6692327f944c9b0193f37bd8a35acdbe"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "chc",
+            "invariant": "old B3 ~ new B2: (and (not (>= (+ old.i.31 (* (- 1) new.index.30)) 2)) (not (<= old.i.31 (- 1))) (or old.values.isNull.28 (not new.values.isNull.27)) (or new.values.isNull.27 (not old.values.isNull.28)) (not (<= (+ old.count.35 (* (- 1) new.count.35)) (- 1))) (not (>= (+ old.count.35 (* (- 1) new.count.35)) 1)) (not (<= (+ old.i.31 (* (- 1) new.index.30)) 0))); old exit ~ new exit: (and (or (not old.returned) (not (>= (+ old.value (* (- 1) new.value)) 1))) (= old.array.int__ new.array.int__) (not (<= (+ old.exception (* (- 1) new.exception)) (- 1))) (= old.returned new.returned) (not (>= (+ old.exception (* (- 1) new.exception)) 1)) (or (not new.returned) (not (<= (+ old.value (* (- 1) new.value)) (- 1)))))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "no divergence within the bound 3, and some input goes past it"
+              },
+              {
+                "rung": "lockstep-induction",
+                "outcome": "inconclusive",
+                "detail": "the base obligation fails"
+              },
+              {
+                "rung": "k-induction",
+                "outcome": "not-applicable",
+                "detail": "lockstep induction did not fail on a step obligation"
+              },
+              {
+                "rung": "chc",
+                "outcome": "proved",
+                "detail": "Spacer found a coupling invariant over the integers that holds with wrap-around arithmetic too"
+              }
+            ],
+            "chcMode": "bitvector"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 1,
+            "modern": 1
+          },
+          "matchedPairs": 1,
+          "pairsWithoutOpaque": 1,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 0,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 1,
+          "changedPairsWithoutOpaque": 1,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 1
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [],
+            "modern": []
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 35,
+          "modern": 29
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        }
+      }
+    }
+  ]
+}

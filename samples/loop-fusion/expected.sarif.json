@@ -1,0 +1,183 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.LoopFusion.Window::CountOutside(int,int,int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Window.cs"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 20,
+                  "endLine": 5,
+                  "endColumn": 32
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.LoopFusion.Window::CountOutside(int,int,int)",
+            "resultFingerprint/v1": "e055a10b5669096d12cf00f68968d29ae45792d7ae8a9131083662a17bd6ffb4"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "chc",
+            "invariant": "old B3 ~ new B3: (and (not (>= (+ old.i.34 (* (- 1) old.inside.44) (* (- 1) new.total.30) new.inside.31) 1)) (not (<= new.i.28 (- 1))) (not (<= (+ old.i.34 (* (- 1) new.i.28)) (- 1))) (not (<= (+ old.i.34 (* (- 1) old.inside.44) (* (- 1) new.total.30) new.inside.31) (- 1))) (or (not (<= (+ in.count (* (- 1) old.inside.44) (* (- 1) new.total.30) new.inside.31) (- 1))) (not (<= in.count 3)) (not (>= (+ old.inside.44 new.total.30 (* (- 1) new.inside.31)) 1))) (or (not (<= (+ in.count (* (- 1) old.inside.44) (* (- 1) new.total.30) new.inside.31) 0)) (not (>= (+ in.count (* (- 1) new.i.28)) 1))) (or (not (>= in.count 1)) (not (<= (+ in.count (* (- 1) old.inside.44) (* (- 1) new.total.30) new.inside.31) (- 1)))) (or (not (>= (+ in.count (* (- 1) new.i.28)) 2)) (not (>= (+ old.i.34 (* (- 1) new.i.28)) 1)))); old B10 ~ new exit: (and (or (not (<= (+ in.count (* (- 1) old.i.38) old.total.40 (* (- 1) old.inside.44) (* (- 1) new.value)) (- 1))) (not (>= (+ in.count (* (- 1) old.i.38)) 2))) new.returned (not (>= new.exception 1)) (not (<= new.exception (- 1))) (not (>= (+ in.count (* (- 1) old.i.38) old.total.40 (* (- 1) old.inside.44) (* (- 1) new.value)) 1)) (or (not (<= (+ in.count (* (- 1) old.i.38) old.total.40 (* (- 1) old.inside.44) (* (- 1) new.value)) (- 1))) (not (<= (+ old.total.40 (* (- 1) old.inside.44) (* (- 1) new.value)) (- 1))) (not (<= (+ in.count (* (- 1) old.i.38)) 2))) (or (not (<= (+ in.count (* (- 1) old.i.38)) 1)) (not (>= (+ old.total.40 (* (- 1) old.inside.44) (* (- 1) new.value)) 1)))); old exit ~ new exit: (and (not (<= (+ new.value (* (- 1) old.value)) (- 1))) (not (>= (+ new.exception (* (- 1) old.exception)) 1)) (not (>= (+ new.value (* (- 1) old.value)) 1)) (not (<= (+ new.exception (* (- 1) old.exception)) (- 1))) (= old.returned new.returned))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "no divergence within the bound 3, and some input goes past it"
+              },
+              {
+                "rung": "lockstep-induction",
+                "outcome": "not-applicable",
+                "detail": "the loops do not align: the old side has 2 loops and the new side 1"
+              },
+              {
+                "rung": "k-induction",
+                "outcome": "not-applicable",
+                "detail": "the loops do not align: the old side has 2 loops and the new side 1"
+              },
+              {
+                "rung": "chc",
+                "outcome": "proved",
+                "detail": "Spacer found a coupling invariant over the integers"
+              }
+            ],
+            "chcMode": "int"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 1,
+            "modern": 1
+          },
+          "matchedPairs": 1,
+          "pairsWithoutOpaque": 1,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 0,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 1,
+          "changedPairsWithoutOpaque": 1,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 1
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [],
+            "modern": []
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 40,
+          "modern": 30
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        }
+      }
+    }
+  ]
+}

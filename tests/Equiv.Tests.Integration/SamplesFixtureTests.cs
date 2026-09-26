@@ -20,6 +20,8 @@ public sealed class SamplesFixtureTests
             ["business-layer"] = ["Equivalent", "Divergent", "Unknown"],
             ["api-drift"] = ["Equivalent", "Divergent"],
             ["callee-changed"] = ["Divergent", "Equivalent"],
+            ["loop-to-linq"] = ["Equivalent"],
+            ["loop-fusion"] = ["Equivalent"],
         };
 
     private static string SamplesRoot =>

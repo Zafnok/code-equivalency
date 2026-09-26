@@ -1123,6 +1123,10 @@
                 "callSites": 1
               },
               {
+                "member": "System.Int32::TryParse(string,out int)",
+                "callSites": 1
+              },
+              {
                 "member": "System.Linq.Enumerable::Select`2(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, string>)<Equiv.Samples.BusinessLayer.OrderLine,string>",
                 "callSites": 1
               },
@@ -1170,6 +1174,10 @@
               },
               {
                 "member": "System.IO.TextWriter::Write(int)",
+                "callSites": 1
+              },
+              {
+                "member": "System.Int32::TryParse(string,out int)",
                 "callSites": 1
               },
               {
