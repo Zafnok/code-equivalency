@@ -171,6 +171,20 @@ public sealed class IrLowererSnapshotTests
     public Task BoxingAnInt() => Dump("static object M(int a) => a;");
 
     [Fact]
+    public Task SwitchOnTypePatterns() => Dump("""
+        static int M(object o)
+        {
+            switch (o)
+            {
+                case string s: return s.Length;
+                case Exception: return 1;
+            }
+
+            return o switch { IComparable => 2, ArgumentException e => e.HResult, _ => 0 };
+        }
+        """);
+
+    [Fact]
     public Task OutArgumentOfAnOpaqueCall() => Dump("static int M(string s, int fallback) => int.TryParse(s, out var n) ? n : fallback;");
 
     [Fact]
