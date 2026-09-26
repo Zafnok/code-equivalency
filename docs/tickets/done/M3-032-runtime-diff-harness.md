@@ -1,5 +1,5 @@
 # M3-032 `Equiv.Execute` and `tools/runtime-diff`: call a BCL member on .NET Framework 4.8 and on .NET 10, and compare
-Status: in-progress
+Status: done (PR #210)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M2-007; ADR 0035 accepted
