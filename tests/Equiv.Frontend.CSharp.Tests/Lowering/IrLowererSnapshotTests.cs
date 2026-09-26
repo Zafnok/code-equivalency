@@ -206,6 +206,25 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task UsingDeclaration() => Dump("static int M(System.IO.Stream s) { using System.IO.Stream t = s; return t.ReadByte(); }");
 
+    /// <summary>
+    /// Ticket M4-006: an async action is its synchronous body returning the task's result; each <c>await</c> is a call on
+    /// its awaitable with a threw edge, after the awaitable's null check, and the heap is threaded through it as any call's.
+    /// </summary>
+    [Fact]
+    public Task AsyncControllerAction() => Dump("""
+        interface IOrders { System.Threading.Tasks.Task<Order> FindAsync(int id); }
+        class Order { public int Status; }
+        IOrders orders;
+        int served;
+        async System.Threading.Tasks.Task<int> M(int id)
+        {
+            Order order = await orders.FindAsync(id).ConfigureAwait(false);
+            if (order == null) return 404;
+            served = served + 1;
+            return order.Status;
+        }
+        """);
+
     /// <summary>Ticket P1-005: a call with one field map live, first touched after it; the read takes the call's new version.</summary>
     [Fact]
     public Task CallWithOneHeapMap() => Dump("int f; void Foo() { } int M() { Foo(); return f; }");
