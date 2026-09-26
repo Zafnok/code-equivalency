@@ -93,7 +93,8 @@ public sealed class SoundnessPropertyTests
     /// The residual claim of VERIFICATION-MODEL.md section 7 (ticket M3-025; ADR 0029 decision 4): for a line-scoped
     /// Unknown, every generated input on which neither side reaches a listed cause gives equal observables in
     /// <see cref="IrInterpreter"/>, and a cause a run does reach is always listed. Pairs are a generated procedure against
-    /// one or two stacked mutants, so an inserted opaque often sits beside a second change.
+    /// one or two stacked mutants, so an inserted opaque often sits beside a second change. A fragment both sides share is a
+    /// call, not a cause (ticket M4-004), so the runs replay the pair as the backend encodes it.
     /// </summary>
     [Fact]
     public void LineScopedResidualClaimHolds()
@@ -114,10 +115,11 @@ public sealed class SoundnessPropertyTests
 
                     lineScoped++;
                     HashSet<SourceSpan> causes = [.. unknown.Causes.Select(static c => c.Span)];
+                    (IrProcedure original, IrProcedure changed, _) = ProductEncoder.ShareFragments(sample.Original, sample.New);
                     foreach (IrInputs inputs in sample.Inputs)
                     {
-                        IrRun old = IrGen.Run(sample.Original, inputs);
-                        IrRun @new = IrGen.Run(sample.New, inputs);
+                        IrRun old = IrGen.Run(original, inputs);
+                        IrRun @new = IrGen.Run(changed, inputs);
                         if (old.Outcome is IrOpaqueReached || @new.Outcome is IrOpaqueReached)
                         {
                             Assert.All(new[] { old.Outcome, @new.Outcome }.OfType<IrOpaqueReached>(), reached => Assert.Contains(reached.Span, causes));

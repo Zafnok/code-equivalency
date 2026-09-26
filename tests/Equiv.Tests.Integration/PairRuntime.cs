@@ -56,7 +56,7 @@ internal static class PairRuntime
         (IrProcedure @new, byte[] newImage) = Lower(modern, "Modern");
         Verdict verdict = new Z3Backend().Verify(old, @new, new VerificationOptions(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, []));
         (PairInput? model, string? problem) = verdict is Divergent divergent ? Decode(old, @new, divergent.Counterexample.Inputs) : (null, null);
-        return new Analysis(verdict, model, problem, oldImage, newImage);
+        return new Analysis(verdict, model, problem, oldImage, newImage) { Old = old, New = @new };
     }
 
     private static (IrProcedure Procedure, byte[] Image) Lower(string source, string assemblyName)
@@ -116,8 +116,13 @@ internal static class PairRuntime
         model.Any(e => e.Key.StartsWith("null.", StringComparison.Ordinal) && e.Value is IrMapValue nulls && nulls.MapType.Key == reference.Type
             && nulls.Read(reference) is IrBoolValue { Value: true });
 
-    /// <summary>A verified pair: the verdict, its model as C# arguments (or why it has none), and both emitted images.</summary>
-    internal sealed record Analysis(Verdict Verdict, PairInput? Model, string? ModelProblem, byte[] Legacy, byte[] Modern);
+    /// <summary>A verified pair: the verdict, its model as C# arguments (or why it has none), both emitted images and both lowered bodies.</summary>
+    internal sealed record Analysis(Verdict Verdict, PairInput? Model, string? ModelProblem, byte[] Legacy, byte[] Modern)
+    {
+        public required IrProcedure Old { get; init; }
+
+        public required IrProcedure New { get; init; }
+    }
 
     /// <summary>Both sides of an <see cref="Analysis"/>, loaded to run; unloads on dispose.</summary>
     internal sealed class Loaded : IDisposable

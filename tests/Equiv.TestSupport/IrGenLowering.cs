@@ -217,6 +217,9 @@ internal sealed class IrGenLowering
             case Pure pure:
                 LowerPure(pure);
                 break;
+            case Fragment fragment:
+                LowerFragment(fragment);
+                break;
             case If branch:
                 LowerIf(branch);
                 break;
@@ -311,6 +314,25 @@ internal sealed class IrGenLowering
         }
 
         if (call.Slot is int slot)
+        {
+            env[slot] = target!;
+        }
+    }
+
+    private void LowerFragment(Fragment fragment)
+    {
+        ImmutableArray<IrVar> reads = [.. fragment.Reads.Select(Lower)];
+        IrVar? target = fragment.Slot is null ? null : Temp(Bv32);
+        IrVar threw = Temp(Bool);
+        ImmutableArray<IrHeapPair> pairs = heap is null ? [] : [new IrHeapPair(heap.Var.Name, env[Heap], Version(Heap))];
+        Emit(new IrOpaque(target, "fragment", new SourceSpan("gen", 2, 1, 2, 1)) { Fingerprint = fragment.Fingerprint, Reads = reads, Threw = threw, Heap = pairs });
+        foreach (IrHeapPair pair in pairs)
+        {
+            env[Heap] = pair.After;
+        }
+
+        ThrowIf(threw, "System.Exception");
+        if (fragment.Slot is int slot)
         {
             env[slot] = target!;
         }

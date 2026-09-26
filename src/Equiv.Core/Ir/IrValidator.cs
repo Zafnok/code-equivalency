@@ -193,8 +193,8 @@ public static class IrValidator
         }
 
         /// <summary>
-        /// A call's heap pairs each name a different map, and each map is a by-ref parameter of map type whose type the
-        /// pair's before and after share (ticket P1-005).
+        /// A call's heap pairs, and a shareable opaque fragment's (ticket M4-004), each name a different map, and each map is a
+        /// by-ref parameter of map type whose type the pair's before and after share (ticket P1-005).
         /// </summary>
         private void CheckHeapPairs()
         {
@@ -203,20 +203,27 @@ public static class IrValidator
                 .ToDictionary(static p => p.Var.Name, StringComparer.Ordinal);
             foreach (IrBlock block in procedure.Blocks)
             {
-                foreach (IrCall call in block.Instructions.OfType<IrCall>())
+                foreach ((IrInstruction instruction, ImmutableArray<IrHeapPair> heap) in block.Instructions.Select(static i => (i, HeapPairs(i))))
                 {
-                    if (call.Heap.Select(static h => h.Map).Distinct(StringComparer.Ordinal).Take(call.Heap.Length + 1).Count() != call.Heap.Length)
+                    if (heap.Select(static h => h.Map).Distinct(StringComparer.Ordinal).Take(heap.Length + 1).Count() != heap.Length)
                     {
-                        Report(IrDiagnosticIds.HeapPairRepeated, block.Id, $"heap pairs name a map more than once: {IrText.Line(call)}");
+                        Report(IrDiagnosticIds.HeapPairRepeated, block.Id, $"heap pairs name a map more than once: {IrText.Line(instruction)}");
                     }
 
-                    if (!call.Heap.All(h => byRef.TryGetValue(h.Map, out IrParameter? map) && (h.Before.Type == map.Var.Type) & (h.After.Type == map.Var.Type)))
+                    if (!heap.All(h => byRef.TryGetValue(h.Map, out IrParameter? map) && (h.Before.Type == map.Var.Type) & (h.After.Type == map.Var.Type)))
                     {
-                        Report(IrDiagnosticIds.HeapPairMap, block.Id, $"a heap pair's map is not a by-ref map parameter of its type: {IrText.Line(call)}");
+                        Report(IrDiagnosticIds.HeapPairMap, block.Id, $"a heap pair's map is not a by-ref map parameter of its type: {IrText.Line(instruction)}");
                     }
                 }
             }
         }
+
+        private static ImmutableArray<IrHeapPair> HeapPairs(IrInstruction instruction) => instruction switch
+        {
+            IrCall call => call.Heap,
+            IrOpaque opaque => opaque.Heap,
+            _ => [],
+        };
 
         /// <summary>Cooper, Harvey and Kennedy, "A Simple, Fast Dominance Algorithm" (2001).</summary>
         private void ComputeDominators()
@@ -379,7 +386,7 @@ public static class IrValidator
 
         public string? Visit(IrPure instruction) => Operands(instruction.Throws.All(static t => t.Flag.Type is IrBool));
 
-        public string? Visit(IrOpaque instruction) => null;
+        public string? Visit(IrOpaque instruction) => Operands(instruction.Threw is null || instruction.Threw.Type is IrBool);
 
         internal static string? Operands(bool ok) => ok ? null : IrDiagnosticIds.OperandTypes;
 

@@ -1,9 +1,9 @@
 ﻿{
   procedures: {
-    legacy: 29,
-    modern: 29
+    legacy: 30,
+    modern: 30
   },
-  matchedPairs: 29,
+  matchedPairs: 30,
   pairsWithoutOpaque: 26,
   pairsWholeBodyOpaque: 1,
   pairsCongruent: 24,
@@ -13,8 +13,8 @@
   },
   opaqueByReason: {
     DelegateCreation: {
-      legacy: 1,
-      modern: 1
+      legacy: 2,
+      modern: 2
     },
     InterpolatedString: {
       legacy: 1,
@@ -25,11 +25,12 @@
       modern: 1
     }
   },
-  changedPairs: 5,
+  changedPairs: 6,
   changedPairsWithoutOpaque: 4,
   changedPairsWholeBodyOpaque: 0,
   changedReasonSets: {
     : 4,
+    DelegateCreation: 1,
     InterpolatedString: 1
   },
   runtimeChangeCalls: {
@@ -81,6 +82,14 @@
         callSites: 1
       },
       {
+        member: System.Int32::TryParse(string,out int),
+        callSites: 1
+      },
+      {
+        member: System.Linq.Enumerable::Count`1(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, bool>)<Equiv.Samples.BusinessLayer.OrderLine>,
+        callSites: 1
+      },
+      {
         member: System.Linq.Enumerable::Select`2(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, string>)<Equiv.Samples.BusinessLayer.OrderLine,string>,
         callSites: 1
       },
@@ -128,6 +137,14 @@
       },
       {
         member: System.IO.TextWriter::Write(int),
+        callSites: 1
+      },
+      {
+        member: System.Int32::TryParse(string,out int),
+        callSites: 1
+      },
+      {
+        member: System.Linq.Enumerable::Count`1(System.Collections.Generic.IEnumerable<global::Equiv.Samples.BusinessLayer.OrderLine>,System.Func<global::Equiv.Samples.BusinessLayer.OrderLine, bool>)<Equiv.Samples.BusinessLayer.OrderLine>,
         callSites: 1
       },
       {

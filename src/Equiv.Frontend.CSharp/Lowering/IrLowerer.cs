@@ -9,6 +9,7 @@ using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Verdicts;
+using Equiv.Frontend.CSharp.Fingerprinting;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -58,6 +59,7 @@ internal sealed class IrLowerer
     private ControlFlowGraph cfg = null!;
     private SourceSpan bodySpan = null!;
     private INamedTypeSymbol receiver = null!;
+    private FragmentFingerprinter fragments = null!;
 
     private IrLowerer(RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue, IrType? returnType, bool x87)
     {
@@ -91,7 +93,7 @@ internal sealed class IrLowerer
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
-        Catalogue entries = new(equivalences) { X87 = legacy && PureCatalogue.IsX87(compilation) };
+        Catalogue entries = new(equivalences) { X87 = legacy && PureCatalogue.IsX87(compilation), Legacy = legacy };
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
@@ -303,6 +305,7 @@ internal sealed class IrLowerer
     {
         bodySpan = span;
         receiver = method.ContainingType;
+        fragments = new FragmentFingerprinter(method, compilation, renames, suppressedRuntimeChanges, catalogue.Entries, catalogue.Legacy);
         heap = NewHeap();
         IrBlockId start = ssa.NewBlock();
         LoweringContext entry = new([], [], handlerExit: null) { Current = start };
@@ -875,12 +878,29 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// An opaque for <paramref name="operation"/>, followed by one opaque with the same reason per local,
-    /// parameter or capture it writes (ticket P2-009), so a later read sees a value and not <c>undefined</c>.
+    /// parameter or capture it writes (ticket P2-009), so a later read sees a value and not <c>undefined</c>. A fragment
+    /// that writes none of them and that <see cref="FragmentFingerprinter"/> fingerprints carries its fingerprint and the
+    /// values it reads, each reference's null shadow after it, and a <c>threw</c> edge to <c>System.Exception</c>, as a call
+    /// has (ADR 0024 decision 2; ticket M4-004); <see cref="SsaBuilder.Build"/> adds its heap pairs.
     /// </summary>
     private IrVar? Opaque(IOperation operation, string reason, LoweringContext context)
     {
         IrVar? target = operation.Type is { SpecialType: not SpecialType.System_Void } type ? ssa.Temp(Map(type)) : null;
         SourceSpan span = Span(operation.Syntax);
+        if (Fragment(operation) is var (fingerprint, reads, captured))
+        {
+            IrVar threw = ssa.Temp(Bool);
+            IrOpaque fragment = new(target, reason, span)
+            {
+                Fingerprint = fingerprint,
+                Reads = [.. reads.SelectMany(v => Shadow(v) is { } shadow ? [v, shadow] : new[] { v }).Select(v => ssa.Load(context.Current, v))],
+                Threw = threw,
+            };
+            ssa.EmitFragment(context.Current, fragment, captured);
+            ThrowIf(threw, "System.Exception", context, known: false);
+            return target;
+        }
+
         ssa.Emit(context.Current, new IrOpaque(target, reason, span));
         foreach (SsaBuilder.Variable written in Written(operation))
         {
@@ -900,6 +920,24 @@ internal sealed class IrLowerer
         {
             ssa.Store(context.Current, shadow, heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context));
         }
+    }
+
+    /// <summary>
+    /// <paramref name="operation"/>'s fingerprint, the variables it reads and those a lambda in it captures, when it writes no
+    /// variable and every variable it reads or captures is one the lowering tracks; otherwise null.
+    /// </summary>
+    private (string Fingerprint, ImmutableArray<SsaBuilder.Variable> Reads, ImmutableArray<SsaBuilder.Variable> Captured)? Fragment(IOperation operation)
+    {
+        if (Written(operation).Any() || fragments.Of(operation, cfg) is not { } fragment)
+        {
+            return null;
+        }
+
+        SsaBuilder.Variable?[] reads = [.. fragment.Reads.Select(variables.GetValueOrDefault)];
+        SsaBuilder.Variable?[] captured = [.. fragment.Captured.Select(variables.GetValueOrDefault)];
+        return reads.Concat(captured).Any(static v => v is null)
+            ? null
+            : (fragment.Fingerprint, [.. reads.OfType<SsaBuilder.Variable>()], [.. captured.OfType<SsaBuilder.Variable>()]);
     }
 
     /// <summary>The variables an operation writes as a side effect: its <c>ref</c>/<c>out</c> arguments, deconstruction targets and pattern-declared locals.</summary>
@@ -1776,12 +1814,19 @@ internal sealed class IrLowerer
 
         public Catalogue(ImmutableArray<ApiEquivalence> entries)
         {
+            Entries = entries;
             Members = entries.Where(static e => !e.IsType).ToImmutableDictionary(static e => e.Legacy, StringComparer.Ordinal);
             types = entries.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, StringComparer.Ordinal);
             Sorts = Sort;
         }
 
         public ImmutableDictionary<string, ApiEquivalence> Members { get; }
+
+        /// <summary>The entries themselves, which a fragment's fingerprint applies as the body's does (ticket M4-004).</summary>
+        public ImmutableArray<ApiEquivalence> Entries { get; }
+
+        /// <summary>Whether this is the legacy side, which alone is given entries.</summary>
+        public bool Legacy { get; init; }
 
         /// <summary>Whether this is the legacy side of a project whose floating point runs on x87 (ticket M4-002).</summary>
         public bool X87 { get; init; }

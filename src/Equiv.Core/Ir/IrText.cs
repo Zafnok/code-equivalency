@@ -161,7 +161,10 @@ public static class IrText
             $"{Assigned(instruction.Target)}call {Callee(instruction.Callee)}({string.Join(", ", instruction.Args.Select(Use))})"
             + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw))
             + (instruction.RefOuts.IsEmpty ? string.Empty : $" refout({string.Join(", ", instruction.RefOuts.Select(Definition))})")
-            + (instruction.Heap.IsEmpty ? string.Empty : $" heap({string.Join(", ", instruction.Heap.Select(static h => $"{Quote(h.Map)} {Use(h.Before)} -> {Definition(h.After)}"))})");
+            + HeapPairs(instruction.Heap);
+
+        private static string HeapPairs(ImmutableArray<IrHeapPair> heap) =>
+            heap.IsEmpty ? string.Empty : $" heap({string.Join(", ", heap.Select(static h => $"{Quote(h.Map)} {Use(h.Before)} -> {Definition(h.After)}"))})";
 
         public string Visit(IrMapRead instruction) =>
             $"{Definition(instruction.Target)} = mapread {Use(instruction.Map)}, {Use(instruction.Key)}";
@@ -177,11 +180,19 @@ public static class IrText
             $"{Definition(instruction.Target)} = pure {Quote(instruction.Function)}{(instruction.RuntimeSensitive ? "!" : string.Empty)}({string.Join(", ", instruction.Args.Select(Use))})"
             + (instruction.Throws.IsEmpty ? string.Empty : $" throws({string.Join(", ", instruction.Throws.Select(static t => $"{Definition(t.Flag)} {Quote(t.ExceptionType)}"))})");
 
+        /// <summary>
+        /// <c>%t: T = opaque "reason" at "path" 1:2-3:4</c>, then, each only when present, <c>fragment "fingerprint"</c>,
+        /// <c>reads(%a, ...)</c>, <c>threw %f: bool</c> and the heap pairs a call writes (ticket M4-004).
+        /// </summary>
         public string Visit(IrOpaque instruction)
         {
             SourceSpan span = instruction.Span;
             return $"{Assigned(instruction.Target)}opaque {(instruction.WholeBody ? "body " : string.Empty)}{Quote(instruction.Reason)} at {Quote(span.Path)} "
-                + $"{Number(span.StartLine)}:{Number(span.StartColumn)}-{Number(span.EndLine)}:{Number(span.EndColumn)}";
+                + $"{Number(span.StartLine)}:{Number(span.StartColumn)}-{Number(span.EndLine)}:{Number(span.EndColumn)}"
+                + (instruction.Fingerprint is null ? string.Empty : " fragment " + Quote(instruction.Fingerprint))
+                + (instruction.Reads.IsEmpty ? string.Empty : $" reads({string.Join(", ", instruction.Reads.Select(Use))})")
+                + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw))
+                + HeapPairs(instruction.Heap);
         }
     }
 

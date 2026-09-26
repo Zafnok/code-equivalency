@@ -5,7 +5,7 @@ Typical service-layer code (ADR 0027 decision 5): an `OrderService` over two pla
 snapshotted by `LoweringCensusTests.BusinessLayerCensusSnapshot` (ticket M3-014), and every
 precision ticket must move at least one method below to its target verdict.
 
-Most methods are unchanged between legacy and modern. Four are cosmetic refactors, and one is a
+Most methods are unchanged between legacy and modern. Five are cosmetic refactors, and one is a
 real divergence: `Math.Round(total, 2)` rounds half to even, while
 `Math.Round(total, 2, MidpointRounding.AwayFromZero)` rounds half away from zero.
 
@@ -46,6 +46,15 @@ Since M4-006, an `async` method is its synchronous body returning the task's res
 awaitable. `ConfirmAsync`'s `await pending` is a call `await:System.Runtime.CompilerServices.TaskAwaiter`1<...Order>`
 after `pending`'s null check, so it lowers with no opaque and its whole-body `async` opaque leaves the census.
 
+Since M4-004, a fragment the lowerer leaves opaque carries its bound fingerprint and the variables it reads, and a
+fingerprint on both sides of a pair is one shared call `opaque:<fingerprint>` (ADR 0024 decision 2). `CappedLineCount`
+counts the lines with the same lambda on both sides and spells its integer guard `cap < 1` on the legacy side and
+`cap <= 0` on the modern one, then returns the smaller of the count and the cap. Its sources differ, so it is not
+congruent. Without shared fragments its `DelegateCreation` opaque would make every input Unknown; the lambda is one call on both
+sides, and the solver proves the integer paths equal. `SkusOver`'s lambdas would be shared in the same way, but it is
+already Equivalent by congruence. A divergence past a shared fragment would be Unknown(Abstraction), not Divergent:
+every path through the fragment branches on its `threw` flag, which the replay taints (ADR 0026).
+
 Congruent results that call another matched procedure list it in `properties.assumedCallees`
 (ADR 0019). Every such callee here is itself Equivalent, so no result has `unprovenAssumptions`.
 
@@ -65,6 +74,7 @@ Congruent results that call another matched procedure list it in `properties.ass
 | `OrderService.LineTotal(OrderLine)` | `decimal` arithmetic | extracted variable | Equivalent (bounded) | Equivalent | M4-002 | M4-002 (with M3-010) |
 | `OrderService.Reserve(Order, int)` | guard `throw new ArgumentNullException` | inverted guard | Equivalent (bounded) | Equivalent | M3-010 | M3-010 (the `order == null` conversion) |
 | `OrderService.Discounted(decimal, decimal)` | `decimal` compound assignment | `total = total - total * rate` becomes `total -= total * rate` | Equivalent (bounded) | Equivalent | P2-022 | P2-022 |
+| `OrderService.CappedLineCount(Order, int)` | LINQ `Count` with a lambda, integer guard | `cap < 1` becomes `cap <= 0`, `count > cap ? cap : count` becomes `count < cap ? count : cap` | Equivalent (bounded) | Equivalent | M4-004 | M4-004 (the lambda is one shared call) |
 | `OrderService.RoundTotal(decimal)` | `Math.Round` overloads | real divergence | Divergent | Divergent | M3-001 | stays Divergent through M4-002: `Math.Round` is a call, not a pure function, so the divergence is untainted (M3-016) |
 | 14 auto-property accessors of `Order` and `OrderLine` | auto-property | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M3-010 |
 
