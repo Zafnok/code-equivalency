@@ -1277,6 +1277,46 @@ public sealed class CompareCommandTests
         ],
         new IrBlockId(0));
 
+    /// <summary>
+    /// Ticket M3-003 acceptance criterion 7: <see cref="MatchResult.Ambiguous"/> was deferred by M1-003 to
+    /// "M1-004 or M1-005", then again by both without either naming it; this is the ticket that finally assembles a
+    /// real <c>MatchResult</c> end to end, so it is where an unmatched overload group stops being left out of the SARIF.
+    /// </summary>
+    [Fact]
+    public void AnAmbiguousIdentityIsUnknownUnmatchedOverload()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity ambiguous = new("T::Overload()");
+        MatchResult matchResult = new([], [], [], [ambiguous]);
+        InMemoryReportSink sink = new();
+
+        int exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(NoVerdicts), sink);
+
+        Assert.Equal(ExitCodes.UnknownPresent, exitCode);
+        Result result = Assert.Single(sink.Log!.Runs[0].Results);
+        Assert.Equal("EQ003", result.RuleId);
+        Assert.Equal("unmatched-overload", result.GetProperty<string>("unknownReason"));
+        Assert.Contains(ambiguous.Value, result.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>An ambiguous identity does not, by itself, change the exit code without <c>--fail-on unknown</c>.</summary>
+    [Fact]
+    public void AnAmbiguousIdentityExits0ByDefault()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        MatchResult matchResult = new([], [], [], [new ProcedureIdentity("T::Overload()")]);
+
+        int exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(NoVerdicts), new InMemoryReportSink());
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+    }
+
     private static ProcedurePair Pair(ProcedureIdentity identity)
     {
         IrProcedure body = IrText.Parse($"proc \"{identity.Value}\" () entry B0 B0: ret");
