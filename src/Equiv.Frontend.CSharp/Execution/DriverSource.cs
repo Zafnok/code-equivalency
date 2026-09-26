@@ -36,21 +36,30 @@ internal static class DriverSource
             arguments.Add(Declare(parameter.Type, declarations));
         }
 
-        ITypeSymbol? result = method.MethodKind == MethodKind.Constructor ? method.ContainingType : method.ReturnsVoid ? null : method.ReturnType;
+        ITypeSymbol? result = Result(method);
         string call = Call(method, receiver, arguments);
         string invoke = result is null ? $"{call};" : $"r = {call};";
         string declareResult = result is null ? string.Empty : $"{result.ToDisplayString(Qualified)} r;";
-        string answer = result is null
-            ? "Returned(\"null\")"
-            : Canonical(result, "r", 0) is { } canonical
-                ? $"Returned({canonical})"
-                : $"NotComparable({SymbolDisplay.FormatLiteral(result.ToDisplayString(), quote: true)})";
+        string answer = result is null ? "Returned(\"null\")" : Answer(result);
         return Template
             .Replace("/*DECLARATIONS*/", string.Concat(declarations), StringComparison.Ordinal)
             .Replace("/*RESULT*/", declareResult, StringComparison.Ordinal)
             .Replace("/*CALL*/", invoke, StringComparison.Ordinal)
             .Replace("/*ANSWER*/", answer, StringComparison.Ordinal);
     }
+
+    /// <summary>What a call yields: a constructor its type, a method its return type, and a <c>void</c> method nothing.</summary>
+    private static ITypeSymbol? Result(IMethodSymbol method) => method switch
+    {
+        { MethodKind: MethodKind.Constructor } => method.ContainingType,
+        { ReturnsVoid: true } => null,
+        _ => method.ReturnType,
+    };
+
+    /// <summary>The driver's answer for a returned <paramref name="result"/>: its canonical form, or NotComparable with its type.</summary>
+    private static string Answer(ITypeSymbol result) => Canonical(result, "r", 0) is { } canonical
+        ? $"Returned({canonical})"
+        : $"NotComparable({SymbolDisplay.FormatLiteral(result.ToDisplayString(), quote: true)})";
 
     /// <summary>Declares the next argument, decoded from its slot in the case line (slot 0 is the culture); returns its name.</summary>
     private static string Declare(ITypeSymbol type, List<string> declarations)
