@@ -18,13 +18,19 @@ namespace Equiv.Verify.Z3;
 /// Rung 4 of the loop ladder (VERIFICATION-MODEL.md section 5.1; ADR 0008; ticket P1-001): the pair's constrained Horn
 /// clauses (<see cref="ChcEncoder"/>) go to Z3 Spacer, which synthesises the coupling invariant itself, so the loops need
 /// not align. It applies to a pair neither side of which calls or applies a pure function, since a call trace is not a
-/// relation Spacer can infer. Unless <see cref="VerificationOptions.ChcIntMode"/> is off, it first encodes over the
-/// integers (<see cref="IntModeTranslator"/>), and keeps that mode only when a Spacer query proves that no exactly modelled
-/// operation of either side can overflow; otherwise it encodes over the bitvectors. An unsatisfiable divergence query is
-/// unbounded <see cref="ProofMethod.Chc"/> Equivalent with Spacer's invariant. A derivation is replayed from its inputs
-/// through both original procedures: a divergence is Divergent, an opaque node reached is Unknown(Opaque), and anything
-/// else is <see cref="UnknownReason.ChcSpurious"/> with both runs in the detail. A query that gives up is
-/// <see cref="UnknownReason.ChcTimeout"/>. Every step names the mode it ran in (<see cref="LadderStep.Mode"/>).
+/// relation Spacer can infer. An unsatisfiable divergence query is unbounded <see cref="ProofMethod.Chc"/> Equivalent with
+/// Spacer's invariant. A derivation is replayed from its inputs through both original procedures: a divergence is
+/// Divergent, an opaque node reached is Unknown(Opaque), and anything else is <see cref="UnknownReason.ChcSpurious"/> with
+/// both runs in the detail. A query that gives up is <see cref="UnknownReason.ChcTimeout"/>.
+/// <para>
+/// Unless <see cref="VerificationOptions.ChcIntMode"/> is off, rung 4 first asks over the integers
+/// (<see cref="IntModeTranslator"/>), where Spacer finds linear invariants far more readily. An invariant found there
+/// that also solves the clauses read with wrap-around arithmetic (<see cref="ChcEncoder.Solves"/>) is a proof over the
+/// bitvectors. Otherwise the integer answer stands only when a second Spacer query proves that no exactly modelled
+/// operation of either side can overflow, since only then is every bitvector run an integer run; a replayed divergence, an
+/// opaque node or a query that gave up stands without it. Failing both, rung 4 asks over the bitvectors. Every step names
+/// the arithmetic its answer holds in (<see cref="LadderStep.Mode"/>).
+/// </para>
 /// </summary>
 internal sealed class SpacerRung(Func<Context> createContext, VerificationOptions options)
 {
@@ -40,15 +46,27 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
             return LoopLadder.NotApplicable(ProofMethod.Chc, $"rung 4 does not model calls: {obstacle}", cause: null);
         }
 
+        using Context context = createContext();
         string bitVectors = "integer mode is off";
         if (options.ChcIntMode)
         {
-            using Context context = createContext();
-            ChcEncoder integers = new(context, old, @new, integers: true, options.CallIdentityMap);
+            ChcEncoder integers = new(context, old, @new, ChcArithmetic.Integers, options.CallIdentityMap);
+            ChcAnswer found = integers.Query(overflows: false, Timeout);
+            if (found.Status == Status.UNSATISFIABLE && new ChcEncoder(context, old, @new, ChcArithmetic.WrappingIntegers, options.CallIdentityMap).Solves(found.Answer, Timeout))
+            {
+                return InMode(Conclude(integers, found, old, @new, "over the integers that holds with wrap-around arithmetic too"), ChcMode.BitVectors);
+            }
+
+            Rung rung = Conclude(integers, found, old, @new, "over the integers");
+            if (rung.Verdict is not (Equivalent or Unknown { Reason: UnknownReason.ChcSpurious }))
+            {
+                return InMode(rung, ChcMode.Integers);
+            }
+
             ChcAnswer overflow = integers.Query(overflows: true, Timeout);
             if (overflow.Status == Status.UNSATISFIABLE)
             {
-                return Conclude(integers, old, @new, ChcMode.Integers, "over the integers");
+                return InMode(rung, ChcMode.Integers);
             }
 
             bitVectors = overflow.Status == Status.SATISFIABLE
@@ -56,8 +74,8 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
                 : $"the overflow query gave up ({overflow.Reason})";
         }
 
-        using Context bits = createContext();
-        return Conclude(new ChcEncoder(bits, old, @new, integers: false, options.CallIdentityMap), old, @new, ChcMode.BitVectors, $"over the bitvectors, since {bitVectors}");
+        ChcEncoder bits = new(context, old, @new, ChcArithmetic.BitVectors, options.CallIdentityMap);
+        return InMode(Conclude(bits, bits.Query(overflows: false, Timeout), old, @new, $"over the bitvectors, since {bitVectors}"), ChcMode.BitVectors);
     }
 
     /// <summary>Why rung 4 does not apply to <paramref name="procedure"/>: the first call or pure function a reachable block holds.</summary>
@@ -75,18 +93,13 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
 
     private static Rung InMode(Rung rung, ChcMode mode) => rung with { Step = rung.Step with { Mode = mode } };
 
-    /// <summary>The divergence query and what its answer means.</summary>
-    private Rung Conclude(ChcEncoder chc, IrProcedure old, IrProcedure @new, ChcMode mode, string how)
+    /// <summary>What <paramref name="chc"/>'s divergence query answering <paramref name="answer"/> means.</summary>
+    private Rung Conclude(ChcEncoder chc, ChcAnswer answer, IrProcedure old, IrProcedure @new, string how) => answer.Status switch
     {
-        ChcAnswer answer = chc.Query(overflows: false, Timeout);
-        Rung rung = answer.Status switch
-        {
-            Status.UNSATISFIABLE => LoopLadder.Proved(ProofMethod.Chc, $"Spacer found a coupling invariant {how}", new Equivalent(ProofMethod.Chc) { Invariant = chc.Invariant(answer.Answer) }),
-            Status.SATISFIABLE => Replay(chc, old, @new, chc.DerivationInputs(answer.Answer, Timeout), how),
-            _ => TimedOut($"Spacer gave up {how}: {answer.Reason} with a {options.TimeoutMs.ToString(CultureInfo.InvariantCulture)} ms timeout"),
-        };
-        return InMode(rung, mode);
-    }
+        Status.UNSATISFIABLE => LoopLadder.Proved(ProofMethod.Chc, $"Spacer found a coupling invariant {how}", new Equivalent(ProofMethod.Chc) { Invariant = chc.Invariant(answer.Answer) }),
+        Status.SATISFIABLE => Replay(chc, old, @new, chc.DerivationInputs(answer.Answer, Timeout), how),
+        _ => TimedOut($"Spacer gave up {how}: {answer.Reason} with a {options.TimeoutMs.ToString(CultureInfo.InvariantCulture)} ms timeout"),
+    };
 
     /// <summary>A derivation's inputs replayed through both original procedures.</summary>
     private static Rung Replay(ChcEncoder chc, IrProcedure old, IrProcedure @new, IrInputs inputs, string how)

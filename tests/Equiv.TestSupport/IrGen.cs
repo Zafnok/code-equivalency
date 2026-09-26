@@ -53,6 +53,9 @@ public static class IrGen
     /// <summary>As <see cref="Procedure"/> without loops, so every CFG is acyclic (the M3-001 encoder's domain).</summary>
     public static Gen<IrProcedure> AcyclicProcedure { get; } = Procedures(loops: false);
 
+    /// <summary>As <see cref="Procedure"/> without calls or pure functions, the domain of loop-ladder rung 4 (ticket P1-001).</summary>
+    public static Gen<IrProcedure> CallFreeProcedure { get; } = Procedures(loops: true, calls: false);
+
     /// <summary>
     /// An acyclic procedure and the same procedure with its source-language parameters renamed, which a
     /// caller cannot tell apart (ADR 0021).
@@ -115,10 +118,10 @@ public static class IrGen
             Gen.Const(ImmutableArray<IrValue>.Empty),
             static (acc, value) => Gen.Select(acc, value, static (a, v) => a.Add(v)));
 
-    private static Gen<IrProcedure> Procedures(bool loops) => Programs(loops).Select(static p => IrGenLowering.Lower(p));
+    private static Gen<IrProcedure> Procedures(bool loops, bool calls = true) => Programs(loops, calls).Select(static p => IrGenLowering.Lower(p));
 
-    private static Gen<Program> Programs(bool loops) =>
-        Gen.Select(Gen.Bool, Gen.Bool, Word.Array[4], Statements(2, loops), Expression(2), static (hasRef, hasHeap, inits, body, result) =>
+    private static Gen<Program> Programs(bool loops, bool calls = true) =>
+        Gen.Select(Gen.Bool, Gen.Bool, Word.Array[4], Statements(2, loops, calls), Expression(2), static (hasRef, hasHeap, inits, body, result) =>
             new Program(hasRef, hasHeap, [.. inits], body, result));
 
     private static Gen<IrValue> Value(IrType type) => type switch
@@ -335,11 +338,12 @@ public static class IrGen
             (1, smaller.Select(static c => (ICond)new Negate(c))));
     }
 
-    private static Gen<ImmutableArray<IStmt>> Statements(int depth, bool loops) =>
-        Statement(depth, loops).Array[0, 3].Select(static s => s.ToImmutableArray());
+    private static Gen<ImmutableArray<IStmt>> Statements(int depth, bool loops, bool calls) =>
+        Statement(depth, loops, calls).Array[0, 3].Select(static s => s.ToImmutableArray());
 
-    private static Gen<IStmt> Statement(int depth, bool loops)
+    private static Gen<IStmt> Statement(int depth, bool loops, bool calls)
     {
+        int callWeight = calls ? 1 : 0;
         Gen<int> slot = Gen.Int[0, SlotCount - 1];
         Gen<IStmt> assign = Gen.Select(slot, Expression(2), static (s, e) => (IStmt)new Assign(s, e));
         Gen<IStmt> check = Gen.Select(
@@ -363,10 +367,10 @@ public static class IrGen
             static (s, function, args, throws) => (IStmt)new Pure(s, function, [.. args], throws));
         if (depth == 0)
         {
-            return Gen.Frequency((4, assign), (1, check), (1, call), (1, store), (1, pure));
+            return Gen.Frequency((4, assign), (1, check), (callWeight, call), (1, store), (callWeight, pure));
         }
 
-        Gen<ImmutableArray<IStmt>> body = Statements(depth - 1, loops);
+        Gen<ImmutableArray<IStmt>> body = Statements(depth - 1, loops, calls);
         Gen<ImmutableArray<IStmt>> maybeThrowing = Gen.Select(body, Gen.Int[0, 3], static (s, k) =>
             k == 0 ? s.Add(new Throw("System.InvalidOperationException")) : s);
         Gen<IStmt> branch = Gen.Select(Condition(1), maybeThrowing, body, static (c, t, e) => (IStmt)new If(c, t, e));
@@ -376,6 +380,6 @@ public static class IrGen
             body,
             static (e, cases, fallback) => (IStmt)new Switch(e, [.. cases], fallback));
         Gen<IStmt> loop = Gen.Select(Gen.Int[0, 3], body, static (n, b) => (IStmt)new Loop(n, b));
-        return Gen.Frequency((4, assign), (1, check), (1, call), (1, store), (1, pure), (2, branch), (1, choice), (loops ? 1 : 0, loop));
+        return Gen.Frequency((4, assign), (1, check), (callWeight, call), (1, store), (callWeight, pure), (2, branch), (1, choice), (loops ? 1 : 0, loop));
     }
 }

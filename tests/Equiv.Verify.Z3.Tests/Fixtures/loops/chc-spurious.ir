@@ -1,7 +1,7 @@
-# Unknown(ChcSpurious)
+# Unknown(ChcSpurious, int)
 # Counting the odd numbers below n, the new side with a pre-incremented counter from -1: equal, but the counters
-# start apart, so rungs 2 and 3 fail. Nothing overflows, so rung 4 runs over the integers, where i & 1 is not
-# modelled (any integer in bounds, chosen apart on each side): its derivation does not replay to a divergence.
+# start apart, so rungs 2 and 3 fail. Over the integers i & 1 is not modelled (any integer in bounds, chosen apart on
+# each side), so Spacer finds a derivation, which does not replay to a divergence; nothing overflows, so it stands.
 proc "T::Odd(int)" (%n "n": bv32) -> bv32 entry B0
 B0:
   %z: bv32 = const bv32 0

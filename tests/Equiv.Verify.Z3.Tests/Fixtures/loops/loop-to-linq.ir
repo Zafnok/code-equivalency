@@ -1,7 +1,7 @@
-# Unknown(ChcTimeout)
+# Unknown(ChcTimeout, int)
 # One loop computing a sum and a count, rewritten as LINQ's two passes (Sum(), Count()): equivalent, but one
-# loop against two does not align, so rungs 2 and 3 do not apply. The sum can overflow, so rung 4 cannot use
-# integers, and over bitvectors Spacer finds no invariant in time.
+# loop against two does not align, so rungs 2 and 3 do not apply, and within this fixture's 50 ms Spacer finds no
+# invariant over the integers.
 proc "T::Stats(int)" (%n "n": bv32) -> bv32 entry B0
 B0:
   %z: bv32 = const bv32 0

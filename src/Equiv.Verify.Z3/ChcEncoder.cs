@@ -26,7 +26,8 @@ namespace Equiv.Verify.Z3;
 /// waits. So every pair of runs that both terminate is one path of steps from the entries to <c>inv.exit.exit</c>, and the
 /// pair is partially equivalent when no derivation reaches <c>bad</c>: both sides exited with different observables, or a
 /// side has a segment to run that reaches an <see cref="IrOpaque"/>. The overflow query reaches <c>bad</c> instead when a
-/// segment to run overflows an operation <see cref="IntModeTranslator"/> models exactly. No fragment calls or applies a
+/// segment to run overflows an operation <see cref="IntModeTranslator"/> models exactly, and an integer-mode answer can be
+/// checked against the clauses read with wrap-around arithmetic (<see cref="Solves"/>). No fragment calls or applies a
 /// pure function: rung 4 does not apply to such a pair. Every rule is universally quantified over its constants.
 /// </para>
 /// </summary>
@@ -39,22 +40,23 @@ internal sealed class ChcEncoder
     private readonly Cuts @new;
     private readonly ImmutableArray<Expr> literals;
     private readonly ImmutableArray<IrSortValue> literalValues;
-    private readonly Dictionary<(IrBlockId? Old, IrBlockId? New), FuncDecl> relations = [];
-    private readonly Dictionary<(Side Side, IrBlockId Header), FuncDecl> reachable = [];
     private readonly FuncDecl bad;
-    private readonly List<BoolExpr> divergence = [];
-    private readonly List<BoolExpr> overflow = [];
     private readonly List<BoolExpr> entryDivergence = [];
+    private readonly Horn divergence;
+    private readonly Horn overflow;
 
-    /// <param name="context">The context every term lives in; rung 4 gives each attempt a fresh one.</param>
+    /// <param name="context">
+    /// The context every term lives in. Encoders of one pair may share it: those of the same arithmetic then declare the
+    /// same relations.
+    /// </param>
     /// <param name="old">The old procedure: no call, no pure function, no self-call.</param>
     /// <param name="new">The new procedure, likewise.</param>
-    /// <param name="integers">Whether bitvectors are integers (<see cref="IntModeTranslator"/>).</param>
+    /// <param name="arithmetic">How a bitvector reads (<see cref="IntModeTranslator"/>).</param>
     /// <param name="callIdentityMap">The call-identity unifications <see cref="Calls"/> renames legacy traces with.</param>
-    public ChcEncoder(Context context, IrProcedure old, IrProcedure @new, bool integers, ImmutableDictionary<string, string> callIdentityMap)
+    public ChcEncoder(Context context, IrProcedure old, IrProcedure @new, ChcArithmetic arithmetic, ImmutableDictionary<string, string> callIdentityMap)
     {
         this.context = context;
-        sorts = new SortMapper(context, integers ? new IntModeTranslator(context) : null);
+        sorts = new SortMapper(context, arithmetic == ChcArithmetic.BitVectors ? null : new IntModeTranslator(context, wraps: arithmetic == ChcArithmetic.WrappingIntegers));
         Inputs = [.. ProductEncoder.Pair(old, @new).Select(s => (s, context.MkConst(s.InputName, sorts.Sort(s.Type))))];
         this.old = new Cuts(this, Side.Old, old);
         this.@new = new Cuts(this, Side.New, @new);
@@ -62,34 +64,9 @@ internal sealed class ChcEncoder
         literals = [.. sorts.SortLiterals.Values];
         Calls = new TraceEncoder(sorts, [], callIdentityMap, []);
         bad = context.MkFuncDecl("bad", [], context.BoolSort);
-        foreach (IrBlockId? a in this.old.Points)
-        {
-            foreach (IrBlockId? b in this.@new.Points)
-            {
-                relations.Add((a, b), context.MkFuncDecl(
-                    $"inv.{Label(a)}.{Label(b)}",
-                    [.. Carried.Select(static t => t.Sort), .. this.old.Pre(a).Select(static t => t.Sort), .. this.@new.Pre(b).Select(static t => t.Sort)],
-                    context.BoolSort));
-            }
-        }
-
-        EncodeEntries();
-        foreach (IrBlockId? a in this.old.Points)
-        {
-            foreach (IrBlockId? b in this.@new.Points.Where(b => a is not null || b is not null))
-            {
-                EncodeSteps(a, b);
-            }
-        }
-
-        ImmutableArray<Expr> oldExit = this.old.Pre(point: null);
-        ImmutableArray<Expr> newExit = this.@new.Pre(point: null);
-        divergence.Add(Rule([Atom(a: null, b: null, oldExit, newExit), Differs(this.old.Observables(oldExit), this.@new.Observables(newExit))], Bad));
-        if (sorts.Integers is { } translator)
-        {
-            EncodeOverflows(this.old, translator);
-            EncodeOverflows(this.@new, translator);
-        }
+        divergence = Encode(new Horn(arithmetic == ChcArithmetic.WrappingIntegers ? sorts.Integers : null, Overflows: false));
+        divergence.Rules.Add(Rule([.. Premise(divergence, a: null, b: null), Differs(this.old.Observables(this.old.Pre(point: null)), this.@new.Observables(this.@new.Pre(point: null)))], Bad));
+        overflow = arithmetic == ChcArithmetic.Integers ? Encode(new Horn(sorts.Integers, Overflows: true)) : new Horn(Bounds: null, Overflows: true);
     }
 
     /// <summary>The shared inputs in <see cref="ProductEncoder.Pair"/> order, each with its constant.</summary>
@@ -98,9 +75,6 @@ internal sealed class ChcEncoder
     /// <summary>A trace encoder of this context, only for renaming legacy call identities when a replay is compared.</summary>
     public TraceEncoder Calls { get; }
 
-    /// <summary>Whether some relation holds a map, which Spacer's quantified lemma generator helps with.</summary>
-    public bool HasMaps => relations.Values.Any(static r => r.Domain.Any(static s => s is ArraySort));
-
     /// <summary>What every relation carries unchanged: the shared inputs, then the sort literals.</summary>
     private IEnumerable<Expr> Carried => Inputs.Select(static i => i.Term).Concat(literals);
 
@@ -108,13 +82,14 @@ internal sealed class ChcEncoder
 
     /// <summary>
     /// Asks Spacer, within <paramref name="timeoutMs"/>, whether <c>bad</c> is derivable: through the product's steps and
-    /// divergence rules, or, when <paramref name="overflows"/> is set, through each side's own steps and overflow rules.
-    /// Global guidance (Krishnan et al., CAV 2020) keeps Spacer from enumerating counter values one lemma at a time; its
+    /// divergence rules, or, when <paramref name="overflows"/> is set, through the same steps from states within bounds
+    /// (<see cref="Premise"/>) and the overflow rules. Global guidance (Krishnan et al., CAV 2020) keeps Spacer from enumerating counter values one lemma at a time; its
     /// concretize rule is off because with it a timeout throws "unreachable" instead of cancelling. Inlining and slicing
     /// are off so that every relation a derivation passes through leaves a ground fact of that relation with every argument
     /// (<see cref="DerivationInputs"/>): Z3 inlines a loop pair whose self-steps it simplified away (a loop whose guard is
     /// always false), and slicing replaces a relation by a copy without the inputs no rule reads. A timeout is
-    /// <see cref="Status.UNKNOWN"/>: Z3 reports it by throwing an exception whose message says "canceled".
+    /// <see cref="Status.UNKNOWN"/>: Z3 reports it by throwing an exception, whose message says "canceled", or under global
+    /// guidance sometimes "unreachable" (after printing an assertion violation); any exception Z3 throws gives up the same way.
     /// </summary>
     public ChcAnswer Query(bool overflows, uint timeoutMs)
     {
@@ -125,19 +100,20 @@ internal sealed class ChcEncoder
         parameters.Add("spacer.global", value: true);
         parameters.Add("spacer.gg.concretize", value: false);
         parameters.Add("spacer.ground_pobs", value: false);
-        parameters.Add("spacer.q3.use_qgen", HasMaps);
+        Horn system = overflows ? overflow : divergence;
+        parameters.Add("spacer.q3.use_qgen", system.HasMaps);
         parameters.Add("xform.inline_eager", value: false);
         parameters.Add("xform.inline_linear", value: false);
         parameters.Add("xform.slice", value: false);
         fixedpoint.Parameters = parameters;
-        foreach (FuncDecl relation in (overflows ? reachable.Values.AsEnumerable() : relations.Values).Append(bad))
+        foreach (FuncDecl relation in system.Relations.Values.Append(bad))
         {
             fixedpoint.RegisterRelation(relation);
         }
 
-        foreach (BoolExpr rule in overflows ? overflow : divergence)
+        foreach (BoolExpr rule in system.Rules)
         {
-            fixedpoint.AddRule(rule);
+            fixedpoint.AddRule(context.MkForall(Constants(rule), rule));
         }
 
         try
@@ -145,24 +121,65 @@ internal sealed class ChcEncoder
             Status status = fixedpoint.Query([bad]);
             return new ChcAnswer(status, fixedpoint.GetAnswer(), fixedpoint.GetReasonUnknown());
         }
-        catch (Z3Exception exception) when (exception.Message.Contains("canceled", StringComparison.Ordinal))
+        catch (Z3Exception exception)
         {
             return new ChcAnswer(Status.UNKNOWN, context.MkTrue(), exception.Message);
         }
     }
 
     /// <summary>
-    /// The coupling invariant of an unsatisfiable query's answer: each relation Spacer defines as something other than
-    /// false (an unreachable pair of cut points), as <c>old &lt;a&gt; ~ new &lt;b&gt;: &lt;definition&gt;</c>, with its
-    /// arguments named after the inputs (<c>in.*</c>), the sort literals (<c>lit.*</c>) and each side's state
-    /// (<c>old.*</c>, <c>new.*</c>). A definition of another shape is kept as Z3 prints it.
+    /// The coupling invariant of an unsatisfiable divergence query's answer: each relation Spacer defines as something other
+    /// than false (an unreachable pair of cut points), in the order of the cut points, as
+    /// <c>old &lt;a&gt; ~ new &lt;b&gt;: &lt;definition&gt;</c>, with its arguments named after the inputs (<c>in.*</c>),
+    /// the sort literals (<c>lit.*</c>) and each side's state (<c>old.*</c>, <c>new.*</c>). Each definition prints on one
+    /// line in SMT-LIB, without let-bindings (the context's print mode, which only rung 4's own context gets).
     /// </summary>
     public string Invariant(Expr answer)
     {
-        Dictionary<FuncDecl, (string Label, ImmutableArray<Expr> Names)> named = relations.ToDictionary(
-            static r => r.Value,
-            r => ($"old {Label(r.Key.Old)} ~ new {Label(r.Key.New)}", (ImmutableArray<Expr>)[.. Inputs.Select(static i => i.Term), .. literals, .. old.Named(r.Key.Old), .. @new.Named(r.Key.New)]));
-        return string.Join("; ", (answer.IsAnd ? answer.Args : [answer]).Select(d => Definition(d, named)).OfType<string>());
+        Dictionary<FuncDecl, Definition> definitions = Definitions(answer).ToDictionary(static d => d.Relation);
+        context.PrintMode = Z3_ast_print_mode.Z3_PRINT_SMTLIB_FULL;
+        return string.Join("; ", divergence.Relations
+            .Where(r => definitions.TryGetValue(r.Value, out Definition? definition) && !definition.Body.IsFalse)
+            .Select(r => $"old {Label(r.Key.Old)} ~ new {Label(r.Key.New)}: {OneLine(Apply(definitions[r.Value], [.. Inputs.Select(static i => i.Term), .. literals, .. old.Named(r.Key.Old), .. @new.Named(r.Key.New)]))}"));
+    }
+
+    /// <summary>
+    /// Whether <paramref name="answer"/>, the definitions an unsatisfiable divergence query of an integer-mode encoder of
+    /// the same pair and context gave, also solve this wrapping encoder's divergence query
+    /// (<see cref="ChcArithmetic.WrappingIntegers"/>): with every relation replaced by its definition, and <c>bad</c> by
+    /// false, no rule has a counterexample within <paramref name="timeoutMs"/>. Then no derivation reaches <c>bad</c> over
+    /// the bitvectors, whether or not an integer operation can overflow: the plain integers only found the invariant. The two
+    /// encoders declare the same relations. Spacer's answer leaves out some relations, the unreachable ones and ones no
+    /// derivation of <c>bad</c> passes through; each of those reads as false, and as true once a rule concludes it from
+    /// premises that hold (a reachable relation), which only weakens premises, so the check stops after at most one round
+    /// per relation.
+    /// </summary>
+    public bool Solves(Expr answer, uint timeoutMs)
+    {
+        Dictionary<FuncDecl, Definition> definitions = Definitions(answer).ToDictionary(static d => d.Relation);
+        HashSet<FuncDecl> reachable = [];
+        while (true)
+        {
+            BoolExpr[] counterexamples = [.. divergence.Rules.Select(rule => context.MkNot(Read(rule, definitions, reachable)))];
+            using Solver solver = context.MkSolver();
+            solver.Set("timeout", timeoutMs);
+            solver.Add(context.MkOr(counterexamples));
+            Status status = solver.Check();
+            if (status != Status.SATISFIABLE)
+            {
+                return status == Status.UNSATISFIABLE;
+            }
+
+            Model model = solver.Model;
+            FuncDecl[] concluded = [.. divergence.Rules.Where((_, i) => model.Eval(counterexamples[i], completion: true).IsTrue).Select(static r => r.Args[1].FuncDecl)];
+
+            if (concluded.Any(r => definitions.ContainsKey(r) || reachable.Contains(r) || r.Equals(bad)))
+            {
+                return false;
+            }
+
+            reachable.UnionWith(concluded);
+        }
     }
 
     /// <summary>
@@ -173,8 +190,8 @@ internal sealed class ChcEncoder
     /// </summary>
     public IrInputs DerivationInputs(Expr answer, uint timeoutMs)
     {
-        HashSet<FuncDecl> declared = [.. relations.Values];
-        if (Facts(answer).FirstOrDefault(f => declared.Contains(f.FuncDecl)) is { } fact)
+        HashSet<FuncDecl> declared = [.. divergence.Relations.Values];
+        if (Applications(answer).FirstOrDefault(f => declared.Contains(f.FuncDecl)) is { } fact)
         {
             return Decode(fact.Args[..Inputs.Length], fact.Args[Inputs.Length..(Inputs.Length + literals.Length)]);
         }
@@ -190,49 +207,68 @@ internal sealed class ChcEncoder
     /// <summary>A cut point as the IR text names it: <c>B&lt;n&gt;</c> for a header, <c>exit</c> for the exit.</summary>
     private static string Label(IrBlockId? point) => point is null ? "exit" : "B" + point.Value.ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>The applications in a proof outside every quantifier (the rules it cites are quantified): its ground facts.</summary>
-    private static IEnumerable<Expr> Facts(Expr proof)
+    /// <summary>
+    /// The applications in <paramref name="term"/> outside every quantifier, once each, in the order a depth-first walk
+    /// meets them: a proof's ground facts (the rules it cites are quantified), or a rule's atoms.
+    /// </summary>
+    private static IEnumerable<Expr> Applications(Expr term)
     {
-        Stack<Expr> pending = new([proof]);
+        Stack<Expr> pending = new([term]);
         HashSet<Expr> seen = [];
-        while (pending.TryPop(out Expr? term))
+        while (pending.TryPop(out Expr? next))
         {
-            if (!term.IsApp || !seen.Add(term))
+            if (!next.IsApp || !seen.Add(next))
             {
                 continue;
             }
 
-            yield return term;
-            foreach (Expr argument in term.Args.Reverse())
+            yield return next;
+            foreach (Expr argument in next.Args.Reverse())
             {
                 pending.Push(argument);
             }
         }
     }
 
-    /// <summary>One relation's definition in the answer, named; null for an unreachable pair.</summary>
-    private static string? Definition(Expr definition, Dictionary<FuncDecl, (string Label, ImmutableArray<Expr> Names)> named)
+    /// <summary>
+    /// The definitions in a query's answer, one per relation Spacer defines, each <c>(= (R x1 .. xn) body)</c> under a
+    /// quantifier binding its arguments.
+    /// </summary>
+    private static IEnumerable<Definition> Definitions(Expr answer) =>
+        from conjunct in answer.IsAnd ? answer.Args : [answer]
+        let equation = conjunct is Quantifier quantifier ? quantifier.Body : conjunct
+        where equation.IsEq && equation.Args[0].IsApp
+        select new Definition(equation.Args[0].FuncDecl, equation.Args[0].Args, equation.Args[1]);
+
+    /// <summary><paramref name="term"/> as Z3 prints it, each run of white space one space.</summary>
+    private static string OneLine(Expr term) => string.Join(' ', term.ToString().Split((char[])[' ', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
+
+    /// <summary>A definition's body with each argument replaced by the term at its position in <paramref name="actual"/>.</summary>
+    private static Expr Apply(Definition definition, Expr[] actual)
     {
-        Expr equation = definition is Quantifier quantifier ? quantifier.Body : definition;
-        if (!equation.IsEq || !equation.Args[0].IsApp || !named.TryGetValue(equation.Args[0].FuncDecl, out (string Label, ImmutableArray<Expr> Names) relation))
+        Expr[] substitution = new Expr[actual.Length];
+        for (int i = 0; i < actual.Length; i++)
         {
-            return definition.ToString();
+            substitution[definition.Arguments[i].Index] = actual[i];
         }
 
-        Expr body = equation.Args[1];
-        if (body.IsFalse)
-        {
-            return null;
-        }
+        return definition.Body.SubstituteVars(substitution);
+    }
 
-        Expr[] arguments = equation.Args[0].Args;
-        Expr[] substitution = new Expr[arguments.Length];
-        for (int i = 0; i < arguments.Length; i++)
-        {
-            substitution[arguments[i].Index] = relation.Names[i];
-        }
-
-        return $"{relation.Label}: {body.SubstituteVars(substitution)}";
+    /// <summary>
+    /// <paramref name="rule"/> with each relation replaced by its definition, or by true when <paramref name="reachable"/>
+    /// holds it and false when neither does, and <c>bad</c> by false.
+    /// </summary>
+    private BoolExpr Read(BoolExpr rule, Dictionary<FuncDecl, Definition> definitions, HashSet<FuncDecl> reachable)
+    {
+        Expr[] atoms = [.. Applications(rule).Where(a => a.FuncDecl.Equals(bad) || divergence.Relations.ContainsValue(a.FuncDecl))];
+        Expr[] meanings =
+        [
+            .. atoms.Select(a => definitions.TryGetValue(a.FuncDecl, out Definition? definition)
+                ? Apply(definition, a.Args)
+                : context.MkBool(reachable.Contains(a.FuncDecl))),
+        ];
+        return (BoolExpr)rule.Substitute(atoms, meanings);
     }
 
     /// <summary>
@@ -278,44 +314,40 @@ internal sealed class ChcEncoder
     }
 
     /// <summary>
-    /// A rule: <paramref name="body"/> implies <paramref name="head"/>, for all values of its constants. Every body has one:
-    /// a segment's <c>reach</c>, or a relation's argument.
+    /// A rule: <paramref name="body"/> implies <paramref name="head"/>. <see cref="Query"/> quantifies it universally over
+    /// its constants; every body has one, a segment's <c>reach</c> or a relation's argument.
     /// </summary>
-    private Quantifier Rule(IEnumerable<BoolExpr> body, BoolExpr head)
-    {
-        BoolExpr implication = context.MkImplies(context.MkAnd(body), head);
-        return context.MkForall(Constants(implication), implication);
-    }
+    private BoolExpr Rule(IEnumerable<BoolExpr> body, BoolExpr head) => context.MkImplies(context.MkAnd(body), head);
 
-    /// <summary>The relation of <paramref name="a"/> and <paramref name="b"/> applied to the inputs, the literals and the two states.</summary>
-    private BoolExpr Atom(IrBlockId? a, IrBlockId? b, IEnumerable<Expr> oldState, IEnumerable<Expr> newState) =>
-        (BoolExpr)context.MkApp(relations[(a, b)], [.. Carried, .. oldState, .. newState]);
+    /// <summary>The relation of <paramref name="a"/> and <paramref name="b"/> in <paramref name="system"/> applied to the inputs, the literals and the two states.</summary>
+    private BoolExpr Atom(Horn system, IrBlockId? a, IrBlockId? b, IEnumerable<Expr> oldState, IEnumerable<Expr> newState) =>
+        (BoolExpr)context.MkApp(system.Relations[(a, b)], [.. Carried, .. oldState, .. newState]);
 
     /// <summary>
-    /// What a run starts from: distinct literals of one sort and, for the overflow query, the bitvector inputs within
-    /// their bounds (<paramref name="translator"/>). The divergence query needs no bounds: integers out of bounds only add
-    /// runs, and a derivation is replayed anyway.
+    /// <paramref name="system"/>'s relations, one per pair of cut points, and the product's rules: the entry step, then the
+    /// steps from every pair of cut points but the two exits, and <c>bad</c> whenever a side has a segment to run that
+    /// reaches an opaque node (the divergence query) or overflows (the overflow query).
     /// </summary>
-    private IEnumerable<BoolExpr> Start(IntModeTranslator? translator = null) =>
-    [
-        .. Inputs.Where(i => translator is not null && i.Shared.Type is IrBitVec).Select(i => translator!.InRange(i.Term, ((IrBitVec)i.Shared.Type).Width)),
-        .. sorts.Distinctness(),
-    ];
-
-    /// <summary>Both entry segments, stepping together: every pair of their exits, and each side's opaque nodes.</summary>
-    private void EncodeEntries()
+    private Horn Encode(Horn system)
     {
+        foreach (IrBlockId? a in old.Points)
+        {
+            foreach (IrBlockId? b in @new.Points)
+            {
+                system.Relations.Add((a, b), context.MkFuncDecl($"inv.{Label(a)}.{Label(b)}", [.. Carried.Concat(old.Pre(a)).Concat(@new.Pre(b)).Select(static t => t.Sort)], context.BoolSort));
+            }
+        }
+
         Segment oldEntry = old.Entry;
         Segment newEntry = @new.Entry;
+        BoolExpr[] start = [.. Start(system.Bounds)];
         foreach (SegmentExit oldExit in oldEntry.Exits)
         {
             foreach (SegmentExit newExit in newEntry.Exits)
             {
-                (IReadOnlyList<Expr> Terms, IEnumerable<BoolExpr> Post) oldState = old.Moved(oldExit);
-                (IReadOnlyList<Expr> Terms, IEnumerable<BoolExpr> Post) newState = @new.Moved(newExit);
-                BoolExpr[] body = [.. Start(), oldEntry.Formula, newEntry.Formula, oldExit.Reach, newExit.Reach];
-                divergence.Add(Rule([.. body, .. oldState.Post, .. newState.Post], Atom(oldExit.Target, newExit.Target, oldState.Terms, newState.Terms)));
-                if (oldExit.Target is null && newExit.Target is null)
+                BoolExpr[] body = [.. start, oldEntry.Formula, newEntry.Formula, oldExit.Reach, newExit.Reach];
+                Step(system, body, oldExit.Target, newExit.Target, old.Moved(oldExit), @new.Moved(newExit));
+                if (!system.Overflows && oldExit.Target is null && newExit.Target is null)
                 {
                     entryDivergence.Add(context.MkAnd([.. body, Differs(old.Observables(oldExit.Values), @new.Observables(newExit.Values))]));
                 }
@@ -324,72 +356,93 @@ internal sealed class ChcEncoder
 
         foreach (Segment entry in (Segment[])[oldEntry, newEntry])
         {
-            BoolExpr[] body = [.. Start(), entry.Formula, entry.Encoder.Opaque];
-            divergence.Add(Rule(body, Bad));
-            entryDivergence.Add(context.MkAnd(body));
+            BoolExpr[] body = [.. start, entry.Formula, Failure(entry, system)];
+            system.Rules.Add(Rule(body, Bad));
+            if (!system.Overflows)
+            {
+                entryDivergence.Add(context.MkAnd(body));
+            }
         }
+
+        foreach (IrBlockId? a in old.Points)
+        {
+            foreach (IrBlockId? b in @new.Points)
+            {
+                if (a is not null || b is not null)
+                {
+                    EncodeSteps(system, a, b);
+                }
+            }
+        }
+
+        return system;
     }
 
     /// <summary>
-    /// The overflow query's own system: one relation <c>reach.&lt;side&gt;.&lt;header&gt;</c> per header, of the side's
-    /// states there, and <c>bad</c> when a segment from the entry or a reachable header overflows. Overflow is a property of
-    /// each side alone, and a proof over each side's runs covers every pair of them.
+    /// What a run starts from: distinct literals of one sort and, with <paramref name="bounds"/>, the bitvector inputs
+    /// within their bounds. The plain divergence query needs no bounds: integers out of bounds only add runs, and a
+    /// derivation is replayed anyway.
     /// </summary>
-    private void EncodeOverflows(Cuts side, IntModeTranslator translator)
-    {
-        foreach (IrBlockId header in side.Loops.Keys)
-        {
-            reachable.Add((side.Side, header), context.MkFuncDecl($"reach.{ProductEncoder.Prefix(side.Side)}.{Label(header)}", [.. Carried.Select(static t => t.Sort), .. side.Pre(header).Select(static t => t.Sort)], context.BoolSort));
-        }
+    private IEnumerable<BoolExpr> Start(IntModeTranslator? bounds) =>
+    [
+        .. Inputs.Where(i => bounds is not null && i.Shared.Type is IrBitVec).Select(i => bounds!.InRange(i.Term, ((IrBitVec)i.Shared.Type).Width)),
+        .. sorts.Distinctness(),
+    ];
 
-        foreach ((BoolExpr[] from, Segment segment) in side.Loops.Select(l => ((BoolExpr[])[Reached(side, l.Key, side.Pre(l.Key))], l.Value)).Prepend((Start(translator).ToArray(), side.Entry)))
-        {
-            overflow.Add(Rule([.. from, segment.Formula, segment.Encoder.Overflow], Bad));
-            foreach (SegmentExit exit in segment.Exits.Where(static e => e.Target is not null))
-            {
-                (IReadOnlyList<Expr> terms, IEnumerable<BoolExpr> post) = side.Moved(exit);
-                overflow.Add(Rule([.. from, segment.Formula, exit.Reach, .. post], Reached(side, exit.Target!, terms)));
-            }
-        }
-    }
+    /// <summary>
+    /// A step's premise: the relation of <paramref name="a"/> and <paramref name="b"/> holds of the inputs, the literals and
+    /// the two states; and in a query with bounds, what every state of a bitvector run keeps: <see cref="Start"/>, and each
+    /// bitvector of the two states within its bounds. In the overflow query that holds until an operation first overflows,
+    /// so the first overflow of any run is still derivable; with wrap-around arithmetic it always holds.
+    /// </summary>
+    private BoolExpr[] Premise(Horn system, IrBlockId? a, IrBlockId? b) =>
+    [
+        Atom(system, a, b, old.Pre(a), @new.Pre(b)),
+        .. Kept(system.Bounds),
+        .. old.Bounds(a, system.Bounds),
+        .. @new.Bounds(b, system.Bounds),
+    ];
 
-    private BoolExpr Reached(Cuts side, IrBlockId header, IEnumerable<Expr> state) =>
-        (BoolExpr)context.MkApp(reachable[(side.Side, header)], [.. Carried, .. state]);
+    /// <summary>With <paramref name="bounds"/>, what <see cref="Start"/> assumes; else nothing.</summary>
+    private IEnumerable<BoolExpr> Kept(IntModeTranslator? bounds) => bounds is null ? [] : Start(bounds);
+
+    /// <summary>What makes a segment's run <c>bad</c>: reaching an opaque node, or in the overflow query an overflow.</summary>
+    private static BoolExpr Failure(Segment segment, Horn system) => system.Overflows ? segment.Encoder.Overflow : segment.Encoder.Opaque;
 
     /// <summary>The steps from the pair of cut points <paramref name="a"/> and <paramref name="b"/>, not both exits.</summary>
-    private void EncodeSteps(IrBlockId? a, IrBlockId? b)
+    private void EncodeSteps(Horn system, IrBlockId? a, IrBlockId? b)
     {
-        BoolExpr pre = Atom(a, b, old.Pre(a), @new.Pre(b));
+        BoolExpr[] pre = Premise(system, a, b);
         Segment? oldSegment = a is null ? null : old.Loops[a];
         Segment? newSegment = b is null ? null : @new.Loops[b];
         foreach (SegmentExit oldExit in oldSegment?.Exits ?? [])
         {
             foreach (SegmentExit newExit in newSegment?.Exits.Where(n => n.Continues == oldExit.Continues) ?? [])
             {
-                Step([pre, oldSegment!.Formula, newSegment!.Formula, oldExit.Reach, newExit.Reach], oldExit.Target, newExit.Target, old.Moved(oldExit), @new.Moved(newExit));
+                Step(system, [.. pre, oldSegment!.Formula, newSegment!.Formula, oldExit.Reach, newExit.Reach], oldExit.Target, newExit.Target, old.Moved(oldExit), @new.Moved(newExit));
             }
 
             if (oldExit.Continues || newSegment is null)
             {
                 BoolExpr waits = newSegment is null ? context.MkTrue() : context.MkAnd(newSegment.Formula, context.MkNot(newSegment.Continues));
-                Step([pre, oldSegment!.Formula, oldExit.Reach, waits], oldExit.Target, b, old.Moved(oldExit), (@new.Pre(b), []));
+                Step(system, [.. pre, oldSegment!.Formula, oldExit.Reach, waits], oldExit.Target, b, old.Moved(oldExit), (@new.Pre(b), []));
             }
         }
 
         foreach (SegmentExit newExit in newSegment?.Exits.Where(n => n.Continues || oldSegment is null) ?? [])
         {
             BoolExpr waits = oldSegment is null ? context.MkTrue() : context.MkAnd(oldSegment.Formula, context.MkNot(oldSegment.Continues));
-            Step([pre, newSegment!.Formula, newExit.Reach, waits], a, newExit.Target, (old.Pre(a), []), @new.Moved(newExit));
+            Step(system, [.. pre, newSegment!.Formula, newExit.Reach, waits], a, newExit.Target, (old.Pre(a), []), @new.Moved(newExit));
         }
 
         foreach (Segment segment in new[] { oldSegment, newSegment }.OfType<Segment>())
         {
-            divergence.Add(Rule([pre, segment.Formula, segment.Encoder.Opaque], Bad));
+            system.Rules.Add(Rule([.. pre, segment.Formula, Failure(segment, system)], Bad));
         }
     }
 
-    private void Step(BoolExpr[] body, IrBlockId? a, IrBlockId? b, (IReadOnlyList<Expr> Terms, IEnumerable<BoolExpr> Post) oldState, (IReadOnlyList<Expr> Terms, IEnumerable<BoolExpr> Post) newState) =>
-        divergence.Add(Rule([.. body, .. oldState.Post, .. newState.Post], Atom(a, b, oldState.Terms, newState.Terms)));
+    private void Step(Horn system, BoolExpr[] body, IrBlockId? a, IrBlockId? b, (IReadOnlyList<Expr> Terms, IEnumerable<BoolExpr> Post) oldState, (IReadOnlyList<Expr> Terms, IEnumerable<BoolExpr> Post) newState) =>
+        system.Rules.Add(Rule([.. body, .. oldState.Post, .. newState.Post], Atom(system, a, b, oldState.Terms, newState.Terms)));
 
     /// <summary>
     /// Some observable differs, as <see cref="ProductEncoder"/> compares them: whether each returned, the values when both
@@ -421,6 +474,24 @@ internal sealed class ChcEncoder
     /// otherwise nothing of use and the reason it gave up.
     /// </summary>
     public sealed record ChcAnswer(Status Status, Expr Answer, string Reason);
+
+    /// <summary>
+    /// One query's relations and rules: with <paramref name="Bounds"/> when its premises keep bitvectors within bounds
+    /// (<see cref="Premise"/>), and <paramref name="Overflows"/> for the overflow query. Outside the integer mode the
+    /// overflow query has no rule, since no operation is read as an integer that can overflow.
+    /// </summary>
+    private sealed record Horn(IntModeTranslator? Bounds, bool Overflows)
+    {
+        public Dictionary<(IrBlockId? Old, IrBlockId? New), FuncDecl> Relations { get; } = [];
+
+        public List<BoolExpr> Rules { get; } = [];
+
+        /// <summary>Whether some relation holds a map, which Spacer's quantified lemma generator helps with.</summary>
+        public bool HasMaps => Relations.Values.Any(static r => r.Domain.Any(static s => s is ArraySort));
+    }
+
+    /// <summary>A relation's definition in a query's answer: its arguments as the bound variables its body names them by, and the body.</summary>
+    private sealed record Definition(FuncDecl Relation, Expr[] Arguments, Expr Body);
 
     /// <summary>
     /// A segment: its encoding, its conjoined assertions, its exits and whether it returns to the header it starts at.
@@ -482,7 +553,9 @@ internal sealed class ChcEncoder
 
         public IrProcedure Procedure { get; }
 
-        public Side Side => side;
+        /// <summary>The IR type of each observable of the exit state, in order; the exception id has none.</summary>
+        private IEnumerable<IrType?> ExitTypes =>
+            [new IrBool(), .. Procedure.ReturnType is { } type ? [type] : Array.Empty<IrType?>(), null, .. byRef.Select(static p => (IrType?)p.Var.Type)];
 
         /// <summary>The headers in pre-order, then the exit (null).</summary>
         public ImmutableArray<IrBlockId?> Points { get; }
@@ -498,6 +571,16 @@ internal sealed class ChcEncoder
         /// <summary>The state at cut point <paramref name="point"/> as a relation's argument in a step's premise.</summary>
         public ImmutableArray<Expr> Pre(IrBlockId? point) =>
             point is null ? [.. exitPart.Select(p => chc.context.MkConst($"pre.{Prefix}.{p.Name}", p.Sort))] : pre[point];
+
+        /// <summary>The IR type of each term of the state at <paramref name="point"/>; the exception id has none.</summary>
+        public IEnumerable<IrType?> Types(IrBlockId? point) => point is null ? ExitTypes : parts[point].Select(static v => (IrType?)v.Type);
+
+        /// <summary>With <paramref name="bounds"/>, each bitvector of the state at <paramref name="point"/> within its bounds; else nothing.</summary>
+        public IEnumerable<BoolExpr> Bounds(IrBlockId? point, IntModeTranslator? bounds) =>
+            Pre(point)
+                .Zip(Types(point))
+                .Where(p => bounds is not null && p.Second is IrBitVec)
+                .Select(p => bounds!.InRange(p.First, ((IrBitVec)p.Second!).Width));
 
         /// <summary>The state at <paramref name="point"/> named for an invariant: <c>old.&lt;variable&gt;</c>, or the observable's name at the exit.</summary>
         public IEnumerable<Expr> Named(IrBlockId? point) =>

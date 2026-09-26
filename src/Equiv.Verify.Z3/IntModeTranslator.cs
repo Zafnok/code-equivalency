@@ -19,8 +19,13 @@ namespace Equiv.Verify.Z3;
 /// and a proof over the integers is a proof over the bitvectors. A derivation over the integers may use a value no
 /// bitvector run computes, which is why rung 4 replays every derivation. Unsigned comparisons and conversions stay exact
 /// by reading a negative integer as itself plus <c>2^w</c>.
+/// <para>
+/// With <paramref name="wraps"/> an exact operation instead wraps its result around into bounds, as the bitvector
+/// operation does, and never overflows: every bitvector run is then an integer run with no proof of overflow-freedom, and
+/// rung 4 checks an invariant Spacer found over the plain integers against this reading.
+/// </para>
 /// </summary>
-internal sealed class IntModeTranslator(Context context)
+internal sealed class IntModeTranslator(Context context, bool wraps = false)
 {
     /// <summary>The sort of every bitvector, whatever its width.</summary>
     public Sort Sort => context.IntSort;
@@ -103,7 +108,9 @@ internal sealed class IntModeTranslator(Context context)
 
     private IntNum Int(BigInteger value) => context.MkInt(value.ToString(CultureInfo.InvariantCulture));
 
-    private (Expr Value, BoolExpr? Overflow) Checked(ArithExpr value, int width) => (value, context.MkNot(InRange(value, width)));
+    /// <summary>An exact result: out of bounds it overflows, or wrapped around into bounds it is the bitvector's value.</summary>
+    private (Expr Value, BoolExpr? Overflow) Checked(ArithExpr value, int width) =>
+        wraps ? (Signed(context.MkMod((IntExpr)value, Int(BigInteger.One << width)), width), null) : (value, context.MkNot(InRange(value, width)));
 
     /// <summary>C#'s division, which truncates toward zero; SMT-LIB's <c>div</c> is Euclidean.</summary>
     private IntExpr TruncatedDivision(IntExpr a, IntExpr b) =>
