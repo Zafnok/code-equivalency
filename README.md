@@ -143,7 +143,7 @@ commercial licence, open an issue. Reasoning and the dependency licence policy a
 equiv compare --legacy <path> --modern <path>
               [--out equiv.sarif] [--baseline <previous.sarif>]
               [--config equiv.config.json] [--fail-on divergent|unknown] [--dry-run]
-              [--lower-only]
+              [--lower-only] [--chc-int-mode true|false]
 ```
 
 `--dry-run` routes and loads both sides, prints the analysed line counts, and stops without

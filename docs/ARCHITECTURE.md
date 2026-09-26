@@ -77,7 +77,9 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 
 - `equiv compare --legacy <path.sln> --modern <path.sln> [--baseline prev.sarif]
   [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
-  [--dry-run] [--lower-only]`.
+  [--dry-run] [--lower-only] [--chc-int-mode true|false]`.
+- `--chc-int-mode` (default true) lets loop-ladder rung 4 ask Z3 Spacer over the integers first
+  (VERIFICATION-MODEL.md section 5.1); `false` keeps it to the bitvectors.
 - Every run prints the analysed line count of each codebase and writes both to
   `run.properties.analysedLinesOfCode`: two numbers, never a total (README "Licence"). The frontend
   counts them from the files it loaded. `--dry-run` loads both sides, prints the route and the
