@@ -887,6 +887,39 @@ public sealed class CompareCommandTests
         Assert.Contains("modern: unbound at a.cs 3:5; modern: unbound at a.cs 4:1", result.Message.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket M4-006 acceptance criterion 2: a pair the frontend marked <c>async-mismatch</c> is Unknown with that detail, both
+    /// marks as related locations, without calling the backend, even when the bound fingerprints agree.
+    /// </summary>
+    [Fact]
+    public void AsyncMismatchIsUnknown()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        BodyFingerprint fingerprint = new("same", RuntimeSensitive: false);
+        ProcedurePair pair = Pair(PairIdentity) with
+        {
+            OldBody = MismatchBody(PairIdentity, new SourceSpan("old.cs", 7, 20, 7, 21)),
+            NewBody = MismatchBody(PairIdentity, new SourceSpan("new.cs", 9, 32, 9, 33)),
+            OldFingerprint = fingerprint,
+            NewFingerprint = fingerprint,
+        };
+        FakeBackend backend = new(NoVerdicts);
+        InMemoryReportSink sink = new();
+
+        int exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink);
+
+        Assert.Equal(ExitCodes.UnknownPresent, exitCode);
+        Assert.Empty(backend.Calls);
+        Result result = Assert.Single(sink.Log!.Runs[0].Results);
+        Assert.Equal("EQ003", result.RuleId);
+        Assert.Equal("opaque", result.GetProperty<string>("unknownReason"));
+        Assert.Contains("async-mismatch", result.Message.Text, StringComparison.Ordinal);
+        Assert.Equal(["old.cs", "new.cs"], result.RelatedLocations.Select(static l => l.PhysicalLocation.ArtifactLocation.Uri.OriginalString), StringComparer.Ordinal);
+    }
+
     /// <summary>Ticket M3-009 acceptance criterion 4: a pair's applied catalogue entries reach its SARIF result, whatever the verdict.</summary>
     [Fact]
     public void ThePairsEquivalencesAppliedReachTheResult()
@@ -1260,6 +1293,13 @@ public sealed class CompareCommandTests
         IrProcedure body = IrText.Parse($"proc \"{identity}\" () entry B0\nB0:\n{calls}  ret\n");
         return new ProcedurePair(new ProcedureIdentity(identity), new ProcedureIdentity(identity), body, body);
     }
+
+    private static IrProcedure MismatchBody(ProcedureIdentity identity, SourceSpan span) => new(
+        identity,
+        [],
+        ReturnType: null,
+        [new IrBlock(new IrBlockId(0), [new IrOpaque(Target: null, Unknown.AsyncMismatchReason, span) { WholeBody = true }], new IrReturn(Value: null, []))],
+        new IrBlockId(0));
 
     private static IrProcedure UnboundBody(ProcedureIdentity identity) => new(
         identity,

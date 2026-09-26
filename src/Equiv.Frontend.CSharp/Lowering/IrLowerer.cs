@@ -137,16 +137,21 @@ internal sealed class IrLowerer
         IMethodSymbol method, IOperation body, ImmutableArray<ControlFlowGraph> graphs, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue)
     {
         SourceSpan span = Span(body.Syntax);
-        // `async` is checked first: an `await`'s state machine is not modelled (ticket M4-006), and
-        // checking it ahead of the other whole-body cases keeps an async method from being classified
-        // by whichever of those constructs its body happens to also contain.
+        // An `async` method is its synchronous body, each `await` a call (ticket M4-006). An iterator is checked first: its
+        // state machine is not modelled, whether or not it is also async. `await foreach` and `await using` are only looked
+        // for in an async method, so an async lambda in a sync one leaves it alone; their desugaring awaits calls the CFG
+        // does not show.
         // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles, and
         // desugars `foreach` and `using` into calls, conversions and a `finally` (ticket M4-001). `lock`
         // stays whole-body opaque: its desugaring passes `ref` to `Monitor.Enter` (ticket M4-003).
         // A whole-body opaque points at the first offending construct, not the body (ADR 0029 decision 3).
         (string Reason, SourceSpan Span)? wholeBody = body switch
         {
-            _ when method.IsAsync => ("async", span),
+            _ when method.IsIterator => ("iterator", Span(body.Descendants().First(static o => o.Kind is OperationKind.YieldReturn or OperationKind.YieldBreak).Syntax)),
+            _ when method.IsAsync && body.Descendants().FirstOrDefault(static o => o is IForEachLoopOperation { IsAsynchronous: true }) is { } loop =>
+                ("await-foreach", Span(loop.Syntax)),
+            _ when method.IsAsync && body.Descendants().FirstOrDefault(static o => o is IUsingOperation { IsAsynchronous: true } or IUsingDeclarationOperation { IsAsynchronous: true }) is { } @using =>
+                ("await-using", Span(@using.Syntax)),
             _ when body.Descendants().FirstOrDefault(static o => o is ILockOperation) is { } @lock => ("lock", Span(@lock.Syntax)),
             _ => null,
         };
@@ -215,6 +220,8 @@ internal sealed class IrLowerer
     /// <summary>
     /// The C# parameters. One declared <c>@this</c> has the name <c>this</c>, which is the receiver's (ADR 0021), so it is
     /// spelled <c>$this</c>; no C# identifier contains <c>$</c>, so that name is never another parameter's (ticket M3-007).
+    /// An <c>async</c> method that is not an iterator returns its task's result: the type argument of a generic task-like
+    /// type, and nothing for <c>Task</c>, <c>ValueTask</c> or <c>void</c> (ticket M4-006).
     /// </summary>
     private static (ImmutableArray<IrParameter> Parameters, IrType? ReturnType) Signature(IMethodSymbol method, Func<string, string> sorts) => (
         [.. method.Parameters.Select(p => new IrParameter(
@@ -225,7 +232,13 @@ internal sealed class IrLowerer
                 RefKind.Out => IrParameterKind.Out,
                 _ => IrParameterKind.In,
             }))],
-        method.ReturnsVoid ? null : TypeMapper.Map(method.ReturnType, sorts));
+        (method, method.ReturnType) switch
+        {
+            ({ ReturnsVoid: true }, _) => null,
+            ({ IsAsync: true, IsIterator: false }, INamedTypeSymbol { TypeArguments: [var result] }) => TypeMapper.Map(result, sorts),
+            ({ IsAsync: true, IsIterator: false }, _) => null,
+            (_, var returned) => TypeMapper.Map(returned, sorts),
+        });
 
     /// <summary>
     /// Where <paramref name="syntax"/>'s bound code is erroneous (ADR 0029 decision 2): the span of every compiler error
@@ -259,12 +272,28 @@ internal sealed class IrLowerer
     private static IrProcedure Opaque(IMethodSymbol method, RenameMap renames, Catalogue catalogue, string reason, ImmutableArray<SourceSpan> spans)
     {
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
+        return Opaque(RoslynIdentity.Of(method, renames), parameters, returnType, reason, spans);
+    }
+
+    /// <summary>
+    /// <paramref name="lowered"/>'s signature over one whole-body <see cref="IrOpaque"/> with reason
+    /// <paramref name="reason"/> at <paramref name="span"/>: how the frontend marks both bodies of a pair it decides
+    /// without either one, such as one where exactly one side is <c>async</c> (ticket M4-006).
+    /// </summary>
+    public static IrProcedure Opaque(IrProcedure lowered, string reason, SourceSpan span)
+    {
+        ArgumentNullException.ThrowIfNull(lowered);
+        return Opaque(lowered.Identity, lowered.Parameters, lowered.ReturnType, reason, [span]);
+    }
+
+    private static IrProcedure Opaque(ProcedureIdentity identity, ImmutableArray<IrParameter> parameters, IrType? returnType, string reason, ImmutableArray<SourceSpan> spans)
+    {
         IrVar? value = returnType is null ? null : new IrVar("$0", returnType);
         IrBlock block = new(
             new IrBlockId(0),
             [.. spans[..^1].Select(span => new IrOpaque(Target: null, reason, span) { WholeBody = true }), new IrOpaque(value, reason, spans[^1]) { WholeBody = true }],
             new IrReturn(value, [.. parameters.Where(static p => p.Kind != IrParameterKind.In).Select(static p => new IrOut(p.Var, p.Var))]));
-        return new IrProcedure(RoslynIdentity.Of(method, renames), parameters, returnType, [block], block.Id);
+        return new IrProcedure(identity, parameters, returnType, [block], block.Id);
     }
 
     private static SourceSpan Span(SyntaxNode syntax) => CSharpFrontend.ToSourceSpan(syntax.GetLocation());
@@ -708,6 +737,8 @@ internal sealed class IrLowerer
                 return Step(step, context);
             case IInvocationOperation invocation:
                 return Invoke(invocation, context);
+            case IAwaitOperation awaited:
+                return Await(awaited, context);
             case IObjectCreationOperation creation:
                 return Create(creation, context);
             case IArrayCreationOperation creation:
@@ -1458,6 +1489,30 @@ internal sealed class IrLowerer
         }
 
         return Dispatch(invocation.Instance, callee, Operands(invocation.Instance, invocation.Arguments, context), returns, context);
+    }
+
+    /// <summary>
+    /// <c>await e</c> (ticket M4-006): a call <c>await:&lt;awaiter type&gt;</c> of the awaitable, yielding the awaited value,
+    /// whose <c>threw</c> flag branches as any call's. A reference-typed awaitable whose <c>GetAwaiter</c> is an instance
+    /// method is null-checked first, as a <c>callvirt</c> receiver is (ticket P2-017). An await whose awaiter is not a named
+    /// type, a dynamic one or a type parameter, is opaque with reason <c>Await</c>.
+    /// </summary>
+    private IrVar? Await(IAwaitOperation awaited, LoweringContext context)
+    {
+        AwaitExpressionSyntax syntax = (AwaitExpressionSyntax)awaited.Syntax;
+        if (compilation.GetSemanticModel(syntax.SyntaxTree).GetAwaitExpressionInfo(syntax).GetAwaiterMethod is not { ReturnType: INamedTypeSymbol awaiter } getAwaiter)
+        {
+            return Opaque(awaited, awaited.Kind.ToString(), context);
+        }
+
+        IrVar awaitable = Value(awaited.Operation, context);
+        if (!getAwaiter.IsExtensionMethod && awaited.Operation.Type!.IsReferenceType)
+        {
+            ThrowIfNull(awaited.Operation, awaitable, context);
+        }
+
+        IrType? result = awaited.Type!.SpecialType == SpecialType.System_Void ? null : Map(awaited.Type);
+        return Call(CallIdentityFactory.Await(awaiter, renames, suppressedRuntimeChanges), [awaitable], result, context);
     }
 
     /// <summary>

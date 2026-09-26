@@ -1,0 +1,47 @@
+﻿proc "C::M(int)" (%id "id": bv32, %cast.C_Order.System.Object: map<sort "C+Order", sort "System.Object">, ref %field.C.orders: map<sort "C", sort "C+IOrders">, ref %field.C.served: map<sort "C", bv32>, ref %field.C_Order.Status: map<sort "C+Order", bv32>, %null.C_IOrders: map<sort "C+IOrders", bool>, %null.C_Order: map<sort "C+Order", bool>, %null.System.Object: map<sort "System.Object", bool>, %null.System.Threading.Tasks.Task_1: map<sort "System.Threading.Tasks.Task`1", bool>, %this: sort "C") -> bv32 entry B0
+B0:
+  goto B1
+B1:
+  %$1: sort "C+IOrders" = mapread %field.C.orders, %this
+  %$3: bool = mapread %null.C_IOrders, %$1
+  br %$3, B5, B6
+B2:
+  %$16: bv32 = const bv32 404
+  ret %$16 outs(%field.C.orders = %field.C.orders.34, %field.C.served = %field.C.served.35, %field.C_Order.Status = %field.C_Order.Status.36)
+B3:
+  %$18: bv32 = mapread %field.C.served.35, %this
+  %$19: bv32 = const bv32 1
+  %$20: bv32 = add %$18, %$19
+  %field.C.served.39: map<sort "C", bv32> = mapwrite %field.C.served.35, %this, %$20
+  br %order.isNull.38, B5, B12
+B5:
+  %field.C.orders.43: map<sort "C", sort "C+IOrders"> = phi [B1: %field.C.orders, B8: %field.C.orders.28, B3: %field.C.orders.34]
+  %field.C.served.44: map<sort "C", bv32> = phi [B1: %field.C.served, B8: %field.C.served.29, B3: %field.C.served.39]
+  %field.C_Order.Status.45: map<sort "C+Order", bv32> = phi [B1: %field.C_Order.Status, B8: %field.C_Order.Status.30, B3: %field.C_Order.Status.36]
+  throw "System.NullReferenceException" outs(%field.C.orders = %field.C.orders.43, %field.C.served = %field.C.served.44, %field.C_Order.Status = %field.C_Order.Status.45)
+B6:
+  %$4: sort "System.Threading.Tasks.Task`1" = call "C.IOrders::FindAsync(int)"(%$1, %id) threw %$5: bool heap("field.C.orders" %field.C.orders -> %field.C.orders.28: map<sort "C", sort "C+IOrders">, "field.C.served" %field.C.served -> %field.C.served.29: map<sort "C", bv32>, "field.C_Order.Status" %field.C_Order.Status -> %field.C_Order.Status.30: map<sort "C+Order", bv32>)
+  br %$5, B7, B8
+B7:
+  %field.C.orders.40: map<sort "C", sort "C+IOrders"> = phi [B6: %field.C.orders.28, B9: %field.C.orders.31, B10: %field.C.orders.34]
+  %field.C.served.41: map<sort "C", bv32> = phi [B6: %field.C.served.29, B9: %field.C.served.32, B10: %field.C.served.35]
+  %field.C_Order.Status.42: map<sort "C+Order", bv32> = phi [B6: %field.C_Order.Status.30, B9: %field.C_Order.Status.33, B10: %field.C_Order.Status.36]
+  throw "System.Exception" outs(%field.C.orders = %field.C.orders.40, %field.C.served = %field.C.served.41, %field.C_Order.Status = %field.C_Order.Status.42)
+B8:
+  %$6: bool = const bool false
+  %$7: bool = mapread %null.System.Threading.Tasks.Task_1, %$4
+  br %$7, B5, B9
+B9:
+  %$8: sort "System.Runtime.CompilerServices.ConfiguredTaskAwaitable`1" = call "System.Threading.Tasks.Task`1::ConfigureAwait(bool)<C.Order>"(%$4, %$6) threw %$9: bool heap("field.C.orders" %field.C.orders.28 -> %field.C.orders.31: map<sort "C", sort "C+IOrders">, "field.C.served" %field.C.served.29 -> %field.C.served.32: map<sort "C", bv32>, "field.C_Order.Status" %field.C_Order.Status.30 -> %field.C_Order.Status.33: map<sort "C+Order", bv32>)
+  br %$9, B7, B10
+B10:
+  %order.37 "order": sort "C+Order" = call "await:System.Runtime.CompilerServices.ConfiguredTaskAwaitable`1.ConfiguredTaskAwaiter<C.Order>"(%$8) threw %$11: bool heap("field.C.orders" %field.C.orders.31 -> %field.C.orders.34: map<sort "C", sort "C+IOrders">, "field.C.served" %field.C.served.32 -> %field.C.served.35: map<sort "C", bv32>, "field.C_Order.Status" %field.C_Order.Status.33 -> %field.C_Order.Status.36: map<sort "C+Order", bv32>)
+  br %$11, B7, B11
+B11:
+  %order.isNull.38 "order": bool = mapread %null.C_Order, %order.37
+  %$14: sort "System.Object" = mapread %cast.C_Order.System.Object, %order.37
+  %$15: bool = mapread %null.System.Object, %$14
+  br %$15, B2, B3
+B12:
+  %$26: bv32 = mapread %field.C_Order.Status.36, %order.37
+  ret %$26 outs(%field.C.orders = %field.C.orders.34, %field.C.served = %field.C.served.39, %field.C_Order.Status = %field.C_Order.Status.36)

@@ -156,6 +156,25 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   Throwing any other expression is `IrOpaque` with reason `Throw`, because the thrown object's
   dynamic type is not known statically, and `throw;` is `IrOpaque` with reason `rethrow`.
 
+An `async` method (ticket M4-006) is lowered as the synchronous body its CFG already is, over the original
+operations, never over the compiler's state machine. `await e` is `IrCall(await:<awaiter type>, [e])`: its result is
+the awaited value and its `threw` flag branches as any call's. The awaiter type is spelled as a member identity spells
+its declaring type, with its type arguments as a generic callee's; a reference-typed `e` whose `GetAwaiter` is an
+instance method is null-checked first, as a `callvirt` receiver is. The procedure returns the task's result: the type
+argument of a generic task-like return type, nothing for `Task`, `ValueTask` or `void`. Why this is sound for a pair
+where both sides are `async`: every observable of section 1 happens in the same order whether or not the body is
+suspended at an `await` (the heap is threaded through the call, so what other code does meanwhile is a havoc both sides
+share), and an exception thrown anywhere in the body, before the first `await` or after one, is caught by the method's
+builder and stored in the returned task as it is, faulted (cancelled for `OperationCanceledException`), the same way on
+both sides; so a throw of type `T` in the IR stands for exactly the task a caller observes. Two awaits are two calls at
+different trace positions (ADR 0018), so awaiting one task twice is not forced to yield one value, and a real awaitable
+that is not idempotent is modelled. `ConfigureAwait(false)` is an ordinary call whose result is what is awaited. A pair
+where exactly one side is `async` is Unknown with detail `async-mismatch`, without the solver: a synchronous method
+throws to its caller at the call, an `async` one into its task, which the caller sees only when it awaits, so their
+exception timing differs. Iterators (`yield`, async or not), `await foreach` and `await using` stay whole-body opaque with
+reasons `iterator`, `await-foreach` and `await-using`: their desugaring is a state machine or awaits calls the CFG does
+not show.
+
 Floating-point, `decimal` and user-defined operators (ADR 0025, ticket M4-002) are `IrPure`
 applications of the functions one frontend catalogue lists: `f32.<op>` and `f64.<op>` (arithmetic,
 negation and comparisons, which never throw; `==` is `f64.eq`, not an equality of sort elements, since
