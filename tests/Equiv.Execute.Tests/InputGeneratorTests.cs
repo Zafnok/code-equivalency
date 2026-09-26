@@ -39,10 +39,14 @@ public sealed class InputGeneratorTests
         List<string> singles = Column(ExecutionTypeKind.Binary32, 11);
         List<string> doubles = Column(ExecutionTypeKind.Binary64, 12);
 
-        Assert.Equal(["\"0x00000000\"", "\"0x80000000\"", "\"0x3F800000\""], singles.Take(3), StringComparer.Ordinal);
-        Assert.Contains("\"0x7F800000\"", singles, StringComparer.Ordinal);
-        Assert.Contains("\"0x3FD3333333333334\"", doubles, StringComparer.Ordinal);
-        Assert.Contains("\"0x3FB999999999999A\"", doubles, StringComparer.Ordinal);
+        Assert.Equal(
+            ["00000000", "80000000", "3F800000", "BF800000", "3DCCCCCD", "FFC00000", "7F800000", "FF800000", "7F7FFFFF", "FF7FFFFF", "00000001"],
+            singles.Select(static s => s[3..^1]),
+            StringComparer.Ordinal);
+        Assert.Equal(
+            ["0000000000000000", "8000000000000000", "3FF0000000000000", "BFF0000000000000", "3FB999999999999A", "3FD3333333333334", "FFF8000000000000", "7FF0000000000000", "FFF0000000000000", "7FEFFFFFFFFFFFFF", "FFEFFFFFFFFFFFFF", "0000000000000001"],
+            doubles.Select(static d => d[3..^1]),
+            StringComparer.Ordinal);
     }
 
     [Fact]
@@ -50,7 +54,34 @@ public sealed class InputGeneratorTests
     {
         List<string> decimals = Column(ExecutionTypeKind.DecimalNumber, 7);
 
-        Assert.Equal(["[0,0,0,0]", "[1,0,0,0]", "[1,0,0,-2147483648]", "[1,0,0,65536]", "[10,0,0,65536]"], decimals.Take(5), StringComparer.Ordinal);
+        Assert.Equal(
+            ["[0,0,0,0]", "[1,0,0,0]", "[1,0,0,-2147483648]", "[1,0,0,65536]", "[10,0,0,65536]", "[-1,-1,-1,0]", "[-1,-1,-1,-2147483648]"],
+            decimals,
+            StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void RandomDecimalsHaveEitherSignAndAnyValidScale()
+    {
+        List<decimal> decimals = [.. Column(ExecutionTypeKind.DecimalNumber, 200).Skip(7).Select(static v => new decimal(Bits(v)))];
+
+        Assert.Contains(decimals, static m => m < 0);
+        Assert.Contains(decimals, static m => m > 0);
+        Assert.True(decimals.Select(static m => m.Scale).Distinct().Skip(10).Any());
+    }
+
+    [Fact]
+    public void RandomStringsMixPrintableAsciiWithEdgeCharactersUpToEightLong()
+    {
+        List<string> strings = [.. Column(ExecutionTypeKind.Text, 300).Skip(10).Select(Unescape)];
+
+        Assert.All(strings, static s => Assert.InRange(s.Length, 0, 8));
+        Assert.Contains(strings, static s => s.Length == 8);
+        Assert.Contains(strings, static s => s.Length == 0);
+        Assert.All(strings.SelectMany(static s => s), static c => Assert.True(c is >= ' ' and <= '~' || EdgeCharacters.Contains(c), ((int)c).ToString(CultureInfo.InvariantCulture)));
+        Assert.Contains(strings.SelectMany(static s => s), static c => c == '~');
+        Assert.Contains(strings.SelectMany(static s => s), static c => c == ' ');
+        Assert.Contains(strings.SelectMany(static s => s), static c => c > '~');
     }
 
     [Fact]
@@ -64,8 +95,13 @@ public sealed class InputGeneratorTests
             Assert.True(values.Distinct(StringComparer.Ordinal).Skip(20).Any(), kind.ToString());
         }
 
-        Assert.All(Column(ExecutionTypeKind.Binary32, 100), static v => Assert.Matches("^\"0x[0-9A-F]{8}\"$", v));
-        Assert.All(Column(ExecutionTypeKind.Binary64, 100), static v => Assert.Matches("^\"0x[0-9A-F]{16}\"$", v));
+        foreach ((ExecutionTypeKind kind, string pattern) in new[] { (ExecutionTypeKind.Binary32, "^\"0x[0-9A-F]{8}\"$"), (ExecutionTypeKind.Binary64, "^\"0x[0-9A-F]{16}\"$") })
+        {
+            List<string> values = Column(kind, 100);
+            Assert.All(values, v => Assert.Matches(pattern, v));
+            Assert.True(values.Distinct(StringComparer.Ordinal).Skip(80).Any(), kind.ToString());
+        }
+
         Assert.All(Column(ExecutionTypeKind.DecimalNumber, 100).Skip(7), static v => Assert.InRange(new decimal(Bits(v)), decimal.MinValue, decimal.MaxValue));
         Assert.All(Column(ExecutionTypeKind.Text, 100).Skip(10), static v => Assert.Matches("^\"[ -~]*\"$", v));
     }
@@ -121,6 +157,32 @@ public sealed class InputGeneratorTests
 
         Assert.Equal("System.DateTime", exception.ActualValue);
         Assert.Throws<ArgumentNullException>(() => InputGenerator.Generate(null!, 0, 1));
+    }
+
+    private static readonly char[] EdgeCharacters = ['ß', 'æ', 'é', 'İ', 'ı', '́', '̈', '\uD800', '\uDC00'];
+
+    /// <summary>Undoes <see cref="JsonText.String"/>, whose only escapes are <c>\"</c>, <c>\\</c> and <c>\uXXXX</c>.</summary>
+    private static string Unescape(string json)
+    {
+        System.Text.StringBuilder text = new();
+        for (int i = 1; i < json.Length - 1; i++)
+        {
+            if (json[i] != '\\')
+            {
+                text.Append(json[i]);
+            }
+            else if (json[++i] == 'u')
+            {
+                text.Append((char)int.Parse(json.AsSpan(i + 1, 4), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture));
+                i += 4;
+            }
+            else
+            {
+                text.Append(json[i]);
+            }
+        }
+
+        return text.ToString();
     }
 
     private static int[] Bits(string json) => [.. json.Trim('[', ']').Split(',').Select(static b => int.Parse(b, CultureInfo.InvariantCulture))];

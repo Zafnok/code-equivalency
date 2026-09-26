@@ -77,6 +77,7 @@ public sealed class DriverRunnerTests
             "[\"NotComparable\",\"System.DateTime\"]",
             "[\"NotConstructible\",\"System.Globalization.CultureNotFoundException\"]",
             "garbage",
+            "[\"Returned\",1",
         ];
         FakeHost host = new((_, _, line) => answers[int.Parse(line[^2..^1], System.Globalization.CultureInfo.InvariantCulture)]);
         ExecutionRequest request = new(new CallIdentity("M()"), [.. Enumerable.Range(0, answers.Length).Select(static i => new ExecutionInput([i.ToString(CultureInfo.InvariantCulture)]))], ["invariant"]);
@@ -90,6 +91,7 @@ public sealed class DriverRunnerTests
                 (OutcomeKind.NotComparable, "\"System.DateTime\""),
                 (OutcomeKind.NotConstructible, "\"System.Globalization.CultureNotFoundException\""),
                 (OutcomeKind.NotComparable, "\"malformed: garbage\""),
+                (OutcomeKind.NotComparable, "\"malformed: [\\\"Returned\\\",1\""),
             ],
             runs.Modern1.Select(static o => (o.Kind, o.Canonical)));
         Assert.Equal(["Returned", "Threw", "NotComparable", "NotConstructible"], new[] { OutcomeKind.Returned, OutcomeKind.Threw, OutcomeKind.NotComparable, OutcomeKind.NotConstructible }.Select(OutcomeLine.Name), StringComparer.Ordinal);

@@ -46,7 +46,7 @@ internal static class DriverSource
                 ? $"Returned({canonical})"
                 : $"NotComparable({SymbolDisplay.FormatLiteral(result.ToDisplayString(), quote: true)})";
         return Template
-            .Replace("/*DECLARATIONS*/", string.Join("\n        ", declarations), StringComparison.Ordinal)
+            .Replace("/*DECLARATIONS*/", string.Concat(declarations), StringComparison.Ordinal)
             .Replace("/*RESULT*/", declareResult, StringComparison.Ordinal)
             .Replace("/*CALL*/", invoke, StringComparison.Ordinal)
             .Replace("/*ANSWER*/", answer, StringComparison.Ordinal);

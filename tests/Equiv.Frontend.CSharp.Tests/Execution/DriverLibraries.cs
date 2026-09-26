@@ -12,8 +12,8 @@ namespace Equiv.Frontend.CSharp.Tests.Execution;
 
 /// <summary>
 /// A <see cref="DriverFactory"/> over the test host's runtime assemblies plus a small library, <c>Odd</c>, built once into
-/// the test output folder in a legacy and a modern version: the modern one adds <c>Small.C</c> and
-/// <c>Members.OnlyModern()</c>.
+/// the test output folder in a legacy and a modern version: the legacy one alone has <c>Members.OnlyLegacy()</c>, the
+/// modern one alone <c>Small.C</c> and <c>Members.OnlyModern()</c>.
 /// </summary>
 internal static class DriverLibraries
 {
@@ -24,6 +24,9 @@ internal static class DriverLibraries
         {
             public enum Small : byte { A = 1, B = 2, /*MODERN*/ }
             public enum Signed : long { Minus = -1, Zero = 0 }
+            public enum Wide16 : ushort { A }
+            public enum Wide32 : uint { A }
+            public enum Wide64 : ulong { A }
 
             public static class Members
             {
@@ -59,6 +62,7 @@ internal static class DriverLibraries
                 public static T Generic<T>(T x) => x;
                 [System.Obsolete("gone", true)] public static int Gone() => 0;
                 internal static int Internal() => 0;
+                public static int Widths(Wide16 a, Wide32 b, Wide64 c) => 0;
                 /*ONLYMODERN*/
             }
 
@@ -77,6 +81,8 @@ internal static class DriverLibraries
             public class Outer { public class Inner { public static int X() => 1; } }
             internal class Hidden { public class Inner { public static int X() => 1; } }
         }
+
+        public class Global { public class Nested { public static int Z() => 1; } }
         """;
 
     private static readonly Lazy<DriverFactory> Shared = new(Build);
@@ -101,7 +107,7 @@ internal static class DriverLibraries
     private static DriverFactory Build()
     {
         IReadOnlyList<string> runtime = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
-        string legacy = Library("legacy", Odd, runtime);
+        string legacy = Library("legacy", Odd.Replace("/*ONLYMODERN*/", "public static int OnlyLegacy() => 0;", StringComparison.Ordinal), runtime);
         string modern = Library(
             "modern",
             Odd.Replace("/*MODERN*/", "C = 3", StringComparison.Ordinal).Replace("/*ONLYMODERN*/", "public static int OnlyModern() => 0;", StringComparison.Ordinal),

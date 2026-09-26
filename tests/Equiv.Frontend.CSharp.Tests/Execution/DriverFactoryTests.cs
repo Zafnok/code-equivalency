@@ -79,14 +79,66 @@ public sealed class DriverFactoryTests
 
     [Theory]
     [InlineData("Odd.Members::OnlyModern()")]
+    [InlineData("Odd.Members::OnlyLegacy()")]
     [InlineData("Odd.Members::Internal()")]
     [InlineData("Odd.Hidden.Inner::X()")]
     [InlineData("Odd.Nope::X()")]
     [InlineData("Odd.Members")]
     public void OnlyPublicMembersOnBothRuntimesResolve(string member) => Assert.Empty(Factory.Resolve(member));
 
+    [Theory]
+    [InlineData("Odd.Outer.Inner::X()")]
+    [InlineData("Global.Nested::Z()")]
+    public void ANestedTypeResolves(string member) => Assert.Empty(Single(member).NotConstructible);
+
+    [Theory]
+    [InlineData("Odd.Members::B()", "Returned(W.B(r))")]
+    [InlineData("Odd.Members::S8()", "Returned(W.I(r))")]
+    [InlineData("Odd.Members::S16()", "Returned(W.I(r))")]
+    [InlineData("Odd.Members::S32()", "Returned(W.I(r))")]
+    [InlineData("Odd.Members::S64()", "Returned(W.I(r))")]
+    [InlineData("Odd.Members::U8()", "Returned(W.U(r))")]
+    [InlineData("Odd.Members::U16()", "Returned(W.U(r))")]
+    [InlineData("Odd.Members::U32()", "Returned(W.U(r))")]
+    [InlineData("Odd.Members::U64()", "Returned(W.U(r))")]
+    [InlineData("Odd.Members::C()", "Returned(W.U(r))")]
+    [InlineData("Odd.Members::F()", "Returned(W.F(r))")]
+    [InlineData("Odd.Members::D()", "Returned(W.D(r))")]
+    [InlineData("Odd.Members::M()", "Returned(W.M(r))")]
+    [InlineData("Odd.Members::When()", "NotComparable(\"System.DateTime\")")]
+    public void EachPrimitiveReturnHasItsCanonicalWriter(string member, string answer) =>
+        Assert.Contains($"return {answer};", DriverLibraries.Source(member), StringComparison.Ordinal);
+
     [Fact]
-    public void ANestedTypeResolves() => Assert.Empty(Single("Odd.Outer.Inner::X()").NotConstructible);
+    public void EveryUnsignedEnumIsDecodedUnsigned()
+    {
+        string source = DriverLibraries.Source("Odd.Members::Widths(Odd.Wide16,Odd.Wide32,Odd.Wide64)");
+
+        Assert.Contains("global::Odd.Wide16 p0 = (global::Odd.Wide16)R.U(a[1]);", source, StringComparison.Ordinal);
+        Assert.Contains("global::Odd.Wide32 p1 = (global::Odd.Wide32)R.U(a[2]);", source, StringComparison.Ordinal);
+        Assert.Contains("global::Odd.Wide64 p2 = (global::Odd.Wide64)R.U(a[3]);", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheSameMemberCompilesToTheSameBytes()
+    {
+        string first = Directory.CreateTempSubdirectory("driver-factory-").FullName;
+        string second = Directory.CreateTempSubdirectory("driver-factory-").FullName;
+        try
+        {
+            ExecutionRequest request = new(new CallIdentity("System.String::IndexOf(string)"), [], []);
+            ExecutionDrivers a = Factory.Create(request, first);
+            ExecutionDrivers b = Factory.Create(request, second);
+
+            Assert.Equal(File.ReadAllBytes(a.Legacy), File.ReadAllBytes(b.Legacy));
+            Assert.Equal(File.ReadAllBytes(a.Modern), File.ReadAllBytes(b.Modern));
+        }
+        finally
+        {
+            Directory.Delete(first, recursive: true);
+            Directory.Delete(second, recursive: true);
+        }
+    }
 
     [Theory]
     [InlineData(DriverLibraries.AllKinds)]
@@ -164,6 +216,7 @@ public sealed class DriverFactoryTests
     [Theory]
     [InlineData("Odd.Members::Gone()", "does not compile: ")]
     [InlineData("Odd.Members::OnlyModern()", "Odd.Members::OnlyModern() is not a public member on .NET Framework 4.8")]
+    [InlineData("Odd.Members::OnlyLegacy()", "Odd.Members::OnlyLegacy() is not a public member on .NET 10")]
     [InlineData("System.DateTime::AddDays(double)", "no input can be built for System.DateTime")]
     public void ADriverThatCannotBeBuiltThrows(string member, string message)
     {
@@ -188,6 +241,9 @@ public sealed class DriverFactoryTests
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => factory.Resolve("System.String::ToUpper("));
 
         Assert.Equal("no .NET Framework 4.8 reference assemblies are installed", exception.Message);
+        string[] runtime = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
+        DriverFactory noModern = new(() => new DriverReferences(runtime, []));
+        Assert.Equal("no .NET 10 reference assemblies are installed", Assert.Throws<InvalidOperationException>(() => noModern.Resolve("System.String::ToUpper(")).Message);
         Assert.Throws<ArgumentNullException>(() => factory.Resolve(null!));
         Assert.Throws<ArgumentNullException>(() => factory.Create(null!, "."));
     }

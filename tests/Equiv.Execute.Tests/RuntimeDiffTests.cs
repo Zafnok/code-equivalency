@@ -76,17 +76,39 @@ public sealed class RuntimeDiffTests : IDisposable
         Assert.Equal(3, root.GetProperty("cases").GetInt32());
         Assert.Equal(["invariant", "en-US", "tr-TR", "de-DE", "ja-JP"], root.GetProperty("cultures").EnumerateArray().Select(static c => c.GetString()), StringComparer.Ordinal);
         JsonElement overload = Assert.Single(root.GetProperty("overloads").EnumerateArray());
+        Assert.Equal("System.String::IndexOf(string)", overload.GetProperty("member").GetString());
         Assert.Equal(15, overload.GetProperty("casesRun").GetInt32());
         Assert.Equal(15, overload.GetProperty("divergent").GetInt32());
         Assert.Equal(0, overload.GetProperty("notComparable").GetInt32());
-        Assert.Equal(0, overload.GetProperty("nondeterministic").GetProperty("modern").GetInt32());
+        Assert.Empty(overload.GetProperty("notConstructible").EnumerateArray());
+        JsonElement nondeterministic = overload.GetProperty("nondeterministic");
+        Assert.Equal((0, 0, 0), (nondeterministic.GetProperty("legacy").GetInt32(), nondeterministic.GetProperty("modern").GetInt32(), nondeterministic.GetProperty("both").GetInt32()));
+        Assert.Equal(RuntimeComparison.MaxWitnesses, overload.GetProperty("witnesses").GetArrayLength());
         JsonElement witness = overload.GetProperty("witnesses")[0];
         Assert.Equal(["i", "i"], witness.GetProperty("input").EnumerateArray().Select(static a => a.GetString()), StringComparer.Ordinal);
         Assert.Equal("invariant", witness.GetProperty("culture").GetString());
         Assert.Equal("Returned", witness.GetProperty("legacy").GetProperty("kind").GetString());
         Assert.Equal(1, witness.GetProperty("legacy").GetProperty("value").GetInt32());
         Assert.Equal(-1, witness.GetProperty("modern").GetProperty("value").GetInt32());
-        Assert.Contains("15 cases, 15 divergent", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(
+            ["System.String::IndexOf(string): 15 cases, 15 divergent, nondeterministic legacy 0 modern 0 both 0, 0 not comparable", $"report: {Report}"],
+            output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries),
+            StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void NondeterminismIsCountedPerSideInTheReport()
+    {
+        FakeFactory factory = new([Signature("System.String::GetHashCode()", Parameter(ExecutionTypeKind.Text))]);
+        FakeHost host = new(static (driver, session, _) => driver.EndsWith(".exe", StringComparison.Ordinal) ? "[\"Returned\",7]" : $"[\"Returned\",{(session % 2).ToString(System.Globalization.CultureInfo.InvariantCulture)}]");
+
+        int exit = Run(factory, host, "--member", "System.String::GetHashCode()", "--cases", "1", "--out", Report);
+
+        Assert.Equal(RuntimeDiff.NoDivergence, exit);
+        using JsonDocument report = JsonDocument.Parse(File.ReadAllText(Report));
+        JsonElement nondeterministic = Assert.Single(report.RootElement.GetProperty("overloads").EnumerateArray()).GetProperty("nondeterministic");
+        Assert.Equal((0, 5, 0), (nondeterministic.GetProperty("legacy").GetInt32(), nondeterministic.GetProperty("modern").GetInt32(), nondeterministic.GetProperty("both").GetInt32()));
+        Assert.Contains("nondeterministic legacy 0 modern 5 both 0", output.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -128,17 +150,17 @@ public sealed class RuntimeDiffTests : IDisposable
     }
 
     [Theory]
-    [InlineData("--member")]
-    [InlineData("--out", "r.json")]
-    [InlineData("--member", "System.String::ToUpper(")]
-    [InlineData("--member", "System.String", "--out", "r.json")]
-    [InlineData("--member", "System.String::ToUpper(", "--out", "r.json", "--seed", "-1")]
-    [InlineData("--member", "System.String::ToUpper(", "--out", "r.json", "--cases", "0")]
-    [InlineData("--member", "System.String::ToUpper(", "--out", "r.json", "--verbose", "yes")]
-    public void BadArgumentsAreAUsageError(params string[] args)
+    [InlineData("--member needs a value", "--member")]
+    [InlineData("--member and --out are required", "--out", "r.json")]
+    [InlineData("--member and --out are required", "--member", "System.String::ToUpper(")]
+    [InlineData("--member must name a type and a member, as in System.String::IndexOf(", "--member", "System.String", "--out", "r.json")]
+    [InlineData("unexpected --seed -1", "--member", "System.String::ToUpper(", "--out", "r.json", "--seed", "-1")]
+    [InlineData("unexpected --cases 0", "--member", "System.String::ToUpper(", "--out", "r.json", "--cases", "0")]
+    [InlineData("unexpected --verbose yes", "--member", "System.String::ToUpper(", "--out", "r.json", "--verbose", "yes")]
+    public void BadArgumentsAreAUsageError(string problem, params string[] args)
     {
         Assert.Equal(RuntimeDiff.UsageError, Run(new FakeFactory([]), Answering("", ""), args));
-        Assert.Contains(RuntimeDiffOptions.Usage, error.ToString(), StringComparison.Ordinal);
+        Assert.Equal([problem, RuntimeDiffOptions.Usage], error.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries), StringComparer.Ordinal);
     }
 
     [Fact]
