@@ -1,5 +1,5 @@
 # M4-006 `await` in async methods as a call
-Status: in-progress
+Status: done (PR #221)
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M4-001
