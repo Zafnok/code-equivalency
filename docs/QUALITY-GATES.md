@@ -14,7 +14,7 @@ are pinned in `Directory.Packages.props` (Central Package Management) and listed
 | Analyzers | Microsoft.CodeAnalysis.NetAnalyzers (built in), Meziantou.Analyzer | all rules on; severities only lowered in `.editorconfig` with a comment | yes |
 | Format | `dotnet format --verify-no-changes` | `.editorconfig` is the single style source | yes |
 | Unit/property/snapshot tests | xUnit v3 on Microsoft.Testing.Platform (`dotnet.config` `[dotnet.test:runner] name="Microsoft.Testing.Platform"`), CsCheck, Verify | includes the differential soundness gate (`DifferentialSoundnessTests`, VERIFICATION-MODEL.md section 7, M0-012): 200 generated C# pairs per PR in the Windows `gates` leg, which runs `Equiv.Tests.Integration`, and 5,000 in `mutation.yml`'s nightly `differential` job (`EQUIV_DIFFERENTIAL_BUDGET=nightly`; `EQUIV_DIFFERENTIAL_SEED` replays a failure's seed) | yes |
-| Coverage | coverlet.MTP → cobertura → `tools/check-coverage` (M0-003) | 100% line and branch per `src/` project; coverlet.MTP has no threshold flag, so the check is a small script over the cobertura XML | yes |
+| Coverage | coverlet.MTP → cobertura → `tools/check-coverage` (M0-003) | 100% line and branch per `src/` project (`Equiv.Core`, `Equiv.Cli`, `Equiv.Frontend.CSharp`, `Equiv.Verify.Z3`, and since M3-032 `Equiv.Execute`, whose child-process host is excluded and covered by `RuntimeDiffTests` on Windows); coverlet.MTP has no threshold flag, so the check is a small script over the cobertura XML | yes |
 | Architecture | ArchUnitNET (xUnit v3 package) | dependency edges from ARCHITECTURE.md, naming rules from CLAUDE.md | yes |
 | Integration | `Equiv.Tests.Integration` runs the CLI on every `samples/*` and compares SARIF snapshot | Windows runner only (needs VS Build Tools) | yes |
 | Mutation | Stryker.NET 5 (`--test-runner mtp`) | `--break-at 90` per `src/` project, raised per milestone; blocking since M0-011. PRs run incrementally (`--since` the base commit the PR's merge ref was built on, M0-007), so the score a PR is held to is the score of the `src/` files it changed, tested against the whole new test suite; test-side changes (`tests/**`) are ignored by the diff (`.github/stryker-pr-config.json`: under the MTP runner Stryker 5.0.0 cannot tell which tests a changed test file holds, so any test edit re-ran every mutant of the project). The nightly schedule is a full sweep and is what catches a test edit that lets a mutant in an unchanged file survive. A project or PR with no mutants has no score and passes; a PR leg whose project has no changed `.cs` file skips Stryker for that reason | yes |
@@ -66,8 +66,9 @@ is the user's action — this ticket only wires the workflows. Mark as required:
 - `analyze` (CodeQL)
 - `stryker (Equiv.Core, Equiv.Core.Tests)`, `stryker (Equiv.Cli, Equiv.Cli.Tests)`,
   `stryker (Equiv.Frontend.CSharp, Equiv.Frontend.CSharp.Tests)`,
-  `stryker (Equiv.Verify.Z3, Equiv.Verify.Z3.Tests)` (M0-011; one check per matrix leg, so a
-  new `src/` project needs its own entry here and in the ruleset)
+  `stryker (Equiv.Verify.Z3, Equiv.Verify.Z3.Tests)`,
+  `stryker (Equiv.Execute, Equiv.Execute.Tests)` (M0-011; one check per matrix leg, so a
+  new `src/` project needs its own entry here and in the ruleset; M3-032 added `Equiv.Execute`)
 
 Do not mark `sonar` (sonar.yml) as required until it has been calibrated per ADR 0009.
 
