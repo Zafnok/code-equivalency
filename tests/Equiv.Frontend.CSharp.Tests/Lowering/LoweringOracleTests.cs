@@ -360,7 +360,8 @@ public sealed class LoweringOracleTests
     /// <c>k</c> to <c>o</c>'s <c>G</c>, wrapping as the compiled method's <c>unchecked</c> add does, and leaves every other map as
     /// it is; no other call writes the heap. The <c>G</c> it adds to is the heap's when the call is given <c>field.Cell.G</c>, else
     /// <see cref="Cells"/>, the version threaded through the earlier calls, as the encoder threads a map a side never names
-    /// (VERIFICATION-MODEL.md section 5). No other call is generated.
+    /// (VERIFICATION-MODEL.md section 5). <c>o.TryParse(k, out n)</c> (ticket M4-003) answers as the compiled method does, its
+    /// <c>n</c> as the call's one ref output. No other call is generated.
     /// </summary>
     private sealed class CompiledRunOracle(int initial, List<int> list, IrMapValue cells) : Equiv.Core.ICallOracle
     {
@@ -378,6 +379,8 @@ public sealed class LoweringOracleTests
 
         private static readonly Equiv.Core.CallIdentity Bump = new($"{LoweringOracleGen.CellType}::{LoweringOracleGen.Bump}(int)");
 
+        private static readonly Equiv.Core.CallIdentity TryParse = new($"{LoweringOracleGen.CellType}::{LoweringOracleGen.TryParse}(int,out int)");
+
         /// <summary>Boxed, so each call advances the one enumerator and not a copy of the struct.</summary>
         private readonly List<IEnumerator<int>> enumerators = [];
 
@@ -386,13 +389,21 @@ public sealed class LoweringOracleTests
         /// <summary><c>field.Cell.G</c> after the last call to <c>o.Bump</c>, or its input before the first.</summary>
         public IrMapValue Cells { get; private set; } = cells;
 
-        public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap)
+        public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
         {
             if (callee == Bump)
             {
                 Assert.Equal(CellReference, arguments[0]);
                 Cells = Bumped((IrMapValue?)heap.FirstOrDefault(static h => h.Map is CellMap)?.Value ?? Cells, arguments[1]);
                 return new IrCallResult(Value: null, Threw: false) { Heap = [.. heap.Select(h => h.Map is CellMap ? Cells : h.Value)] };
+            }
+
+            if (callee == TryParse)
+            {
+                Assert.Equal(CellReference, arguments[0]);
+                int k = (int)((IrBitVecValue)arguments[1]).TwosComplement;
+                Assert.Equal([new IrBitVec(32)], refOuts);
+                return new IrCallResult(new IrBoolValue((k & 1) == 0), Threw: false) { RefOuts = [IrBitVecValue.FromSigned(32, unchecked(k * 3))] };
             }
 
             if (callee == Setter)

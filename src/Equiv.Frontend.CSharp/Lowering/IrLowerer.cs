@@ -128,7 +128,8 @@ internal sealed class IrLowerer
         // by whichever of those constructs its body happens to also contain.
         // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles, and
         // desugars `foreach` and `using` into calls, conversions and a `finally` (ticket M4-001). `lock`
-        // stays whole-body opaque: its desugaring passes `ref` to `Monitor.Enter` (ticket M4-003).
+        // stays whole-body opaque: the CFG passes `ref` to `Monitor.Enter` a synthesized `lockTaken` local it
+        // never initialises, so the lowered read of it is undefined (ticket M4-011).
         // A whole-body opaque points at the first offending construct, not the body (ADR 0029 decision 3).
         (string Reason, SourceSpan Span)? wholeBody = body switch
         {
@@ -634,14 +635,20 @@ internal sealed class IrLowerer
         {
             IrVar value = ssa.Temp(written.Template.Type);
             ssa.Emit(context.Current, new IrOpaque(value, reason, span));
-            ssa.Store(context.Current, written, value);
-            if (Shadow(written) is { } shadow)
-            {
-                ssa.Store(context.Current, shadow, heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context));
-            }
+            StoreUnknown(written, value, context);
         }
 
         return target;
+    }
+
+    /// <summary>Stores a value nothing is known about into <paramref name="variable"/>; its shadow, if any, asks the <c>null.&lt;Sort&gt;</c> map.</summary>
+    private void StoreUnknown(SsaBuilder.Variable variable, IrVar value, LoweringContext context)
+    {
+        ssa.Store(context.Current, variable, value);
+        if (Shadow(variable) is { } shadow)
+        {
+            ssa.Store(context.Current, shadow, heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context));
+        }
     }
 
     /// <summary>The variables an operation writes as a side effect: its <c>ref</c>/<c>out</c> arguments, deconstruction targets and pattern-declared locals.</summary>
@@ -847,6 +854,7 @@ internal sealed class IrLowerer
                 new CallIdentity(ProcedureIdentityNormalizer.Member("System", "String", "Concat", 0, ["string", "string"], renames).Value),
                 [Value(binary.LeftOperand, context), Value(binary.RightOperand, context)],
                 Map(binary.Type!),
+                [],
                 context);
         }
 
@@ -1110,11 +1118,14 @@ internal sealed class IrLowerer
         return target;
     }
 
-    /// <summary><c>new T(...)</c>: an opaque call to the constructor yielding the new object.</summary>
+    /// <summary>
+    /// <c>new T(...)</c>: an opaque call to the constructor yielding the new object, which writes its <c>ref</c> and
+    /// <c>out</c> arguments as <see cref="Invoke"/>'s call does.
+    /// </summary>
     private IrVar? Create(IObjectCreationOperation creation, LoweringContext context) =>
-        creation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out)
-            ? Opaque(creation, "ref-argument", context)
-            : Call(Identity(creation.Constructor!), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), context);
+        RefOuts(creation.Arguments) is { } written
+            ? Call(Identity(creation.Constructor!), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, context)
+            : Opaque(creation, "ref-argument", context);
 
     /// <summary>
     /// <c>new T[n]</c> or <c>new T[] { ... }</c> with one <c>int</c> dimension (ticket P2-001): a negative length throws
@@ -1151,27 +1162,60 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
-    /// An opaque call (receiver first, then arguments in parameter order) that may throw System.Exception. A call to an
-    /// API-equivalence entry's legacy member whose arguments its adapter addresses is a call to the entry's modern member
-    /// instead, and the entry is recorded as applied (ADR 0020; ticket M3-009).
+    /// An opaque call (receiver first, then arguments in parameter order) that may throw System.Exception. Each <c>ref</c>
+    /// or <c>out</c> argument is written through one of the call's outputs, in parameter order (ticket M4-003); one that
+    /// is not a local, a parameter or a discard makes the call opaque with reason <c>ref-argument</c>. A call to an
+    /// API-equivalence entry's legacy member whose arguments its adapter addresses, and that has no <c>ref</c> or
+    /// <c>out</c> argument, is a call to the entry's modern member instead, and the entry is recorded as applied (ADR 0020;
+    /// ticket M3-009).
     /// </summary>
     private IrVar? Invoke(IInvocationOperation invocation, LoweringContext context)
     {
-        if (invocation.Arguments.Any(static a => a.Parameter!.RefKind is RefKind.Ref or RefKind.Out))
+        if (RefOuts(invocation.Arguments) is not { } written)
         {
             return Opaque(invocation, "ref-argument", context);
         }
 
         CallIdentity callee = Identity(invocation.TargetMethod);
         IrType? returns = invocation.TargetMethod.ReturnsVoid ? null : Map(invocation.Type!);
-        if (catalogue.Members.TryGetValue(callee.Value, out ApiEquivalence? entry) && Adapt(entry, invocation, context) is { } adapted)
+        if (written.IsEmpty && catalogue.Members.TryGetValue(callee.Value, out ApiEquivalence? entry) && Adapt(entry, invocation, context) is { } adapted)
         {
             catalogue.Applied.Add(entry.Id);
-            return Call(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges), adapted, returns, context);
+            return Call(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges), adapted, returns, [], context);
         }
 
-        return Dispatch(invocation.Instance, callee, Operands(invocation.Instance, invocation.Arguments, context), returns, context);
+        return Dispatch(invocation.Instance, callee, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
     }
+
+    /// <summary>
+    /// What each <c>ref</c> or <c>out</c> argument writes, in parameter order: its local or parameter, or nothing for a
+    /// discard. Null when one writes anything else, such as a field or an array element, or when two write the same
+    /// variable: which write lands last is the callee's order, which the call's outputs do not model.
+    /// </summary>
+    private ImmutableArray<RefOut>? RefOuts(ImmutableArray<IArgumentOperation> arguments)
+    {
+        ImmutableArray<RefOut>.Builder written = ImmutableArray.CreateBuilder<RefOut>();
+        foreach (IArgumentOperation argument in arguments.Where(static a => IsWritten(a.Parameter!)).OrderBy(static a => a.Parameter!.Ordinal))
+        {
+            IOperation lvalue = argument.Value is IDeclarationExpressionOperation declaration ? declaration.Expression : argument.Value;
+            if (lvalue is IDiscardOperation discard)
+            {
+                written.Add(new RefOut(Variable: null, Map(discard.Type!)));
+            }
+            else if (Target(lvalue) is { } variable && !written.Any(w => w.Variable == variable))
+            {
+                written.Add(new RefOut(variable, variable.Template.Type));
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        return written.ToImmutable();
+    }
+
+    private static bool IsWritten(IParameterSymbol parameter) => parameter.RefKind is RefKind.Ref or RefKind.Out;
 
     /// <summary>
     /// The modern call's arguments under <paramref name="entry"/>'s adapter, or null, with nothing emitted, when it cannot
@@ -1294,7 +1338,7 @@ internal sealed class IrLowerer
         }
 
         IrType? returns = value is null ? Map(property.Type!) : null;
-        return Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], returns, context);
+        return Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], returns, [], context);
     }
 
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
@@ -1314,34 +1358,56 @@ internal sealed class IrLowerer
     /// <c>callvirt</c>, it null-checks a receiver of a reference type at the call, after every argument, a setter's value
     /// included (ticket P2-017).
     /// </summary>
-    private IrVar? Dispatch(IOperation? receiver, CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, LoweringContext context)
+    private IrVar? Dispatch(IOperation? receiver, CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, LoweringContext context)
     {
         if (receiver is not null && !receiver.Type!.IsValueType)
         {
             ThrowIfNull(receiver, args[0], context);
         }
 
-        return Call(callee, args, returns, context);
+        return Call(callee, args, returns, written, context);
     }
 
-    /// <summary>The receiver, then the arguments in parameter order; each is evaluated in source order first.</summary>
-    private IEnumerable<IrVar> Arguments(IEnumerable<IrVar> receiver, ImmutableArray<IArgumentOperation> arguments, LoweringContext context) =>
-        receiver.Concat(arguments
-            .Select(a => (a.Parameter!.Ordinal, Value: Value(a.Value, context)))
-            .OrderBy(static a => a.Ordinal)
-            .Select(static a => a.Value));
+    /// <summary>
+    /// The receiver, then the arguments in parameter order; each is evaluated in source order first. An <c>out</c>
+    /// argument passes nothing. A <c>ref</c> argument passes its variable's value at the call, after every other argument
+    /// has been evaluated, since the callee reads it through the reference (ticket M4-003).
+    /// </summary>
+    private ImmutableArray<IrVar> Arguments(IEnumerable<IrVar> receiver, ImmutableArray<IArgumentOperation> arguments, LoweringContext context)
+    {
+        (int Ordinal, IArgumentOperation Argument, IrVar? Value)[] evaluated =
+        [
+            .. arguments
+                .Where(static a => a.Parameter!.RefKind is not RefKind.Out)
+                .Select(a => (a.Parameter!.Ordinal, a, a.Parameter!.RefKind is RefKind.Ref ? null : Value(a.Value, context))),
+        ];
+        return [.. receiver, .. evaluated.OrderBy(static a => a.Ordinal).Select(a => a.Value ?? Value(a.Argument.Value, context))];
+    }
 
-    private IrVar? Call(CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, LoweringContext context)
+    /// <summary>A call's result, <c>threw</c> flag and <c>ref</c>/<c>out</c> outputs, each output stored to its variable before the call can throw.</summary>
+    private IrVar? Call(CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, LoweringContext context)
     {
         IrVar? target = returns is null ? null : ssa.Temp(returns);
         IrVar threw = ssa.Temp(Bool);
-        ssa.Emit(context.Current, new IrCall(target, threw, callee, args));
+        ImmutableArray<IrVar> outputs = [.. written.Select(w => ssa.Temp(w.Type))];
+        ssa.Emit(context.Current, new IrCall(target, threw, callee, args) { RefOuts = outputs });
+        foreach ((RefOut output, IrVar value) in written.Zip(outputs))
+        {
+            if (output.Variable is { } variable)
+            {
+                StoreUnknown(variable, value, context);
+            }
+        }
+
         ThrowIf(threw, "System.Exception", context, known: false);
         return target;
     }
 
     /// <summary>The operation <see cref="Update"/> rewrites, the lvalue it reads and writes, and how: checked, and whether it yields the value read.</summary>
     private sealed record UpdateSite(IOperation Node, IOperation Target, bool IsChecked, bool IsPostfix);
+
+    /// <summary>What a call's <c>ref</c> or <c>out</c> output is stored to, null for a discard, and its type (ticket M4-003).</summary>
+    private sealed record RefOut(SsaBuilder.Variable? Variable, IrType Type);
 
     /// <summary>A property an assignment writes, and its receiver and index arguments, evaluated once.</summary>
     private sealed record PropertyAccess(IPropertyReferenceOperation Reference, ImmutableArray<IrVar> Operands);

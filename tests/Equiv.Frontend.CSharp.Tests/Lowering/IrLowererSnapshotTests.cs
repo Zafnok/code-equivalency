@@ -173,6 +173,10 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task OutArgumentOfAnOpaqueCall() => Dump("static int M(string s, int fallback) => int.TryParse(s, out var n) ? n : fallback;");
 
+    /// <summary>Ticket M4-003: a reference-typed <c>out</c> argument is a call output, and its variable's nullness asks the <c>null.*</c> map.</summary>
+    [Fact]
+    public Task TryGetValue() => Dump("static string M(System.Collections.Generic.Dictionary<int, string> d, string f) => d.TryGetValue(1, out string v) ? v : f;");
+
     [Fact]
     public Task ForEachOverList() => Dump("static int M(System.Collections.Generic.List<int> l) { int s = 0; foreach (int x in l) s += x; return s; }");
 
