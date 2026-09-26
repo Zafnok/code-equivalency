@@ -1,5 +1,5 @@
 # M3-029 Linux loader: bare loader for non-SDK projects off Windows, and the Windows/Ubuntu parity job
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-028
