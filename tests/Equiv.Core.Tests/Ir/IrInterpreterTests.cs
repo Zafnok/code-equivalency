@@ -207,7 +207,7 @@ public sealed class IrInterpreterTests
         ScriptedOracle oracle = new((_, _, _) => new IrCallResult(new IrBoolValue(Value: true), Threw: false) { RefOuts = [Bv(9), new IrBoolValue(Value: true)] });
 
         Assert.Equal(new IrReturned(Bv(9)), Run(p, oracle, Bv(1)).Outcome);
-        Assert.Equal([ImmutableArray.Create<IrType>(new IrBitVec(32), new IrBool())], oracle.RefOuts);
+        Assert.Equal([(ImmutableArray<IrType>)[new IrBitVec(32), new IrBool()]], oracle.RefOuts);
     }
 
     [Fact]

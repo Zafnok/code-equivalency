@@ -1195,9 +1195,11 @@ internal sealed class IrLowerer
     private ImmutableArray<RefOut>? RefOuts(ImmutableArray<IArgumentOperation> arguments)
     {
         ImmutableArray<RefOut>.Builder written = ImmutableArray.CreateBuilder<RefOut>();
-        foreach (IArgumentOperation argument in arguments.Where(static a => IsWritten(a.Parameter!)).OrderBy(static a => a.Parameter!.Ordinal))
+        foreach (IOperation lvalue in arguments
+            .Where(static a => IsWritten(a.Parameter!))
+            .OrderBy(static a => a.Parameter!.Ordinal)
+            .Select(static a => a.Value is IDeclarationExpressionOperation declaration ? declaration.Expression : a.Value))
         {
-            IOperation lvalue = argument.Value is IDeclarationExpressionOperation declaration ? declaration.Expression : argument.Value;
             if (lvalue is IDiscardOperation discard)
             {
                 written.Add(new RefOut(Variable: null, Map(discard.Type!)));
@@ -1379,7 +1381,7 @@ internal sealed class IrLowerer
         [
             .. arguments
                 .Where(static a => a.Parameter!.RefKind is not RefKind.Out)
-                .Select(a => (a.Parameter!.Ordinal, a, a.Parameter!.RefKind is RefKind.Ref ? null : Value(a.Value, context))),
+                .Select(a => (a.Parameter!.Ordinal, a, a.Parameter.RefKind is RefKind.Ref ? null : Value(a.Value, context))),
         ];
         return [.. receiver, .. evaluated.OrderBy(static a => a.Ordinal).Select(a => a.Value ?? Value(a.Argument.Value, context))];
     }
