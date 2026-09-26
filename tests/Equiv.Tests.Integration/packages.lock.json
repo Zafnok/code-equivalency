@@ -117,15 +117,6 @@
           "Microsoft.CodeAnalysis.Analyzers": "5.9.0-1.26328.17"
         }
       },
-      "Microsoft.CodeAnalysis.CSharp": {
-        "type": "Transitive",
-        "resolved": "5.9.0",
-        "contentHash": "7JGDA0UT1+h7k9ZcA3rF4eFC8+QPq1xyYaXxag4p8r/zzPurEJxvdi7aM+MRL/SfP7XADXpWF/pl/eUYXOq/ww==",
-        "dependencies": {
-          "Microsoft.CodeAnalysis.Analyzers": "5.9.0-1.26328.17",
-          "Microsoft.CodeAnalysis.Common": "[5.9.0]"
-        }
-      },
       "Microsoft.CodeAnalysis.Workspaces.Common": {
         "type": "Transitive",
         "resolved": "5.9.0",
@@ -451,6 +442,12 @@
           "Sarif.Sdk": "[5.7.0, )"
         }
       },
+      "equiv.corpus.seeder": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )"
+        }
+      },
       "equiv.frontend.csharp": {
         "type": "Project",
         "dependencies": {
@@ -463,7 +460,8 @@
         "type": "Project",
         "dependencies": {
           "CsCheck": "[4.9.1, )",
-          "Equiv.Core": "[1.0.0, )"
+          "Equiv.Core": "[1.0.0, )",
+          "Equiv.Corpus.Seeder": "[1.0.0, )"
         }
       },
       "equiv.verify.z3": {
@@ -471,6 +469,16 @@
         "dependencies": {
           "Equiv.Core": "[1.0.0, )",
           "Microsoft.Z3": "[5.1.0, )"
+        }
+      },
+      "Microsoft.CodeAnalysis.CSharp": {
+        "type": "CentralTransitive",
+        "requested": "[5.9.0, )",
+        "resolved": "5.9.0",
+        "contentHash": "7JGDA0UT1+h7k9ZcA3rF4eFC8+QPq1xyYaXxag4p8r/zzPurEJxvdi7aM+MRL/SfP7XADXpWF/pl/eUYXOq/ww==",
+        "dependencies": {
+          "Microsoft.CodeAnalysis.Analyzers": "5.9.0-1.26328.17",
+          "Microsoft.CodeAnalysis.Common": "[5.9.0]"
         }
       },
       "Microsoft.CodeAnalysis.CSharp.Workspaces": {

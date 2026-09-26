@@ -145,6 +145,24 @@ $t = Measure-Command {
   `modern-seeded`. For each seed, find its method's result. It passes when the result is EQ002, or
   EQ003 with a `relatedLocation` on the seeded line. A seed reported EQ001 is a soundness failure:
   report it to the user first.
+- `seeded` also runs the mechanical copy (ticket M4-010; needs M0-012): `./tools/corpus/corpus.ps1
+  -SeedMechanical <slug> -Count 300` writes `.corpus/pairs/<slug>/seeded-mech/` and its
+  `seeds.json` (method identity, operator, line; a `Changing`-family operator can be an equivalent
+  mutant, so it is not assumed to differ). Run `full` against `seeded-mech` the same way as
+  `modern-seeded`, and for each seed in its manifest find the result at the seed's identity or line:
+  - **Divergent, or Unknown with a `relatedLocation` on the seeded line**: a hit, same as a
+    hand-written seed.
+  - **Equivalent, operator in the `Changing` family**: not a hit by itself. It is a **confirmed
+    miss** only when the repo's own tests (section 4's `verifyCommand`, run on legacy and on
+    `seeded-mech`) or M4-009's replay show the seeded line's behaviour actually changed. Check
+    those before concluding anything; otherwise list the seed as **unconfirmed** and move on. A
+    confirmed miss is a soundness bug and is reported to the user first, exactly as an EQ001
+    hand-written seed is (criterion 3 of M4-007's own acceptance criteria): write it up as
+    `P2-nnn-soundness-<slug>.md` and stop to show the user before doing anything else with this run.
+  - **Divergent, operator in the `Preserving` family** (`RenameLocals`, `ReorderIndependentStatements`,
+    `InvertIf`, `Commute`, `IntroduceTemporary`, `InlineTemporary`): a precision bug, not a soundness
+    one — the two methods behave identically by construction, so a Divergent verdict is `equiv`
+    wrongly disagreeing. File it as an ordinary precision ticket, not a `P2-nnn-soundness-` one.
 
 ## 6. Write the summary
 
@@ -203,6 +221,16 @@ Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | ownin
 ## Seeds (seeded only)
 | seed id | procedure identity | verdict | on the seeded line? |
 - Seeded recall: <%>
+
+## Mechanical seeds (seeded only, ticket M4-010)
+- Seeds: requested <n>, applied <n>, dropped (failed to compile) <n>
+- By verdict: EQ001 (Preserving, precision bug) <n>, EQ001 (Changing, confirmed miss) <n>,
+  EQ001 (Changing, unconfirmed) <n>, EQ002 <n>, EQ003 line-scoped with cause on seed's line <n>,
+  EQ003 other <n>
+- Recall = (EQ002 + line-scoped EQ003 on the seed's line) / confirmed behaviour-changing seeds
+  (n/a if that denominator is 0)
+- Unconfirmed list size: <n> (procedure identities only, in `.corpus/`'s own seeds.json; never
+  quoted here)
 
 ## Findings
 One line each, with the ticket it became (`P2-nnn`, or an existing ticket id).

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ticket M4-010: mechanical seeding of the corpus. Also the shared library behind M0-012's
+       differential soundness gate (tests/Equiv.TestSupport/PairGen.cs references this project). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Equiv.Corpus.Seeder</RootNamespace>
+    <AssemblyName>Equiv.Corpus.Seeder</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- MutationOperator and SyntaxMutator are public instead (see .editorconfig's CA1515 notes for why). -->
+    <InternalsVisibleTo Include="Equiv.Corpus.Seeder.Tests" />
+  </ItemGroup>
+
+</Project>

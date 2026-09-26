@@ -1,5 +1,6 @@
 using CsCheck;
 
+using Equiv.Corpus.Seeder;
 using Equiv.TestSupport;
 
 using Microsoft.CodeAnalysis;
