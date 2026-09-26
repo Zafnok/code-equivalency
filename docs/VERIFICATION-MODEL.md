@@ -63,7 +63,7 @@ Instructions:
 | `IrCall(var?, threw?, callee identity, args, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005). Result, `threw` and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018) |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
 | `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025) |
-| `IrOpaque(var?, reason, sourceSpan, fingerprint?, reads)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024) |
+| `IrOpaque(var?, reason, sourceSpan, fingerprint?, reads, threw?, heap)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024). A fingerprinted fragment has what that call needs: a `threw` flag the frontend branches on and the heap pairs an `IrCall` has; `reads` and each pair's `before` are uses, `threw` and each `after` definitions (M4-004) |
 
 Terminators: `IrGoto`, `IrBranch(cond, then, else)`, `IrSwitch`, `IrReturn(var?, outs)`,
 `IrThrow(exceptionTypeIdentity, outs)`, `IrUnreachable` (assume false; produced by loop
@@ -151,6 +151,16 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   `%` also test `IrOverflows sdiv` (`System.OverflowException`) whether or not the code
   is checked, because .NET throws on `MinValue / -1` and `MinValue % -1` in both contexts.
 - A shift count is masked to `width - 1` before the IR shift, as C# does.
+- An expression the lowerer leaves opaque carries its bound fingerprint (ADR 0024: the fragment's
+  `IOperation` tree, a lambda of the graph as its bound body, serialised as a body is, with the
+  method's parameters numbered by first occurrence like its locals) and reads the locals and
+  parameters declared outside it that it references, a reference's null shadow after it, in order of
+  first occurrence. It then has a `threw` flag branching as a call's does and a heap pair per heap map
+  (M4-004). It gets no fingerprint when it is not an expression; holds a flow capture, null test or
+  caught exception of the graph, or a struct's `this`; writes a local or parameter declared outside
+  it; calls a local function declared outside it; reads a `ref` local; holds a lambda capturing a
+  variable that is stored after it in the IR or that any lambda or local function writes; or is
+  runtime-sensitive. A whole-body opaque has none.
 - An opaque call's `threw` flag branches to `IrThrow("System.Exception")`. `throw new T(...)`
   records the constructor call and then lowers to `IrThrow("T")` on T's static type (M2-004).
   Throwing any other expression is `IrOpaque` with reason `Throw`, because the thrown object's
@@ -214,8 +224,11 @@ at the same position with the same identity, arguments and heap therefore agree 
 sides. Two calls on one side are never forced to agree, because a real callee may be
 stateful. The exception is an identity in the runtime-changes table, which gets
 side-specific functions. An `IrOpaque` whose fingerprint occurs on both sides is encoded as
-exactly such a call, with identity `opaque:<fingerprint>` and its reads as arguments (ADR
-0024). An `IrPure` is a function of its arguments only, shared unless runtime-sensitive (ADR
+exactly such a call, with identity `opaque:<fingerprint>`, its reads as arguments, and its `threw`
+flag and heap pairs (ADR 0024; M4-004): the backend rewrites it into that `IrCall` before the
+ladder runs, so the encoder, the replay oracle and the taint predicate treat it as any call. Every
+path past a shared fragment branches on its tainted `threw` flag, so a divergence there is
+Unknown(Abstraction), never Divergent. An `IrPure` is a function of its arguments only, shared unless runtime-sensitive (ADR
 0025). The call trace is a bounded list compared element-wise; an event
 is (identity, arguments, heap at the call). The heap at a call ranges over every map a heap pair
 names on either side, in name order (P1-005). A call reads a map it pairs at its `before`; any
