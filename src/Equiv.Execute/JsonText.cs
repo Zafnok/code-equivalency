@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace Equiv.Execute;
@@ -8,8 +9,6 @@ namespace Equiv.Execute;
 /// </summary>
 internal static class JsonText
 {
-    private const string Hex = "0123456789ABCDEF";
-
     public static string String(string? value)
     {
         if (value is null)
@@ -26,7 +25,7 @@ internal static class JsonText
             }
             else if (c is < ' ' or > '~')
             {
-                text.Append("\\u").Append(Hex[(c >> 12) & 15]).Append(Hex[(c >> 8) & 15]).Append(Hex[(c >> 4) & 15]).Append(Hex[c & 15]);
+                text.Append("\\u").Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
             }
             else
             {

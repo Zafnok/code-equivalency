@@ -156,10 +156,32 @@ public sealed class InputGeneratorTests
         ArgumentOutOfRangeException exception = Assert.Throws<ArgumentOutOfRangeException>(() => InputGenerator.Generate([Parameter(ExecutionTypeKind.Unsupported, "System.DateTime")], 0, 1));
 
         Assert.Equal("System.DateTime", exception.ActualValue);
-        Assert.Throws<ArgumentNullException>(() => InputGenerator.Generate(null!, 0, 1));
+        Assert.StartsWith("No input can be built for this parameter type.", exception.Message, StringComparison.Ordinal);
     }
 
-    private static readonly char[] EdgeCharacters = ['ß', 'æ', 'é', 'İ', 'ı', '́', '̈', '\uD800', '\uDC00'];
+    /// <summary>
+    /// The random values for one seed, pinned: the generator is part of the report's reproducibility, since the same seed
+    /// must give the same inputs on every machine and .NET version.
+    /// </summary>
+    [Fact]
+    public void ASeedPinsTheRandomValues()
+    {
+        IReadOnlyList<ExecutionInput> inputs = InputGenerator.Generate(
+            [Parameter(ExecutionTypeKind.Text), Parameter(ExecutionTypeKind.DecimalNumber), Parameter(ExecutionTypeKind.Binary64), Parameter(ExecutionTypeKind.Signed32)],
+            42,
+            10_000);
+
+        Assert.Equal(PinnedTail, inputs.Skip(inputs.Count - 3).Select(static i => string.Join(' ', i.Arguments)), StringComparer.Ordinal);
+    }
+
+    private static readonly string[] PinnedTail =
+    [
+        "\"\\u0131\\u0308 }\\u0131\\u0301D\" [724825957,1263914607,-1755957424,720896] \"0xA86962B9FD22AF73\" -396575173",
+        "\"Aa]\" [-361872896,-1095122503,778129485,-2146631680] \"0x4FA1B3AC3A5B21A3\" -676480176",
+        "\"0\" [-1760326488,1097782901,-497125042,-2147287040] \"0xFDA531526CB49D86\" -976966696",
+    ];
+
+    private static readonly char[] EdgeCharacters = ['\u00DF', '\u00E6', '\u00E9', '\u0130', '\u0131', '\u0301', '\u0308', '\uD800', '\uDC00'];
 
     /// <summary>Undoes <see cref="JsonText.String"/>, whose only escapes are <c>\"</c>, <c>\\</c> and <c>\uXXXX</c>.</summary>
     private static string Unescape(string json)

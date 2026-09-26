@@ -12,28 +12,29 @@ namespace Equiv.Execute.Inputs;
 /// </summary>
 internal static class InputGenerator
 {
+    // The value lists below are properties, not static readonly fields: a field initialiser runs once per test process,
+    // so a mutation tester could never switch its mutants on.
+
     /// <summary>ASCII, Latin-1, Turkish dotted and dotless i, combining marks and surrogate halves.</summary>
-    private static readonly IReadOnlyList<char> Chars =
-        ['a', 'I', 'i', '0', ' ', 'ß', 'æ', 'é', 'İ', 'ı', '́', '̈', '\uD800', '\uDC00'];
+    private static char[] Chars =>
+        ['a', 'I', 'i', '0', ' ', '\u00DF', '\u00E6', '\u00E9', '\u0130', '\u0131', '\u0301', '\u0308', '\uD800', '\uDC00'];
 
-    /// <summary>The culture-sensitive string corpus, then empty and <c>null</c>.</summary>
-    private static readonly IReadOnlyList<string> Strings =
-        [.. new[] { "i", "I", "ß", "ss", "\u0000", "­", "æ", "ae", string.Empty }.Select(JsonText.String), "null"];
+    /// <summary>The culture-sensitive string corpus (<c>\u00AD</c> is a soft hyphen), then empty and <c>null</c>.</summary>
+    private static string[] Strings =>
+        [.. new[] { "i", "I", "\u00DF", "ss", "\u0000", "\u00AD", "\u00E6", "ae", string.Empty }.Select(JsonText.String), "null"];
 
-    private static readonly IReadOnlyList<float> Singles =
+    private static float[] Singles =>
         [0f, -0f, 1f, -1f, 0.1f, float.NaN, float.PositiveInfinity, float.NegativeInfinity, float.MaxValue, float.MinValue, float.Epsilon];
 
-    private static readonly IReadOnlyList<double> Doubles =
+    private static double[] Doubles =>
         [0d, -0d, 1d, -1d, 0.1d, 0.1d + 0.2d, double.NaN, double.PositiveInfinity, double.NegativeInfinity, double.MaxValue, double.MinValue, double.Epsilon];
 
-    private static readonly IReadOnlyList<decimal> Decimals = [0m, 1m, -1m, 0.1m, 1.0m, decimal.MaxValue, decimal.MinValue];
+    private static decimal[] Decimals => [0m, 1m, -1m, 0.1m, 1.0m, decimal.MaxValue, decimal.MinValue];
 
     private const int MaxRandomStringLength = 8;
 
     public static IReadOnlyList<ExecutionInput> Generate(IReadOnlyList<ExecutionParameter> parameters, ulong seed, int cases)
     {
-        ArgumentNullException.ThrowIfNull(parameters);
-
         IReadOnlyList<IReadOnlyList<string>> edges = [.. parameters.Select(Edges)];
         long combinations = edges.Aggregate(1L, static (product, values) => Math.Min(product * values.Count, int.MaxValue));
         List<ExecutionInput> inputs = [];
@@ -138,7 +139,7 @@ internal static class InputGenerator
         for (int i = 0; i < length; i++)
         {
             ulong draw = random.Next();
-            characters[i] = (draw & 1) == 0 ? (char)(' ' + (int)((draw >> 1) % 95)) : Chars[(int)((draw >> 1) % (ulong)Chars.Count)];
+            characters[i] = (draw & 1) == 0 ? (char)(' ' + (int)((draw >> 1) % 95)) : Chars[(int)((draw >> 1) % (ulong)Chars.Length)];
         }
 
         return JsonText.String(new string(characters));

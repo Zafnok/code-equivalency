@@ -9,8 +9,6 @@ internal static class RuntimeComparison
 
     public static OverloadReport Compare(string member, RunOutcomes runs)
     {
-        ArgumentNullException.ThrowIfNull(runs);
-
         List<OverloadReport.Witness> witnesses = [];
         int divergent = 0, legacyOnly = 0, modernOnly = 0, both = 0, notComparable = 0;
         for (int i = 0; i < runs.Legacy1.Count; i++)

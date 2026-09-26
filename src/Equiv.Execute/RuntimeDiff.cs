@@ -21,7 +21,7 @@ public sealed class RuntimeDiff(IExecutionDriverFactory factory, IDriverHost hos
     public const string NeedsWindows = "runtime-diff needs Windows and .NET Framework 4.8 (ADR 0035)";
 
     /// <summary>The invariant culture, then en-US, tr-TR, de-DE and ja-JP.</summary>
-    public static readonly IReadOnlyList<string> Cultures = ["invariant", "en-US", "tr-TR", "de-DE", "ja-JP"];
+    public static IReadOnlyList<string> Cultures => ["invariant", "en-US", "tr-TR", "de-DE", "ja-JP"];
 
     internal static readonly TimeSpan CaseTimeout = TimeSpan.FromSeconds(10);
 

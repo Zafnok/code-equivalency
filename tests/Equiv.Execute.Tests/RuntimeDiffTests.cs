@@ -59,6 +59,15 @@ public sealed class RuntimeDiffTests : IDisposable
     }
 
     [Fact]
+    public void EveryReasonAnOverloadIsNotConstructibleIsListed()
+    {
+        FakeFactory factory = new([Signature("System.Int32::TryParse(string,out int)", Parameter(ExecutionTypeKind.Text), Parameter(ExecutionTypeKind.Unsupported, "out int"), Parameter(ExecutionTypeKind.Unsupported, "System.DateTime"))]);
+
+        Assert.Equal(RuntimeDiff.NoDivergence, Run(factory, Answering("", ""), "--member", "System.Int32::TryParse(", "--out", Report));
+        Assert.Contains("System.Int32::TryParse(string,out int): not constructible (out int; System.DateTime)", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ADivergenceExitsOneAndIsReportedWithItsWitnesses()
     {
         FakeFactory factory = new([Signature("System.String::IndexOf(string)", Parameter(ExecutionTypeKind.Text), Parameter(ExecutionTypeKind.Text))]);

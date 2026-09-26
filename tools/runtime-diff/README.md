@@ -98,7 +98,7 @@ exception type.
       "divergent": 65,
       "witnesses": [
         {
-          "input": ["ss", "ß"],
+          "input": ["ss", "\u00DF"],
           "culture": "invariant",
           "legacy": { "kind": "Returned", "value": 0 },
           "modern": { "kind": "Returned", "value": -1 }
