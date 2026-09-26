@@ -62,21 +62,18 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// <summary>
     /// Every rung on its own, whatever the others found (VERIFICATION-MODEL.md section 7: the soundness harness runs
     /// against every rung independently); k-induction runs whenever the loops align one to one, and rung 4 whenever
-    /// neither side calls.
+    /// neither side calls. Each rung runs when it is enumerated, so a caller can stop after the rungs it checks.
     /// </summary>
-    public IReadOnlyList<Rung> Independently(IrProcedure old, IrProcedure @new)
+    public IEnumerable<Rung> Independently(IrProcedure old, IrProcedure @new)
     {
         IrLoopAnalysis oldShape = IrLoopAnalysis.Of(old);
         IrLoopAnalysis newShape = IrLoopAnalysis.Of(@new);
         bool looping = oldShape.IsSelfRecursive || newShape.IsSelfRecursive || !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
         LockstepInduction lockstep = new(this, old, @new, oldShape, newShape);
-        return
-        [
-            Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible),
-            lockstep.Prove(),
-            new KInduction(this, lockstep).Prove(force: true),
-            new SpacerRung(createContext, options).Prove(old, @new),
-        ];
+        yield return Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible);
+        yield return lockstep.Prove();
+        yield return new KInduction(this, lockstep).Prove(force: true);
+        yield return new SpacerRung(createContext, options).Prove(old, @new);
     }
 
     /// <summary>
