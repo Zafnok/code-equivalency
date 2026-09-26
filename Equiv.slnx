@@ -2,12 +2,14 @@
   <Folder Name="/src/">
     <Project Path="src/Equiv.Cli/Equiv.Cli.csproj" />
     <Project Path="src/Equiv.Core/Equiv.Core.csproj" />
+    <Project Path="src/Equiv.Execute/Equiv.Execute.csproj" />
     <Project Path="src/Equiv.Frontend.CSharp/Equiv.Frontend.CSharp.csproj" />
     <Project Path="src/Equiv.Verify.Z3/Equiv.Verify.Z3.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Equiv.Cli.Tests/Equiv.Cli.Tests.csproj" />
     <Project Path="tests/Equiv.Core.Tests/Equiv.Core.Tests.csproj" />
+    <Project Path="tests/Equiv.Execute.Tests/Equiv.Execute.Tests.csproj" />
     <Project Path="tests/Equiv.Frontend.CSharp.Tests/Equiv.Frontend.CSharp.Tests.csproj" />
     <Project Path="tests/Equiv.Tests.Architecture/Equiv.Tests.Architecture.csproj" />
     <Project Path="tests/Equiv.Tests.Integration/Equiv.Tests.Integration.csproj" />
@@ -19,5 +21,6 @@
     <Project Path="tools/check-coverage.Tests/check-coverage.Tests.csproj" />
     <Project Path="tools/licence-check/licence-check.csproj" />
     <Project Path="tools/licence-check.Tests/licence-check.Tests.csproj" />
+    <Project Path="tools/runtime-diff/runtime-diff.csproj" />
   </Folder>
 </Solution>

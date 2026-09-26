@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- M3-032: a thin console over Equiv.Execute and the C# frontend's DriverFactory (ADR 0035). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>RuntimeDiff</RootNamespace>
+    <AssemblyName>runtime-diff</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Equiv.Execute\Equiv.Execute.csproj" />
+    <ProjectReference Include="..\..\src\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
+  </ItemGroup>
+
+</Project>

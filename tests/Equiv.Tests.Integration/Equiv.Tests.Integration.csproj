@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Equiv.Cli\Equiv.Cli.csproj" />
+    <!-- M3-032: RuntimeDiffTests run the Equiv.Execute runner against real drivers. -->
+    <ProjectReference Include="..\..\src\Equiv.Execute\Equiv.Execute.csproj" />
     <!-- M3-015: the congruence soundness property draws its programs from LoweringOracleGen; M0-012: the differential soundness gate from PairGen. -->
     <ProjectReference Include="..\Equiv.TestSupport\Equiv.TestSupport.csproj" />
   </ItemGroup>
