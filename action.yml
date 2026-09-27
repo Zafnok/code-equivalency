@@ -1,0 +1,41 @@
+name: 'equiv'
+description: >-
+  Behavioural equivalence checker for migrated code: proves two versions of a codebase behave
+  the same, or finds a counterexample, and writes the result as SARIF 2.1.0. Licensed under the
+  Business Source License 1.1 (source-available, not open source); see LICENSE.
+author: 'Nicholas Wentz'
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  legacy:
+    description: 'Path to the legacy (before) solution, relative to the workspace.'
+    required: true
+  modern:
+    description: 'Path to the modern (after) solution, relative to the workspace.'
+    required: true
+  config:
+    description: 'Path to equiv.config.json (procedure rename maps, HTTP route hints).'
+    required: false
+  baseline:
+    description: 'Path to a previous SARIF run, to compute baselineState against.'
+    required: false
+  fail-on:
+    description: 'Verdict that fails the action: "divergent" (default) or "unknown".'
+    required: false
+
+outputs:
+  sarif:
+    description: 'Path to the SARIF results file, for github/codeql-action/upload-sarif.'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  entrypoint: '/entrypoint.sh'
+  args:
+    - ${{ inputs.legacy }}
+    - ${{ inputs.modern }}
+    - ${{ inputs.config }}
+    - ${{ inputs.baseline }}
+    - ${{ inputs.fail-on }}

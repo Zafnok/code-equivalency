@@ -15,6 +15,8 @@
     <!-- Verify's SponsorCheck (SC021): the project has under US$10k annual revenue. Re-evaluate before 2027-09 or on monetisation. -->
     <Verify_SponsorshipExemption>SmallRevenue</Verify_SponsorshipExemption>
     <Verify_SponsorshipExemptionUntil>2027-09</Verify_SponsorshipExemptionUntil>
+    <!-- M3-004: release.yml tags v0.1.0-rc.1 style; MinVer's default tag pattern has no "v" prefix. -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
   </PropertyGroup>
 
   <!-- Licensing and ownership (ADR 0017). The product is BUSL-1.1, not open source. -->

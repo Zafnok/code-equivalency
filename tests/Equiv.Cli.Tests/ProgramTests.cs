@@ -65,6 +65,32 @@ public sealed class ProgramTests
         Assert.Contains(identity.Value, errorOutput, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket M3-004 criterion 1: <c>--version</c> prints the MinVer version. System.CommandLine's
+    /// <c>RootCommand</c> adds <c>--version</c> automatically and prints
+    /// <c>Assembly.GetEntryAssembly()</c>'s informational version, which MinVer sets from the git
+    /// tag (or, untagged, a height-based prerelease plus commit sha).
+    /// </summary>
+    [Fact]
+    public void Version_PrintsMinVer()
+    {
+        int exitCode = ExitCodes.UsageError;
+        TextWriter original = Console.Out;
+        using StringWriter writer = new();
+        Console.SetOut(writer);
+        try
+        {
+            exitCode = Program.Main(["--version"]);
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Matches(@"^\d+\.\d+\.\d+", writer.ToString().Trim());
+    }
+
     [Fact]
     public void Main_HelpShowsDescriptionAndExits0()
     {

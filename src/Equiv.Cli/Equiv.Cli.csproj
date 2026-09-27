@@ -2,6 +2,21 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <!-- M3-004 criterion 1: single-file, self-contained win-x64/linux-x64 publish, Z3's native
+         bundled via IncludeNativeLibrariesForSelfExtract. Gated on a RuntimeIdentifier being set
+         (i.e. `dotnet publish -r <rid>`); without one, Equiv.Cli.Tests' ProjectReference to this
+         project would fail (NETSDK1151: a self-contained exe cannot be referenced by one that isn't). -->
+    <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>
+    <SelfContained Condition="'$(RuntimeIdentifier)' != ''">true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract Condition="'$(RuntimeIdentifier)' != ''">true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Microsoft.CodeAnalysis.Workspaces.MSBuild ships its out-of-process BuildHost as Content
+         (contentFiles/any/any/BuildHost-net472, BuildHost-netcore): real .exe/.dll files the
+         workspace spawns as a separate process, found relative to AppContext.BaseDirectory.
+         Bundled into the single file (the default), they exist only inside the bundle, not on
+         disk, so the workspace's process-spawn fails ("build host could not be found"). This
+         extracts every Content file to the self-extraction temp dir alongside the native libraries,
+         restoring the on-disk layout the workspace expects. -->
+    <IncludeAllContentForSelfExtract Condition="'$(RuntimeIdentifier)' != ''">true</IncludeAllContentForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>

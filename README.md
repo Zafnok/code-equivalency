@@ -275,6 +275,54 @@ Linux hosts need **glibc 2.38 or newer** (Ubuntu 24.04+): the `Microsoft.Z3` 5.1
 (from the official Z3Prover/z3 GitHub release, ADR 0030) is built against it. Debian 12,
 Ubuntu 22.04 and Alpine are unsupported for the linux-x64 build.
 
+## Running without cloning
+
+A tagged release (`.github/workflows/release.yml`, triggered on `v*`) publishes three ways to run
+`equiv` without a checkout. Every artifact carries `LICENSE` and `THIRD-PARTY-NOTICES.md`
+(ADR 0017); the licence is BUSL-1.1, source-available and not open source, with a Change Date
+specific to that release.
+
+**Single-file binary.** `equiv-<version>-win-x64.zip` / `equiv-<version>-linux-x64.tar.gz` on the
+GitHub release, built with `dotnet publish -r <rid>` (`PublishSingleFile`, `SelfContained`,
+`IncludeNativeLibrariesForSelfExtract`; see `src/Equiv.Cli/Equiv.Cli.csproj`). Extract and run
+`equiv compare ...` directly; no .NET SDK install needed. On Linux, the same [Prerequisites](#linux)
+above still apply (SDK for SDK-style projects, network access for `packages.config` and reference
+assemblies) except the SDK itself is bundled with the binary.
+
+**Container.** `docker run --rm --user "$(id -u):$(id -g)" -v <samples>:/samples
+ghcr.io/zafnok/equiv:<version> compare --legacy /samples/legacy/*.sln --modern
+/samples/modern/*.slnx --out /samples/equiv.sarif` (mount whatever directory holds the solutions
+read-write; MSBuildWorkspace writes `obj/` there). The image runs as a non-root user (uid/gid
+1654, the base image's own `app` user), not root, so `--user "$(id -u):$(id -g)"` is what makes
+the container's writes into your mounted directory land with your own ownership instead of
+failing with "Permission denied" — the same pattern any rootless container needs for bind-mount
+access. The image is the .NET SDK itself, not a runtime-only base (Dockerfile; ADR 0031), because
+the SDK-style loader path shells into the SDK's own MSBuild at runtime. It holds no net4x
+reference assemblies or NuGet packages; those are fetched into `$EQUIV_REFERENCE_ASSEMBLIES`
+(`/data/reference-assemblies`) on first use (M3-029) — mount a volume there
+(`-v equiv-ref-assemblies:/data/reference-assemblies`) to avoid re-fetching on every run. Image
+size: 1.62 GB (measured locally; M3-028 measured the plain Debian `sdk:10.0` base at 917 MB, so
+the `noble` base plus the app layer roughly doubles it).
+
+**GitHub Action.** `action.yml` at the repo root runs the container (`runs.using: docker`) with
+inputs `legacy`, `modern`, `config`, `baseline`, `fail-on` and output `sarif`. Follow it with
+`github/codeql-action/upload-sarif` to get results into Code Scanning:
+
+```yaml
+- uses: zafnok/code-equivalency@v0.1.0
+  id: equiv
+  with:
+    legacy: legacy
+    modern: modern
+- uses: github/codeql-action/upload-sarif@v4
+  with:
+    sarif_file: ${{ steps.equiv.outputs.sarif }}
+    category: equiv
+```
+
+SonarQube can also consume the same SARIF file via `sonar.sarifReportPaths` (not integrated here;
+see Out of scope in ticket M3-004).
+
 ## Star history
 
 <a href="https://star-history.com/#Zafnok/code-equivalency&Date">
