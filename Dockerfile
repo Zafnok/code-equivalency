@@ -59,6 +59,14 @@ RUN chmod +x /entrypoint.sh
 # image (about 110 MB per framework version). Mount a volume here to cache them across `docker run`
 # invocations; README documents this.
 ENV EQUIV_REFERENCE_ASSEMBLIES=/data/reference-assemblies
+
+# Sonar docker:S6471: don't run as root. The base image already ships a non-root `app` user
+# (uid/gid 1654); reuse it rather than adding another. This changes what a caller must do to get
+# write access to a bind-mounted host directory (README's "Running without cloning" documents
+# `--user "$(id -u):$(id -g)"`); it does not affect the GitHub Action, whose $GITHUB_WORKSPACE
+# mount the runner itself makes world-writable for exactly this reason.
+RUN mkdir -p /data/reference-assemblies && chown -R app:app /app /data
 VOLUME ["/data/reference-assemblies"]
+USER app
 
 ENTRYPOINT ["dotnet", "/app/Equiv.Cli.dll"]

@@ -289,12 +289,16 @@ GitHub release, built with `dotnet publish -r <rid>` (`PublishSingleFile`, `Self
 above still apply (SDK for SDK-style projects, network access for `packages.config` and reference
 assemblies) except the SDK itself is bundled with the binary.
 
-**Container.** `docker run --rm -v <samples>:/samples ghcr.io/zafnok/equiv:<version> compare
---legacy /samples/legacy/*.sln --modern /samples/modern/*.slnx --out /samples/equiv.sarif` (mount
-whatever directory holds the solutions read-write; MSBuildWorkspace writes `obj/` there). The
-image is the .NET SDK itself, not a runtime-only base (Dockerfile; ADR 0031), because the
-SDK-style loader path shells into the SDK's own MSBuild at runtime. It holds no net4x reference
-assemblies or NuGet packages; those are fetched into `$EQUIV_REFERENCE_ASSEMBLIES`
+**Container.** `docker run --rm --user "$(id -u):$(id -g)" -v <samples>:/samples
+ghcr.io/zafnok/equiv:<version> compare --legacy /samples/legacy/*.sln --modern
+/samples/modern/*.slnx --out /samples/equiv.sarif` (mount whatever directory holds the solutions
+read-write; MSBuildWorkspace writes `obj/` there). The image runs as a non-root user (uid/gid
+1654, the base image's own `app` user), not root, so `--user "$(id -u):$(id -g)"` is what makes
+the container's writes into your mounted directory land with your own ownership instead of
+failing with "Permission denied" — the same pattern any rootless container needs for bind-mount
+access. The image is the .NET SDK itself, not a runtime-only base (Dockerfile; ADR 0031), because
+the SDK-style loader path shells into the SDK's own MSBuild at runtime. It holds no net4x
+reference assemblies or NuGet packages; those are fetched into `$EQUIV_REFERENCE_ASSEMBLIES`
 (`/data/reference-assemblies`) on first use (M3-029) — mount a volume there
 (`-v equiv-ref-assemblies:/data/reference-assemblies`) to avoid re-fetching on every run. Image
 size: 1.62 GB (measured locally; M3-028 measured the plain Debian `sdk:10.0` base at 917 MB, so
