@@ -51,10 +51,12 @@ internal sealed class IrLowerer
     private HashSet<CaptureId> assignedCaptures = [];
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
     private readonly Dictionary<IOperation, IrVar> tryCastNulls = [];
+    private readonly Dictionary<CaptureId, SsaBuilder.Variable> indices = [];
     private int selects;
     private HeapLowerer heap = null!;
     private ExceptionLowerer exceptions = null!;
     private SwitchChains chains = null!;
+    private ArrayForEachLoops loops = null!;
     private CSharpCompilation compilation = null!;
     private ControlFlowGraph cfg = null!;
     private SourceSpan bodySpan = null!;
@@ -347,7 +349,8 @@ internal sealed class IrLowerer
     {
         cfg = graph;
         chains = SwitchChains.Find(cfg);
-        exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, bodySpan, Fill);
+        loops = ArrayForEachLoops.Find(cfg);
+        exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, loops, bodySpan, Fill);
         captures.Clear();
         captureTargets.Clear();
         propertyTargets.Clear();
@@ -679,6 +682,12 @@ internal sealed class IrLowerer
 
     private void Statement(IOperation operation, LoweringContext context)
     {
+        if (loops.Of(operation) is { } start)
+        {
+            ForEach(start, context);
+            return;
+        }
+
         if (operation is IFlowCaptureOperation { Value: IPropertyReferenceOperation autoProperty } backed && assignedCaptures.Contains(backed.Id)
             && heap.AutoProperty(autoProperty, context) is { } slice)
         {
@@ -716,8 +725,14 @@ internal sealed class IrLowerer
 
     private IrVar Value(IOperation operation, LoweringContext context) => Lower(operation, context)!;
 
-    /// <summary>The operation's value, or null for an operation without one (a statement, a void call).</summary>
-    private IrVar? Lower(IOperation operation, LoweringContext context)
+    /// <summary>
+    /// The operation's value, or null for an operation without one (a statement, a void call). An operation of an array
+    /// <c>foreach</c> is its index loop's (ticket P1-004).
+    /// </summary>
+    private IrVar? Lower(IOperation operation, LoweringContext context) =>
+        loops.Of(operation) is { } site ? ForEach(site, context) : Operation(operation, context);
+
+    private IrVar? Operation(IOperation operation, LoweringContext context)
     {
         if (operation is { ConstantValue.HasValue: true, Type: { } constantType })
         {
@@ -777,6 +792,48 @@ internal sealed class IrLowerer
             default:
                 return Opaque(operation, operation.Kind.ToString(), context);
         }
+    }
+
+    /// <summary>
+    /// A <c>foreach</c> over an array as the index loop the compiler emits (ticket P1-004). The enumerator's capture holds the
+    /// array, with its null shadow, and a bv32 index starts at 0; <c>MoveNext</c> is the signed test of the index against
+    /// the length map read at the array, null-checked as <c>a.Length</c> is; <c>Current</c> is the element read at the index,
+    /// null- and bounds-checked as <c>a[i]</c> is, after which the index steps by one, so the header's phi takes 0 on entry and
+    /// the stepped index on every back edge.
+    /// </summary>
+    private IrVar? ForEach(ArrayForEachLoops.Site site, LoweringContext context)
+    {
+        SsaBuilder.Variable array = Capture(site.Loop.Enumerator, site.Loop.Type);
+        SsaBuilder.Variable index = Index(site.Loop.Enumerator);
+        switch (site.Role)
+        {
+            case ArrayForEachLoops.Role.Start:
+                IrVar collection = Value(site.Operand, context);
+                ssa.Store(context.Current, array, collection);
+                StoreShadow(array, site.Operand, collection, context);
+                ssa.Store(context.Current, index, Const(new IrBitVecValue(32, 0), context));
+                return null;
+            case ArrayForEachLoops.Role.Condition:
+                IrVar length = heap.ArrayLength(ssa.Load(context.Current, array), site.Operand, context);
+                return Emit(IrBinaryOp.Slt, ssa.Load(context.Current, index), length, Bool, context);
+            default:
+                IrVar at = ssa.Load(context.Current, index);
+                IrVar element = heap.ReadSlice(heap.Element(ssa.Load(context.Current, array), at, site.Loop.Type.ElementType, site.Operand), context);
+                ssa.Store(context.Current, index, Emit(IrBinaryOp.Add, at, Const(new IrBitVecValue(32, 1), context), at.Type, context));
+                return element;
+        }
+    }
+
+    /// <summary>The index of the array <c>foreach</c> whose enumerator is <paramref name="enumerator"/>.</summary>
+    private SsaBuilder.Variable Index(CaptureId enumerator)
+    {
+        if (!indices.TryGetValue(enumerator, out SsaBuilder.Variable? index))
+        {
+            index = new SsaBuilder.Variable(new IrVar($"$index{indices.Count.ToString(CultureInfo.InvariantCulture)}", new IrBitVec(32)));
+            indices[enumerator] = index;
+        }
+
+        return index;
     }
 
     /// <summary>

@@ -1,0 +1,41 @@
+﻿proc "C::M(string[])" (%xs "xs": sort "string[]", ref %array.string__: map<sort "string[]", map<bv32, sort "System.String">>, %length.string__: map<sort "string[]", bv32>, %null.System.String: map<sort "System.String", bool>, %null.string__: map<sort "string[]", bool>) -> bv32 entry B0
+B0:
+  %xs.isNull.30 "xs": bool = mapread %null.string__, %xs
+  goto B1
+B1:
+  %n.31 "n": bv32 = const bv32 0
+  goto B2
+B2:
+  %$index0.32: bv32 = const bv32 0
+  goto B3
+B3:
+  %$index0.36: bv32 = phi [B2: %$index0.32, B12: %$index0.39, B5: %$index0.39]
+  %n.37 "n": bv32 = phi [B2: %n.31, B12: %n.37, B5: %n.42]
+  br %xs.isNull.30, B8, B9
+B4:
+  br %xs.isNull.30, B8, B10
+B5:
+  %$26: bv32 = const bv32 1
+  %n.42 "n": bv32 = add %n.37, %$26
+  goto B3
+B6:
+  ret %n.37 outs(%array.string__ = %array.string__)
+B8:
+  throw "System.NullReferenceException" outs(%array.string__ = %array.string__)
+B9:
+  %$8: bv32 = mapread %length.string__, %xs
+  %$10: bool = slt %$index0.36, %$8
+  br %$10, B4, B6
+B10:
+  %$15: bv32 = mapread %length.string__, %xs
+  %$16: bool = uge %$index0.36, %$15
+  br %$16, B11, B12
+B11:
+  throw "System.IndexOutOfRangeException" outs(%array.string__ = %array.string__)
+B12:
+  %$18: map<bv32, sort "System.String"> = mapread %array.string__, %xs
+  %x.40 "x": sort "System.String" = mapread %$18, %$index0.36
+  %$20: bv32 = const bv32 1
+  %$index0.39: bv32 = add %$index0.36, %$20
+  %x.isNull.41 "x": bool = mapread %null.System.String, %x.40
+  br %x.isNull.41, B5, B3

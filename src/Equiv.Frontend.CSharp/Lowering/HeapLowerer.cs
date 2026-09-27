@@ -145,21 +145,27 @@ internal sealed class HeapLowerer(
 
         IrVar reference = lower(element.ArrayReference, context);
         IrVar index = lower(element.Indices[0], context);
-        return new Access(Versioned(Inputs.Elements((IrSort)reference.Type, TypeMapper.Map(element.Type!, sorts))), reference, index, element.ArrayReference);
+        return Element(reference, index, element.Type!, element.ArrayReference);
     }
 
-    /// <summary><c>a.Length</c> on an array variable is the length map read at its reference; every other property stays opaque.</summary>
-    public IrVar? ArrayLength(IPropertyReferenceOperation property, LoweringContext context)
-    {
-        if (property is not { Property: { Name: "Length", ContainingType.SpecialType: SpecialType.System_Array }, Instance: { } instance }
-            || resolveTarget(instance) is null)
-        {
-            return null;
-        }
+    /// <summary>
+    /// Element <paramref name="index"/> of the array <paramref name="array"/> references, whose elements are of
+    /// <paramref name="elementType"/>; <paramref name="dereferenced"/> is the operand whose nullness is the array's.
+    /// </summary>
+    public Access Element(IrVar array, IrVar index, ITypeSymbol elementType, IOperation dereferenced) =>
+        new(Versioned(Inputs.Elements((IrSort)array.Type, TypeMapper.Map(elementType, sorts))), array, index, dereferenced);
 
-        IrVar reference = lower(instance, context);
-        throwIfNull(instance, reference, context);
-        return Length(reference, context);
+    /// <summary><c>a.Length</c> on an array variable is the length map read at its reference; every other property stays opaque.</summary>
+    public IrVar? ArrayLength(IPropertyReferenceOperation property, LoweringContext context) =>
+        property is { Property: { Name: "Length", ContainingType.SpecialType: SpecialType.System_Array }, Instance: { } instance } && resolveTarget(instance) is not null
+            ? ArrayLength(lower(instance, context), instance, context)
+            : null;
+
+    /// <summary>The length of the array <paramref name="array"/> references, which throws when <paramref name="operand"/>, its source, is null.</summary>
+    public IrVar ArrayLength(IrVar array, IOperation operand, LoweringContext context)
+    {
+        throwIfNull(operand, array, context);
+        return Length(array, context);
     }
 
     public IrVar ReadSlice(Access access, LoweringContext context)
