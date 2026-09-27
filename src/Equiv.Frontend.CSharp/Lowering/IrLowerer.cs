@@ -723,8 +723,8 @@ internal sealed class IrLowerer
                 return Assign(assignment, context);
             case IFieldReferenceOperation field:
                 return heap.ReadSlice(heap.Field(field, context), context);
-            case IArrayElementReferenceOperation element:
-                return heap.Element(element, context) is { } read ? heap.ReadSlice(read, context) : Opaque(element, element.Kind.ToString(), context);
+            case IArrayElementReferenceOperation or IEventReferenceOperation:
+                return heap.Readable(operation, receiver, context) is { } read ? heap.ReadSlice(read, context) : Opaque(operation, operation.Kind.ToString(), context);
             case IPropertyReferenceOperation property:
                 return Read(property, context);
             case IConversionOperation conversion:
@@ -1348,7 +1348,7 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// How to read and write an lvalue that is both read and written, or null, with nothing emitted, when it is neither
-    /// a variable nor a property. A property's receiver and index arguments are evaluated here, once, for both accessors.
+    /// a variable, a field nor a property (a field since ticket P2-004). A property's receiver and index arguments are evaluated here, once, for both accessors.
     /// </summary>
     private (Func<IrVar> Read, Action<IrVar> Write)? Place(IOperation lvalue, LoweringContext context)
     {
@@ -1357,7 +1357,13 @@ internal sealed class IrLowerer
             return (() => ssa.Load(context.Current, target), value => ssa.Store(context.Current, target, value));
         }
 
-        if (lvalue is IPropertyReferenceOperation auto && heap.AutoProperty(auto, context) is { } slice)
+        HeapLowerer.Access? heapSlot = lvalue switch
+        {
+            IFieldReferenceOperation field => heap.Field(field, context),
+            IPropertyReferenceOperation auto => heap.AutoProperty(auto, context),
+            _ => null,
+        };
+        if (heapSlot is { } slice)
         {
             return (() => heap.ReadSlice(slice, context), value => heap.WriteSlice(slice, value, context));
         }
