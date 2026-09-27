@@ -54,6 +54,30 @@ public sealed class IrRecordEqualityTests
     public void CallHeap() =>
         AssertStructural(() => new IrCall(A, Threw: null, new CallIdentity("F"), [B]) { Heap = [new IrHeapPair("m", A, B)] }, c => c with { Heap = [] });
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    public void Opaque(int field) =>
+        AssertStructural(
+            () => new IrOpaque(A, "Lambda", new SourceSpan("a.cs", 1, 2, 3, 4)) { Fingerprint = "f", Reads = [A, B], Threw = new IrVar("t", new IrBool()), Heap = [new IrHeapPair("m", A, B)] },
+            o => field switch
+            {
+                0 => o with { Target = B },
+                1 => o with { Reason = "Other" },
+                2 => o with { Span = new SourceSpan("b.cs", 1, 2, 3, 4) },
+                3 => o with { WholeBody = true },
+                4 => o with { Fingerprint = null },
+                5 => o with { Reads = [B, A] },
+                6 => o with { Threw = null },
+                _ => o with { Heap = [] },
+            });
+
     [Fact]
     public void CallResult() => AssertStructural(() => new IrCallResult(One, Threw: false) { Heap = [One] }, r => r with { Heap = [] });
 

@@ -47,6 +47,14 @@ internal sealed class SsaBuilder
 
     public void Emit(IrBlockId block, IrInstruction instruction) => drafts[block.Value].Steps.Add(new Instruction(instruction));
 
+    /// <summary>
+    /// Emits a fingerprinted <paramref name="fragment"/> whose lambdas capture <paramref name="captured"/>. <see cref="Build"/>
+    /// drops its fingerprint and reads when one of them is stored at a point reachable after it (ticket M4-004), and otherwise
+    /// gives it the heap pairs a call has.
+    /// </summary>
+    public void EmitFragment(IrBlockId block, IrOpaque fragment, ImmutableArray<Variable> captured) =>
+        drafts[block.Value].Steps.Add(new Instruction(fragment) { Captured = captured });
+
     /// <summary>Reads <paramref name="variable"/> at this point of <paramref name="block"/>.</summary>
     public IrVar Load(IrBlockId block, Variable variable)
     {
@@ -135,7 +143,12 @@ internal sealed class SsaBuilder
                     WriteVariable(store.Variable, draft.Id, Name(store.Variable, Resolve(store.Value)));
                     break;
                 case Instruction { Value: IrCall call }:
-                    draft.Steps[i] = new Instruction(call with { Heap = [.. heap.Select(v => HeapPair(v, draft.Id))] });
+                    draft.Steps[i] = new Instruction(call with { Heap = HeapPairs(heap, draft.Id) });
+                    break;
+                case Instruction { Value: IrOpaque { Fingerprint: not null } fragment } step:
+                    draft.Steps[i] = new Instruction(StoredAfter(draft, i, step.Captured)
+                        ? fragment with { Fingerprint = null, Reads = [] }
+                        : fragment with { Heap = HeapPairs(heap, draft.Id) });
                     break;
             }
         }
@@ -147,6 +160,33 @@ internal sealed class SsaBuilder
             var other => other,
         };
     }
+
+    /// <summary>
+    /// Whether one of <paramref name="captured"/> is stored after step <paramref name="index"/> of <paramref name="draft"/>: later
+    /// in the block, or anywhere in a block reachable from it, the block itself included when a loop leads back to it. A lambda
+    /// that captures such a variable sees a value its reads at creation do not determine (ADR 0024 decision 2).
+    /// </summary>
+    private bool StoredAfter(Draft draft, int index, ImmutableArray<Variable> captured)
+    {
+        HashSet<IrBlockId> reached = [];
+        Stack<IrBlockId> pending = new(Successors(draft.Terminator!));
+        while (pending.TryPop(out IrBlockId? block))
+        {
+            if (reached.Add(block))
+            {
+                foreach (IrBlockId successor in Successors(drafts[block.Value].Terminator!))
+                {
+                    pending.Push(successor);
+                }
+            }
+        }
+
+        return draft.Steps.Skip(index + 1).Concat(reached.SelectMany(b => drafts[b.Value].Steps))
+            .Any(s => s is StoreStep store && captured.Contains(store.Variable));
+    }
+
+    /// <summary>A heap pair of each of <paramref name="heap"/> at a call or shared fragment in <paramref name="block"/>.</summary>
+    private ImmutableArray<IrHeapPair> HeapPairs(ImmutableArray<Variable> heap, IrBlockId block) => [.. heap.Select(v => HeapPair(v, block))];
 
     /// <summary>The version of <paramref name="variable"/> a call in <paramref name="block"/> reads, and a fresh one it leaves.</summary>
     private IrHeapPair HeapPair(Variable variable, IrBlockId block)
@@ -301,7 +341,13 @@ internal sealed class SsaBuilder
         _ => Rewrite((IrOpaque)instruction),
     };
 
-    private IrOpaque Rewrite(IrOpaque opaque) => opaque with { Target = opaque.Target is null ? null : Resolve(opaque.Target) };
+    private IrOpaque Rewrite(IrOpaque opaque) => opaque with
+    {
+        Target = opaque.Target is null ? null : Resolve(opaque.Target),
+        Reads = [.. opaque.Reads.Select(Resolve)],
+        Threw = opaque.Threw is null ? null : Resolve(opaque.Threw),
+        Heap = [.. opaque.Heap.Select(h => h with { Before = Resolve(h.Before) })],
+    };
 
     private IrTerminator Rewrite(IrTerminator terminator) => terminator switch
     {
@@ -323,7 +369,11 @@ internal sealed class SsaBuilder
 
     private interface IStep;
 
-    private sealed record Instruction(IrInstruction Value) : IStep;
+    /// <summary>An instruction, and, for a fingerprinted fragment, the variables its lambdas capture.</summary>
+    private sealed record Instruction(IrInstruction Value) : IStep
+    {
+        public ImmutableArray<Variable> Captured { get; init; } = [];
+    }
 
     private sealed record LoadStep(Variable Variable, IrVar Temp) : IStep;
 

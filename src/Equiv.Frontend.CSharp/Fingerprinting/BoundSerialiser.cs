@@ -12,6 +12,7 @@ using Equiv.Frontend.CSharp.Lowering;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.FlowAnalysis;
 using Microsoft.CodeAnalysis.Operations;
 
 namespace Equiv.Frontend.CSharp.Fingerprinting;
@@ -48,13 +49,22 @@ internal sealed class BoundSerialiser : OperationWalker
     private readonly ImmutableDictionary<string, string> members;
     private readonly bool x87;
     private readonly string interpolation;
+    private readonly Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas;
     private int depth;
 
     private bool RuntimeSensitive { get; set; }
 
-    private BoundSerialiser(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences, bool legacy)
+    private BoundSerialiser(
+        IMethodSymbol method,
+        Compilation compilation,
+        RenameMap renames,
+        ImmutableArray<string> suppressedRuntimeChanges,
+        ImmutableArray<ApiEquivalence> equivalences,
+        bool legacy,
+        Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas = null)
     {
         this.method = method;
+        this.lambdas = lambdas;
         this.renames = renames;
         this.suppressedRuntimeChanges = suppressedRuntimeChanges;
         types = equivalences.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
@@ -100,6 +110,30 @@ internal sealed class BoundSerialiser : OperationWalker
     }
 
     /// <summary>
+    /// The serialisation of one expression-level <paramref name="fragment"/> of <paramref name="method"/>'s control-flow graph
+    /// (ADR 0024 decision 2; ticket M4-004), and whether it is runtime-sensitive, by the rules of <see cref="Serialise"/>, with
+    /// two differences. The graph holds a lambda as an <see cref="IFlowAnonymousFunctionOperation"/>, which has no body, so
+    /// each one is serialised as the lambda <paramref name="lambdas"/> gives, body and all. And the method's own parameters
+    /// are numbered by first occurrence, as its locals are, since a fragment is called with the variables it reads in that
+    /// order, not with the method's parameters.
+    /// </summary>
+    public static (string Text, bool RuntimeSensitive) SerialiseFragment(
+        IMethodSymbol method,
+        Compilation compilation,
+        IOperation fragment,
+        Func<IFlowAnonymousFunctionOperation, IOperation> lambdas,
+        RenameMap renames,
+        ImmutableArray<string> suppressedRuntimeChanges,
+        ImmutableArray<ApiEquivalence> equivalences,
+        bool legacy)
+    {
+        BoundSerialiser serialiser = new(method, compilation, renames, suppressedRuntimeChanges, equivalences, legacy, lambdas);
+        serialiser.text.Append("Fragment").Append('\n');
+        serialiser.Visit(fragment);
+        return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
+    }
+
+    /// <summary>
     /// Writes <paramref name="operation"/>'s line and then its children's. It does not dispatch through the visitor, which skips
     /// an <see cref="OperationKind.None"/> operation and would drop exactly the ones whose meaning only their tokens hold.
     /// </summary>
@@ -107,6 +141,7 @@ internal sealed class BoundSerialiser : OperationWalker
     {
         ArgumentNullException.ThrowIfNull(operation);
         RuntimeHelpers.EnsureSufficientExecutionStack();
+        operation = operation is IFlowAnonymousFunctionOperation flow ? lambdas!(flow) : operation;
         text.Append(' ', depth * 2).Append(operation.Kind)
             .Append(" syntax=").Append((SyntaxKind)operation.Syntax.RawKind)
             .Append(" implicit=").Append(operation.IsImplicit);
@@ -194,7 +229,8 @@ internal sealed class BoundSerialiser : OperationWalker
         IPropertySymbol p => string.Join('|', ((IMethodSymbol?[])[p.GetMethod, p.SetMethod]).OfType<IMethodSymbol>().Select(Method)),
         ILocalSymbol l => $"{Number(l, "L")}:{l.RefKind} {Type(l.Type)}",
         ILabelSymbol => Number(symbol, "B"),
-        IParameterSymbol p when SymbolEqualityComparer.Default.Equals(p.ContainingSymbol, method) => $"P{p.Ordinal.ToString(CultureInfo.InvariantCulture)}",
+        IParameterSymbol p when SymbolEqualityComparer.Default.Equals(p.ContainingSymbol, method) =>
+            lambdas is null ? $"P{p.Ordinal.ToString(CultureInfo.InvariantCulture)}" : Number(p, "P"),
         IParameterSymbol { ContainingSymbol: IMethodSymbol { MethodKind: MethodKind.AnonymousFunction or MethodKind.LocalFunction } } => Number(symbol, "A"),
         IParameterSymbol p => $"#{p.Ordinal.ToString(CultureInfo.InvariantCulture)}",
         ITypeSymbol t => Type(t),
