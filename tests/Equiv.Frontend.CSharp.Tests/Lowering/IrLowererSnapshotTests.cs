@@ -148,7 +148,7 @@ public sealed class IrLowererSnapshotTests
     public Task ThrowOfANewObject() => Dump("class E : Exception { public E(int n) { } } static int M(int a) { if (a < 0) throw new E(a); return a; }");
 
     [Fact]
-    public Task EntirelyOpaque() => Dump("static int M(object o, int a) { lock (o) { a = a + 1; } return a; }");
+    public Task EntirelyOpaque() => Dump("static System.Collections.Generic.IEnumerable<int> M(int a) { yield return a + 1; }");
 
     [Fact]
     public Task WhileLoop() => Dump("static int M(int n) { int s = 0; while (n > 0) { s = s + n; n = n - 1; } return s; }");
@@ -275,6 +275,10 @@ public sealed class IrLowererSnapshotTests
     /// <summary>Ticket M4-008: the initializers' graphs, then the constructor's, its base call first.</summary>
     [Fact]
     public Task ConstructorWithFieldInitializers() => Dump("int f = 1; int P { get; } = 2; C(int a) { f = a; }", ".ctor");
+
+    /// <summary>Ticket P2-004 acceptance criterion 1: a field-like event raised inside its type is its backing field's map.</summary>
+    [Fact]
+    public Task RaisedFieldLikeEvent() => Dump("public event EventHandler? Changed; int n; public void Bump() { n++; Changed?.Invoke(this, EventArgs.Empty); }", "Bump");
 
     private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }

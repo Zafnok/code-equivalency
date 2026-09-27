@@ -1,5 +1,5 @@
 # M4-011 `lock` through its `try`/`finally`
-Status: todo
+Status: done (PR #224)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-003
@@ -42,3 +42,16 @@ If criterion 1 needs more than a store at region entry, stop.
 `EnterScope` instead.
 
 ## Notes
+- Decision: "entry to a region" is lowering the region's first block (walking out through every enclosing region that
+  starts at that block). Roslyn's regions are entered only through their first block, and `lock`'s local-lifetime region
+  starts with the capture of the lock object, so no back edge inside it lands there.
+- Decision: the default is `TypeMapper.Default(...)!`. The CFG builder's only implicitly declared local is `lock`'s
+  `bool lockTaken`, so the type always has a constant default and there is no reference shadow to store; a branch for a
+  type without one would be dead code under the 100% branch gate.
+- Decision: the whole-body examples that used `lock` moved to `iterator` (`EntirelyOpaque`, the span test) and to `extern`
+  (`no-body`, for the by-ref outs test and the API-equivalence modern-return-sort test, since an iterator cannot have
+  `ref` parameters or return a `Task`).
+- `Monitor.Exit` has two call sites per `lock` in the census: the `finally` is copied onto the normal and the exceptional
+  exit.
+- Locally, `webapi-basic`'s legacy solution did not load (System.Web.Http unresolved: its packages were not restored in
+  this worktree); unrelated to this ticket, CI restores them.

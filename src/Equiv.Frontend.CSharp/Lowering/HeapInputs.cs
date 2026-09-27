@@ -49,13 +49,16 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// property's backing field is named for the property, so both sides agree whatever the compiler calls it, and an
     /// auto-property is one slice with a field of its name on the other side (ticket M4-008).
     /// </summary>
-    public IrVar Field(IFieldSymbol field) =>
-        Input(
-            $"field.{Part(TypeMapper.MetadataName(field.ContainingType, sorts))}.{Part((field.AssociatedSymbol as IPropertySymbol)?.Name ?? field.Name)}",
-            new IrMap(Receiver(field), TypeMapper.Map(field.Type, sorts)));
+    public IrVar Field(IFieldSymbol field) => Field(field, (field.AssociatedSymbol as IPropertySymbol)?.Name ?? field.Name, field.Type);
 
-    /// <summary>The token a static field's map is keyed by: element 0 of its declaring type's sort.</summary>
-    public IrSortValue Token(IFieldSymbol field) => new(Receiver(field).Name, 0);
+    /// <summary>
+    /// A field-like event's backing field, which the compiler names for the event (ticket P2-004), so reading the event and
+    /// initialising its field name one slice.
+    /// </summary>
+    public IrVar Field(IEventSymbol @event) => Field(@event, @event.Name, @event.Type);
+
+    /// <summary>The token a static member's map is keyed by: element 0 of its declaring type's sort.</summary>
+    public IrSortValue Token(ISymbol member) => new(Receiver(member).Name, 0);
 
     /// <summary>
     /// An implicit reference or boxing conversion from <paramref name="from"/> to <paramref name="to"/>, or a downcast whose
@@ -101,8 +104,11 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// <summary>Marks <paramref name="input"/> as written by the body, which makes it <see cref="IrParameterKind.Ref"/>.</summary>
     public void Write(IrVar input) => written.Add(input.Name);
 
+    private IrVar Field(ISymbol member, string name, ITypeSymbol type) =>
+        Input($"field.{Part(TypeMapper.MetadataName(member.ContainingType, sorts))}.{Part(name)}", new IrMap(Receiver(member), TypeMapper.Map(type, sorts)));
+
     /// <summary>A field map's key type. A field of a value type is keyed by the value, which is what value semantics mean.</summary>
-    private IrSort Receiver(IFieldSymbol field) => new(TypeMapper.MetadataName(field.ContainingType, sorts));
+    private IrSort Receiver(ISymbol member) => new(TypeMapper.MetadataName(member.ContainingType, sorts));
 
     /// <summary>Whether <paramref name="name"/> is a <c>field.*</c> or <c>array.*</c> map, which is always <see cref="IrParameterKind.Ref"/>.</summary>
     public static bool IsWritable(string name) => name.StartsWith("field.", StringComparison.Ordinal) || name.StartsWith("array.", StringComparison.Ordinal);

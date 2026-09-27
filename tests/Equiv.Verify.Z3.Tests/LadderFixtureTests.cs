@@ -20,7 +20,7 @@ public sealed class LadderFixtureTests
         "loop-break-return", "loop-break-return-mutant", "loop-invariant-livein", "loop-invariant-livein-mutant",
         "nested-aligned", "nesting-changed", "late-divergence", "late-divergence-beyond", "constant-loop-prefix-change",
         "phis-reordered", "state-unpaired", "irreducible", "loop-opaque", "loop-hard",
-        "recursion-aligned", "recursion-divergent", "recursion-heap",
+        "recursion-aligned", "recursion-divergent", "recursion-heap", "recursion-array-divergent",
         "trip-count-changed", "chc-spurious", "chc-overflow-bitvectors", "fusion", "counter-shape", "array-count",
         "int-proof-wraps",
     ];
@@ -100,6 +100,38 @@ public sealed class LadderFixtureTests
             ],
             verdict.Ladder.Select(static s => (s.Rung, s.Outcome)));
         Assert.Equal("the step obligation of loop 1 fails", verdict.Ladder[1].Detail);
+    }
+
+    [Fact]
+    public void RungOneInlinesAHeapSelfCall()
+    {
+        Verdict verdict = Verify(Fixture.Load("loops/recursion-heap"));
+
+        Assert.NotEqual(RungOutcome.NotApplicable, verdict.Ladder[0].Outcome);
+    }
+
+    [Fact]
+    public void RungOneDoesNotInlineASelfCallWithASourceRefParameter()
+    {
+        const string Side = """
+            proc "T::F(ref int)" (ref %n: bv32) entry B0
+            B0:
+              %z: bv32 = const bv32 0
+              %c: bool = sle %n, %z
+              br %c, B1, B2
+            B1:
+              ret outs(%n = %n)
+            B2:
+              call "T::F(ref int)"(%z) threw %t: bool
+              ret outs(%n = %z)
+            """;
+        (IrProcedure old, IrProcedure @new) = Fixture.Pair(Side + "\n---\n" + Side);
+
+        Verdict verdict = new Z3Backend().Verify(old, @new, new VerificationOptions(3, 60_000, []));
+
+        Assert.Equal(
+            (ProofMethod.Bounded, RungOutcome.NotApplicable, "self-recursion is not inlined: it has a by-ref parameter"),
+            (verdict.Ladder[0].Rung, verdict.Ladder[0].Outcome, verdict.Ladder[0].Detail));
     }
 
     [Fact]
