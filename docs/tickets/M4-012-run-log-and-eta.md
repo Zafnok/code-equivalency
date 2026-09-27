@@ -1,5 +1,5 @@
 # M4-012 Run log: `--verbosity`, `--log`, phase clocks, heartbeat and ETA, written off the pipeline thread
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-004
@@ -96,3 +96,9 @@ Frontend and backend events (M4-013, M4-014). Cancellation or Ctrl-C handling. A
 cap. Parallel verification. MCP progress notifications. Any change to SARIF.
 
 ## Notes
+- Decision: `VerificationOptions.Log` and equality -> left out of the existing `Equals`/`GetHashCode` override, which already lists its members by hand. Alternatives: a wrapper type with constant equality. Rule: 4.
+- Decision: "instruction count" in `PairWeight` -> instructions plus one per block (its terminator) on both sides, so a pair that reaches the solver weighs at least 2 and never ties with the weight-1 pairs. Alternatives: instructions only (an empty body weighs 0 and stalls the ETA). Rule: 3.
+- Decision: `EtaEstimator.Estimate` -> takes the done item count as a fourth argument (the "or 20 items" threshold needs it) and never reads a clock; the writer computes `elapsed` from `TimeProvider` timestamps. Alternatives: an estimator that owns a `TimeProvider`. Rule: 3.
+- Deviation: `IRunLog.Phase` gains an optional fourth parameter, `PhaseBound? bound = null` (solver pairs, `TimeoutMs`, rungs), because the ticket's contract gives the writer no way to learn ADR 0038's worst-case inputs, which only `CompareCommand` knows once the config is loaded. The writer prints `worst=WorstCase(min(solver pairs, items left), TimeoutMs, rungs)` and clamps `eta` to it, which is what makes criterion 6's "never greater than `WorstCase`" hold when weights differ. Calls without a bound (M4-013's) are unchanged. Rungs are 1 for a loop-free pair and 5 (the ladder's rungs, `LoopLadder.Climb`) when either side has a back edge.
+- Decision: the grammar's `<dur>` -> `HH:MM:SS.fff`, `took=<s>` -> seconds with three decimals, `rate=<n>/s` -> items per second with one decimal, a missing checkpoint -> `?`, all invariant culture. A debug item line adds `outcome=<o>` after `item=`, a heartbeat past 10x the median ends in ` slow`, and a `Detail` is `equiv: +HH:MM:SS <phase> detail: <text>`. `dropped=<n>` is the run's total so far. Alternatives: whole seconds (a sub-second phase reads `done in 00:00:00`). Rule: 3.
+- Deviation: criterion 2's run on `samples/business-layer` is in `Equiv.Tests.Integration/CompareProgressSampleTests.cs`, not `Equiv.Cli.Tests`: loading the legacy `.csproj` needs VS Build Tools (Windows `gates` leg only), and a real solution load in `Equiv.Cli.Tests` would run under every Stryker mutant of `Equiv.Cli`. `Equiv.Cli.Tests/CompareCommandProgressTests.cs` covers criteria 1 to 3 against the fakes.
