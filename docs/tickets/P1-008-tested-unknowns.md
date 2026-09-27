@@ -86,3 +86,67 @@ Heap-carrying inputs (object graphs). Adaptive (coverage-guided) generation. Ext
 estimators (Baez et al., ASE 2025), which are a possible later comparison. Changing exit codes.
 
 ## Notes
+- Decision: an observed divergence is a `Divergent` whose `Observed` holds both runtimes' outcomes
+  (`Divergent.Observation`). `Verdict` stays closed at five kinds, so every switch that reads EQ002
+  (rule id, exit code, baseline) treats it as the Divergent it is. It has no model of the IR, so its
+  `Counterexample` is `Divergent.Unmodelled` (no inputs, both runs `infeasible`), which the writer
+  and the fingerprint never read: both use `ObservationText` instead. `proofMethod: observed` is
+  written by the SARIF writer and is not a `ProofMethod` member, so no `Equivalent` can carry it.
+- Decision: `properties.model` of an observed divergence is `inputs(<wire args>) culture(<name>)`,
+  and the message is `<id> diverges on the real runtimes: <model> legacy(<kind> <canonical>)
+  modern(<kind> <canonical>)`. The fingerprint hashes the message's dump, so a verdict change from
+  Unknown is `new` (M1-004).
+- Decision: an observed divergence carries no `differentialTesting`. Criterion 1 describes Unknown
+  results, and testing stops at the first divergence, where the estimate has no meaning left.
+- Decision: a divergent input is rerun once per side in fresh processes before it is reported
+  (ADR 0035's "runs every input twice per side", applied only where it matters). If either outcome
+  changes it is noise: the input stays a species, with `equal` false, and testing goes on.
+- Decision: the species key is `<legacy class> / <modern class>` per culture, `equal <bool>`, then
+  `path <legacy blocks> / <modern blocks>`. The outcome class of a timeout or a value with no
+  canonical form is `not-comparable`; such an input is never a divergence. A side answering
+  `NotConstructible` (its driver could not build the arguments or the culture) stops testing with
+  `notConstructible: the <side> side gave NotConstructible <canonical>`, since every later input
+  would say the same and the figure would describe nothing.
+- Decision: the hash bucket is FNV-1a over the canonical text's UTF-16 code units, modulo 16, so a
+  class is the same on every machine (`string.GetHashCode` is randomised per process).
+- Decision: the IR path signature is `IrRun.Path`, recorded by `IrInterpreter` on every run and
+  ignored by `IrRun` equality (it is not an observable). The path was not observable before, so
+  `IrInterpreter.cs` changed, as the Files list allows. For the path, every call and pure function is
+  an abstraction and is answered with its type's default (`DefaultOracle`), so the signature stops
+  at the first branch on one. Wire arguments bind to the body's C# parameters by position; a
+  sort-typed value (string, floating point, decimal, any reference) is one element per distinct wire
+  text, `null` also set in the `null.<Sort>` map; the receiver is one more element; every other
+  synthesised input is its type's default. The step budget is 1,000.
+- Decision: "a runtime-changes row is reached" is read statically: either body holds an `IrCall`
+  whose callee is `RuntimeChanged` or a `RuntimeSensitive` `IrPure`. A dynamic reading would miss
+  calls inside opaque fragments, which the IR path never enters. Each input then runs under both
+  cultures and counts once; its species covers both.
+- Decision: inputs come from `InputGenerator.Stream`, which yields `Generate`'s cases and then keeps
+  drawing; a parameter with finitely many values (a `bool`, an enum, `null`) draws among them, so a
+  finite input space is sampled with replacement and its estimate falls to 0 once every value
+  repeats. `Generate` is now `Stream(...).Take(...)`, with the same output as before. The seed is
+  fixed at `DifferentialTester.Seed` (0), which is what makes criterion 7's snapshot stable; there
+  is no seed option. Seeds from the candidate counterexample count as inputs.
+- Decision: the pair is tested with the legacy side's parameter list, position by position, and
+  both sides must classify every parameter alike (`the two sides' parameters differ: ...`). An
+  enum's values are the union of both sides', as in M3-032.
+- Decision: the frontend's part is `IReplayDriverFactory.Plan(pair, candidate, directory)`, beside
+  `Create`, returning a `TestingPlan` (Core). It is outside the Files list, but the frontend alone
+  holds the symbols. `ReplayArguments.CallObstacle` is the part of replay's obstacle check that does
+  not depend on a model, shared by both. The drivers are replay's (`EquivReplay<n>`).
+- Decision: `--test-budget` is `<inputs>` or `<inputs>,<seconds>`, both positive integers;
+  `--test-target` is a number strictly between 0 and 1. Both are validated by System.CommandLine
+  validators, so nonsense is a parse error and exit 3 with or without `--execute`; valid values do
+  nothing without it. `CompareCommand.Create` takes an optional `ExecutionEnvironment` so a test can
+  run the parsed command against fakes, and `ExecutionEnvironment.Time` is the budget's clock.
+- Decision: `run.properties.loweringCensus.unknownByScope` is counted after testing, so an Unknown
+  that became an observed Divergent is not counted as Unknown.
+- Decision: `TestingNeverYieldsEquivalent` lives in `Equiv.Tests.Integration`, beside the M0-012
+  harness it reuses: 30 `PairGen` pairs, 200 inputs each, both sides run in-process on each case
+  through a host that decodes the wire line. It also checks that a divergence it observes is on a
+  pair the solver did not call Equivalent.
+- Decision: the snapshot is `tests/Equiv.Tests.Integration/business-layer.execute.sarif`. It differs
+  from `samples/business-layer/expected.sarif.json` by `Describe`'s tested sentence and
+  `differentialTesting` (1,000 inputs, 1 species, stopped by target: its only parameter is an
+  `Order`, which the generators build only as `null`) and by `RoundTotal`'s M4-009 replay fields.
+- Observed: the whole `business-layer` run with `--execute` takes about 7 s on the dev box.

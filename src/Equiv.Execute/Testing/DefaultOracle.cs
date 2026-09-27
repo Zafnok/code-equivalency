@@ -25,6 +25,6 @@ internal sealed class DefaultOracle : ICallOracle, IPureOracle
         IrBool => new IrBoolValue(Value: false),
         IrBitVec bitVec => new IrBitVecValue(bitVec.Width, 0),
         IrSort sort => new IrSortValue(sort.Name, 0),
-        _ => new IrMapValue((IrMap)type, Default(((IrMap)type).Value), ImmutableDictionary<IrValue, IrValue>.Empty),
+        _ => new IrMapValue((IrMap)type, Default(((IrMap)type).Value), []),
     };
 }

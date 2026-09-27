@@ -36,8 +36,8 @@ public sealed class IrPathSignatureTests
                 nullString,
                 new IrSortValue("T", 3),
                 new IrMapValue(Nulls, new IrBoolValue(Value: false), ImmutableDictionary<IrValue, IrValue>.Empty.Add(nullString, new IrBoolValue(Value: true))),
-                new IrMapValue(new IrMap(new IrSort("T"), new IrBitVec(32)), new IrBitVecValue(32, 0), ImmutableDictionary<IrValue, IrValue>.Empty),
-                new IrMapValue(new IrMap(new IrBitVec(8), new IrBitVec(8)), new IrBitVecValue(8, 0), ImmutableDictionary<IrValue, IrValue>.Empty),
+                new IrMapValue(new IrMap(new IrSort("T"), new IrBitVec(32)), new IrBitVecValue(32, 0), []),
+                new IrMapValue(new IrMap(new IrBitVec(8), new IrBitVec(8)), new IrBitVecValue(8, 0), []),
                 new IrBitVecValue(32, 0),
             ],
             inputs.Arguments);
