@@ -11,6 +11,13 @@ public sealed record IrRun(IrOutcome Outcome, ImmutableArray<IrValue> Outs, Immu
 {
     public IrTaint Taint { get; init; } = IrTaint.None;
 
+    /// <summary>
+    /// Every block the run entered, in order, until its control first depended on an abstraction (ADR 0026) or it
+    /// reached an <see cref="IrOpaque"/>: tested Unknowns' IR path signature (ticket P1-008). It is not an observable, so
+    /// equality ignores it.
+    /// </summary>
+    public ImmutableArray<IrBlockId> Path { get; init; } = [];
+
     /// <summary>Whether the final value <see cref="Outs"/>[<paramref name="index"/>] is tainted.</summary>
     public bool OutTainted(int index) => Taint.Outs.Contains(index);
 

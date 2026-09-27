@@ -16,6 +16,8 @@ namespace Equiv.Core.Reporting;
 /// <see cref="UnprovenAssumptions"/> the ones among them whose own result in the run is not Equivalent (ADR 0019; ticket M3-015).
 /// Neither is part of the result's fingerprint. <see cref="Replay"/> is a Divergent's replay on both real runtimes under
 /// <c>--execute</c> (ADR 0035 decision 2; ticket M4-009), null otherwise; it is never part of the fingerprint either.
+/// <see cref="Testing"/> is an Unknown's run on generated inputs under <c>--execute</c> (ADR 0035 decision 3; ticket
+/// P1-008), null otherwise, and is not part of the fingerprint.
 /// </summary>
 public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
 {
@@ -26,4 +28,6 @@ public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verd
     public ImmutableArray<string> UnprovenAssumptions { get; init; } = [];
 
     public ReplayResult? Replay { get; init; }
+
+    public DifferentialTesting? Testing { get; init; }
 }

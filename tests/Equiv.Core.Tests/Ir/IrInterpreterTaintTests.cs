@@ -287,6 +287,51 @@ public sealed class IrInterpreterTaintTests
                 print: static s => IrText.Dump(s.p));
     }
 
+    /// <summary>Ticket P1-008: the path signature is every block entered while control depends on no abstraction.</summary>
+    [Fact]
+    public void Path_RecordsEveryBlockEnteredUntilABranchOnAnAbstraction()
+    {
+        IrProcedure p = IrText.Parse(Header + """
+            (%a: bv32, %c: bool) -> bv32 entry B0
+            B0:
+              br %c, B1, B2
+            B1:
+              goto B2
+            B2:
+              %t: bool = call "opaque:f"(%a)
+              br %t, B3, B4
+            B3:
+              ret %a
+            B4:
+              ret %a
+            """);
+
+        IrRun run = Run(p, Bv(1), new IrBoolValue(Value: true));
+
+        Assert.Equal([new IrBlockId(0), new IrBlockId(1), new IrBlockId(2)], run.Path);
+        Assert.Equal([new IrBlockId(0), new IrBlockId(2)], Run(p, Bv(0), new IrBoolValue(Value: false)).Path);
+    }
+
+    [Fact]
+    public void Path_EndsAtAnOpaqueAndIsNotAnObservable()
+    {
+        IrProcedure p = IrText.Parse(Header + """
+            (%c: bool) -> bool entry B0
+            B0:
+              br %c, B1, B2
+            B1:
+              opaque "lambda" at "T.cs" 3:9-3:20
+              goto B2
+            B2:
+              ret %c
+            """);
+
+        IrRun opaque = Run(p, new IrBoolValue(Value: true));
+
+        Assert.Equal([new IrBlockId(0), new IrBlockId(1)], opaque.Path);
+        Assert.Equal(opaque, opaque with { Path = [] });
+    }
+
     private static IrBitVecValue Bv(ulong bits) => new(32, bits);
 
     private static IrMapValue Map() => new(new IrMap(new IrBitVec(32), new IrBitVec(32)), Bv(0), []);

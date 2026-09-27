@@ -49,6 +49,7 @@ public static class IrInterpreter
         private readonly HashSet<string> tainted = new(StringComparer.Ordinal);
         private readonly ImmutableArray<int>.Builder taintedEvents = ImmutableArray.CreateBuilder<int>();
         private readonly ImmutableArray<CallIdentity>.Builder sources = ImmutableArray.CreateBuilder<CallIdentity>();
+        private readonly ImmutableArray<IrBlockId>.Builder path = ImmutableArray.CreateBuilder<IrBlockId>();
 
         /// <summary>The run branched on a tainted condition, so everything it does from here on is tainted.</summary>
         private bool control;
@@ -70,6 +71,11 @@ public static class IrInterpreter
             int steps = 0;
             while (true)
             {
+                if (!control)
+                {
+                    path.Add(block.Id);
+                }
+
                 List<(IrVar Target, IrVar From)> phis =
                     [.. block.Instructions.OfType<IrPhi>().Select(phi => (phi.Target, phi.Incoming.First(i => i.From == previous).Value))];
                 List<(IrVar Target, IrValue Value, bool Tainted)> bound = [.. phis.Select(p => (p.Target, Get(p.From), IsTainted(p.From)))];
@@ -238,6 +244,7 @@ public static class IrInterpreter
                     [.. Enumerable.Range(0, outs.Length).Where(i => control || IsTainted(outs[i].Final))],
                     taintedEvents.ToImmutable(),
                     sources.ToImmutable()),
+                Path = path.ToImmutable(),
             };
 
         private sealed class IrStepper(IrMachine machine) : IIrTerminatorVisitor<IrJump>
