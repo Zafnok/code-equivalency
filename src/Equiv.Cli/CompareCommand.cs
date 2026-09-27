@@ -28,6 +28,9 @@ namespace Equiv.Cli;
 /// </summary>
 internal static class CompareCommand
 {
+    /// <summary>How many times <see cref="DeleteTemporary"/> tries before it leaves the folder behind.</summary>
+    internal const int DeleteAttempts = 5;
+
     /// <summary>The <c>compare</c> command; <paramref name="execution"/> is where <c>--execute</c> runs, this machine when null.</summary>
     public static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution = null)
     {
@@ -350,7 +353,34 @@ internal static class CompareCommand
         finally
         {
             runLog.PhaseDone();
-            Directory.Delete(directory, recursive: true);
+            DeleteTemporary(directory, static d => Directory.Delete(d, recursive: true), TimeSpan.FromMilliseconds(500));
+        }
+    }
+
+    /// <summary>
+    /// Deletes <c>--execute</c>'s temporary folder, trying <see cref="DeleteAttempts"/> times <paramref name="pause"/> apart
+    /// and then leaving it to the OS's temp cleanup. A driver process that has exited can still hold its <c>.exe</c> open for
+    /// a moment on Windows ("Access to the path is denied"), and a folder left behind must not turn a finished run into
+    /// exit 5 with no SARIF.
+    /// </summary>
+    internal static void DeleteTemporary(string directory, Action<string> delete, TimeSpan pause)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                delete(directory);
+                return;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                if (attempt == DeleteAttempts)
+                {
+                    return;
+                }
+
+                Thread.Sleep(pause);
+            }
         }
     }
 
