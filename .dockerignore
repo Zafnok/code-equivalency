@@ -1,0 +1,14 @@
+.git
+.claude
+.corpus
+.z3-feed
+.reference-assemblies
+TestResults
+StrykerOutput
+**/bin
+**/obj
+docs
+samples
+tests
+tools/corpus
+*.user
