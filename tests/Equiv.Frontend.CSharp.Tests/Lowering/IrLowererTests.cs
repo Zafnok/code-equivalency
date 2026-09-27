@@ -1,6 +1,10 @@
 ﻿using System.Collections.Immutable;
 
+using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
+using Equiv.Frontend.CSharp.Lowering;
+
+using Microsoft.CodeAnalysis;
 
 using Xunit;
 
@@ -262,7 +266,6 @@ public sealed class IrLowererTests
     }
 
     [Theory]
-    [InlineData("int f; void M(int a) { f += a; }", "FieldReference")]
     [InlineData("static void M(int[] xs) { xs[0]++; }", "ArrayElementReference")]
     [InlineData("enum E { A } static void M(E e) { e += 1; }", "ParameterReference")]
     public void CompoundAssignmentToAnUnsupportedTargetIsOpaque(string members, string reason) =>
@@ -531,6 +534,58 @@ public sealed class IrLowererTests
         IrParameter receiver = Assert.Single(procedure.Parameters, static p => p.Var.Name is "this");
         Assert.Equal(new IrSort("C"), receiver.Var.Type);
         Assert.Equal([receiver.Var], Assert.Single(Calls(procedure)).Args);
+    }
+
+    /// <summary>Ticket P2-004 acceptance criterion 1: a field, instance or static, is a compound target: its map is read and written once.</summary>
+    [Theory]
+    [InlineData("int f; static void M(C c, int a) { c.f += a; }")]
+    [InlineData("int f; void M() { f++; }")]
+    [InlineData("static int f; static void M() { --f; }")]
+    public void AFieldIsACompoundTarget(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>(), static r => r.Map.Name is "field.C.f");
+        Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapWrite>());
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket P2-004: inside its declaring type, a field-like event is read as its backing field, at the receiver.</summary>
+    [Theory]
+    [InlineData("event Action? E; static Action? M(C c) => c.E;")]
+    [InlineData("static event Action? E; static Action? M() => E;")]
+    public void AFieldLikeEventReadInItsTypeIsItsFieldMap(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.C.E");
+        Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>(), static r => r.Map.Name.StartsWith("field.C.E", StringComparison.Ordinal));
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket P2-004 acceptance criterion 2: a field-like event read from a nested type stays opaque.</summary>
+    [Fact]
+    public void AFieldLikeEventReadOutsideItsTypeIsOpaque()
+    {
+        Compilation compilation = RoslynTestCompilations.Compile("using System;\nclass D { public event Action? E; public class C { static Action? M(D d) => d.E; } }\n");
+        IMethodSymbol method = compilation.GetTypeByMetadataName("D+C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+
+        Assert.Equal("EventReference", Assert.Single(Opaques(procedure)).Reason);
+    }
+
+    /// <summary>
+    /// Ticket P2-004 acceptance criterion 2: an event with explicit accessors can only be the target of <c>+=</c> or <c>-=</c>
+    /// (CS0079), which stays opaque, with no read of a field map.
+    /// </summary>
+    [Fact]
+    public void AnEventWithExplicitAccessorsIsOpaque()
+    {
+        IrProcedure procedure = Method("event Action E { add { } remove { } } void M(Action h) { E += h; }");
+
+        Assert.Equal("EventAssignment", Assert.Single(Opaques(procedure)).Reason);
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("field.", StringComparison.Ordinal));
     }
 
     /// <summary>Ticket M2-004 acceptance criterion 6: a field is one SSA map keyed by its receiver.</summary>

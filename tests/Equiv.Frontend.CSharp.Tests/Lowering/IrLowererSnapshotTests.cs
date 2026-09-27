@@ -276,5 +276,9 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task ConstructorWithFieldInitializers() => Dump("int f = 1; int P { get; } = 2; C(int a) { f = a; }", ".ctor");
 
+    /// <summary>Ticket P2-004 acceptance criterion 1: a field-like event raised inside its type is its backing field's map.</summary>
+    [Fact]
+    public Task RaisedFieldLikeEvent() => Dump("public event EventHandler? Changed; int n; public void Bump() { n++; Changed?.Invoke(this, EventArgs.Empty); }", "Bump");
+
     private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }
