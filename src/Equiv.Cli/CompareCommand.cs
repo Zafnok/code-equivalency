@@ -60,7 +60,7 @@ internal static class CompareCommand
             testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption,
         };
 
-        command.SetAction((parseResult, cancellationToken) => RunLoggedAsync(
+        command.SetAction(parseResult => RunLogged(
             new CompareOptions(
                 parseResult.GetValue(legacyOption)!,
                 parseResult.GetValue(modernOption)!,
@@ -89,18 +89,11 @@ internal static class CompareCommand
     /// <see cref="Run"/> with a <see cref="ChannelRunLog"/> built from <c>--verbosity</c> and <c>--log</c> (ticket M4-012).
     /// Progress goes to stderr and the <c>--log</c> file, never to stdout (ADR 0038, ADR 0033).
     /// </summary>
-    private static async Task<int> RunLoggedAsync(
-        CompareOptions options, IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution)
+    private static int RunLogged(CompareOptions options, IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution)
     {
-        TextWriter logFile = OpenLog(options.LogPath);
-        await using (logFile.ConfigureAwait(false))
-        {
-            ChannelRunLog runLog = new(options.Verbosity, Console.Error, logFile, TimeProvider.System);
-            await using (runLog.ConfigureAwait(false))
-            {
-                return Run(options, frontends, backend, new FileReportSink(options.OutPath), runLog, execution);
-            }
-        }
+        using TextWriter logFile = OpenLog(options.LogPath);
+        using ChannelRunLog runLog = new(options.Verbosity, Console.Error, logFile, TimeProvider.System);
+        return Run(options, frontends, backend, new FileReportSink(options.OutPath), runLog, execution);
     }
 
     /// <summary>The <c>--log</c> file, flushed after every line so a run that is killed keeps what it wrote; <see cref="TextWriter.Null"/> without one.</summary>

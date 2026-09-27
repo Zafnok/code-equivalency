@@ -17,12 +17,12 @@ public sealed class ChannelRunLogTests
     private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
 
     [Fact]
-    public async Task Heartbeat_WhileProducerBlocked_NamesItem()
+    public void Heartbeat_WhileProducerBlocked_NamesItem()
     {
         ManualTimeProvider time = new();
         using LineWriter error = new();
         ChannelRunLog log = new(Verbosity.Normal, error, file: null, time);
-        await using (log)
+        using (log)
         {
             log.Phase("verify", 2, 2, new PhaseBound(2, 5000, 1));
             log.Item("T::Stuck()", 1);
@@ -44,12 +44,12 @@ public sealed class ChannelRunLogTests
     }
 
     [Fact]
-    public async Task Full_Channel_Drops_And_Counts()
+    public void Full_Channel_Drops_And_Counts()
     {
         ManualTimeProvider time = new();
         using LineWriter error = new();
         ChannelRunLog log = new(Verbosity.Normal, error, file: null, time);
-        await using (log)
+        using (log)
         {
             error.Hold();
             log.Phase("verify", ChannelRunLog.Capacity + 7, ChannelRunLog.Capacity + 7);
@@ -71,13 +71,13 @@ public sealed class ChannelRunLogTests
     }
 
     [Fact]
-    public async Task Quiet_Writes_Nothing()
+    public void Quiet_Writes_Nothing()
     {
         ManualTimeProvider time = new();
         using LineWriter error = new();
         using LineWriter file = new();
         ChannelRunLog log = new(Verbosity.Quiet, error, file, time);
-        await using (log)
+        using (log)
         {
             Assert.False(log.IsDebug);
             Run(log, time);
@@ -89,13 +89,13 @@ public sealed class ChannelRunLogTests
     }
 
     [Fact]
-    public async Task Log_File_Mirrors_Stderr()
+    public void Log_File_Mirrors_Stderr()
     {
         ManualTimeProvider time = new();
         using LineWriter error = new();
         using LineWriter file = new();
         ChannelRunLog log = new(Verbosity.Debug, error, file, time);
-        await using (log)
+        using (log)
         {
             Run(log, time);
         }
@@ -105,12 +105,12 @@ public sealed class ChannelRunLogTests
     }
 
     [Fact]
-    public async Task PhaseDone_Reports_Eta_Checkpoints()
+    public void PhaseDone_Reports_Eta_Checkpoints()
     {
         ManualTimeProvider time = new();
         using LineWriter error = new();
         ChannelRunLog log = new(Verbosity.Normal, error, file: null, time);
-        await using (log)
+        using (log)
         {
             log.Phase("verify", 4, 100);
             for (int i = 0; i < 4; i++)
@@ -137,12 +137,12 @@ public sealed class ChannelRunLogTests
 
     /// <summary>At <c>normal</c>, items between two 5% steps of the weight write nothing, and a detail is not even queued.</summary>
     [Fact]
-    public async Task Normal_Writes_A_Line_Per_Five_Percent_Of_Weight()
+    public void Normal_Writes_A_Line_Per_Five_Percent_Of_Weight()
     {
         ManualTimeProvider time = new();
         using LineWriter error = new();
         ChannelRunLog log = new(Verbosity.Normal, error, file: null, time);
-        await using (log)
+        using (log)
         {
             log.Phase("verify", 40, 40);
             for (int i = 0; i < 40; i++)
@@ -161,12 +161,12 @@ public sealed class ChannelRunLogTests
     }
 
     [Fact]
-    public async Task Debug_Writes_Every_Item_And_Detail_And_Beats_Every_Ten_Seconds()
+    public void Debug_Writes_Every_Item_And_Detail_And_Beats_Every_Ten_Seconds()
     {
         ManualTimeProvider time = new();
         using LineWriter error = new();
         ChannelRunLog log = new(Verbosity.Debug, error, file: null, time);
-        await using (log)
+        using (log)
         {
             Assert.True(log.IsDebug);
             log.Phase("verify", 2, 30, new PhaseBound(1, 5000, 5));
@@ -198,12 +198,12 @@ public sealed class ChannelRunLogTests
     [Theory]
     [InlineData(1, true)]
     [InlineData(10, false)]
-    public async Task Heartbeat_Says_Slow_Past_Ten_Times_The_Median(int firstSeconds, bool slow)
+    public void Heartbeat_Says_Slow_Past_Ten_Times_The_Median(int firstSeconds, bool slow)
     {
         ManualTimeProvider time = new();
         using LineWriter error = new();
         ChannelRunLog log = new(Verbosity.Normal, error, file: null, time);
-        await using (log)
+        using (log)
         {
             log.Phase("verify", 100, 100);
             log.Item("T::A()", 1);
@@ -220,12 +220,12 @@ public sealed class ChannelRunLogTests
     }
 
     [Fact]
-    public async Task Heartbeat_Between_Items_Has_No_Item_And_Outside_A_Phase_Writes_Nothing()
+    public void Heartbeat_Between_Items_Has_No_Item_And_Outside_A_Phase_Writes_Nothing()
     {
         ManualTimeProvider time = new();
         using LineWriter error = new();
         ChannelRunLog log = new(Verbosity.Normal, error, file: null, time);
-        await using (log)
+        using (log)
         {
             time.Advance(Minute);
             log.Phase("write", 1, 0);
@@ -248,15 +248,15 @@ public sealed class ChannelRunLogTests
     }
 
     [Fact]
-    public async Task Dispose_Gives_Up_On_A_Stuck_Writer()
+    public void Dispose_Gives_Up_On_A_Stuck_Writer()
     {
         using LineWriter error = new();
-        ChannelRunLog log = new(Verbosity.Normal, error, file: null, new ManualTimeProvider());
+        using ChannelRunLog log = new(Verbosity.Normal, error, file: null, new ManualTimeProvider());
         error.Hold();
         log.Phase("load", 1, 1);
         error.WaitUntilBlocked();
 
-        await log.DisposeAsync();
+        log.Dispose();
 
         Assert.Empty(error.Lines);
         error.Release();

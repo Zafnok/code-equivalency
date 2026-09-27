@@ -13,11 +13,11 @@ namespace Equiv.Cli.Progress;
 /// wakes on a <see cref="PeriodicTimer"/> and writes a heartbeat from the snapshot, so an item that never finishes is
 /// still named, with how long it has run and <c>slow</c> once that is ten times the phase's median item.
 /// </summary>
-internal sealed class ChannelRunLog : IRunLog, IAsyncDisposable
+internal sealed class ChannelRunLog : IRunLog, IDisposable
 {
     public const int Capacity = 4096;
 
-    /// <summary>How long <see cref="DisposeAsync"/> waits for the writer to drain the channel.</summary>
+    /// <summary>How long <see cref="Dispose"/> waits for the writer to drain the channel.</summary>
     public static readonly TimeSpan DrainTimeout = TimeSpan.FromSeconds(2);
 
     private const int SlowFactor = 10;
@@ -98,18 +98,14 @@ internal sealed class ChannelRunLog : IRunLog, IAsyncDisposable
         channel.Writer.TryWrite(new RunEvent.PhaseFinished(now));
     }
 
-    /// <summary>Completes the channel and waits at most <see cref="DrainTimeout"/> for the writer to finish; a log that falls behind is cut short, never the run.</summary>
-    public async ValueTask DisposeAsync()
+    /// <summary>
+    /// Completes the channel and waits at most <see cref="DrainTimeout"/> for the writer to finish. A writer stuck on its
+    /// output is left behind: the run's result does not wait for its progress lines.
+    /// </summary>
+    public void Dispose()
     {
         channel.Writer.TryComplete();
-        try
-        {
-            await consumer.WaitAsync(DrainTimeout).ConfigureAwait(false);
-        }
-        catch (TimeoutException)
-        {
-            // The writer is stuck on its output; the run's result does not wait for its progress lines.
-        }
+        _ = consumer.Wait(DrainTimeout);
     }
 
     private static TimeSpan? Worst(PhaseBound? bound, int total, int done) =>
