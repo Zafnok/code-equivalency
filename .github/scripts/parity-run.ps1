@@ -41,7 +41,8 @@ $rid = if ($IsWindows) { 'win-x64' } else { 'linux-x64' }
 $publishDir = Join-Path $OutDir '_publish'
 dotnet publish $cli -c Release -r $rid -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw "publishing the CLI failed with exit code $LASTEXITCODE" }
-$exe = Join-Path $publishDir (if ($IsWindows) { 'Equiv.Cli.exe' } else { 'Equiv.Cli' })
+$exeName = if ($IsWindows) { 'Equiv.Cli.exe' } else { 'Equiv.Cli' }
+$exe = Join-Path $publishDir $exeName
 
 $exitCodes = [ordered]@{}
 foreach ($sample in Get-ChildItem -Path $samples -Directory | Sort-Object Name) {
