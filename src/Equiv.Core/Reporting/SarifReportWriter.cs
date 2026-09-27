@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 
 using Equiv.Core.Execution;
 using Equiv.Core.Matching;
@@ -189,8 +189,8 @@ public static class SarifReportWriter
 
     /// <summary>
     /// The verdict's payload as result properties: a Divergent's counterexample (<c>model</c>), an Equivalent's
-    /// <c>proofMethod</c> and, for a bounded proof over a loop, <c>boundedBy</c>, and for a rung 4 proof the coupling
-    /// <c>invariant</c>, an Unknown's <c>unknownReason</c>, the <c>ladderTrace</c> of every rung the backend attempted
+    /// <c>proofMethod</c> and, for a bounded proof over a loop, <c>boundedBy</c>, for a rung 4 or 5 proof the coupling
+    /// <c>invariant</c> and for rung 5 its <c>proposedBy</c> (ticket P1-002; ADR 0036), an Unknown's <c>unknownReason</c>, the <c>ladderTrace</c> of every rung the backend attempted
     /// (VERIFICATION-MODEL.md sections 1 and 5.1; ticket M3-002), and the <c>chcMode</c> rung 4 ran in when it ran
     /// (ticket P1-001).
     /// </summary>
@@ -211,6 +211,11 @@ public static class SarifReportWriter
                 if (equivalent.Invariant is { } invariant)
                 {
                     sarifResult.SetProperty("invariant", invariant);
+                }
+
+                if (equivalent.ProposedBy is { } proposer)
+                {
+                    sarifResult.SetProperty("proposedBy", proposer);
                 }
 
                 break;
@@ -323,7 +328,7 @@ public static class SarifReportWriter
 
     /// <summary>
     /// The spelling VERIFICATION-MODEL.md sections 1 and 5.1 use for a proof: <c>bounded</c>, <c>lockstep-induction</c>,
-    /// <c>k-induction</c>, <c>chc</c>, <c>congruence</c>.
+    /// <c>k-induction</c>, <c>chc</c>, <c>llm-invariant</c>, <c>congruence</c>.
     /// </summary>
     internal static string Name(ProofMethod method) => method switch
     {
@@ -331,6 +336,7 @@ public static class SarifReportWriter
         ProofMethod.LockstepInduction => "lockstep-induction",
         ProofMethod.KInduction => "k-induction",
         ProofMethod.Chc => "chc",
+        ProofMethod.LlmInvariant => "llm-invariant",
         _ => "congruence",
     };
 
@@ -344,6 +350,7 @@ public static class SarifReportWriter
         UnknownReason.Abstraction => "abstraction",
         UnknownReason.ChcTimeout => "chc-timeout",
         UnknownReason.ChcSpurious => "chc-spurious",
+        UnknownReason.NoInvariant => "no-invariant",
         _ => "unbound",
     };
 
