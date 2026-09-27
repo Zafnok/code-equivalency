@@ -777,6 +777,42 @@ public sealed class CompareCommandTests
         Assert.False(Assert.Single(backend.Calls).ChcIntMode);
     }
 
+    /// <summary>Ticket P1-002 criterion 4: <c>--invariant-model</c> is off unless given.</summary>
+    [Theory]
+    [InlineData(new string[0], null)]
+    [InlineData(new[] { "--invariant-model", "claude-test" }, "claude-test")]
+    public void Create_ParsesInvariantModelOffByDefault(string[] flag, string? expected)
+    {
+        ParseResult parseResult = CompareCommand.Create([], new FakeBackend(NoVerdicts)).Parse(["--legacy", "a.sln", "--modern", "b.sln", .. flag]);
+
+        Assert.Empty(parseResult.Errors);
+        Assert.Equal(expected, parseResult.GetValue<string?>("--invariant-model"));
+    }
+
+    /// <summary>
+    /// Ticket P1-002 criterion 4: with <c>--invariant-model</c> the model reaches the backend and stderr says, once and
+    /// before any pair is verified, that loop IR text goes to it; without it, neither.
+    /// </summary>
+    [Theory]
+    [InlineData("claude-test")]
+    [InlineData(null)]
+    public void Cli_PrintsNoteWhenEnabled(string? model)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.LlmInvariant) });
+        int exitCode = 0;
+
+        string stderr = CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false, InvariantModel: model),
+            [frontend], backend, new InMemoryReportSink()));
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Equal(model, Assert.Single(backend.Calls).InvariantModel);
+        Assert.Equal(model is null ? "" : "note: sending loop IR text to claude-test" + Environment.NewLine, stderr);
+    }
+
     [Fact]
     public void Compare_MissingConfigFileExits3()
     {

@@ -5,6 +5,8 @@ namespace Equiv.Cli;
 /// <see cref="FailOn"/> is null when <c>--fail-on</c> was not given, which means <c>divergent</c> and lets <c>--lower-only</c> reject only an explicit one.
 /// <see cref="Execute"/> is <c>--execute</c>: replay every Divergent on both real runtimes (ADR 0035; ticket M4-009).
 /// <see cref="ChcIntMode"/> is <c>--chc-int-mode</c>, on unless given as false (<see cref="Core.VerificationOptions.ChcIntMode"/>; ticket P1-001).
+/// <see cref="InvariantModel"/> is <c>--invariant-model</c>: the model rung 5 asks for a coupling invariant when rung 4
+/// times out, off when null (<see cref="Core.VerificationOptions.InvariantModel"/>; ticket P1-002).
 /// </summary>
 internal sealed record CompareOptions(
     string LegacyPath,
@@ -16,4 +18,5 @@ internal sealed record CompareOptions(
     bool DryRun,
     bool LowerOnly = false,
     bool Execute = false,
-    bool ChcIntMode = true);
+    bool ChcIntMode = true,
+    string? InvariantModel = null);
