@@ -5,6 +5,8 @@ using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
+using Equiv.Verify.Z3.Ladder;
+
 using Microsoft.Z3;
 
 using ProductEncoding = Equiv.Verify.Z3.ProductEncoder.ProductEncoding;
@@ -24,16 +26,21 @@ namespace Equiv.Verify.Z3;
 public sealed class Z3Backend : IVerificationBackend
 {
     private readonly Func<Context> createContext;
+    private readonly Func<string, IInvariantProposer> proposers;
 
     public Z3Backend()
         : this(static () => new Context())
     {
     }
 
-    /// <summary>For tests: supplies the <see cref="Context"/> each query uses and disposes.</summary>
-    internal Z3Backend(Func<Context> createContext)
+    /// <summary>
+    /// For tests: supplies the <see cref="Context"/> each query uses and disposes, and the proposer rung 5 asks for the
+    /// model <see cref="VerificationOptions.InvariantModel"/> names (by default <see cref="AnthropicInvariantProposer"/>).
+    /// </summary>
+    internal Z3Backend(Func<Context> createContext, Func<string, IInvariantProposer>? proposers = null)
     {
         this.createContext = createContext;
+        this.proposers = proposers ?? AnthropicInvariantProposer.FromEnvironment;
     }
 
     public Verdict Verify(IrProcedure oldBody, IrProcedure newBody, VerificationOptions options)
@@ -41,7 +48,7 @@ public sealed class Z3Backend : IVerificationBackend
         ArgumentNullException.ThrowIfNull(oldBody);
         ArgumentNullException.ThrowIfNull(newBody);
         ArgumentNullException.ThrowIfNull(options);
-        return new LoopLadder(createContext, options).Verify(oldBody, newBody);
+        return new LoopLadder(createContext, options, options.InvariantModel is { } model ? proposers(model) : null).Verify(oldBody, newBody);
     }
 
     /// <summary>

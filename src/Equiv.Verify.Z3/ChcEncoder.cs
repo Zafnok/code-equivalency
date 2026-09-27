@@ -183,6 +183,81 @@ internal sealed class ChcEncoder
     }
 
     /// <summary>
+    /// Every relation of the divergence query, in cut-point order, with its arguments as constants named as
+    /// <see cref="Invariant"/> names them (<c>in.*</c>, <c>lit.*</c>, <c>old.*</c>, <c>new.*</c>): what rung 5 asks a
+    /// model to define (ticket P1-002).
+    /// </summary>
+    public IEnumerable<Relation> Relations =>
+        divergence.Relations.Select(r => new Relation(r.Value, [.. Carried, .. old.Named(r.Key.Old), .. @new.Named(r.Key.New)]));
+
+    /// <summary>
+    /// Whether <paramref name="definitions"/>, one formula per relation over that relation's <see cref="Relation.Parameters"/>
+    /// and nothing else, solve the divergence query: with every relation replaced by its definition and <c>bad</c> by false,
+    /// no rule has a counterexample. The rules are checked as three obligations, each one SMT query within
+    /// <paramref name="timeoutMs"/>: init (a rule with no relation in its premise), step (a relation in its premise and one
+    /// in its conclusion) and exit (a relation in its premise and <c>bad</c> in its conclusion). Null when every obligation
+    /// is unsatisfiable, which is a proof of the pair in this encoder's arithmetic; else the first obligation that is not,
+    /// with the rule a model breaks and that model's values of the two relations' arguments (ticket P1-002).
+    /// </summary>
+    public string? Refutes(IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, uint timeoutMs)
+    {
+        foreach ((string name, BoolExpr[] rules) in Obligations())
+        {
+            BoolExpr[] counterexamples = [.. rules.Select(rule => context.MkNot(Define(rule, definitions)))];
+            using Solver solver = context.MkSolver();
+            solver.Set("timeout", timeoutMs);
+            solver.Add(context.MkOr(counterexamples));
+            Status status = solver.Check();
+            if (status == Status.UNSATISFIABLE)
+            {
+                continue;
+            }
+
+            if (status == Status.UNKNOWN)
+            {
+                return $"Z3 gave up on the {name} obligation: {solver.ReasonUnknown}";
+            }
+
+            Model model = solver.Model;
+            BoolExpr broken = rules.Where((_, i) => model.Eval(counterexamples[i], completion: true).IsTrue).First();
+            return $"the {name} obligation fails: {Describe(broken, definitions, model)}";
+        }
+
+        return null;
+    }
+
+    /// <summary>The divergence query's rules as the three obligations <see cref="Refutes"/> checks, in order.</summary>
+    private IEnumerable<(string Name, BoolExpr[] Rules)> Obligations()
+    {
+        bool Premised(BoolExpr rule) => Applications(rule.Args[0]).Any(a => divergence.Relations.ContainsValue(a.FuncDecl));
+        bool Exits(BoolExpr rule) => rule.Args[1].FuncDecl.Equals(bad);
+        return
+        [
+            ("init", [.. divergence.Rules.Where(r => !Premised(r))]),
+            ("step", [.. divergence.Rules.Where(r => Premised(r) && !Exits(r))]),
+            ("exit", [.. divergence.Rules.Where(r => Premised(r) && Exits(r))]),
+        ];
+    }
+
+    /// <summary><paramref name="rule"/> with each relation's atom replaced by its definition applied to the atom's arguments, and <c>bad</c> by false.</summary>
+    private BoolExpr Define(BoolExpr rule, IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions)
+    {
+        Expr[] atoms = [.. Applications(rule).Where(a => a.FuncDecl.Equals(bad) || divergence.Relations.ContainsValue(a.FuncDecl))];
+        Expr[] meanings = [.. atoms.Select(a => a.FuncDecl.Equals(bad) ? context.MkFalse() : definitions[a.FuncDecl].Body.Substitute(definitions[a.FuncDecl].Parameters, a.Args))];
+        return (BoolExpr)rule.Substitute(atoms, meanings);
+    }
+
+    /// <summary>A broken rule as <c>&lt;premise&gt; -&gt; &lt;conclusion&gt;</c>, each relation with the model's value of every argument.</summary>
+    private string Describe(BoolExpr rule, IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, Model model)
+    {
+        string Atom(Expr atom) => atom.FuncDecl.Equals(bad)
+            ? "bad"
+            : $"{atom.FuncDecl.Name}({string.Join(", ", definitions[atom.FuncDecl].Parameters.Zip(atom.Args, (p, a) => $"{p} = {model.Eval(a, completion: true)}"))})";
+        Expr? premise = Applications(rule.Args[0]).FirstOrDefault(a => divergence.Relations.ContainsValue(a.FuncDecl));
+        return $"{(premise is null ? "entry" : Atom(premise))} -> {Atom(rule.Args[1])}";
+    }
+
+    /// <summary>
     /// The inputs of a satisfiable query's derivation: the shared inputs and sort literals every relation holds, read from
     /// the first ground fact of a relation in <paramref name="answer"/>. A derivation that reaches no relation derives
     /// <c>bad</c> from a rule without one, which only an entry segment reaching an opaque node has; its inputs come from a
@@ -482,6 +557,9 @@ internal sealed class ChcEncoder
     /// otherwise nothing of use and the reason it gave up.
     /// </summary>
     public sealed record ChcAnswer(Status Status, Expr Answer, string Reason);
+
+    /// <summary>A relation of the divergence query and its arguments, each a constant named for a reader (<see cref="Relations"/>).</summary>
+    public sealed record Relation(FuncDecl Decl, ImmutableArray<Expr> Parameters);
 
     /// <summary>
     /// One query's relations and rules: with <paramref name="Bounds"/> when its premises keep bitvectors within bounds
