@@ -45,6 +45,9 @@ public sealed class ReplayTests
                 "--modern", Path.Combine(Sample, "modern", "Equiv.Samples.RemovedNullCheck.Modern.slnx"),
                 "--out", outPath,
                 "--execute",
+
+                // Only the pre-existing note, not ADR 0038's progress lines, which this test does not check.
+                "--verbosity", "quiet",
             ]);
             json = await File.ReadAllTextAsync(outPath, TestContext.Current.CancellationToken);
             log = SarifLog.Load(outPath);
