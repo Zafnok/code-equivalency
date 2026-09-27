@@ -153,10 +153,13 @@ internal static class ReplayArguments
             .. body.Parameters.Select(static p => p.Var.Name)
                 .Where(static n => IrParameterNames.IsSynthesised(n) && !string.Equals(n, IrParameterNames.Receiver, StringComparison.Ordinal) && !n.StartsWith(NullPrefix, StringComparison.Ordinal)),
         ];
-        return CallObstacle(method)
-            ?? (constrained.Length > 0 ? $"the model constrains {string.Join(", ", constrained)}"
-            : values.GetValueOrDefault(IrParameterNames.Receiver) is IrSortValue receiver && IsNull(receiver, nullness) ? "the model's receiver is null"
-            : null);
+        bool nullReceiver = values.GetValueOrDefault(IrParameterNames.Receiver) is IrSortValue receiver && IsNull(receiver, nullness);
+        return CallObstacle(method) ?? (constrained.Length, nullReceiver) switch
+        {
+            ( > 0, _) => $"the model constrains {string.Join(", ", constrained)}",
+            (_, true) => "the model's receiver is null",
+            _ => null,
+        };
     }
 
     private static bool Constructible(INamedTypeSymbol type) =>
