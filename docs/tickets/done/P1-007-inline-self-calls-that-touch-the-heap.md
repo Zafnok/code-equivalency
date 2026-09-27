@@ -1,5 +1,5 @@
 # P1-007 Rung 1 inlines self-calls that read or write the heap
-Status: in-progress
+Status: done (PR #226)
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-002, M3-007, P1-005, P1-006
