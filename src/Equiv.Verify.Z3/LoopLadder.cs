@@ -5,6 +5,8 @@ using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
+using Equiv.Verify.Z3.Ladder;
+
 using Microsoft.Z3;
 
 using ProductEncoding = Equiv.Verify.Z3.ProductEncoder.ProductEncoding;
@@ -24,14 +26,22 @@ namespace Equiv.Verify.Z3;
 /// <see cref="UnknownReason.Recursion"/> when a side calls itself, <see cref="UnknownReason.UnalignedLoop"/> when the
 /// loops do not align or an induction failed, and <see cref="UnknownReason.Timeout"/> when only the solver gave up;
 /// except that a pair that would be UnalignedLoop goes to rung 4 (<see cref="SpacerRung"/>) first, which decides it
-/// whenever neither side calls. Every verdict lists the rungs it ran in <see cref="Verdict.Ladder"/>.
+/// whenever neither side calls. When rung 4 times out and <paramref name="proposer"/> is given (<c>--invariant-model</c>),
+/// rung 5 (<see cref="LlmInvariantRung"/>) asks it for the invariant, one ladder step per round. Every verdict lists the
+/// rungs it ran in <see cref="Verdict.Ladder"/>.
 /// </summary>
-internal sealed class LoopLadder(Func<Context> createContext, VerificationOptions options)
+internal sealed class LoopLadder(Func<Context> createContext, VerificationOptions options, IInvariantProposer? proposer = null)
 {
     /// <summary>Steps a replay of a looping procedure may take; a replay that runs out is not a counterexample.</summary>
     public const int ReplayBudget = 100_000;
 
     public VerificationOptions Options => options;
+
+    /// <summary>
+    /// The timeout of rung 5's obligation checks, <see cref="VerificationOptions.TimeoutMs"/> unless set; a test sets it to
+    /// force rung 4 to time out while rung 5 still decides.
+    /// </summary>
+    public int? InvariantTimeoutMs { get; init; }
 
     /// <summary>
     /// Runs the ladder on the pair with its shared fragments encoded as calls (<see cref="ProductEncoder.ShareFragments"/>).
@@ -69,6 +79,11 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             if (rungs[^1].Verdict is null && UndecidedReason(rungs, recursive) == UnknownReason.UnalignedLoop)
             {
                 rungs.Add(new SpacerRung(createContext, options).Prove(old, @new));
+            }
+
+            if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout } && proposer is not null)
+            {
+                rungs.AddRange(new LlmInvariantRung(createContext, options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs }, proposer, options.InvariantModel!).Prove(old, @new));
             }
         }
 

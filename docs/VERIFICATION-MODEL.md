@@ -323,13 +323,24 @@ Every derivation is replayed through the original procedures (a value the intege
 run computes): a divergence is Divergent, an opaque node reached is `Opaque`, and anything else is `ChcSpurious`
 with both runs in the detail.
 
+Rung 5 (ticket P1-002, ADR 0036) runs only when rung 4 timed out and `--invariant-model <id>` names a model; the
+CLI then prints `note: sending loop IR text to <id>` on stderr. It sends the model the IR text of both procedures and
+rung 4's relations with their arguments' names and sorts, and asks for one SMT-LIB `define-fun` per relation, at
+most three times. Each candidate is parsed against each relation's own arguments and may name nothing else, then
+checked against rung 4's clauses read with wrap-around arithmetic, so an admitted invariant is a proof over the
+bitvectors: the init, step and exit obligations must all be unsatisfiable. A parse failure or a failed obligation
+(with the model's values of both relations' arguments) goes back to the model as a rejection. An admitted candidate
+is Equivalent with `proofMethod: llm-invariant`, the candidate in `properties.invariant` and the model id in
+`properties.proposedBy`; otherwise the pair is `NoInvariant`. Every round, its candidate and Z3's verdict is a step of
+`properties.ladderTrace`. A wrong candidate is rejected by Z3, so it can never make a pair Equivalent.
+
 ## 6. Verdict semantics and SARIF mapping
 
 | Verdict | SARIF `level` | `kind` | ruleId |
 |---|---|---|---|
 | Equivalent | none | `pass` | EQ001 |
 | Divergent | `error` | `fail` | EQ002 (counterexample in `properties.model` and in `message`; with `proofMethod: observed` when the real runtimes showed it, below) |
-| Unknown | none (rule default `warning`) | `open` | EQ003 (reason in `properties.unknownReason`: timeout, opaque, unmatched-overload, unaligned-loop, recursion, abstraction, unbound, chc-timeout, chc-spurious) |
+| Unknown | none (rule default `warning`) | `open` | EQ003 (reason in `properties.unknownReason`: timeout, opaque, unmatched-overload, unaligned-loop, recursion, abstraction, unbound, chc-timeout, chc-spurious, no-invariant) |
 | Added | none (rule default `note`) | `informational` | EQ004 |
 | Removed | none (rule default `note`) | `informational` | EQ005 |
 | Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link in `message`) |
@@ -337,7 +348,9 @@ with both runs in the detail.
 Every verdict on a matched pair with bodies also carries `properties.assumedCallees` and
 `properties.unprovenAssumptions` (ADR 0019), and `properties.equivalencesApplied` when a
 catalogue entry fired (ADR 0020). A result whose ladder reached rung 4 carries `properties.chcMode`, and an
-Equivalent by `chc` carries Spacer's coupling invariant in `properties.invariant` (section 5.1).
+Equivalent by `chc` carries Spacer's coupling invariant in `properties.invariant` (section 5.1). An Equivalent by
+`llm-invariant` carries the admitted invariant there too, and the model that proposed it in `properties.proposedBy`
+(ADR 0036).
 
 A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
 and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the

@@ -5,6 +5,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Ladder/Prompts/invariant.txt" LogicalName="Equiv.Verify.Z3.Ladder.Prompts.invariant.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Equiv.Core\Equiv.Core.csproj" />
   </ItemGroup>
 

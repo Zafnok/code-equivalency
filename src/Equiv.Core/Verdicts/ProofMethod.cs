@@ -22,6 +22,12 @@ public enum ProofMethod
     Chc,
 
     /// <summary>
+    /// Rung 5: a coupling invariant a language model proposed, admitted only once Z3 proves every rung 4 clause with it
+    /// (unbounded; ticket P1-002, ADR 0036). The proposer is <see cref="Equivalent.ProposedBy"/>.
+    /// </summary>
+    LlmInvariant,
+
+    /// <summary>
     /// No rung: the two bound bodies fingerprint equal and neither is runtime-sensitive, so the solver is not called (ADR 0024;
     /// ticket M3-015). Unbounded, and modular like every verdict (ADR 0019).
     /// </summary>

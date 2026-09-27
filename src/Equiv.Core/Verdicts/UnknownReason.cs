@@ -42,4 +42,10 @@ public enum UnknownReason
     /// is an artefact of the encoding (ticket P1-001). The detail carries both replayed runs.
     /// </summary>
     ChcSpurious,
+
+    /// <summary>
+    /// Rung 5 ran after rung 4 timed out, and no invariant the model proposed within its rounds was admitted by Z3 (ticket
+    /// P1-002). Each rejected candidate and why is in the ladder trace.
+    /// </summary>
+    NoInvariant,
 }

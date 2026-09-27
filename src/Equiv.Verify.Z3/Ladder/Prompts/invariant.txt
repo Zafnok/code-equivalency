@@ -1,0 +1,28 @@
+You are helping prove two versions of a procedure equivalent. Both are given in an SSA intermediate representation.
+Each side is cut at every loop header; a relation inv.<a>.<b> couples the old side at cut point <a> with the new side
+at cut point <b> (a loop header block, or "exit" once that side has returned or thrown). Its arguments are the shared
+inputs (in.*), sort literals (lit.*), the old side's state (old.*) and the new side's state (new.*). At an exit the
+state is returned (Bool), value (the return value), exception (0 on a return) and each by-ref parameter's final value.
+Bitvectors are integers here, read with wrap-around arithmetic: every value stays within its width's signed bounds.
+
+Find definitions of the relations that make these clauses valid:
+- init: both entry segments run from the inputs to the pair of cut points they reach; that relation holds there.
+- step: from a pair of cut points where the relation holds, one side or both run a segment; the relation of the pair
+  they reach holds there.
+- exit: when inv.exit.exit holds, both sides' observables (returned, value, exception, by-ref finals) are equal.
+
+Old procedure:
+{{old}}
+
+New procedure:
+{{new}}
+
+Relations to define, each with its arguments and their sorts:
+{{relations}}
+
+Candidates already rejected by Z3, with the reason:
+{{rejected}}
+
+Answer with SMT-LIB only: one (define-fun <name> (<arguments>) Bool <body>) per relation listed above, using exactly
+the names and sorts given, in linear integer arithmetic. Define a pair of cut points you think unreachable as false.
+No prose, no code fences. If you cannot find an invariant, answer with the single word none.

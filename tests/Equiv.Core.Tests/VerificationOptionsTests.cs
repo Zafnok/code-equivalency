@@ -36,6 +36,18 @@ public sealed class VerificationOptionsTests
     }
 
     /// <summary>Ticket P1-001: <c>--chc-int-mode</c> is on unless turned off, and two options differing in it are unequal.</summary>
+    /// <summary>Ticket P1-002 criterion 4: rung 5 is off unless a model is named, and two options differing in it are unequal.</summary>
+    [Fact]
+    public void InvariantModelIsOffByDefaultAndPartOfEquality()
+    {
+        VerificationOptions a = new(3, 5000, []);
+
+        Assert.Null(a.InvariantModel);
+        Assert.NotEqual(a, a with { InvariantModel = "m" });
+        Assert.Equal(a with { InvariantModel = "m" }, new VerificationOptions(3, 5000, []) { InvariantModel = "m" });
+        Assert.Equal((a with { InvariantModel = "m" }).GetHashCode(), new VerificationOptions(3, 5000, []) { InvariantModel = "m" }.GetHashCode());
+    }
+
     [Fact]
     public void ChcIntModeIsOnByDefaultAndPartOfEquality()
     {

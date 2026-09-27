@@ -54,6 +54,7 @@ public sealed class VerdictTests
     [InlineData(UnknownReason.Abstraction)]
     [InlineData(UnknownReason.ChcTimeout)]
     [InlineData(UnknownReason.ChcSpurious)]
+    [InlineData(UnknownReason.NoInvariant)]
     public void EveryUnknownReasonRoundTripsThroughTheRecord(UnknownReason reason)
     {
         Assert.Equal(reason, new Unknown(reason, "detail").Reason);

@@ -325,6 +325,7 @@ public sealed class SarifReportWriterTests
     [InlineData(ProofMethod.LockstepInduction, "lockstep-induction")]
     [InlineData(ProofMethod.KInduction, "k-induction")]
     [InlineData(ProofMethod.Chc, "chc")]
+    [InlineData(ProofMethod.LlmInvariant, "llm-invariant")]
     [InlineData(ProofMethod.Congruence, "congruence")]
     public void EquivalentResultCarriesItsProofMethodAndNoBoundUnlessBounded(ProofMethod method, string name)
     {
@@ -350,6 +351,20 @@ public sealed class SarifReportWriterTests
 
         Assert.Equal("old B1 / new B1: (= old.i new.i)", result.GetProperty<string>("invariant"));
         Assert.Equal("int", result.GetProperty<string>("chcMode"));
+        Assert.False(result.TryGetProperty("proposedBy", out string? _));
+    }
+
+    /// <summary>Ticket P1-002 criterion 2, ADR 0036: a rung 5 proof shows the admitted invariant and the model that proposed it.</summary>
+    [Fact]
+    public void AnLlmInvariantEquivalentNamesItsProposer()
+    {
+        Equivalent proved = new(ProofMethod.LlmInvariant) { Invariant = "(define-fun inv.exit.exit () Bool true)", ProposedBy = "claude-test" };
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(proved)]).Runs[0].Results[0];
+
+        Assert.Equal("llm-invariant", result.GetProperty<string>("proofMethod"));
+        Assert.Equal("(define-fun inv.exit.exit () Bool true)", result.GetProperty<string>("invariant"));
+        Assert.Equal("claude-test", result.GetProperty<string>("proposedBy"));
     }
 
     /// <summary>Ticket P1-001 criterion 4: whatever rung 4 concluded, the result says which mode it ran in.</summary>
@@ -389,6 +404,7 @@ public sealed class SarifReportWriterTests
     [InlineData(UnknownReason.Abstraction, "abstraction")]
     [InlineData(UnknownReason.ChcTimeout, "chc-timeout")]
     [InlineData(UnknownReason.ChcSpurious, "chc-spurious")]
+    [InlineData(UnknownReason.NoInvariant, "no-invariant")]
     public void UnknownResultCarriesItsReason(UnknownReason reason, string name)
     {
         Result result = SarifReportWriter.Write([Fixtures.Result(new Unknown(reason, "detail"))]).Runs[0].Results[0];

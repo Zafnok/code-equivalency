@@ -47,11 +47,12 @@ internal static class CompareCommand
         testTargetOption.Validators.Add(static result => Validate(result, TestingOptions.TryParse(result.GetValueOrDefault<string?>(), budget: null, out string error), error));
         Option<string?> testBudgetOption = new("--test-budget");
         testBudgetOption.Validators.Add(static result => Validate(result, TestingOptions.TryParse(target: null, result.GetValueOrDefault<string?>(), out string error), error));
+        Option<string?> invariantModelOption = new("--invariant-model");
 
         Command command = new("compare")
         {
             legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption,
-            testTargetOption, testBudgetOption,
+            testTargetOption, testBudgetOption, invariantModelOption,
         };
 
         command.SetAction(parseResult => Run(
@@ -65,7 +66,8 @@ internal static class CompareCommand
                 parseResult.GetValue(dryRunOption),
                 parseResult.GetValue(lowerOnlyOption),
                 parseResult.GetValue(executeOption),
-                parseResult.GetValue(chcIntModeOption))
+                parseResult.GetValue(chcIntModeOption),
+                parseResult.GetValue(invariantModelOption))
             {
                 Testing = TestingOptions.TryParse(parseResult.GetValue(testTargetOption), parseResult.GetValue(testBudgetOption), out _)!,
             },
@@ -174,7 +176,7 @@ internal static class CompareCommand
         List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(static f => PairFailure("Lowering", f.Old, f.New, f.Exception))];
         List<ProcedureIdentity> unverifiedPairs = [.. matchResult.LoweringFailures.Select(static f => f.New)];
         (List<VerificationResult> verified, List<Notification> verifyFailures, List<ProcedureIdentity> unverifiedVerified) =
-            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config, options.ChcIntMode);
+            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config, options);
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
         List<VerificationResult> results = Executed(WithAssumptions(verified, lowered, matchResult), lowered, analysis.Replay, execution, options.Testing);
@@ -397,9 +399,15 @@ internal static class CompareCommand
     /// verified. <see cref="OperationCanceledException"/> and <see cref="OutOfMemoryException"/> propagate unchanged.
     /// </summary>
     private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) Verified(
-        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config, bool chcIntMode)
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config, CompareOptions compare)
     {
-        VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames) { ChcIntMode = chcIntMode };
+        VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames) { ChcIntMode = compare.ChcIntMode, InvariantModel = compare.InvariantModel };
+        if (options.InvariantModel is { } model)
+        {
+            // Ticket P1-002 criterion 4: rung 5 sends loop IR text to the model, so say so before any pair is verified.
+            Console.Error.WriteLine($"note: sending loop IR text to {model}");
+        }
+
         List<VerificationResult> results = [];
         List<Notification> failures = [];
         List<ProcedureIdentity> unverified = [];
