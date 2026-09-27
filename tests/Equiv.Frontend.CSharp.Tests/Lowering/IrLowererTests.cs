@@ -163,17 +163,62 @@ public sealed class IrLowererTests
     }
 
     /// <summary>
-    /// Ticket M4-001: an array's enumerator is the non-generic one, so the CFG unboxes <c>Current</c> and disposes through
-    /// <c>as IDisposable</c>. Those two conversions are opaque where they are, and the loop around them is lowered.
+    /// Ticket P1-004 acceptance criterion 1: an array <c>foreach</c> is an index loop with no opaque and no call. The element
+    /// is the array's slice of <c>array.int__</c> read at the array, then read at the index; the bound is <c>length.int__</c>
+    /// read at the same array; the index is a bv32 phi of 0 and its step at the loop header.
     /// </summary>
     [Fact]
-    public void ForEachOverAnArrayIsOpaqueOnlyAtItsConversions()
+    public void ForEachOverAnArrayIsAnIndexLoop()
     {
         IrProcedure procedure = Method("static int M(int[] xs) { int s = 0; foreach (int x in xs) s += x; return s; }");
+        ImmutableArray<IrInstruction> instructions = [.. procedure.Blocks.SelectMany(static b => b.Instructions)];
+        IrVar xs = procedure.Parameters[0].Var;
 
-        Assert.All(Opaques(procedure), static o => Assert.Equal("Conversion", o.Reason));
-        Assert.Contains(Calls(procedure), static c => string.Equals(c.Callee.Value, "System.Collections.IEnumerator::MoveNext()", StringComparison.Ordinal));
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+        IrMapRead slice = Assert.Single(instructions.OfType<IrMapRead>(), static r => r.Map.Name.StartsWith("array.int__", StringComparison.Ordinal));
+        Assert.Equal(xs, slice.Key);
+        IrMapRead element = Assert.Single(instructions.OfType<IrMapRead>(), r => r.Map == slice.Target);
+        Assert.Contains(instructions.OfType<IrMapRead>(), r => r.Map.Name.StartsWith("length.int__", StringComparison.Ordinal) && r.Key == xs);
+        IrPhi index = Assert.Single(instructions.OfType<IrPhi>(), static p => p.Target.Name.StartsWith("$index0", StringComparison.Ordinal));
+        Assert.Equal(new IrBitVec(32), index.Target.Type);
+        Assert.Equal(index.Target, element.Key);
     }
+
+    /// <summary>Ticket P1-004: the element is read at the element type and converted on to the loop variable's as the CFG converts it.</summary>
+    [Theory]
+    [InlineData("static long M(int[] xs) { long s = 0; foreach (long x in xs) s += x; return s; }")]
+    [InlineData("static object M(int[] xs) { object s = null; foreach (object x in xs) s = x; return s; }")]
+    [InlineData("static object M(object[] xs) { object s = null; foreach (object x in xs) s = x; return s; }")]
+    public void ForEachOverAnArrayConvertsTheElementToTheLoopVariable(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+    }
+
+    /// <summary>Ticket P1-004: two array loops, one inside the other and after a branch on a call, each have their own index.</summary>
+    [Fact]
+    public void NestedArrayForEachLoopsHaveAnIndexEach()
+    {
+        IrProcedure procedure = Method("static bool N(int s) => s > 0; static int M(int[] a, string[] b) { int s = 0; if (N(s)) s = 1; foreach (int x in a) foreach (string y in b) s += x; return s; }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Single(Calls(procedure));
+        Assert.Contains(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPhi>(), static p => p.Target.Name.StartsWith("$index1", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Ticket P1-004 acceptance criteria 2 and 3: a loop over an array whose variable is a deconstruction, and a loop over
+    /// anything but a single-dimensional array, stay the enumerator calls M4-001 lowers.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M((int, int)[] t) { int s = 0; foreach (var (p, q) in t) s += p; return s; }", "System.Collections.IEnumerator::MoveNext()")]
+    [InlineData("static int M(int[,] m) { int s = 0; foreach (int x in m) s += x; return s; }", "System.Collections.IEnumerator::MoveNext()")]
+    [InlineData("static int M(string t) { int s = 0; foreach (char c in t) s += c; return s; }", "System.CharEnumerator::MoveNext()")]
+    public void ForEachOverAnythingElseStaysEnumeratorCalls(string members, string moveNext) =>
+        Assert.Contains(Calls(Method(members)), c => string.Equals(c.Callee.Value, moveNext, StringComparison.Ordinal));
 
     /// <summary>A reference typed as the base, as <c>base.N()</c> is, is still the one <c>this</c> input of the containing type.</summary>
     [Fact]

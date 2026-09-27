@@ -21,19 +21,25 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// behind (the bug ticket M2-004 PR #30 fixed: <c>Raise</c> resolving a <c>catch</c> through a block
 /// map a <c>finally</c> copy had swapped in).
 /// </summary>
-internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compilation, ControlFlowGraph cfg, SwitchChains chains, SourceSpan bodySpan, Action<BasicBlock, LoweringContext> fill)
+internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compilation, ControlFlowGraph cfg, SwitchChains chains, ArrayForEachLoops loops, SourceSpan bodySpan, Action<BasicBlock, LoweringContext> fill)
 {
     private readonly Dictionary<string, IrBlockId> throwBlocks = new(StringComparer.Ordinal);
     private readonly Dictionary<(int Region, IrBlockId Continuation), IrBlockId> copies = [];
     private readonly Dictionary<(int Region, IrBlockId Taken, IrBlockId Declined), IrBlockId> filters = [];
     private IrBlockId? neverReached;
 
-    /// <summary>Runs <paramref name="finallys"/> in order and then continues at <paramref name="destination"/>.</summary>
+    /// <summary>
+    /// Runs <paramref name="finallys"/> in order and then continues at <paramref name="destination"/>. The <c>finally</c> of an
+    /// array <c>foreach</c> lowered as an index loop is not run: it disposes an enumerator the index loop does not have (ticket P1-004).
+    /// </summary>
     public IrBlockId Unwind(ImmutableArray<ControlFlowRegion> finallys, IrBlockId destination, LoweringContext context)
     {
         for (int i = finallys.Length - 1; i >= 0; i--)
         {
-            destination = Copy(finallys[i], destination, context);
+            if (!loops.IsElided(finallys[i]))
+            {
+                destination = Copy(finallys[i], destination, context);
+            }
         }
 
         return destination;

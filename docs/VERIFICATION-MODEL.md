@@ -141,6 +141,16 @@ interpolation and `try`/`finally` into explicit blocks. That is why we lower fro
 CFG instead of walking syntax: syntactic sugar is gone before we see it. What we add is
 SSA renaming, type narrowing, opaque-call identity, and explicit exception edges.
 
+One desugaring is undone (P1-004): the CFG turns every `foreach` into enumerator calls, but a `foreach`
+over a single-dimensional array lowers to the index loop the compiler emits. A loop is recognised
+from the operation tree (an array collection and a declared loop variable) together with the CFG
+(that variable's assignment from `IEnumerator.Current` names the enumerator's capture). The capture
+holds the array instead; a bv32 index starts at 0 and has a phi at the loop header; `MoveNext` is
+`index < length.<Sort>[array]` (signed, null-checked as `a.Length`); `Current` is the element read
+as `a[index]` (the `array.<Sort>` slice at the array, then the index, null- and bounds-checked),
+after which the index steps by one; the enumerator's `finally` is not run. A loop whose variable is a
+deconstruction, or whose element read is not found, stays the M4-001 enumerator calls.
+
 C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 0013):
 
 - Checked `+ - *` and unary `-` test `IrOverflows` and branch to one shared

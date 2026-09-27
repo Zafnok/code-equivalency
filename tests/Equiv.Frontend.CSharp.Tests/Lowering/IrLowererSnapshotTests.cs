@@ -204,6 +204,20 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task ForEachWithBreak() => Dump("static int M(System.Collections.Generic.IEnumerable<int> xs) { int s = 0; foreach (int x in xs) { if (x < 0) break; s += x; } return s; }");
 
+    /// <summary>Ticket P1-004: a <c>foreach</c> over an array is the compiler's index loop, over a bitvector element type.</summary>
+    [Fact]
+    public Task ForEachOverAnIntArray() => Dump("static int M(int[] xs) { int s = 0; foreach (int x in xs) s += x; return s; }");
+
+    /// <summary>Ticket P1-004: over a <c>Sort</c> element type, whose element's nullness is read from its <c>null</c> map.</summary>
+    [Fact]
+    public Task ForEachOverAStringArray() => Dump("static int M(string[] xs) { int n = 0; foreach (string x in xs) if (x == null) n++; return n; }");
+
+    [Fact]
+    public Task ForEachOverAnArrayWithBreak() => Dump("static int M(int[] xs) { int s = 0; foreach (int x in xs) { if (x < 0) break; s += x; } return s; }");
+
+    [Fact]
+    public Task ForEachOverAnArrayWithContinue() => Dump("static int M(int[] xs) { int s = 0; foreach (int x in xs) { if (x < 0) continue; s += x; } return s; }");
+
     [Fact]
     public Task UsingStatement() => Dump("static int M(IDisposable d, int a) { using (d) { a = a + 1; } return a; }");
 
