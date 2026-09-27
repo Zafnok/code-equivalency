@@ -32,7 +32,24 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
 
     public VerificationOptions Options => options;
 
+    /// <summary>
+    /// Runs the ladder on the pair with its shared fragments encoded as calls (<see cref="ProductEncoder.ShareFragments"/>).
+    /// An Unknown that depends on one points at that fragment's line on each side (ADR 0027 decision 4).
+    /// </summary>
     public Verdict Verify(IrProcedure old, IrProcedure @new)
+    {
+        ProductEncoder.SharedFragments shared = ProductEncoder.ShareFragments(old, @new);
+        Verdict verdict = Climb(shared.Old, shared.New);
+        if (verdict is not Unknown { Reason: UnknownReason.Abstraction } unknown)
+        {
+            return verdict;
+        }
+
+        ImmutableArray<Abstraction> located = [.. unknown.Abstractions.Select(shared.Locate)];
+        return unknown with { Abstractions = located, Causes = [.. located.Select(static a => a.Cause).OfType<UnknownCause>()] };
+    }
+
+    private Verdict Climb(IrProcedure old, IrProcedure @new)
     {
         IrLoopAnalysis oldShape = IrLoopAnalysis.Of(old);
         IrLoopAnalysis newShape = IrLoopAnalysis.Of(@new);
@@ -59,6 +76,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// </summary>
     public IReadOnlyList<Rung> Independently(IrProcedure old, IrProcedure @new)
     {
+        (old, @new, _) = ProductEncoder.ShareFragments(old, @new);
         IrLoopAnalysis oldShape = IrLoopAnalysis.Of(old);
         IrLoopAnalysis newShape = IrLoopAnalysis.Of(@new);
         bool looping = oldShape.IsSelfRecursive || newShape.IsSelfRecursive || !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;

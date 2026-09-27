@@ -207,6 +207,19 @@ internal static class PairSyntax
         public string Render() => $"({Condition.Render()} ? {Then.Render()} : {Else.Render()})";
     }
 
+    /// <summary>
+    /// <c>((System.Func&lt;int, int&gt;)(v =&gt; Body))(Argument)</c>: a lambda, which the lowerer leaves an opaque fragment, called
+    /// at once (ticket M4-004). <see cref="Body"/> reads <c>v</c> and may read any variable in scope.
+    /// </summary>
+    public sealed record Fragment(IExpr Body, IExpr Argument) : IExpr
+    {
+        public Type Type => typeof(int);
+
+        public bool CannotThrow => false;
+
+        public string Render() => $"((System.Func<int, int>)(v => {Body.Render()}))({Argument.Render()})";
+    }
+
     /// <summary>A comparison of two numbers or two bools.</summary>
     public sealed record Relation(string Op, IExpr Left, IExpr Right) : IExpr
     {

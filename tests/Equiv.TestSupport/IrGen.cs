@@ -12,7 +12,7 @@ namespace Equiv.TestSupport;
 
 /// <summary>
 /// CsCheck generators for IR. Procedures come from a small structured language (sequence,
-/// if/else, switch, bounded counter loops, checked arithmetic, opaque calls, pure functions, throws) lowered
+/// if/else, switch, bounded counter loops, checked arithmetic, opaque calls, pure functions, shared opaque fragments, throws) lowered
 /// to SSA by <see cref="IrGenLowering"/>, so they are well formed by construction.
 /// </summary>
 public static class IrGen
@@ -363,9 +363,14 @@ public static class IrGen
             Expression(1).Array[1, 2],
             Gen.OneOfConst<ImmutableArray<string>>([], ["System.OverflowException"], ["System.DivideByZeroException", "System.OverflowException"]),
             static (s, function, args, throws) => (IStmt)new Pure(s, function, [.. args], throws));
+        Gen<IStmt> fragment = Gen.Select(
+            Gen.Frequency((3, slot.Select(static s => (int?)s)), (1, Gen.Const((int?)null))),
+            Gen.OneOfConst("gen0", "gen1"),
+            Expression(1).Array[0, 2],
+            static (s, fingerprint, reads) => (IStmt)new Fragment(s, fingerprint, [.. reads]));
         if (depth == 0)
         {
-            return Gen.Frequency((4, assign), (1, check), (1, call), (1, store), (1, pure));
+            return Gen.Frequency((4, assign), (1, check), (1, call), (1, store), (1, pure), (1, fragment));
         }
 
         Gen<ImmutableArray<IStmt>> body = Statements(depth - 1, loops);
@@ -378,6 +383,6 @@ public static class IrGen
             body,
             static (e, cases, fallback) => (IStmt)new Switch(e, [.. cases], fallback));
         Gen<IStmt> loop = Gen.Select(Gen.Int[0, 3], body, static (n, b) => (IStmt)new Loop(n, b));
-        return Gen.Frequency((4, assign), (1, check), (1, call), (1, store), (1, pure), (2, branch), (1, choice), (loops ? 1 : 0, loop));
+        return Gen.Frequency((4, assign), (1, check), (1, call), (1, store), (1, pure), (1, fragment), (2, branch), (1, choice), (loops ? 1 : 0, loop));
     }
 }

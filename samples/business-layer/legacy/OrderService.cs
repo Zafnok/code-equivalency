@@ -118,5 +118,16 @@ namespace Equiv.Samples.BusinessLayer
             total = total - total * rate;
             return total;
         }
+
+        public int CappedLineCount(Order order, int cap)
+        {
+            int count = order.Lines.Count(line => line.Quantity > 0);
+            if (cap < 1)
+            {
+                return count;
+            }
+
+            return count > cap ? cap : count;
+        }
     }
 }

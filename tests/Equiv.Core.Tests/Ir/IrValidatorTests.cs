@@ -202,6 +202,7 @@ public sealed class IrValidatorTests
     [InlineData("%t: bv32 = sext %a")]
     [InlineData("%t: bv64 = trunc %a")]
     [InlineData("%t: bool = call \"F\"() threw %u: bv32")]
+    [InlineData("%t: bool = opaque \"x\" at \"f.cs\" 1:1-1:2 fragment \"f\" reads(%a) threw %u: bv32")]
     public void IR007OperandTypes(string instruction)
     {
         Assert.Equal([IrDiagnosticIds.OperandTypes], Ids(WithInstruction(instruction)));
@@ -223,6 +224,7 @@ public sealed class IrValidatorTests
     [InlineData("%t: bool = mapread %m, %a")]
     [InlineData("%t: map<bv32, bool> = mapwrite %m, %a, %c")]
     [InlineData("opaque \"x\" at \"f.cs\" 1:1-1:2")]
+    [InlineData("%t: bool = opaque \"x\" at \"f.cs\" 1:1-1:2 fragment \"f\" reads(%a, %s) threw %u: bool")]
     public void IR007AndIR009AcceptWellTypedInstructions(string instruction)
     {
         Assert.Empty(IrValidator.Validate(WithInstruction(instruction)));
@@ -362,6 +364,27 @@ public sealed class IrValidatorTests
         {
             Blocks = [p.Blocks[0] with { Instructions = [call with { Heap = [call.Heap[0] with { Before = stranger }] }] }],
         };
+
+        Assert.Equal([IrDiagnosticIds.UseNotDominated], Ids(changed));
+    }
+
+    /// <summary>Ticket M4-004: a fragment's heap pairs follow a call's rules.</summary>
+    [Theory]
+    [InlineData("\"field.C.x\" %field.C.x -> %x1: map<bv32, bv32>, \"field.C.x\" %field.C.x -> %x2: map<bv32, bv32>", IrDiagnosticIds.HeapPairRepeated)]
+    [InlineData("\"m\" %m -> %m1: map<bv32, bv32>", IrDiagnosticIds.HeapPairMap)]
+    public void AFragmentsHeapPairsFollowTheCallRules(string pairs, string expected)
+    {
+        string fragment = HeapCall.Replace("call \"F\"(%a)", "opaque \"x\" at \"f.cs\" 1:1-1:2 fragment \"f\" reads(%a)", StringComparison.Ordinal);
+
+        Assert.Equal([expected], Ids(fragment.Replace("{{pairs}}", pairs, StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void AFragmentsReadMustBeDefined()
+    {
+        IrProcedure p = WithInstruction("opaque \"x\" at \"f.cs\" 1:1-1:2 fragment \"f\" reads(%a)");
+        IrOpaque fragment = (IrOpaque)p.Blocks[0].Instructions[0];
+        IrProcedure changed = p with { Blocks = [p.Blocks[0] with { Instructions = [fragment with { Reads = [new IrVar("stranger", fragment.Reads[0].Type)] }] }] };
 
         Assert.Equal([IrDiagnosticIds.UseNotDominated], Ids(changed));
     }

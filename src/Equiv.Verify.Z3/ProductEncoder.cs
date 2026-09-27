@@ -2,7 +2,9 @@ using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Globalization;
 
+using Equiv.Core;
 using Equiv.Core.Ir;
+using Equiv.Core.Verdicts;
 
 using Microsoft.Z3;
 
@@ -150,6 +152,38 @@ internal static class ProductEncoder
             pures,
             oldSide.Terms,
             newSide.Terms);
+    }
+
+    /// <summary>
+    /// The pair with every opaque fragment whose fingerprint occurs on both sides encoded exactly as a call (ADR 0024
+    /// decision 2; ticket M4-004): an <see cref="IrCall"/> with identity <c>opaque:&lt;fingerprint&gt;</c>
+    /// (<see cref="ModelDecoder.OpaquePrefix"/>), the fragment's reads as arguments, and its <c>threw</c> flag and heap pairs,
+    /// so it has the call's trace event, heap functions and position. Every other <see cref="IrOpaque"/> is left as it is and
+    /// keeps ADR 0014's meaning. <see cref="SharedFragments.Occurrences"/> gives each shared identity's source span per side.
+    /// </summary>
+    public static SharedFragments ShareFragments(IrProcedure old, IrProcedure @new)
+    {
+        HashSet<string> shared = [.. Fingerprints(old)];
+        shared.IntersectWith(Fingerprints(@new));
+        return new SharedFragments(Share(old, shared), Share(@new, shared), [.. Occurrences(Codebase.Legacy, old, shared), .. Occurrences(Codebase.Modern, @new, shared)]);
+
+        static IEnumerable<string> Fingerprints(IrProcedure procedure) => Fragments(procedure).Select(static f => f.Fingerprint!);
+
+        static IEnumerable<IrOpaque> Fragments(IrProcedure procedure) =>
+            procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>().Where(static o => o.Fingerprint is not null);
+
+        static IrProcedure Share(IrProcedure procedure, HashSet<string> shared) => procedure with
+        {
+            Blocks = [.. procedure.Blocks.Select(b => b with { Instructions = [.. b.Instructions.Select(i => i is IrOpaque { Fingerprint: { } f } o && shared.Contains(f) ? Call(o) : i)] })],
+        };
+
+        static IrCall Call(IrOpaque fragment) =>
+            new(fragment.Target, fragment.Threw, new CallIdentity(ModelDecoder.OpaquePrefix + fragment.Fingerprint), fragment.Reads) { Heap = fragment.Heap };
+
+        static IEnumerable<(Codebase, CallIdentity, SourceSpan)> Occurrences(Codebase side, IrProcedure procedure, HashSet<string> shared) =>
+            Fragments(procedure)
+                .Where(o => shared.Contains(o.Fingerprint!))
+                .Select(o => (side, new CallIdentity(ModelDecoder.OpaquePrefix + o.Fingerprint), o.Span));
     }
 
     /// <summary>
@@ -564,6 +598,19 @@ internal static class ProductEncoder
                 list.Add((block.Id, context.MkAnd(reached, condition)));
             }
         }
+    }
+
+    /// <summary>
+    /// A pair after <see cref="ShareFragments"/>, and the source span of each shared fragment's identity on each side, the
+    /// first one when a side has it more than once.
+    /// </summary>
+    public sealed record SharedFragments(IrProcedure Old, IrProcedure New, ImmutableArray<(Codebase Side, CallIdentity Identity, SourceSpan Span)> Occurrences)
+    {
+        /// <summary><paramref name="abstraction"/> with the span of its shared fragment on its side, when it is one and has none.</summary>
+        public Abstraction Locate(Abstraction abstraction) =>
+            abstraction.Span is null && Occurrences.FirstOrDefault(o => o.Side == abstraction.Side && o.Identity == abstraction.Identity).Span is { } span
+                ? abstraction with { Span = span }
+                : abstraction;
     }
 
     /// <summary>Which procedure of a pair a term belongs to.</summary>
