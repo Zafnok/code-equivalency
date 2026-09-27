@@ -1,5 +1,5 @@
 # P2-004 Reading and raising a field-like event is lowered, not opaque
-Status: in-progress
+Status: done (PR #225)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-010, P1-005
