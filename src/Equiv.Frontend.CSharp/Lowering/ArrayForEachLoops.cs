@@ -79,7 +79,7 @@ internal sealed class ArrayForEachLoops
         BasicBlock header = cfg.Blocks.First(b => b.BranchValue is IInvocationOperation { Instance: IFlowCaptureReferenceOperation receiver } && receiver.Id.Equals(enumerator));
         IOperation collection = ((IConversionOperation)((IInvocationOperation)start.Value).Instance!).Operand;
         // The MoveNext block is the `try` of the enumerator's `try`/`finally`.
-        Loop loop = new(enumerator, collection, type, header.EnclosingRegion!.EnclosingRegion!.NestedRegions[^1]);
+        Loop loop = new(enumerator, collection, type, header.EnclosingRegion.EnclosingRegion!.NestedRegions[^1]);
 
         // Nothing is recorded when no operation over `Current` has the element type.
         ImmutableArray<(IOperation Operation, Site Site)> recognised =
