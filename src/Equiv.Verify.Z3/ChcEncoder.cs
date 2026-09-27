@@ -33,6 +33,9 @@ namespace Equiv.Verify.Z3;
 /// </summary>
 internal sealed class ChcEncoder
 {
+    /// <summary>The Z3 parameter every query and check of rung 4 and 5 is bounded by, in milliseconds.</summary>
+    private const string Timeout = "timeout";
+
     private readonly Context context;
     private readonly SortMapper sorts;
     private readonly Dictionary<string, int> exceptionTypes = new(StringComparer.Ordinal);
@@ -96,7 +99,7 @@ internal sealed class ChcEncoder
         using Fixedpoint fixedpoint = context.MkFixedpoint();
         using Params parameters = context.MkParams();
         parameters.Add("engine", "spacer");
-        parameters.Add("timeout", timeoutMs);
+        parameters.Add(Timeout, timeoutMs);
         parameters.Add("spacer.global", value: true);
         parameters.Add("spacer.gg.concretize", value: false);
         parameters.Add("spacer.ground_pobs", value: false);
@@ -162,7 +165,7 @@ internal sealed class ChcEncoder
         {
             BoolExpr[] counterexamples = [.. divergence.Rules.Select(rule => context.MkNot(Read(rule, definitions, reachable)))];
             using Solver solver = context.MkSolver();
-            solver.Set("timeout", timeoutMs);
+            solver.Set(Timeout, timeoutMs);
             solver.Add(context.MkOr(counterexamples));
             Status status = solver.Check();
             if (status != Status.SATISFIABLE)
@@ -205,7 +208,7 @@ internal sealed class ChcEncoder
         {
             BoolExpr[] counterexamples = [.. rules.Select(rule => context.MkNot(Define(rule, definitions)))];
             using Solver solver = context.MkSolver();
-            solver.Set("timeout", timeoutMs);
+            solver.Set(Timeout, timeoutMs);
             solver.Add(context.MkOr(counterexamples));
             Status status = solver.Check();
             if (status == Status.UNSATISFIABLE)
@@ -272,7 +275,7 @@ internal sealed class ChcEncoder
         }
 
         using Solver solver = context.MkSolver();
-        solver.Set("timeout", timeoutMs);
+        solver.Set(Timeout, timeoutMs);
         solver.Add(context.MkOr(entryDivergence));
         solver.Check();
         Model model = solver.Model;
