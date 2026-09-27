@@ -111,6 +111,30 @@ public sealed class LadderFixtureTests
     }
 
     [Fact]
+    public void RungOneDoesNotInlineASelfCallWithASourceRefParameter()
+    {
+        const string Side = """
+            proc "T::F(ref int)" (ref %n: bv32) entry B0
+            B0:
+              %z: bv32 = const bv32 0
+              %c: bool = sle %n, %z
+              br %c, B1, B2
+            B1:
+              ret outs(%n = %n)
+            B2:
+              call "T::F(ref int)"(%z) threw %t: bool
+              ret outs(%n = %z)
+            """;
+        (IrProcedure old, IrProcedure @new) = Fixture.Pair(Side + "\n---\n" + Side);
+
+        Verdict verdict = new Z3Backend().Verify(old, @new, new VerificationOptions(3, 60_000, []));
+
+        Assert.Equal(
+            (ProofMethod.Bounded, RungOutcome.NotApplicable, "self-recursion is not inlined: it has a by-ref parameter"),
+            (verdict.Ladder[0].Rung, verdict.Ladder[0].Outcome, verdict.Ladder[0].Detail));
+    }
+
+    [Fact]
     public void TimeoutsOnEveryRungAreUnknownTimeout()
     {
         Unknown unknown = Assert.IsType<Unknown>(Verify(Fixture.Load("loops/loop-hard")));

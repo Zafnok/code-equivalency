@@ -127,3 +127,6 @@ defines a new `length.*` version.
   P1-005 Notes). So a self-recursive procedure that allocates an array has a `Ref` heap parameter that no self-call
   pairs, and criterion 3's obstacle refuses it. No further obstacle is needed, and criterion 1's claim holds: an `In`
   `length.*` is one nothing writes.
+- `recursion-heap` was the only Z3 test that reached `LoopLadder.Bounded`'s "self-recursion is not inlined" branch.
+  Once it inlines, the `Equiv.Verify.Z3` coverage gate failed on that branch. The new
+  `LadderFixtureTests.RungOneDoesNotInlineASelfCallWithASourceRefParameter` covers it with a source `ref` parameter.
