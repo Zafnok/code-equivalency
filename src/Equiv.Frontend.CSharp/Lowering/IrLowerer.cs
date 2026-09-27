@@ -51,10 +51,12 @@ internal sealed class IrLowerer
     private HashSet<CaptureId> assignedCaptures = [];
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
     private readonly Dictionary<IOperation, IrVar> tryCastNulls = [];
+    private readonly Dictionary<CaptureId, SsaBuilder.Variable> indices = [];
     private int selects;
     private HeapLowerer heap = null!;
     private ExceptionLowerer exceptions = null!;
     private SwitchChains chains = null!;
+    private ArrayForEachLoops loops = null!;
     private CSharpCompilation compilation = null!;
     private ControlFlowGraph cfg = null!;
     private SourceSpan bodySpan = null!;
@@ -144,9 +146,7 @@ internal sealed class IrLowerer
         // for in an async method, so an async lambda in a sync one leaves it alone; their desugaring awaits calls the CFG
         // does not show.
         // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles, and
-        // desugars `foreach` and `using` into calls, conversions and a `finally` (ticket M4-001). `lock`
-        // stays whole-body opaque: the CFG passes `ref` to `Monitor.Enter` a synthesized `lockTaken` local it
-        // never initialises, so the lowered read of it is undefined (ticket M4-011).
+        // desugars `foreach`, `using` and `lock` into calls, conversions and a `finally` (tickets M4-001, M4-011).
         // A whole-body opaque points at the first offending construct, not the body (ADR 0029 decision 3).
         (string Reason, SourceSpan Span)? wholeBody = body switch
         {
@@ -155,7 +155,6 @@ internal sealed class IrLowerer
                 ("await-foreach", Span(loop.Syntax)),
             _ when method.IsAsync && body.Descendants().FirstOrDefault(static o => o is IUsingOperation { IsAsynchronous: true } or IUsingDeclarationOperation { IsAsynchronous: true }) is { } @using =>
                 ("await-using", Span(@using.Syntax)),
-            _ when body.Descendants().FirstOrDefault(static o => o is ILockOperation) is { } @lock => ("lock", Span(@lock.Syntax)),
             _ => null,
         };
         if (wholeBody is { } opaque)
@@ -350,7 +349,8 @@ internal sealed class IrLowerer
     {
         cfg = graph;
         chains = SwitchChains.Find(cfg);
-        exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, bodySpan, Fill);
+        loops = ArrayForEachLoops.Find(cfg);
+        exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, loops, bodySpan, Fill);
         captures.Clear();
         captureTargets.Clear();
         propertyTargets.Clear();
@@ -417,12 +417,31 @@ internal sealed class IrLowerer
     {
         context.Source = block;
         context.Current = context.BlockIds[block.Ordinal];
+        for (ControlFlowRegion? region = block.EnclosingRegion; region?.FirstBlockOrdinal == block.Ordinal; region = region.EnclosingRegion)
+        {
+            EnterRegion(region, context);
+        }
+
         foreach (IOperation operation in block.Operations)
         {
             Statement(operation, context);
         }
 
         Terminate(block, context);
+    }
+
+    /// <summary>
+    /// A local the compiler declares for a region starts at its type's default each time the region is entered, a loop
+    /// iteration's included, as the compiled code sets it (ticket M4-011). Roslyn's CFG never assigns it: the one it
+    /// declares is <c>lock</c>'s <c>bool lockTaken</c>, which it passes by <c>ref</c> to <c>Monitor.Enter</c>, so the
+    /// type always has a constant default. A user-declared local is not touched: C# rejects a read before its assignment.
+    /// </summary>
+    private void EnterRegion(ControlFlowRegion region, LoweringContext context)
+    {
+        foreach (ILocalSymbol local in region.Locals.Where(static l => l.IsImplicitlyDeclared))
+        {
+            ssa.Store(context.Current, Local(local), Const(TypeMapper.Default(local.Type, catalogue.Sorts)!, context));
+        }
     }
 
     private void Terminate(BasicBlock block, LoweringContext context)
@@ -663,6 +682,12 @@ internal sealed class IrLowerer
 
     private void Statement(IOperation operation, LoweringContext context)
     {
+        if (loops.Of(operation) is { } start)
+        {
+            ForEach(start, context);
+            return;
+        }
+
         if (operation is IFlowCaptureOperation { Value: IPropertyReferenceOperation autoProperty } backed && assignedCaptures.Contains(backed.Id)
             && heap.AutoProperty(autoProperty, context) is { } slice)
         {
@@ -700,8 +725,14 @@ internal sealed class IrLowerer
 
     private IrVar Value(IOperation operation, LoweringContext context) => Lower(operation, context)!;
 
-    /// <summary>The operation's value, or null for an operation without one (a statement, a void call).</summary>
-    private IrVar? Lower(IOperation operation, LoweringContext context)
+    /// <summary>
+    /// The operation's value, or null for an operation without one (a statement, a void call). An operation of an array
+    /// <c>foreach</c> is its index loop's (ticket P1-004).
+    /// </summary>
+    private IrVar? Lower(IOperation operation, LoweringContext context) =>
+        loops.Of(operation) is { } site ? ForEach(site, context) : Operation(operation, context);
+
+    private IrVar? Operation(IOperation operation, LoweringContext context)
     {
         if (operation is { ConstantValue.HasValue: true, Type: { } constantType })
         {
@@ -723,8 +754,8 @@ internal sealed class IrLowerer
                 return Assign(assignment, context);
             case IFieldReferenceOperation field:
                 return heap.ReadSlice(heap.Field(field, context), context);
-            case IArrayElementReferenceOperation element:
-                return heap.Element(element, context) is { } read ? heap.ReadSlice(read, context) : Opaque(element, element.Kind.ToString(), context);
+            case IArrayElementReferenceOperation or IEventReferenceOperation:
+                return heap.Readable(operation, receiver, context) is { } read ? heap.ReadSlice(read, context) : Opaque(operation, operation.Kind.ToString(), context);
             case IPropertyReferenceOperation property:
                 return Read(property, context);
             case IConversionOperation conversion:
@@ -761,6 +792,48 @@ internal sealed class IrLowerer
             default:
                 return Opaque(operation, operation.Kind.ToString(), context);
         }
+    }
+
+    /// <summary>
+    /// A <c>foreach</c> over an array as the index loop the compiler emits (ticket P1-004). The enumerator's capture holds the
+    /// array, with its null shadow, and a bv32 index starts at 0; <c>MoveNext</c> is the signed test of the index against
+    /// the length map read at the array, null-checked as <c>a.Length</c> is; <c>Current</c> is the element read at the index,
+    /// null- and bounds-checked as <c>a[i]</c> is, after which the index steps by one, so the header's phi takes 0 on entry and
+    /// the stepped index on every back edge.
+    /// </summary>
+    private IrVar? ForEach(ArrayForEachLoops.Site site, LoweringContext context)
+    {
+        SsaBuilder.Variable array = Capture(site.Loop.Enumerator, site.Loop.Type);
+        SsaBuilder.Variable index = Index(site.Loop.Enumerator);
+        switch (site.Role)
+        {
+            case ArrayForEachLoops.Role.Start:
+                IrVar collection = Value(site.Operand, context);
+                ssa.Store(context.Current, array, collection);
+                StoreShadow(array, site.Operand, collection, context);
+                ssa.Store(context.Current, index, Const(new IrBitVecValue(32, 0), context));
+                return null;
+            case ArrayForEachLoops.Role.Condition:
+                IrVar length = heap.ArrayLength(ssa.Load(context.Current, array), site.Operand, context);
+                return Emit(IrBinaryOp.Slt, ssa.Load(context.Current, index), length, Bool, context);
+            default:
+                IrVar at = ssa.Load(context.Current, index);
+                IrVar element = heap.ReadSlice(heap.Element(ssa.Load(context.Current, array), at, site.Loop.Type.ElementType, site.Operand), context);
+                ssa.Store(context.Current, index, Emit(IrBinaryOp.Add, at, Const(new IrBitVecValue(32, 1), context), at.Type, context));
+                return element;
+        }
+    }
+
+    /// <summary>The index of the array <c>foreach</c> whose enumerator is <paramref name="enumerator"/>.</summary>
+    private SsaBuilder.Variable Index(CaptureId enumerator)
+    {
+        if (!indices.TryGetValue(enumerator, out SsaBuilder.Variable? index))
+        {
+            index = new SsaBuilder.Variable(new IrVar($"$index{indices.Count.ToString(CultureInfo.InvariantCulture)}", new IrBitVec(32)));
+            indices[enumerator] = index;
+        }
+
+        return index;
     }
 
     /// <summary>
@@ -1348,7 +1421,7 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// How to read and write an lvalue that is both read and written, or null, with nothing emitted, when it is neither
-    /// a variable nor a property. A property's receiver and index arguments are evaluated here, once, for both accessors.
+    /// a variable, a field nor a property (a field since ticket P2-004). A property's receiver and index arguments are evaluated here, once, for both accessors.
     /// </summary>
     private (Func<IrVar> Read, Action<IrVar> Write)? Place(IOperation lvalue, LoweringContext context)
     {
@@ -1357,7 +1430,13 @@ internal sealed class IrLowerer
             return (() => ssa.Load(context.Current, target), value => ssa.Store(context.Current, target, value));
         }
 
-        if (lvalue is IPropertyReferenceOperation auto && heap.AutoProperty(auto, context) is { } slice)
+        HeapLowerer.Access? heapSlot = lvalue switch
+        {
+            IFieldReferenceOperation field => heap.Field(field, context),
+            IPropertyReferenceOperation auto => heap.AutoProperty(auto, context),
+            _ => null,
+        };
+        if (heapSlot is { } slice)
         {
             return (() => heap.ReadSlice(slice, context), value => heap.WriteSlice(slice, value, context));
         }

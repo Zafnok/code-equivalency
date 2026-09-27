@@ -1,0 +1,41 @@
+﻿proc "C::M(int[])" (%xs "xs": sort "int[]", ref %array.int__: map<sort "int[]", map<bv32, bv32>>, %length.int__: map<sort "int[]", bv32>, %null.int__: map<sort "int[]", bool>) -> bv32 entry B0
+B0:
+  %xs.isNull.30 "xs": bool = mapread %null.int__, %xs
+  goto B1
+B1:
+  %s.31 "s": bv32 = const bv32 0
+  goto B2
+B2:
+  %$index0.32: bv32 = const bv32 0
+  goto B3
+B3:
+  %$index0.36: bv32 = phi [B2: %$index0.32, B12: %$index0.39, B5: %$index0.39]
+  %s.37 "s": bv32 = phi [B2: %s.31, B12: %s.37, B5: %s.41]
+  br %xs.isNull.30, B8, B9
+B4:
+  br %xs.isNull.30, B8, B10
+B5:
+  %s.41 "s": bv32 = add %s.37, %x.40
+  goto B3
+B6:
+  ret %s.37 outs(%array.int__ = %array.int__)
+B8:
+  throw "System.NullReferenceException" outs(%array.int__ = %array.int__)
+B9:
+  %$8: bv32 = mapread %length.int__, %xs
+  %$10: bool = slt %$index0.36, %$8
+  br %$10, B4, B6
+B10:
+  %$15: bv32 = mapread %length.int__, %xs
+  %$16: bool = uge %$index0.36, %$15
+  br %$16, B11, B12
+B11:
+  throw "System.IndexOutOfRangeException" outs(%array.int__ = %array.int__)
+B12:
+  %$18: map<bv32, bv32> = mapread %array.int__, %xs
+  %x.40 "x": bv32 = mapread %$18, %$index0.36
+  %$20: bv32 = const bv32 1
+  %$index0.39: bv32 = add %$index0.36, %$20
+  %$23: bv32 = const bv32 0
+  %$24: bool = slt %x.40, %$23
+  br %$24, B3, B5

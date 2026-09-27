@@ -20,7 +20,7 @@ namespace Equiv.Verify.Z3.Tests;
 /// so no earlier rung runs. <c>loops/fusion</c> is <c>samples/loop-fusion</c>'s shape: the old side counts in two loops,
 /// the new side in one.
 /// </summary>
-public sealed class LlmInvariantRungTests
+public sealed partial class LlmInvariantRungTests
 {
     /// <summary>
     /// A coupling invariant for <c>loops/fusion</c> that holds with wrap-around arithmetic: in lockstep through the first
@@ -228,7 +228,8 @@ public sealed class LlmInvariantRungTests
     /// <summary>
     /// Criteria 2 and 5 through the ladder: with a 1 ms timeout rung 4 gives up on <c>loops/fusion</c>, and rung 5, given
     /// its own timeout, proves the pair with the fake proposer's second candidate. The snapshot holds the verdict and the
-    /// ladder from rung 4 on (rungs 1 to 3 at 1 ms may time out or not).
+    /// ladder from rung 4 on (rungs 1 to 3 at 1 ms may time out or not), with each counterexample value masked: which
+    /// model Z3 gives depends on what the process ran before.
     /// </summary>
     [Fact]
     public Task LadderSnapshot_FakeProposerSolvesLoopFusionAfterRungFourTimesOut()
@@ -247,7 +248,7 @@ public sealed class LlmInvariantRungTests
                 $"{proved.Method} proposedBy={proved.ProposedBy}",
                 $"invariant: {proved.Invariant}",
                 "Chc Timeout",
-                .. fromRungFour.Skip(1).Select(static s => $"{s.Rung} {s.Outcome}: {s.Detail}"),
+                .. fromRungFour.Skip(1).Select(static s => $"{s.Rung} {s.Outcome}: {CounterexampleValue.Replace(s.Detail, "= _")}"),
             ]));
     }
 
@@ -289,4 +290,7 @@ public sealed class LlmInvariantRungTests
 
     /// <summary><c>loops/fusion</c>'s relations, each defined as <paramref name="body"/>.</summary>
     private static string Everywhere(string body) => string.Join('\n', FusionSignatures.Select(s => $"(define-fun {s} Bool {body})"));
+
+    [System.Text.RegularExpressions.GeneratedRegex("= [^,)]+", System.Text.RegularExpressions.RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial System.Text.RegularExpressions.Regex CounterexampleValue { get; }
 }

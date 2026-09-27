@@ -1,6 +1,10 @@
 ﻿using System.Collections.Immutable;
 
+using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
+using Equiv.Frontend.CSharp.Lowering;
+
+using Microsoft.CodeAnalysis;
 
 using Xunit;
 
@@ -15,7 +19,6 @@ public sealed class IrLowererTests
 
     [Theory]
     [InlineData("static extern int M();", "M", "no-body")]
-    [InlineData("static void M(object o) { lock (o) { } }", "M", "lock")]
     [InlineData("static System.Collections.Generic.IEnumerable<int> M() { yield return 1; }", "M", "iterator")]
     [InlineData("static async System.Threading.Tasks.Task M(IAsyncDisposable d) { await using (d) { } }", "M", "await-using")]
     public void WholeBodyIsOneOpaque(string members, string name, string reason)
@@ -29,7 +32,6 @@ public sealed class IrLowererTests
 
     [Theory]
     [InlineData("static extern int M();", "M")]
-    [InlineData("static void M(object o) { lock (o) { } }", "M")]
     [InlineData("static System.Collections.Generic.IEnumerable<int> M() { yield return 1; }", "M")]
     public void WholeBodyOpaqueIsFlagged(string members, string name) =>
         Assert.True(Assert.Single(Opaques(Method(members, name))).WholeBody);
@@ -43,7 +45,7 @@ public sealed class IrLowererTests
     /// body. Lines are 1-based from <c>using System;</c>.
     /// </summary>
     [Theory]
-    [InlineData("static void M(object o, object p)\n{\n    int x = 0;\n    lock (o) { x++; }\n    lock (p) { }\n}", "lock", 7, 5, 7, 22)]
+    [InlineData("static System.Collections.Generic.IEnumerable<int> M()\n{\n    int x = 0;\n    yield return x;\n    yield break;\n}", "iterator", 7, 5, 7, 20)]
     public void WholeBodyOpaqueSpanIsTheConstructNotTheBody(string members, string reason, int startLine, int startColumn, int endLine, int endColumn)
     {
         IrOpaque opaque = Assert.Single(Opaques(Method(members)));
@@ -56,7 +58,7 @@ public sealed class IrLowererTests
     [Fact]
     public void WholeBodyOpaqueKeepsByRefParametersAsOuts()
     {
-        IrProcedure procedure = Method("static void M(ref int a, out int b, object o) { b = 0; lock (o) a = a - 1; }");
+        IrProcedure procedure = Method("static extern void M(ref int a, out int b, object o);");
 
         IrReturn exit = Assert.IsType<IrReturn>(Assert.Single(procedure.Blocks).Terminator);
         Assert.Null(exit.Value);
@@ -163,17 +165,62 @@ public sealed class IrLowererTests
     }
 
     /// <summary>
-    /// Ticket M4-001: an array's enumerator is the non-generic one, so the CFG unboxes <c>Current</c> and disposes through
-    /// <c>as IDisposable</c>. Those two conversions are opaque where they are, and the loop around them is lowered.
+    /// Ticket P1-004 acceptance criterion 1: an array <c>foreach</c> is an index loop with no opaque and no call. The element
+    /// is the array's slice of <c>array.int__</c> read at the array, then read at the index; the bound is <c>length.int__</c>
+    /// read at the same array; the index is a bv32 phi of 0 and its step at the loop header.
     /// </summary>
     [Fact]
-    public void ForEachOverAnArrayIsOpaqueOnlyAtItsConversions()
+    public void ForEachOverAnArrayIsAnIndexLoop()
     {
         IrProcedure procedure = Method("static int M(int[] xs) { int s = 0; foreach (int x in xs) s += x; return s; }");
+        ImmutableArray<IrInstruction> instructions = [.. procedure.Blocks.SelectMany(static b => b.Instructions)];
+        IrVar xs = procedure.Parameters[0].Var;
 
-        Assert.All(Opaques(procedure), static o => Assert.Equal("Conversion", o.Reason));
-        Assert.Contains(Calls(procedure), static c => string.Equals(c.Callee.Value, "System.Collections.IEnumerator::MoveNext()", StringComparison.Ordinal));
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+        IrMapRead slice = Assert.Single(instructions.OfType<IrMapRead>(), static r => r.Map.Name.StartsWith("array.int__", StringComparison.Ordinal));
+        Assert.Equal(xs, slice.Key);
+        IrMapRead element = Assert.Single(instructions.OfType<IrMapRead>(), r => r.Map == slice.Target);
+        Assert.Contains(instructions.OfType<IrMapRead>(), r => r.Map.Name.StartsWith("length.int__", StringComparison.Ordinal) && r.Key == xs);
+        IrPhi index = Assert.Single(instructions.OfType<IrPhi>(), static p => p.Target.Name.StartsWith("$index0", StringComparison.Ordinal));
+        Assert.Equal(new IrBitVec(32), index.Target.Type);
+        Assert.Equal(index.Target, element.Key);
     }
+
+    /// <summary>Ticket P1-004: the element is read at the element type and converted on to the loop variable's as the CFG converts it.</summary>
+    [Theory]
+    [InlineData("static long M(int[] xs) { long s = 0; foreach (long x in xs) s += x; return s; }")]
+    [InlineData("static object M(int[] xs) { object s = null; foreach (object x in xs) s = x; return s; }")]
+    [InlineData("static object M(object[] xs) { object s = null; foreach (object x in xs) s = x; return s; }")]
+    public void ForEachOverAnArrayConvertsTheElementToTheLoopVariable(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+    }
+
+    /// <summary>Ticket P1-004: two array loops, one inside the other and after a branch on a call, each have their own index.</summary>
+    [Fact]
+    public void NestedArrayForEachLoopsHaveAnIndexEach()
+    {
+        IrProcedure procedure = Method("static bool N(int s) => s > 0; static int M(int[] a, string[] b) { int s = 0; if (N(s)) s = 1; foreach (int x in a) foreach (string y in b) s += x; return s; }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Single(Calls(procedure));
+        Assert.Contains(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPhi>(), static p => p.Target.Name.StartsWith("$index1", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Ticket P1-004 acceptance criteria 2 and 3: a loop over an array whose variable is a deconstruction, and a loop over
+    /// anything but a single-dimensional array, stay the enumerator calls M4-001 lowers.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M((int, int)[] t) { int s = 0; foreach (var (p, q) in t) s += p; return s; }", "System.Collections.IEnumerator::MoveNext()")]
+    [InlineData("static int M(int[,] m) { int s = 0; foreach (int x in m) s += x; return s; }", "System.Collections.IEnumerator::MoveNext()")]
+    [InlineData("static int M(string t) { int s = 0; foreach (char c in t) s += c; return s; }", "System.CharEnumerator::MoveNext()")]
+    public void ForEachOverAnythingElseStaysEnumeratorCalls(string members, string moveNext) =>
+        Assert.Contains(Calls(Method(members)), c => string.Equals(c.Callee.Value, moveNext, StringComparison.Ordinal));
 
     /// <summary>A reference typed as the base, as <c>base.N()</c> is, is still the one <c>this</c> input of the containing type.</summary>
     [Fact]
@@ -262,7 +309,6 @@ public sealed class IrLowererTests
     }
 
     [Theory]
-    [InlineData("int f; void M(int a) { f += a; }", "FieldReference")]
     [InlineData("static void M(int[] xs) { xs[0]++; }", "ArrayElementReference")]
     [InlineData("enum E { A } static void M(E e) { e += 1; }", "ParameterReference")]
     public void CompoundAssignmentToAnUnsupportedTargetIsOpaque(string members, string reason) =>
@@ -531,6 +577,58 @@ public sealed class IrLowererTests
         IrParameter receiver = Assert.Single(procedure.Parameters, static p => p.Var.Name is "this");
         Assert.Equal(new IrSort("C"), receiver.Var.Type);
         Assert.Equal([receiver.Var], Assert.Single(Calls(procedure)).Args);
+    }
+
+    /// <summary>Ticket P2-004 acceptance criterion 1: a field, instance or static, is a compound target: its map is read and written once.</summary>
+    [Theory]
+    [InlineData("int f; static void M(C c, int a) { c.f += a; }")]
+    [InlineData("int f; void M() { f++; }")]
+    [InlineData("static int f; static void M() { --f; }")]
+    public void AFieldIsACompoundTarget(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>(), static r => r.Map.Name is "field.C.f");
+        Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapWrite>());
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket P2-004: inside its declaring type, a field-like event is read as its backing field, at the receiver.</summary>
+    [Theory]
+    [InlineData("event Action? E; static Action? M(C c) => c.E;")]
+    [InlineData("static event Action? E; static Action? M() => E;")]
+    public void AFieldLikeEventReadInItsTypeIsItsFieldMap(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.C.E");
+        Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>(), static r => r.Map.Name.StartsWith("field.C.E", StringComparison.Ordinal));
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket P2-004 acceptance criterion 2: a field-like event read from a nested type stays opaque.</summary>
+    [Fact]
+    public void AFieldLikeEventReadOutsideItsTypeIsOpaque()
+    {
+        Compilation compilation = RoslynTestCompilations.Compile("using System;\nclass D { public event Action? E; public class C { static Action? M(D d) => d.E; } }\n");
+        IMethodSymbol method = compilation.GetTypeByMetadataName("D+C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+
+        Assert.Equal("EventReference", Assert.Single(Opaques(procedure)).Reason);
+    }
+
+    /// <summary>
+    /// Ticket P2-004 acceptance criterion 2: an event with explicit accessors can only be the target of <c>+=</c> or <c>-=</c>
+    /// (CS0079), which stays opaque, with no read of a field map.
+    /// </summary>
+    [Fact]
+    public void AnEventWithExplicitAccessorsIsOpaque()
+    {
+        IrProcedure procedure = Method("event Action E { add { } remove { } } void M(Action h) { E += h; }");
+
+        Assert.Equal("EventAssignment", Assert.Single(Opaques(procedure)).Reason);
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("field.", StringComparison.Ordinal));
     }
 
     /// <summary>Ticket M2-004 acceptance criterion 6: a field is one SSA map keyed by its receiver.</summary>
@@ -1250,6 +1348,37 @@ public sealed class IrLowererTests
         Assert.Equal([Bits(32, 5), Bits(32, 5)], Assert.Single(oracle.Arguments));
     }
 
+    /// <summary>
+    /// Ticket M4-011: <c>lock</c> lowers through the CFG's <c>Monitor.Enter(o, ref lockTaken)</c> and
+    /// <c>finally { if (lockTaken) Monitor.Exit(o); }</c>, with no opaque.
+    /// </summary>
+    [Fact]
+    public void LockLowersThroughTryFinally()
+    {
+        IrProcedure procedure = Method("static int M(object o, int a) { lock (o) { a = a + 1; } return a; }");
+        LockOracle oracle = new();
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(Bits(32, 4), Assert.IsType<IrReturned>(RunWith(procedure, oracle, Reference(1, "System.Object"), Bits(32, 3))).Value);
+        Assert.Equal(
+            ["System.Threading.Monitor::Enter(object,ref bool)", "System.Threading.Monitor::Exit(object)"],
+            oracle.Calls.Select(static c => c.Callee),
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>Ticket M4-011 criterion 1: the compiler's <c>lockTaken</c> is false on every entry to the <c>lock</c>.</summary>
+    [Fact]
+    public void LockInALoopStartsUntakenEachIteration()
+    {
+        IrProcedure procedure = Method("static int M(object o, int n) { int k = 0; for (int i = 0; i < n; i++) { lock (o) { k++; } } return k; }");
+        LockOracle oracle = new();
+
+        Assert.Equal(Bits(32, 2), Assert.IsType<IrReturned>(RunWith(procedure, oracle, Reference(1, "System.Object"), Bits(32, 2))).Value);
+        Assert.Equal(
+            [new IrBoolValue(Value: false), new IrBoolValue(Value: false)],
+            oracle.Calls.Where(static c => c.Callee.Contains("Enter", StringComparison.Ordinal)).Select(static c => c.Arguments[1]));
+    }
+
     [Theory]
     [InlineData("static int f; static void M() { System.Threading.Interlocked.Increment(ref f); }")]
     [InlineData("int f; void M() { System.Threading.Interlocked.Increment(ref f); }")]
@@ -1553,6 +1682,18 @@ public sealed class IrLowererTests
         {
             Arguments.Add(arguments);
             return new IrCallResult(resultType is IrBool ? new IrBoolValue(Value: true) : null, Threw: false) { RefOuts = [.. refOuts.Select(_ => output)] };
+        }
+    }
+
+    /// <summary>Answers <c>Monitor.Enter</c> by taking the lock, sets every other <c>ref</c> output false, and records each call.</summary>
+    private sealed class LockOracle : Equiv.Core.ICallOracle
+    {
+        public List<(string Callee, ImmutableArray<IrValue> Arguments)> Calls { get; } = [];
+
+        public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
+        {
+            Calls.Add((callee.Value, arguments));
+            return new IrCallResult(Value: null, Threw: false) { RefOuts = [.. refOuts.Select(_ => new IrBoolValue(Value: true))] };
         }
     }
 

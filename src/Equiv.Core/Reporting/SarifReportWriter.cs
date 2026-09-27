@@ -1,4 +1,5 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
+using System.Globalization;
 
 using Equiv.Core.Execution;
 using Equiv.Core.Matching;
@@ -25,6 +26,9 @@ public static class SarifReportWriter
     internal const string ResultFingerprintId = "resultFingerprint/v1";
 
     private const string ToolName = "Equiv";
+
+    /// <summary>The <c>proofMethod</c> of a Divergent the real runtimes showed (ADR 0035 decision 3); never an Equivalent's.</summary>
+    private const string ObservedProofMethod = "observed";
 
     /// <param name="results">One SARIF result each, in order, ahead of any baseline carry-overs.</param>
     /// <param name="baseline">The previous log <c>baselineState</c> is computed against.</param>
@@ -138,6 +142,7 @@ public static class SarifReportWriter
         SetListProperty(sarifResult, "assumedCallees", result.AssumedCallees);
         SetListProperty(sarifResult, "unprovenAssumptions", result.UnprovenAssumptions);
         SetReplayProperties(sarifResult, result.Replay);
+        SetTestingProperty(sarifResult, result.Testing);
 
         SetLocations(sarifResult, result);
         return sarifResult;
@@ -198,6 +203,10 @@ public static class SarifReportWriter
     {
         switch (verdict)
         {
+            case Divergent { Observed: { } observed }:
+                sarifResult.SetProperty("proofMethod", ObservedProofMethod);
+                sarifResult.SetProperty("model", ObservationText.Model(observed));
+                break;
             case Divergent divergent:
                 sarifResult.SetProperty("model", CounterexampleText.Dump(divergent.Counterexample));
                 break;
@@ -316,6 +325,35 @@ public static class SarifReportWriter
         }
     }
 
+    /// <summary>
+    /// An Unknown's run on generated inputs (ADR 0035 decision 3; ticket P1-008): <c>differentialTesting</c> is the input
+    /// count, the species seen and seen once, the Good-Turing discovery probability, the species definition, why it
+    /// stopped and the input distribution, or only <c>notConstructible</c> with the reason. Left out when the run did not test.
+    /// </summary>
+    private static void SetTestingProperty(Result sarifResult, DifferentialTesting? testing)
+    {
+        switch (testing)
+        {
+            case null:
+                return;
+            case { NotConstructible: { } reason }:
+                sarifResult.SetProperty("differentialTesting", new Dictionary<string, string>(StringComparer.Ordinal) { ["notConstructible"] = reason });
+                break;
+            default:
+                sarifResult.SetProperty("differentialTesting", new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["inputs"] = testing.Inputs,
+                    ["species"] = testing.Species,
+                    ["singletons"] = testing.Singletons,
+                    ["discoveryProbability"] = testing.DiscoveryProbability,
+                    ["speciesDefinition"] = DifferentialTesting.SpeciesDefinition,
+                    ["stoppedBy"] = testing.StoppedBy == TestingStop.Target ? "target" : "budget",
+                    ["distribution"] = DifferentialTesting.Distribution,
+                });
+                break;
+        }
+    }
+
     /// <summary>An outcome's kind and its canonical JSON text, as the driver wrote it.</summary>
     private static Dictionary<string, string> Describe(ExecutionOutcome outcome) => new(StringComparer.Ordinal)
     {
@@ -403,11 +441,24 @@ public static class SarifReportWriter
     /// <paramref name="runtimeChange"/> is non-null only for an EQ006 <see cref="Divergent"/>. An Equivalent that assumed a
     /// callee pair this run did not prove says so in one more sentence (ADR 0019).
     /// </summary>
-    private static string MessageText(VerificationResult result, RuntimeChange? runtimeChange) => result.Verdict switch
+    private static string MessageText(VerificationResult result, RuntimeChange? runtimeChange) =>
+        result.Testing is { NotConstructible: null } testing ? WithTestedSentence(VerdictText(result, runtimeChange), testing) : VerdictText(result, runtimeChange);
+
+    /// <summary>
+    /// Ticket P1-008 criterion 3: a tested Unknown's message ends with one sentence stating the input count and the
+    /// discovery probability, labelled as a likelihood under the generators' distribution.
+    /// </summary>
+    private static string WithTestedSentence(string text, DifferentialTesting testing) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{text}{(text.EndsWith('.') ? string.Empty : ".")} Tested on {testing.Inputs} inputs; estimated chance the next input shows new behaviour: {testing.DiscoveryProbability:0.######} (equiv generators, not a proof).");
+
+    private static string VerdictText(VerificationResult result, RuntimeChange? runtimeChange) => result.Verdict switch
     {
         Equivalent when !result.UnprovenAssumptions.IsEmpty =>
             $"{result.Identity.Value} is equivalent. Assumes callees equivalent; not proved for: {string.Join(", ", result.UnprovenAssumptions)}.",
         Equivalent => $"{result.Identity.Value} is equivalent.",
+        Divergent { Observed: { } observed } => $"{result.Identity.Value} diverges on the real runtimes: {ObservationText.Dump(observed)}",
         Divergent divergent when runtimeChange is not null =>
             $"{result.Identity.Value} diverges via a runtime-changed API ({runtimeChange.Reason} {runtimeChange.Url.OriginalString}): {CounterexampleText.Dump(divergent.Counterexample)}",
         Divergent divergent => $"{result.Identity.Value} diverges: {CounterexampleText.Dump(divergent.Counterexample)}",

@@ -67,7 +67,7 @@ internal sealed class HeapLowerer(
     /// A field is a map from its receiver, or from its declaring type's token when it is static. A receiver of a
     /// reference type is null-checked where the slice is read or written, not here (ticket P2-017).
     /// </summary>
-    public Access Field(IFieldReferenceOperation field, LoweringContext context) => Member(field.Field, field.Instance, context);
+    public Access Field(IFieldReferenceOperation field, LoweringContext context) => Member(Inputs.Field(field.Field), field.Field, field.Instance, context);
 
     /// <summary>
     /// An auto-property whose accessors no override can replace is its backing field (ticket M4-008): its map is read and
@@ -75,7 +75,21 @@ internal sealed class HeapLowerer(
     /// any other property.
     /// </summary>
     public Access? AutoProperty(IPropertyReferenceOperation property, LoweringContext context) =>
-        Inlined(property.Property) is { } field ? Member(field, property.Instance, context) : null;
+        Inlined(property.Property) is { } field ? Member(Inputs.Field(field), field, property.Instance, context) : null;
+
+    /// <summary>The slice an array element or an event reference reads, or null when it stays opaque.</summary>
+    public Access? Readable(IOperation reference, INamedTypeSymbol declaring, LoweringContext context) =>
+        reference is IEventReferenceOperation @event ? Event(@event, declaring, context) : Element((IArrayElementReferenceOperation)reference, context);
+
+    /// <summary>
+    /// Inside <paramref name="declaring"/>, a field-like event is its backing field (ticket P2-004): its map is read at the
+    /// receiver, as a field's is. Null, with nothing emitted, for one read from another type, such as a nested one. An event
+    /// with explicit accessors is never read here: C# only lets it be the target of <c>+=</c> and <c>-=</c> (CS0079).
+    /// </summary>
+    private Access? Event(IEventReferenceOperation reference, INamedTypeSymbol declaring, LoweringContext context) =>
+        SymbolEqualityComparer.Default.Equals(reference.Event.ContainingType, declaring)
+            ? Member(Inputs.Field(reference.Event), reference.Event, reference.Instance, context)
+            : null;
 
     /// <summary>
     /// The map of <paramref name="field"/> at <paramref name="receiver"/>, or at its type's token when that is null; a
@@ -102,12 +116,12 @@ internal sealed class HeapLowerer(
     /// A field is a map from its receiver, or from its declaring type's token when it is static. A receiver of a
     /// reference type is null-checked where the slice is read or written, not here (ticket P2-017).
     /// </summary>
-    private Access Member(IFieldSymbol field, IOperation? instance, LoweringContext context)
+    private Access Member(IrVar input, ISymbol member, IOperation? instance, LoweringContext context)
     {
-        SsaBuilder.Variable map = Versioned(Inputs.Field(field));
+        SsaBuilder.Variable map = Versioned(input);
         if (instance is null)
         {
-            return new Access(map, Array: null, Const(Inputs.Token(field), context), Dereferenced: null);
+            return new Access(map, Array: null, Const(Inputs.Token(member), context), Dereferenced: null);
         }
 
         IOperation? dereferenced = instance.Type!.IsValueType ? null : instance;
@@ -131,21 +145,27 @@ internal sealed class HeapLowerer(
 
         IrVar reference = lower(element.ArrayReference, context);
         IrVar index = lower(element.Indices[0], context);
-        return new Access(Versioned(Inputs.Elements((IrSort)reference.Type, TypeMapper.Map(element.Type!, sorts))), reference, index, element.ArrayReference);
+        return Element(reference, index, element.Type!, element.ArrayReference);
     }
 
-    /// <summary><c>a.Length</c> on an array variable is the length map read at its reference; every other property stays opaque.</summary>
-    public IrVar? ArrayLength(IPropertyReferenceOperation property, LoweringContext context)
-    {
-        if (property is not { Property: { Name: "Length", ContainingType.SpecialType: SpecialType.System_Array }, Instance: { } instance }
-            || resolveTarget(instance) is null)
-        {
-            return null;
-        }
+    /// <summary>
+    /// Element <paramref name="index"/> of the array <paramref name="array"/> references, whose elements are of
+    /// <paramref name="elementType"/>; <paramref name="dereferenced"/> is the operand whose nullness is the array's.
+    /// </summary>
+    public Access Element(IrVar array, IrVar index, ITypeSymbol elementType, IOperation dereferenced) =>
+        new(Versioned(Inputs.Elements((IrSort)array.Type, TypeMapper.Map(elementType, sorts))), array, index, dereferenced);
 
-        IrVar reference = lower(instance, context);
-        throwIfNull(instance, reference, context);
-        return Length(reference, context);
+    /// <summary><c>a.Length</c> on an array variable is the length map read at its reference; every other property stays opaque.</summary>
+    public IrVar? ArrayLength(IPropertyReferenceOperation property, LoweringContext context) =>
+        property is { Property: { Name: "Length", ContainingType.SpecialType: SpecialType.System_Array }, Instance: { } instance } && resolveTarget(instance) is not null
+            ? ArrayLength(lower(instance, context), instance, context)
+            : null;
+
+    /// <summary>The length of the array <paramref name="array"/> references, which throws when <paramref name="operand"/>, its source, is null.</summary>
+    public IrVar ArrayLength(IrVar array, IOperation operand, LoweringContext context)
+    {
+        throwIfNull(operand, array, context);
+        return Length(array, context);
     }
 
     public IrVar ReadSlice(Access access, LoweringContext context)

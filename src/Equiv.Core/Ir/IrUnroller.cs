@@ -75,8 +75,11 @@ public static class IrUnroller
     /// <summary>
     /// Why the self-calls of <paramref name="procedure"/> cannot be inlined, or null when they can (or there are
     /// none). Inlining binds the callee's source-language parameters to the call's arguments and its receiver input
-    /// <c>this</c> to the receiver argument; every other synthesised input is the caller's own, which is exact only
-    /// while no heap map or by-ref parameter changes and no input is keyed by an array variable (ADR 0015).
+    /// <c>this</c> to the receiver argument. The other synthesised inputs are bound by kind: an <c>In</c> one
+    /// (<c>null.*</c>, <c>cast.*</c>, <c>length.*</c>) to the caller's own, which is exact because nothing changes it,
+    /// and a by-ref one (the <c>field.*</c> and <c>array.*</c> maps) through the self-call's heap pairs: the copy starts
+    /// from the pair's <c>before</c> version and hands its final version back as the pair's <c>after</c>. A
+    /// source-language <c>ref</c> or <c>out</c> parameter has nothing to bind it to.
     /// </summary>
     public static string? InliningObstacle(IrProcedure procedure)
     {
@@ -89,14 +92,14 @@ public static class IrUnroller
 
         int sourceParameters = procedure.Parameters.Count(static p => !IrParameterNames.IsSynthesised(p.Var.Name));
         bool hasThis = procedure.Parameters.Any(static p => string.Equals(p.Var.Name, "this", StringComparison.Ordinal));
-        IEnumerable<IrInstruction> instructions = analysis.ReversePostorder.SelectMany(static b => b.Instructions);
+        string[] heap = [.. HeapParameters(procedure).Select(static p => p.Var.Name).Order(StringComparer.Ordinal)];
+        IrCall[] selfCalls = [.. SelfCalls(procedure, analysis.ReversePostorder.SelectMany(static b => b.Instructions))];
         return procedure switch
         {
-            _ when procedure.Parameters.Any(static p => p.Kind != IrParameterKind.In) => "it has a by-ref parameter",
-            _ when procedure.Parameters.Any(static p => p.Var.Name.StartsWith("array.", StringComparison.Ordinal) || p.Var.Name.StartsWith("length.", StringComparison.Ordinal)) =>
-                "an input is keyed by an array variable",
-            _ when instructions.Any(static i => i is IrMapWrite) => "it writes the heap",
-            _ when SelfCalls(procedure, instructions).Any(c => c.Threw is null || Receivers(c, sourceParameters, hasThis) < 0) =>
+            _ when procedure.Parameters.Any(static p => p.Kind != IrParameterKind.In && !IrParameterNames.IsSynthesised(p.Var.Name)) => "it has a by-ref parameter",
+            _ when selfCalls.Any(c => !c.Heap.Select(static h => h.Map).Order(StringComparer.Ordinal).SequenceEqual(heap, StringComparer.Ordinal)) =>
+                "a self-call's heap pairs do not match the heap parameters",
+            _ when selfCalls.Any(c => c.Threw is null || Receivers(c, sourceParameters, hasThis) < 0) =>
                 "a self-call has no threw flag or its arguments do not match the parameters",
             _ => null,
         };
@@ -198,6 +201,10 @@ public static class IrUnroller
     }
 
     private static IrVar? Optional(IrVar? var, Func<IrVar, IrVar> map) => var is null ? null : map(var);
+
+    /// <summary>The synthesised by-ref inputs: the heap maps a self-call versions with its heap pairs.</summary>
+    private static IEnumerable<IrParameter> HeapParameters(IrProcedure procedure) =>
+        procedure.Parameters.Where(static p => p.Kind != IrParameterKind.In && IrParameterNames.IsSynthesised(p.Var.Name));
 
     private static IEnumerable<IrCall> SelfCalls(IrProcedure procedure, IEnumerable<IrInstruction> instructions) =>
         instructions.OfType<IrCall>().Where(c => string.Equals(c.Callee.Value, procedure.Identity.Value, StringComparison.Ordinal));
@@ -307,8 +314,9 @@ public static class IrUnroller
         /// <summary>
         /// Replaces the self-call at <paramref name="index"/> of <paramref name="block"/> with a copy of
         /// <paramref name="callee"/>'s body. The block keeps what precedes the call and jumps to the copy's entry; a
-        /// new block receives every exit of the copy, merges the call's result and <c>threw</c> flag with phis, and
-        /// continues with the rest of the block. Returns the copy's blocks and the new block.
+        /// new block receives every exit of the copy, merges the call's result, <c>threw</c> flag and the <c>after</c>
+        /// version of each heap pair (the version of that map the exit's outs name) with phis, and continues with the
+        /// rest of the block. Returns the copy's blocks and the new block.
         /// </summary>
         public (ImmutableArray<IrBlockId> Inlined, IrBlockId After) InlineCall(IrProcedure callee, IrBlock block, int index, string suffix)
         {
@@ -317,17 +325,17 @@ public static class IrUnroller
             Dictionary<string, IrVar> bound = Bindings(callee, call, suffix);
             IrVar Var(IrVar var) => bound.GetValueOrDefault(var.Name, var);
             Dictionary<IrBlockId, IrBlockId> ids = callee.Blocks.ToDictionary(static b => b.Id, _ => NewBlock());
-            List<(IrBlockId From, IrVar? Result, IrVar Threw)> exits = [];
+            List<(IrBlockId From, IrVar? Result, IrVar Threw, ImmutableArray<IrOut> Outs)> exits = [];
             foreach (IrBlock original in callee.Blocks)
             {
                 IrBlock copy = MapPhis(original with { Id = ids[original.Id], Instructions = [.. original.Instructions.Select(i => Rewrite(i, Var))] }, e => [(ids[e.From], e.Value)]);
                 switch (original.Terminator)
                 {
                     case IrReturn returned:
-                        exits.Add(InlineExit(copy, call.Target, returned, Var, suffix, join));
+                        exits.Add(InlineExit(copy, call.Target, returned, returned.Outs, Var, suffix, join));
                         break;
-                    case IrThrow:
-                        exits.Add(InlineExit(copy, call.Target, returned: null, Var, suffix, join));
+                    case IrThrow thrown:
+                        exits.Add(InlineExit(copy, call.Target, returned: null, thrown.Outs, Var, suffix, join));
                         break;
                     default:
                         Add(copy with { Terminator = Rewrite(original.Terminator, Var, b => ids[b]) });
@@ -338,8 +346,11 @@ public static class IrUnroller
             IrInstruction[] merges = call.Target is null
                 ? [new IrPhi(call.Threw!, [.. exits.Select(static e => (e.From, e.Threw))])]
                 : [new IrPhi(call.Target, [.. exits.Select(static e => (e.From, e.Result!))]), new IrPhi(call.Threw!, [.. exits.Select(static e => (e.From, e.Threw))])];
+            IEnumerable<IrPhi> heap = call.Heap.Select(h => new IrPhi(
+                h.After,
+                [.. exits.Select(e => (e.From, e.Outs.First(o => string.Equals(o.Param.Name, h.Map, StringComparison.Ordinal)).Final))]));
             Replace(block with { Instructions = block.Instructions[..index], Terminator = new IrGoto(ids[callee.Entry]) });
-            Add(new IrBlock(join, [.. merges, .. block.Instructions[(index + 1)..]], block.Terminator));
+            Add(new IrBlock(join, [.. merges, .. heap, .. block.Instructions[(index + 1)..]], block.Terminator));
             foreach (IrBlockId successor in block.Terminator.Successors().Distinct())
             {
                 Replace(MapPhis(Get(successor), e => [(e.From == block.Id ? join : e.From, e.Value)]));
@@ -351,9 +362,11 @@ public static class IrUnroller
         /// <summary>
         /// Adds <paramref name="copy"/>, an exit of an inlined body (a return when <paramref name="returned"/> is set,
         /// else a throw), ending in a jump to <paramref name="join"/> after setting its <c>threw</c> flag, plus a default
-        /// result for a throw into a <paramref name="target"/>. Returns the exit's operands for the join's phis.
+        /// result for a throw into a <paramref name="target"/>. Returns the exit's operands for the join's phis, with
+        /// its <paramref name="outs"/> renamed into the copy.
         /// </summary>
-        private (IrBlockId From, IrVar? Result, IrVar Threw) InlineExit(IrBlock copy, IrVar? target, IrReturn? returned, Func<IrVar, IrVar> map, string suffix, IrBlockId join)
+        private (IrBlockId From, IrVar? Result, IrVar Threw, ImmutableArray<IrOut> Outs) InlineExit(
+            IrBlock copy, IrVar? target, IrReturn? returned, ImmutableArray<IrOut> outs, Func<IrVar, IrVar> map, string suffix, IrBlockId join)
         {
             bool threw = returned is null;
             IrVar flag = Fresh(new IrVar("threw", new IrBool()), suffix);
@@ -367,7 +380,7 @@ public static class IrUnroller
                 ? [new IrConst(flag, new IrBoolValue(threw)), new IrConst(result, Default(result.Type))]
                 : [new IrConst(flag, new IrBoolValue(threw))];
             Add(copy with { Instructions = [.. copy.Instructions, .. tail], Terminator = new IrGoto(join) });
-            return (copy.Id, result, flag);
+            return (copy.Id, result, flag, [.. outs.Select(o => o with { Final = map(o.Final) })]);
         }
 
         /// <summary>
@@ -406,7 +419,10 @@ public static class IrUnroller
             return clones.Headers;
         }
 
-        /// <summary>The callee's source-language parameters bound to the call's arguments, <c>this</c> to its receiver, and every variable it defines renamed.</summary>
+        /// <summary>
+        /// The callee's source-language parameters bound to the call's arguments, <c>this</c> to its receiver, each
+        /// heap map to the <c>before</c> version of the call's pair for it, and every variable it defines renamed.
+        /// </summary>
         private Dictionary<string, IrVar> Bindings(IrProcedure callee, IrCall call, string suffix)
         {
             IrParameter[] source = [.. callee.Parameters.Where(static p => !IrParameterNames.IsSynthesised(p.Var.Name))];
@@ -414,6 +430,7 @@ public static class IrUnroller
             Dictionary<string, IrVar> bound = source
                 .Select((p, i) => (p.Var.Name, Arg: call.Args[receivers + i]))
                 .Concat(call.Args.Take(receivers).Select(static a => (Name: "this", Arg: a)))
+                .Concat(call.Heap.Select(static h => (Name: h.Map, Arg: h.Before)))
                 .ToDictionary(static b => b.Name, static b => b.Arg, StringComparer.Ordinal);
             foreach (IrVar defined in callee.Blocks.SelectMany(static b => b.Instructions).SelectMany(static i => i.Definitions()))
             {

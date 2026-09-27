@@ -1,5 +1,5 @@
 # P1-007 Rung 1 inlines self-calls that read or write the heap
-Status: todo
+Status: done (PR #226)
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-002, M3-007, P1-005, P1-006
@@ -101,3 +101,32 @@ defines a new `length.*` version.
 - It depends on P1-005 rather than landing between P1-006 and P1-005. Once P1-005 puts heap pairs on
   the self-call, the join must define their `after` versions. Before P1-005 there is nothing to bind,
   and an inliner written then would leave the `after` versions undefined as soon as P1-005 landed.
+- Decision: a heap pair names its map by `IrHeapPair.Map`, the name of the by-ref parameter it versions (P1-005's
+  rule). Criterion 3 compares each self-call's `Map` names, sorted, with the sorted names of the synthesised by-ref
+  parameters, so a missing, a repeated and an extra pair all raise the obstacle. Rule: equiv-decide 1.
+- Decision: criterion 3's "synthesised `Ref` parameter" is read as every synthesised parameter that is not `In`. A
+  synthesised `Out` parameter cannot carry a pair (IR012 wants `Ref`), so it is refused instead of being bound to the
+  caller's own. No frontend emits one today. Rule: equiv-decide 3 (the conservative reading).
+- Decision: `recursion-heap.ir`'s self-call gains the heap pair `("field.T.seen" %w -> %after)`, and the exits after
+  the call report `%after`. The fixture was written before P1-005 and its self-call had no pair, so the callee's
+  write was dropped. Without the pair, criterion 3's obstacle would still leave rung 1 not applicable, against
+  criterion 6. The verdict stays `Equivalent(lockstep-induction)`. Rung 1 now reaches its last query and is
+  inconclusive, because every input reaches the bound. Rule: equiv-decide 1.
+- Decision: in criterion 5, "the original's" run comes from a test-local oracle (`IrUnrollerTests.SelfOracle`).
+  `IrGen.Run` answers a self-call with a hash, so it cannot be the reference for an inlined copy. The oracle answers a
+  self-call by running the procedure on the call's arguments, the heap slices the call passes and the caller's other
+  inputs. It returns the final heap as the call's new slices, and puts that run's trace where the self-call's record
+  was. The unrolled procedure runs through `IrGen.Run` as the criterion says. Each row also pins its return value, so
+  a broken oracle cannot pass by agreeing with a broken inliner. Rule: equiv-decide 4.
+- Criterion 7, measured with `main`'s `IrUnroller.cs` and this branch's fixture: `Unknown(Recursion)`. Ladder: rung 1
+  not applicable ("self-recursion is not inlined: it has a by-ref parameter"), rung 2 inconclusive ("the base
+  obligation fails"), rung 3 not applicable ("lockstep induction did not fail on a step obligation"). With the fix,
+  rung 1 finds the divergence.
+- Out of scope's P2-001 recheck: P2-001 has landed. An allocation's `length.*` write makes that map `Ref`
+  (`HeapInputs`: written maps are `Ref`), and the lowerer never pairs `length.*` at a call (`HeapLowerer.CallHeap`,
+  P1-005 Notes). So a self-recursive procedure that allocates an array has a `Ref` heap parameter that no self-call
+  pairs, and criterion 3's obstacle refuses it. No further obstacle is needed, and criterion 1's claim holds: an `In`
+  `length.*` is one nothing writes.
+- `recursion-heap` was the only Z3 test that reached `LoopLadder.Bounded`'s "self-recursion is not inlined" branch.
+  Once it inlines, the `Equiv.Verify.Z3` coverage gate failed on that branch. The new
+  `LadderFixtureTests.RungOneDoesNotInlineASelfCallWithASourceRefParameter` covers it with a source `ref` parameter.

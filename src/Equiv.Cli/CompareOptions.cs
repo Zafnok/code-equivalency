@@ -1,3 +1,5 @@
+using Equiv.Execute.Testing;
+
 namespace Equiv.Cli;
 
 /// <summary>
@@ -7,6 +9,8 @@ namespace Equiv.Cli;
 /// <see cref="ChcIntMode"/> is <c>--chc-int-mode</c>, on unless given as false (<see cref="Core.VerificationOptions.ChcIntMode"/>; ticket P1-001).
 /// <see cref="InvariantModel"/> is <c>--invariant-model</c>: the model rung 5 asks for a coupling invariant when rung 4
 /// times out, off when null (<see cref="Core.VerificationOptions.InvariantModel"/>; ticket P1-002).
+/// <see cref="Testing"/> is <c>--test-target</c> and <c>--test-budget</c>, which bound testing each Unknown pair under
+/// <c>--execute</c> and do nothing without it (ADR 0035 decision 3; ticket P1-008).
 /// </summary>
 internal sealed record CompareOptions(
     string LegacyPath,
@@ -19,4 +23,7 @@ internal sealed record CompareOptions(
     bool LowerOnly = false,
     bool Execute = false,
     bool ChcIntMode = true,
-    string? InvariantModel = null);
+    string? InvariantModel = null)
+{
+    public TestingOptions Testing { get; init; } = TestingOptions.Default;
+}

@@ -1,0 +1,32 @@
+﻿proc "C::Bump()" (%cast.C.System.Object: map<sort "C", sort "System.Object">, ref %field.C.Changed: map<sort "C", sort "System.EventHandler">, ref %field.C.n: map<sort "C", bv32>, ref %field.System.EventArgs.Empty: map<sort "System.EventArgs", sort "System.EventArgs">, %null.System.EventHandler: map<sort "System.EventHandler", bool>, %this: sort "C") entry B0
+B0:
+  goto B1
+B1:
+  %$1: bv32 = mapread %field.C.n, %this
+  %$2: bv32 = const bv32 1
+  %$3: bv32 = add %$1, %$2
+  %field.C.n.18: map<sort "C", bv32> = mapwrite %field.C.n, %this, %$3
+  goto B2
+B2:
+  %$c0.19: sort "System.EventHandler" = mapread %field.C.Changed, %this
+  %$c0.isNull.20: bool = mapread %null.System.EventHandler, %$c0.19
+  br %$c0.isNull.20, B4, B3
+B3:
+  %$12: sort "System.Object" = mapread %cast.C.System.Object, %this
+  %$13: sort "System.EventArgs" = const sort "System.EventArgs" 0
+  %$15: sort "System.EventArgs" = mapread %field.System.EventArgs.Empty, %$13
+  br %$c0.isNull.20, B5, B6
+B4:
+  %field.C.Changed.24: map<sort "C", sort "System.EventHandler"> = phi [B2: %field.C.Changed, B8: %field.C.Changed.21]
+  %field.C.n.25: map<sort "C", bv32> = phi [B2: %field.C.n.18, B8: %field.C.n.22]
+  %field.System.EventArgs.Empty.26: map<sort "System.EventArgs", sort "System.EventArgs"> = phi [B2: %field.System.EventArgs.Empty, B8: %field.System.EventArgs.Empty.23]
+  ret outs(%field.C.Changed = %field.C.Changed.24, %field.C.n = %field.C.n.25, %field.System.EventArgs.Empty = %field.System.EventArgs.Empty.26)
+B5:
+  throw "System.NullReferenceException" outs(%field.C.Changed = %field.C.Changed, %field.C.n = %field.C.n.18, %field.System.EventArgs.Empty = %field.System.EventArgs.Empty)
+B6:
+  call "System.EventHandler::Invoke(object,System.EventArgs)"(%$c0.19, %$12, %$15) threw %$17: bool heap("field.C.Changed" %field.C.Changed -> %field.C.Changed.21: map<sort "C", sort "System.EventHandler">, "field.C.n" %field.C.n.18 -> %field.C.n.22: map<sort "C", bv32>, "field.System.EventArgs.Empty" %field.System.EventArgs.Empty -> %field.System.EventArgs.Empty.23: map<sort "System.EventArgs", sort "System.EventArgs">)
+  br %$17, B7, B8
+B7:
+  throw "System.Exception" outs(%field.C.Changed = %field.C.Changed.21, %field.C.n = %field.C.n.22, %field.System.EventArgs.Empty = %field.System.EventArgs.Empty.23)
+B8:
+  goto B4

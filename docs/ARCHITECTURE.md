@@ -77,7 +77,8 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 
 - `equiv compare --legacy <path.sln> --modern <path.sln> [--baseline prev.sarif]
   [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
-  [--dry-run] [--lower-only] [--execute] [--chc-int-mode true|false] [--invariant-model <id>]`.
+  [--dry-run] [--lower-only] [--execute] [--test-target 0.001] [--test-budget 10000[,60]]
+  [--chc-int-mode true|false] [--invariant-model <id>]`.
 - `--chc-int-mode` (default true) lets loop-ladder rung 4 ask Z3 Spacer over the integers first
   (VERIFICATION-MODEL.md section 5.1); `false` keeps it to the bitvectors.
 - `--invariant-model <id>` (off by default) turns on rung 5: when rung 4 times out, the Claude model `<id>` is asked
@@ -96,8 +97,12 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   The frontend's analysis carries an `IReplayDriverFactory` (`Equiv.Core.Execution`) over the
   projects it loaded; the C# one emits them and compiles a driver per side, and `Equiv.Execute`'s
   `Replayer` runs them. The result gains `properties.replay` (VERIFICATION-MODEL.md section 6);
-  the verdict, rule id, fingerprint and exit code never change. Without `--execute`, no user code
-  runs.
+  the verdict, rule id, fingerprint and exit code never change. It also tests every Unknown pair on
+  generated inputs (decision 3; ticket P1-008): the factory's `Plan` builds the same two drivers,
+  and `Equiv.Execute`'s `DifferentialTester` streams inputs through them until the Good-Turing
+  discovery probability falls below `--test-target` or `--test-budget` (inputs, and optionally
+  seconds, per pair) runs out. Both options are validated (exit 3) and do nothing without
+  `--execute`. Without `--execute`, no user code runs.
 - Router: inspects inputs, rejects mismatched or unsupported languages (exit 3), else
   selects the frontend. One frontend in the MVP; the router exists from day one so that
   Java is a new project, not a refactor.

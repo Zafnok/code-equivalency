@@ -4,8 +4,8 @@
     modern: 30
   },
   matchedPairs: 30,
-  pairsWithoutOpaque: 26,
-  pairsWholeBodyOpaque: 1,
+  pairsWithoutOpaque: 27,
+  pairsWholeBodyOpaque: 0,
   pairsCongruent: 24,
   projectsSkipped: {
     legacy: 0,
@@ -17,10 +17,6 @@
       modern: 2
     },
     InterpolatedString: {
-      legacy: 1,
-      modern: 1
-    },
-    lock: {
       legacy: 1,
       modern: 1
     }
@@ -66,6 +62,10 @@
         callSites: 2
       },
       {
+        member: System.Threading.Monitor::Exit(object),
+        callSites: 2
+      },
+      {
         member: System.ArgumentNullException::.ctor(string),
         callSites: 1
       },
@@ -104,6 +104,10 @@
       {
         member: System.Math::Round(decimal,int),
         callSites: 1
+      },
+      {
+        member: System.Threading.Monitor::Enter(object,ref bool),
+        callSites: 1
       }
     ],
     modern: [
@@ -121,6 +125,10 @@
       },
       {
         member: System.Collections.Generic.List`1::GetEnumerator()<Equiv.Samples.BusinessLayer.OrderLine>,
+        callSites: 2
+      },
+      {
+        member: System.Threading.Monitor::Exit(object),
         callSites: 2
       },
       {
@@ -161,6 +169,10 @@
       },
       {
         member: System.Math::Round(decimal,int,System.MidpointRounding),
+        callSites: 1
+      },
+      {
+        member: System.Threading.Monitor::Enter(object,ref bool),
         callSites: 1
       }
     ]

@@ -10,6 +10,7 @@ using Equiv.Core.Matching;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
 using Equiv.Execute;
+using Equiv.Execute.Testing;
 
 using Microsoft.CodeAnalysis.Sarif;
 
@@ -25,7 +26,8 @@ namespace Equiv.Cli;
 /// </summary>
 internal static class CompareCommand
 {
-    public static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend)
+    /// <summary>The <c>compare</c> command; <paramref name="execution"/> is where <c>--execute</c> runs, this machine when null.</summary>
+    public static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution = null)
     {
         ArgumentNullException.ThrowIfNull(frontends);
         ArgumentNullException.ThrowIfNull(backend);
@@ -41,11 +43,16 @@ internal static class CompareCommand
         Option<bool> lowerOnlyOption = new("--lower-only");
         Option<bool> executeOption = new("--execute");
         Option<bool> chcIntModeOption = new("--chc-int-mode") { DefaultValueFactory = _ => true };
+        Option<string?> testTargetOption = new("--test-target");
+        testTargetOption.Validators.Add(static result => Validate(result, TestingOptions.TryParse(result.GetValueOrDefault<string?>(), budget: null, out string error), error));
+        Option<string?> testBudgetOption = new("--test-budget");
+        testBudgetOption.Validators.Add(static result => Validate(result, TestingOptions.TryParse(target: null, result.GetValueOrDefault<string?>(), out string error), error));
         Option<string?> invariantModelOption = new("--invariant-model");
 
         Command command = new("compare")
         {
-            legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption, invariantModelOption,
+            legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption,
+            testTargetOption, testBudgetOption, invariantModelOption,
         };
 
         command.SetAction(parseResult => Run(
@@ -60,12 +67,25 @@ internal static class CompareCommand
                 parseResult.GetValue(lowerOnlyOption),
                 parseResult.GetValue(executeOption),
                 parseResult.GetValue(chcIntModeOption),
-                parseResult.GetValue(invariantModelOption)),
+                parseResult.GetValue(invariantModelOption))
+            {
+                Testing = TestingOptions.TryParse(parseResult.GetValue(testTargetOption), parseResult.GetValue(testBudgetOption), out _)!,
+            },
             frontends,
             backend,
-            new FileReportSink(parseResult.GetValue(outOption)!)));
+            new FileReportSink(parseResult.GetValue(outOption)!),
+            execution));
 
         return command;
+    }
+
+    /// <summary><c>--test-target</c> and <c>--test-budget</c> are usage errors (exit 3) unless they parse (ticket P1-008).</summary>
+    private static void Validate(System.CommandLine.Parsing.OptionResult result, TestingOptions? parsed, string error)
+    {
+        if (parsed is null)
+        {
+            result.AddError(error);
+        }
     }
 
     /// <summary>
@@ -159,7 +179,7 @@ internal static class CompareCommand
             options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config, options);
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
-        List<VerificationResult> results = Replayed(WithAssumptions(verified, lowered, matchResult), lowered, analysis.Replay, execution);
+        List<VerificationResult> results = Executed(WithAssumptions(verified, lowered, matchResult), lowered, analysis.Replay, execution, options.Testing);
         if (!options.LowerOnly)
         {
             census = census with { UnknownByScope = ScopeCounts.Of(results) };
@@ -222,32 +242,40 @@ internal static class CompareCommand
     }
 
     /// <summary>
-    /// ADR 0035 decision 2 (ticket M4-009): every Divergent's model replayed on both real runtimes, recorded as the result's
-    /// <see cref="VerificationResult.Replay"/>. The verdict, and with it the rule id, the fingerprint and the exit code, is
-    /// never changed. Projects and drivers are emitted into a temporary folder that is deleted afterwards. Without
-    /// <c>--execute</c> (<paramref name="execution"/> null), or from a frontend that cannot replay, nothing is replayed.
+    /// ADR 0035 decisions 2 and 3, under <c>--execute</c>. Every Divergent's model is replayed on both real runtimes and
+    /// recorded as the result's <see cref="VerificationResult.Replay"/>, which never changes the verdict, the rule id, the
+    /// fingerprint or the exit code (ticket M4-009). Every Unknown pair is tested on generated inputs within
+    /// <paramref name="testing"/>: it stays Unknown with <see cref="VerificationResult.Testing"/>, or becomes Divergent with
+    /// <c>proofMethod: observed</c> when the runtimes are seen to differ (ticket P1-008). Execution never makes a result
+    /// Equivalent. Projects and drivers are emitted into a temporary folder that is deleted afterwards. Without
+    /// <c>--execute</c> (<paramref name="execution"/> null), or from a frontend that cannot build drivers, nothing runs.
     /// </summary>
-    private static List<VerificationResult> Replayed(
+    private static List<VerificationResult> Executed(
         List<VerificationResult> results,
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered,
         IReplayDriverFactory? factory,
-        ExecutionEnvironment? execution)
+        ExecutionEnvironment? execution,
+        TestingOptions testing)
     {
         if (execution is null || factory is null)
         {
             return results;
         }
 
-        Dictionary<string, ProcedurePair> pairs = lowered.ToDictionary(static p => p.Pair.New.Value, static p => p.Pair, StringComparer.Ordinal);
+        Dictionary<string, (ProcedurePair Pair, IrProcedure Old, IrProcedure New)> pairs = lowered.ToDictionary(static p => p.Pair.New.Value, StringComparer.Ordinal);
         Replayer replayer = new(execution.Host);
+        DifferentialTester tester = new(execution.Host, testing, execution.Time);
         string directory = Directory.CreateTempSubdirectory("equiv-execute-").FullName;
         try
         {
             return
             [
-                .. results.Select(result => result.Verdict is Divergent divergent
-                    ? result with { Replay = replayer.Replay(factory.Create(pairs[result.Identity.Value], divergent.Counterexample, directory)) }
-                    : result),
+                .. results.Select(result => (result.Verdict, pairs[result.Identity.Value]) switch
+                {
+                    (Divergent divergent, var (pair, _, _)) => result with { Replay = replayer.Replay(factory.Create(pair, divergent.Counterexample, directory)) },
+                    (Unknown unknown, var (pair, old, @new)) => tester.Test(factory.Plan(pair, unknown.Candidate, directory), old, @new).Apply(result),
+                    _ => result,
+                }),
             ];
         }
         finally

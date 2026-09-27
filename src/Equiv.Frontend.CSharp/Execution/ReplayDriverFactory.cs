@@ -18,7 +18,8 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// (<see cref="ProjectEmitter"/>), and each replay's driver is compiled against that project's own references into the same
 /// folder: <c>EquivReplay&lt;n&gt;.exe</c> with an <c>app.config</c> on the legacy side, run on .NET Framework 4.8, and
 /// <c>EquivReplay&lt;n&gt;.dll</c> with a <c>runtimeconfig.json</c> on the modern side, run on .NET 10. Its source is written
-/// beside it, so a reproduced divergence is one the user can read and run.
+/// beside it, so a reproduced divergence is one the user can read and run. <see cref="Plan"/> builds the same two drivers
+/// for an Unknown pair to be tested on generated inputs (ticket P1-008).
 /// </summary>
 internal sealed class ReplayDriverFactory(
     IReadOnlyDictionary<ProcedureIdentity, ReplayTarget> legacy,
@@ -68,6 +69,73 @@ internal sealed class ReplayDriverFactory(
         return modernDriver is null
             ? ReplayPlan.NotConstructible(modernProblem)
             : ReplayPlan.Runnable(new ExecutionDrivers(legacyDriver, modernDriver), oldCase.Input, newCase.Input);
+    }
+
+    public TestingPlan Plan(ProcedurePair pair, Counterexample? candidate, string directory)
+    {
+        ArgumentNullException.ThrowIfNull(pair);
+
+        ReplayTarget old = legacy[pair.Old];
+        ReplayTarget @new = modern[pair.New];
+        if (Obstacle(old.Method, @new.Method) is { } obstacle)
+        {
+            return TestingPlan.NotConstructible(obstacle);
+        }
+
+        int number = ++drivers;
+        (string? legacyDriver, string legacyProblem) = Driver(old, Path.Combine(directory, "legacy"), number, legacy: true);
+        if (legacyDriver is null)
+        {
+            return TestingPlan.NotConstructible(legacyProblem);
+        }
+
+        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, "modern"), number, legacy: false);
+        return modernDriver is null
+            ? TestingPlan.NotConstructible(modernProblem)
+            : TestingPlan.Runnable(
+                new ExecutionDrivers(legacyDriver, modernDriver),
+                [.. @new.Method.Parameters.Zip(old.Method.Parameters, static (n, l) => DriverFactory.Parameter(n.Type, RefKind.None, l.Type))],
+                Seeds(pair, old, candidate));
+    }
+
+    /// <summary>
+    /// Why generated inputs cannot be given to both methods alike: either cannot be called, they take parameters of
+    /// different kinds, position by position, or a kind the M3-032 generators cannot build.
+    /// </summary>
+    private static string? Obstacle(IMethodSymbol old, IMethodSymbol @new)
+    {
+        if (ReplayArguments.CallObstacle(old) is { } oldObstacle)
+        {
+            return $"legacy: {oldObstacle}";
+        }
+
+        if (ReplayArguments.CallObstacle(@new) is { } newObstacle)
+        {
+            return $"modern: {newObstacle}";
+        }
+
+        bool sameKinds = old.Parameters.Select(static p => DriverFactory.Classify(p.Type)).SequenceEqual(@new.Parameters.Select(static p => DriverFactory.Classify(p.Type)));
+        IParameterSymbol? unsupported = old.Parameters.FirstOrDefault(static p => DriverFactory.Classify(p.Type) == ExecutionTypeKind.Unsupported);
+        return (sameKinds, unsupported) switch
+        {
+            (false, _) => $"the two sides' parameters differ: {Types(old)} and {Types(@new)}",
+            (true, { } parameter) => $"no input can be built for {parameter.Type.ToDisplayString()}",
+            _ => null,
+        };
+    }
+
+    private static string Types(IMethodSymbol method) => string.Join(", ", method.Parameters.Select(static p => p.Type.ToDisplayString()));
+
+    /// <summary>The legacy case <paramref name="candidate"/>'s inputs give, when the model can be built as arguments at all.</summary>
+    private static List<ExecutionInput> Seeds(ProcedurePair pair, ReplayTarget old, Counterexample? candidate)
+    {
+        if (candidate is null || ReplayArguments.Bind(pair.OldBody!, pair.NewBody!, candidate.Inputs) is not var (oldValues, newValues))
+        {
+            return [];
+        }
+
+        ReplayArguments.SideCase seed = ReplayArguments.Case(old.Method, pair.OldBody!, oldValues, ReplayArguments.Nullness(oldValues, newValues));
+        return seed.Input is { } input ? [input] : [];
     }
 
     /// <summary>Emits <paramref name="target"/>'s project, once, and compiles a driver beside it; or returns why it could not.</summary>
