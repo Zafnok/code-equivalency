@@ -1,5 +1,5 @@
 # M4-012 Run log: `--verbosity`, `--log`, phase clocks, heartbeat and ETA, written off the pipeline thread
-Status: in-progress
+Status: done (PR #232)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-004
