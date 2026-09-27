@@ -146,9 +146,9 @@ internal sealed class ChannelRunLog : IRunLog, IDisposable
     {
         switch (next)
         {
-            case RunEvent.PhaseStarted started:
-                phase = new PhaseState(started);
-                Write(Verbosity.Normal, () => Line(started.Timestamp, phase.Started.Timestamp).Format());
+            case RunEvent.PhaseStarted phaseStarted:
+                phase = new PhaseState(phaseStarted);
+                Write(Verbosity.Normal, () => Line(phaseStarted.Timestamp, phase.Started.Timestamp).Format());
                 break;
             case RunEvent.ItemStarted item:
                 phase.Item = item;

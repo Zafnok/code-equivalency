@@ -178,7 +178,7 @@ internal static class CompareCommand
 
         // Two numbers, never a total: the licence measures each codebase on its own (ticket M3-014).
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"analysed lines of code: legacy={analysis.Lines.Legacy} modern={analysis.Lines.Modern}"));
-        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, sink, runLog, executing);
+        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, new Output(sink, runLog), executing);
     }
 
     /// <summary>The <c>load</c> phase (ADR 0038): the frontend's analysis, or null, with the message on stderr, when it cannot load.</summary>
@@ -210,8 +210,9 @@ internal static class CompareCommand
     /// Added and Removed results, no backend call, exit 0 unless a C# project was skipped.
     /// </summary>
     private static int Report(
-        CompareOptions options, FrontendAnalysis analysis, EquivConfig config, IVerificationBackend backend, SarifLog? baseline, IReportSink sink, IRunLog runLog, ExecutionEnvironment? execution)
+        CompareOptions options, FrontendAnalysis analysis, EquivConfig config, IVerificationBackend backend, SarifLog? baseline, Output output, ExecutionEnvironment? execution)
     {
+        (IReportSink sink, IRunLog runLog) = output;
         MatchResult matchResult = analysis.Match;
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered = Lowered(matchResult);
         LoweringCensus census = LoweringCensus.Compute(
@@ -680,4 +681,7 @@ internal static class CompareCommand
 
     /// <summary>A pair's result decided without the solver, and the outcome the verify phase logs for it.</summary>
     private sealed record Decision(VerificationResult Result, string Outcome);
+
+    /// <summary>Where <see cref="Report"/> writes: the SARIF sink and the run log (sonar(src): csharpsquid:S107).</summary>
+    private sealed record Output(IReportSink Sink, IRunLog Log);
 }

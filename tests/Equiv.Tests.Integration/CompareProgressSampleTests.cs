@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 using Equiv.Cli;
@@ -72,6 +73,7 @@ public sealed class CompareProgressSampleTests
                 "--verbosity", verbosity,
                 .. log,
             ]);
+            Assert.True(File.Exists(outPath), string.Create(CultureInfo.InvariantCulture, $"--verbosity {verbosity} wrote no SARIF (exit {exitCode}): {error}"));
             return (exitCode, output.ToString(), error.ToString(), File.ReadAllBytes(outPath));
         }
         finally

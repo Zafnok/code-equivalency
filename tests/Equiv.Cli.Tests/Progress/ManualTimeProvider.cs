@@ -72,18 +72,20 @@ internal sealed class ManualTimeProvider : TimeProvider
 
         public void Fire() => callback(state);
 
-        public void Dispose()
+        public void Dispose() => Stop();
+
+        public ValueTask DisposeAsync()
+        {
+            Stop();
+            return ValueTask.CompletedTask;
+        }
+
+        private void Stop()
         {
             lock (owner.gate)
             {
                 owner.timers.Remove(this);
             }
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            Dispose();
-            return ValueTask.CompletedTask;
         }
     }
 }
