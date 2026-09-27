@@ -33,8 +33,7 @@ internal sealed class ModelDecoder
     private readonly Context context;
     private readonly Model model;
     private readonly ProductEncoding encoding;
-    private readonly Dictionary<string, Dictionary<string, int>> ids = new(StringComparer.Ordinal);
-    private readonly Dictionary<IrSortValue, Expr> elements = [];
+    private readonly Values values = new();
 
     public ModelDecoder(Context context, Model model, ProductEncoding encoding)
     {
@@ -43,7 +42,7 @@ internal sealed class ModelDecoder
         this.encoding = encoding;
         foreach ((IrSortValue literal, Expr constant) in encoding.Sorts.SortLiterals)
         {
-            Remember(literal, model.Eval(constant, completion: true));
+            values.Remember(literal, model.Eval(constant, completion: true));
         }
     }
 
@@ -200,18 +199,12 @@ internal sealed class ModelDecoder
         new([.. encoding.Inputs.Select(i => (i.Shared.Var.Name, Value: Decode(model.Eval(i.Term, completion: true), i.Shared.Type)))
             .Select(static i => i.Name.StartsWith(ProductEncoder.LengthPrefix, StringComparison.Ordinal) ? NonNegative((IrMapValue)i.Value) : i.Value)]);
 
-    public IrValue Decode(Expr value, IrType type) => type switch
-    {
-        IrBool => new IrBoolValue(value.IsTrue),
-        IrBitVec bitVec => new IrBitVecValue(bitVec.Width, ((BitVecNum)value).UInt64),
-        IrSort sort => Element(sort.Name, value),
-        _ => DecodeMap(value, (IrMap)type),
-    };
+    public IrValue Decode(Expr value, IrType type) => values.Decode(value, type);
 
     /// <summary>The Z3 term for a decoded or literal value, so the oracle can apply call functions to it.</summary>
     public Expr Encode(IrValue value) => value switch
     {
-        IrSortValue element => elements[element],
+        IrSortValue element => values.Term(element),
         IrMapValue map => map.Entries.Aggregate(
             context.MkConstArray(encoding.Sorts.Sort(map.MapType.Key), Encode(map.Default)),
             (array, e) => context.MkStore(array, Encode(e.Key), Encode(e.Value))),
@@ -242,7 +235,7 @@ internal sealed class ModelDecoder
         run.Taint.Sources.Select(s => new Abstraction(side, s, Span: null));
 
     /// <summary>One side's arguments, in its own parameter order, from the shared inputs it binds.</summary>
-    private static IrInputs Bind(IrProcedure procedure, ImmutableArray<SharedParameter> shared, IrInputs inputs, Func<SharedParameter, IrParameter?> side)
+    public static IrInputs Bind(IrProcedure procedure, ImmutableArray<SharedParameter> shared, IrInputs inputs, Func<SharedParameter, IrParameter?> side)
     {
         Dictionary<string, IrValue> byName = shared
             .Select((s, i) => (Parameter: side(s), Value: inputs.Arguments[i]))
@@ -260,41 +253,65 @@ internal sealed class ModelDecoder
     private static string Describe(IrRun run) =>
         $"{run.Outcome} outs [{string.Join(", ", run.Outs)}] trace [{string.Join(", ", run.Trace.Select(static c => $"{c.Callee.Value}({string.Join(", ", c.Arguments)})"))}]";
 
-    private IrSortValue Element(string sort, Expr value)
-    {
-        string key = value.ToString();
-        if (ids.TryGetValue(sort, out Dictionary<string, int>? known) && known.TryGetValue(key, out int id))
-        {
-            return new IrSortValue(sort, id);
-        }
-
-        IrSortValue element = new(sort, elements.Keys.Where(e => string.Equals(e.Sort, sort, StringComparison.Ordinal)).Select(static e => e.Id + 1).DefaultIfEmpty(0).Max());
-        Remember(element, value);
-        return element;
-    }
-
-    private void Remember(IrSortValue element, Expr value)
-    {
-        if (!ids.TryGetValue(element.Sort, out Dictionary<string, int>? known))
-        {
-            known = new(StringComparer.Ordinal);
-            ids.Add(element.Sort, known);
-        }
-
-        known[value.ToString()] = element.Id;
-        elements[element] = value;
-    }
-
     /// <summary>
-    /// Z3 4.12 evaluates a model array, with completion, to a store chain over a constant array; any other
-    /// shape (an <c>as-array</c>, a lambda) fails loudly, naming the term, rather than decoding to a wrong map.
+    /// Values a solver gives, as IR values: a model's, or the ground facts of rung 4's derivations (ticket P1-001). An
+    /// element of an uninterpreted sort becomes <c>sort "S" n</c>: an element <see cref="Remember"/>ed for a literal keeps
+    /// that literal's id, any other gets the next free id. A bitvector may come as an integer, in rung 4's integer mode,
+    /// and then denotes its bits modulo its width.
     /// </summary>
-    private IrMapValue DecodeMap(Expr value, IrMap type) => value switch
+    internal sealed class Values
     {
-        { IsStore: true } => DecodeMap(value.Args[0], type).Write(Decode(value.Args[1], type.Key), Decode(value.Args[2], type.Value)),
-        { IsConstantArray: true } => new IrMapValue(type, Decode(value.Args[0], type.Value), []),
-        _ => throw new InvalidOperationException($"Encoder bug: the model gives a map in a shape the decoder does not read (store chain over a constant array expected): {value}"),
-    };
+        private readonly Dictionary<string, Dictionary<string, int>> ids = new(StringComparer.Ordinal);
+        private readonly Dictionary<IrSortValue, Expr> elements = [];
+
+        public IrValue Decode(Expr value, IrType type) => type switch
+        {
+            IrBool => new IrBoolValue(value.IsTrue),
+            IrBitVec bitVec when value is IntNum integer => IntModeTranslator.Decode(integer, bitVec.Width),
+            IrBitVec bitVec => new IrBitVecValue(bitVec.Width, ((BitVecNum)value).UInt64),
+            IrSort sort => Element(sort.Name, value),
+            _ => DecodeMap(value, (IrMap)type),
+        };
+
+        /// <summary>The solver's term for an element already decoded or remembered.</summary>
+        public Expr Term(IrSortValue element) => elements[element];
+
+        public void Remember(IrSortValue element, Expr value)
+        {
+            if (!ids.TryGetValue(element.Sort, out Dictionary<string, int>? known))
+            {
+                known = new(StringComparer.Ordinal);
+                ids.Add(element.Sort, known);
+            }
+
+            known[value.ToString()] = element.Id;
+            elements[element] = value;
+        }
+
+        private IrSortValue Element(string sort, Expr value)
+        {
+            string key = value.ToString();
+            if (ids.TryGetValue(sort, out Dictionary<string, int>? known) && known.TryGetValue(key, out int id))
+            {
+                return new IrSortValue(sort, id);
+            }
+
+            IrSortValue element = new(sort, elements.Keys.Where(e => string.Equals(e.Sort, sort, StringComparison.Ordinal)).Select(static e => e.Id + 1).DefaultIfEmpty(0).Max());
+            Remember(element, value);
+            return element;
+        }
+
+        /// <summary>
+        /// Z3 4.12 evaluates a model array, with completion, to a store chain over a constant array; any other
+        /// shape (an <c>as-array</c>, a lambda) fails loudly, naming the term, rather than decoding to a wrong map.
+        /// </summary>
+        private IrMapValue DecodeMap(Expr value, IrMap type) => value switch
+        {
+            { IsStore: true } => DecodeMap(value.Args[0], type).Write(Decode(value.Args[1], type.Key), Decode(value.Args[2], type.Value)),
+            { IsConstantArray: true } => new IrMapValue(type, Decode(value.Args[0], type.Value), []),
+            _ => throw new InvalidOperationException($"Encoder bug: the model gives a map in a shape the decoder does not read (store chain over a constant array expected): {value}"),
+        };
+    }
 
     /// <summary>
     /// Answers a call from the model: the side's result, <c>threw</c>, ref output (ticket M4-003) and heap functions applied to the arguments, the

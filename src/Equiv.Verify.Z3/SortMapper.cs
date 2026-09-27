@@ -11,14 +11,18 @@ namespace Equiv.Verify.Z3;
 /// section 2; ticket M3-001). <see cref="IrBool"/> is <c>Bool</c>, <see cref="IrBitVec"/> a bitvector,
 /// <see cref="IrMap"/> an array, and each <see cref="IrSort"/> name one uninterpreted sort that both sides
 /// share. A sort literal <c>sort "S" n</c> is the constant <c>lit.S.n</c>; <see cref="Distinctness"/> keeps
-/// literals of one sort apart, as the interpreter compares them by id.
+/// literals of one sort apart, as the interpreter compares them by id. With <paramref name="integers"/>, a bitvector is
+/// an integer instead, and its literal the integer its bits denote (rung 4's integer mode, ticket P1-001).
 /// </summary>
-internal sealed class SortMapper(Context context)
+internal sealed class SortMapper(Context context, IntModeTranslator? integers = null)
 {
     private readonly Dictionary<string, UninterpretedSort> uninterpreted = new(StringComparer.Ordinal);
     private readonly Dictionary<IrSortValue, Expr> literals = [];
 
     public Context Context => context;
+
+    /// <summary>The integer mode's translator when bitvectors are integers, else null.</summary>
+    public IntModeTranslator? Integers => integers;
 
     /// <summary>Every sort literal created so far, for the model decoder to name the elements they denote.</summary>
     public IReadOnlyDictionary<IrSortValue, Expr> SortLiterals => literals;
@@ -35,6 +39,7 @@ internal sealed class SortMapper(Context context)
     public Sort Sort(IrType type) => type switch
     {
         IrBool => context.BoolSort,
+        IrBitVec when integers is not null => integers.Sort,
         IrBitVec bitVec => context.MkBitVecSort((uint)bitVec.Width),
         IrSort sort => Uninterpreted(sort.Name),
         _ => context.MkArraySort(Sort(((IrMap)type).Key), Sort(((IrMap)type).Value)),
@@ -43,6 +48,7 @@ internal sealed class SortMapper(Context context)
     public Expr Literal(IrValue value) => value switch
     {
         IrBoolValue boolean => context.MkBool(boolean.Value),
+        IrBitVecValue bits when integers is not null => integers.Literal(bits),
         IrBitVecValue bits => context.MkBV(bits.Bits, (uint)bits.Width),
         IrSortValue element => SortLiteral(element),
         _ => MapLiteral((IrMapValue)value),

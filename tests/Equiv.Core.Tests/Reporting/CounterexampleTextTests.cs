@@ -11,6 +11,13 @@ public sealed class CounterexampleTextTests
 {
     private static readonly IrInputs NoInputs = new([]);
 
+    /// <summary>Public since ticket P1-001, whose rung 4 renders a spurious derivation's replay with it.</summary>
+    [Fact]
+    public void DumpRejectsNull()
+    {
+        Assert.Throws<ArgumentNullException>(static () => CounterexampleText.Dump(Null.Of<Counterexample>()!));
+    }
+
     [Fact]
     public void ReturnedWithNoValueDumpsAsReturned()
     {

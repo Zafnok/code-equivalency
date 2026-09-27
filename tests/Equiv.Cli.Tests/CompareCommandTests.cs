@@ -64,6 +64,19 @@ public sealed class CompareCommandTests
         Assert.False(parseResult.GetValue<bool>("--lower-only"));
     }
 
+    /// <summary><c>--chc-int-mode</c> is on unless given as false (ticket P1-001).</summary>
+    [Theory]
+    [InlineData(new string[0], true)]
+    [InlineData(new[] { "--chc-int-mode", "false" }, false)]
+    [InlineData(new[] { "--chc-int-mode", "true" }, true)]
+    public void Create_ParsesChcIntModeOnByDefault(string[] flag, bool expected)
+    {
+        ParseResult parseResult = CompareCommand.Create([], new FakeBackend(NoVerdicts)).Parse(["--legacy", "a.sln", "--modern", "b.sln", .. flag]);
+
+        Assert.Empty(parseResult.Errors);
+        Assert.Equal(expected, parseResult.GetValue<bool>("--chc-int-mode"));
+    }
+
     [Fact]
     public void Create_ParsesLowerOnly()
     {
@@ -739,11 +752,29 @@ public sealed class CompareCommandTests
             Assert.Equal(7, options.Bound);
             Assert.Equal(12000, options.TimeoutMs);
             Assert.Equal("New::M", options.CallIdentityMap["Old::M"]);
+            Assert.True(options.ChcIntMode);
         }
         finally
         {
             File.Delete(configPath);
         }
+    }
+
+    /// <summary>Ticket P1-001: <c>--chc-int-mode false</c> reaches the backend.</summary>
+    [Fact]
+    public void Compare_PassesChcIntModeToTheBackend()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Chc) });
+
+        int exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false, ChcIntMode: false),
+            [frontend], backend, new InMemoryReportSink());
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.False(Assert.Single(backend.Calls).ChcIntMode);
     }
 
     [Fact]

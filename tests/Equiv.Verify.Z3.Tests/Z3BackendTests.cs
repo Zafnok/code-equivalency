@@ -49,8 +49,13 @@ public sealed class Z3BackendTests
 
     private static readonly VerificationOptions Options = new(3, 10_000, []);
 
+    /// <summary>
+    /// A loop that never exits against a body without one: rungs 2 and 3 do not align them, and rung 4 proves the pair,
+    /// since no pair of runs both terminates (partial equivalence, VERIFICATION-MODEL.md section 5.1). Every context rung 4
+    /// creates, one per mode it tries, is disposed.
+    /// </summary>
     [Fact]
-    public void ALoopOnOneSideOnlyClimbsTheLadderAndIsUnaligned()
+    public void ALoopOnOneSideOnlyClimbsTheLadderToRungFour()
     {
         List<CountingContext> contexts = [];
         Z3Backend backend = new(() => Track(contexts));
@@ -58,17 +63,17 @@ public sealed class Z3BackendTests
         Verdict oldLoops = backend.Verify(IrText.Parse(Loop), IrText.Parse(Straight), Options);
         Verdict newLoops = backend.Verify(IrText.Parse(Straight), IrText.Parse(Loop), Options);
 
-        Unknown unknown = Assert.IsType<Unknown>(oldLoops);
-        Assert.Equal(UnknownReason.UnalignedLoop, unknown.Reason);
-        Assert.Equal("the loops do not align: the old side has 1 loops and the new side 0", unknown.Detail);
+        Assert.Equal(new Equivalent(ProofMethod.Chc), Assert.IsType<Equivalent>(oldLoops) with { Ladder = [], Invariant = null });
         Assert.Equal(
             [
                 (ProofMethod.Bounded, RungOutcome.Inconclusive),
                 (ProofMethod.LockstepInduction, RungOutcome.NotApplicable),
                 (ProofMethod.KInduction, RungOutcome.NotApplicable),
+                (ProofMethod.Chc, RungOutcome.Proved),
             ],
-            unknown.Ladder.Select(static s => (s.Rung, s.Outcome)));
-        Assert.Equal(UnknownReason.UnalignedLoop, Assert.IsType<Unknown>(newLoops).Reason);
+            oldLoops.Ladder.Select(static s => (s.Rung, s.Outcome)));
+        Assert.Equal("the loops do not align: the old side has 1 loops and the new side 0", oldLoops.Ladder[1].Detail);
+        Assert.IsType<Equivalent>(newLoops);
         Assert.All(contexts, static c => Assert.Equal(1, c.Disposals));
     }
 

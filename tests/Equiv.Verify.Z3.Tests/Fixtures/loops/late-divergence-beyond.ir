@@ -1,5 +1,6 @@
-# Unknown(UnalignedLoop)
-# As late-divergence, but in the iteration with i == 5: beyond every rung's window, and not provable.
+# Divergent(chc, int)
+# As late-divergence, but in the iteration with i == 5: beyond every window of rungs 1 to 3; rung 4 finds a
+# derivation over the integers through all ten iterations, which replays to the divergence.
 proc "T::Late()" () -> bv32 entry B0
 B0:
   %z: bv32 = const bv32 0

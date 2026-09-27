@@ -16,6 +16,12 @@ public enum ProofMethod
     KInduction,
 
     /// <summary>
+    /// Rung 4: constrained Horn clauses solved by Z3 Spacer, which synthesises the coupling invariant itself; loops need not
+    /// align (unbounded; ticket P1-001).
+    /// </summary>
+    Chc,
+
+    /// <summary>
     /// No rung: the two bound bodies fingerprint equal and neither is runtime-sensitive, so the solver is not called (ADR 0024;
     /// ticket M3-015). Unbounded, and modular like every verdict (ADR 0019).
     /// </summary>
