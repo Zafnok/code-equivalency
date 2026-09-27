@@ -148,7 +148,7 @@ public sealed class IrLowererSnapshotTests
     public Task ThrowOfANewObject() => Dump("class E : Exception { public E(int n) { } } static int M(int a) { if (a < 0) throw new E(a); return a; }");
 
     [Fact]
-    public Task EntirelyOpaque() => Dump("static int M(object o, int a) { lock (o) { a = a + 1; } return a; }");
+    public Task EntirelyOpaque() => Dump("static System.Collections.Generic.IEnumerable<int> M(int a) { yield return a + 1; }");
 
     [Fact]
     public Task WhileLoop() => Dump("static int M(int n) { int s = 0; while (n > 0) { s = s + n; n = n - 1; } return s; }");

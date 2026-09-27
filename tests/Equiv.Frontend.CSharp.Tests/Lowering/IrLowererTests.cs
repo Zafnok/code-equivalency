@@ -19,7 +19,6 @@ public sealed class IrLowererTests
 
     [Theory]
     [InlineData("static extern int M();", "M", "no-body")]
-    [InlineData("static void M(object o) { lock (o) { } }", "M", "lock")]
     [InlineData("static System.Collections.Generic.IEnumerable<int> M() { yield return 1; }", "M", "iterator")]
     [InlineData("static async System.Threading.Tasks.Task M(IAsyncDisposable d) { await using (d) { } }", "M", "await-using")]
     public void WholeBodyIsOneOpaque(string members, string name, string reason)
@@ -33,7 +32,6 @@ public sealed class IrLowererTests
 
     [Theory]
     [InlineData("static extern int M();", "M")]
-    [InlineData("static void M(object o) { lock (o) { } }", "M")]
     [InlineData("static System.Collections.Generic.IEnumerable<int> M() { yield return 1; }", "M")]
     public void WholeBodyOpaqueIsFlagged(string members, string name) =>
         Assert.True(Assert.Single(Opaques(Method(members, name))).WholeBody);
@@ -47,7 +45,7 @@ public sealed class IrLowererTests
     /// body. Lines are 1-based from <c>using System;</c>.
     /// </summary>
     [Theory]
-    [InlineData("static void M(object o, object p)\n{\n    int x = 0;\n    lock (o) { x++; }\n    lock (p) { }\n}", "lock", 7, 5, 7, 22)]
+    [InlineData("static System.Collections.Generic.IEnumerable<int> M()\n{\n    int x = 0;\n    yield return x;\n    yield break;\n}", "iterator", 7, 5, 7, 20)]
     public void WholeBodyOpaqueSpanIsTheConstructNotTheBody(string members, string reason, int startLine, int startColumn, int endLine, int endColumn)
     {
         IrOpaque opaque = Assert.Single(Opaques(Method(members)));
@@ -60,7 +58,7 @@ public sealed class IrLowererTests
     [Fact]
     public void WholeBodyOpaqueKeepsByRefParametersAsOuts()
     {
-        IrProcedure procedure = Method("static void M(ref int a, out int b, object o) { b = 0; lock (o) a = a - 1; }");
+        IrProcedure procedure = Method("static extern void M(ref int a, out int b, object o);");
 
         IrReturn exit = Assert.IsType<IrReturn>(Assert.Single(procedure.Blocks).Terminator);
         Assert.Null(exit.Value);
@@ -1305,6 +1303,37 @@ public sealed class IrLowererTests
         Assert.Equal([Bits(32, 5), Bits(32, 5)], Assert.Single(oracle.Arguments));
     }
 
+    /// <summary>
+    /// Ticket M4-011: <c>lock</c> lowers through the CFG's <c>Monitor.Enter(o, ref lockTaken)</c> and
+    /// <c>finally { if (lockTaken) Monitor.Exit(o); }</c>, with no opaque.
+    /// </summary>
+    [Fact]
+    public void LockLowersThroughTryFinally()
+    {
+        IrProcedure procedure = Method("static int M(object o, int a) { lock (o) { a = a + 1; } return a; }");
+        LockOracle oracle = new();
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(Bits(32, 4), Assert.IsType<IrReturned>(RunWith(procedure, oracle, Reference(1, "System.Object"), Bits(32, 3))).Value);
+        Assert.Equal(
+            ["System.Threading.Monitor::Enter(object,ref bool)", "System.Threading.Monitor::Exit(object)"],
+            oracle.Calls.Select(static c => c.Callee),
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>Ticket M4-011 criterion 1: the compiler's <c>lockTaken</c> is false on every entry to the <c>lock</c>.</summary>
+    [Fact]
+    public void LockInALoopStartsUntakenEachIteration()
+    {
+        IrProcedure procedure = Method("static int M(object o, int n) { int k = 0; for (int i = 0; i < n; i++) { lock (o) { k++; } } return k; }");
+        LockOracle oracle = new();
+
+        Assert.Equal(Bits(32, 2), Assert.IsType<IrReturned>(RunWith(procedure, oracle, Reference(1, "System.Object"), Bits(32, 2))).Value);
+        Assert.Equal(
+            [new IrBoolValue(Value: false), new IrBoolValue(Value: false)],
+            oracle.Calls.Where(static c => c.Callee.Contains("Enter", StringComparison.Ordinal)).Select(static c => c.Arguments[1]));
+    }
+
     [Theory]
     [InlineData("static int f; static void M() { System.Threading.Interlocked.Increment(ref f); }")]
     [InlineData("int f; void M() { System.Threading.Interlocked.Increment(ref f); }")]
@@ -1608,6 +1637,18 @@ public sealed class IrLowererTests
         {
             Arguments.Add(arguments);
             return new IrCallResult(resultType is IrBool ? new IrBoolValue(Value: true) : null, Threw: false) { RefOuts = [.. refOuts.Select(_ => output)] };
+        }
+    }
+
+    /// <summary>Answers <c>Monitor.Enter</c> by taking the lock, sets every other <c>ref</c> output false, and records each call.</summary>
+    private sealed class LockOracle : Equiv.Core.ICallOracle
+    {
+        public List<(string Callee, ImmutableArray<IrValue> Arguments)> Calls { get; } = [];
+
+        public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
+        {
+            Calls.Add((callee.Value, arguments));
+            return new IrCallResult(Value: null, Threw: false) { RefOuts = [.. refOuts.Select(_ => new IrBoolValue(Value: true))] };
         }
     }
 
