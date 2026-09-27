@@ -28,8 +28,11 @@ the same values, so the solver proves it Equivalent without modelling `decimal`.
 leave the census.
 
 Since M4-003, `ref` and `out` arguments to locals and parameters are call outputs, so `ParseQuantity`'s `TryParse`
-lowers with no opaque and its `ref-argument` entry leaves the census. `Record`'s `lock` stays whole-body opaque: the CFG
-never initialises the `lockTaken` local it passes to `Monitor.Enter` by `ref` (ticket M4-011).
+lowers with no opaque and its `ref-argument` entry leaves the census.
+
+Since M4-011, a local the compiler declares for a region starts at its type's default on every entry to the region, so
+`lock`'s `lockTaken` is false before `Monitor.Enter(gate, ref lockTaken)` and `lock` lowers through its `try`/`finally`.
+`Record` lowers with no opaque, its `lock` entry leaves the census, and no pair is whole-body opaque.
 
 Since M4-005, `QuantityOf`'s `item is OrderLine line` is a read of the `istype.System.Object.<OrderLine>` predicate at a
 non-null `item`, and `line` is a read of the `cast` map, so the method lowers with no opaque and its `switch-pattern`
