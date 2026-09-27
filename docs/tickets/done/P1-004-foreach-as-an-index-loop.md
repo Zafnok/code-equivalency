@@ -1,5 +1,5 @@
 # P1-004 Lower `foreach` over an array as an index loop
-Status: in-progress
+Status: done (PR #227)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004, M4-001
