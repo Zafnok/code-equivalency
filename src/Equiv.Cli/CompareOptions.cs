@@ -1,3 +1,5 @@
+using Equiv.Execute.Testing;
+
 namespace Equiv.Cli;
 
 /// <summary>
@@ -5,6 +7,8 @@ namespace Equiv.Cli;
 /// <see cref="FailOn"/> is null when <c>--fail-on</c> was not given, which means <c>divergent</c> and lets <c>--lower-only</c> reject only an explicit one.
 /// <see cref="Execute"/> is <c>--execute</c>: replay every Divergent on both real runtimes (ADR 0035; ticket M4-009).
 /// <see cref="ChcIntMode"/> is <c>--chc-int-mode</c>, on unless given as false (<see cref="Core.VerificationOptions.ChcIntMode"/>; ticket P1-001).
+/// <see cref="Testing"/> is <c>--test-target</c> and <c>--test-budget</c>, which bound testing each Unknown pair under
+/// <c>--execute</c> and do nothing without it (ADR 0035 decision 3; ticket P1-008).
 /// </summary>
 internal sealed record CompareOptions(
     string LegacyPath,
@@ -16,4 +20,7 @@ internal sealed record CompareOptions(
     bool DryRun,
     bool LowerOnly = false,
     bool Execute = false,
-    bool ChcIntMode = true);
+    bool ChcIntMode = true)
+{
+    public TestingOptions Testing { get; init; } = TestingOptions.Default;
+}

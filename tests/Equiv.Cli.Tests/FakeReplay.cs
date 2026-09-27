@@ -9,11 +9,14 @@ namespace Equiv.Cli.Tests;
 
 /// <summary>
 /// A replay factory that plans the same two drivers for every pair and records what it was asked (ticket M4-009), and a
-/// driver host that answers every case with the canned line of its driver.
+/// driver host that answers every case with the canned line of its driver. <see cref="Plan"/> plans a method without
+/// parameters for every Unknown pair (ticket P1-008).
 /// </summary>
 internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IReplayDriverFactory, IDriverHost
 {
     public List<(ProcedurePair Pair, Counterexample Counterexample, string Directory)> Creates { get; } = [];
+
+    public List<(ProcedurePair Pair, Counterexample? Candidate, string Directory)> Plans { get; } = [];
 
     public List<string> Starts { get; } = [];
 
@@ -22,6 +25,13 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
         Creates.Add((pair, counterexample, directory));
         Assert.True(Directory.Exists(directory));
         return ReplayPlan.Runnable(new ExecutionDrivers("legacy.exe", "modern.dll"), new ExecutionInput(["0"]), new ExecutionInput(["0"]));
+    }
+
+    public TestingPlan Plan(ProcedurePair pair, Counterexample? candidate, string directory)
+    {
+        Plans.Add((pair, candidate, directory));
+        Assert.True(Directory.Exists(directory));
+        return TestingPlan.Runnable(new ExecutionDrivers("legacy.exe", "modern.dll"), [], []);
     }
 
     public IDriverSession Start(string driver)

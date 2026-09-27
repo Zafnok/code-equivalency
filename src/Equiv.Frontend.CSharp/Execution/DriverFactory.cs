@@ -146,7 +146,7 @@ public sealed class DriverFactory : IExecutionDriverFactory
     }
 
     /// <summary>A parameter, with an enum's defined values taken from both runtimes, since a runtime may add members.</summary>
-    private static ExecutionParameter Parameter(ITypeSymbol type, RefKind refKind, ITypeSymbol legacyType)
+    internal static ExecutionParameter Parameter(ITypeSymbol type, RefKind refKind, ITypeSymbol legacyType)
     {
         string prefix = refKind switch
         {

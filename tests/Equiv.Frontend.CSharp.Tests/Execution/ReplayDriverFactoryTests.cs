@@ -27,6 +27,15 @@ public sealed class ReplayDriverFactoryTests : IDisposable
                 public string Greet(string name) => "Hello, " + name.ToUpper();
             }
 
+            public class Kinds
+            {
+                public int Count(string s, long n) => 0;
+                public int Count(string s, int n) => 0;
+                public int Count(string s) => 0;
+                public static int When(System.DateTime at) => 0;
+                public static int Pick(System.DayOfWeek day) => 0;
+            }
+
             public class Locked
             {
                 [System.Obsolete("no", true)] public Locked() { }
@@ -166,5 +175,106 @@ public sealed class ReplayDriverFactoryTests : IDisposable
 
         Assert.Throws<ArgumentNullException>(() => factory.Create(null!, NullName(), directory));
         Assert.Throws<ArgumentNullException>(() => factory.Create(pair, null!, directory));
+        Assert.Throws<ArgumentNullException>(() => factory.Plan(null!, NullName(), directory));
+    }
+
+    /// <summary>Ticket P1-008: an Unknown pair's drivers, the parameters both sides take, and its candidate counterexample as the first seed.</summary>
+    [Fact]
+    public void Plan_BuildsDriversParametersAndSeedsWithTheCandidate()
+    {
+        CSharpCompilation legacy = Compile(Greeter, "Greeter");
+        CSharpCompilation modern = Compile(Greeter, "Greeter");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
+
+        TestingPlan seeded = factory.Plan(pair, NullName(), directory);
+        TestingPlan unseeded = factory.Plan(pair, candidate: null, directory);
+
+        Assert.Empty(seeded.Reason);
+        Assert.Equal(
+            new ExecutionDrivers(Path.Combine(directory, "legacy", "Greeter", "EquivReplay1.exe"), Path.Combine(directory, "modern", "Greeter", "EquivReplay1.dll")),
+            seeded.Drivers);
+        Assert.Equal([("string", ExecutionTypeKind.Text)], seeded.Parameters.Select(static p => (p.TypeName, p.Kind)));
+        Assert.Equal(["null"], Assert.Single(seeded.Seeds).Arguments);
+        Assert.Empty(unseeded.Seeds);
+        Assert.NotNull(unseeded.Drivers);
+    }
+
+    [Fact]
+    public void Plan_ACandidateTheModelCannotBuild_IsNoSeed()
+    {
+        CSharpCompilation project = Compile(Greeter, "Greeter");
+        IMethodSymbol greet = Method(project, "N.Greeter", "Greet");
+        const string heap = "proc \"X\" (%name: sort \"System.String\", %field.N.Greeter.x: map<sort \"N.Greeter\", bv32>, %this: sort \"N.Greeter\") entry B0 B0: ret";
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, greet, GreetIr, project, greet, GreetIr);
+        (ReplayDriverFactory heapFactory, ProcedurePair heapPair) = Factory(project, greet, heap, project, greet, heap);
+        IrMapValue field = new(new IrMap(new IrSort("N.Greeter"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 0), []);
+
+        TestingPlan otherParameters = factory.Plan(pair, Counterexample(), directory);
+        TestingPlan heapModel = heapFactory.Plan(heapPair, Counterexample(new IrSortValue("System.String", 3), field, new IrSortValue("N.Greeter", 1)), directory);
+
+        Assert.NotNull(otherParameters.Drivers);
+        Assert.Empty(otherParameters.Seeds);
+        Assert.NotNull(heapModel.Drivers);
+        Assert.Empty(heapModel.Seeds);
+    }
+
+    [Theory]
+    [InlineData("Count", "Count", 0, 1, "the two sides' parameters differ: string, long and string, int")]
+    [InlineData("Count", "Count", 0, 2, "the two sides' parameters differ: string, long and string")]
+    [InlineData("When", "When", 0, 0, "no input can be built for System.DateTime")]
+    public void Plan_ParametersItCannotGenerate_AreNotConstructible(string legacyName, string modernName, int legacyOverload, int modernOverload, string reason)
+    {
+        CSharpCompilation project = Compile(Greeter, "Kinds");
+        INamedTypeSymbol kinds = project.GetTypeByMetadataName("N.Kinds")!;
+        const string ir = "proc \"X\" () entry B0 B0: ret";
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(
+            project, kinds.GetMembers(legacyName).OfType<IMethodSymbol>().ElementAt(legacyOverload), ir,
+            project, kinds.GetMembers(modernName).OfType<IMethodSymbol>().ElementAt(modernOverload), ir);
+
+        TestingPlan plan = factory.Plan(pair, candidate: null, directory);
+
+        Assert.Null(plan.Drivers);
+        Assert.Equal(reason, plan.Reason);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(directory));
+    }
+
+    [Fact]
+    public void Plan_EnumsTakeBothSidesValues()
+    {
+        CSharpCompilation project = Compile(Greeter, "Kinds");
+        IMethodSymbol pick = Method(project, "N.Kinds", "Pick");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, pick, "proc \"X\" (%day: bv32) entry B0 B0: ret", project, pick, "proc \"X\" (%day: bv32) entry B0 B0: ret");
+
+        ExecutionParameter day = Assert.Single(factory.Plan(pair, candidate: null, directory).Parameters);
+
+        Assert.Equal((ExecutionTypeKind.Enum, 7), (day.Kind, day.EnumValues.Count));
+    }
+
+    [Theory]
+    [InlineData(true, "legacy: not public")]
+    [InlineData(false, "modern: not public")]
+    public void Plan_ASideItCannotCall_IsNotConstructible(bool legacyHidden, string reason)
+    {
+        CSharpCompilation open = Compile(Greeter, "Greeter");
+        CSharpCompilation hidden = Compile(Greeter.Replace("public string Greet", "internal string Greet", StringComparison.Ordinal), "Greeter");
+        CSharpCompilation legacy = legacyHidden ? hidden : open;
+        CSharpCompilation modern = legacyHidden ? open : hidden;
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
+
+        Assert.Equal(reason, factory.Plan(pair, NullName(), directory).Reason);
+    }
+
+    [Theory]
+    [InlineData(true, "emit-failed: legacy project Broken: ")]
+    [InlineData(false, "emit-failed: modern project Broken: ")]
+    public void Plan_EmitFailure_IsNotConstructible(bool legacyBroken, string reason)
+    {
+        CSharpCompilation good = Compile(Greeter, "Broken");
+        CSharpCompilation broken = Compile(Greeter + "namespace N { public class Bad { public int M() => missing; } }", "Broken");
+        CSharpCompilation legacy = legacyBroken ? broken : good;
+        CSharpCompilation modern = legacyBroken ? good : broken;
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
+
+        Assert.StartsWith(reason, factory.Plan(pair, candidate: null, directory).Reason, StringComparison.Ordinal);
     }
 }
