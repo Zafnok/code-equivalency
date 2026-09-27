@@ -119,13 +119,31 @@ internal static class ReplayArguments
     /// Why generated source cannot call <paramref name="method"/> on <c>new T()</c> at all, whatever its arguments, or null
     /// (tickets M4-009, P1-008).
     /// </summary>
-    public static string? CallObstacle(IMethodSymbol method) =>
-        !IsPublic(method) ? "not public"
-        : method.MethodKind is not (MethodKind.Ordinary or MethodKind.PropertyGet) ? "not a method or a property getter"
-        : method.IsGenericMethod || method.ContainingType.IsGenericType ? "generic"
-        : method.Parameters.FirstOrDefault(static p => p.RefKind != RefKind.None) is { } byRef ? $"{byRef.Name} is passed by reference"
-        : method.IsStatic || Constructible(method.ContainingType) ? null
-        : $"{method.ContainingType.ToDisplayString()} has no public parameterless constructor";
+    public static string? CallObstacle(IMethodSymbol method)
+    {
+        if (!IsPublic(method))
+        {
+            return "not public";
+        }
+
+        if (method.MethodKind is not (MethodKind.Ordinary or MethodKind.PropertyGet))
+        {
+            return "not a method or a property getter";
+        }
+
+        if (method.IsGenericMethod || method.ContainingType.IsGenericType)
+        {
+            return "generic";
+        }
+
+        IParameterSymbol? byRef = method.Parameters.FirstOrDefault(static p => p.RefKind != RefKind.None);
+        return (byRef, method.IsStatic || Constructible(method.ContainingType)) switch
+        {
+            ({ } parameter, _) => $"{parameter.Name} is passed by reference",
+            (null, false) => $"{method.ContainingType.ToDisplayString()} has no public parameterless constructor",
+            _ => null,
+        };
+    }
 
     /// <summary>Why generated source cannot call <paramref name="method"/> with the model's values, whatever its arguments.</summary>
     private static string? Obstacle(IMethodSymbol method, IrProcedure body, Dictionary<string, IrValue> values, IReadOnlyDictionary<string, IrValue> nullness)

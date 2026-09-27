@@ -50,10 +50,14 @@ internal static class IrPathSignature
     };
 
     /// <summary>A decimal integer as <paramref name="width"/> bits: two's complement when negative; zero when it is no integer.</summary>
-    private static IrBitVecValue Integer(int width, string argument) =>
-        long.TryParse(argument, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long signed) ? IrBitVecValue.FromSigned(width, signed)
-        : ulong.TryParse(argument, NumberStyles.None, CultureInfo.InvariantCulture, out ulong bits) ? IrBitVecValue.FromSigned(width, unchecked((long)bits))
-        : new IrBitVecValue(width, 0);
+    private static IrBitVecValue Integer(int width, string argument)
+    {
+        // A failed parse leaves bits at zero.
+        _ = ulong.TryParse(argument, NumberStyles.None, CultureInfo.InvariantCulture, out ulong bits);
+        return IrBitVecValue.FromSigned(
+            width,
+            long.TryParse(argument, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long signed) ? signed : unchecked((long)bits));
+    }
 
     /// <summary>The element of <paramref name="sort"/> for <paramref name="text"/>, numbered from 1 in order of first use.</summary>
     private static IrSortValue Element(string sort, string text, Dictionary<(string Sort, string Text), IrSortValue> elements)

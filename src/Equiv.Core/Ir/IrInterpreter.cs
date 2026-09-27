@@ -71,11 +71,7 @@ public static class IrInterpreter
             int steps = 0;
             while (true)
             {
-                if (!control)
-                {
-                    path.Add(block.Id);
-                }
-
+                Enter(block.Id);
                 List<(IrVar Target, IrVar From)> phis =
                     [.. block.Instructions.OfType<IrPhi>().Select(phi => (phi.Target, phi.Incoming.First(i => i.From == previous).Value))];
                 List<(IrVar Target, IrValue Value, bool Tainted)> bound = [.. phis.Select(p => (p.Target, Get(p.From), IsTainted(p.From)))];
@@ -200,6 +196,15 @@ public static class IrInterpreter
         public IrOutcome? Visit(IrOpaque instruction) => new IrOpaqueReached(instruction.Reason, instruction.Span);
 
         private IrValue Get(IrVar var) => values[var.Name];
+
+        /// <summary>Records <paramref name="block"/> in the run's path while control depends on no abstraction (ticket P1-008).</summary>
+        private void Enter(IrBlockId block)
+        {
+            if (!control)
+            {
+                path.Add(block);
+            }
+        }
 
         /// <summary>The instruction being executed defines abstractions: its definitions are tainted, and <paramref name="source"/> is recorded once.</summary>
         private void Tainting(CallIdentity source)

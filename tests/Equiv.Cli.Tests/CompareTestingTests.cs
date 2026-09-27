@@ -134,10 +134,7 @@ public sealed class CompareTestingTests
         using TempFile legacy = new();
         using TempFile modern = new();
         using TempFile baselineFile = new();
-        if (baseline is not null)
-        {
-            baseline.Save(baselineFile.Path);
-        }
+        baseline?.Save(baselineFile.Path);
 
         InMemoryReportSink sink = new();
         int exitCode = 0;

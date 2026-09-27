@@ -36,26 +36,24 @@ internal static class InputGenerator
     public static IReadOnlyList<ExecutionInput> Generate(IReadOnlyList<ExecutionParameter> parameters, ulong seed, int cases)
     {
         long combinations = Combinations([.. parameters.Select(Edges)]);
-        return [.. Stream(parameters, seed).Take(parameters.All(static p => IsFinite(p.Kind)) ? (int)Math.Min(cases, combinations) : cases)];
+        return [.. Stream(parameters, seed, parameters.All(static p => IsFinite(p.Kind)) ? (int)Math.Min(cases, combinations) : cases)];
     }
 
     /// <summary>
-    /// Every combination of the parameters' edge values, then random draws that never end (ticket P1-008): a parameter
-    /// with finitely many values draws among them, so the stream samples with replacement once the combinations run out.
+    /// The first <paramref name="cases"/> of every combination of the parameters' edge values, then random draws (ticket
+    /// P1-008): a parameter with finitely many values draws among them, so the stream samples with replacement once the
+    /// combinations run out.
     /// </summary>
-    public static IEnumerable<ExecutionInput> Stream(IReadOnlyList<ExecutionParameter> parameters, ulong seed)
+    public static IEnumerable<ExecutionInput> Stream(IReadOnlyList<ExecutionParameter> parameters, ulong seed, int cases)
     {
         IReadOnlyList<IReadOnlyList<string>> edges = [.. parameters.Select(Edges)];
         long combinations = Combinations(edges);
-        for (int i = 0; i < combinations; i++)
-        {
-            yield return new ExecutionInput(Combination(edges, i));
-        }
-
         SplitMix random = new(seed);
-        while (true)
+        for (int i = 0; i < cases; i++)
         {
-            yield return new ExecutionInput([.. parameters.Select((p, k) => Random(p.Kind, edges[k], random))]);
+            yield return i < combinations
+                ? new ExecutionInput(Combination(edges, i))
+                : new ExecutionInput([.. parameters.Select((p, k) => Random(p.Kind, edges[k], random))]);
         }
     }
 

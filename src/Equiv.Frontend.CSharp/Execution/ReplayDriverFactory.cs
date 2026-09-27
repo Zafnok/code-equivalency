@@ -77,10 +77,7 @@ internal sealed class ReplayDriverFactory(
 
         ReplayTarget old = legacy[pair.Old];
         ReplayTarget @new = modern[pair.New];
-        string? obstacle = ReplayArguments.CallObstacle(old.Method) is { } oldObstacle ? $"legacy: {oldObstacle}"
-            : ReplayArguments.CallObstacle(@new.Method) is { } newObstacle ? $"modern: {newObstacle}"
-            : ParameterObstacle(old.Method, @new.Method);
-        if (obstacle is not null)
+        if (Obstacle(old.Method, @new.Method) is { } obstacle)
         {
             return TestingPlan.NotConstructible(obstacle);
         }
@@ -102,18 +99,29 @@ internal sealed class ReplayDriverFactory(
     }
 
     /// <summary>
-    /// Why generated inputs cannot be given to both methods alike: they take parameters of different kinds, position by
-    /// position, or a kind the M3-032 generators cannot build.
+    /// Why generated inputs cannot be given to both methods alike: either cannot be called, they take parameters of
+    /// different kinds, position by position, or a kind the M3-032 generators cannot build.
     /// </summary>
-    private static string? ParameterObstacle(IMethodSymbol old, IMethodSymbol @new)
+    private static string? Obstacle(IMethodSymbol old, IMethodSymbol @new)
     {
-        IEnumerable<ExecutionTypeKind> oldKinds = old.Parameters.Select(static p => DriverFactory.Classify(p.Type));
-        IEnumerable<ExecutionTypeKind> newKinds = @new.Parameters.Select(static p => DriverFactory.Classify(p.Type));
-        return !oldKinds.SequenceEqual(newKinds)
-            ? $"the two sides' parameters differ: {Types(old)} and {Types(@new)}"
-            : old.Parameters.FirstOrDefault(static p => DriverFactory.Classify(p.Type) == ExecutionTypeKind.Unsupported) is { } unsupported
-                ? $"no input can be built for {unsupported.Type.ToDisplayString()}"
-                : null;
+        if (ReplayArguments.CallObstacle(old) is { } oldObstacle)
+        {
+            return $"legacy: {oldObstacle}";
+        }
+
+        if (ReplayArguments.CallObstacle(@new) is { } newObstacle)
+        {
+            return $"modern: {newObstacle}";
+        }
+
+        bool sameKinds = old.Parameters.Select(static p => DriverFactory.Classify(p.Type)).SequenceEqual(@new.Parameters.Select(static p => DriverFactory.Classify(p.Type)));
+        IParameterSymbol? unsupported = old.Parameters.FirstOrDefault(static p => DriverFactory.Classify(p.Type) == ExecutionTypeKind.Unsupported);
+        return (sameKinds, unsupported) switch
+        {
+            (false, _) => $"the two sides' parameters differ: {Types(old)} and {Types(@new)}",
+            (true, { } parameter) => $"no input can be built for {parameter.Type.ToDisplayString()}",
+            _ => null,
+        };
     }
 
     private static string Types(IMethodSymbol method) => string.Join(", ", method.Parameters.Select(static p => p.Type.ToDisplayString()));

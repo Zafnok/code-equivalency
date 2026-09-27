@@ -6,7 +6,7 @@ namespace Equiv.Execute.Testing;
 
 /// <summary>
 /// Runs an Unknown pair on generated inputs on both real runtimes (ADR 0035 decision 3; ticket P1-008): the plan's seeds
-/// first, then the M3-032 generators' stream from <see cref="Seed"/>, each input under the invariant culture, and also
+/// first, then the M3-032 generators' stream from <see cref="Seed"/>, as many as the input budget, each input under the invariant culture, and also
 /// under <c>tr-TR</c> when either body calls a member of the runtime-changes table. One driver process per side streams
 /// every case. Each input's species is both outcome classes per culture, whether the outcomes are all equal, and both
 /// sides' IR path signatures (<see cref="DifferentialTesting.SpeciesDefinition"/>); since "equal" is part of it, a
@@ -41,13 +41,12 @@ public sealed class DifferentialTester(IDriverHost host, TestingOptions options,
         IReadOnlyList<string> cultures = RuntimeSensitive(old) || RuntimeSensitive(@new) ? [Invariant, Turkish] : [Invariant];
         using DriverStream legacy = new(host, drivers.Legacy, RuntimeDiff.CaseTimeout);
         using DriverStream modern = new(host, drivers.Modern, RuntimeDiff.CaseTimeout);
-        using IEnumerator<ExecutionInput> inputs = plan.Seeds.Concat(InputGenerator.Stream(plan.Parameters, Seed)).GetEnumerator();
         SpeciesTally tally = new();
         long start = time.GetTimestamp();
-        while (true)
+
+        // The input budget is the number of inputs taken; the time budget breaks out early.
+        foreach (ExecutionInput input in plan.Seeds.Concat(InputGenerator.Stream(plan.Parameters, Seed, options.Inputs)).Take(options.Inputs))
         {
-            _ = inputs.MoveNext();
-            ExecutionInput input = inputs.Current;
             List<(ExecutionOutcome Legacy, ExecutionOutcome Modern)> runs = [.. cultures.Select(c => (legacy.Run(input, c), modern.Run(input, c)))];
             if (Obstacle(runs) is { } reason)
             {
@@ -66,11 +65,13 @@ public sealed class DifferentialTester(IDriverHost host, TestingOptions options,
                 return Tested(tally, TestingStop.Target);
             }
 
-            if (tally.Inputs >= options.Inputs || time.GetElapsedTime(start) >= options.Time)
+            if (time.GetElapsedTime(start) >= options.Time)
             {
-                return Tested(tally, TestingStop.Budget);
+                break;
             }
         }
+
+        return Tested(tally, TestingStop.Budget);
     }
 
     private static TestingOutcome Tested(SpeciesTally tally, TestingStop stop) =>
