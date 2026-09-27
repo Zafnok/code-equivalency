@@ -365,7 +365,7 @@ internal static class CompareCommand
     /// </summary>
     internal static void DeleteTemporary(string directory, Action<string> delete, TimeSpan pause)
     {
-        for (int attempt = 1; ; attempt++)
+        for (int attempt = 1; attempt <= DeleteAttempts; attempt++)
         {
             try
             {
@@ -374,12 +374,10 @@ internal static class CompareCommand
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                if (attempt == DeleteAttempts)
+                if (attempt < DeleteAttempts)
                 {
-                    return;
+                    Thread.Sleep(pause);
                 }
-
-                Thread.Sleep(pause);
             }
         }
     }
