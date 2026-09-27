@@ -18,34 +18,7 @@ internal sealed class DriverRunner(IDriverHost host, TimeSpan caseTimeout)
     /// <summary>One run of <paramref name="driver"/> over <paramref name="request"/>'s cases, in one process while it answers.</summary>
     public List<ExecutionOutcome> Side(string driver, ExecutionRequest request)
     {
-        List<ExecutionOutcome> outcomes = [];
-        IDriverSession? session = null;
-        try
-        {
-            foreach (ExecutionInput input in request.Inputs)
-            {
-                foreach (string culture in request.Cultures)
-                {
-                    session ??= host.Start(driver);
-                    if (session.Exchange(OutcomeLine.Case(culture, input), caseTimeout) is { } answer)
-                    {
-                        (OutcomeKind kind, string canonical) = OutcomeLine.Parse(answer);
-                        outcomes.Add(new ExecutionOutcome(input, culture, kind, canonical));
-                    }
-                    else
-                    {
-                        session.Dispose();
-                        session = null;
-                        outcomes.Add(new ExecutionOutcome(input, culture, OutcomeKind.NotComparable, OutcomeLine.NoAnswer));
-                    }
-                }
-            }
-        }
-        finally
-        {
-            session?.Dispose();
-        }
-
-        return outcomes;
+        using DriverStream stream = new(host, driver, caseTimeout);
+        return [.. request.Inputs.SelectMany(input => request.Cultures.Select(culture => stream.Run(input, culture)))];
     }
 }

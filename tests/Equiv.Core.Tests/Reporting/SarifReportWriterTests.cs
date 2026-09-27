@@ -453,6 +453,72 @@ public sealed class SarifReportWriterTests
             r => Assert.Equal(none.PartialFingerprints["resultFingerprint/v1"], r.PartialFingerprints["resultFingerprint/v1"]));
     }
 
+    /// <summary>Ticket P1-008 criteria 1 and 3.</summary>
+    [Fact]
+    public Task TestedUnknown()
+    {
+        VerificationResult plain = Fixtures.Result(new Unknown(UnknownReason.Timeout, "solver gave up after 5000ms"));
+        VerificationResult tested = plain with { Testing = DifferentialTesting.Tested(1_000, 3, 0, 0, TestingStop.Target) };
+
+        Assert.Equal(Fingerprint(plain), Fingerprint(tested));
+        return VerifyJson(Serialize(tested));
+    }
+
+    [Theory]
+    [InlineData(UnknownScope.Method, "solver gave up after 5000ms. Tested on 2500 inputs; estimated chance the next input shows new behaviour: 0.0012 (equiv generators, not a proof).")]
+    [InlineData(UnknownScope.Line, "none of the related locations. Tested on 2500 inputs; estimated chance the next input shows new behaviour: 0.0012 (equiv generators, not a proof).")]
+    public void Message_EndsWithTestedSentence(UnknownScope scope, string ending)
+    {
+        VerificationResult tested = Fixtures.Result(new Unknown(UnknownReason.Timeout, "solver gave up after 5000ms") { Scope = scope }) with
+        {
+            Testing = DifferentialTesting.Tested(2_500, 9, 3, 3 / 2_500d, TestingStop.Budget),
+        };
+
+        Result result = SarifReportWriter.Write([tested]).Runs[0].Results[0];
+
+        Assert.EndsWith(ending, result.Message.Text, StringComparison.Ordinal);
+        Assert.Equal("budget", result.GetProperty<Dictionary<string, object>>("differentialTesting")["stoppedBy"]);
+    }
+
+    [Fact]
+    public void UntestableUnknown_SaysWhyAndKeepsItsMessage()
+    {
+        VerificationResult plain = Fixtures.Result(new Unknown(UnknownReason.Timeout, "solver gave up after 5000ms"));
+
+        Result result = SarifReportWriter.Write([plain with { Testing = DifferentialTesting.Unconstructible("generic") }]).Runs[0].Results[0];
+
+        Assert.Equal(
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["notConstructible"] = "generic" },
+            result.GetProperty<Dictionary<string, string>>("differentialTesting"));
+        Assert.Equal(SarifReportWriter.Write([plain]).Runs[0].Results[0].Message.Text, result.Message.Text);
+        Assert.Equal(Fingerprint(plain), result.PartialFingerprints["resultFingerprint/v1"]);
+    }
+
+    /// <summary>Ticket P1-008 criterion 2: EQ002, <c>proofMethod: observed</c>, the input as the model, and a verdict change is <c>new</c>.</summary>
+    [Fact]
+    public Task ObservedDivergence_IsEq002Observed()
+    {
+        ExecutionInput input = new(["null", "\"i\""]);
+        VerificationResult unknown = Fixtures.Result(new Unknown(UnknownReason.Opaque, "old: lambda"));
+        VerificationResult observed = Fixtures.Result(Equiv.Core.Verdicts.Divergent.Observation(new ObservedDivergence(
+            new ExecutionOutcome(input, "tr-TR", OutcomeKind.Threw, "\"System.ArgumentNullException\""),
+            new ExecutionOutcome(input, "tr-TR", OutcomeKind.Returned, "1"))));
+        SarifLog baseline = SarifReportWriter.Write([unknown]);
+
+        Result result = SarifReportWriter.Write([observed], baseline).Runs[0].Results[0];
+
+        Assert.Equal("EQ002", result.RuleId);
+        Assert.Equal("observed", result.GetProperty<string>("proofMethod"));
+        Assert.Equal("inputs(null, \"i\") culture(tr-TR)", result.GetProperty<string>("model"));
+        Assert.EndsWith(
+            "diverges on the real runtimes: inputs(null, \"i\") culture(tr-TR) legacy(threw \"System.ArgumentNullException\") modern(returned 1)",
+            result.Message.Text,
+            StringComparison.Ordinal);
+        Assert.Equal(BaselineState.New, result.BaselineState);
+        Assert.NotEqual(Fingerprint(Fixtures.Result(new Divergent(Equiv.Core.Verdicts.Divergent.Unmodelled))), result.PartialFingerprints["resultFingerprint/v1"], StringComparer.Ordinal);
+        return VerifyJson(Serialize(observed));
+    }
+
     [Fact]
     public void ResultListsEveryLadderRungWithItsOutcome()
     {
@@ -619,6 +685,9 @@ public sealed class SarifReportWriterTests
             File.Delete(path);
         }
     }
+
+    private static string Fingerprint(VerificationResult result) =>
+        SarifReportWriter.Write([result]).Runs[0].Results[0].PartialFingerprints["resultFingerprint/v1"];
 
     private static string Serialize(VerificationResult result)
     {

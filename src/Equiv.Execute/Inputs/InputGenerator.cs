@@ -35,27 +35,30 @@ internal static class InputGenerator
 
     public static IReadOnlyList<ExecutionInput> Generate(IReadOnlyList<ExecutionParameter> parameters, ulong seed, int cases)
     {
-        IReadOnlyList<IReadOnlyList<string>> edges = [.. parameters.Select(Edges)];
-        long combinations = edges.Aggregate(1L, static (product, values) => Math.Min(product * values.Count, int.MaxValue));
-        List<ExecutionInput> inputs = [];
-        for (int i = 0; i < cases && i < combinations; i++)
-        {
-            inputs.Add(new ExecutionInput(Combination(edges, i)));
-        }
-
-        if (parameters.All(static p => IsFinite(p.Kind)))
-        {
-            return inputs;
-        }
-
-        SplitMix random = new(seed);
-        while (inputs.Count < cases)
-        {
-            inputs.Add(new ExecutionInput([.. parameters.Select((p, k) => Random(p.Kind, edges[k], random))]));
-        }
-
-        return inputs;
+        long combinations = Combinations([.. parameters.Select(Edges)]);
+        return [.. Stream(parameters, seed, parameters.All(static p => IsFinite(p.Kind)) ? (int)Math.Min(cases, combinations) : cases)];
     }
+
+    /// <summary>
+    /// The first <paramref name="cases"/> of every combination of the parameters' edge values, then random draws (ticket
+    /// P1-008): a parameter with finitely many values draws among them, so the stream samples with replacement once the
+    /// combinations run out.
+    /// </summary>
+    public static IEnumerable<ExecutionInput> Stream(IReadOnlyList<ExecutionParameter> parameters, ulong seed, int cases)
+    {
+        IReadOnlyList<IReadOnlyList<string>> edges = [.. parameters.Select(Edges)];
+        long combinations = Combinations(edges);
+        SplitMix random = new(seed);
+        for (int i = 0; i < cases; i++)
+        {
+            yield return i < combinations
+                ? new ExecutionInput(Combination(edges, i))
+                : new ExecutionInput([.. parameters.Select((p, k) => Random(p.Kind, edges[k], random))]);
+        }
+    }
+
+    private static long Combinations(IReadOnlyList<IReadOnlyList<string>> edges) =>
+        edges.Aggregate(1L, static (product, values) => Math.Min(product * values.Count, int.MaxValue));
 
     /// <summary>Case <paramref name="index"/> of the edge-value product, read as a mixed-radix number.</summary>
     private static List<string> Combination(IReadOnlyList<IReadOnlyList<string>> edges, int index)

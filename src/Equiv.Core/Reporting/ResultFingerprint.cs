@@ -38,6 +38,7 @@ internal static class ResultFingerprint
 
     private static string Model(Verdict verdict) => verdict switch
     {
+        Divergent { Observed: { } observed } => ObservationText.Dump(observed),
         Divergent divergent => CounterexampleText.Dump(divergent.Counterexample),
         Unknown unknown => string.Join('\0', unknown.Reason, unknown.Detail),
         _ => string.Empty,

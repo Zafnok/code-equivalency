@@ -32,6 +32,14 @@ congruence`, ADR 0024): identical bound code makes the same claim a shared call 
 `properties.boundedBy` when the claim is bounded, and `properties.opaqueNodes`, so a
 reader can see exactly how strong the claim is. Never report Equivalent without saying how.
 
+Running the code on the two real runtimes (`--execute`, ADR 0035) is a second oracle beside the
+solver, and execution never proves. It can confirm a Divergent (`replay`), show one
+(`proofMethod: observed`, a Divergent the runtimes were seen to produce), or bound an Unknown with
+a likelihood (`differentialTesting`, the Good-Turing chance that the next generated input shows
+new behaviour, stated for the generators' input distribution). A tested Unknown stays Unknown. No
+number of passing runs makes a result Equivalent, and a `line` Unknown's residual claim, which is a
+proof, is reported next to the testing figure and never replaced by it (ADR 0029).
+
 ## 2. IR
 
 Procedure = signature + ordered basic blocks + entry block. Block = instructions +
@@ -320,7 +328,7 @@ with both runs in the detail.
 | Verdict | SARIF `level` | `kind` | ruleId |
 |---|---|---|---|
 | Equivalent | none | `pass` | EQ001 |
-| Divergent | `error` | `fail` | EQ002 (counterexample in `properties.model` and in `message`) |
+| Divergent | `error` | `fail` | EQ002 (counterexample in `properties.model` and in `message`; with `proofMethod: observed` when the real runtimes showed it, below) |
 | Unknown | none (rule default `warning`) | `open` | EQ003 (reason in `properties.unknownReason`: timeout, opaque, unmatched-overload, unaligned-loop, recursion, abstraction, unbound, chc-timeout, chc-spurious) |
 | Added | none (rule default `note`) | `informational` | EQ004 |
 | Removed | none (rule default `note`) | `informational` | EQ005 |
@@ -363,6 +371,40 @@ modern method once on .NET 10, under the invariant culture. The result carries
 
 Replay never changes the verdict, the rule id, the fingerprint or the exit code, and a run without
 `--execute` runs no code and writes no `replay`.
+
+With `--execute`, every Unknown pair is also tested on generated inputs (ADR 0035 decision 3;
+ticket P1-008). Execution never proves: this path yields Unknown or an observed Divergent, never
+Equivalent. The pair is callable when both methods are, as for replay, and take parameters of the
+same M3-032 generator kinds position by position; the receiver is `new T()`. One driver process per
+side reads the cases on stdin, with M3-032's per-case timeout. The inputs are the solver's
+`candidateCounterexample`, when it has one that can be built as arguments, then the M3-032
+generators' stream from a fixed seed: every combination of edge values, then random draws, a
+parameter with finitely many values drawing among them. Each input runs under the invariant
+culture, and also under `tr-TR` when either body calls a member of the runtime-changes table.
+Each input's species is the tuple of both runtimes' outcome classes per culture (the exception
+type, or `returned` and one of 16 buckets of a fixed hash of the canonical value), whether all its
+canonical outcomes are equal, and the IR path signature of each side: the blocks `IrInterpreter`
+enters, with the input's arguments bound by position and every call and pure function answered
+with a default, until the first opaque node or the first branch on such an answer
+(`IrRun.Path`). Because equality is part of the species, a divergent input is a new species while
+none has been seen. After n inputs with f1 species seen exactly once, the discovery probability is
+f1 / n (Böhme, Liyanage and Wüstholz, FSE 2021); the generators are not adaptive, so the plain
+Good-Turing estimate applies, and it bounds the chance of a new species, a divergence included,
+under the generators' distribution only. Testing stops when that estimate is below `--test-target`
+(default 0.001) after at least 1,000 inputs, or at `--test-budget` (default 10,000 inputs or 60 s
+per pair). The result then carries `properties.differentialTesting`: `inputs`, `species`,
+`singletons`, `discoveryProbability`, `speciesDefinition: "outcome+equal+irPrefix"`, `stoppedBy`
+(`target` or `budget`) and `distribution: "equiv generators v1"`, and its message ends with
+`Tested on <n> inputs; estimated chance the next input shows new behaviour: <p> (equiv generators,
+not a proof).` A pair that cannot be tested, or a side whose driver cannot build an input's
+arguments, carries only `differentialTesting.notConstructible` with the reason. None of these is
+part of the fingerprint.
+
+A divergent input (both canonical outcomes comparable and different) is run once more on each side
+in fresh processes. If both outcomes repeat, the result becomes Divergent, EQ002 with
+`properties.proofMethod: observed`, the input and its culture as `properties.model`, and both
+canonical outcomes in the message. Its fingerprint is that of a new verdict, so against a baseline
+that held the Unknown it is `new`. If either outcome changes, the input is only a species.
 
 An Unknown result lists every reached opaque node and every abstraction it depends on as a
 `relatedLocation` whose message is the reason, each line once, legacy side first and then in source order. Its
