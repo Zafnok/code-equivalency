@@ -142,6 +142,23 @@ public sealed class InputGeneratorTests
         Assert.All(inputs.Skip(6), static i => Assert.Matches("^(false|true)$", i.Arguments[0]));
     }
 
+    /// <summary>Ticket P1-008: the stream starts with the cases <see cref="InputGenerator.Generate"/> lists and never ends.</summary>
+    [Fact]
+    public void Stream_StartsWithTheGeneratedCasesAndSamplesFiniteParametersWithReplacement()
+    {
+        ExecutionParameter[] mixed = [Parameter(ExecutionTypeKind.Boolean), Parameter(ExecutionTypeKind.Signed32)];
+        ExecutionParameter[] finite = [Parameter(ExecutionTypeKind.Boolean), Parameter(ExecutionTypeKind.NullOnly)];
+
+        Assert.Equal(Text(InputGenerator.Generate(mixed, 3, 40)), Text(InputGenerator.Stream(mixed, 3).Take(40)), StringComparer.Ordinal);
+        List<string> sampled = Text(InputGenerator.Stream(finite, 3).Take(50));
+        Assert.Equal(["false,null", "true,null"], sampled.Take(2), StringComparer.Ordinal);
+        Assert.All(sampled, static s => Assert.Matches("^(false|true),null$", s));
+        Assert.Equal(2, sampled.Skip(2).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(InputGenerator.Stream([], 3).Take(5), static i => Assert.Empty(i.Arguments));
+    }
+
+    private static List<string> Text(IEnumerable<ExecutionInput> inputs) => [.. inputs.Select(static i => string.Join(',', i.Arguments))];
+
     [Fact]
     public void AVastProductIsCappedByTheCaseCount()
     {
