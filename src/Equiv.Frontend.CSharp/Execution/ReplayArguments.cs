@@ -137,7 +137,7 @@ internal static class ReplayArguments
         ];
         return CallObstacle(method)
             ?? (constrained.Length > 0 ? $"the model constrains {string.Join(", ", constrained)}"
-            : !method.IsStatic && values.GetValueOrDefault(IrParameterNames.Receiver) is IrSortValue receiver && IsNull(receiver, nullness) ? "the model's receiver is null"
+            : values.GetValueOrDefault(IrParameterNames.Receiver) is IrSortValue receiver && IsNull(receiver, nullness) ? "the model's receiver is null"
             : null);
     }
 

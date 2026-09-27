@@ -25,8 +25,8 @@ public sealed class DifferentialTesterTests
 
     private static readonly TestingPlan IntPlan = TestingPlan.Runnable(Drivers, [Parameter(ExecutionTypeKind.Signed32)], []);
 
-    private static TestingOutcome Test(FakeHost host, TestingPlan plan, TestingOptions? options = null, TimeProvider? time = null, IrProcedure? body = null) =>
-        new DifferentialTester(host, options ?? TestingOptions.Default, time ?? new SteppingClock(TimeSpan.Zero)).Test(plan, body ?? Body, body ?? Body);
+    private static TestingOutcome Test(FakeHost host, TestingPlan plan, TestingOptions? options = null, TimeProvider? time = null, IrProcedure? old = null, IrProcedure? @new = null) =>
+        new DifferentialTester(host, options ?? TestingOptions.Default, time ?? new SteppingClock(TimeSpan.Zero)).Test(plan, old ?? Body, @new ?? Body);
 
     /// <summary>Both sides return the argument, so the species follow the values' hash buckets.</summary>
     private static string Echo(string line) => $"[\"Returned\",{line[(line.IndexOf(',', StringComparison.Ordinal) + 1)..^1]}]";
@@ -106,9 +106,9 @@ public sealed class DifferentialTesterTests
 
         TestingOutcome outcome = Test(host, IntPlan);
 
+        // The one divergent input is a singleton: f1 / n is 1 / 1000, not below the target, until input 1001.
         Assert.Null(outcome.Observed);
-        Assert.Equal(TestingStop.Target, outcome.Testing!.StoppedBy);
-        Assert.Equal(2, outcome.Testing.Species);
+        Assert.Equal((1_001, 2, 1, TestingStop.Target), (outcome.Testing!.Inputs, outcome.Testing.Species, outcome.Testing.Singletons, outcome.Testing.StoppedBy));
     }
 
     [Theory]
@@ -121,13 +121,16 @@ public sealed class DifferentialTesterTests
         Assert.Null(Test(host, IntPlan, TestingOptions.Default with { Inputs = 1 }).Observed);
     }
 
-    [Fact]
-    public void AnUnanswerableCaseIsASpeciesNotADivergence()
+    [Theory]
+    [InlineData("legacy.exe")]
+    [InlineData("modern.dll")]
+    public void AnUnanswerableCaseIsASpeciesNotADivergence(string silent)
     {
-        FakeHost host = new(static (driver, _, _) => driver.EndsWith(".exe", StringComparison.Ordinal) ? null : "[\"Returned\",0]");
+        FakeHost host = new((driver, _, _) => string.Equals(driver, silent, StringComparison.Ordinal) ? null : "[\"Returned\",0]");
 
         TestingOutcome outcome = Test(host, IntPlan, TestingOptions.Default with { Inputs = 2 });
 
+        Assert.Null(outcome.Observed);
         Assert.Equal((2, 1, 0), (outcome.Testing!.Inputs, outcome.Testing.Species, outcome.Testing.Singletons));
     }
 
@@ -155,9 +158,9 @@ public sealed class DifferentialTesterTests
     }
 
     [Theory]
-    [InlineData("%r: bv32 = call \"System.String::ToUpper()\"!(%a)")]
-    [InlineData("%r: sort \"System.Double\" = pure \"f64.parse\"!(%a)")]
-    public void ARuntimeChangedCallAddsTheTurkishCulture(string instruction)
+    [InlineData("%r: bv32 = call \"System.String::ToUpper()\"!(%a)", true)]
+    [InlineData("%r: sort \"System.Double\" = pure \"f64.parse\"!(%a)", false)]
+    public void ARuntimeChangedCallOnEitherSideAddsTheTurkishCulture(string instruction, bool legacy)
     {
         IrProcedure body = IrText.Parse($"""
             proc "T::M" (%a: bv32) -> bv32 entry B0
@@ -167,7 +170,7 @@ public sealed class DifferentialTesterTests
             """);
         FakeHost host = new(static (_, _, _) => "[\"Returned\",1]");
 
-        _ = Test(host, IntPlan, TestingOptions.Default with { Inputs = 1 }, body: body);
+        _ = Test(host, IntPlan, TestingOptions.Default with { Inputs = 1 }, old: legacy ? body : null, @new: legacy ? null : body);
 
         Assert.Equal(["[\"invariant\",0]", "[\"invariant\",0]", "[\"tr-TR\",0]", "[\"tr-TR\",0]"], host.Exchanges.Select(static e => e.Line), StringComparer.Ordinal);
     }
@@ -188,10 +191,37 @@ public sealed class DifferentialTesterTests
             """);
         FakeHost host = new(static (_, _, _) => "[\"Returned\",1]");
 
-        TestingOutcome outcome = Test(host, IntPlan, TestingOptions.Default with { Inputs = 5 }, body: body);
+        TestingOutcome outcome = Test(host, IntPlan, TestingOptions.Default with { Inputs = 5 }, old: body, @new: body);
 
         // 0, 1, -1, int.MinValue, int.MaxValue: two paths, each seen more than once.
         Assert.Equal((5, 2, 0), (outcome.Testing!.Inputs, outcome.Testing.Species, outcome.Testing.Singletons));
+    }
+
+    [Fact]
+    public void Species_NamesEachCulturesClassesTheEqualityAndBothPaths()
+    {
+        ExecutionInput input = new(["-1"]);
+        IrProcedure branching = IrText.Parse("""
+            proc "T::M" (%a: bv32) -> bv32 entry B0
+            B0:
+              %z: bv32 = const bv32 0
+              %c: bool = slt %a, %z
+              br %c, B1, B2
+            B1:
+              ret %a
+            B2:
+              ret %a
+            """);
+        List<(ExecutionOutcome Legacy, ExecutionOutcome Modern)> runs =
+        [
+            (new ExecutionOutcome(input, "invariant", OutcomeKind.Returned, "1"), new ExecutionOutcome(input, "invariant", OutcomeKind.Returned, "1")),
+            (new ExecutionOutcome(input, "tr-TR", OutcomeKind.Returned, "1"), new ExecutionOutcome(input, "tr-TR", OutcomeKind.Threw, "\"E\"")),
+        ];
+
+        Assert.Equal(
+            "returned #12 / returned #12 | returned #12 / threw \"E\" | equal False | path 0 / 0,1",
+            DifferentialTester.Species(runs, Body, branching, input));
+        Assert.EndsWith("| equal True | path 0 / 0,1", DifferentialTester.Species(runs[..1], Body, branching, input), StringComparison.Ordinal);
     }
 
     [Fact]

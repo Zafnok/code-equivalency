@@ -99,7 +99,8 @@ public sealed class DifferentialTester(IDriverHost host, TestingOptions options,
             && RuntimeComparison.Same(modernAgain.Run(modern.Input, modern.Culture), modern);
     }
 
-    private static string Species(List<(ExecutionOutcome Legacy, ExecutionOutcome Modern)> runs, IrProcedure old, IrProcedure @new, ExecutionInput input) =>
+    /// <summary>One input's species, as text: each culture's two outcome classes, whether every pair is equal, and both IR paths.</summary>
+    internal static string Species(List<(ExecutionOutcome Legacy, ExecutionOutcome Modern)> runs, IrProcedure old, IrProcedure @new, ExecutionInput input) =>
         string.Join(" | ", runs.Select(static r => $"{OutcomeClass.Of(r.Legacy)} / {OutcomeClass.Of(r.Modern)}"))
         + $" | equal {runs.TrueForAll(static r => RuntimeComparison.Same(r.Legacy, r.Modern))}"
         + $" | path {IrPathSignature.Of(old, input)} / {IrPathSignature.Of(@new, input)}";
