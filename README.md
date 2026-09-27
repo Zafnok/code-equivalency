@@ -144,8 +144,12 @@ commercial licence, open an issue. Reasoning and the dependency licence policy a
 equiv compare --legacy <path> --modern <path>
               [--out equiv.sarif] [--baseline <previous.sarif>]
               [--config equiv.config.json] [--fail-on divergent|unknown] [--dry-run]
-              [--lower-only] [--chc-int-mode true|false]
+              [--lower-only] [--chc-int-mode true|false] [--invariant-model <id>]
 ```
+
+`--invariant-model <id>` lets the loop ladder ask the Claude model `<id>` for a loop invariant
+when Z3 Spacer times out (rung 5); it sends the loops' IR text, needs `ANTHROPIC_API_KEY`, and
+Z3 checks every answer, so a wrong one can never prove a pair. It is off by default.
 
 `--dry-run` routes and loads both sides, prints the analysed line counts, and stops without
 writing SARIF. `--lower-only` loads, matches and lowers, then writes a SARIF log with the
