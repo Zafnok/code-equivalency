@@ -1,5 +1,5 @@
 # P1-008 Tested Unknowns: differential execution on generated inputs, with a stated discovery probability
-Status: in-progress
+Status: done (PR #230)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M4-009; ADR 0035 accepted
