@@ -20,7 +20,7 @@ public sealed class LadderFixtureTests
         "loop-break-return", "loop-break-return-mutant", "loop-invariant-livein", "loop-invariant-livein-mutant",
         "nested-aligned", "nesting-changed", "late-divergence", "late-divergence-beyond", "constant-loop-prefix-change",
         "phis-reordered", "state-unpaired", "irreducible", "loop-opaque", "loop-hard",
-        "recursion-aligned", "recursion-divergent", "recursion-heap",
+        "recursion-aligned", "recursion-divergent", "recursion-heap", "recursion-array-divergent",
         "trip-count-changed", "chc-spurious", "chc-overflow-bitvectors", "fusion", "counter-shape", "array-count",
         "int-proof-wraps",
     ];
@@ -100,6 +100,14 @@ public sealed class LadderFixtureTests
             ],
             verdict.Ladder.Select(static s => (s.Rung, s.Outcome)));
         Assert.Equal("the step obligation of loop 1 fails", verdict.Ladder[1].Detail);
+    }
+
+    [Fact]
+    public void RungOneInlinesAHeapSelfCall()
+    {
+        Verdict verdict = Verify(Fixture.Load("loops/recursion-heap"));
+
+        Assert.NotEqual(RungOutcome.NotApplicable, verdict.Ladder[0].Outcome);
     }
 
     [Fact]

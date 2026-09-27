@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 
+using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.TestSupport;
 
@@ -34,6 +35,99 @@ public sealed class IrUnrollerTests
         B4:
           %s: bv32 = add %n, %r
           ret %s
+        """;
+
+    /// <summary>Sums an array from index <c>%i</c> to its end: reads <c>array.*</c> and <c>length.*</c>.</summary>
+    private const string ArraySum = """
+        proc "T::Sum(int[],int)" (%a: sort "int[]", %i: bv32, ref %array.int__: map<sort "int[]", map<bv32, bv32>>, %length.int__: map<sort "int[]", bv32>) -> bv32 entry B0
+        B0:
+          %elems: map<bv32, bv32> = mapread %array.int__, %a
+          %len: bv32 = mapread %length.int__, %a
+          %one: bv32 = const bv32 1
+          %j: bv32 = add %i, %one
+          %c: bool = uge %j, %len
+          br %c, B1, B2
+        B1:
+          %x: bv32 = mapread %elems, %i
+          ret %x outs(%array.int__ = %array.int__)
+        B2:
+          %y: bv32 = mapread %elems, %i
+          %r: bv32 = call "T::Sum(int[],int)"(%a, %j) threw %t: bool heap("array.int__" %array.int__ -> %array.int__.1: map<sort "int[]", map<bv32, bv32>>)
+          br %t, B3, B4
+        B3:
+          throw "System.Exception" outs(%array.int__ = %array.int__.1)
+        B4:
+          %s: bv32 = add %y, %r
+          ret %s outs(%array.int__ = %array.int__.1)
+        """;
+
+    /// <summary>Adds the counts down from <c>%n</c> to a field it reads at the base case.</summary>
+    private const string FieldRead = """
+        proc "T::F(int)" (%n: bv32, %this: sort "T", ref %field.T.x: map<sort "T", bv32>) -> bv32 entry B0
+        B0:
+          %z: bv32 = const bv32 0
+          %c: bool = eq %n, %z
+          br %c, B1, B2
+        B1:
+          %v: bv32 = mapread %field.T.x, %this
+          ret %v outs(%field.T.x = %field.T.x)
+        B2:
+          %one: bv32 = const bv32 1
+          %m: bv32 = sub %n, %one
+          %r: bv32 = call "T::F(int)"(%this, %m) threw %t: bool heap("field.T.x" %field.T.x -> %field.T.x.1: map<sort "T", bv32>)
+          br %t, B3, B4
+        B3:
+          throw "System.Exception" outs(%field.T.x = %field.T.x.1)
+        B4:
+          %s: bv32 = add %r, %n
+          ret %s outs(%field.T.x = %field.T.x.1)
+        """;
+
+    /// <summary>Writes a field before its self-call and reads it after.</summary>
+    private const string FieldWrittenBeforeTheCall = """
+        proc "T::F(int)" (%n: bv32, %this: sort "T", ref %field.T.x: map<sort "T", bv32>) -> bv32 entry B0
+        B0:
+          %z: bv32 = const bv32 0
+          %c: bool = eq %n, %z
+          br %c, B1, B2
+        B1:
+          ret %n outs(%field.T.x = %field.T.x)
+        B2:
+          %w: map<sort "T", bv32> = mapwrite %field.T.x, %this, %n
+          %one: bv32 = const bv32 1
+          %m: bv32 = sub %n, %one
+          %r: bv32 = call "T::F(int)"(%this, %m) threw %t: bool heap("field.T.x" %w -> %field.T.x.1: map<sort "T", bv32>)
+          br %t, B3, B4
+        B3:
+          throw "System.Exception" outs(%field.T.x = %field.T.x.1)
+        B4:
+          %v: bv32 = mapread %field.T.x.1, %this
+          %s: bv32 = add %r, %v
+          ret %s outs(%field.T.x = %field.T.x.1)
+        """;
+
+    /// <summary>Writes a field at the base case, which each caller reads after its self-call.</summary>
+    private const string FieldWrittenByTheCallee = """
+        proc "T::F(int)" (%n: bv32, %this: sort "T", ref %field.T.x: map<sort "T", bv32>) -> bv32 entry B0
+        B0:
+          %z: bv32 = const bv32 0
+          %c: bool = eq %n, %z
+          br %c, B1, B2
+        B1:
+          %seven: bv32 = const bv32 7
+          %w: map<sort "T", bv32> = mapwrite %field.T.x, %this, %seven
+          ret %z outs(%field.T.x = %w)
+        B2:
+          %one: bv32 = const bv32 1
+          %m: bv32 = sub %n, %one
+          %r: bv32 = call "T::F(int)"(%this, %m) threw %t: bool heap("field.T.x" %field.T.x -> %field.T.x.1: map<sort "T", bv32>)
+          br %t, B3, B4
+        B3:
+          throw "System.Exception" outs(%field.T.x = %field.T.x.1)
+        B4:
+          %v: bv32 = mapread %field.T.x.1, %this
+          %s: bv32 = add %r, %v
+          ret %s outs(%field.T.x = %field.T.x.1)
         """;
 
     public static TheoryData<string, int> Fixtures => new()
@@ -256,19 +350,56 @@ public sealed class IrUnrollerTests
         Assert.Equal(2, IrGen.Run(unrolled, new IrInputs([Bits(2)])).Trace.Length);
     }
 
+    /// <summary>Self-recursive procedures over the heap (ticket P1-007 criterion 5), each by what it does with the heap, and its result.</summary>
+    public static TheoryData<string, string, uint> HeapRecursion => new()
+    {
+        { "reads array.* and length.*", ArraySum, 39u },
+        { "reads field.*", FieldRead, 8u },
+        { "writes field.* before the self-call and reads it after", FieldWrittenBeforeTheCall, 2u },
+        { "the callee writes field.* and the caller reads it after the call", FieldWrittenByTheCallee, 14u },
+    };
+
     [Theory]
-    [InlineData("ref %n: bv32", "%n", " outs(%n = %n)", "it has a by-ref parameter")]
-    [InlineData("%n: bv32, %length.a: bv32", "%n", "", "an input is keyed by an array variable")]
-    [InlineData("%n: bv32, %array.a: map<bv32, bv32>", "%n", "", "an input is keyed by an array variable")]
-    [InlineData("%n: bv32, %this: sort \"T\"", "%n", "", "a self-call has no threw flag or its arguments do not match the parameters")]
-    [InlineData("%n: bv32", "%n, %n, %n", "", "a self-call has no threw flag or its arguments do not match the parameters")]
-    [InlineData("%n: bv32, ref %m: bv32", "%n, %m", " outs(%m = %m)", "it has a by-ref parameter")]
-    public void SomeSelfRecursionCannotBeInlined(string parameters, string arguments, string outs, string obstacle)
+    [MemberData(nameof(HeapRecursion))]
+    public void SelfRecursionOverTheHeapIsInlined(string heap, string text, uint result)
+    {
+        IrProcedure original = IrText.Parse(text);
+        IrInputs input = new([.. original.Parameters.Select(static p => HeapInput(p.Var.Type))]);
+
+        IrProcedure unrolled = IrUnroller.Unroll(original, 3);
+
+        Assert.Null(IrUnroller.InliningObstacle(original));
+        Assert.Empty(IrValidator.Validate(unrolled));
+        IrRun run = IrGen.Run(unrolled, input);
+        IrRun expected = RunRecursively(original, input);
+        Assert.Equal(new IrReturned(Bits(result)), run.Outcome);
+        Assert.True(expected == run, $"{heap}: expected {expected.Outcome} {string.Join(", ", expected.Outs)}, got {run.Outcome} {string.Join(", ", run.Outs)}");
+    }
+
+    [Theory]
+    [InlineData("ref %n: bv32", "%n", "", " outs(%n = %n)", "it has a by-ref parameter")]
+    [InlineData("%n: bv32, %this: sort \"T\"", "%n", "", "", "a self-call has no threw flag or its arguments do not match the parameters")]
+    [InlineData("%n: bv32", "%n, %n, %n", "", "", "a self-call has no threw flag or its arguments do not match the parameters")]
+    [InlineData("%n: bv32, ref %m: bv32", "%n, %m", "", " outs(%m = %m)", "it has a by-ref parameter")]
+    [InlineData("%n: bv32, ref %field.T.x: map<bv32, bv32>", "%n", "", " outs(%field.T.x = %field.T.x)", "a self-call's heap pairs do not match the heap parameters")]
+    [InlineData(
+        "%n: bv32, ref %field.T.x: map<bv32, bv32>",
+        "%n",
+        " heap(\"field.T.x\" %field.T.x -> %x1: map<bv32, bv32>, \"field.T.x\" %field.T.x -> %x2: map<bv32, bv32>)",
+        " outs(%field.T.x = %field.T.x)",
+        "a self-call's heap pairs do not match the heap parameters")]
+    [InlineData(
+        "%n: bv32, ref %field.T.b: map<bv32, bv32>, ref %field.T.a: map<bv32, bv32>",
+        "%n, %n, %n",
+        " heap(\"field.T.b\" %field.T.b -> %b1: map<bv32, bv32>, \"field.T.a\" %field.T.a -> %a1: map<bv32, bv32>)",
+        " outs(%field.T.b = %field.T.b, %field.T.a = %field.T.a)",
+        "a self-call has no threw flag or its arguments do not match the parameters")]
+    public void SomeSelfRecursionCannotBeInlined(string parameters, string arguments, string heap, string outs, string obstacle)
     {
         IrProcedure procedure = IrText.Parse($$"""
             proc "T::F(int)" ({{parameters}}) entry B0
             B0:
-              call "T::F(int)"({{arguments}}) threw %t: bool
+              call "T::F(int)"({{arguments}}) threw %t: bool{{heap}}
               ret{{outs}}
             """);
 
@@ -280,7 +411,6 @@ public sealed class IrUnrollerTests
     [Theory]
     [InlineData("call \"T::F(int)\"(%n)", "a self-call has no threw flag or its arguments do not match the parameters")]
     [InlineData("call \"T::F(int)\"(%n) threw %t: bool\n  call \"T::F(int)\"(%n)", "a self-call has no threw flag or its arguments do not match the parameters")]
-    [InlineData("%w: map<bv32, bv32> = mapwrite %field.T.x, %n, %n\n  call \"T::F(int)\"(%n) threw %t: bool", "it writes the heap")]
     [InlineData("call \"T::G(int)\"(%n) threw %t: bool", null)]
     public void InliningObstaclesLookAtTheBody(string body, string? obstacle)
     {
@@ -371,4 +501,66 @@ public sealed class IrUnrollerTests
     }
 
     private static IrBitVecValue Bits(uint value) => new(32, value);
+
+    /// <summary>
+    /// An input that keeps every <see cref="HeapRecursion"/> row two self-calls deep: every bitvector is 2 (a count down
+    /// from 2, or index 2 of a length-5 array), every field and length is 5, and every array holds 10 + i at index i.
+    /// </summary>
+    private static IrValue HeapInput(IrType type) => type switch
+    {
+        IrBitVec => Bits(2),
+        IrSort sort => new IrSortValue(sort.Name, 0),
+        IrMap { Key: IrBitVec } elements => new IrMapValue(elements, Bits(0), ImmutableDictionary<IrValue, IrValue>.Empty.Add(Bits(2), Bits(12)).Add(Bits(3), Bits(13)).Add(Bits(4), Bits(14))),
+        IrMap { Value: IrBitVec } values => new IrMapValue(values, Bits(5), []),
+        _ => new IrMapValue((IrMap)type, HeapInput(((IrMap)type).Value), []),
+    };
+
+    /// <summary>
+    /// <paramref name="procedure"/>'s run with each self-call answered by running <paramref name="procedure"/> itself
+    /// (every other call by <see cref="IrGenOracle"/>), and each self-call's trace record replaced by that run's trace:
+    /// what an exact inlining must reproduce.
+    /// </summary>
+    private static IrRun RunRecursively(IrProcedure procedure, IrInputs inputs)
+    {
+        SelfOracle oracle = new(procedure, inputs);
+        IrRun run = IrInterpreter.Run(procedure, inputs, oracle, IrGen.StepBudget, pure: IrGenOracle.Instance);
+        int next = 0;
+        return run with { Trace = [.. run.Trace.SelectMany(r => SelfCall(procedure, r.Callee) ? oracle.Traces[next++] : [r])] };
+    }
+
+    private static bool SelfCall(IrProcedure procedure, CallIdentity callee) => string.Equals(callee.Value, procedure.Identity.Value, StringComparison.Ordinal);
+
+    /// <summary>Answers a self-call by running the procedure on its arguments, the heap it was given and the caller's other inputs.</summary>
+    private sealed class SelfOracle(IrProcedure procedure, IrInputs caller) : ICallOracle
+    {
+        public List<ImmutableArray<IrCallRecord>> Traces { get; } = [];
+
+        public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
+        {
+            if (!SelfCall(procedure, callee))
+            {
+                return IrGenOracle.Instance.Answer(callee, arguments, resultType, position, heap, refOuts);
+            }
+
+            IrParameter[] parameters = [.. procedure.Parameters];
+            Queue<IrValue> source = new(arguments.Skip(arguments.Length - parameters.Count(static p => !IrParameterNames.IsSynthesised(p.Var.Name))));
+            IrValue[] values = new IrValue[parameters.Length];
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                string name = parameters[i].Var.Name;
+                values[i] = IrParameterNames.IsSynthesised(name) switch
+                {
+                    false => source.Dequeue(),
+                    true when string.Equals(name, IrParameterNames.Receiver, StringComparison.Ordinal) => arguments[0],
+                    true => heap.FirstOrDefault(h => string.Equals(h.Map, name, StringComparison.Ordinal))?.Value ?? caller.Arguments[i],
+                };
+            }
+
+            IrRun run = RunRecursively(procedure, new IrInputs([.. values]));
+            Traces.Add(run.Trace);
+            string[] byRef = [.. parameters.Where(static p => p.Kind != IrParameterKind.In).Select(static p => p.Var.Name)];
+            IrValue? value = run.Outcome is IrReturned returned ? returned.Value : resultType is null ? null : IrUnroller.Default(resultType);
+            return new IrCallResult(value, run.Outcome is IrThrew) { Heap = [.. heap.Select(h => run.Outs[Array.IndexOf(byRef, h.Map)])] };
+        }
+    }
 }
