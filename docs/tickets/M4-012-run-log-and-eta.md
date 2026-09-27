@@ -3,7 +3,7 @@ Status: todo
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-004
-(ADR 0038 must be accepted first. This ticket does not block M4-007 and must not be merged into a
+(ADR 0038, accepted 2026-09-27. This ticket does not block M4-007 and must not be merged into a
 build that an in-progress corpus run is using.)
 
 ## Goal
@@ -73,14 +73,12 @@ ADR 0038 (the whole decision); ADR 0033 (stdout is reserved); ADR 0027 (measure 
    exactly when a back edge exists.
 8. `IRunLog` and `NullRunLog` are in `Equiv.Core`, and `ChannelRunLog` is in `Equiv.Cli`. The
    architecture tests still pass. No new NuGet package.
-9. ARCHITECTURE.md's extension-point table has the `IRunLog` row.
 
 ## Files
 - `src/Equiv.Core/Progress/IRunLog.cs`, `NullRunLog.cs`, `EtaEstimator.cs`, `PairWeight.cs`
 - `src/Equiv.Core/VerificationOptions.cs`
 - `src/Equiv.Cli/Progress/ChannelRunLog.cs`, `RunEvent.cs`, `RunLogLine.cs` (formatting)
 - `src/Equiv.Cli/CompareCommand.cs`, `CompareOptions.cs`
-- `docs/ARCHITECTURE.md`
 
 ## Tests
 - `Equiv.Core.Tests/Progress/EtaEstimatorTests.cs` (the properties in criterion 6)

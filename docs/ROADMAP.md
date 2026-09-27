@@ -325,7 +325,7 @@ changed-pair data, which is what reorders this list.
   changes, over the hand-written and mechanical seeds. Findings become tickets, not fixes. Needs
   M3-004, M3-022, M3-033, M4-001, M4-002, M4-004, M4-009, M4-010, P2-001.
 
-Run observability (ADR 0038, proposed 2026-09-27). The M4-007 `full` run gave no sign of progress
+Run observability (ADR 0038, accepted 2026-09-27). The M4-007 `full` run gave no sign of progress
 after 2.5 hours. These tickets do not block M4-007 and change no verdict:
 - M4-012 (L) `--verbosity quiet|normal|debug` and `--log`, a channel-backed writer that never
   blocks the pipeline, phase stopwatches, a heartbeat that names a stuck pair, and an IR-weighted

@@ -1,6 +1,6 @@
 # ADR 0038: A run reports its progress on stderr, with a clock per phase, an ETA, and a writer that never blocks the pipeline
 
-Status: proposed (2026-09-27)
+Status: accepted (2026-09-27)
 
 ## Context
 The M4-007 `full` run on the corpus had been going for 2.5 hours on 2026-09-27 with no way to tell

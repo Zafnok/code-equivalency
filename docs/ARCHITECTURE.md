@@ -143,4 +143,5 @@ paths -> router -> loader(legacy) -> symbols --+
 | `ILanguageFrontend` | C# | Java (Eclipse JDT sidecar) reusing everything else |
 | `IVerificationBackend` | Z3 direct encoding | Boogie IVL (SymDiff-style) when loop invariants are needed |
 | `IReportSink` | SARIF file | SARIF upload to GitHub Code Scanning / SonarQube |
+| `IRunLog` | CLI channel writer: stderr and `--log`, heartbeat, ETA (ADR 0038, M4-012) | MCP progress notifications for `equiv mcp` (M5) |
 | `IExecutionDriverFactory` | C# drivers for .NET Framework 4.8 and .NET 10 (ADR 0035) | drivers for user assemblies (M4-009) |
