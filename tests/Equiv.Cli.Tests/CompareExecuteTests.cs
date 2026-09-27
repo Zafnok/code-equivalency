@@ -3,6 +3,7 @@ using System.CommandLine;
 using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Verdicts;
 
 using Microsoft.CodeAnalysis.Sarif;
@@ -59,7 +60,7 @@ public sealed class CompareExecuteTests
         int exitCode = 0;
 
         string error = CaptureStdErr(() => exitCode = CompareCommand.Run(
-            Options(legacy.Path, modern.Path, execute: true), [frontend], Backend(), new InMemoryReportSink(), new ExecutionEnvironment(IsWindows: false, replay)));
+            Options(legacy.Path, modern.Path, execute: true), [frontend], Backend(), new InMemoryReportSink(), NullRunLog.Instance, new ExecutionEnvironment(IsWindows: false, replay)));
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
         Assert.Equal("error: --execute needs Windows and .NET Framework 4.8 (ADR 0035)" + Environment.NewLine, error);
@@ -121,7 +122,7 @@ public sealed class CompareExecuteTests
         InMemoryReportSink sink = new();
         int exitCode = 0;
         string error = CaptureStdErr(() => CaptureStdOut(() => exitCode = CompareCommand.Run(
-            Options(legacy.Path, modern.Path, execute), [new FakeFrontend("csharp", _ => true, Match(), replay: replay)], Backend(), sink, execution)));
+            Options(legacy.Path, modern.Path, execute), [new FakeFrontend("csharp", _ => true, Match(), replay: replay)], Backend(), sink, NullRunLog.Instance, execution)));
         return (exitCode, error, sink.Log);
     }
 

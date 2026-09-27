@@ -1,4 +1,5 @@
 using Equiv.Cli;
+using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
 using Equiv.Frontend.CSharp;
 using Equiv.Verify.Z3;
@@ -32,7 +33,7 @@ public sealed class ComparePipelineTests
         {
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: "divergent", DryRun: false),
-                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath));
+                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath), NullRunLog.Instance);
 
             Assert.Equal(ExitCodes.Success, exitCode);
             SarifLog log = SarifLog.Load(outPath);
@@ -56,7 +57,7 @@ public sealed class ComparePipelineTests
         {
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: "divergent", DryRun: false),
-                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath));
+                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath), NullRunLog.Instance);
 
             Assert.Equal(ExitCodes.Success, exitCode);
             SarifLog log = SarifLog.Load(outPath);
