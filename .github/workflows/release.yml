@@ -1,0 +1,165 @@
+name: Release
+
+# M3-004: publishes the single-file win-x64/linux-x64 binaries, builds and pushes the container
+# image to GHCR, and attaches everything to a GitHub release. Triggered only by a `v*` tag push
+# (ADR 0017/0002's Versioning gate: MinVer reads the version from this tag, MinVerTagPrefix=v).
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # BUSL applies separately per version (ADR 0017): this release's own LICENSE gets a Change Date
+  # four years from today, computed once here and reused by every job below so the binaries, the
+  # image and the release notes all carry the same date.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      change_date: ${{ steps.version.outputs.change_date }}
+    steps:
+      - name: Compute the release version and Change Date
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "change_date=$(date -u -d '+4 years' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+  build-binaries:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # MinVer needs the tag history to compute the version; the default shallow checkout
+          # would leave it on the untagged 0.0.0-alpha.0 fallback.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Fetch Microsoft.Z3 (ADR 0030)
+        shell: pwsh
+        run: ./tools/z3-feed/fetch.ps1
+
+      # M3-004 criterion 1: single-file, self-contained (Equiv.Cli.csproj's publish properties).
+      # No --locked-mode/--no-restore here: a self-contained RID-specific publish restores its own
+      # runtime pack and apphost, which the plain (RID-less) lock file entries ci.yml checks don't
+      # cover; this is an ephemeral release checkout, so an unlocked restore is harmless.
+      - name: Publish ${{ matrix.rid }}
+        shell: pwsh
+        run: dotnet publish src/Equiv.Cli -c Release -r ${{ matrix.rid }} -o publish/${{ matrix.rid }}
+
+      # ADR 0017 criterion 7/8: every release artifact carries the licence and third-party
+      # notices, and this version's own LICENSE copy gets its own Change Date; the tracked
+      # LICENSE keeps its placeholder.
+      - name: Stamp LICENSE's Change Date and add third-party notices
+        shell: pwsh
+        run: |
+          (Get-Content LICENSE) -replace '(?<=Change Date:\s+)\d{4}-\d{2}-\d{2}', '${{ needs.prepare.outputs.change_date }}' |
+            Set-Content (Join-Path publish/${{ matrix.rid }} LICENSE)
+          Copy-Item THIRD-PARTY-NOTICES.md publish/${{ matrix.rid }}/
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = "equiv-${{ needs.prepare.outputs.version }}-${{ matrix.rid }}"
+          if ('${{ matrix.os }}' -eq 'windows-latest') {
+            Compress-Archive -Path (Join-Path publish/${{ matrix.rid }} '*') -DestinationPath "$name.zip"
+          } else {
+            tar -czf "$name.tar.gz" -C publish/${{ matrix.rid }} .
+          }
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binary-${{ matrix.rid }}
+          path: |
+            equiv-*.zip
+            equiv-*.tar.gz
+          if-no-files-found: error
+
+  build-and-push-image:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Log in to GHCR
+        shell: bash
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # M3-004 criterion 2: Ubuntu 24.04 .NET SDK base (Dockerfile). VERSION/CHANGE_DATE are build
+      # args because the build stage has no .git for MinVer to read (see Dockerfile).
+      - name: Build and push equiv:${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          image="ghcr.io/$owner/equiv"
+          docker build \
+            --build-arg VERSION="${{ needs.prepare.outputs.version }}" \
+            --build-arg CHANGE_DATE="${{ needs.prepare.outputs.change_date }}" \
+            -t "$image:${{ needs.prepare.outputs.version }}" \
+            -t "$image:latest" \
+            .
+          docker push "$image:${{ needs.prepare.outputs.version }}"
+          docker push "$image:latest"
+
+  create-release:
+    needs: [prepare, build-binaries, build-and-push-image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: binary-*
+          path: dist
+          merge-multiple: true
+
+      # ADR 0017 criterion 7: the release body states the licence and links it, rather than
+      # letting the release page read as if this were an open-source project.
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANGE_DATE: ${{ needs.prepare.outputs.change_date }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          notes_file=$(mktemp)
+          {
+            echo "equiv is licensed under the **Business Source License 1.1**: source-available, not open source."
+            echo "See [LICENSE](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/LICENSE) for the Additional Use Grant (three-seat, 50,000-LOC free tier); this release's own copy has a Change Date of $CHANGE_DATE."
+            echo ""
+            echo "Container image: \`ghcr.io/$owner/equiv:$VERSION\`."
+          } > "$notes_file"
+          gh release create "${{ github.ref_name }}" dist/*.zip dist/*.tar.gz \
+            --title "equiv $VERSION" \
+            --notes-file "$notes_file"

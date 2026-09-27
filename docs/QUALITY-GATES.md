@@ -26,7 +26,7 @@ are pinned in `Directory.Packages.props` (Central Package Management) and listed
 | Secrets | gitleaks action | | yes |
 | Supply chain | Dependabot weekly, NuGet lock files (`RestorePackagesWithLockFile`), `--locked-mode` in CI | | yes |
 | Versioning | MinVer from git tags | | n/a |
-| Packaging | `dotnet publish` single-file for win-x64 + linux-x64, Docker multi-stage image (`equiv:<version>`), GitHub Action wrapper `action.yml` | M3 | yes from M3 |
+| Packaging | `dotnet publish` single-file for win-x64 + linux-x64, Docker multi-stage image (`equiv:<version>`), GitHub Action wrapper `action.yml` (M3-004). `release.yml` builds and publishes all three on a `v*` tag push; `parity-run.ps1` (M3-029) exercises the published binaries, not `dotnet run`, so the loop-free build gate and the release artifact are the same code path | M3 | yes from M3 |
 
 ## CI matrix
 
