@@ -407,9 +407,13 @@ calls a member of the runtime-changes table, as differential testing does (P2-03
   model has a synthesised input other than `this` and `null.*` (a heap map, a cast or type-test
   map, `typeof`, `new`), since replay builds no object graphs; a project does not emit
   (`emit-failed`); the model's two runs end alike, so the divergence is in the call trace, which a
-  driver does not observe; a side gives no comparable outcome; or both sides throw the same
-  exception where the model's runs do not both throw, so the driver's `new T()` or an argument is
-  not the model's (P2-038).
+  driver does not observe; the model's call traces differ and the two real outcomes are equal, since
+  the model's outcomes may then rest on call answers the solver chose after the traces split (ADR
+  0026, "Why"; P2-037), so equal real outcomes are no evidence against it, while differing ones still
+  give `reproduced`; both sides throw the same exception where the model's runs do not both throw,
+  so the driver's `new T()` or an argument is not the model's (P2-038); or a side gives no
+  comparable outcome. These come before `not-applicable`, so `not-reproduced` always means the
+  model was wrong.
 
 Replay never changes the verdict, the rule id, the fingerprint or the exit code, and a run without
 `--execute` runs no code and writes no `replay`.

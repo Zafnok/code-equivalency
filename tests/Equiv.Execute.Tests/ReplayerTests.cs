@@ -14,6 +14,8 @@ public sealed class ReplayerTests
     private static readonly ReplayPlan Plan = ReplayPlan.Runnable(
         new ExecutionDrivers("legacy.exe", "modern.dll"), new ExecutionInput(["null"]), new ExecutionInput(["null", "1"]));
 
+    private const string TraceSplit = "the call traces differ";
+
     private static readonly IrProcedure Body = Procedure(string.Empty);
 
     /// <summary>A solver counterexample: both sides return, different values, and neither calls a runtime-changed member.</summary>
@@ -33,10 +35,10 @@ public sealed class ReplayerTests
           ret %a
         """);
 
-    private static ReplayResult Replay(string legacy, string modern, FakeHost? observed = null, Counterexample? model = null, IrProcedure? old = null, IrProcedure? @new = null)
+    private static ReplayResult Replay(string legacy, string modern, FakeHost? observed = null, Counterexample? model = null, IrProcedure? old = null, IrProcedure? @new = null, ReplayPlan? plan = null)
     {
         FakeHost host = observed ?? new FakeHost((driver, _, _) => driver.EndsWith(".exe", StringComparison.Ordinal) ? legacy : modern);
-        return new Replayer(host).Replay(Plan, model ?? Model, old ?? Body, @new ?? Body);
+        return new Replayer(host).Replay(plan ?? Plan, model ?? Model, old ?? Body, @new ?? Body);
     }
 
     [Fact]
@@ -147,6 +149,29 @@ public sealed class ReplayerTests
         Assert.Equal(ReplayStatus.NotReproduced, result.Status);
     }
 
+    /// <summary>Ticket P2-037: equal outcomes are no evidence against a model whose call traces split before its outcomes differ.</summary>
+    [Fact]
+    public void EqualOutcomes_OfAModelWhoseTracesSplit_AreNotConstructible() =>
+        Assert.Equal(
+            ReplayResult.NotConstructible(TraceSplit),
+            Replay("[\"Returned\",null]", "[\"Returned\",null]", plan: Plan with { AlikeReason = TraceSplit }));
+
+    [Fact]
+    public void DifferingOutcomes_OfAModelWhoseTracesSplit_StillReproduce() =>
+        Assert.Equal(
+            ReplayResult.Reproduced,
+            Replay("[\"Threw\",\"System.Exception\"]", "[\"Returned\",null]", plan: Plan with { AlikeReason = TraceSplit }));
+
+    /// <summary>A split trace's reason wins over both sides throwing and over EQ006, since it says the outcomes are no evidence.</summary>
+    [Fact]
+    public void EqualOutcomes_OfAModelWhoseTracesSplit_AreNotConstructibleEvenWhenBothThrowOrEq006() =>
+        Assert.All(
+            [
+                Replay("[\"Threw\",\"System.Exception\"]", "[\"Threw\",\"System.Exception\"]", plan: Plan with { AlikeReason = TraceSplit }),
+                Replay("[\"Returned\",1]", "[\"Returned\",1]", model: RuntimeChangedModel, plan: Plan with { AlikeReason = TraceSplit }),
+            ],
+            static r => Assert.Equal(ReplayResult.NotConstructible(TraceSplit), r));
+
     [Theory]
     [InlineData("[\"NotComparable\",\"Odd.Holder\"]", "[\"Returned\",1]", "the legacy side gave NotComparable \"Odd.Holder\"")]
     [InlineData("[\"Returned\",1]", "[\"NotConstructible\",\"System.FormatException\"]", "the modern side gave NotConstructible \"System.FormatException\"")]
@@ -164,6 +189,12 @@ public sealed class ReplayerTests
             ReplayResult.NotConstructible("the legacy side gave NotConstructible \"System.Globalization.CultureNotFoundException\""),
             Replay(string.Empty, string.Empty, host, old: Procedure(TurkishUpper)));
     }
+
+    [Fact]
+    public void BothSidesWithNoComparableOutcome_GiveTheLegacyReason() =>
+        Assert.Equal(
+            ReplayResult.NotConstructible("the legacy side gave NotComparable \"Odd.Holder\""),
+            Replay("[\"NotComparable\",\"Odd.Holder\"]", "[\"NotConstructible\",\"System.FormatException\"]"));
 
     [Fact]
     public void APlanWithoutDrivers_IsNotConstructibleWithItsReasonAndRunsNothing()

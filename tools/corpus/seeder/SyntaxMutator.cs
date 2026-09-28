@@ -91,11 +91,11 @@ public static class SyntaxMutator
         };
     }
 
-    // -- RenameLocals: one site, renaming the first local the method declares throughout its body. --
+    // -- RenameLocals: one site, renaming the first local the method declares, and never names in an argument, throughout its body. --
 
     private static IReadOnlyList<Func<MethodDeclarationSyntax>> RenameLocalsCandidates(MethodDeclarationSyntax method)
     {
-        VariableDeclaratorSyntax? first = Nodes<VariableDeclaratorSyntax>(method, static _ => true).FirstOrDefault();
+        VariableDeclaratorSyntax? first = Nodes<VariableDeclaratorSyntax>(method, d => !IsNamedInArgument(method, d.Identifier.Text)).FirstOrDefault();
         if (first is null)
         {
             return [];
@@ -105,6 +105,17 @@ public static class SyntaxMutator
         string renamed = FreshName(original, UsedNames(method));
         return [() => RenameIdentifier(method, original, renamed)];
     }
+
+    /// <summary>
+    /// Whether <paramref name="name"/> is written anywhere inside an argument in the body, lambdas included. A parameter
+    /// marked <c>[CallerArgumentExpression]</c> receives its argument's source text (MSTest 4's <c>Assert.AreEqual</c>
+    /// does), and <c>nameof(x)</c> is an argument too, so renaming a local written there changes a string the program
+    /// sees: the rename is then not behaviour-preserving (ticket P2-036). With no semantic model the callee cannot be
+    /// checked, so every argument counts.
+    /// </summary>
+    private static bool IsNamedInArgument(MethodDeclarationSyntax method, string name) =>
+        method.Body!.DescendantNodes().OfType<IdentifierNameSyntax>()
+            .Any(id => string.Equals(id.Identifier.Text, name, StringComparison.Ordinal) && id.FirstAncestorOrSelf<ArgumentSyntax>() is not null);
 
     private static MethodDeclarationSyntax RenameIdentifier(MethodDeclarationSyntax method, string from, string to)
     {
@@ -214,7 +225,7 @@ public static class SyntaxMutator
                 ReturnStatementSyntax { Expression: { } result } ret => (result, replacement => ret.WithExpression(replacement)),
                 _ => (null, null),
             };
-            if (value is null || !IsSimple(value))
+            if (value is null || !IsSimple(value) || !IsListElement(statement))
             {
                 continue;
             }
@@ -246,7 +257,7 @@ public static class SyntaxMutator
     // -- DropNullCheck: if (x == null) A else B -> the branch a non-null x takes. --
 
     private static IReadOnlyList<Func<MethodDeclarationSyntax>> DropNullCheckCandidates(MethodDeclarationSyntax method) =>
-        [.. Nodes<IfStatementSyntax>(method, static branch => Unwrap(branch.Condition) is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression } b
+        [.. Nodes<IfStatementSyntax>(method, static branch => IsListElement(branch) && Unwrap(branch.Condition) is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression } b
                 && (b.Left.IsKind(SyntaxKind.NullLiteralExpression) || b.Right.IsKind(SyntaxKind.NullLiteralExpression)))
             .Select(branch => (Func<MethodDeclarationSyntax>)(() => DropNullCheck(method, branch)))];
 
@@ -262,7 +273,7 @@ public static class SyntaxMutator
     private static IReadOnlyList<Func<MethodDeclarationSyntax>> FieldWriteCandidates(MethodDeclarationSyntax method)
     {
         HashSet<string> locals = LocalAndParameterNames(method);
-        return [.. Nodes<ExpressionStatementSyntax>(method, es => IsFieldWrite(es, locals))
+        return [.. Nodes<ExpressionStatementSyntax>(method, es => IsListElement(es) && IsFieldWrite(es, locals))
             .Select(es => (Func<MethodDeclarationSyntax>)(() => RemoveStatement(method, es)))];
     }
 
@@ -348,6 +359,15 @@ public static class SyntaxMutator
 
         return candidate;
     }
+
+    /// <summary>
+    /// Whether <paramref name="statement"/> sits in a statement list (a block or a switch section) rather than being the
+    /// single embedded statement of an <c>if</c>, <c>else</c>, loop, <c>using</c> or label (ticket P2-035). Only a list
+    /// element can be replaced by several statements, or by none, so an operator that does either offers no site on an
+    /// embedded one: Roslyn throws "The item specified is not the element of a list" for the first and a null
+    /// <c>statement</c> for the second.
+    /// </summary>
+    private static bool IsListElement(StatementSyntax statement) => statement.Parent is BlockSyntax or SwitchSectionSyntax;
 
     /// <summary>Never descends into a nested lambda, local function or anonymous method: their locals are a separate scope.</summary>
     private static bool DoesNotCrossScope(SyntaxNode node) => node is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax);

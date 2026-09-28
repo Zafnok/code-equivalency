@@ -694,10 +694,10 @@ internal sealed class IrLowerer
             return;
         }
 
-        if (operation is IFlowCaptureOperation { Value: IPropertyReferenceOperation autoProperty } backed && assignedCaptures.Contains(backed.Id)
-            && heap.AutoProperty(autoProperty, context) is { } slice)
+        if (operation is IFlowCaptureOperation backed && assignedCaptures.Contains(backed.Id) && heap.Slice(backed.Value, context) is { } slice)
         {
-            // An auto-property is its backing field's map (ticket M4-008), so, as for a field, its receiver is evaluated here.
+            // A field, an array element or an auto-property's backing field is its heap map (tickets M4-008, P2-007), so, as
+            // for a direct write, its receiver and index are evaluated here, ahead of a value that branches.
             sliceTargets[backed.Id] = slice;
             return;
         }
@@ -1536,6 +1536,7 @@ internal sealed class IrLowerer
 
         HeapLowerer.Access? heapSlot = lvalue switch
         {
+            IFlowCaptureReferenceOperation reference when sliceTargets.TryGetValue(reference.Id, out HeapLowerer.Access captured) => captured,
             IFieldReferenceOperation field when TypeMapper.TupleElement(field.Field) is null => heap.Field(field, context),
             IPropertyReferenceOperation auto => heap.AutoProperty(auto, context),
             _ => null,

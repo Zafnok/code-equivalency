@@ -10,12 +10,13 @@ namespace Equiv.Execute;
 /// Replays a Divergent's model on both real runtimes (ADR 0035 decision 2; ticket M4-009): the legacy driver on .NET
 /// Framework 4.8 and the modern driver on .NET 10, each once, under the invariant culture, and also under <c>tr-TR</c> when
 /// either body calls a member of the runtime-changes table, as differential testing does (ticket P2-038). Differing
-/// canonical outcomes under any culture reproduce the divergence. Equal ones do not, unless both sides threw where the
-/// model's runs do not both throw: then the driver's receiver or arguments are not the model's and the replay is not
-/// constructible. Equal outcomes of an EQ006 Divergent (a runtime-changed callee in the model's call trace) are not
-/// applicable, since EQ006 claims the member differs, not that the model's input shows it. A side that gives no
-/// comparable outcome (a result with no canonical form, no answer in time, or arguments or a culture its driver could not
-/// build) makes the replay not constructible. The verdict is never changed here.
+/// canonical outcomes under any culture reproduce the divergence. Equal ones do not, and make the replay not constructible
+/// when the plan's <see cref="ReplayPlan.AlikeReason"/> says they are no evidence (ticket P2-037), or when both sides threw
+/// where the model's runs do not both throw, so the driver's receiver or arguments are not the model's (ticket P2-038).
+/// Otherwise equal outcomes of an EQ006 Divergent (a runtime-changed callee in the model's call trace) are not applicable,
+/// since EQ006 claims the member differs, not that the model's input shows it. A side that gives no comparable outcome (a
+/// result with no canonical form, no answer in time, or arguments or a culture its driver could not build) makes the
+/// replay not constructible. The verdict is never changed here.
 /// </summary>
 public sealed class Replayer(IDriverHost host)
 {
@@ -42,10 +43,11 @@ public sealed class Replayer(IDriverHost host)
         }
 
         bool agree = legacy.Zip(modern).All(static p => RuntimeComparison.Same(p.First, p.Second));
-        return (legacy[0].Kind, model) switch
+        return (legacy[0].Kind, model, plan.AlikeReason) switch
         {
             _ when !agree => ReplayResult.Reproduced,
-            (OutcomeKind.Threw, not { Old.Outcome: IrThrew, New.Outcome: IrThrew }) =>
+            (_, _, { } alike) => ReplayResult.NotConstructible(alike),
+            (OutcomeKind.Threw, not { Old.Outcome: IrThrew, New.Outcome: IrThrew }, _) =>
                 ReplayResult.NotConstructible($"both sides threw {legacy[0].Canonical}, which the model's runs do not: the receiver or an argument is not the model's"),
             _ when RuntimeChanged(model) => ReplayResult.NotApplicable(legacy[0], modern[0]),
             _ => ReplayResult.NotReproduced(legacy[0], modern[0]),
