@@ -108,6 +108,7 @@ public sealed class IrLowererTests
     [InlineData("static int? M(int? n) => ~n;", "Unary")]
     [InlineData("static string M<T>(T t) => t?.ToString() ?? \"\";", "IsNull")]
     [InlineData("static bool? M(bool? b) => !b;", "Unary")]
+    [InlineData("static void M(int[] a, bool b) { a[0] = b ? 1 : 2; }", "FlowCaptureReference")]
     public void UnsupportedConstructIsOpaqueWithItsName(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
 
@@ -1616,6 +1617,85 @@ public sealed class IrLowererTests
 
         Assert.Equal(new IrReturned(Bits(32, 6)), Run(procedure, Bits(32, 2), Bits(32, 3)));
         Assert.DoesNotContain(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPhi>(), static p => p.Target.SourceName is "m");
+    }
+
+    /// <summary>
+    /// Ticket P2-006 acceptance criterion 1: <c>??=</c> on a field makes the CFG capture the field, and the assignment's
+    /// target is that capture. The field's map is read once and written only when it held null.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 7)]
+    [InlineData(false, 5)]
+    public void ANullCoalescingAssignmentToAFieldWritesItOnlyWhenItWasNull(bool wasNull, int expected)
+    {
+        IrProcedure procedure = Method("static string? s; static string M(string t) => s ??= t;");
+        IrMapValue field = new(new IrMap(new IrSort("C"), new IrSort("System.String")), Reference(5), []);
+        IrInputs inputs = new([.. procedure.Parameters.Select(p => p.Var.Name switch
+        {
+            "t" => Reference(7),
+            "field.C.s" => field,
+            _ => (IrValue)Nulls("System.String", 5, wasNull),
+        })]);
+
+        IrRun run = IrInterpreter.Run(procedure, inputs, Equiv.TestSupport.IrGenOracle.Instance, Equiv.TestSupport.IrGen.StepBudget);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Reference(expected)), run.Outcome);
+        Assert.Equal(Reference(expected), Assert.IsType<IrMapValue>(Assert.Single(run.Outs)).Read(new IrSortValue("C", 0)));
+    }
+
+    /// <summary>
+    /// Ticket P2-006 acceptance criterion 1: a field assigned a value that branches, directly or by a compound assignment,
+    /// is captured before the value, and the assignment's target is that capture.
+    /// </summary>
+    [Theory]
+    [InlineData("static int f; static void M(bool b, int a) { f = b ? 1 : a; }", true, 1)]
+    [InlineData("static int f; static void M(bool b, int a) { f = b ? 1 : a; }", false, 9)]
+    [InlineData("static int f; static void M(bool b, int a) { f += b ? 1 : a; }", false, 9)]
+    [InlineData("static int f; static void M(bool b, int a) { f = 4; f += b ? 1 : a; }", true, 5)]
+    public void AFieldAssignedABranchingValueIsWrittenThroughTheCapture(string members, bool b, int expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        IrRun run = IrInterpreter.Run(
+            procedure,
+            new IrInputs([new IrBoolValue(b), Bits(32, 9), Fields("C", new IrBitVec(32))]),
+            Equiv.TestSupport.IrGenOracle.Instance,
+            Equiv.TestSupport.IrGen.StepBudget);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(Bits(32, expected), Assert.IsType<IrMapValue>(Assert.Single(run.Outs)).Read(new IrSortValue("C", 0)));
+    }
+
+    /// <summary>Ticket P2-006: a captured field's receiver is null-checked where the field is written, after the value.</summary>
+    [Fact]
+    public void AFieldOfANullReceiverAssignedABranchingValueThrows()
+    {
+        IrProcedure procedure = Method("sealed class H { public int F; } static void M(H h, bool b) { h.F = b ? 1 : 2; }");
+        IrInputs inputs = new([.. procedure.Parameters.Select(p => p.Var.Type switch
+        {
+            IrSort sort => Reference(0, sort.Name),
+            IrBool => new IrBoolValue(Value: true),
+            IrMap { Value: IrBool } => Nulls("C+H", 0, isNull: true),
+            _ => (IrValue)Fields("C+H", new IrBitVec(32)),
+        })]);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrThrew("System.NullReferenceException"), IrInterpreter.Run(procedure, inputs, Equiv.TestSupport.IrGenOracle.Instance, Equiv.TestSupport.IrGen.StepBudget).Outcome);
+    }
+
+    /// <summary>
+    /// Ticket P2-006: <c>??=</c> on a property captures it; the capture's read is the getter call and its write the setter
+    /// call, in a later block that runs only when the getter returned null. Before the fix the read was an undefined capture.
+    /// </summary>
+    [Fact]
+    public void ANullCoalescingAssignmentToAPropertyCallsTheGetterThenTheSetter()
+    {
+        IrProcedure procedure = Method("sealed class H { string? v; public string? Name { get => v; set => v = value; } } static string M(H h, string t) => h.Name ??= t;");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(["C.H::get_Name()", "C.H::set_Name(string)"], Calls(procedure).Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        Assert.Equal(2, procedure.Blocks.Count(static b => b.Instructions.OfType<IrCall>().Any()));
     }
 
     [Fact]
