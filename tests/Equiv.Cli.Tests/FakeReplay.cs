@@ -25,6 +25,9 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
 
     public List<string> Starts { get; } = [];
 
+    /// <summary>Every case line exchanged with either driver, in order (ticket M5-002: proves the culture an agent gave reaches the driver).</summary>
+    public List<string> Lines { get; } = [];
+
     /// <summary>When set, <see cref="Probe"/> returns a not-constructible plan with this reason instead of a runnable one.</summary>
     public string? ProbeReason { get; set; }
 
@@ -46,6 +49,11 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
     {
         Probes.Add((pair, arguments, directory));
         Assert.True(Directory.Exists(directory));
+
+        // A real ReplayDriverFactory.Probe leaves the emitted project and driver files behind, so the directory is
+        // never empty when the caller cleans it up; a fake that leaves it empty could not tell a recursive delete
+        // from a non-recursive one that happens to succeed anyway.
+        File.WriteAllText(Path.Combine(directory, "driver.cs"), string.Empty);
         return ProbeReason is { } reason
             ? ReplayPlan.NotConstructible(reason)
             : ReplayPlan.Runnable(new ExecutionDrivers("legacy.exe", "modern.dll"), new ExecutionInput(["0"]), new ExecutionInput(["0"]));
@@ -54,12 +62,16 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
     public IDriverSession Start(string driver)
     {
         Starts.Add(driver);
-        return new Session(driver.EndsWith(".exe", StringComparison.Ordinal) ? legacyAnswer : modernAnswer);
+        return new Session(this, driver.EndsWith(".exe", StringComparison.Ordinal) ? legacyAnswer : modernAnswer);
     }
 
-    private sealed class Session(string answer) : IDriverSession
+    private sealed class Session(FakeReplay owner, string answer) : IDriverSession
     {
-        public string? Exchange(string line, TimeSpan timeout) => answer;
+        public string? Exchange(string line, TimeSpan timeout)
+        {
+            owner.Lines.Add(line);
+            return answer;
+        }
 
         public void Dispose()
         {

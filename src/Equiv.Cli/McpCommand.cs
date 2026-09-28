@@ -41,6 +41,34 @@ internal static class McpCommand
         return command;
     }
 
+    /// <summary>Serves <paramref name="tools"/> until <paramref name="input"/> closes, then exits 0.</summary>
+    internal static async Task<int> ServeAsync(Stream input, Stream output, EquivTools tools, CancellationToken cancellationToken)
+    {
+        McpServerOptions options = new()
+        {
+            ServerInfo = new Implementation { Name = ServerName, Version = Version },
+            ToolCollection = [.. tools.Create()],
+        };
+        StreamServerTransport transport = new(input, output, ServerName);
+        McpServer server = McpServer.Create(transport, options);
+        try
+        {
+            await server.RunAsync(cancellationToken).ConfigureAwait(false);
+            return ExitCodes.Success;
+        }
+        finally
+        {
+            await server.DisposeAsync().ConfigureAwait(false);
+            await transport.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The version MinVer stamped on this assembly.</summary>
+    internal static string Version { get; } = typeof(McpCommand).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion;
+
+    [ExcludeFromCodeCoverage(Justification = "M5-001: the process's own stdin and stdout, exercised by Equiv.Tests.Integration's McpIntegrationTests")]
+    private static (Stream Input, Stream Output) ProcessStreams() => (Console.OpenStandardInput(), Console.OpenStandardOutput());
+
     /// <summary>
     /// ADR 0035's consequences for the <c>probe</c> tool, at server startup rather than per call: without <c>--execute</c>
     /// nothing changes and <c>probe</c> is not registered (ticket M5-002 criterion 1); with it, a non-Windows OS stops the
@@ -71,32 +99,4 @@ internal static class McpCommand
         await Console.Error.WriteLineAsync(ExecutionEnvironment.Note).ConfigureAwait(false);
         return await ServeAsync(input, output, new EquivTools(frontends, backend, executing), cancellationToken).ConfigureAwait(false);
     }
-
-    /// <summary>Serves <paramref name="tools"/> until <paramref name="input"/> closes, then exits 0.</summary>
-    internal static async Task<int> ServeAsync(Stream input, Stream output, EquivTools tools, CancellationToken cancellationToken)
-    {
-        McpServerOptions options = new()
-        {
-            ServerInfo = new Implementation { Name = ServerName, Version = Version },
-            ToolCollection = [.. tools.Create()],
-        };
-        StreamServerTransport transport = new(input, output, ServerName);
-        McpServer server = McpServer.Create(transport, options);
-        try
-        {
-            await server.RunAsync(cancellationToken).ConfigureAwait(false);
-            return ExitCodes.Success;
-        }
-        finally
-        {
-            await server.DisposeAsync().ConfigureAwait(false);
-            await transport.DisposeAsync().ConfigureAwait(false);
-        }
-    }
-
-    /// <summary>The version MinVer stamped on this assembly.</summary>
-    internal static string Version { get; } = typeof(McpCommand).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion;
-
-    [ExcludeFromCodeCoverage(Justification = "M5-001: the process's own stdin and stdout, exercised by Equiv.Tests.Integration's McpIntegrationTests")]
-    private static (Stream Input, Stream Output) ProcessStreams() => (Console.OpenStandardInput(), Console.OpenStandardOutput());
 }

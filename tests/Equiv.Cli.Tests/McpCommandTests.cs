@@ -42,6 +42,10 @@ public sealed class McpCommandTests
         Assert.Equal(["compare", "lower_only"], tools.Select(static t => t.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         Assert.All(tools, static t => Assert.True(t.ProtocolTool.Annotations?.ReadOnlyHint));
         McpClientTool compare = tools.Single(static t => string.Equals(t.Name, "compare", StringComparison.Ordinal));
+        Assert.Equal("Compare two solutions", compare.ProtocolTool.Title);
+        Assert.Equal(
+            "Checks whether a legacy and a modern solution behave the same. Returns a one-line verdict summary, then the SARIF 2.1.0 log `equiv compare` writes.",
+            compare.ProtocolTool.Description);
         Assert.Equal(
             ["legacy", "modern"],
             compare.ProtocolTool.InputSchema.GetProperty("required").EnumerateArray().Select(static e => e.GetString()).Order(StringComparer.Ordinal), StringComparer.Ordinal);
@@ -49,9 +53,31 @@ public sealed class McpCommandTests
             ["baseline", "bound", "config", "legacy", "modern", "timeoutMs"],
             compare.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject().Select(static p => p.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         McpClientTool lowerOnly = tools.Single(static t => string.Equals(t.Name, "lower_only", StringComparison.Ordinal));
+        Assert.Equal("Lower two solutions without verifying", lowerOnly.ProtocolTool.Title);
+        Assert.Equal(
+            "Loads, matches and lowers a legacy and a modern solution and reports the lowering census and the added and removed procedures, without calling the solver (`equiv compare --lower-only`).",
+            lowerOnly.ProtocolTool.Description);
         Assert.Equal(
             ["config", "legacy", "modern"],
             lowerOnly.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject().Select(static p => p.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
+    }
+
+    /// <summary>The summary's <c>Divergent</c> count matches EQ006 (a runtime-changed callee) as well as EQ002.</summary>
+    [Fact]
+    public async Task Compare_RuntimeChangedDivergent_CountsAsDivergent()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        CallIdentity flagged = new("System.String::IndexOf(char)", RuntimeChanged: true);
+        IrCallRecord record = new(flagged, [new IrBitVecValue(16, 'a')]);
+        Counterexample counterexample = Counterexample() with { Old = Run(1) with { Trace = [record] } };
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Divergent(counterexample) });
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        using Session session = await Session.StartAsync(frontend, backend).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
+
+        Assert.Equal("Equivalent 0, Divergent 1, Unknown 0, skipped projects 0, exit code 1", Text(result.Content[0]));
     }
 
     [Fact]
@@ -386,7 +412,12 @@ public sealed class McpCommandTests
         IList<McpClientTool> tools = await session.Client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         McpClientTool probe = tools.Single(static t => string.Equals(t.Name, "probe", StringComparison.Ordinal));
-        Assert.StartsWith("Runs code from both solutions on this machine", probe.ProtocolTool.Description, StringComparison.Ordinal);
+        Assert.Equal("Run one matched pair on both runtimes", probe.ProtocolTool.Title);
+        Assert.Equal(
+            "Runs code from both solutions on this machine: calls one matched pair's method on the legacy runtime "
+            + "and on the modern runtime with the given arguments, and returns each side's outcome. It never writes "
+            + "SARIF and never changes a compare verdict; a mismatch here is a hypothesis, not a proof (ADR 0036).",
+            probe.ProtocolTool.Description);
         Assert.NotEqual(true, probe.ProtocolTool.Annotations?.ReadOnlyHint);
         Assert.Equal(
             ["arguments", "culture", "identity", "legacy", "modern"],
@@ -560,8 +591,51 @@ public sealed class McpCommandTests
         Assert.Equal("error: this frontend cannot run code", Text(Assert.Single(result.Content)));
     }
 
-    private static Dictionary<string, object?> ProbeArgs(string legacy, string modern, string identity, object?[] arguments) =>
-        new(StringComparer.Ordinal) { ["legacy"] = legacy, ["modern"] = modern, ["identity"] = identity, ["arguments"] = arguments };
+    private static Dictionary<string, object?> ProbeArgs(string legacy, string modern, string identity, object?[] arguments, string? culture = null)
+    {
+        Dictionary<string, object?> args = new(StringComparer.Ordinal) { ["legacy"] = legacy, ["modern"] = modern, ["identity"] = identity, ["arguments"] = arguments };
+        if (culture is not null)
+        {
+            args["culture"] = culture;
+        }
+
+        return args;
+    }
+
+    /// <summary>An explicit <c>culture</c> reaches the driver's case line; it is not always the invariant culture.</summary>
+    [Fact]
+    public async Task Probe_CultureReachesTheDriver()
+    {
+        FakeReplay replay = new("[\"Returned\",1]", "[\"Returned\",1]");
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null], culture: "fr-FR")).ConfigureAwait(true);
+
+        Assert.All(replay.Lines, static line => Assert.StartsWith("[\"fr-FR\"", line, StringComparison.Ordinal));
+        Assert.NotEmpty(replay.Lines);
+    }
+
+    /// <summary>The temporary directory a probe built its drivers in is deleted afterwards, as <c>--execute</c>'s replay does.</summary>
+    [Fact]
+    public async Task Probe_DeletesItsTemporaryDirectoryAfterward()
+    {
+        FakeReplay replay = new("[\"Returned\",1]", "[\"Returned\",1]");
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null])).ConfigureAwait(true);
+
+        string directory = Assert.Single(replay.Probes).Directory;
+        Assert.StartsWith("equiv-probe-", Path.GetFileName(directory), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(directory));
+    }
 
     [Fact]
     public async Task LowerOnly_MissingSolution_IsToolError()
