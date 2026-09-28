@@ -1,5 +1,5 @@
 # P2-030 `sizeof(T)` (`SizeOf`) has no lowering
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004
@@ -35,3 +35,5 @@ struct layout modelling here.
 `Marshal.SizeOf`, struct layout in general.
 
 ## Notes
+- Decision: no lowering change. `IrLowerer` lowers any operation whose `ConstantValue.HasValue` as a constant before dispatching on its kind, and Roslyn folds `sizeof` of a built-in type (`sizeof(int)` = 4, also allowed outside `unsafe`), so the constant path already took it. The Git Extensions `SizeOf` opaque is therefore a user-defined struct's `sizeof`, which has no constant and falls to the default `operation.Kind` opaque; it stays opaque, per the Size guard.
+- The struct test uses `ErroneousBody` because the test compilation does not allow unsafe code (CS0233 outside `unsafe`); the bound tree is still an `ISizeOfOperation` with no constant.
