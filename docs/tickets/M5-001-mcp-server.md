@@ -1,5 +1,5 @@
 # M5-001 `equiv mcp`: the compare pipeline as an MCP server over stdio
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-004
@@ -61,3 +61,12 @@ notifications, MCP resources and prompts, writing SARIF to disk from the server,
 verdicts.
 
 ## Notes
+Decision: branch is the worktree's own `claude/mcp-server-m5-001-1baacd` (the app made it from `main`), not `M5-001-mcp-server`.
+Decision: `CompareCommand.Run`'s stdout and stderr lines go through a `Streams(Out, Error)` record on `CompareOptions` (null means the console, read when `Run` starts), not two more `Run` parameters (Sonar S107). The `mcp` tools pass stderr as `Out` and a `StringWriter` as `Error`; the captured text becomes the tool error's message and is then copied to stderr.
+Decision: `bound` and `timeoutMs` are `CompareOptions.Bound`/`TimeoutMs` overriding the loaded config's `Bound`/`TimeoutMs`. Non-positive is exit 3 with `error: bound and timeoutMs must be positive integers`, so the tool reports it as a tool error and a future CLI option gets the same check. (ARCHITECTURE.md lists `--bound`/`--timeout-ms` but `compare` has no such options today; the config file's `bound`/`timeoutMs` are the existing meaning.)
+Decision: a run that wrote a SARIF log is a normal tool result whatever its exit code (a skipped C# project is exit 4 with a log and says `exit code 4` in the summary); a run with no log (exit 3, or 4 from a frontend load failure) is a tool error. An exception that escapes `Run` is a tool error with its message, the analogue of `Program`'s exit 5.
+Decision: summary counts come from the log's rule ids (EQ001 equivalent, EQ002/EQ006 divergent, EQ003 unknown); skipped projects are the tool-execution notifications without an exception (pair failures carry one, ADR 0023).
+Decision: the server version is the assembly's `AssemblyInformationalVersion` (MinVer's, including the `+sha` build metadata).
+Decision: `Streams` is its own file because MA0048 wants file name = type name; three new files under `src/` (McpCommand, EquivTools, Streams), under the size guard's four. `McpCommand.ProcessStreams` (the process's real stdin/stdout) carries `[ExcludeFromCodeCoverage]` naming this ticket; `McpIntegrationTests` runs it for real.
+Toolchain: `McpServer.RunAsync` reads its input synchronously before returning a task, so a test that starts `ServeAsync` on the test thread deadlocks; `McpCommandTests` starts it with `Task.Run`. A pipe-based test client must also dispose its own write end of the pipe, or the server never sees EOF (the SDK's `StreamClientTransport` does not).
+Environment: `Mcp_Compare_MatchesCliSarif` passes for 11 of the 12 samples on this dev box. `webapi-basic` fails here, as the existing `SamplesEndToEndTests` does for it before this change (no SARIF is written for it), so it is not caused by this ticket; the Windows CI leg has the VS Build Tools it needs.

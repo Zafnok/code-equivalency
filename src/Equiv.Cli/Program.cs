@@ -16,7 +16,7 @@ internal static class Program
     internal static int Run(string[] args, IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend)
     {
         Command compareCommand = CompareCommand.Create(frontends, backend);
-        RootCommand root = new("Compares two versions of a codebase for behavioural equivalence.") { compareCommand };
+        RootCommand root = new("Compares two versions of a codebase for behavioural equivalence.") { compareCommand, McpCommand.Create(frontends, backend) };
 
         ParseResult parseResult = root.Parse(args);
         if (parseResult.Errors.Count > 0)
