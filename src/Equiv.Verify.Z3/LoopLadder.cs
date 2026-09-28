@@ -5,6 +5,7 @@ using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
+using Equiv.Verify.Z3.Contracts;
 using Equiv.Verify.Z3.Ladder;
 
 using Microsoft.Z3;
@@ -48,6 +49,18 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// a test sets it to null to run the model's proposer alone.
     /// </summary>
     public IInvariantProposer? Traces { get; init; } = new TraceInvariantProposer();
+
+    /// <summary>
+    /// The callee contracts a caller's product relates its calls by (ticket P1-010; <see cref="ProductEncoder.Encode"/>), or
+    /// null to share every call function.
+    /// </summary>
+    public CallerContracts? Contracts { get; init; }
+
+    /// <summary>
+    /// The contract a callee pair's product checks in place of equal observables (ticket P1-010; <see cref="ContractVerifier"/>),
+    /// or null.
+    /// </summary>
+    public CalleeContract? Relation { get; init; }
 
     /// <summary>
     /// Runs the ladder on the pair with its shared fragments encoded as calls (<see cref="ProductEncoder.ShareFragments"/>).
@@ -250,7 +263,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     private T Session<T>(IrProcedure old, IrProcedure @new, Func<Context, ProductEncoding, T> body)
     {
         using Context context = createContext();
-        return body(context, ProductEncoder.Encode(context, old, @new, options.CallIdentityMap));
+        return body(context, ProductEncoder.Encode(context, old, @new, options.CallIdentityMap, Contracts, Relation));
     }
 
     /// <summary>

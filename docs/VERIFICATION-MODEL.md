@@ -17,6 +17,14 @@ SARIF result names them (`assumedCallees`) and flags the ones not proved in the 
 (`unprovenAssumptions`). This holds for cycles too: if every pair on a cycle of matched
 procedures is Equivalent, every pair is partially equivalent (the mutual-summary rule).
 
+A changed callee that the caller cannot observe does not stay an assumption (ADR 0036 decision 2;
+ticket P1-010). Take an Equivalent caller whose unproven assumptions include a lowered callee pair
+(f, f'). The run builds a relational contract K from what the caller observes of that call (section
+5.2). It proves on the product of f and f' that the pair satisfies K, and then proves the caller again
+with each side's call given its own outcome and heap, related to the other side's only by K. If the
+caller is still Equivalent, f moves from `unprovenAssumptions` to `contractsUsed`. The proof of K is
+itself modular, so f's own unproven assumptions join the caller's.
+
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
 No single algorithm decides equivalence for every program pair, but this sub-problem
@@ -363,6 +371,41 @@ is Equivalent with `proofMethod: llm-invariant`, the candidate in `properties.in
 `properties.proposedBy`; otherwise the pair is `NoInvariant`. Every round, its candidate and Z3's verdict is a step of
 `properties.ladderTrace`. A wrong candidate is rejected by Z3, so it can never make a pair Equivalent.
 
+### 5.2 Callee contracts
+
+A callee contract K (ADR 0036 decision 2; ticket P1-010) relates one call's two outcomes, the legacy
+side's and the modern side's, when both are called with equal arguments on an equal heap. K is a
+conjunction. Its first candidate is built from the caller:
+- the two sides throw alike;
+- when both throw, they throw the same exception type;
+- they make the same calls;
+- they leave each heap map the same, for every map the caller's product or either callee side names;
+- for every predicate the caller applies to the call's result, or to a heap map the call left, the
+  predicate has the same value on both sides unless either side throws.
+
+A predicate is a Bool the caller computes from that call's outputs through constants, operations,
+map reads and unchanging synthesised inputs (`null.*`) only: a branch condition, a comparison, a
+`== null` test, or a Bool result itself.
+
+K is admitted when the product of f and f' cannot break it. That product is section 5's, with "some
+observable differs" replaced by "K fails or the call traces differ". A loop segment's cut events are
+trace events, so the traces must always agree. Rung 1 runs on the pair unrolled; a model of it
+rejects K. An acyclic pair with no such model admits K. A pair with loops goes on to rungs 2 and 3,
+with K as the exit condition. A rejected K loses every conjunct the model falsifies and is checked
+again, four checks in all. The caller cannot tell exception types, the callee's calls or a heap map
+it does not name apart, so a candidate whose model falsifies one of those conjuncts gets no contract.
+Neither does a callee pair that reaches an `IrOpaque`, takes a source parameter by reference,
+returns different types on the two sides, calls itself or has irreducible control flow.
+
+In the caller's product, each side's call to f gets its own result, `threw`, heap and ref-output
+functions (the `:old`/`:new` functions a runtime-changed callee gets). For every old call to f and
+every new call to f with the same argument types, the product asserts: if both are reached at the
+same position with equal arguments and an equal heap, their outcomes satisfy K. A conjunct the caller
+has no term for (exception types, calls, a map it does not name) is left out. Calls that are not
+aligned so are unrelated, exactly as shared functions leave them. The call stays in the trace. Sharing
+the functions, or `threw`, under K would assume r = r', which is the assumption being removed. The
+caller then runs through the whole ladder as usual.
+
 ## 6. Verdict semantics and SARIF mapping
 
 | Verdict | SARIF `level` | `kind` | ruleId |
@@ -379,7 +422,13 @@ Every verdict on a matched pair with bodies also carries `properties.assumedCall
 catalogue entry fired (ADR 0020). A result whose ladder reached rung 4 carries `properties.chcMode`, and an
 Equivalent by `chc` carries Spacer's coupling invariant in `properties.invariant` (section 5.1). An Equivalent by
 `llm-invariant` or `trace-invariant` carries the admitted invariant there too, and what proposed it in
-`properties.proposedBy`: the model id, or `trace` (ADR 0036).
+`properties.proposedBy`: the model id, or `trace` (ADR 0036). An Equivalent whose proof used callee
+contracts (section 5.2; ticket P1-010) has `proofMethod` suffixed `+contract` (for example
+`bounded+contract`). It also carries `properties.contractsUsed`, one `{ callee, contract, proposedBy }`
+per callee: `contract` is K in SMT-LIB over `r.old`/`r.new`, `threw.*`, `type.*`, `calls.*` and
+`heap.<map>.*`, and `proposedBy` is `observed-predicates`. Each such callee is left out of
+`unprovenAssumptions`, and its own unproven assumptions are added to the caller's `assumedCallees` and
+`unprovenAssumptions`.
 
 A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
 and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the

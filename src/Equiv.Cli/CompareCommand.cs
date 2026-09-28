@@ -228,10 +228,11 @@ internal static class CompareCommand
         List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(f => PairFailure("Lowering", f.Old, f.New, f.Exception, error))];
         List<ProcedureIdentity> unverifiedPairs = [.. matchResult.LoweringFailures.Select(static f => f.New)];
         (List<VerificationResult> verified, List<Notification> verifyFailures, List<ProcedureIdentity> unverifiedVerified) =
-            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config, options, runLog, error);
+            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, Verification(config, options, runLog), runLog, error);
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
-        List<VerificationResult> results = Executed(WithAssumptions(verified, lowered, matchResult), lowered, analysis.Replay, execution, options.Testing, runLog);
+        List<VerificationResult> results = Executed(
+            WithContracts(WithAssumptions(verified, lowered, matchResult), lowered, backend, Verification(config, options, runLog), error), lowered, analysis.Replay, execution, options.Testing, runLog);
         if (!options.LowerOnly)
         {
             census = census with { UnknownByScope = ScopeCounts.Of(results) };
@@ -477,6 +478,15 @@ internal static class CompareCommand
         return result.Config;
     }
 
+    /// <summary>The backend's knobs for this run: the config's bound, timeout and renames, and the command line's rung options.</summary>
+    private static VerificationOptions Verification(EquivConfig config, CompareOptions options, IRunLog runLog) =>
+        new(config.Bound, config.TimeoutMs, config.CallIdentityRenames)
+        {
+            ChcIntMode = options.ChcIntMode,
+            InvariantModel = options.InvariantModel,
+            Log = runLog,
+        };
+
     /// <summary>
     /// Both lowered bodies of every matched pair. A frontend must attach them (ticket M2-003); a pair without
     /// one is a frontend bug, not an input problem.
@@ -498,14 +508,8 @@ internal static class CompareCommand
     /// the pairs the solver decides (ADR 0038).
     /// </summary>
     private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) Verified(
-        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config, CompareOptions compare, IRunLog runLog, TextWriter error)
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, VerificationOptions options, IRunLog runLog, TextWriter error)
     {
-        VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames)
-        {
-            ChcIntMode = compare.ChcIntMode,
-            InvariantModel = compare.InvariantModel,
-            Log = runLog,
-        };
         if (options.InvariantModel is { } model)
         {
             // Ticket P1-002 criterion 4: rung 5 sends loop IR text to the model, so say so before any pair is verified.
@@ -519,7 +523,7 @@ internal static class CompareCommand
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New, Decision? Decided, long Weight)> pairs =
             [.. lowered.Select(static p => Weighed(p.Pair, p.Old, p.New, Decide(p.Pair, p.Old, p.New)))];
         List<int> solverRungs = [.. pairs.Where(static p => p.Decided is null).Select(static p => PairWeight.Rungs(p.Old, p.New))];
-        runLog.Phase("verify", pairs.Count, pairs.Sum(static p => p.Weight), new PhaseBound(solverRungs.Count, config.TimeoutMs, solverRungs.DefaultIfEmpty(1).Max()));
+        runLog.Phase("verify", pairs.Count, pairs.Sum(static p => p.Weight), new PhaseBound(solverRungs.Count, options.TimeoutMs, solverRungs.DefaultIfEmpty(1).Max()));
         foreach ((ProcedurePair pair, IrProcedure old, IrProcedure @new, Decision? decided, long weight) in pairs)
         {
             runLog.Item(pair.New.Value, weight);
@@ -625,6 +629,63 @@ internal static class CompareCommand
                 };
             }),
         ];
+    }
+
+    /// <summary>
+    /// ADR 0036 decision 2 (ticket P1-010), once every result carries its assumptions: an Equivalent result whose unproven
+    /// assumptions include lowered callee pairs goes back to <paramref name="backend"/> with those pairs, to be proved again
+    /// with a caller-sufficient contract for each. When it is, the result takes that verdict, each callee it has a contract
+    /// for leaves <see cref="VerificationResult.UnprovenAssumptions"/>, and that callee's own unproven assumptions join the
+    /// caller's assumed and unproven ones, since the contract's proof assumed them. Otherwise, and when the backend throws,
+    /// the result stays as it was; a throw is written to stderr as a warning, because the verdict it leaves is still sound.
+    /// </summary>
+    private static List<VerificationResult> WithContracts(
+        List<VerificationResult> results, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, VerificationOptions options, TextWriter error)
+    {
+        Dictionary<string, (IrProcedure Old, IrProcedure New)> bodies = lowered.ToDictionary(static p => p.Pair.New.Value, static p => (p.Old, p.New), StringComparer.Ordinal);
+        Dictionary<string, VerificationResult> byIdentity = results.ToDictionary(static r => r.Identity.Value, StringComparer.Ordinal);
+        return [.. results.Select(result => UnderContracts(result, bodies, byIdentity, backend, options, error))];
+    }
+
+    private static VerificationResult UnderContracts(
+        VerificationResult result,
+        Dictionary<string, (IrProcedure Old, IrProcedure New)> bodies,
+        Dictionary<string, VerificationResult> byIdentity,
+        IVerificationBackend backend,
+        VerificationOptions options,
+        TextWriter error)
+    {
+        ImmutableArray<CalleePair> callees = [.. result.UnprovenAssumptions.Where(bodies.ContainsKey).Select(c => new CalleePair(c, bodies[c].Old, bodies[c].New))];
+        if (result.Verdict is not Equivalent || callees.IsEmpty)
+        {
+            return result;
+        }
+
+        (IrProcedure old, IrProcedure @new) = bodies[result.Identity.Value];
+        Equivalent? proved;
+        try
+        {
+            proved = backend.VerifyUnderContracts(old, @new, callees, options);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
+        {
+            error.WriteLine($"warning: Verifying {result.Identity.Value} under callee contracts failed, so it keeps its verdict: {exception.Message}");
+            return result;
+        }
+
+        if (proved is null)
+        {
+            return result;
+        }
+
+        HashSet<string> contracted = new(proved.ContractsUsed.Select(static c => c.Callee), StringComparer.Ordinal);
+        string[] inherited = [.. contracted.SelectMany(c => byIdentity.TryGetValue(c, out VerificationResult? callee) ? callee.UnprovenAssumptions : [])];
+        return result with
+        {
+            Verdict = proved,
+            AssumedCallees = [.. result.AssumedCallees.Concat(inherited).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
+            UnprovenAssumptions = [.. result.UnprovenAssumptions.Where(c => !contracted.Contains(c)).Concat(inherited).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
+        };
     }
 
     private static IEnumerable<string> Callees(IrProcedure body) =>
