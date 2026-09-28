@@ -201,10 +201,14 @@ internal sealed class ModelDecoder
 
     public IrValue Decode(Expr value, IrType type) => values.Decode(value, type);
 
-    /// <summary>The Z3 term for a decoded or literal value, so the oracle can apply call functions to it.</summary>
+    /// <summary>
+    /// The Z3 term for a decoded or literal value, so the oracle can apply call functions to it. A replay of the original
+    /// procedures from a fragment's model (a loop rung) can reach a literal the fragment never mentions (ticket P2-033);
+    /// it denotes whatever element the model completes its constant to.
+    /// </summary>
     public Expr Encode(IrValue value) => value switch
     {
-        IrSortValue element => values.Term(element),
+        IrSortValue element => values.Term(element, () => model.Eval(encoding.Sorts.Literal(element), completion: true)),
         IrMapValue map => map.Entries.Aggregate(
             context.MkConstArray(encoding.Sorts.Sort(map.MapType.Key), Encode(map.Default)),
             (array, e) => context.MkStore(array, Encode(e.Key), Encode(e.Value))),
@@ -273,19 +277,37 @@ internal sealed class ModelDecoder
             _ => DecodeMap(value, (IrMap)type),
         };
 
-        /// <summary>The solver's term for an element already decoded or remembered.</summary>
-        public Expr Term(IrSortValue element) => elements[element];
+        /// <summary>
+        /// The solver's term for an element already decoded or remembered; any other is remembered as
+        /// <paramref name="unseen"/>'s term, without taking over the id of an element already decoded to that term.
+        /// </summary>
+        public Expr Term(IrSortValue element, Func<Expr> unseen)
+        {
+            if (!elements.TryGetValue(element, out Expr? term))
+            {
+                term = unseen();
+                Known(element.Sort).TryAdd(term.ToString(), element.Id);
+                elements.Add(element, term);
+            }
+
+            return term;
+        }
 
         public void Remember(IrSortValue element, Expr value)
         {
-            if (!ids.TryGetValue(element.Sort, out Dictionary<string, int>? known))
+            Known(element.Sort)[value.ToString()] = element.Id;
+            elements[element] = value;
+        }
+
+        private Dictionary<string, int> Known(string sort)
+        {
+            if (!ids.TryGetValue(sort, out Dictionary<string, int>? known))
             {
                 known = new(StringComparer.Ordinal);
-                ids.Add(element.Sort, known);
+                ids.Add(sort, known);
             }
 
-            known[value.ToString()] = element.Id;
-            elements[element] = value;
+            return known;
         }
 
         private IrSortValue Element(string sort, Expr value)

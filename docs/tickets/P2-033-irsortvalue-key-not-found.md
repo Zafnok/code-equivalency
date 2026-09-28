@@ -1,5 +1,5 @@
 # P2-033 Verifying crashes with "IrSortValue ... was not present in the dictionary"
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -37,3 +37,14 @@ verification pipeline, stop and write an ADR instead of a narrow equality-contra
 Any other `KeyNotFoundException` not tied to `IrSortValue`.
 
 ## Notes
+- Root cause: not `IrSortValue`'s equality (it is a record, so value equality holds), and the id is not an object
+  identity: it is `TypeMapper.Element`'s FNV-1a hash of a string constant's text. A loop rung's obligation
+  (`LoopLadder.Check`) is encoded over the loop fragments, but `ModelDecoder.TryReplay` replays the original
+  procedures from that model. A sort literal only the originals contain is never in the fragment's `SortMapper`, so
+  the oracle's `Values.Term` lookup (applying a call function to the literal argument) missed.
+- Decision: an unseen literal is encoded as its own `lit.S.n` constant, evaluated with model completion (the fragment's
+  model says nothing about it, so any element serves the oracle); it is remembered for later lookups but never takes
+  over the id of an element already decoded to the same term (`TryAdd`).
+- Criterion 3, Tomas: a `full` re-run on this branch (65 s) gives `GetExpectedWeightAndNodes(string)` EQ006
+  (runtime-changed regex API) instead of a tool error; exit 1 (was 5); no `IrSortValue` or `KeyNotFoundException` in
+  the log.

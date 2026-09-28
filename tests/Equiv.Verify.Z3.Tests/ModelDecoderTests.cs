@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
+using Equiv.Core.Verdicts;
 
 using Microsoft.Z3;
 
@@ -297,6 +298,56 @@ public sealed class ModelDecoderTests
         Assert.Equal(new IrSortValue("S", 5), decoded);
     }
 
+    /// <summary>
+    /// Ticket P2-033: a loop rung replays the original procedures from a fragment's model, so the replay can pass a
+    /// string literal the fragment never mentions to a call. The oracle must still encode it, not fail the lookup
+    /// with <see cref="KeyNotFoundException"/>.
+    /// </summary>
+    [Fact]
+    public void AReplayPassesALiteralTheFragmentNeverMentionedToACall()
+    {
+        IrProcedure oldOriginal = CallsWithLiteral("F");
+        IrProcedure newOriginal = CallsWithLiteral("G");
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
+        using Solver solver = context.MkSolver();
+        solver.Add(encoding.Assertions);
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+
+        Counterexample? counterexample = ModelDecoder.TryReplay(context, solver.Model, encoding, oldOriginal, newOriginal, stepBudget: 10);
+
+        Assert.NotNull(counterexample);
+        IrValue passed = Assert.Single(counterexample.Old.Trace).Arguments[1];
+        Assert.Equal(new IrSortValue("System.String", 1174359459), passed);
+    }
+
+    [Fact]
+    public void AnUnseenLiteralKeepsItsIdWhenItsTermDecodes()
+    {
+        using Context context = new();
+        Expr element = context.MkConst("e", context.MkUninterpretedSort("S"));
+        ModelDecoder.Values values = new();
+
+        Expr term = values.Term(new IrSortValue("S", 7), () => element);
+
+        Assert.Same(element, term);
+        Assert.Same(element, values.Term(new IrSortValue("S", 7), static () => throw new InvalidOperationException("asked twice")));
+        Assert.Equal(new IrSortValue("S", 7), values.Decode(element, new IrSort("S")));
+    }
+
+    [Fact]
+    public void AnUnseenLiteralDoesNotTakeOverAnElementAlreadyKnown()
+    {
+        using Context context = new();
+        Expr element = context.MkConst("e", context.MkUninterpretedSort("S"));
+        ModelDecoder.Values values = new();
+        values.Remember(new IrSortValue("S", 5), element);
+
+        values.Term(new IrSortValue("S", 7), () => element);
+
+        Assert.Equal(new IrSortValue("S", 5), values.Decode(element, new IrSort("S")));
+    }
+
     [Fact]
     public void TheSameSortElementReusesItsId()
     {
@@ -341,6 +392,14 @@ public sealed class ModelDecoderTests
     private static IrBitVecValue Bv(ulong bits) => new(32, bits);
 
     private static ImmutableArray<ProductEncoder.SharedParameter> Shared(IrProcedure old, IrProcedure @new) => ProductEncoder.Pair(old, @new);
+
+    private static IrProcedure CallsWithLiteral(string callee) => IrText.Parse($$"""
+        proc "T::M(int)" (%a: bv32) entry B0
+        B0:
+          %s: sort "System.String" = const sort "System.String" 1174359459
+          call "T::{{callee}}(int,string)"(%a, %s)
+          ret
+        """);
 
     private static IrRun Returned(ImmutableArray<IrValue> outs) => new(new IrReturned(Value: null), outs, []);
 
