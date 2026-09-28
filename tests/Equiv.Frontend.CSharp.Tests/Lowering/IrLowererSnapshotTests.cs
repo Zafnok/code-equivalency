@@ -294,5 +294,10 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task RaisedFieldLikeEvent() => Dump("public event EventHandler? Changed; int n; public void Bump() { n++; Changed?.Invoke(this, EventArgs.Empty); }", "Bump");
 
+    /// <summary>Ticket P2-026 acceptance criterion 3: the whole query is one fingerprinted fragment the loop enumerates.</summary>
+    [Fact]
+    public Task QueryExpression() => Verify(IrText.Dump(Lowered.Source(
+        "using System.Linq;\nclass C { static int M(int[] xs) { int s = 0; foreach (var x in from n in xs where n % 2 == 0 select n) s += x; return s; } }")));
+
     private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }

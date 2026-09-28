@@ -1,5 +1,5 @@
 # P2-026 LINQ query syntax (`TranslatedQuery`) has no lowering, and one crashes the frontend
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004, M4-004
@@ -43,3 +43,7 @@ stop and write an ADR instead of widening this ticket.
 Query continuations (`into`), `group by`, `join`.
 
 ## Notes
+- Criterion 1 already held: the repro's query lowers as one fingerprinted `TranslatedQuery` fragment through M4-004's mechanism, reading only `xs` (and its null shadow). No lowering change; only tests and the coverage row.
+- Crash root cause: `FragmentFingerprinter.WrittenByFunctions` data-flow-analyses every lambda and local function of the graph, casting any non-expression syntax to `StatementSyntax`. A second `from` clause's collection-selector lambda has the `FromClauseSyntax` itself as its syntax. It is query-specific (a lambda's or local function's syntax is otherwise always an expression or a statement), so the size guard did not trip. The walk only runs when some fragment in the graph captures a variable, which is why the top-level repro never hit it; `SplitRecentRepos` has `from caption in orderedRepos.Keys from repo in orderedRepos[caption] ...` in a local function plus captured-variable lambdas elsewhere in the method.
+- Decision: a query-clause lambda's writes are the whole enclosing `QueryExpressionSyntax`'s `WrittenInside`, a superset of the clause's, so over-approximation only withholds fingerprints and stays sound (`ALambdaCapturingAVariableANestedFromClauseWritesHasNoFingerprint` checks it discriminates).
+- Regression test reduced from the real method (fetched from gitextensions/gitextensions `src/app/GitCommands/UserRepositoryHistory/RecentRepoInfo.cs`): both `ANestedFromClauseLowersWithoutThrowing` cases threw the exact `InvalidCastException` before the fix.

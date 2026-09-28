@@ -129,7 +129,15 @@ internal sealed class FragmentFingerprinter(
                 .SelectMany(o =>
                 {
                     SemanticModel model = compilation.GetSemanticModel(o.Syntax.SyntaxTree);
-                    return (o.Syntax is ExpressionSyntax lambda ? model.AnalyzeDataFlow(lambda) : model.AnalyzeDataFlow((StatementSyntax)o.Syntax)).WrittenInside;
+                    DataFlowAnalysis flow = o.Syntax switch
+                    {
+                        ExpressionSyntax lambda => model.AnalyzeDataFlow(lambda),
+                        StatementSyntax local => model.AnalyzeDataFlow(local),
+                        // A query clause's lambda, such as a second from's, has the clause as its syntax, neither an
+                        // expression nor a statement: the whole query's writes stand in for it, a superset.
+                        _ => model.AnalyzeDataFlow(o.Syntax.FirstAncestorOrSelf<QueryExpressionSyntax>()!),
+                    };
+                    return flow.WrittenInside;
                 })
                 .ToImmutableHashSet(SymbolEqualityComparer.Default);
             writtenByFunctions[graph] = written;
