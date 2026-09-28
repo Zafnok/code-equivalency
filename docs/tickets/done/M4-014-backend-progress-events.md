@@ -1,5 +1,5 @@
 # M4-014 Backend progress: rung and solver-query timings at `debug`
-Status: in-progress
+Status: done (PR #244)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-012
