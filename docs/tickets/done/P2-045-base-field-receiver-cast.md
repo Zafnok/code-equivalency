@@ -1,5 +1,5 @@
 # P2-045 A field read or written through `base` lowers to IR that fails validation
-Status: in-progress
+Status: done (PR #282)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-031
