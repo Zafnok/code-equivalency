@@ -113,7 +113,15 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   is `compare --lower-only`. An input error that `compare` maps to exit 3, or to exit 4 with no SARIF log,
   is a tool error (`isError: true`) with the message `equiv compare` prints on stderr. stdout carries
   protocol messages only: `CompareCommand.Run` writes its own lines through the `Streams` on
-  `CompareOptions` (the console's for `compare`, stderr for `mcp`).
+  `CompareOptions` (the console's for `compare`, stderr for `mcp`). `equiv mcp --execute` prints the same
+  stderr note as `compare --execute`, exits 3 with the same message on a non-Windows OS, and registers a
+  third tool, `probe` (ADR 0035, ADR 0036; ticket M5-002): an agent names a matched pair by its normalised
+  identity (`{ legacy, modern, identity, arguments, culture? }`) and its own JSON arguments in parameter
+  order (receiver excluded), and gets back `{ legacy: {kind, canonical}, modern: {kind, canonical}, equal
+  }` from the same `IReplayDriverFactory`/`Replayer` path `--execute`'s replay uses, built from the pair's
+  Roslyn method symbols rather than a solver model. `probe` never writes SARIF, never changes a `compare`
+  result, and is not registered at all without `--execute` or off Windows, so an agent cannot turn
+  execution on by itself.
 - Router: inspects inputs, rejects mismatched or unsupported languages (exit 3), else
   selects the frontend. One frontend in the MVP; the router exists from day one so that
   Java is a new project, not a refactor.
