@@ -214,7 +214,7 @@ public static class SyntaxMutator
                 ReturnStatementSyntax { Expression: { } result } ret => (result, replacement => ret.WithExpression(replacement)),
                 _ => (null, null),
             };
-            if (value is null || !IsSimple(value))
+            if (value is null || !IsSimple(value) || !IsListElement(statement))
             {
                 continue;
             }
@@ -246,7 +246,7 @@ public static class SyntaxMutator
     // -- DropNullCheck: if (x == null) A else B -> the branch a non-null x takes. --
 
     private static IReadOnlyList<Func<MethodDeclarationSyntax>> DropNullCheckCandidates(MethodDeclarationSyntax method) =>
-        [.. Nodes<IfStatementSyntax>(method, static branch => Unwrap(branch.Condition) is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression } b
+        [.. Nodes<IfStatementSyntax>(method, static branch => IsListElement(branch) && Unwrap(branch.Condition) is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression } b
                 && (b.Left.IsKind(SyntaxKind.NullLiteralExpression) || b.Right.IsKind(SyntaxKind.NullLiteralExpression)))
             .Select(branch => (Func<MethodDeclarationSyntax>)(() => DropNullCheck(method, branch)))];
 
@@ -262,7 +262,7 @@ public static class SyntaxMutator
     private static IReadOnlyList<Func<MethodDeclarationSyntax>> FieldWriteCandidates(MethodDeclarationSyntax method)
     {
         HashSet<string> locals = LocalAndParameterNames(method);
-        return [.. Nodes<ExpressionStatementSyntax>(method, es => IsFieldWrite(es, locals))
+        return [.. Nodes<ExpressionStatementSyntax>(method, es => IsListElement(es) && IsFieldWrite(es, locals))
             .Select(es => (Func<MethodDeclarationSyntax>)(() => RemoveStatement(method, es)))];
     }
 
@@ -348,6 +348,15 @@ public static class SyntaxMutator
 
         return candidate;
     }
+
+    /// <summary>
+    /// Whether <paramref name="statement"/> sits in a statement list (a block or a switch section) rather than being the
+    /// single embedded statement of an <c>if</c>, <c>else</c>, loop, <c>using</c> or label (ticket P2-035). Only a list
+    /// element can be replaced by several statements, or by none, so an operator that does either offers no site on an
+    /// embedded one: Roslyn throws "The item specified is not the element of a list" for the first and a null
+    /// <c>statement</c> for the second.
+    /// </summary>
+    private static bool IsListElement(StatementSyntax statement) => statement.Parent is BlockSyntax or SwitchSectionSyntax;
 
     /// <summary>Never descends into a nested lambda, local function or anonymous method: their locals are a separate scope.</summary>
     private static bool DoesNotCrossScope(SyntaxNode node) => node is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax);
