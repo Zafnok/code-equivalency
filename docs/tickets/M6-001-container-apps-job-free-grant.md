@@ -66,7 +66,7 @@ Dedicated workload profiles, `equiv mcp` over HTTP, multi-region.
 - Decision (`equiv-decide`): a manual execution takes no parameters unless the job's container is
   re-declared in the start call, and the CLI's override semantics for `--env-vars`/`--command` on
   `az containerapp job start` are not documented precisely enough to rely on offline. So the sample name
-  travels through the share: `run.ps1` uploads it to `/mnt/work/request/sample`, and the job's fixed
+  travels through the share: `run.ps1` uploads it to `/mnt/work/request/sample.txt`, and the job's fixed
   command (a bash script inline in `main.bicep`) reads it. The command is still exactly the ticket's
   `equiv compare --legacy /mnt/work/samples/<name>/legacy/*.sln --modern .../modern/*.slnx --out
   /mnt/work/out/<name>.sarif`, preceded by a `dotnet restore` of each sample project (parity-run.ps1 does
@@ -88,13 +88,46 @@ Dedicated workload profiles, `equiv mcp` over HTTP, multi-region.
   the three scripts parse. Not verified: the deployment itself, the script inside the real image (Docker
   Desktop was not running), and the CLI flags of `az containerapp job start|execution show` and
   `az storage file upload-batch|download`, all written from documentation.
-- Blocker for criteria 4 and 5 (2026-09-27): they need a real subscription (criterion 7: ask before the
-  first `deploy.ps1`), and `ghcr.io/zafnok/equiv:<version>` does not exist yet: the repository has no `v*`
-  tag and no release (M3-004 left `release.yml` unexercised pending a `v0.1.0-rc.1` tag, which needs the
-  user's go-ahead). The first push also creates the GHCR package private; Container Apps pulls it
-  anonymously, so it must be made public. `release.yml` builds `docker build .` on `ubuntu-latest`, which
-  is linux/amd64, the only architecture Container Apps runs.
-- To do once those are unblocked: record each execution's duration and the peak memory Azure reports
-  (Azure Monitor metrics for the job resource; if it reports none, say so here) and the month's vCPU-seconds,
-  GiB-seconds and charge from Cost Management (criterion 5), plus the `sarif-parity.ps1` result against
-  CI's `parity-Linux` artifact for the same version (criterion 4).
+- Unblocked (2026-09-28): the owner approved tagging and deploying. `v0.1.0` was tagged at 6ec8e87 (the last
+  main commit with green CI) and `release.yml` published `ghcr.io/zafnok/equiv:0.1.0`, built on
+  `ubuntu-latest` (linux/amd64). The package came out public (it inherits the public repository's visibility),
+  so an anonymous registry pull of the manifest worked with no manual step. Deployed to `eastus` in
+  subscription "Azure subscription 1" with `deploy.ps1 -Version 0.1.0`; `what-if` beforehand listed 7
+  resources, all of criteria 1 and 2's types.
+- Toolchain: Windows PowerShell 5.1 turns a native command's redirected stderr into error records, which
+  `$ErrorActionPreference = 'Stop'` makes fatal mid-command; it killed `az storage file upload-batch` halfway
+  on the first deploy. The `az` helpers now set `Continue` locally and decide on the exit code alone.
+- Toolchain: `az storage file upload --path request/sample` treats an extensionless last segment as a
+  directory and PUTs `request/sample/sample` (404 ParentNotFound). The request file is now `request/sample.txt`.
+- Toolchain: Azure Monitor's `UsageBytes` metric for the job is sampled once a minute, so it missed 11 of
+  the first 12 ~40 s executions (it reported only `business-layer`, max 366 MiB, a working-set figure that
+  includes page cache). The job script now prints the container cgroup's own high-water mark
+  (`/sys/fs/cgroup/memory.peak`), which is exact, and all 12 samples were run again.
+- Criterion 4 evidence (2026-09-28, second pass, cgroup peak memory; every execution `Succeeded`, and the
+  `equiv` exit code equals CI's Linux leg for each sample):
+
+  | Sample | Execution | Duration | equiv exit | Peak memory |
+  |---|---|---|---|---|
+  | added-branch | equiv-compare-kcvxgij | 37 s | 1 | 289 MiB |
+  | added-removed | equiv-compare-t0ziozx | 41 s | 0 | 293 MiB |
+  | api-drift | equiv-compare-81uuh5f | 41 s | 1 | 295 MiB |
+  | business-layer | equiv-compare-7fzbeyo | 40 s | 1 | 305 MiB |
+  | callee-changed | equiv-compare-dpn2np9 | 43 s | 1 | 290 MiB |
+  | identical | equiv-compare-ex3f399 | 38 s | 0 | 292 MiB |
+  | loop-bound-change | equiv-compare-8cve46g | 37 s | 1 | 290 MiB |
+  | loop-fusion | equiv-compare-cg4mw87 | 39 s | 0 | 338 MiB |
+  | loop-to-linq | equiv-compare-6k3nk4o | 42 s | 0 | 316 MiB |
+  | removed-null-check | equiv-compare-pn78hon | 38 s | 1 | 292 MiB |
+  | renamed-locals | equiv-compare-0rk5wu4 | 37 s | 0 | 294 MiB |
+  | webapi-basic | equiv-compare-nad3w3l | 47 s | 0 | 339 MiB |
+
+  `.github/scripts/sarif-parity.ps1 -Left <run.ps1 out> -Right <parity-Linux artifact of CI run 36367659165,
+  main at 6ec8e87>` prints "All 12 samples match" for both passes. That script is the M3-029 parity diff:
+  it compares results and leaves out physical locations, URIs and timestamps. Durations are the execution's
+  start to end, most of it `dotnet restore` of the two sample projects; `equiv` itself finishes in about
+  7 s. Peak memory stays under 350 MiB against the 2 GiB replica, so the samples leave a lot of headroom
+  (real solutions are the M4-007 question).
+- Criterion 5, usage so far: 24 executions totalling 953 s of execution time (473 s first pass, 480 s
+  second), which is about 953 vCPU-seconds and 1,906 GiB-seconds at 1 vCPU / 2 GiB. That is 0.53% of the
+  monthly grant on each meter. Cost Management lags usage by a day or more; the metered figures and the
+  actual charge get recorded here once they appear.

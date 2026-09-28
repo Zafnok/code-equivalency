@@ -52,7 +52,10 @@ done
 dotnet /app/Equiv.Cli.dll compare --legacy "$root"/legacy/*.sln --modern "$root"/modern/*.slnx --out "$out/$sample.sarif"
 code=$?
 echo "$code" > "$out/$sample.exit"
-echo "exit=$code end=$(date -u +%FT%TZ)"
+# Azure samples memory once a minute, which misses most short executions; the cgroup's own
+# high-water mark is exact (v2 memory.peak, else v1 max_usage_in_bytes).
+peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || cat /sys/fs/cgroup/memory/memory.max_usage_in_bytes 2>/dev/null || echo unknown)
+echo "exit=$code end=$(date -u +%FT%TZ) peak_memory_bytes=$peak"
 sleep 1 # let the tee above flush the last lines
 case $code in 0|1|4) exit 0 ;; *) exit "$code" ;; esac
 ''', '\r', '')
