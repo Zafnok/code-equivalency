@@ -133,9 +133,13 @@ internal static class TypeMapper
     /// <summary><see cref="MetadataName(ITypeSymbol)"/>, passed through <paramref name="sorts"/>.</summary>
     public static string MetadataName(ITypeSymbol type, Func<string, string> sorts) => sorts(MetadataName(type));
 
-    /// <summary><c>Namespace.Outer+Inner`1</c> for named types; the display string for arrays, pointers and type parameters.</summary>
+    /// <summary>
+    /// <c>Namespace.Outer+Inner`1</c> for named types; <c>System.Object</c> for <c>dynamic</c>, which is <c>object</c> at run
+    /// time and identity-convertible to it (ticket P2-029); the display string for arrays, pointers and type parameters.
+    /// </summary>
     public static string MetadataName(ITypeSymbol type) => type switch
     {
+        IDynamicTypeSymbol => "System.Object",
         INamedTypeSymbol { ContainingType: { } outer } => $"{MetadataName(outer)}+{type.MetadataName}",
         INamedTypeSymbol { ContainingNamespace.IsGlobalNamespace: false } => $"{type.ContainingNamespace.ToDisplayString()}.{type.MetadataName}",
         INamedTypeSymbol => type.MetadataName,

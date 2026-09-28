@@ -1,5 +1,5 @@
 # P2-024 `new { ... }` (`AnonymousObjectCreation`) has no lowering
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004
@@ -32,3 +32,5 @@ Anonymous types with computed (non-simple-member-access) property values beyond 
 needs; `with` expressions on anonymous types.
 
 ## Notes
+- Decision: anonymous object creation -> stays opaque with reason `AnonymousObjectCreation` (the lowerer's default arm already produces it; this ticket pins it with a row and a snapshot). Alternatives: lower the properties as a tuple's elements (P2-027 has not landed, so that needs a new record-like IR sort, which the Size guard sends to an ADR); scalar-replace a local initialised by `new { ... }` in the frontend. Rule: 4.
+- The repro's snapshot shows the anonymous type's sort spelled `""` and its getters `::get_X()` / `::get_Y()`: an anonymous type has an empty metadata-style name in the type mapper and call identity. Harmless while the creation is opaque (the verdict is Unknown(Opaque) anyway), but whoever lowers it later (after P2-027) should give anonymous types a distinct sort name.
