@@ -1,5 +1,5 @@
 # P2-044 A replay driver's protocol stdout is shared with the code under test
-Status: todo
+Status: done (PR #279)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-039
@@ -35,3 +35,23 @@ as an observable) is out of scope.
 Sandboxing the code under test (P2-040 covers only the working directory).
 
 ## Notes
+- Decision (criterion 1): the emitted driver (`DriverSource`'s template, shared by `DriverFactory` and
+  `ReplayDriverFactory`) opens its own `StreamWriter` over `Console.OpenStandardOutput()` for the protocol and then
+  points `Console.Out` and `Console.Error` at `TextWriter.Null`, before the first case. The protocol pipe is unchanged, so
+  `ChildProcessHost` and the outcome-line format are untouched. The writer's default encoding is UTF-8 without a BOM on
+  both runtimes, and every protocol line is ASCII anyway. What the code under test prints is dropped, not captured
+  (size guard). Code that writes to `Console.OpenStandardOutput()` itself, or calls `Console.SetOut` back to stdout,
+  still reaches the pipe; the criterion names `Console.Out` and `Console.Error` only. Likewise `Console.In` is still the
+  protocol's stdin, so a method that reads stdin could swallow later case lines; nothing in the corpus does, and P2-039's
+  deadline bounds it.
+- Criterion 2: `RuntimeDiffTests.WriteLine_PrintsPastThePipeAndForgesAnOutcome_ReturnsItsOwnOutcome` calls the real
+  `System.Console::WriteLine(string)` through both runtimes' drivers, first with a 5000-character string, then with the
+  string `["Threw","Forged"]`. Every run gets `Returned null` for both cases. Without the fix it fails on all four runs,
+  with the first case read as `NotComparable "malformed: aaaa..."` (the printed line taken as the answer).
+- Criterion 3: on 2026-09-28 a Release build of this branch ran `equiv compare --execute` on the migrated Tomas pair
+  (M4-007's agent copy) on Windows: exit 1 (Divergent present), 103 s, 721 results (EQ001 681, EQ002 2, EQ003 16,
+  EQ004 1, EQ005 5, EQ006 16). No result mentions `no answer within`. `Graph::ImportFromFile(string)` is now an
+  observed EQ002: on input `"ä\"̈9aH"` the legacy side throws `System.ArgumentException` (.NET Framework
+  rejects `"` in a path) and the modern side returns (it catches the I/O error and prints it). A Debug build of the CLI
+  stops earlier on this pair, at `Debug.Assert("lowered IR must validate")` in `IrLowerer.cs:186`; that is outside
+  this ticket.
