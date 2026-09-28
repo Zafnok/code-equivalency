@@ -1649,6 +1649,23 @@ public sealed class IrLowererTests
         Assert.Contains(procedure.Parameters, static p => p.Var.Name is "null.System.Object");
     }
 
+    /// <summary>Ticket P2-030 acceptance criterion 2: Roslyn folds <c>sizeof(int)</c> to the constant 4, which lowers like any other constant.</summary>
+    [Fact]
+    public void SizeOfABuiltInTypeFoldsToItsConstant()
+    {
+        IrProcedure procedure = Method("static int M() => sizeof(int);");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 4)), Run(procedure));
+    }
+
+    /// <summary>Ticket P2-030 acceptance criterion 1: a user-defined struct's <c>sizeof</c> is layout-dependent and stays opaque with reason <c>SizeOf</c>.</summary>
+    [Fact]
+    public void SizeOfAUserDefinedStructIsOpaque() =>
+        Assert.Contains(
+            Opaques(ErroneousBody("struct S { public int X; } static int M() => sizeof(S);")),
+            static o => string.Equals(o.Reason, "SizeOf", StringComparison.Ordinal));
+
     /// <summary>Ticket P2-002 acceptance criterion 1: <c>typeof(T)</c> for a closed <c>T</c> reads a shared <c>typeof.&lt;T&gt;</c> input, adding no trace event.</summary>
     [Fact]
     public void TypeOfIsAReadOfASharedInput()
