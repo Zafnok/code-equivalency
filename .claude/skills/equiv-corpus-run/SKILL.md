@@ -130,16 +130,29 @@ $run = ".corpus/pairs/<slug>/runs/$(Get-Date -Format yyyyMMdd-HHmm)-census"
 New-Item -ItemType Directory -Force $run | Out-Null
 $t = Measure-Command {
   dotnet run --project src/Equiv.Cli -c Release --no-build -- compare `
-    --legacy $p.legacySolution --modern $p.modernSolution --lower-only --out "$run/equiv.sarif" *> "$run/console.txt"
+    --legacy $p.legacySolution --modern $p.modernSolution --lower-only --out "$run/equiv.sarif" `
+    --verbosity debug --log "$run/progress.log" *> "$run/console.txt"
 }
 "exit=$LASTEXITCODE seconds=$([int]$t.TotalSeconds)" | Set-Content "$run/exit.txt"
 ./tools/corpus/corpus.ps1 -Metrics "$run/equiv.sarif"
 ./tools/corpus/corpus.ps1 -Unchanged <slug>     # file-level proxy; the census's pairsCongruent is the measure (M3-015)
 ./tools/corpus/corpus.ps1 -Packages <slug>      # package version changes; needs both sides restored
+./tools/corpus/corpus.ps1 -Progress $run -Summary   # the "## Phase times" table for SUMMARY.md
 ```
 
+Every `equiv compare` here, in every mode, passes `--verbosity debug --log "$run/progress.log"`
+(ADR 0038): corpus runs are the long ones, and the log is the only way to see inside one.
+
+**Watching a run.** From a second terminal, without touching the `equiv` process:
+`./tools/corpus/corpus.ps1 -Progress $run` prints the current phase, done/total, the last ETA and
+worst-case bound, the item in flight and how long it has run (`slow` once that is ten times the
+phase's median), and the five slowest items so far. It only reads `progress.log`, shared for
+writing, so it never blocks the run. To follow the raw lines instead:
+`Get-Content "$run/progress.log" -Wait -Tail 20`. A pair stuck in the solver shows as heartbeats
+naming the same item with a growing time.
+
 - `full`: drop `--lower-only`. Run once with defaults and once with `--fail-on unknown` into a
-  second SARIF.
+  second run directory (`...-full-fail-on-unknown`), so each run keeps its own `progress.log`.
 - `seeded`: copy `modern` to `modern-seeded`, apply 5 to 10 seeds following `tools/corpus/seeds.md`
   exactly, and record them in `.corpus/pairs/<slug>/seeds.json`. Then run `full` against
   `modern-seeded`. For each seed, find its method's result. It passes when the result is EQ002, or
@@ -176,6 +189,14 @@ where the SARIF has no value yet; `-Metrics` prints `n/a` for those.
 - Corpus list: Poly-MigrationBench @ <pinned commit from tools/corpus/README.md> (agent pairs only)
 - Migrated by: <agent / model / date, or "human" / tool name>
 - equiv: <git rev-parse --short HEAD of this repo>, mode <mode>, wall-clock <s>, exit <code>
+
+## Phase times
+Paste `./tools/corpus/corpus.ps1 -Progress $run -Summary` as is: one row per phase that finished,
+from its `done in` line. ETA error is the estimate printed at 50% minus the time actually left
+then, in seconds (positive = too pessimistic); `n/a` when the phase gave no estimate.
+
+| phase | items | seconds | ETA error at 50% |
+|---|---|---|---|
 
 ## Load
 - Projects: legacy <loaded>/<total C#>, modern <loaded>/<total C#>; skipped: <name: reason>, ...
