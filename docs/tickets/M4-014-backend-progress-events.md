@@ -1,5 +1,5 @@
 # M4-014 Backend progress: rung and solver-query timings at `debug`
-Status: todo
+Status: in-progress
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-012
@@ -37,3 +37,4 @@ More than 6 non-test files changed: stop and re-read.
 A per-pair wall-clock cap, changes to timeouts, anything verdict-affecting.
 
 ## Notes
+Decision: rung 5 asks the proposer for several rounds inside one `Prove` call, so it is logged as one `rung=llm-invariant` Detail (whole call, result of the last round), not one per round. Rung names are `bounded`, `lockstep`, `k-induction`, `spacer`, `llm-invariant`. Result maps outcome: Proved=unsat, Refuted=sat, Timeout=timeout, else unknown. Logging is in `LoopLadder.Climb` only, so `Z3Backend.cs` and the rung classes are untouched; `Independently` (test-only) is not logged.
