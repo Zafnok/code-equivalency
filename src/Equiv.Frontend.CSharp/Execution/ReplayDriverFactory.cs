@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 
 using Equiv.Core;
 using Equiv.Core.Execution;
@@ -19,7 +20,8 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// folder: <c>EquivReplay&lt;n&gt;.exe</c> with an <c>app.config</c> on the legacy side, run on .NET Framework 4.8, and
 /// <c>EquivReplay&lt;n&gt;.dll</c> with a <c>runtimeconfig.json</c> on the modern side, run on .NET 10. Its source is written
 /// beside it, so a reproduced divergence is one the user can read and run. <see cref="Plan"/> builds the same two drivers
-/// for an Unknown pair to be tested on generated inputs (ticket P1-008).
+/// for an Unknown pair to be tested on generated inputs (ticket P1-008). <see cref="Probe"/> builds them for one case an
+/// agent supplies itself, with no model in play (ADR 0035, ADR 0036; ticket M5-002).
 /// </summary>
 internal sealed class ReplayDriverFactory(
     IReadOnlyDictionary<ProcedureIdentity, ReplayTarget> legacy,
@@ -96,6 +98,33 @@ internal sealed class ReplayDriverFactory(
                 new ExecutionDrivers(legacyDriver, modernDriver),
                 [.. @new.Method.Parameters.Zip(old.Method.Parameters, static (n, l) => DriverFactory.Parameter(n.Type, RefKind.None, l.Type))],
                 Seeds(pair, old, candidate));
+    }
+
+    public ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, string directory)
+    {
+        ArgumentNullException.ThrowIfNull(pair);
+        ArgumentNullException.ThrowIfNull(arguments);
+
+        ReplayTarget old = legacy[pair.Old];
+        ReplayTarget @new = modern[pair.New];
+        ProbeArguments.SideCase oldCase = ProbeArguments.Case(old.Method, arguments);
+        ProbeArguments.SideCase newCase = ProbeArguments.Case(@new.Method, arguments);
+        if (oldCase.Input is null || newCase.Input is null)
+        {
+            return ReplayPlan.NotConstructible(oldCase.Input is null ? $"legacy: {oldCase.Reason}" : $"modern: {newCase.Reason}");
+        }
+
+        int number = ++drivers;
+        (string? legacyDriver, string legacyProblem) = Driver(old, Path.Combine(directory, "legacy"), number, legacy: true);
+        if (legacyDriver is null)
+        {
+            return ReplayPlan.NotConstructible(legacyProblem);
+        }
+
+        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, "modern"), number, legacy: false);
+        return modernDriver is null
+            ? ReplayPlan.NotConstructible(modernProblem)
+            : ReplayPlan.Runnable(new ExecutionDrivers(legacyDriver, modernDriver), oldCase.Input, newCase.Input);
     }
 
     /// <summary>

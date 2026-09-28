@@ -1,5 +1,5 @@
 # M5-002 `equiv mcp` `probe` tool: an agent runs one matched pair on both runtimes with its own inputs
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M5-001, M4-009; ADR 0035 accepted
@@ -50,3 +50,33 @@ If `probe` starts returning SARIF or verdicts, stop: that is `compare`.
 Remote transport. Batch probes. Heap or object-graph arguments.
 
 ## Notes
+- Decision: `probe`'s `arguments` are plain JSON values (`JsonElement[]`), not the driver's own wire-format tokens, and are
+  bound positionally against the pair's Roslyn method symbols (`IMethodSymbol.Parameters`), receiver excluded (built as
+  `new T()`, as replay's is) -> a new `ProbeArguments` (Frontend.CSharp) converts each JSON value to its parameter's wire
+  form, and a new `IReplayDriverFactory.Probe(pair, arguments, directory)` builds the same two drivers `Create`/`Plan` do.
+  Alternatives: wire-format strings directly (mirrors the driver protocol one-to-one, but unusable for an LLM agent, which
+  is the whole point of the tool); a synthetic `Counterexample` reusing `Create` unchanged (fails for any pair with
+  synthesised IR parameters, which an agent's plain arguments cannot supply anyway). Rule: 1 (mirror the consumer — the
+  consumer here is the agent, not the driver's wire protocol).
+- Decision: `probe` never goes through IR/`Counterexample` at all; it calls the pair's Roslyn method symbols directly via
+  the existing `legacy`/`modern` `ReplayTarget` dictionaries `ReplayDriverFactory` already holds. An "unconstructible
+  parameter" is caught the same way `ReplayArguments.CallObstacle` catches an uncallable method (not public, generic,
+  by-ref, no public parameterless constructor) plus a new per-argument JSON-to-wire conversion that fails by naming the
+  parameter. Rule: 4 (smaller change: reuses `CallObstacle` and the existing `Driver` compilation step unchanged).
+- Decision: raw outcomes for `probe` come from a new `Replayer.Run(ReplayPlan, culture)` (`Equiv.Execute`, public) that
+  returns both sides' `ExecutionOutcome`s unconditionally, alongside the existing `Replay` (which only returns outcomes on
+  `NotReproduced` and hides them on `Reproduced` — the opposite of what an agent's hunch-check wants to see). Rule: 1
+  (mirror the consumer: `probe`'s contract is "always both outcomes", not "reproduced yes/no").
+  `Equiv.Cli` already references `Equiv.Execute` (M4-009), so no new architecture edge.
+- Decision: `equiv mcp --execute` is a new bool option on `mcp` gating registration server-wide (checked once at startup,
+  same stderr note/exit-3 message as `compare --execute`, ADR 0035), not a per-call tool argument — matches criterion 1
+  ("registered only when the server ... was started with `equiv mcp --execute`"). `EquivTools` takes an optional
+  `ExecutionEnvironment?`; null (the default) leaves `probe` out of `tools/list` entirely. Rule: 2 (closed shape: a
+  nullable collaborator the constructor either has or doesn't, rather than a bool flag plus a separately-injected host).
+- Decision: `probe`'s `McpServerToolCreateOptions.ReadOnly` is `false` (the SDK's own default is `true`), since ADR 0035
+  is explicit that `--execute` runs the user's code with real side effects (file I/O, network), unlike `compare` and
+  `lower_only`, which only read. Rule: 3 (the annotation is exactly what a client-facing safety check would assert).
+- Decision: an `OutcomeKind`'s wire name is spelled out in a small `switch` in `ProbeTool`, matching `Equiv.Execute`'s own
+  internal `OutcomeLine.Name` (not exposed publicly) rather than relying on `enum.ToString()` or widening
+  `Equiv.Execute`'s public surface for one caller. Rule: 4 (smaller, self-contained change; the two switches independently
+  enforce the same "no enum-formatting reliance" rule this repo already has for wire/report text).

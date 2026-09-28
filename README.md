@@ -196,7 +196,7 @@ The counterexample is `x = 0` (`bv32 0`): legacy returns `0`, modern returns `-1
 
 `equiv mcp` runs the same pipeline as `equiv compare` as a [Model Context Protocol](https://modelcontextprotocol.io)
 server over stdio (ADR 0033), so a coding agent can ask "is my port equivalent?" while it works. It
-has two tools, both read-only and neither writes a file:
+has two read-only tools that write no file:
 
 - `compare`: `legacy` and `modern` (solution paths, required), and optionally `config`, `baseline`,
   `bound` and `timeoutMs`. The result is a one-line summary (`Equivalent n, Divergent n, Unknown n,
@@ -204,8 +204,22 @@ has two tools, both read-only and neither writes a file:
 - `lower_only`: `legacy`, `modern` and optionally `config`; the same as `equiv compare --lower-only`.
 
 An input error `equiv compare` exits 3 or 4 on (a missing file, no frontend for the paths, no C#
-project that loads) comes back as a tool error with the same message. Every MCP host takes a stdio
-server as a command and its arguments; for the binary:
+project that loads) comes back as a tool error with the same message.
+
+`equiv mcp --execute` also registers `probe` (ADR 0035, ADR 0036; ticket M5-002), which runs code
+from both solutions on this machine and so needs Windows, same as `compare --execute`: an agent that
+gets Unknown back from `compare` can name a matched pair by its normalised identity and supply its
+own arguments, and get back both runtimes' outcomes to test its own hunch. `probe` never writes
+SARIF and never changes a `compare` result; a mismatch it reports is a hypothesis, not a proof.
+Without `--execute`, or off Windows, `probe` is not registered at all, so an agent cannot turn
+execution on by itself.
+
+- `probe`: `legacy`, `modern`, `identity` and `arguments` (the method's own arguments, in order, as
+  JSON values), and optionally `culture`. The result is `{ legacy: {kind, canonical}, modern: {kind,
+  canonical}, equal }`. An argument that cannot be built, or an identity that matches no pair, comes
+  back as a tool error naming it.
+
+Every MCP host takes a stdio server as a command and its arguments; for the binary:
 
 ```json
 { "mcpServers": { "equiv": { "command": "equiv", "args": ["mcp"] } } }
