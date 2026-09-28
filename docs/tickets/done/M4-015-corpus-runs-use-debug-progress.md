@@ -1,5 +1,5 @@
 # M4-015 Corpus runs log at `debug`, report progress on demand, and time each phase in SUMMARY.md
-Status: in-progress
+Status: done (PR #280)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-012, M4-013, M4-014
