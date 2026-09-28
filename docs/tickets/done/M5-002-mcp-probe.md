@@ -1,5 +1,5 @@
 # M5-002 `equiv mcp` `probe` tool: an agent runs one matched pair on both runtimes with its own inputs
-Status: in-progress
+Status: done (PR #266)
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M5-001, M4-009; ADR 0035 accepted
