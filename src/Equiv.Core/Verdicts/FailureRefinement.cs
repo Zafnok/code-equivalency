@@ -11,7 +11,7 @@ public sealed record FailureRefinement(RefinementResult NewFailures, RefinementR
     public TimeSpan Elapsed { get; init; }
 
     public bool Equals(FailureRefinement? other) =>
-        other is not null && (NewFailures == other.NewFailures) & (RemovedFailures == other.RemovedFailures);
+        other is not null && NewFailures == other.NewFailures && RemovedFailures == other.RemovedFailures;
 
     public override int GetHashCode() => HashCode.Combine(NewFailures, RemovedFailures);
 }

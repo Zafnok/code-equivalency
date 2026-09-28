@@ -278,8 +278,8 @@ public static class SarifReportWriter
         {
             sarifResult.SetProperty("failureRefinement", new Dictionary<string, object>(StringComparer.Ordinal)
             {
-                ["newFailures"] = Describe(refinement.NewFailures),
-                ["removedFailures"] = Describe(refinement.RemovedFailures),
+                ["newFailures"] = RefinementProperty(refinement.NewFailures),
+                ["removedFailures"] = RefinementProperty(refinement.RemovedFailures),
             });
         }
     }
@@ -306,7 +306,7 @@ public static class SarifReportWriter
     /// One of ADR 0037's queries (ticket P1-013): its <c>outcome</c>, <c>none-proved</c>, <c>found</c> or <c>unknown</c>, and for
     /// <c>found</c> the input and both runs as <c>model</c>, rendered as a Divergent's is.
     /// </summary>
-    private static Dictionary<string, string> Describe(RefinementResult result)
+    private static Dictionary<string, string> RefinementProperty(RefinementResult result)
     {
         Dictionary<string, string> described = new(StringComparer.Ordinal) { ["outcome"] = Name(result.Outcome) };
         if (result.Model is { } model)
