@@ -424,6 +424,33 @@ the only large ones.
 - P2-045 (S) A field read or written through `base` lowers to IR that fails validation (found
   verifying P2-044 on the Tomas pair).
 
+## P2 — Success assessment (2026-09-28)
+
+The assessment of M4-007's results found three gaps. Every rate is stale, because 41 commits
+landed since that run, among them the fixes for 92 Git Extensions crashes. Divergent precision has
+never been measured. And code-cleanup commits are not measured at all, since the corpus holds only
+migrations and `migration-prompt.md` forbids refactoring. Order: P2-046 first, because every other
+ticket reads its run. Then P2-047 and P2-048/P2-049 (the two missing measurements), then the rate
+work, P2-050, P1-014, P2-051 and P2-052.
+
+- P2-046 (S) Second full corpus run on M4-007's four pairs. Adds a "since M4-007" table, mechanical
+  seeds on Git Extensions, the Preserving Equivalent share, a top-abstractions histogram and a
+  re-scored per-ticket unlock table.
+- P2-047 (M) Divergent audit: hand-adjudicate a fixed sample of EQ002 and EQ006 and report Divergent
+  precision. Needs P2-046.
+- P2-048 (M) Five cleanup refactorings as Preserving seed operators, and a "cleanup proof rate" per
+  seeded run. Needs M4-010, P2-035.
+- P2-049 (M) Samples for cleanup refactorings (modern syntax, extract and inline method). Each
+  non-Equivalent verdict becomes a ticket.
+- P2-050 (M) Deterministic solver budgets (Z3 `rlimit`, wall-clock as a backstop), and the
+  timeout Unknowns measured at 1x, 4x and 20x. Needs P2-046.
+- P1-014 (M) Spike: how many `abstraction` Unknowns (261 of 700 on Git Extensions) refinement would
+  resolve. An ADR only if the answer is at least 5%. Needs P2-046.
+- P2-051 (M) `runtime-diff` covers Windows Forms and `System.Drawing`, and every external callee.
+  Needs M3-033.
+- P2-052 (M) Replay and differential testing reach `internal` methods (via `InternalsVisibleTo` on the
+  emitted compilation). Needs M4-009, P1-008.
+
 ## M5 — Agent surface (MCP)
 
 Coding agents do migrations; M5 lets them check their own work while they do it (ADR 0033). It
