@@ -5,6 +5,8 @@ using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
+using Equiv.Verify.Z3.Contracts;
+
 using Microsoft.Z3;
 
 namespace Equiv.Verify.Z3;
@@ -107,7 +109,22 @@ internal static class ProductEncoder
         return [.. shared];
     }
 
-    public static ProductEncoding Encode(Context context, IrProcedure old, IrProcedure @new, ImmutableDictionary<string, string> callIdentityMap)
+    /// <summary>
+    /// The product of <paramref name="old"/> and <paramref name="new"/>. Under <paramref name="contracts"/> (a caller's
+    /// product; ticket P1-010), each aligned pair of calls to a callee under contract is related by its contract, and with
+    /// the contracts' <see cref="ICalleeContractEncoding.FreshPerSide"/> each side's call has its own functions. Under
+    /// <paramref name="relation"/> (a callee pair's product), <see cref="ProductEncoding.Differs"/> says the relation fails
+    /// or the call traces differ, instead of that some observable differs, and <see cref="ProductEncoding.Conjuncts"/> are the
+    /// relation's conjuncts' terms. The traces always agree because a loop segment's cut events are trace events: without
+    /// them an induction step would never compare the header states.
+    /// </summary>
+    public static ProductEncoding Encode(
+        Context context,
+        IrProcedure old,
+        IrProcedure @new,
+        ImmutableDictionary<string, string> callIdentityMap,
+        CallerContracts? contracts = null,
+        CalleeContract? relation = null)
     {
         SortMapper sorts = new(context);
         ImmutableArray<(SharedParameter Shared, Expr Term)> inputs =
@@ -117,7 +134,8 @@ internal static class ProductEncoder
 
         IrCall[] allCalls = [.. old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrCall>())];
         IEnumerable<IrType> argumentTypes = allCalls.SelectMany(static c => c.Args.Select(static a => a.Type));
-        TraceEncoder calls = new(sorts, argumentTypes, callIdentityMap, HeapMaps(allCalls));
+        HashSet<string> freshPerSide = new(contracts is { Encoding.FreshPerSide: true } ? contracts.Callees.Keys : [], StringComparer.Ordinal);
+        TraceEncoder calls = new(sorts, argumentTypes, callIdentityMap, HeapMaps(allCalls), freshPerSide);
         ImmutableArray<Expr> heapInputs = [.. calls.Heap.Select(m => inputs.First(i => string.Equals(i.Shared.Var.Name, m.Name, StringComparison.Ordinal) && i.Shared.Type == m.Type).Term)];
         PureEncoder pures = new(sorts, old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrPure>()));
         Dictionary<string, int> exceptionTypes = new(StringComparer.Ordinal);
@@ -135,10 +153,12 @@ internal static class ProductEncoder
             .Where(static i => i.Shared.ByRef)
             .Select(i => context.MkEq(oldSide.Final(i.Shared.Old, i.Shared.Var, i.Term), newSide.Final(i.Shared.New, i.Shared.Var, i.Term))));
         equal.Add(context.MkEq(oldSide.Trace, newSide.Trace));
+        ImmutableArray<BoolExpr> conjuncts = relation is null ? [] : ContractTerms.Callee(context, sorts, relation, oldSide, newSide, inputs);
+        IEnumerable<BoolExpr> related = contracts is null ? [] : ContractTerms.Caller(context, sorts, contracts.Callees, calls, (oldSide, newSide), inputs);
 
         return new ProductEncoding(
-            [.. oldSide.Assertions, .. newSide.Assertions, .. sorts.Distinctness()],
-            context.MkNot(context.MkAnd(equal)),
+            [.. oldSide.Assertions, .. newSide.Assertions, .. sorts.Distinctness(), .. related],
+            context.MkNot(context.MkAnd(relation is null ? equal : [context.MkEq(oldSide.Trace, newSide.Trace), .. conjuncts])),
             oldSide.Opaque,
             newSide.Opaque,
             inputs,
@@ -147,7 +167,10 @@ internal static class ProductEncoder
             calls,
             pures,
             oldSide.Terms,
-            newSide.Terms);
+            newSide.Terms)
+        {
+            Conjuncts = conjuncts,
+        };
     }
 
     /// <summary>
@@ -286,5 +309,9 @@ internal static class ProductEncoder
         TraceEncoder Calls,
         PureEncoder Pures,
         SideTerms Old,
-        SideTerms New);
+        SideTerms New)
+    {
+        /// <summary>Under a callee contract, the term of each of its conjuncts, in order (ticket P1-010); empty otherwise.</summary>
+        public ImmutableArray<BoolExpr> Conjuncts { get; init; } = [];
+    }
 }
