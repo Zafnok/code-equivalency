@@ -38,7 +38,7 @@ public sealed class BackendProgressTests
 
         new Z3Backend().Verify(fixture.Old, fixture.New, Options with { TimeoutMs = 1, Log = log });
 
-        Assert.Equal("chc:timeout", Parse(log)[^1]);
+        Assert.Equal(["chc:timeout", "trace-invariant:unknown"], Parse(log)[^2..]);
     }
 
     [Fact]
@@ -50,6 +50,7 @@ public sealed class BackendProgressTests
 
         backend.Verify(fixture.Old, fixture.New, Options with { TimeoutMs = 1, InvariantModel = "fake-model", Log = log });
 
+        Assert.Single(Parse(log), static l => l.StartsWith("trace-invariant:", StringComparison.Ordinal));
         Assert.Single(Parse(log), static l => l.StartsWith("llm-invariant:", StringComparison.Ordinal));
     }
 

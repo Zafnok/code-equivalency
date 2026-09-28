@@ -26,9 +26,9 @@ namespace Equiv.Verify.Z3;
 /// <see cref="UnknownReason.Recursion"/> when a side calls itself, <see cref="UnknownReason.UnalignedLoop"/> when the
 /// loops do not align or an induction failed, and <see cref="UnknownReason.Timeout"/> when only the solver gave up;
 /// except that a pair that would be UnalignedLoop goes to rung 4 (<see cref="SpacerRung"/>) first, which decides it
-/// whenever neither side calls. When rung 4 times out and <paramref name="proposer"/> is given (<c>--invariant-model</c>),
-/// rung 5 (<see cref="LlmInvariantRung"/>) asks it for the invariant, one ladder step per round. Every verdict lists the
-/// rungs it ran in <see cref="Verdict.Ladder"/>.
+/// whenever neither side calls. When rung 4 times out, rung 5 (<see cref="LlmInvariantRung"/>) asks <see cref="Traces"/>
+/// for the invariant (ticket P1-009), and then, unless that proved the pair, <paramref name="proposer"/> when it is given
+/// (<c>--invariant-model</c>), one ladder step per round. Every verdict lists the rungs it ran in <see cref="Verdict.Ladder"/>.
 /// </summary>
 internal sealed class LoopLadder(Func<Context> createContext, VerificationOptions options, IInvariantProposer? proposer = null)
 {
@@ -42,6 +42,12 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// force rung 4 to time out while rung 5 still decides.
     /// </summary>
     public int? InvariantTimeoutMs { get; init; }
+
+    /// <summary>
+    /// The local proposer rung 5 asks first, on by default because it runs in process and sends nothing (ticket P1-009);
+    /// a test sets it to null to run the model's proposer alone.
+    /// </summary>
+    public IInvariantProposer? Traces { get; init; } = new TraceInvariantProposer();
 
     /// <summary>
     /// Runs the ladder on the pair with its shared fragments encoded as calls (<see cref="ProductEncoder.ShareFragments"/>).
@@ -81,13 +87,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
                 rungs.Add(Timed(() => new SpacerRung(createContext, options).Prove(old, @new)));
             }
 
-            if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout } && proposer is not null)
-            {
-                long started = TimeProvider.System.GetTimestamp();
-                ImmutableArray<Rung> rounds = new LlmInvariantRung(createContext, options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs }, proposer, options.InvariantModel!).Prove(old, @new);
-                LogRung(rounds[^1].Step, started);
-                rungs.AddRange(rounds);
-            }
+            ProposeInvariants(rungs, old, @new);
         }
 
         Verdict verdict = rungs[^1].Verdict ?? Undecided(rungs, recursive);
@@ -104,6 +104,32 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     }
 
     /// <summary>One line per rung; the text is built only when the log is at <c>debug</c>. Rung 5's rounds are one rung, named by its last step.</summary>
+    /// <summary>
+    /// Rung 5 after rung 4 timed out: <see cref="Traces"/> first, then the model's proposer unless that proved the pair.
+    /// </summary>
+    private void ProposeInvariants(List<Rung> rungs, IrProcedure old, IrProcedure @new)
+    {
+        VerificationOptions invariantOptions = options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs };
+        if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout } && Traces is not null)
+        {
+            rungs.AddRange(Invariant(old, @new, invariantOptions, Traces, TraceInvariantProposer.Name, ProofMethod.TraceInvariant));
+        }
+
+        if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout or UnknownReason.NoInvariant } && proposer is not null)
+        {
+            rungs.AddRange(Invariant(old, @new, invariantOptions, proposer, options.InvariantModel!, ProofMethod.LlmInvariant));
+        }
+    }
+
+    /// <summary>Rung 5 with one proposer, logged at debug as one rung with its last round's outcome.</summary>
+    private ImmutableArray<Rung> Invariant(IrProcedure old, IrProcedure @new, VerificationOptions invariantOptions, IInvariantProposer asked, string proposedBy, ProofMethod method)
+    {
+        long started = TimeProvider.System.GetTimestamp();
+        ImmutableArray<Rung> rounds = new LlmInvariantRung(createContext, invariantOptions, asked, proposedBy, method).Prove(old, @new);
+        LogRung(rounds[^1].Step, started);
+        return rounds;
+    }
+
     private void LogRung(LadderStep step, long started)
     {
         if (!options.Log.IsDebug)
@@ -121,6 +147,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         ProofMethod.LockstepInduction => "lockstep-induction",
         ProofMethod.KInduction => "k-induction",
         ProofMethod.Chc => "chc",
+        ProofMethod.TraceInvariant => "trace-invariant",
         _ => "llm-invariant",
     };
 

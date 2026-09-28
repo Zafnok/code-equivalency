@@ -19,6 +19,21 @@ internal sealed record InvariantRequest(
     /// <summary>A relation's argument: its SMT-LIB name and sort.</summary>
     internal sealed record Variable(string Name, string Sort);
 
-    /// <summary>A candidate Z3 did not admit, and the parse error or the failed obligation with its counterexample.</summary>
-    internal sealed record Rejection(string Candidate, string Reason);
+    /// <summary>
+    /// A candidate Z3 did not admit, and the parse error or the failed obligation with its counterexample. For a broken
+    /// rule, <see cref="Premise"/> and <see cref="Conclusion"/> are its relations with the counterexample's values (null
+    /// for the entry and for <c>bad</c>), so that a proposer can weaken the conclusion's definition (ticket P1-009).
+    /// </summary>
+    internal sealed record Rejection(string Candidate, string Reason)
+    {
+        public Fact? Premise { get; init; }
+
+        public Fact? Conclusion { get; init; }
+    }
+
+    /// <summary>A relation applied to values: each argument's name and its value as Z3 prints it in SMT-LIB.</summary>
+    internal sealed record Fact(string Relation, ImmutableArray<Binding> Values);
+
+    /// <summary>An argument's name and value.</summary>
+    internal sealed record Binding(string Name, string Value);
 }

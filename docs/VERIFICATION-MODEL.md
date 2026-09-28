@@ -297,7 +297,7 @@ Equivalent or finds a counterexample wins, and `proofMethod` names it.
 | 2 | Lockstep relational induction (mutual summaries): align loop pairs by position in the loop nesting forest and pair each header's state; cut both sides at every header and prove, from equal inputs and from each pair of equal header states, that both sides reach the same next header with equal states or leave with equal observables | **unbounded** Equivalent | both sides have the same loop forest and pairable header states; covers unchanged and cosmetically changed loops | M3-002 |
 | 3 | k-induction: rung 2 with k prior iterations assumed equal | unbounded Equivalent | bodies agree only after warm-up | M3-002 |
 | 4 | Constrained Horn clauses solved by Z3 Spacer: each side is cut at every loop header, one relation per pair of cut points, and Z3 synthesises the coupling invariant | unbounded Equivalent (the invariant in `properties.invariant`), Divergent when a derivation replays, or Unknown(chc-timeout, chc-spurious) | loops do not align (loop to LINQ, fusion, iterator rewrite), and neither side calls or applies a pure function | P1-001 |
-| 5 | LLM-proposed coupling invariant checked by Z3; a wrong guess can never yield Equivalent | unbounded Equivalent, or Unknown(no-invariant) | rung 4 timed out | P1-002 |
+| 5 | Proposed coupling invariant checked by Z3, first mined from runs of both sides (`trace-invariant`), then from a model (`llm-invariant`); a wrong guess can never yield Equivalent | unbounded Equivalent, or Unknown(no-invariant) | rung 4 timed out | P1-002, P1-009 |
 
 Recursion is handled by rung 2 with the recursive call as the induction point
 (the standard regression-verification treatment): a self-call stays a call both sides share. Rung 1 inlines it
@@ -336,7 +336,16 @@ Every derivation is replayed through the original procedures (a value the intege
 run computes): a divergence is Divergent, an opaque node reached is `Opaque`, and anything else is `ChcSpurious`
 with both runs in the detail.
 
-Rung 5 (ticket P1-002, ADR 0036) runs only when rung 4 timed out and `--invariant-model <id>` names a model; the
+Rung 5 (tickets P1-002 and P1-009, ADR 0036) runs only when rung 4 timed out. It first asks a local proposer, on by
+default because it runs in process and sends nothing (P1-009): it runs both procedures in `IrInterpreter` on up to 200
+inputs (each earlier counterexample's first, then random ones), cut at their loop headers as rung 4 cuts them and
+paired as rung 4 steps them, and defines each relation as the conjunction of every template instance that held on
+all its samples: over each pair of same-sort arguments `x = y`, `x = y + c` and `x = c*y` for small constants, and
+`x <= y`, and over each argument its range where the bounds are the same in every trace; a relation no run reached is
+`false`. Z3 checks the candidate exactly as below; after a rejection it drops each conjunct the counterexample's
+conclusion falsifies and retries. A proof is Equivalent with `proofMethod: trace-invariant` and `properties.proposedBy:
+trace`. Disjunctive invariants are out of its reach, so a pair whose loops must end at `max(n, 0)`, such as loop fusion,
+stays Unknown. Only if it fails does rung 5 ask a model, and only when `--invariant-model <id>` names one; the
 CLI then prints `note: sending loop IR text to <id>` on stderr. It sends the model the IR text of both procedures and
 rung 4's relations with their arguments' names and sorts, and asks for one SMT-LIB `define-fun` per relation, at
 most three times. Each candidate is parsed against each relation's own arguments and may name nothing else, then
@@ -362,8 +371,8 @@ Every verdict on a matched pair with bodies also carries `properties.assumedCall
 `properties.unprovenAssumptions` (ADR 0019), and `properties.equivalencesApplied` when a
 catalogue entry fired (ADR 0020). A result whose ladder reached rung 4 carries `properties.chcMode`, and an
 Equivalent by `chc` carries Spacer's coupling invariant in `properties.invariant` (section 5.1). An Equivalent by
-`llm-invariant` carries the admitted invariant there too, and the model that proposed it in `properties.proposedBy`
-(ADR 0036).
+`llm-invariant` or `trace-invariant` carries the admitted invariant there too, and what proposed it in
+`properties.proposedBy`: the model id, or `trace` (ADR 0036).
 
 A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
 and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the
