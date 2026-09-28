@@ -73,3 +73,29 @@ Making replay or testing succeed on the pair; only stopping it from hanging.
   replay (2 x 10 s).
 - Criterion 4 (the Tomas `--execute` run completes) was not run here, for the same reason as criterion 1: it needs the
   Windows corpus box (`tools/corpus/corpus.ps1 -Fetch -PrepareAgent`, then `equiv compare --execute`).
+- Dumps (criterion 1), 2026-09-28, old code at `main` 440ab32, Windows, M4-007's migrated Tomas pair. They show a
+  different hang from the one the first bullet guessed. The run stalled at `execute 311/708
+  item=edu.asu.emit.algorithm.graph.Graph::ImportFromFile(string)` (408 s on one item, still climbing, when the dumps
+  were taken). CPU: `Equiv.Cli.exe` 76 s, `EquivReplay4.exe` 0.03 s, `dotnet EquivReplay4.dll` 0.09 s.
+  - Parent (`dotnet-stack`): the main thread is blocked writing a case line, as expected: `Interop+Kernel32.WriteFile` <-
+    `BufferedFileStreamStrategy.Flush` <- `StreamWriter.WriteLine` <- `ChildProcessHost+Session.Exchange` <-
+    `DriverStream.Run` <- `DifferentialTester+<>c__DisplayClass8_1.<Test>b__0` <- `Enumerable.ToList` <-
+    `DifferentialTester.Test` <- `CompareCommand.Executed`.
+  - Modern driver (`dotnet-stack`): it is not waiting before `Console.ReadLine`. It is inside a case, blocked writing its
+    own stdout: `WindowsConsoleStream.WriteFileNative` <- `StreamWriter.Flush` <- `Console.WriteLine(object)` <-
+    `ConsoleUtility.WriteLine(object)` <- `edu.asu.emit.algorithm.graph.Graph.ImportFromFile(string)` <- `Program.Case`
+    <- `Program.Main`.
+  - Legacy driver (`dotnet-dump collect` works on the .NET Framework process; `dotnet-dump analyze` `clrstack -all`):
+    the same place: `Win32Native.WriteFile` <- `__ConsoleStream.WriteFileNative` <- `StreamWriter.Flush` <-
+    `Console.WriteLine(object)` <- `ConsoleUtility.WriteLine(object)` <- `Graph.ImportFromFile(string)`, called from the
+    handler for an exception thrown by `StreamReader..ctor(string)` -> `FileStream.Init` -> `__Error.WinIOError` (the
+    generated path does not exist) <- `Graph.ImportFromFile` <- `Program.Case` <- `Program.Main`.
+  - Reading of the stacks: the method under test catches the I/O error and prints it with `Console.WriteLine`. That
+    goes to the driver's stdout, which is also the protocol channel. The old `Exchange` reads one stdout line after
+    each write, so the parent can take the method's printed text as the case's answer and go on to the next exchange
+    while the driver keeps printing. Nothing drains the rest, the stdout pipe fills, and the driver blocks in
+    `WriteFile`. The parent's next case line then fills that driver's stdin, and the parent blocks in `WriteFile`
+    too. Each side is waiting on the other's pipe. The branch's `Exchange` deadline and process-tree kill should
+    still end this. The root cause, though, is the code under test writing to the protocol stdout, not a driver that
+    never reads. The step-2 check (branch rerun, `DriverDeadlineTests` on Windows) and criterion 4 were not run.
+    Per instructions, work stopped here so a decision can be made on this second cause.
