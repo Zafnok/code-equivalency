@@ -7,6 +7,7 @@ using Equiv.Frontend.CSharp.Loading;
 using Equiv.TestSupport;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 using Xunit;
 
@@ -35,6 +36,58 @@ public sealed class FrontendProgressTests
                 ? new LoadedSolution(null!, [legacy], [], skipped)
                 : new LoadedSolution(null!, [modern], [], [])),
             new StableIdentityMatcher());
+    }
+
+    private static readonly string[] Body =
+    [
+        "phase load-modern 1 1", "item App 1", "done loaded", "phase-done",
+        "phase enumerate 2 2", "item legacy 1", "done 2 procedures", "item modern 1", "done 2 procedures", "phase-done",
+        "phase match 1 4", "item procedures 4", "done 2 pairs", "phase-done",
+        "phase lower 2 2", "item N.C::A() 1", "done lowered", "item N.C::B() 1", "done lowered", "phase-done",
+    ];
+
+    [Fact]
+    public void Events_Are_Exact_Without_Debug()
+    {
+        RecordingRunLog log = new();
+
+        _ = Frontend(skipOnLegacy: true).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, log, CancellationToken.None);
+
+        Assert.Equal(
+            ["phase load-legacy 3 3", "item App 1", "done loaded", "item Broken 1", "done skipped", "item Native 1", "done skipped", "phase-done", .. Body],
+            log.Events,
+            StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Events_Are_Exact_With_Debug()
+    {
+        RecordingRunLog log = new(isDebug: true);
+
+        _ = Frontend(skipOnLegacy: true).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, log, CancellationToken.None);
+
+        Assert.Equal(
+            [
+                "phase load-legacy 3 3", "item App 1", "done loaded",
+                "item Broken 1", "done skipped", "detail legacy project Broken skipped: CS0246: type Foo not found",
+                "item Native 1", "done skipped", "detail legacy project Native skipped: project language 'C++' is not supported",
+                "phase-done",
+                .. Body,
+            ],
+            log.Events,
+            StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void A_Project_Without_Documents_Weighs_One()
+    {
+        RecordingRunLog log = new();
+        Compilation empty = CSharpCompilation.Create("Empty");
+        CSharpFrontend frontend = new(new StubLoader(_ => new LoadedSolution(null!, [empty], [], [])), new StableIdentityMatcher());
+
+        _ = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, log, CancellationToken.None);
+
+        Assert.Equal(["phase load-legacy 1 1", "item Empty 1", "done loaded", "phase-done"], log.Events.Take(4), StringComparer.Ordinal);
     }
 
     [Fact]
