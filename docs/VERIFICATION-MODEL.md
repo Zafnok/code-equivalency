@@ -390,19 +390,26 @@ equal elements are equal strings; a `float`, `double` or `decimal` as the number
 reference type only as `null`. A static method is called directly, and an instance method on
 `new T()`, which needs a public parameterless constructor. Each side's project is emitted with its
 references beside it, and a driver calls the legacy method once on .NET Framework 4.8 and the
-modern method once on .NET 10, under the invariant culture. The result carries
+modern method once on .NET 10, under the invariant culture, and also under `tr-TR` when either body
+calls a member of the runtime-changes table, as differential testing does (P2-038). The result carries
 `properties.replay`:
-- `reproduced`: the two canonical outcomes (M3-032's canonical form) differ;
-- `not-reproduced`: they are equal, and `properties.replayOutcomes` gives both (`kind`, `value`).
-  The model and the CLR disagree; in a corpus run that is a soundness or modelling finding and
-  gets a ticket;
+- `reproduced`: the two canonical outcomes (M3-032's canonical form) differ under some culture;
+- `not-reproduced`: they are equal under every culture, and `properties.replayOutcomes` gives both
+  invariant-culture outcomes (`kind`, `value`). The model and the CLR disagree; in a corpus run that
+  is a soundness or modelling finding and gets a ticket;
+- `not-applicable`: they are equal, `replayOutcomes` gives both, and the result is EQ006 (the model's
+  call trace holds a runtime-changed callee). EQ006 claims the member differs between runtimes, and
+  its side-specific functions are free in the model, so one call with the model's inputs need not
+  show it (a hash seed, a default encoding, an ICU detail). Not a soundness finding (P2-038);
 - `not-constructible`, with `properties.replayReason`: the method is not public, generic, an
   accessor other than a getter, or takes a parameter by reference; the receiver has no public
   parameterless constructor or the model makes it null; a parameter's type has no generator; the
   model has a synthesised input other than `this` and `null.*` (a heap map, a cast or type-test
   map, `typeof`, `new`), since replay builds no object graphs; a project does not emit
   (`emit-failed`); the model's two runs end alike, so the divergence is in the call trace, which a
-  driver does not observe; or a side gives no comparable outcome.
+  driver does not observe; a side gives no comparable outcome; or both sides throw the same
+  exception where the model's runs do not both throw, so the driver's `new T()` or an argument is
+  not the model's (P2-038).
 
 Replay never changes the verdict, the rule id, the fingerprint or the exit code, and a run without
 `--execute` runs no code and writes no `replay`.

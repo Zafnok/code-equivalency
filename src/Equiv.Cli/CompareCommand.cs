@@ -339,7 +339,7 @@ internal static class CompareCommand
                 runLog.Item(result.Identity.Value, 1);
                 (VerificationResult next, string outcome) = (result.Verdict, pairs[result.Identity.Value]) switch
                 {
-                    (Divergent divergent, var (pair, _, _)) => (result with { Replay = replayer.Replay(factory.Create(pair, divergent.Counterexample, directory)) }, "replayed"),
+                    (Divergent divergent, var (pair, old, @new)) => (result with { Replay = replayer.Replay(factory.Create(pair, divergent.Counterexample, directory), divergent.Counterexample, old, @new) }, "replayed"),
                     (Unknown unknown, var (pair, old, @new)) => (tester.Test(factory.Plan(pair, unknown.Candidate, directory), old, @new).Apply(result), "tested"),
                     _ => (result, "skipped"),
                 };
