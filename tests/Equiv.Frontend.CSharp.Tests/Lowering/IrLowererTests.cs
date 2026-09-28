@@ -138,6 +138,7 @@ public sealed class IrLowererTests
     [Theory]
     [InlineData("static int M((int, int) p) { (int x, int y) = p; return x + y; }")]
     [InlineData("static int M((int, int) p) { int x, y; (x, y) = ((int, int))p; return x + y; }")]
+    [InlineData("struct S { public static implicit operator S((int, int) t) => default; public void Deconstruct(out int a, out int b) { a = 1; b = 2; } } static int M(int a) { int x, y; (x, y) = (S)(a, a); return x + y; }")]
     [InlineData("static int M(int a) { int x, y, z; (x, (y, z)) = (a, (a, a)); return x + y + z; }")]
     [InlineData("int P { get; set; } void M(int a) { (P, _) = (a, a); }")]
     [InlineData("static void M(int[] u, int a) { (u[0], u[1]) = (a, a); }")]
