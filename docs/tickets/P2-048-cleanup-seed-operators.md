@@ -12,7 +12,9 @@ micro-edits (rename a local, swap operands), not the refactorings a cleanup comm
 operators that are cleanup refactorings and preserve behaviour by construction. After this, each
 corpus run measures cleanup on real code: the share of these seeds that `equiv` proves Equivalent.
 No new corpus data and no ADR are needed, because the seeded modes already exist (ADR 0028,
-decision 4).
+decision 4). Once P2-055 lands (ADR 0040), the cleanup proof rate can also be measured on a
+same-runtime pair: the modern side against its seeded copy. That isolates the refactoring from the
+migration.
 
 ## Spec references
 `tools/corpus/seeds.md` (mechanical seeds), ticket M0-012 (the differential soundness gate that

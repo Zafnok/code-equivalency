@@ -45,3 +45,4 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0036 | A proposed invariant, contract or table row is a hypothesis until a checker admits it; callee contracts replace unproven assumptions |
 | 0037 | An Unknown says whether the modern side can fail where the legacy side does not |
 | 0038 | A run reports its progress on stderr, with a clock per phase, an ETA, and a writer that never blocks the pipeline |
+| 0040 | Each side's runtime is detected from its projects, and a runtime rule applies only if the pair crosses it (proposed) |

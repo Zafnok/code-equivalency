@@ -451,6 +451,25 @@ work, P2-050, P1-014, P2-051 and P2-052.
 - P2-052 (M) Replay and differential testing reach `internal` methods (via `InternalsVisibleTo` on the
   emitted compilation). Needs M4-009, P1-008.
 
+### Runtimes are detected, not assumed (ADR 0040, proposed)
+
+`equiv` supports a framework migration, a version upgrade (net6 to net8) and a same-runtime commit
+(a cleanup), and reads each project's runtime instead of assuming 4.8 and 10. Every ticket here
+needs ADR 0040 accepted. P2-049's cleanup samples are same-runtime pairs, so they wait for P2-055.
+
+- P2-053 (M) Detect each project's runtime (the `TargetFrameworkAttribute`, `netstandard` resolved
+  to its hosts, a `runtimes` config key) and report it in `run.properties.runtimes`.
+- P2-054 (M) Every `runtime-changes.json` row gets `changedIn`, and `RuntimeChangeTable` matches by
+  runtime interval. Needs P2-053.
+- P2-055 (L) Runtime rules (table rows, float-to-int saturation, x87) apply only inside a pair's
+  interval. New samples `same-runtime-cleanup` and `version-bump`. Needs P2-053, P2-054.
+- P2-056 (M) `--execute` and `runtime-diff` run each side on its detected runtime, and need Windows
+  only for .NET Framework. Needs P2-053.
+- P2-057 (S) `--before`/`--after` aliases, and scope wording in README and specs. Needs P2-055, P2-056.
+- P2-058 (M) Pin three public "no functional change" PRs as `cleanup` corpus pairs (Git Extensions
+  #11372 and #11284, PowerShell #19687), run them, and adjudicate every Divergent. Needs P2-055,
+  P2-047.
+
 ## M5 — Agent surface (MCP)
 
 Coding agents do migrations; M5 lets them check their own work while they do it (ADR 0033). It

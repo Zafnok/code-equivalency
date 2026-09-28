@@ -2,7 +2,7 @@
 Status: todo
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: M3-003
+Depends on: M3-003, P2-055 (same-runtime pairs, ADR 0040)
 
 ## Goal
 The samples cover migration shapes (`api-drift`, `removed-null-check`) and three refactorings
@@ -16,8 +16,9 @@ shapes are unsupported.
 `samples/README.md`; VERIFICATION-MODEL.md sections 5 and 6; `docs/tickets/IOPERATION-COVERAGE.md`.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
-1. `samples/cleanup-modern-syntax/`: one method per rewrite, legacy in C# 7.3 style and modern in
-   C# 14 style, behaviour identical on every input:
+1. `samples/cleanup-modern-syntax/`: both sides target net10.0 (a same-runtime pair, ADR 0040). One
+   method per rewrite, the legacy side in C# 7.3 style and the modern side in C# 14 style, with
+   behaviour identical on every input:
    - an `if`/`else if` chain on an `int` becomes a `switch` expression;
    - `string.Format("{0}-{1}", a, b)` on `string` arguments becomes `$"{a}-{b}"`;
    - `x == null ? (int?)null : x.Length` becomes `x?.Length`;
@@ -25,7 +26,7 @@ shapes are unsupported.
    - `if (o is Foo) { var f = (Foo)o; ... }` becomes `if (o is Foo f) { ... }`;
    - a block-bodied getter becomes expression-bodied;
    - a `foreach` with `if` and `Add` becomes `.Where(...).ToList()`.
-2. `samples/cleanup-extract-method/`: a legacy method, and a modern side where part of its body moved
+2. `samples/cleanup-extract-method/`, also net10.0 on both sides: a legacy method, and a modern side where part of its body moved
    into a new private helper. Also the reverse, a legacy helper inlined into its single caller.
    Both callers are matched pairs, and the helper is Added or Removed.
 3. Each sample's README has an "Expected verdicts" table with the verdict `equiv` gives today, and
