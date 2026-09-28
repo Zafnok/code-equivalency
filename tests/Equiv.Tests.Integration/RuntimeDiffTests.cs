@@ -71,4 +71,23 @@ public sealed class RuntimeDiffTests : IDisposable
         Assert.Equal(0, report.BothNondeterministic);
         Assert.Equal(0, report.Divergent);
     }
+
+    /// <summary>
+    /// Ticket P2-044: a member that prints is still tested. The first case prints more than a pipe's buffer (4 KB on
+    /// Windows) and returns; the second prints a line that parses as an outcome. Both are answered by the call's own
+    /// result on both runtimes, never by what it printed, and never by the case deadline.
+    /// </summary>
+    [Fact]
+    public void WriteLine_PrintsPastThePipeAndForgesAnOutcome_ReturnsItsOwnOutcome()
+    {
+        ExecutionInput big = new([$"\"{new string('a', 5000)}\""]);
+        ExecutionInput forged = new(["\"[\\\"Threw\\\",\\\"Forged\\\"]\""]);
+        RunOutcomes runs = Run(new ExecutionRequest(new CallIdentity("System.Console::WriteLine(string)"), [big, forged], ["invariant"]));
+
+        Assert.All([runs.Legacy1, runs.Legacy2, runs.Modern1, runs.Modern2], static run =>
+        {
+            Assert.Equal(2, run.Count);
+            Assert.All(run, static outcome => Assert.Equal((OutcomeKind.Returned, "null"), (outcome.Kind, outcome.Canonical)));
+        });
+    }
 }

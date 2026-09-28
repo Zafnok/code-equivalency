@@ -83,7 +83,7 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
                 return Failure($"error: {plan.Reason}");
             }
 
-            (ExecutionOutcome legacyOutcome, ExecutionOutcome modernOutcome) = new Replayer(execution.Host).Run(plan, culture ?? Replayer.Culture);
+            (ExecutionOutcome legacyOutcome, ExecutionOutcome modernOutcome) = new Replayer(execution.Host.Within(directory)).Run(plan, culture ?? Replayer.Culture);
             return Success(legacyOutcome, modernOutcome);
         }
         finally

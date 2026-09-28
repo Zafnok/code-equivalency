@@ -328,9 +328,13 @@ internal static class CompareCommand
         }
 
         Dictionary<string, (ProcedurePair Pair, IrProcedure Old, IrProcedure New)> pairs = lowered.ToDictionary(static p => p.Pair.New.Value, StringComparer.Ordinal);
-        Replayer replayer = new(execution.Host);
-        DifferentialTester tester = new(execution.Host, testing, execution.Time);
         string directory = Directory.CreateTempSubdirectory("equiv-execute-").FullName;
+
+        // Every driver runs in a fresh folder under the temporary one, so a relative write by the solution's code is
+        // deleted with it instead of landing next to the caller (ticket P2-040).
+        IDriverHost host = execution.Host.Within(directory);
+        Replayer replayer = new(host);
+        DifferentialTester tester = new(host, testing, execution.Time);
         runLog.Phase("execute", results.Count, results.Count);
         try
         {

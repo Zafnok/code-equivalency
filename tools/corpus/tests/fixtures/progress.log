@@ -1,0 +1,28 @@
+equiv: +00:00:00 load-legacy 0/2 (0%) eta=?
+equiv: +00:00:10 load-legacy 0/2 (0%) eta=? rate=0.0/s
+equiv: +00:00:12 load-legacy 1/2 (60%) item=Contoso.Widgets outcome=loaded took=0.000 eta=00:00:08.000 rate=0.1/s
+equiv: +00:00:12 load-legacy 2/2 (100%) item=Contoso.Widgets.Tests outcome=loaded took=0.000 eta=00:00:00.000 rate=0.2/s
+equiv: +00:00:12 load-legacy done in 00:00:12.400; eta@25%=00:00:08.000 eta@50%=00:00:08.000 eta@75%=00:00:00.000 dropped=0
+equiv: +00:00:12 load-modern 0/1 (0%) eta=?
+equiv: +00:00:21 load-modern 1/1 (100%) item=Contoso.Widgets outcome=loaded took=0.000 eta=00:00:00.000 rate=0.1/s
+equiv: +00:00:21 load-modern done in 00:00:09.100; eta@25%=00:00:00.000 eta@50%=00:00:00.000 eta@75%=00:00:00.000 dropped=0
+equiv: +00:00:21 enumerate 0/2 (0%) eta=?
+equiv: +00:00:22 enumerate 1/2 (50%) item=legacy outcome=enumerated took=1.200 eta=00:00:01.200 rate=0.8/s
+equiv: +00:00:23 enumerate 2/2 (100%) item=modern outcome=enumerated took=1.100 eta=00:00:00.000 rate=0.9/s
+equiv: +00:00:23 enumerate done in 00:00:02.300; eta@25%=00:00:01.200 eta@50%=00:00:01.200 eta@75%=00:00:00.000 dropped=0
+equiv: +00:00:23 match 0/1 (0%) eta=?
+equiv: +00:00:24 match 1/1 (100%) item=procedures outcome=matched took=0.800 eta=00:00:00.000 rate=1.2/s
+equiv: +00:00:24 match done in 00:00:00.800; eta@25%=00:00:00.000 eta@50%=00:00:00.000 eta@75%=00:00:00.000 dropped=0
+equiv: +00:00:24 lower 0/4 (0%) eta=?
+equiv: +00:00:26 lower 1/4 (25%) item=Contoso.Widgets.Gear.Spin(int, string) outcome=lowered took=1.900 eta=00:00:06.000 rate=0.5/s
+equiv: +00:00:28 lower 2/4 (50%) item=Contoso.Widgets.Gear.Stop() outcome=lowered took=2.000 eta=00:00:04.000 rate=0.5/s
+equiv: +00:00:34 lower 3/4 (75%) item=Contoso.Widgets.Sprocket.Turn(int) outcome=opaque took=6.000 eta=00:00:03.333 rate=0.3/s
+equiv: +00:00:35 lower 4/4 (100%) item=Contoso.Widgets.Sprocket.Rest() outcome=lowered took=1.000 eta=00:00:00.000 rate=0.4/s
+equiv: +00:00:35 lower done in 00:00:11.000; eta@25%=00:00:06.000 eta@50%=00:00:04.000 eta@75%=00:00:03.333 dropped=0
+equiv: +00:00:35 verify 0/6 (0%) eta=? worst=00:05:00.000
+equiv: +00:00:36 verify 1/6 (10%) item=Contoso.Widgets.Gear.Spin(int, string) outcome=equivalent took=0.500 eta=00:00:04.500 worst=00:04:10.000 rate=1.0/s
+equiv: +00:00:44 verify 2/6 (30%) item=Contoso.Widgets.Gear.Stop() outcome=equivalent took=8.250 eta=00:00:21.000 worst=00:03:20.000 rate=0.2/s
+equiv: +00:00:45 verify detail: rung loop-free done in 0.004s
+equiv: +00:00:45 verify 3/6 (40%) item=Contoso.Widgets.Sprocket.Turn(int) outcome=unknown took=0.750 eta=00:00:15.000 worst=00:02:30.000 rate=0.3/s
+equiv: +00:00:52 verify 3/6 (40%) item=Contoso.Widgets.Sprocket.Rest() took=6.800 eta=00:00:25.500 worst=00:02:30.000 rate=0.2/s
+equiv: +00:01:02 verify 3/6 (40%) item=Contoso.Widgets.Sprocket.Rest() took=16.800 eta=00:00:40.500 worst=00:02:30.000 rate=0.1/s slow

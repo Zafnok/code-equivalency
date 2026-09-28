@@ -13,7 +13,7 @@ internal sealed record ExecutionEnvironment(bool IsWindows, IDriverHost Host)
 
     public const string NeedsWindows = "error: --execute needs Windows and .NET Framework 4.8 (ADR 0035)";
 
-    public const string Note = "note: --execute runs code from both solutions on this machine";
+    public const string Note = "note: --execute runs code from both solutions on this machine, in a temporary working directory; it is not sandboxed, so absolute paths, the registry and the network are still reachable";
 
     public static ExecutionEnvironment Current => new(OperatingSystem.IsWindows(), new ChildProcessHost(ChildProcessHost.DefaultMemoryLimitBytes));
 }

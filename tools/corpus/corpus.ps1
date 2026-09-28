@@ -36,6 +36,8 @@
     ./tools/corpus/corpus.ps1 -Packages gitextensions-8522    # after both sides are restored
     ./tools/corpus/corpus.ps1 -SeedMechanical gitextensions-8522 -Count 300 -Seed 1
     ./tools/corpus/corpus.ps1 -Env | Invoke-Expression     # before any restore or run of equiv
+    ./tools/corpus/corpus.ps1 -Progress $run               # where a run in progress is, from $run/progress.log
+    ./tools/corpus/corpus.ps1 -Progress $run -Summary      # SUMMARY.md's "## Phase times" table
     ./tools/corpus/corpus.ps1 -Refresh                     # dry run against upstream main
     ./tools/corpus/corpus.ps1 -Refresh -Apply -UpstreamRef <sha>
 #>
@@ -75,6 +77,11 @@ param(
 
     # Reads one equiv SARIF log and prints the numbers a SUMMARY.md needs (never source text).
     [Parameter(ParameterSetName = 'Metrics', Mandatory)] [string]$Metrics,
+
+    # ADR 0038 (M4-015): reads only <runDir>/progress.log (never the equiv process) and prints where the run is;
+    # with -Summary, prints SUMMARY.md's "## Phase times" table instead.
+    [Parameter(ParameterSetName = 'Progress', Mandatory)] [string]$Progress,
+    [Parameter(ParameterSetName = 'Progress')] [switch]$Summary,
 
     # ADR 0035 decision 1 (M3-033): runs tools/runtime-diff on the union of both sides' top-N
     # externalCallees from a pair's most recent census SARIF. Reports land under
@@ -338,6 +345,113 @@ function Select-PmbRoot([string]$Roots) {
     return $items[0]
 }
 
+# ADR 0038 (M4-015): a run's progress.log, parsed without touching the equiv process. The grammar is RunLogLine's in
+# src/Equiv.Cli/Progress/RunLogLine.cs; an item identity may contain spaces, so item= is matched lazily up to the
+# fields that follow it. Anything else (a line cut short mid-write, stderr noise) is skipped.
+$ProgressLine = '^equiv: \+(?<at>\d+:\d\d:\d\d) (?<phase>\S+) (?<rest>.*)$'
+$ProgressItem = '^(?<done>\d+)/(?<total>\d+) \((?<pct>\d+)%\)(?: item=(?<item>.*?))?(?: outcome=(?<outcome>\S+))?(?: took=(?<took>[\d.]+))? eta=(?<eta>\S+)(?: worst=(?<worst>\S+))?(?: rate=\S+/s)?(?<slow> slow)?$'
+$ProgressEnd = '^done in (?<took>\S+); eta@25%=\S+ eta@50%=(?<eta50>\S+) eta@75%=\S+ dropped=(?<dropped>\d+)$'
+
+# HH:MM:SS or HH:MM:SS.fff (hours not wrapping at a day) to seconds; '?' to $null.
+function ConvertFrom-LogDuration([string]$Text) {
+    if ($Text -eq '?') { return $null }
+    $parts = $Text.Split(':')
+    return [int]$parts[0] * 3600 + [int]$parts[1] * 60 + [double]::Parse($parts[2], [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Format-Seconds([double]$Seconds, [string]$Format = '0.000') {
+    $Seconds.ToString($Format, [Globalization.CultureInfo]::InvariantCulture)
+}
+
+# +HH:MM:SS as the log writes it, the hours not wrapping at a day.
+function Format-Stamp([double]$Seconds) {
+    $whole = [long][Math]::Floor($Seconds)
+    '{0:00}:{1:00}:{2:00}' -f [Math]::Floor($whole / 3600), [Math]::Floor(($whole % 3600) / 60), ($whole % 60)
+}
+
+# Reads the log with FileShare.ReadWrite, so the writing equiv keeps its handle and is never blocked.
+function Read-ProgressLog([string]$Path) {
+    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+    try {
+        $reader = New-Object IO.StreamReader($stream, (New-Object Text.UTF8Encoding $false))
+        while ($null -ne ($line = $reader.ReadLine())) {
+            if ($line -notmatch $ProgressLine) { continue }
+            $at = ConvertFrom-LogDuration $Matches['at']
+            $phase = $Matches['phase']
+            $rest = $Matches['rest']
+            if ($rest -match $ProgressEnd) {
+                [pscustomobject]@{ Kind = 'end'; At = $at; Phase = $phase; Took = ConvertFrom-LogDuration $Matches['took']; Eta50 = ConvertFrom-LogDuration $Matches['eta50'] }
+            }
+            elseif ($rest -match $ProgressItem) {
+                $took = $null
+                if ($Matches['took']) { $took = [double]::Parse($Matches['took'], [Globalization.CultureInfo]::InvariantCulture) }
+                [pscustomobject]@{
+                    Kind = 'progress'; At = $at; Phase = $phase; Done = [int]$Matches['done']; Total = [int]$Matches['total']
+                    Percent = [int]$Matches['pct']; Item = $Matches['item']; Outcome = $Matches['outcome']; Took = $took
+                    Eta = $Matches['eta']; Worst = $Matches['worst']; Slow = [bool]$Matches['slow']
+                }
+            }
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+# Where the run is: its phase, done/total, the last ETA and bound, the item in flight, and the five slowest so far.
+function Get-ProgressReport([object[]]$Lines) {
+    $last = $Lines | Select-Object -Last 1
+    if ($null -eq $last) { return 'phase: none yet (progress.log has no progress lines)' }
+    if ($last.Kind -eq 'end') {
+        "phase: between phases ($($last.Phase) finished at +$(Format-Stamp $last.At))"
+    }
+    else {
+        "phase: $($last.Phase) $($last.Done)/$($last.Total) ($($last.Percent)%)"
+        $worst = 'n/a'
+        if ($last.Worst) { $worst = $last.Worst }
+        "eta: $($last.Eta) worst: $worst (at +$(Format-Stamp $last.At))"
+        if ($last.Item -and -not $last.Outcome) {
+            $slow = ''
+            if ($last.Slow) { $slow = ' slow' }
+            "current: $($last.Item) running $(Format-Seconds $last.Took)s$slow"
+        }
+        else { 'current: none reported since the last item finished' }
+    }
+    'slowest:'
+    $Lines | Where-Object { $_.Kind -eq 'progress' -and $_.Outcome } |
+        Sort-Object -Property @{ Expression = 'Took'; Descending = $true }, @{ Expression = 'At' } |
+        Select-Object -First 5 |
+        ForEach-Object { "  $(Format-Seconds $_.Took)s $($_.Phase) $($_.Item) ($($_.Outcome))" }
+}
+
+# SUMMARY.md's "## Phase times" table, one row per phase-end line. The ETA error at 50% is the estimate the phase
+# printed when half its weight was done minus the time it actually had left then, from the first finished item at or
+# past 50% to the phase's end (whole-second stamps, so within a second).
+function Get-PhaseTimes([object[]]$Lines) {
+    '| phase | items | seconds | ETA error at 50% |'
+    '|---|---|---|---|'
+    $items = 0
+    $half = $null
+    $phase = ''
+    foreach ($line in $Lines) {
+        if ($line.Phase -ne $phase) { $phase = $line.Phase; $items = 0; $half = $null }
+        if ($line.Kind -eq 'progress') {
+            $items = $line.Total
+            if ($null -eq $half -and $line.Outcome -and $line.Percent -ge 50) { $half = $line.At }
+            continue
+        }
+        $error50 = 'n/a'
+        if ($null -ne $line.Eta50 -and $null -ne $half) {
+            $delta = $line.Eta50 - ($line.At - $half)
+            $sign = '+'
+            if ($delta -lt 0) { $sign = '-' }
+            $error50 = "$sign$(Format-Seconds ([Math]::Abs($delta)))"
+        }
+        "| $($line.Phase) | $items | $(Format-Seconds $line.Took) | $error50 |"
+        $phase = ''
+    }
+}
+
 switch ($PSCmdlet.ParameterSetName) {
     'Prepare' {
         Assert-CorpusIgnored
@@ -537,6 +651,11 @@ switch ($PSCmdlet.ParameterSetName) {
             @($rows | Where-Object Change -eq 'modern only').Count)
         # Out-String, not Out-Host: a table sent to Out-Host is dropped when stdout is redirected to a log.
         if ($rows.Count -gt 0) { Show-Step ($rows | Sort-Object Change, Package | Format-Table -AutoSize | Out-String -Width 400).TrimEnd() }
+    }
+
+    'Progress' {
+        $lines = @(Read-ProgressLog (Join-Path $Progress 'progress.log'))
+        if ($Summary) { Get-PhaseTimes $lines } else { Get-ProgressReport $lines }
     }
 
     'Metrics' {
