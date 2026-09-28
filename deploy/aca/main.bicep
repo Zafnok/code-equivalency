@@ -37,7 +37,8 @@ var mountOptions = 'uid=1654,gid=1654,file_mode=0777,dir_mode=0777,nobrl'
 // before starting an execution (a manual execution takes no parameters without re-declaring the
 // container, and the share is already mounted). The exit code goes to <sample>.exit: 0, 1 (Divergent)
 // and 4 (a skipped project) still write SARIF and are not failures, as in parity-run.ps1.
-var script = '''
+// replace() strips the CRs a Windows checkout would add to the literal below, which bash would choke on.
+var script = replace('''
 set -u
 sample=$(tr -d '\r\n' < /mnt/work/request/sample)
 root=/mnt/work/samples/$sample
@@ -54,7 +55,7 @@ echo "$code" > "$out/$sample.exit"
 echo "exit=$code end=$(date -u +%FT%TZ)"
 sleep 1 # let the tee above flush the last lines
 case $code in 0|1|4) exit 0 ;; *) exit "$code" ;; esac
-'''
+''', '\r', '')
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: 'equivaca${uniqueString(resourceGroup().id)}'
