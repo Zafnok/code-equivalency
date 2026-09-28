@@ -19,14 +19,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# az writes progress and warnings to stderr. Windows PowerShell 5.1 turns redirected stderr into
+# error records, which 'Stop' makes fatal mid-command (it killed an upload-batch halfway), so the
+# exit code alone decides failure here.
 function Invoke-Az {
+    $ErrorActionPreference = 'Continue'
     & az @args
     if ($LASTEXITCODE -ne 0) { throw "az $($args -join ' ') failed with exit code $LASTEXITCODE" }
 }
 
-# az prints the value with -o tsv; capture it and fail loudly on a non-zero exit.
+# az prints the value with -o tsv; capture stdout only and fail loudly on a non-zero exit.
 function Get-Az {
-    $value = & az @args
+    $ErrorActionPreference = 'Continue'
+    $value = & az @args 2>$null
     if ($LASTEXITCODE -ne 0) { throw "az $($args -join ' ') failed with exit code $LASTEXITCODE" }
     return ($value | Out-String).Trim()
 }

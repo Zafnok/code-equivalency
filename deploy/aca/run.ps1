@@ -17,13 +17,17 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# az writes progress and warnings to stderr, which Windows PowerShell 5.1 turns into fatal error
+# records under 'Stop' when redirected; the exit code alone decides failure (see deploy.ps1).
 function Invoke-Az {
+    $ErrorActionPreference = 'Continue'
     & az @args
     if ($LASTEXITCODE -ne 0) { throw "az $($args -join ' ') failed with exit code $LASTEXITCODE" }
 }
 
 function Get-Az {
-    $value = & az @args
+    $ErrorActionPreference = 'Continue'
+    $value = & az @args 2>$null
     if ($LASTEXITCODE -ne 0) { throw "az $($args -join ' ') failed with exit code $LASTEXITCODE" }
     return ($value | Out-String).Trim()
 }
@@ -50,9 +54,10 @@ foreach ($extension in 'sarif', 'log', 'exit') {
 }
 $ErrorActionPreference = $previous
 
-$request = Join-Path $OutDir 'sample'
+# The .txt matters: az storage file upload treats an extensionless --path as a directory.
+$request = Join-Path $OutDir 'sample.txt'
 Set-Content -Path $request -Value $Sample -NoNewline -Encoding ascii
-Invoke-Az storage file upload --share-name $share --source $request --path request/sample --only-show-errors -o none
+Invoke-Az storage file upload --share-name $share --source $request --path request/sample.txt --only-show-errors -o none
 
 $execution = Get-Az containerapp job start --name $job --resource-group $ResourceGroup --query name -o tsv
 Write-Host "Started $execution for '$Sample'."

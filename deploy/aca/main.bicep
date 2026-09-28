@@ -33,14 +33,14 @@ var workloadProfileName = 'Consumption'
 // locks, which MSBuild's obj/ writes do not need and Azure Files does not always honour.
 var mountOptions = 'uid=1654,gid=1654,file_mode=0777,dir_mode=0777,nobrl'
 
-// The job's whole command, one bash script. run.ps1 puts the sample's name in /mnt/work/request/sample
+// The job's whole command, one bash script. run.ps1 puts the sample's name in /mnt/work/request/sample.txt
 // before starting an execution (a manual execution takes no parameters without re-declaring the
 // container, and the share is already mounted). The exit code goes to <sample>.exit: 0, 1 (Divergent)
 // and 4 (a skipped project) still write SARIF and are not failures, as in parity-run.ps1.
 // replace() strips the CRs a Windows checkout would add to the literal below, which bash would choke on.
 var script = replace('''
 set -u
-sample=$(tr -d '\r\n' < /mnt/work/request/sample)
+sample=$(tr -d '\r\n' < /mnt/work/request/sample.txt)
 root=/mnt/work/samples/$sample
 out=/mnt/work/out
 mkdir -p "$out"
