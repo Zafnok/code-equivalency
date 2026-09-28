@@ -779,8 +779,8 @@ internal sealed class IrLowerer
                 return FieldOrTuple(operation, context);
             case IArrayElementReferenceOperation or IEventReferenceOperation:
                 return heap.Readable(operation, receiver, context) is { } read ? heap.ReadSlice(read, context) : Opaque(operation, operation.Kind.ToString(), context);
-            case IPropertyReferenceOperation property:
-                return Read(property, context);
+            case IPropertyReferenceOperation or IEventAssignmentOperation:
+                return AccessorCall(operation, context);
             case IConversionOperation conversion:
                 return Convert(conversion, context);
             case ITypeOfOperation typeOf when typeOf.TypeOperand is not ITypeParameterSymbol:
@@ -1927,6 +1927,22 @@ internal sealed class IrLowerer
 
         IrType? returns = value is null ? Map(property.Type!) : null;
         return Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], returns, [], context);
+    }
+
+    /// <summary>A property read or an event's <c>+=</c> or <c>-=</c>: each is, unless the property's is a field, a call to an accessor.</summary>
+    private IrVar? AccessorCall(IOperation operation, LoweringContext context) =>
+        operation is IPropertyReferenceOperation property ? Read(property, context) : Subscribe((IEventAssignmentOperation)operation, context);
+
+    /// <summary>
+    /// <c>+=</c> or <c>-=</c> on an event is a call to its <c>add</c> or <c>remove</c> accessor with the receiver and the handler,
+    /// lowered as a setter call is (ticket P2-005): no result, the receiver null-checked at the call after the handler.
+    /// </summary>
+    private IrVar? Subscribe(IEventAssignmentOperation assignment, LoweringContext context)
+    {
+        IEventReferenceOperation reference = (IEventReferenceOperation)assignment.EventReference;
+        IMethodSymbol accessor = (assignment.Adds ? reference.Event.AddMethod : reference.Event.RemoveMethod)!;
+        ImmutableArray<IrVar> operands = Operands(reference.Instance, [], context);
+        return Dispatch(reference.Instance, Identity(accessor), [.. operands, Value(assignment.HandlerValue, context)], returns: null, [], context);
     }
 
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
