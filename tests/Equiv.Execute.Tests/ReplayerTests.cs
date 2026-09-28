@@ -67,6 +67,16 @@ public sealed class ReplayerTests
         Assert.Equal(ReplayResult.NotConstructible(reason), Replay(legacy, modern));
 
     [Fact]
+    public void BothSidesWithNoComparableOutcome_GiveTheLegacyReason() =>
+        Assert.Equal(
+            ReplayResult.NotConstructible("the legacy side gave NotComparable \"Odd.Holder\""),
+            Replay("[\"NotComparable\",\"Odd.Holder\"]", "[\"NotConstructible\",\"System.FormatException\"]"));
+
+    [Fact]
+    public void Replay_RejectsANullPlan() =>
+        Assert.Throws<ArgumentNullException>(() => new Replayer(new FakeHost(static (_, _, _) => null)).Replay(null!));
+
+    [Fact]
     public void APlanWithoutDrivers_IsNotConstructibleWithItsReasonAndRunsNothing()
     {
         FakeHost host = new(static (_, _, _) => null);
