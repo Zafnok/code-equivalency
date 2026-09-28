@@ -284,6 +284,7 @@ public sealed class IrLowererTests
     [InlineData("class B { public int f; } class C : B { int N() => f; }", "this")]
     [InlineData("class B { public int f; } class C : B { static int N(C c) => c.f; }", "c")]
     [InlineData("class B { public int f { get; set; } } class C : B { int N() => f; }", "this")]
+    [InlineData("class B { public int f; } class C : B { int N() => base.f; }", "this")]
     public void AnInheritedFieldIsReadAtTheUpcastReceiver(string source, string receiver)
     {
         IrProcedure procedure = Source(source, "N");

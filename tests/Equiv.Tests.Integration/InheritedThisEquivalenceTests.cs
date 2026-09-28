@@ -37,6 +37,8 @@ public sealed class InheritedThisEquivalenceTests
     [InlineData("class Base { public int X; } class C : Base { public static int M(C c) => c.X; }")]
     [InlineData("class Base { public int F() => 1; } class C : Base { public static int M(C c) => c.F(); }")]
     [InlineData("class Base { public virtual int F() => 1; } class C : Base { public override int F() => base.F() + 1; public int M() => base.F(); }")]
+    [InlineData("class Base { public int X; } class C : Base { public int M() => base.X; }")]
+    [InlineData("class Base { public int X; } class C : Base { public int M() { base.X = 3; return base.X; } }")]
     public void AMemberOfABaseClassReachedFromADerivedOneVerifies(string source) =>
         Assert.IsType<Equivalent>(Verify(source, source));
 
