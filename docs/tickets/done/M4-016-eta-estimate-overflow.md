@@ -1,5 +1,5 @@
 # M4-016 `EtaEstimator.Estimate` overflows to a negative ETA for a tiny done weight on a long phase
-Status: in-progress
+Status: done (PR #252)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-012
