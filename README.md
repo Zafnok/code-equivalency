@@ -192,6 +192,33 @@ one result from `equiv.sarif`'s `runs[0].results`:
 The counterexample is `x = 0` (`bv32 0`): legacy returns `0`, modern returns `-1` (`bv32
 4294967295` two's-complement). The exit code is 1.
 
+## Use from a coding agent
+
+`equiv mcp` runs the same pipeline as `equiv compare` as a [Model Context Protocol](https://modelcontextprotocol.io)
+server over stdio (ADR 0033), so a coding agent can ask "is my port equivalent?" while it works. It
+has two tools, both read-only and neither writes a file:
+
+- `compare`: `legacy` and `modern` (solution paths, required), and optionally `config`, `baseline`,
+  `bound` and `timeoutMs`. The result is a one-line summary (`Equivalent n, Divergent n, Unknown n,
+  skipped projects n, exit code k`), then the SARIF log `equiv compare` would write, as JSON text.
+- `lower_only`: `legacy`, `modern` and optionally `config`; the same as `equiv compare --lower-only`.
+
+An input error `equiv compare` exits 3 or 4 on (a missing file, no frontend for the paths, no C#
+project that loads) comes back as a tool error with the same message. Every MCP host takes a stdio
+server as a command and its arguments; for the binary:
+
+```json
+{ "mcpServers": { "equiv": { "command": "equiv", "args": ["mcp"] } } }
+```
+
+and for the container, with the repository mounted so the paths you pass resolve inside it:
+
+```
+docker run -i --rm -v <repo>:/src equiv mcp
+```
+
+Only protocol messages go to stdout; the run's own progress and messages go to stderr.
+
 ## Building and running the gates
 
 ```
