@@ -10,8 +10,9 @@ namespace Equiv.Tests.Integration;
 /// <summary>
 /// Ticket M4-012 criteria 2 and 3 on <c>samples/business-layer</c> (ADR 0038): with <c>--verbosity normal</c> and
 /// <c>--execute</c>, stderr gets a start line and an end line for each of <c>load</c>, <c>verify</c>, <c>execute</c> and
-/// <c>write</c>, the <c>--log</c> file gets the same lines, and stdout and the SARIF file are byte for byte those of the
-/// same run with <c>--verbosity quiet</c>. Windows only, like the rest of this project.
+/// <c>write</c>, the <c>--log</c> file gets the same lines, and stdout and the SARIF file are those of the same run with
+/// <c>--verbosity quiet</c>: stdout byte for byte, the SARIF file up to what <see cref="SarifNormalizer"/> scrubs, since the
+/// census's failure-refinement time differs between any two runs (ticket P1-013). Windows only, like the rest of this project.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("Console")]
@@ -28,8 +29,8 @@ public sealed class CompareProgressSampleTests
         string logPath = Path.Combine(Path.GetTempPath(), $"equiv-M4-012-{Guid.NewGuid():N}.log");
         try
         {
-            (int quietExit, string quietOut, string quietError, byte[] quietSarif) = Compare("quiet", logPath: null);
-            (int normalExit, string normalOut, string normalError, byte[] normalSarif) = Compare("normal", logPath);
+            (int quietExit, string quietOut, string quietError, string quietSarif) = Compare("quiet", logPath: null);
+            (int normalExit, string normalOut, string normalError, string normalSarif) = Compare("normal", logPath);
 
             Assert.Equal(quietExit, normalExit);
             Assert.Equal(quietOut, normalOut);
@@ -51,7 +52,7 @@ public sealed class CompareProgressSampleTests
         }
     }
 
-    private static (int ExitCode, string Out, string Error, byte[] Sarif) Compare(string verbosity, string? logPath)
+    private static (int ExitCode, string Out, string Error, string Sarif) Compare(string verbosity, string? logPath)
     {
         string outPath = Path.Combine(Path.GetTempPath(), $"equiv-M4-012-{Guid.NewGuid():N}.sarif");
         TextWriter originalOut = Console.Out;
@@ -74,7 +75,7 @@ public sealed class CompareProgressSampleTests
                 .. log,
             ]);
             Assert.True(File.Exists(outPath), string.Create(CultureInfo.InvariantCulture, $"--verbosity {verbosity} wrote no SARIF (exit {exitCode}): {error}"));
-            return (exitCode, output.ToString(), error.ToString(), File.ReadAllBytes(outPath));
+            return (exitCode, output.ToString(), error.ToString(), SarifNormalizer.Normalize(File.ReadAllText(outPath), Sample));
         }
         finally
         {
