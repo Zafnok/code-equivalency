@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
+using Equiv.Cli.Mcp;
 using Equiv.Core;
 
 using ModelContextProtocol.Protocol;
@@ -36,7 +37,7 @@ internal static class McpCommand
         command.SetAction((parseResult, cancellationToken) =>
         {
             (Stream input, Stream output) = streams();
-            return RunAsync(input, output, frontends, backend, parseResult.GetValue(executeOption), execution, cancellationToken);
+            return McpExecuteGate.RunAsync(input, output, frontends, backend, parseResult.GetValue(executeOption), execution, cancellationToken);
         });
         return command;
     }
@@ -68,35 +69,4 @@ internal static class McpCommand
 
     [ExcludeFromCodeCoverage(Justification = "M5-001: the process's own stdin and stdout, exercised by Equiv.Tests.Integration's McpIntegrationTests")]
     private static (Stream Input, Stream Output) ProcessStreams() => (Console.OpenStandardInput(), Console.OpenStandardOutput());
-
-    /// <summary>
-    /// ADR 0035's consequences for the <c>probe</c> tool, at server startup rather than per call: without <c>--execute</c>
-    /// nothing changes and <c>probe</c> is not registered (ticket M5-002 criterion 1); with it, a non-Windows OS stops the
-    /// server before it serves anything, with the same message <c>compare --execute</c> gives, and Windows prints the same
-    /// note on stderr and registers <c>probe</c> too.
-    /// </summary>
-    private static async Task<int> RunAsync(
-        Stream input,
-        Stream output,
-        IReadOnlyList<ILanguageFrontend> frontends,
-        IVerificationBackend backend,
-        bool execute,
-        ExecutionEnvironment? execution,
-        CancellationToken cancellationToken)
-    {
-        if (!execute)
-        {
-            return await ServeAsync(input, output, new EquivTools(frontends, backend), cancellationToken).ConfigureAwait(false);
-        }
-
-        ExecutionEnvironment executing = execution ?? ExecutionEnvironment.Current;
-        if (!executing.IsWindows)
-        {
-            await Console.Error.WriteLineAsync(ExecutionEnvironment.NeedsWindows).ConfigureAwait(false);
-            return ExitCodes.UsageError;
-        }
-
-        await Console.Error.WriteLineAsync(ExecutionEnvironment.Note).ConfigureAwait(false);
-        return await ServeAsync(input, output, new EquivTools(frontends, backend, executing), cancellationToken).ConfigureAwait(false);
-    }
 }
