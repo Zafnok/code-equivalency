@@ -1,5 +1,5 @@
 # P2-042 A generic call's identity differs on a nullable-annotated type argument
-Status: in-progress
+Status: done (PR #257)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
