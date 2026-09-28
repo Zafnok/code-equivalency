@@ -415,6 +415,8 @@ the only large ones.
 - P2-039 (M) `compare --execute` hangs when a replay driver never answers. Needs M4-009, P1-008.
 - P2-040 (S) `compare --execute` runs solution code in the caller's working directory. Needs M4-009,
   P1-008.
+- P2-041 (S) A generic call's identity differs on a nullable-annotated type argument (found in
+  P2-032).
 
 ## M5 — Agent surface (MCP)
 
