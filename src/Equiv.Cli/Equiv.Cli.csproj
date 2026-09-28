@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
+    <!-- M5-001: `equiv mcp` serves the compare pipeline over stdio (ADR 0033). -->
+    <PackageReference Include="ModelContextProtocol" />
   </ItemGroup>
 
   <ItemGroup>

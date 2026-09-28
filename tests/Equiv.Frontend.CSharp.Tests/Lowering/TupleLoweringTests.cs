@@ -51,6 +51,16 @@ public sealed class TupleLoweringTests
     public void WritingAnElementIsOpaque(string members) =>
         Assert.Equal("Tuple", Assert.Single(Opaques(Method(members))).Reason);
 
+    /// <summary>A deconstruction into an element of a lowered tuple is opaque, since that element is no field map to write.</summary>
+    [Fact]
+    public void DeconstructingIntoAnElementIsOpaque()
+    {
+        ImmutableArray<IrOpaque> opaques = Opaques(Method("static int M((int X, int Y) p, int a) { (p.X, a) = (1, a); return p.X; }"));
+
+        Assert.NotEmpty(opaques);
+        Assert.All(opaques, static o => Assert.Equal("DeconstructionAssignment", o.Reason));
+    }
+
     [Theory]
     [InlineData("static (string, int) M(string a, int b) => (a, b);")]
     [InlineData("static (int, int, int, int) M(int a) => (a, a, a, a);")]

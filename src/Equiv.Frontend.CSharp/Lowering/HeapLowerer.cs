@@ -114,7 +114,9 @@ internal sealed class HeapLowerer(
 
     /// <summary>
     /// A field is a map from its receiver, or from its declaring type's token when it is static. A receiver of a
-    /// reference type is null-checked where the slice is read or written, not here (ticket P2-017).
+    /// reference type is null-checked where the slice is read or written, not here (ticket P2-017). A receiver whose
+    /// static type derives from the declaring one, which Roslyn never wraps in a conversion, is upcast through the
+    /// <c>cast.&lt;From&gt;.&lt;To&gt;</c> map an explicit one would read (ticket P2-031), so the key is of the map's sort.
     /// </summary>
     private Access Member(IrVar input, ISymbol member, IOperation? instance, LoweringContext context)
     {
@@ -125,7 +127,11 @@ internal sealed class HeapLowerer(
         }
 
         IOperation? dereferenced = instance.Type!.IsValueType ? null : instance;
-        return new Access(map, Array: null, lower(instance, context), dereferenced);
+        IrVar receiver = lower(instance, context);
+        IrVar key = receiver.Type == ((IrMap)input.Type).Key
+            ? receiver
+            : MapRead(Inputs.Cast(instance.Type, member.ContainingType), receiver, context);
+        return new Access(map, Array: null, key, dereferenced);
     }
 
     /// <summary>

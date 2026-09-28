@@ -166,6 +166,12 @@ as `a[index]` (the `array.<Sort>` slice at the array, then the index, null- and 
 after which the index steps by one; the enumerator's `finally` is not run. A loop whose variable is a
 deconstruction, or whose element read is not found, stays the M4-001 enumerator calls.
 
+The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
+locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
+each field's receiver, then every element of the literal (each already converted to its target's
+type), then each store, all left to right, so `(a, b) = (b, a)` swaps. Anything else, a `Deconstruct`
+method or a tuple-typed value included, is `IrOpaque` with reason `DeconstructionAssignment`.
+
 C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 0013):
 
 - Checked `+ - *` and unary `-` test `IrOverflows` and branch to one shared

@@ -504,26 +504,32 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// A two-way branch. <c>if (c) throw;</c> is one block whose fall-through is the rethrow, which names no
-    /// block (ticket P2-010), so the rethrow gets a block of its own and is opaque as it is anywhere else. A <c>when</c>
+    /// block (ticket P2-010); <c>if (c) return; throw;</c> is one block whose conditional successor is the rethrow
+    /// (ticket P2-034). Either way the rethrow gets a block of its own and is opaque as it is anywhere else. A <c>when</c>
     /// filter's last block falls through, when the filter is false, to its copy's structured-exception-handling exit
     /// (ticket M4-008).
     /// </summary>
     private void Branch(BasicBlock block, ControlFlowBranch conditional, ControlFlowBranch fallThrough, LoweringContext context)
     {
         IrVar condition = Value(block.BranchValue!, context);
-        IrBlockId jump = exceptions.Destination(conditional, context);
+        IrBlockId? jumpRethrow = RethrowBlock(conditional, declined: null);
+        IrBlockId jump = jumpRethrow ?? exceptions.Destination(conditional, context);
         IrBlockId? declined = fallThrough.Semantics == ControlFlowBranchSemantics.StructuredExceptionHandling ? context.HandlerExit : null;
-        IrBlockId? rethrow = fallThrough.Semantics == ControlFlowBranchSemantics.Regular || declined is not null ? null : ssa.NewBlock();
+        IrBlockId? rethrow = RethrowBlock(fallThrough, declined);
         IrBlockId next = rethrow ?? declined ?? exceptions.Destination(fallThrough, context);
         ssa.Terminate(context.Current, block.ConditionKind == ControlFlowConditionKind.WhenTrue
             ? new IrBranch(condition, jump, next)
             : new IrBranch(condition, next, jump));
-        if (rethrow is not null)
+        foreach (IrBlockId opaque in ((IrBlockId?[])[jumpRethrow, rethrow]).OfType<IrBlockId>())
         {
-            context.Current = rethrow;
+            context.Current = opaque;
             OpaqueExit("rethrow", context);
         }
     }
+
+    /// <summary>A fresh block for a branch edge that is a rethrow, which names no block; null for an edge that names one.</summary>
+    private IrBlockId? RethrowBlock(ControlFlowBranch branch, IrBlockId? declined) =>
+        branch.Semantics == ControlFlowBranchSemantics.Regular || declined is not null ? null : ssa.NewBlock();
 
     /// <summary>A return runs every enclosing <c>finally</c> after evaluating its value and before exiting.</summary>
     private void Return(IrVar value, ControlFlowBranch branch, LoweringContext context)
@@ -742,7 +748,8 @@ internal sealed class IrLowerer
         switch (operation)
         {
             case IExpressionStatementOperation statement:
-                Lower(statement.Operation, context);
+                // A deconstruction whose value is used is not a statement's, and stays opaque (ticket P2-025).
+                _ = statement.Operation is IDeconstructionAssignmentOperation deconstruction ? Deconstruct(deconstruction, context) : Lower(statement.Operation, context);
                 return null;
             case ILocalReferenceOperation local:
                 return ssa.Load(context.Current, Local(local.Local));
@@ -1128,6 +1135,82 @@ internal sealed class IrLowerer
     /// is an element of a tuple it lowers as a value (ticket P2-027), whose reason is <c>Tuple</c>.
     /// </summary>
     private static string Reason(IOperation lvalue) => lvalue is IFieldReferenceOperation ? "Tuple" : lvalue.Kind.ToString();
+
+    /// <summary>
+    /// A statement that deconstructs a tuple literal into locals, parameters, captured lvalues, fields and discards, one level
+    /// deep (ticket P2-025), as C# evaluates it: each field's receiver, then each element of the literal, then each store, all
+    /// left to right, so <c>(a, b) = (b, a)</c> swaps. A <c>Deconstruct</c> method, a tuple-typed value, a nested tuple, and a
+    /// property, array element or lowered tuple element (ticket P2-027) target stay opaque with reason
+    /// <c>DeconstructionAssignment</c>, their targets written with unknown values, as does a deconstruction whose value is
+    /// used, which is not a statement's.
+    /// </summary>
+    private IrVar? Deconstruct(IDeconstructionAssignmentOperation deconstruction, LoweringContext context)
+    {
+        ImmutableArray<IOperation> lvalues = [.. ((ITupleOperation)Declared(deconstruction.Target)).Elements.Select(Declared)];
+        if (TupleLiteral(deconstruction.Value) is not { } literal
+            || !lvalues.All(l => l is IDiscardOperation || (l is IFieldReferenceOperation field && TypeMapper.TupleElement(field.Field) is null) || Target(l) is not null))
+        {
+            return Opaque(deconstruction, nameof(OperationKind.DeconstructionAssignment), context);
+        }
+
+        List<HeapLowerer.Access?> slices = [];
+        foreach (IOperation lvalue in lvalues)
+        {
+            slices.Add(lvalue is IFieldReferenceOperation field ? heap.Field(field, context) : null);
+        }
+
+        List<IrVar> values = [];
+        foreach (IOperation element in literal.Elements)
+        {
+            values.Add(Value(element, context));
+        }
+
+        // Each null shadow is read before any store, so a swap of references swaps their nullness too.
+        List<IrVar?> nulls = [];
+        for (int i = 0; i < lvalues.Length; i++)
+        {
+            nulls.Add(Target(lvalues[i]) is { } target && Shadow(target) is not null ? NullFlag(literal.Elements[i], values[i], context) : null);
+        }
+
+        for (int i = 0; i < lvalues.Length; i++)
+        {
+            StoreDeconstructed(lvalues[i], slices[i], values[i], nulls[i], context);
+        }
+
+        return null;
+    }
+
+    /// <summary>One store of a deconstruction: to a field's slice, or to a variable and its null shadow; a discard stores nothing.</summary>
+    private void StoreDeconstructed(IOperation lvalue, HeapLowerer.Access? slice, IrVar value, IrVar? isNull, LoweringContext context)
+    {
+        if (slice is { } field)
+        {
+            heap.WriteSlice(field, value, context);
+        }
+        else if (Target(lvalue) is { } target)
+        {
+            ssa.Store(context.Current, target, value);
+            if (isNull is not null)
+            {
+                ssa.Store(context.Current, Shadow(target)!, isNull);
+            }
+        }
+    }
+
+    /// <summary>A declaration's declared expression, or <paramref name="target"/> itself.</summary>
+    private static IOperation Declared(IOperation target) => target is IDeclarationExpressionOperation declaration ? declaration.Expression : target;
+
+    /// <summary>
+    /// The tuple literal <paramref name="value"/> is, through the identity or tuple literal conversion the compiler wraps it in, or
+    /// null. A tuple literal conversion converts each element to its target's type in place, so either way each element is
+    /// already of its target's type.
+    /// </summary>
+    private static ITupleOperation? TupleLiteral(IOperation value) => value switch
+    {
+        ITupleOperation tuple => tuple,
+        IConversionOperation conversion when conversion.GetConversion() is { IsIdentity: true } or { IsTupleLiteralConversion: true } => TupleLiteral(conversion.Operand),
+        _ => null,
+    };
 
     /// <summary>The variable an lvalue names, or null when it is not a local or parameter of this method.</summary>
     private SsaBuilder.Variable? Target(IOperation lvalue) => lvalue switch
