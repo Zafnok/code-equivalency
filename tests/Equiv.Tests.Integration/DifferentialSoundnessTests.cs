@@ -41,6 +41,79 @@ public sealed class DifferentialSoundnessTests
     /// </summary>
     private static readonly ImmutableArray<(string Symptom, string Ticket)> Skips = [];
 
+    /// <summary>The legacy side of the pair <see cref="ADerivationThatNeverReadsALengthReplaysAsDivergence"/> pins.</summary>
+    private const string NeverReadsLengthLegacy = """
+        public static class Oracle
+        {
+            public static int F;
+
+            public static bool M(int a, int b, long c, long d, bool e, string s, int[] u)
+            {
+                int x = a;
+                long y = c;
+                bool z = e;
+                int k0 = 0;
+                while (e && k0 < 2)
+                {
+                    k0++;
+                    y = d;
+                }
+                for (int i1 = 0; i1 < 3; i1++)
+                {
+                    if (((e & z) || (s != null)))
+                    {
+                        F = unchecked((int)y);
+                    }
+                    else
+                    {
+                        x = (e ? b : a);
+                        y = c;
+                        F = checked(unchecked(u[0] ^ x) / (33));
+                    }
+                }
+                F = x;
+                return (z && (s == null));
+            }
+        }
+
+        """;
+
+    /// <summary>Its modern side: <c>F = x;</c> dropped.</summary>
+    private const string NeverReadsLengthModern = """
+        public static class Oracle
+        {
+            public static int F;
+
+            public static bool M(int a, int b, long c, long d, bool e, string s, int[] u)
+            {
+                int x = a;
+                long y = c;
+                bool z = e;
+                int k0 = 0;
+                while (e && k0 < 2)
+                {
+                    k0++;
+                    y = d;
+                }
+                for (int i1 = 0; i1 < 3; i1++)
+                {
+                    if (((e & z) || (s != null)))
+                    {
+                        F = unchecked((int)y);
+                    }
+                    else
+                    {
+                        x = (e ? b : a);
+                        y = c;
+                        F = checked(unchecked(u[0] ^ x) / (33));
+                    }
+                }
+                return (z && (s == null));
+            }
+        }
+
+        """;
+
     private static int Pairs =>
         string.Equals(Environment.GetEnvironmentVariable("EQUIV_DIFFERENTIAL_BUDGET"), "nightly", StringComparison.OrdinalIgnoreCase) ? Budget.Nightly : Budget.PullRequest;
 
@@ -57,6 +130,18 @@ public sealed class DifferentialSoundnessTests
     /// <summary>Rule 3.</summary>
     [Fact]
     public void PreservingMutationIsNeverDivergent() => Sample(Precision);
+
+    /// <summary>
+    /// Ticket P2-041: rule 2 at CsCheck seed <c>6rdKklVqtDVa</c>, shrunk. Spacer's derivation of the dropped
+    /// <c>F = x;</c> never reads <c>u</c>'s length, so it left it at -1, which no C# run can pass.
+    /// </summary>
+    [Fact]
+    public void ADerivationThatNeverReadsALengthReplaysAsDivergence()
+    {
+        Case c = new(NeverReadsLengthLegacy, NeverReadsLengthModern, MutationOperator.DropFieldWrite, []);
+
+        Assert.Null(Decoding(c)?.Describe(c));
+    }
 
     private static void Sample(Func<Case, Failure?> rule) =>
         Gen.Select(PairGen.Pair, PairGen.Input.Array[InputsPerPair], static (pair, inputs) => new Case(pair.LegacySource, pair.ModernSource, pair.Operator, inputs))
