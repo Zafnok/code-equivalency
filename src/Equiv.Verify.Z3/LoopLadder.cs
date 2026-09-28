@@ -66,30 +66,72 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         IrLoopAnalysis newShape = IrLoopAnalysis.Of(@new);
         bool recursive = oldShape.IsSelfRecursive || newShape.IsSelfRecursive;
         bool looping = recursive || !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
-        List<Rung> rungs = [Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible)];
+        List<Rung> rungs = [Timed(() => Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible))];
         if (looping && rungs[^1].Verdict is null)
         {
             LockstepInduction lockstep = new(this, old, @new, oldShape, newShape);
-            rungs.Add(lockstep.Prove());
+            rungs.Add(Timed(lockstep.Prove));
             if (rungs[^1].Verdict is null)
             {
-                rungs.Add(new KInduction(this, lockstep).Prove());
+                rungs.Add(Timed(() => new KInduction(this, lockstep).Prove()));
             }
 
             if (rungs[^1].Verdict is null && UndecidedReason(rungs, recursive) == UnknownReason.UnalignedLoop)
             {
-                rungs.Add(new SpacerRung(createContext, options).Prove(old, @new));
+                rungs.Add(Timed(() => new SpacerRung(createContext, options).Prove(old, @new)));
             }
 
             if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout } && proposer is not null)
             {
-                rungs.AddRange(new LlmInvariantRung(createContext, options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs }, proposer, options.InvariantModel!).Prove(old, @new));
+                long started = TimeProvider.System.GetTimestamp();
+                ImmutableArray<Rung> rounds = new LlmInvariantRung(createContext, options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs }, proposer, options.InvariantModel!).Prove(old, @new);
+                LogRung(rounds[^1].Step, started);
+                rungs.AddRange(rounds);
             }
         }
 
         Verdict verdict = rungs[^1].Verdict ?? Undecided(rungs, recursive);
         return verdict with { Ladder = [.. rungs.Select(static r => r.Step)] };
     }
+
+    /// <summary>Runs one rung and, at <c>debug</c>, writes its <c>rung=… took=… result=…</c> line (ticket M4-014).</summary>
+    private Rung Timed(Func<Rung> rung)
+    {
+        long started = TimeProvider.System.GetTimestamp();
+        Rung result = rung();
+        LogRung(result.Step, started);
+        return result;
+    }
+
+    /// <summary>One line per rung; the text is built only when the log is at <c>debug</c>. Rung 5's rounds are one rung, named by its last step.</summary>
+    private void LogRung(LadderStep step, long started)
+    {
+        if (!options.Log.IsDebug)
+        {
+            return;
+        }
+
+        double took = TimeProvider.System.GetElapsedTime(started).TotalSeconds;
+        options.Log.Detail(string.Create(CultureInfo.InvariantCulture, $"rung={RungName(step.Rung)} took={took:0.###}s result={ResultName(step.Outcome)}"));
+    }
+
+    private static string RungName(ProofMethod method) => method switch
+    {
+        ProofMethod.Bounded => "bounded",
+        ProofMethod.LockstepInduction => "lockstep-induction",
+        ProofMethod.KInduction => "k-induction",
+        ProofMethod.Chc => "chc",
+        _ => "llm-invariant",
+    };
+
+    private static string ResultName(RungOutcome outcome) => outcome switch
+    {
+        RungOutcome.Proved => "unsat",
+        RungOutcome.Refuted => "sat",
+        RungOutcome.Timeout => "timeout",
+        RungOutcome.NotApplicable => "not-applicable",
+        _ => "unknown",
+    };
 
     /// <summary>
     /// Every rung on its own, whatever the others found (VERIFICATION-MODEL.md section 7: the soundness harness runs
