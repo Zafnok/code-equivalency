@@ -3,6 +3,8 @@ using System.Globalization;
 
 using Equiv.Core.Ir;
 
+using Equiv.Verify.Z3.Ladder;
+
 using Microsoft.Z3;
 
 using SharedParameter = Equiv.Verify.Z3.ProductEncoder.SharedParameter;
@@ -200,9 +202,11 @@ internal sealed class ChcEncoder
     /// <paramref name="timeoutMs"/>: init (a rule with no relation in its premise), step (a relation in its premise and one
     /// in its conclusion) and exit (a relation in its premise and <c>bad</c> in its conclusion). Null when every obligation
     /// is unsatisfiable, which is a proof of the pair in this encoder's arithmetic; else the first obligation that is not,
-    /// with the rule a model breaks and that model's values of the two relations' arguments (ticket P1-002).
+    /// with the rule a model breaks and that model's values of the two relations' arguments (ticket P1-002), which are
+    /// also the refutation's <see cref="InvariantRequest.Rejection.Premise"/> and <see cref="InvariantRequest.Rejection.Conclusion"/>
+    /// (ticket P1-009).
     /// </summary>
-    public string? Refutes(IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, uint timeoutMs)
+    public Refutation? Refutes(IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, uint timeoutMs)
     {
         foreach ((string name, BoolExpr[] rules) in Obligations())
         {
@@ -218,12 +222,15 @@ internal sealed class ChcEncoder
 
             if (status == Status.UNKNOWN)
             {
-                return $"Z3 gave up on the {name} obligation: {solver.ReasonUnknown}";
+                return new Refutation($"Z3 gave up on the {name} obligation: {solver.ReasonUnknown}");
             }
 
             Model model = solver.Model;
             BoolExpr broken = rules.Where((_, i) => model.Eval(counterexamples[i], completion: true).IsTrue).First();
-            return $"the {name} obligation fails: {Describe(broken, definitions, model)}";
+            Expr? premise = Applications(broken.Args[0]).FirstOrDefault(a => divergence.Relations.ContainsValue(a.FuncDecl));
+            InvariantRequest.Fact? before = premise is null ? null : Fact(premise, definitions, model);
+            InvariantRequest.Fact? after = broken.Args[1].FuncDecl.Equals(bad) ? null : Fact(broken.Args[1], definitions, model);
+            return new Refutation($"the {name} obligation fails: {Describe(before)} -> {Describe(after, "bad")}") { Premise = before, Conclusion = after };
         }
 
         return null;
@@ -250,15 +257,13 @@ internal sealed class ChcEncoder
         return (BoolExpr)rule.Substitute(atoms, meanings);
     }
 
-    /// <summary>A broken rule as <c>&lt;premise&gt; -&gt; &lt;conclusion&gt;</c>, each relation with the model's value of every argument.</summary>
-    private string Describe(BoolExpr rule, IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, Model model)
-    {
-        string Atom(Expr atom) => atom.FuncDecl.Equals(bad)
-            ? "bad"
-            : $"{atom.FuncDecl.Name}({string.Join(", ", definitions[atom.FuncDecl].Parameters.Zip(atom.Args, (p, a) => $"{p} = {model.Eval(a, completion: true)}"))})";
-        Expr? premise = Applications(rule.Args[0]).FirstOrDefault(a => divergence.Relations.ContainsValue(a.FuncDecl));
-        return $"{(premise is null ? "entry" : Atom(premise))} -> {Atom(rule.Args[1])}";
-    }
+    /// <summary>A relation's atom in a broken rule, with the model's value of every argument.</summary>
+    private static InvariantRequest.Fact Fact(Expr atom, IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, Model model) =>
+        new(atom.FuncDecl.Name.ToString(), [.. definitions[atom.FuncDecl].Parameters.Zip(atom.Args, (p, a) => new InvariantRequest.Binding(p.ToString(), model.Eval(a, completion: true).ToString()))]);
+
+    /// <summary>One side of a broken rule as <c>R(a = v, ...)</c>, or <paramref name="none"/> for no relation.</summary>
+    private static string Describe(InvariantRequest.Fact? fact, string none = "entry") =>
+        fact is null ? none : $"{fact.Relation}({string.Join(", ", fact.Values.Select(static b => $"{b.Name} = {b.Value}"))})";
 
     /// <summary>
     /// The inputs of a satisfiable query's derivation: the shared inputs and sort literals every relation holds, read from
@@ -560,6 +565,17 @@ internal sealed class ChcEncoder
     /// otherwise nothing of use and the reason it gave up.
     /// </summary>
     public sealed record ChcAnswer(Status Status, Expr Answer, string Reason);
+
+    /// <summary>
+    /// Why definitions do not solve the divergence query (<see cref="Refutes"/>): the reason, and for a broken rule the
+    /// model's facts of the relation in its premise and in its conclusion (null for the entry and for <c>bad</c>).
+    /// </summary>
+    public sealed record Refutation(string Reason)
+    {
+        public InvariantRequest.Fact? Premise { get; init; }
+
+        public InvariantRequest.Fact? Conclusion { get; init; }
+    }
 
     /// <summary>A relation of the divergence query and its arguments, each a constant named for a reader (<see cref="Relations"/>).</summary>
     public sealed record Relation(FuncDecl Decl, ImmutableArray<Expr> Parameters);

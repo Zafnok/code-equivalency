@@ -26,9 +26,9 @@ namespace Equiv.Verify.Z3;
 /// <see cref="UnknownReason.Recursion"/> when a side calls itself, <see cref="UnknownReason.UnalignedLoop"/> when the
 /// loops do not align or an induction failed, and <see cref="UnknownReason.Timeout"/> when only the solver gave up;
 /// except that a pair that would be UnalignedLoop goes to rung 4 (<see cref="SpacerRung"/>) first, which decides it
-/// whenever neither side calls. When rung 4 times out and <paramref name="proposer"/> is given (<c>--invariant-model</c>),
-/// rung 5 (<see cref="LlmInvariantRung"/>) asks it for the invariant, one ladder step per round. Every verdict lists the
-/// rungs it ran in <see cref="Verdict.Ladder"/>.
+/// whenever neither side calls. When rung 4 times out, rung 5 (<see cref="LlmInvariantRung"/>) asks <see cref="Traces"/>
+/// for the invariant (ticket P1-009), and then, unless that proved the pair, <paramref name="proposer"/> when it is given
+/// (<c>--invariant-model</c>), one ladder step per round. Every verdict lists the rungs it ran in <see cref="Verdict.Ladder"/>.
 /// </summary>
 internal sealed class LoopLadder(Func<Context> createContext, VerificationOptions options, IInvariantProposer? proposer = null)
 {
@@ -42,6 +42,12 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// force rung 4 to time out while rung 5 still decides.
     /// </summary>
     public int? InvariantTimeoutMs { get; init; }
+
+    /// <summary>
+    /// The local proposer rung 5 asks first, on by default because it runs in process and sends nothing (ticket P1-009);
+    /// a test sets it to null to run the model's proposer alone.
+    /// </summary>
+    public IInvariantProposer? Traces { get; init; } = new TraceInvariantProposer();
 
     /// <summary>
     /// Runs the ladder on the pair with its shared fragments encoded as calls (<see cref="ProductEncoder.ShareFragments"/>).
@@ -81,9 +87,15 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
                 rungs.Add(new SpacerRung(createContext, options).Prove(old, @new));
             }
 
-            if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout } && proposer is not null)
+            VerificationOptions invariantOptions = options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs };
+            if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout } && Traces is not null)
             {
-                rungs.AddRange(new LlmInvariantRung(createContext, options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs }, proposer, options.InvariantModel!).Prove(old, @new));
+                rungs.AddRange(new LlmInvariantRung(createContext, invariantOptions, Traces, TraceInvariantProposer.Name, ProofMethod.TraceInvariant).Prove(old, @new));
+            }
+
+            if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout or UnknownReason.NoInvariant } && proposer is not null)
+            {
+                rungs.AddRange(new LlmInvariantRung(createContext, invariantOptions, proposer, options.InvariantModel!, ProofMethod.LlmInvariant).Prove(old, @new));
             }
         }
 

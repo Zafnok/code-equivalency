@@ -1,4 +1,4 @@
-using Equiv.Core;
+﻿using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
@@ -176,7 +176,7 @@ public sealed class LadderFixtureTests
     /// the property tests on four cores, where ten seconds once turned <c>fusion</c>'s proof into a timeout.
     /// </summary>
     private static Verdict Verify(Fixture fixture) =>
-        new Z3Backend().Verify(fixture.Old, fixture.New, new VerificationOptions(3, fixture.Expected.StartsWith("Unknown(Timeout", StringComparison.Ordinal) || fixture.Expected.StartsWith("Unknown(ChcTimeout", StringComparison.Ordinal) ? 50 : 60_000, []));
+        new Z3Backend().Verify(fixture.Old, fixture.New, new VerificationOptions(3, fixture.Expected.StartsWith("Unknown(Timeout", StringComparison.Ordinal) || fixture.Expected.StartsWith("Unknown(NoInvariant", StringComparison.Ordinal) ? 50 : 60_000, []));
 
     private static string Describe(Verdict verdict) => verdict switch
     {
