@@ -23,7 +23,7 @@ namespace Equiv.Verify.Z3.Tests;
 /// from runs of both sides in <c>IrInterpreter</c>, and <see cref="LlmInvariantRung"/> checks its candidates as it checks
 /// a model's.
 /// </summary>
-public sealed partial class TraceInvariantProposerTests
+public sealed class TraceInvariantProposerTests
 {
     private static readonly VerificationOptions Options = new(3, 10_000, []);
 

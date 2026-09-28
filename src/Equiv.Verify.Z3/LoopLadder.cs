@@ -87,16 +87,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
                 rungs.Add(Timed(() => new SpacerRung(createContext, options).Prove(old, @new)));
             }
 
-            VerificationOptions invariantOptions = options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs };
-            if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout } && Traces is not null)
-            {
-                rungs.AddRange(Invariant(old, @new, invariantOptions, Traces, TraceInvariantProposer.Name, ProofMethod.TraceInvariant));
-            }
-
-            if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout or UnknownReason.NoInvariant } && proposer is not null)
-            {
-                rungs.AddRange(Invariant(old, @new, invariantOptions, proposer, options.InvariantModel!, ProofMethod.LlmInvariant));
-            }
+            ProposeInvariants(rungs, old, @new);
         }
 
         Verdict verdict = rungs[^1].Verdict ?? Undecided(rungs, recursive);
@@ -113,6 +104,23 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     }
 
     /// <summary>One line per rung; the text is built only when the log is at <c>debug</c>. Rung 5's rounds are one rung, named by its last step.</summary>
+    /// <summary>
+    /// Rung 5 after rung 4 timed out: <see cref="Traces"/> first, then the model's proposer unless that proved the pair.
+    /// </summary>
+    private void ProposeInvariants(List<Rung> rungs, IrProcedure old, IrProcedure @new)
+    {
+        VerificationOptions invariantOptions = options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs };
+        if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout } && Traces is not null)
+        {
+            rungs.AddRange(Invariant(old, @new, invariantOptions, Traces, TraceInvariantProposer.Name, ProofMethod.TraceInvariant));
+        }
+
+        if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout or UnknownReason.NoInvariant } && proposer is not null)
+        {
+            rungs.AddRange(Invariant(old, @new, invariantOptions, proposer, options.InvariantModel!, ProofMethod.LlmInvariant));
+        }
+    }
+
     /// <summary>Rung 5 with one proposer, logged at debug as one rung with its last round's outcome.</summary>
     private ImmutableArray<Rung> Invariant(IrProcedure old, IrProcedure @new, VerificationOptions invariantOptions, IInvariantProposer asked, string proposedBy, ProofMethod method)
     {

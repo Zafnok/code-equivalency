@@ -87,18 +87,21 @@ internal static class InvariantTemplates
         return found;
     }
 
-    /// <summary><c>x = c*y</c> with <c>c</c> the ratio of the first sample with <c>y</c> non-zero, when it held everywhere.</summary>
-    private static IEnumerable<Conjunct> Scale(string x, Int128[] xs, string y, Int128[] ys)
+    /// <summary>
+    /// <c>product = c*factor</c> with <c>c</c> the ratio of the first sample with <c>factor</c> non-zero, when it held
+    /// everywhere.
+    /// </summary>
+    private static IEnumerable<Conjunct> Scale(string product, Int128[] products, string factor, Int128[] factors)
     {
-        int k = Array.FindIndex(ys, static v => v != 0);
-        if (k < 0 || xs[k] % ys[k] != 0)
+        int k = Array.FindIndex(factors, static v => v != 0);
+        if (k < 0 || products[k] % factors[k] != 0)
         {
             return [];
         }
 
-        Int128 factor = xs[k] / ys[k];
-        bool small = factor != 0 && factor != 1 && Int128.Abs(factor) <= MaxConstant;
-        return small && xs.Zip(ys).All(p => p.First == factor * p.Second) ? [new Conjunct(Template.Scale, x, y, (long)factor)] : [];
+        Int128 c = products[k] / factors[k];
+        bool small = c != 0 && c != 1 && Int128.Abs(c) <= MaxConstant;
+        return small && products.Zip(factors).All(p => p.First == c * p.Second) ? [new Conjunct(Template.Scale, product, factor, (long)c)] : [];
     }
 
     /// <summary>
@@ -111,7 +114,8 @@ internal static class InvariantTemplates
         if (string.Equals(variable.Sort, Bool, StringComparison.Ordinal))
         {
             bool first = (bool)traces[0][0];
-            return traces.All(t => t.All(v => (bool)v == first)) ? [new Conjunct(Template.Truth, x, C: first ? 1 : 0)] : [];
+            long value = first ? 1 : 0;
+            return traces.All(t => t.All(v => (bool)v == first)) ? [new Conjunct(Template.Truth, x, C: value)] : [];
         }
 
         if (!string.Equals(variable.Sort, Int, StringComparison.Ordinal))

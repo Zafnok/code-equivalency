@@ -52,7 +52,7 @@ internal sealed class TraceInvariantProposer(ulong seed = TraceInvariantProposer
         Runner oldRunner = new(old, Side.Old, exceptions);
         Runner newRunner = new(@new, Side.New, exceptions);
         List<(string Relation, IReadOnlyList<Sample> Samples)> traces = [];
-        foreach (Dictionary<SharedParameter, IrValue> inputs in Inputs(request, shared, seed).Take(MaxInputs))
+        foreach (Dictionary<SharedParameter, IrValue> inputs in Inputs(request, shared, seed))
         {
             Dictionary<string, object> carried = shared.ToDictionary(static s => s.InputName, s => Scalar(inputs[s]), StringComparer.Ordinal);
             List<Point> oldRun = oldRunner.Run([.. old.Parameters.Select(p => inputs[shared.First(s => s.Old == p)])]);
@@ -86,22 +86,23 @@ internal sealed class TraceInvariantProposer(ulong seed = TraceInvariantProposer
     }
 
     /// <summary>
-    /// The inputs to run: those of each rejection's counterexample (its facts' <c>in.*</c> values), then random ones. A
-    /// value a fact does not give as an integer or Boolean is random.
+    /// The inputs to run: those of each rejection's counterexample (its facts' <c>in.*</c> values), then enough random
+    /// ones to reach <see cref="MaxInputs"/>. A value a fact does not give as an integer or Boolean is random.
     /// </summary>
-    private static IEnumerable<Dictionary<SharedParameter, IrValue>> Inputs(InvariantRequest request, ImmutableArray<SharedParameter> shared, ulong seed)
+    private static List<Dictionary<SharedParameter, IrValue>> Inputs(InvariantRequest request, ImmutableArray<SharedParameter> shared, ulong seed)
     {
         SplitMix random = new(seed);
-        foreach (InvariantRequest.Fact fact in request.Rejected.SelectMany(static r => (InvariantRequest.Fact?[])[r.Premise, r.Conclusion]).OfType<InvariantRequest.Fact>())
-        {
-            Dictionary<string, string> values = fact.Values.ToDictionary(static b => b.Name, static b => b.Value, StringComparer.Ordinal);
-            yield return shared.ToDictionary(static s => s, s => Given(s, values) ?? random.Value(s.Type));
-        }
-
-        while (true)
-        {
-            yield return shared.ToDictionary(static s => s, s => random.Value(s.Type));
-        }
+        List<Dictionary<SharedParameter, IrValue>> inputs =
+        [
+            .. request.Rejected
+                .SelectMany(static r => (InvariantRequest.Fact?[])[r.Premise, r.Conclusion])
+                .OfType<InvariantRequest.Fact>()
+                .Select(static f => f.Values.ToDictionary(static b => b.Name, static b => b.Value, StringComparer.Ordinal))
+                .Select(values => shared.ToDictionary(static s => s, s => Given(s, values) ?? random.Value(s.Type)))
+                .Take(MaxInputs),
+        ];
+        inputs.AddRange(Enumerable.Range(0, MaxInputs - inputs.Count).Select(_ => shared.ToDictionary(static s => s, s => random.Value(s.Type))));
+        return inputs;
     }
 
     /// <summary>The value a counterexample gives the input <paramref name="input"/>, when it is an integer or a Boolean.</summary>
@@ -146,19 +147,29 @@ internal sealed class TraceInvariantProposer(ulong seed = TraceInvariantProposer
                 yield break;
             }
 
-            bool oldReturns = a.Header is not null && old[i + 1].Header == a.Header;
-            bool newReturns = b.Header is not null && @new[j + 1].Header == b.Header;
-            (bool oldSteps, bool newSteps) = (a.Header, b.Header) switch
-            {
-                (null, null) => (true, true),
-                (null, _) => (false, true),
-                (_, null) => (true, false),
-                _ when oldReturns == newReturns => (true, true),
-                _ => (oldReturns, newReturns),
-            };
+            (bool oldSteps, bool newSteps) = Steps(a.Header, b.Header, old.ElementAtOrDefault(i + 1), @new.ElementAtOrDefault(j + 1));
             i += oldSteps ? 1 : 0;
             j += newSteps ? 1 : 0;
         }
+    }
+
+    /// <summary>
+    /// Which sides the product steps from cut points <paramref name="a"/> and <paramref name="b"/>, given each side's next
+    /// cut point: a side that has exited waits; else both step when both return to their header or both leave it, and
+    /// otherwise the one that returns steps alone.
+    /// </summary>
+    private static (bool Old, bool New) Steps(IrBlockId? a, IrBlockId? b, Point? oldNext, Point? newNext)
+    {
+        bool oldReturns = oldNext?.Header == a;
+        bool newReturns = newNext?.Header == b;
+        return (a, b) switch
+        {
+            (null, null) => (true, true),
+            (null, _) => (false, true),
+            (_, null) => (true, false),
+            _ when oldReturns == newReturns => (true, true),
+            _ => (oldReturns, newReturns),
+        };
     }
 
     /// <summary>A cut point as rung 4's relations name it: <c>B&lt;n&gt;</c> for a header, <c>exit</c> for the exit.</summary>
