@@ -1,5 +1,5 @@
 # P2-029 A call through `dynamic` (`DynamicInvocation`) has no lowering
-Status: todo
+Status: done (PR #240)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004
@@ -32,3 +32,10 @@ Documentation-and-test only; this is not expected to ever lower.
 Any attempt to model DLR call-site binding.
 
 ## Notes
+
+- Decision: stays opaque, reason `DynamicInvocation` (equiv-decide: the ticket settles it; the DLR binds the call at run
+  time, so there is no callee identity for an `IrCall`, and modelling call-site binding is out of scope).
+- Deviation: the repro did not lower to a valid procedure: `TypeMapper` gave `dynamic` the sort `dynamic`, and Roslyn's
+  `dynamic`-to-`object` conversion is an identity, which the lowerer passes through, so an `object`-returning method
+  returned a `dynamic`-sorted value and `IrValidator` failed (a `Debug.Assert` in `IrLowerer.Procedure`). One-line fix in
+  `TypeMapper.MetadataName`: `dynamic` is the `System.Object` sort, which it is at run time. Needed for criterion 2.
