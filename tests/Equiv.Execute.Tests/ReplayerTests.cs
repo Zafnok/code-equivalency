@@ -48,8 +48,17 @@ public sealed class ReplayerTests
     [Theory]
     [InlineData("[\"NotComparable\",\"Odd.Holder\"]", "[\"Returned\",1]", "the legacy side gave NotComparable \"Odd.Holder\"")]
     [InlineData("[\"Returned\",1]", "[\"NotConstructible\",\"System.FormatException\"]", "the modern side gave NotConstructible \"System.FormatException\"")]
+    [InlineData("[\"NotComparable\",\"A\"]", "[\"NotConstructible\",\"B\"]", "the legacy side gave NotComparable \"A\"")]
     public void ASideWithNoComparableOutcome_IsNotConstructible(string legacy, string modern, string reason) =>
         Assert.Equal(ReplayResult.NotConstructible(reason), Replay(legacy, modern));
+
+    [Fact]
+    public void Replay_RejectsNullPlan()
+    {
+        Replayer replayer = new(new FakeHost(static (_, _, _) => null));
+
+        Assert.Throws<ArgumentNullException>(() => replayer.Replay(null!));
+    }
 
     [Fact]
     public void APlanWithoutDrivers_IsNotConstructibleWithItsReasonAndRunsNothing()
