@@ -1,18 +1,27 @@
 name: Release
 
 # M3-004: publishes the single-file win-x64/linux-x64 binaries, builds and pushes the container
-# image to GHCR, and attaches everything to a GitHub release. Triggered only by a `v*` tag push
-# (ADR 0017/0002's Versioning gate: MinVer reads the version from this tag, MinVerTagPrefix=v).
+# image to GHCR, and attaches everything to a GitHub release for one `v*` tag (ADR 0017/0002's
+# Versioning gate: MinVer reads the version from that tag, MinVerTagPrefix=v). Normally called by
+# rolling-release.yml, which tags every green main commit: a tag pushed with GITHUB_TOKEN triggers
+# no workflows, so it passes the tag in instead. A hand-pushed `v*` tag still triggers this
+# directly (repairs only; policy in .claude/skills/equiv-release).
 on:
   push:
     tags:
       - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: The existing v* tag to build and release.
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -22,16 +31,26 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
+      tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       change_date: ${{ steps.version.outputs.change_date }}
     steps:
+      # Under workflow_call, github.ref_name is the caller's branch (main), not the tag. Passed
+      # through env, not inlined, so a tag name can never be read as script; the shape check
+      # below makes the later inline uses of tag/version safe too.
       - name: Compute the release version and Change Date
         id: version
         shell: bash
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$TAG' is not a vMAJOR.MINOR.PATCH[-prerelease] tag."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
           echo "change_date=$(date -u -d '+4 years' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
   build-binaries:
@@ -48,6 +67,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The tag, not github.ref: under workflow_call that is main, whose tip may have moved on.
+          ref: ${{ needs.prepare.outputs.tag }}
           # MinVer needs the tag history to compute the version; the default shallow checkout
           # would leave it on the untagged 0.0.0-alpha.0 fallback.
           fetch-depth: 0
@@ -105,6 +126,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.prepare.outputs.tag }}
           fetch-depth: 0
 
       - name: Log in to GHCR
@@ -135,6 +157,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -144,9 +168,11 @@ jobs:
 
       # ADR 0017 criterion 7: the release body states the licence and links it, rather than
       # letting the release page read as if this were an open-source project.
+      # --generate-notes appends the PRs merged since the previous release below that text.
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
           VERSION: ${{ needs.prepare.outputs.version }}
           CHANGE_DATE: ${{ needs.prepare.outputs.change_date }}
         shell: bash
@@ -156,10 +182,11 @@ jobs:
           notes_file=$(mktemp)
           {
             echo "equiv is licensed under the **Business Source License 1.1**: source-available, not open source."
-            echo "See [LICENSE](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/LICENSE) for the Additional Use Grant (three-seat, 50,000-LOC free tier); this release's own copy has a Change Date of $CHANGE_DATE."
+            echo "See [LICENSE](https://github.com/${{ github.repository }}/blob/$TAG/LICENSE) for the Additional Use Grant (three-seat, 50,000-LOC free tier); this release's own copy has a Change Date of $CHANGE_DATE."
             echo ""
             echo "Container image: \`ghcr.io/$owner/equiv:$VERSION\`."
           } > "$notes_file"
-          gh release create "${{ github.ref_name }}" dist/*.zip dist/*.tar.gz \
+          gh release create "$TAG" dist/*.zip dist/*.tar.gz \
             --title "equiv $VERSION" \
-            --notes-file "$notes_file"
+            --notes-file "$notes_file" \
+            --generate-notes

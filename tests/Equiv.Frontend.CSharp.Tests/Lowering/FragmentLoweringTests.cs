@@ -147,6 +147,38 @@ public sealed class FragmentLoweringTests
     }
 
     [Fact]
+    public void AQueryOverALoopIsOneTranslatedQueryFragment()
+    {
+        IrOpaque fragment = Assert.Single(Opaques(Source(Linq + "class C { static int M(int[] xs) { int s = 0; foreach (var x in from n in xs where n % 2 == 0 select n) s += x; return s; } }")), static o => string.Equals(o.Reason, "TranslatedQuery", StringComparison.Ordinal));
+
+        Assert.NotNull(fragment.Fingerprint);
+        Assert.Equal(["xs"], fragment.Reads.Select(static r => r.SourceName).Distinct(StringComparer.Ordinal), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-026 criterion 2, reduced from Git Extensions' <c>RecentRepoSplitter.SplitRecentRepos</c>: a second <c>from</c>
+    /// clause is a lambda whose syntax is the clause, neither an expression nor a statement, which the data-flow analysis of the
+    /// graph's functions cast to a statement and threw on.
+    /// </summary>
+    [Theory]
+    [InlineData("int M(List<List<int>> groups, bool top) { var all = new List<int>(); void Add(List<int> into) { into.AddRange(from g in groups from x in g where (x > 0) == top select x); } Add(all); return all.Count(x => (x > 0) == top); }")]
+    [InlineData("int M(int[][] groups, int k) => (from g in groups from x in g where x > k select x).Count();")]
+    public void ANestedFromClauseLowersWithoutThrowing(string method)
+    {
+        IrProcedure procedure = Source(Linq + "class C { " + method + " }");
+
+        Assert.All(Opaques(procedure), static o => Assert.NotNull(o.Fingerprint));
+    }
+
+    [Fact]
+    public void ALambdaCapturingAVariableANestedFromClauseWritesHasNoFingerprint()
+    {
+        IrProcedure procedure = Source(Linq + "class C { int M(int[] xs, int k) { int t = 0; var q = from x in xs from y in xs.Take(t = k) select y; return xs.Count(x => x > t); } }");
+
+        Assert.Null(Assert.Single(Opaques(procedure), static o => string.Equals(o.Reason, "DelegateCreation", StringComparison.Ordinal)).Fingerprint);
+    }
+
+    [Fact]
     public void APatternIsNotAnExpressionAndHasNoFingerprint()
     {
         IrOpaque fragment = Assert.Single(Opaques(Source("class C { int M(object o) { switch (o) { case string { Length: 3 }: return 1; default: return 0; } } }")));

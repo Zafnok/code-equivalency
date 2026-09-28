@@ -1,4 +1,4 @@
-﻿using Equiv.Core.Ir;
+using Equiv.Core.Ir;
 
 using Xunit;
 
@@ -309,6 +309,11 @@ public sealed class IrLowererSnapshotTests
     /// <summary>Ticket P2-027 acceptance criterion 2: the same reads through the tuple's element names.</summary>
     [Fact]
     public Task TupleElementsByName() => Dump("static int M((int X, int Y) p) => p.X + p.Y;");
+
+    /// <summary>Ticket P2-026 acceptance criterion 3: the whole query is one fingerprinted fragment the loop enumerates.</summary>
+    [Fact]
+    public Task QueryExpression() => Verify(IrText.Dump(Lowered.Source(
+        "using System.Linq;\nclass C { static int M(int[] xs) { int s = 0; foreach (var x in from n in xs where n % 2 == 0 select n) s += x; return s; } }")));
 
     /// <summary>Ticket P2-025 acceptance criterion 2: a tuple literal's elements are all read, then stored left to right, so this swaps.</summary>
     [Fact]

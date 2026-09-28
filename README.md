@@ -308,8 +308,9 @@ Ubuntu 22.04 and Alpine are unsupported for the linux-x64 build.
 
 ## Running without cloning
 
-A tagged release (`.github/workflows/release.yml`, triggered on `v*`) publishes three ways to run
-`equiv` without a checkout. Every artifact carries `LICENSE` and `THIRD-PARTY-NOTICES.md`
+Every green commit on `main` (CI, CodeQL and SonarQube Cloud) publishes a patch release
+(`.github/workflows/rolling-release.yml`, then `release.yml`; versioning policy in
+`.claude/skills/equiv-release`), with three ways to run `equiv` without a checkout. Every artifact carries `LICENSE` and `THIRD-PARTY-NOTICES.md`
 (ADR 0017); the licence is BUSL-1.1, source-available and not open source, with a Change Date
 specific to that release.
 
