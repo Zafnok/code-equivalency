@@ -33,13 +33,14 @@ internal sealed class ModelDecoder
     private readonly Context context;
     private readonly Model model;
     private readonly ProductEncoding encoding;
-    private readonly Values values = new();
+    private readonly Values values;
 
     public ModelDecoder(Context context, Model model, ProductEncoding encoding)
     {
         this.context = context;
         this.model = model;
         this.encoding = encoding;
+        values = new(model);
         foreach ((IrSortValue literal, Expr constant) in encoding.Sorts.SortLiterals)
         {
             values.Remember(literal, model.Eval(constant, completion: true));
@@ -257,9 +258,10 @@ internal sealed class ModelDecoder
     /// Values a solver gives, as IR values: a model's, or the ground facts of rung 4's derivations (ticket P1-001). An
     /// element of an uninterpreted sort becomes <c>sort "S" n</c>: an element <see cref="Remember"/>ed for a literal keeps
     /// that literal's id, any other gets the next free id. A bitvector may come as an integer, in rung 4's integer mode,
-    /// and then denotes its bits modulo its width.
+    /// and then denotes its bits modulo its width. A map given as <c>as-array</c> is read from <paramref name="model"/>'s
+    /// interpretation of its function (ticket P2-041); without a model, it cannot be.
     /// </summary>
-    internal sealed class Values
+    internal sealed class Values(Model? model = null)
     {
         private readonly Dictionary<string, Dictionary<string, int>> ids = new(StringComparer.Ordinal);
         private readonly Dictionary<IrSortValue, Expr> elements = [];
@@ -302,13 +304,18 @@ internal sealed class ModelDecoder
         }
 
         /// <summary>
-        /// Z3 4.12 evaluates a model array, with completion, to a store chain over a constant array; any other
-        /// shape (an <c>as-array</c>, a lambda) fails loudly, naming the term, rather than decoding to a wrong map.
+        /// Z3 evaluates a model array, with completion, to a store chain over a constant array, or to <c>as-array</c> over an
+        /// auxiliary function the model interprets (ticket P2-041), whose entries are the map's written keys and whose else
+        /// value is its default. Any other shape (a lambda, an <c>as-array</c> with no interpretation) fails loudly, naming
+        /// the term, rather than decoding to a wrong map.
         /// </summary>
         private IrMapValue DecodeMap(Expr value, IrMap type) => value switch
         {
             { IsStore: true } => DecodeMap(value.Args[0], type).Write(Decode(value.Args[1], type.Key), Decode(value.Args[2], type.Value)),
             { IsConstantArray: true } => new IrMapValue(type, Decode(value.Args[0], type.Value), []),
+            { IsAsArray: true } when model?.FuncInterp(value.FuncDecl.Parameters[0].FuncDecl) is { } interpretation => interpretation.Entries.Aggregate(
+                new IrMapValue(type, Decode(interpretation.Else, type.Value), []),
+                (map, e) => map.Write(Decode(e.Args[0], type.Key), Decode(e.Value, type.Value))),
             _ => throw new InvalidOperationException($"Encoder bug: the model gives a map in a shape the decoder does not read (store chain over a constant array expected): {value}"),
         };
     }
