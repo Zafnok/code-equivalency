@@ -10,9 +10,9 @@ pair to a verification backend, and emits SARIF plus an exit code.
 
 ```
 Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv.Cli
-                (Roslyn lives here)     (no Roslyn,      (Z3 lives here)
-                                         no Z3)
-                                            ^
+                (Roslyn and ICSharp-    (no Roslyn,      (Z3 lives here)
+                 Code.Decompiler live    no Z3)
+                 here; ADR 0039)            ^
                                             |
         Equiv.Cli ------------------> Equiv.Execute
                                   (driver processes live here;
@@ -44,6 +44,13 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 4. Lowering: `ControlFlowGraph.Create(IOperation)` -> IR. Unsupported operations produce
    `IrOpaque` nodes, never exceptions. Coverage of the IOperation surface is tracked in
    `docs/tickets/IOPERATION-COVERAGE.md` and grows ticket by ticket.
+5. IL fallback (ADR 0039; tickets P1-014 to P1-018): with `--il-fallback`, a matched pair that is
+   not congruent and holds an opaque the other side does not share is lowered again, on both sides,
+   from ILSpy's ILAst of the side's compilation emitted in memory (`Lowering/Il/`; no other project
+   references `ICSharpCode.Decompiler`). Every type and member the ILAst names is resolved to the
+   loaded compilation's symbol and goes through step 4's own `TypeMapper` and
+   `CallIdentityFactory`, so identities and sorts come from the same code. The IL bodies replace the IOperation ones only when they hold fewer unshared opaques.
+   Coverage is tracked in `docs/tickets/IL-COVERAGE.md`.
 
 `Equiv.Verify.Z3` implements `IVerificationBackend`:
 
@@ -81,12 +88,14 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 - `equiv compare --legacy <path.sln> --modern <path.sln> [--baseline prev.sarif]
   [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
   [--dry-run] [--lower-only] [--execute] [--test-target 0.001] [--test-budget 10000[,60]]
-  [--chc-int-mode true|false] [--invariant-model <id>]`.
+  [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback]`.
 - `--chc-int-mode` (default true) lets loop-ladder rung 4 ask Z3 Spacer over the integers first
   (VERIFICATION-MODEL.md section 5.1); `false` keeps it to the bitvectors.
 - `--invariant-model <id>` (off by default) turns on rung 5: when rung 4 times out, the Claude model `<id>` is asked
   for a coupling invariant over the Messages API (key in `ANTHROPIC_API_KEY`), which Z3 must admit
   (VERIFICATION-MODEL.md section 5.1; ADR 0036).
+- `--il-fallback` (off by default until P1-018's corpus run decides otherwise; ADR 0039) turns on
+  the frontend's IL fallback (step 5 above).
 - Every run prints the analysed line count of each codebase and writes both to
   `run.properties.analysedLinesOfCode`: two numbers, never a total (README "Licence"). The frontend
   counts them from the files it loaded. `--dry-run` loads both sides, prints the route and the
