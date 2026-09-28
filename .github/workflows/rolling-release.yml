@@ -28,24 +28,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Runs no repository code, so nothing checked out can act with this job's write token
+  # (Sonar githubactions:S7631): main's tip, the tags, the commit messages and the new tag all
+  # go through the REST API.
   tag:
     # workflow_run's branch filter matches a PR whose head branch is called main too (and
-    # CodeQL's schedule): only a push to main is a release candidate.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'push'
+    # CodeQL's schedule): only a push to main, from this repository, is a release candidate.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
-      # actions: read to list the three workflows' runs; contents: write to push the tag.
+      # actions: read to list the three workflows' runs; contents: write to create the tag.
       actions: read
       contents: write
     outputs:
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: main
-          # Every tag and the log since the last one, for the version and the Release: footers.
-          fetch-depth: 0
-
       # Only main's tip is released: an older commit that turns green after a newer one landed
       # is superseded by it. Still-running siblings mean a later completion will release; a
       # failed one means this commit is never released and the next green commit takes the
@@ -60,7 +60,7 @@ jobs:
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          tip=$(git rev-parse HEAD)
+          tip=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
           if [[ "$EVENT_NAME" == workflow_run && "$RUN_SHA" != "$tip" ]]; then
             echo "$RUN_SHA is no longer main's tip ($tip); nothing to release."
             exit 0
@@ -91,28 +91,37 @@ jobs:
         if: steps.green.outputs.sha != ''
         shell: bash
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           SHA: ${{ steps.green.outputs.sha }}
           BUMP: ${{ inputs.bump }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
+          # "name commit-sha" per tag. The tags endpoint already peels an annotated tag to its
+          # commit, so one paginated call answers both questions below.
+          tags=$(gh api --paginate "repos/$REPO/tags?per_page=100" --jq '.[] | "\(.name) \(.commit.sha)"')
           # A dispatched minor/major may re-tag a commit already released as a patch (the tip
           # usually is, by the time anyone dispatches); MinVer then reads the higher tag.
-          existing=$(git tag --points-at "$SHA" | grep '^v' || true)
+          existing=$(awk -v sha="$SHA" '$2 == sha && $1 ~ /^v/ { print $1 }' <<< "$tags")
           if [[ -n "$existing" && ( "$EVENT_NAME" != workflow_dispatch || "$BUMP" == patch ) ]]; then
             echo "$SHA is already tagged ($(tr '\n' ' ' <<< "$existing")); nothing to do."
             exit 0
           fi
           # Highest release tag; prerelease tags (v1.2.3-rc.1) are ignored. sed, not head, so
           # the pipe never closes early under pipefail.
-          last=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n 1p || true)
+          last=$(awk '{ print $1 }' <<< "$tags" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -rV | sed -n 1p || true)
           if [[ -z "$last" ]]; then
             next=v0.1.0
             BUMP=initial
           else
             if [[ -z "$BUMP" ]]; then
               # Squash merges keep each commit's body, so a footer on any commit in the PR counts.
-              footers=$(git log "$last..$SHA" --format=%B | tr -d '\r' \
+              # compare lists at most 250 commits; a footer further back than that between two
+              # releases is missed and the bump falls back to patch, which a dispatch can fix.
+              footers=$(gh api --paginate "repos/$REPO/compare/$last...$SHA?per_page=100" \
+                  --jq '.commits[].commit.message' | tr -d '\r' \
                 | grep -ioE '^Release:[[:space:]]*(major|minor)[[:space:]]*$' || true)
               if grep -qi major <<< "$footers"; then BUMP=major
               elif grep -qi minor <<< "$footers"; then BUMP=minor
@@ -134,13 +143,16 @@ jobs:
             esac
           fi
           echo "Tagging $SHA as $next ($BUMP bump since ${last:-no tag})."
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag -a "$next" "$SHA" -m "equiv ${next#v}"
-          git push origin "refs/tags/$next"
+          # An annotated tag is a tag object plus a ref pointing at it: two calls.
+          tag_sha=$(gh api -X POST "repos/$REPO/git/tags" \
+            -f tag="$next" -f message="equiv ${next#v}" -f object="$SHA" -f type=commit \
+            -f 'tagger[name]=github-actions[bot]' \
+            -f 'tagger[email]=41898282+github-actions[bot]@users.noreply.github.com' \
+            --jq .sha)
+          gh api -X POST "repos/$REPO/git/refs" -f ref="refs/tags/$next" -f sha="$tag_sha" --silent
           echo "tag=$next" >> "$GITHUB_OUTPUT"
 
-  # A tag pushed with GITHUB_TOKEN does not trigger release.yml's own tag-push trigger.
+  # A tag created with GITHUB_TOKEN does not trigger release.yml's own tag-push trigger.
   release:
     needs: tag
     if: needs.tag.outputs.tag != ''

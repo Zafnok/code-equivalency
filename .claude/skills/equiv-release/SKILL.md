@@ -51,8 +51,9 @@ remove in a later major.
 
 ## Where things are
 
-- `.github/workflows/rolling-release.yml`: the green check, version computation and tag push
-  (as github-actions[bot]); then calls `release.yml` with the tag, because a tag pushed with
+- `.github/workflows/rolling-release.yml`: the green check, version computation and tag
+  creation (as github-actions[bot], through the REST API; the job checks out no code, Sonar
+  githubactions:S7631); then calls `release.yml` with the tag, because a tag created with
   `GITHUB_TOKEN` triggers no workflows.
 - `.github/workflows/release.yml`: builds and publishes one tag; also runs on a hand-pushed
   `v*` tag.
