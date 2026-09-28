@@ -95,8 +95,10 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   Removed results, never calls the backend, and exits 0 unless a project was skipped (exit 4)
   (ADR 0027). It cannot be combined with `--baseline` or `--fail-on` (exit 3).
 - `--execute` replays every Divergent's model on both real runtimes (ADR 0035 decision 2; ticket
-  M4-009). It prints `note: --execute runs code from both solutions on this machine` on stderr,
-  and on an OS other than Windows it exits 3, because the legacy side needs .NET Framework 4.8.
+  M4-009). It prints a note on stderr that code from both solutions runs on this machine, in a
+  temporary working directory, and is not sandboxed. Every driver process starts in a fresh
+  `cwd-*` folder under the run's `equiv-execute-*` temporary folder, so a relative write is
+  deleted with it (P2-040); absolute paths, the registry and the network stay reachable. On an OS other than Windows it exits 3, because the legacy side needs .NET Framework 4.8.
   The frontend's analysis carries an `IReplayDriverFactory` (`Equiv.Core.Execution`) over the
   projects it loaded; the C# one emits them and compiles a driver per side, and `Equiv.Execute`'s
   `Replayer` runs them. The result gains `properties.replay` (VERIFICATION-MODEL.md section 6);

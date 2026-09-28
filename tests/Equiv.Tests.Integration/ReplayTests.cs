@@ -60,7 +60,10 @@ public sealed class ReplayTests
         }
 
         Assert.Equal(ExitCodes.Divergent, exitCode);
-        Assert.Equal("note: --execute runs code from both solutions on this machine" + Environment.NewLine, error.ToString());
+        Assert.Equal(
+            "note: --execute runs code from both solutions on this machine, in a temporary working directory; it is not sandboxed, "
+            + "so absolute paths, the registry and the network are still reachable" + Environment.NewLine,
+            error.ToString());
         Result result = Assert.Single(log.Runs[0].Results);
         Assert.Equal("EQ002", result.RuleId);
         Assert.Equal("reproduced", result.GetProperty<string>("replay"));

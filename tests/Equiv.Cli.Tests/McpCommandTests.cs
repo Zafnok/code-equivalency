@@ -635,6 +635,9 @@ public sealed class McpCommandTests
         string directory = Assert.Single(replay.Probes).Directory;
         Assert.StartsWith("equiv-probe-", Path.GetFileName(directory), StringComparison.Ordinal);
         Assert.False(Directory.Exists(directory));
+
+        // The drivers start under that temporary folder, not in the caller's working directory (ticket P2-040).
+        Assert.Equal([directory], replay.Hosts);
     }
 
     [Fact]
