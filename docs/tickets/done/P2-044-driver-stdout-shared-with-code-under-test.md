@@ -1,5 +1,5 @@
 # P2-044 A replay driver's protocol stdout is shared with the code under test
-Status: in-progress
+Status: done (PR #279)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-039
