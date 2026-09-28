@@ -421,6 +421,8 @@ the only large ones.
   P2-032).
 - P2-044 (M) A replay driver's protocol stdout is shared with the code under test (found by
   P2-039's dumps). Needs P2-039.
+- P2-045 (S) A field read or written through `base` lowers to IR that fails validation (found
+  verifying P2-044 on the Tomas pair).
 
 ## M5 — Agent surface (MCP)
 

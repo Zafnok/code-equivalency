@@ -14,11 +14,13 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// other SSA variable. <see cref="IrLowerer"/> reaches this through one instance (ticket P1-003).
 /// Lowering an operand, null-checking a dereferenced receiver, and resolving an lvalue to its SSA
 /// variable stay <see cref="IrLowerer"/>'s job, so this class calls back into it through the delegates
-/// given at construction rather than naming its type. Sort names go through <paramref name="sorts"/> (ticket M3-009).
+/// given at construction rather than naming its type; so is the type of an operand's lowered value, which for <c>base</c>
+/// is the containing type (ticket P2-045). Sort names go through <paramref name="sorts"/> (ticket M3-009).
 /// </summary>
 internal sealed class HeapLowerer(
     SsaBuilder ssa,
     Func<IOperation, LoweringContext, IrVar> lower,
+    Func<IOperation, ITypeSymbol> typeOf,
     Action<IOperation, IrVar, LoweringContext> throwIfNull,
     Func<IOperation, SsaBuilder.Variable?> resolveTarget,
     Action<LoweringContext, IrVar, string> throwIf,
@@ -117,6 +119,7 @@ internal sealed class HeapLowerer(
     /// reference type is null-checked where the slice is read or written, not here (ticket P2-017). A receiver whose
     /// static type derives from the declaring one, which Roslyn never wraps in a conversion, is upcast through the
     /// <c>cast.&lt;From&gt;.&lt;To&gt;</c> map an explicit one would read (ticket P2-031), so the key is of the map's sort.
+    /// <c>base</c> is lowered to <c>this</c>, so it is upcast from the containing type, not from the base it is typed as (ticket P2-045).
     /// </summary>
     private Access Member(IrVar input, ISymbol member, IOperation? instance, LoweringContext context)
     {
@@ -130,7 +133,7 @@ internal sealed class HeapLowerer(
         IrVar receiver = lower(instance, context);
         IrVar key = receiver.Type == ((IrMap)input.Type).Key
             ? receiver
-            : MapRead(Inputs.Cast(instance.Type, member.ContainingType), receiver, context);
+            : MapRead(Inputs.Cast(typeOf(instance), member.ContainingType), receiver, context);
         return new Access(map, Array: null, key, dereferenced);
     }
 

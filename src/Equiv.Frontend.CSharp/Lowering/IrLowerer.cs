@@ -339,7 +339,14 @@ internal sealed class IrLowerer
     }
 
     private HeapLowerer NewHeap() =>
-        new(ssa, Value, ThrowIfNull, Target, (context, condition, exceptionType) => ThrowIf(condition, exceptionType, context), catalogue.Sorts);
+        new(ssa, Value, TypeOf, ThrowIfNull, Target, (context, condition, exceptionType) => ThrowIf(condition, exceptionType, context), catalogue.Sorts);
+
+    /// <summary>
+    /// The type of <paramref name="operand"/>'s lowered value: its own, except that <c>base</c> is typed as the base but
+    /// lowered to <c>this</c>, of the containing type (ticket P2-045).
+    /// </summary>
+    private ITypeSymbol TypeOf(IOperation operand) =>
+        operand is IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance } ? receiver : operand.Type!;
 
     /// <summary>
     /// Lowers one graph whose entry is <paramref name="start"/> and whose exit goes on to <paramref name="next"/>, or
