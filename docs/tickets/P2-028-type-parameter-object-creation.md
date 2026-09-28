@@ -1,5 +1,5 @@
 # P2-028 `new T()` on a generic type parameter (`TypeParameterObjectCreation`) has no lowering
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004
@@ -33,3 +33,5 @@ S ticket, keep it opaque and write an ADR only if a later ticket needs to lower 
 Generic method/type specialisation in general.
 
 ## Notes
+- Decision: stays permanently opaque with reason `TypeParameterObjectCreation`. The constructor `new T()` runs is chosen at each instantiation site, so the only partial lowering would be an uninterpreted call keyed on the type parameter, whose identity differs across the pre/post methods whenever a type parameter is renamed or reordered, and pairing those is the generic specialisation the Size guard rules out. It matches the existing type-parameter cases of `TypeOf` and unconstrained `DefaultValue` (P2-003). Only 2 occurrences in Git Extensions (M4-007).
+- The repro was already a case of `IrLowererTests.UnsupportedConstructIsOpaqueWithItsName` (added in M2-004) and passes as is: the lowerer's fallback arm names the unhandled `OperationKind`, so no `src/` change was needed; this ticket adds the coverage row and records the decision.
