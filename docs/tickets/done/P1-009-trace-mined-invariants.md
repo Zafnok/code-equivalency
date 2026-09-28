@@ -1,5 +1,5 @@
 # P1-009 Trace-mined coupling invariants: execution proposes, Z3 decides
-Status: in-progress
+Status: done (PR #251)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-002, P1-008; ADR 0036 accepted
