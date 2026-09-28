@@ -21,7 +21,8 @@ namespace Equiv.TestSupport;
 /// M4-002), updated with <c>m op= </c> a <c>decimal</c> expression and with <c>m++</c>, <c>++m</c>, <c>m--</c> and <c>--m</c>
 /// (ticket P2-022), and reads and writes of the instance field <c>G</c> of the <c>Cell</c> parameter <c>o</c> around calls to
 /// <c>o.Bump(k)</c>, which adds <c>k</c> to it (ticket P1-005), and <c>z = o.TryParse(k, out x)</c>, whose <c>out</c> argument is
-/// the call's output (ticket M4-003); built as a small AST and
+/// the call's output (ticket M4-003), and deconstructions of tuple literals into <c>(x, y, z)</c> and into <c>(F, x)</c>
+/// (ticket P2-025); built as a small AST and
 /// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
@@ -147,9 +148,14 @@ public static class LoweringOracleGen
         // Ticket P2-022: a compound assignment to the decimal parameter.
         Gen<IStmt> decimals = Gen.Select(Gen.OneOfConst(DecimalArithmetic), Gen.Bool, DecimalGen(Depth - 1), static (op, isChecked, value) =>
             (IStmt)new Compound("m", op, value, isChecked));
+        // Ticket P2-025: every element is read before any target is written. The field's pair never branches, as a field write's value never does.
+        Gen<IStmt> locals = Gen.Select(ExprGen(typeof(int), Depth - 1), ExprGen(typeof(long), Depth - 1), ExprGen(typeof(bool), Depth - 1), static (x, y, z) =>
+            (IStmt)new Deconstruction(["x", "y", "z"], [x, y, z]));
+        Gen<IStmt> fieldPair = Gen.Select(FieldValue, FieldValue, static (f, x) => (IStmt)new Deconstruction([Field, "x"], [f, x]));
+        Gen<IStmt> deconstruct = Gen.OneOf(locals, fieldPair);
         if (depth == 0)
         {
-            return Gen.Frequency((4, assign), (1, property), (1, field), (1, cell), (1, bump), (1, parse), (2, element), (2, update), (1, step), (1, decimals), (1, exit));
+            return Gen.Frequency((4, assign), (1, property), (1, field), (1, cell), (1, bump), (1, parse), (2, element), (2, update), (1, step), (1, decimals), (1, deconstruct), (1, exit));
         }
 
         Gen<IStmt> branch = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Block(returnType, depth - 1), static (condition, then, otherwise) =>
@@ -159,7 +165,7 @@ public static class LoweringOracleGen
         // The element is as often a divisor or shift count, so a loop body also throws out through the `finally`.
         Gen<IStmt> each = Gen.Select(Gen.OneOfConst([List, .. Arrays]), Gen.OneOfConst(Arithmetic), Gen.Bool, Block(returnType, depth - 1), static (collection, op, isChecked, body) =>
             (IStmt)new ForEach(collection, op, isChecked, body));
-        return Gen.Frequency((3, assign), (1, property), (1, field), (1, cell), (1, bump), (1, parse), (2, element), (2, update), (1, step), (1, decimals), (2, branch), (2, loop), (2, each), (1, exit));
+        return Gen.Frequency((3, assign), (1, property), (1, field), (1, cell), (1, bump), (1, parse), (2, element), (2, update), (1, step), (1, decimals), (1, deconstruct), (2, branch), (2, loop), (2, each), (1, exit));
     }
 
     /// <summary>
@@ -278,6 +284,10 @@ public static class LoweringOracleGen
                 case Parse parse:
                     text.Append(pad).Append($"z = {Cell}.{TryParse}(").Append(parse.Argument.Render()).Append(", out x);\n");
                     break;
+                case Deconstruction deconstruct:
+                    text.Append(pad).Append('(').Append(string.Join(", ", deconstruct.Targets)).Append(") = (")
+                        .Append(string.Join(", ", deconstruct.Values.Select(static v => v.Render()))).Append(");\n");
+                    break;
                 case Step step:
                     text.Append(pad).Append(Open(step.IsChecked, pad)).Append(step.Local).Append(step.Op).Append(";\n").Append(Close(step.IsChecked, pad));
                     break;
@@ -365,6 +375,9 @@ public static class LoweringOracleGen
     internal sealed record Compound(string Local, string Op, IExpr Value, bool IsChecked) : IStmt;
 
     internal sealed record Step(string Local, string Op, bool IsChecked) : IStmt;
+
+    /// <summary><c>(Targets) = (Values);</c> (ticket P2-025).</summary>
+    internal sealed record Deconstruction(ImmutableArray<string> Targets, ImmutableArray<IExpr> Values) : IStmt;
 
     /// <summary><c>Method(Argument);</c> as a statement.</summary>
     internal sealed record Call(string Method, IExpr Argument) : IStmt;

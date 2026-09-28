@@ -294,5 +294,18 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task RaisedFieldLikeEvent() => Dump("public event EventHandler? Changed; int n; public void Bump() { n++; Changed?.Invoke(this, EventArgs.Empty); }", "Bump");
 
+    /// <summary>Ticket P2-025 acceptance criterion 2: a tuple literal's elements are all read, then stored left to right, so this swaps.</summary>
+    [Fact]
+    public Task DeconstructionOfATupleLiteral() => Dump("static int M(int a, int b) { (a, b) = (b, a); return a + b; }");
+
+    /// <summary>Ticket P2-025 acceptance criterion 2: a field's receiver first, a discard's element read and dropped, a string's null shadow stored.</summary>
+    [Fact]
+    public Task DeconstructionIntoAFieldADiscardAndAString() => Dump("int f; string M(int a, string s, string t) { (f, _, s) = (a, a + 1, t); return s; }");
+
+    /// <summary>Ticket P2-025 acceptance criterion 2: a <c>Deconstruct</c> method stays opaque, and its targets are written with unknown values.</summary>
+    [Fact]
+    public Task DeconstructionThroughADeconstructMethod() =>
+        Dump("struct P { public int X, Y; public void Deconstruct(out int x, out int y) { x = X; y = Y; } } static int M(P p) { int x, y; (x, y) = p; return x + y; }");
+
     private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }
