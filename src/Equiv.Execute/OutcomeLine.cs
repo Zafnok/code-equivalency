@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Equiv.Core.Execution;
 
 namespace Equiv.Execute;
@@ -8,7 +10,7 @@ namespace Equiv.Execute;
 /// </summary>
 internal static class OutcomeLine
 {
-    /// <summary>The canonical form of a case that got no answer: a timeout, the memory limit, or a crashed driver.</summary>
+    /// <summary>The canonical form of a case that got no answer because its driver went over the memory limit or exited.</summary>
     public const string NoAnswer = "\"no answer\"";
 
     private static readonly IReadOnlyList<OutcomeKind> Kinds =
@@ -22,6 +24,10 @@ internal static class OutcomeLine
         OutcomeKind.NotComparable => "NotComparable",
         _ => "NotConstructible",
     };
+
+    /// <summary>The canonical form of a case whose driver gave no answer within <paramref name="timeout"/> (ticket P2-039).</summary>
+    public static string TimedOut(TimeSpan timeout) =>
+        JsonText.String(string.Create(CultureInfo.InvariantCulture, $"no answer within {timeout.TotalSeconds} s"));
 
     public static string Case(string culture, ExecutionInput input) =>
         $"[{string.Join(',', [JsonText.String(culture), .. input.Arguments])}]";
