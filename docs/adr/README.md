@@ -9,7 +9,7 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 |---|---|
 | 0001 | .NET 10 / C# 14 for the whole MVP |
 | 0002 | Dependency register (living) |
-| 0003 | Lower from Roslyn's IOperation control-flow graph |
+| 0003 | Lower from Roslyn's IOperation control-flow graph (superseded in part by 0039) |
 | 0004 | MSBuildWorkspace on Windows for the MVP loader; fact check on "Windows bindings" |
 | 0005 | Direct Z3 encoding; Lean and Boogie rejected for the MVP |
 | 0006 | SARIF only, headless only, no UI in the MVP |
@@ -45,3 +45,4 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0036 | A proposed invariant, contract or table row is a hypothesis until a checker admits it; callee contracts replace unproven assumptions |
 | 0037 | An Unknown says whether the modern side can fail where the legacy side does not |
 | 0038 | A run reports its progress on stderr, with a clock per phase, an ETA, and a writer that never blocks the pipeline |
+| 0039 | A pair that IOperation leaves with an unshared opaque is lowered from ILAst instead; IOperation stays primary |
