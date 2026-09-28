@@ -1339,6 +1339,97 @@ public sealed class CompareCommandTests
         Assert.Equal(ExitCodes.Divergent, exitCode);
     }
 
+    /// <summary>
+    /// Ticket P1-010 criterion 4 (ADR 0036 decision 2): C calls f, f calls g, and both f and g are Divergent. The backend
+    /// proves C again with a contract for f, so f leaves C's unproven assumptions and g, which f's contract assumed, joins
+    /// them; C's proof method ends in <c>+contract</c> and names the contract.
+    /// </summary>
+    [Fact]
+    public void ContractCallee_UnprovenAssumptionsAreInherited()
+    {
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+        {
+            ["T::C()"] = new Equivalent(ProofMethod.Congruence),
+            ["T::F()"] = new Divergent(Counterexample()),
+            ["T::G()"] = new Divergent(Counterexample()),
+        })
+        {
+            Contracts = new Dictionary<string, Equivalent>(StringComparer.Ordinal)
+            {
+                ["T::C()"] = new Equivalent(ProofMethod.Bounded) { ContractsUsed = [new ContractUse("T::F()", "(= threw.old threw.new)", "observed-predicates")] },
+            },
+        };
+
+        (Dictionary<string, Result> results, _) = ContractRun([Caller("T::C()", "T::F()"), Caller("T::F()", "T::G()"), Caller("T::G()")], backend);
+
+        Result c = results["T::C()"];
+        Assert.Equal("bounded+contract", c.GetProperty<string>("proofMethod"));
+        Assert.Equal(["T::F()", "T::G()"], c.GetProperty<List<string>>("assumedCallees"), StringComparer.Ordinal);
+        Assert.Equal(["T::G()"], c.GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+        Assert.Equal("T::F()", Assert.Single(c.GetProperty<List<Dictionary<string, string>>>("contractsUsed"))["callee"]);
+        Assert.Equal([("T::C()", "T::F()")], backend.ContractCalls.Select(static call => (call.Caller, string.Join(',', call.Callees))));
+        Assert.Equal("EQ002", results["T::F()"].RuleId);
+    }
+
+    /// <summary>
+    /// Ticket P1-010: only an Equivalent result with a lowered unproven callee goes back to the backend, and one the backend
+    /// finds no contract for keeps its verdict and assumptions.
+    /// </summary>
+    [Fact]
+    public void AResultWithoutAContractKeepsItsAssumptions()
+    {
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+        {
+            ["T::C()"] = new Equivalent(ProofMethod.Bounded),
+            ["T::D()"] = new Divergent(Counterexample()),
+            ["T::F()"] = new Divergent(Counterexample()),
+        });
+
+        (Dictionary<string, Result> results, _) = ContractRun([Caller("T::C()", "T::F()"), Caller("T::D()", "T::F()"), Caller("T::F()")], backend);
+
+        Assert.Equal("bounded", results["T::C()"].GetProperty<string>("proofMethod"));
+        Assert.Equal(["T::F()"], results["T::C()"].GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+        Assert.Equal(["T::C()"], backend.ContractCalls.Select(static call => call.Caller), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P1-010: a contract step that throws leaves the caller's sound verdict and says so on stderr; a contract for a
+    /// callee whose own verification crashed inherits nothing, since that callee has no result.
+    /// </summary>
+    [Fact]
+    public void AFailedContractStepKeepsTheVerdictAndACrashedCalleeLeavesNothingToInherit()
+    {
+        Dictionary<string, Verdict> verdicts = new(StringComparer.Ordinal) { ["T::C()"] = new Equivalent(ProofMethod.Bounded) };
+        Dictionary<string, Exception> crashes = new(StringComparer.Ordinal) { ["T::F()"] = new InvalidOperationException("encoder bug") };
+        FakeBackend failing = new(verdicts, crashes) { ContractFailure = new InvalidOperationException("contract bug") };
+        FakeBackend proving = new(verdicts, crashes)
+        {
+            Contracts = new Dictionary<string, Equivalent>(StringComparer.Ordinal)
+            {
+                ["T::C()"] = new Equivalent(ProofMethod.Bounded) { ContractsUsed = [new ContractUse("T::F()", "true", "observed-predicates")] },
+            },
+        };
+
+        (Dictionary<string, Result> kept, string stderr) = ContractRun([Caller("T::C()", "T::F()"), Caller("T::F()")], failing);
+        (Dictionary<string, Result> proved, _) = ContractRun([Caller("T::C()", "T::F()"), Caller("T::F()")], proving);
+
+        Assert.Equal("bounded", kept["T::C()"].GetProperty<string>("proofMethod"));
+        Assert.Contains("warning: Verifying T::C() under callee contracts failed, so it keeps its verdict: contract bug", stderr, StringComparison.Ordinal);
+        Assert.Equal("bounded+contract", proved["T::C()"].GetProperty<string>("proofMethod"));
+        Assert.False(proved["T::C()"].TryGetProperty("unprovenAssumptions", out List<string> _));
+    }
+
+    private static (Dictionary<string, Result> Results, string StdErr) ContractRun(ImmutableArray<ProcedurePair> pairs, FakeBackend backend)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        InMemoryReportSink sink = new();
+        string stderr = CaptureStdErr(() => CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult(pairs, [], [], []))], backend, sink, NullRunLog.Instance));
+        return (sink.Log!.Runs[0].Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal), stderr);
+    }
+
     private static Dictionary<string, Result> AssumptionRun(
         ImmutableArray<ProcedurePair> pairs, IReadOnlyDictionary<string, Verdict> verdicts, ImmutableArray<LoweringFailure> failures = default, Action<int>? onExit = null)
     {
