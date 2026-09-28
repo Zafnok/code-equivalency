@@ -64,6 +64,7 @@ public sealed class ReplayDriverFactoryTests : IDisposable
         ReplayPlan second = factory.Create(pair, NullName(), directory);
 
         Assert.Empty(first.Reason);
+        Assert.Null(first.AlikeReason);
         Assert.Equal(["null"], first.Legacy.Arguments);
         Assert.Equal(["null"], first.Modern.Arguments);
         string legacyProject = Path.Combine(directory, "legacy", "Greeter");
@@ -164,6 +165,31 @@ public sealed class ReplayDriverFactoryTests : IDisposable
         Counterexample traceOnly = NullName() with { Old = returned, New = returned with { Trace = [new IrCallRecord(new Core.CallIdentity("Log::Write()"), [])] } };
 
         Assert.Equal("the divergence is in the call trace, which replay does not observe", factory.Create(pair, traceOnly, directory).Reason);
+    }
+
+    /// <summary>
+    /// Ticket P2-037, Git Extensions' <c>SetSsh</c>: the legacy trace starts with a call the modern one never makes, and the
+    /// legacy run throws only because the solver chose that call's <c>threw</c> answer after the split. The replay still
+    /// runs, since real outcomes that differ reproduce the divergence, but equal ones are not evidence against the model.
+    /// </summary>
+    [Fact]
+    public void ADivergenceWhoseCallTracesSplit_RunsButEqualOutcomesAreNotEvidence()
+    {
+        CSharpCompilation project = Compile(Greeter, "Greeter");
+        IMethodSymbol greet = Method(project, "N.Greeter", "Greet");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, greet, GreetIr, project, greet, GreetIr);
+        Counterexample setSsh = NullName() with
+        {
+            Old = new IrRun(new IrThrew("System.Exception"), [], [new IrCallRecord(new Core.CallIdentity("GitExtUtils.Strings::IsNullOrEmpty(string)"), [new IrSortValue("System.String", 3)])]),
+            New = new IrRun(new IrReturned(Value: null), [], []),
+        };
+
+        ReplayPlan plan = factory.Create(pair, setSsh, directory);
+
+        Assert.NotNull(plan.Drivers);
+        Assert.Equal(
+            "the call traces differ, and the model's outcomes rest on call answers chosen after they split, which replay does not observe",
+            plan.AlikeReason);
     }
 
     [Fact]
