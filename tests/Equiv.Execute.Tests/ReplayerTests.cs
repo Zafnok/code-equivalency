@@ -51,6 +51,16 @@ public sealed class ReplayerTests
     public void ASideWithNoComparableOutcome_IsNotConstructible(string legacy, string modern, string reason) =>
         Assert.Equal(ReplayResult.NotConstructible(reason), Replay(legacy, modern));
 
+    /// <summary>Ticket P2-039: a driver that hangs makes the replay not constructible, naming the timeout.</summary>
+    [Fact]
+    public void ADriverThatNeverAnswers_IsNotConstructible()
+    {
+        FakeHost host = new(static (driver, _, _) => driver.EndsWith(".dll", StringComparison.Ordinal) ? throw new TimeoutException() : "[\"Returned\",1]");
+
+        Assert.Equal(ReplayResult.NotConstructible("the modern side gave NotComparable \"no answer within 10 s\""), Replay(string.Empty, string.Empty, host));
+        Assert.Equal(host.Starts.Count, host.Disposed);
+    }
+
     [Fact]
     public void APlanWithoutDrivers_IsNotConstructibleWithItsReasonAndRunsNothing()
     {

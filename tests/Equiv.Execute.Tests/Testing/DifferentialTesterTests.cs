@@ -144,6 +144,19 @@ public sealed class DifferentialTesterTests
         Assert.Equal(new TestingOutcome(DifferentialTesting.Unconstructible(reason), Observed: null), Test(host, IntPlan));
     }
 
+    /// <summary>Ticket P2-039: a driver that hangs ends the pair on its first case, and both processes are killed.</summary>
+    [Theory]
+    [InlineData("legacy.exe", "the legacy side gave NotComparable \"no answer within 10 s\"")]
+    [InlineData("modern.dll", "the modern side gave NotComparable \"no answer within 10 s\"")]
+    public void ADriverThatNeverAnswersIsNotConstructible(string hung, string reason)
+    {
+        FakeHost host = new((driver, _, _) => string.Equals(driver, hung, StringComparison.Ordinal) ? throw new TimeoutException() : "[\"Returned\",0]");
+
+        Assert.Equal(new TestingOutcome(DifferentialTesting.Unconstructible(reason), Observed: null), Test(host, IntPlan));
+        Assert.Equal(2, host.Exchanges.Count);
+        Assert.Equal(host.Starts.Count, host.Disposed);
+    }
+
     [Fact]
     public void APlanWithoutDriversIsNotConstructibleAndRunsNothing()
     {

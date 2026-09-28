@@ -1,5 +1,5 @@
 # P2-039 `compare --execute` hangs forever when a replay driver never answers
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-009, P1-008
@@ -51,3 +51,25 @@ as the safety net; do not widen this ticket into a rewrite of the driver protoco
 Making replay or testing succeed on the pair; only stopping it from hanging.
 
 ## Notes
+- Decision (criterion 1, from code, not a dump): this session ran in a Linux cloud container with no .NET Framework
+  4.8, no corpus checkout and no Windows process to attach `dotnet-stack`/`dotnet-dump` to, so the dumps the criterion asks
+  for were not taken. The one wait in `src/Equiv.Execute` with no deadline was `ChildProcessHost.Session.Exchange`'s
+  synchronous `StandardInput.WriteLine` + `Flush`: the case clock started only after it returned. A driver that has not
+  read stdin (the M4-007 drivers held 0.03 CPU-seconds each, too little for either runtime to have reached its read loop)
+  lets a case line longer than the pipe buffer (4 KB for .NET's anonymous pipes on Windows; the generators' strings and
+  arrays pass that) block `WriteFile` for good. That fits every observation: the tester's legacy driver answered and sat
+  in its read loop, the modern driver was started and never read, and the parent's CPU stayed flat (the read wait polls
+  every 20 ms, so a parent waiting there would have kept ticking). Proved on Linux, where the pipe buffer is 64 KB: with
+  the old `Exchange`, `DriverDeadlineTests.ADriverThatNeverReadsStdin_TimesOutAndIsKilled` (1 MB line) hangs until the
+  test timeout; with the new one it passes. A Windows dump of the Tomas run is still owed to confirm this is the M4-007
+  hang and not a second one.
+- Decision: `Exchange` now writes and reads on a pool task under one deadline, and on timeout kills the process tree and
+  throws `TimeoutException` (null still means the driver died or passed the memory limit). `DriverStream` turns the
+  timeout into `NotComparable` with canonical `"no answer within 10 s"` (`OutcomeLine.TimedOut`), so `runtime-diff` keeps
+  its per-case behaviour, while `DifferentialTester` treats it as an obstacle (the pair ends as
+  `differentialTesting.notConstructible: the <side> side gave NotComparable "no answer within 10 s"`, both streams
+  disposed, so both processes killed) and `Replayer` already made any non-comparable side not constructible. Bound per
+  pair: `--test-budget` time + one input (at most 2 cultures x 2 sides x 10 s) + the divergence rerun (2 x 10 s) + the
+  replay (2 x 10 s).
+- Criterion 4 (the Tomas `--execute` run completes) was not run here, for the same reason as criterion 1: it needs the
+  Windows corpus box (`tools/corpus/corpus.ps1 -Fetch -PrepareAgent`, then `equiv compare --execute`).

@@ -40,15 +40,30 @@ public sealed class DriverRunnerTests
     }
 
     [Fact]
-    public void Runner_TimesOutACase()
+    public void Runner_DropsADriverThatDies()
     {
         FakeHost host = new(static (_, _, line) => line.Contains("s1", StringComparison.Ordinal) ? null : "[\"Returned\",true]");
 
         RunOutcomes runs = new DriverRunner(host, Timeout).Run(Drivers, Request(3, "invariant"));
 
+        ExecutionOutcome died = runs.Legacy1[1];
+        Assert.Equal(OutcomeKind.NotComparable, died.Kind);
+        Assert.Equal(OutcomeLine.NoAnswer, died.Canonical);
+        Assert.Equal(OutcomeKind.Returned, runs.Legacy1[2].Kind);
+        Assert.Equal(8, host.Starts.Count);
+        Assert.Equal(8, host.Disposed);
+    }
+
+    [Fact]
+    public void Runner_TimesOutACase()
+    {
+        FakeHost host = new(static (_, _, line) => line.Contains("s1", StringComparison.Ordinal) ? throw new TimeoutException() : "[\"Returned\",true]");
+
+        RunOutcomes runs = new DriverRunner(host, Timeout).Run(Drivers, Request(3, "invariant"));
+
         ExecutionOutcome timedOut = runs.Legacy1[1];
         Assert.Equal(OutcomeKind.NotComparable, timedOut.Kind);
-        Assert.Equal(OutcomeLine.NoAnswer, timedOut.Canonical);
+        Assert.Equal("\"no answer within 3 s\"", timedOut.Canonical);
         Assert.Equal(OutcomeKind.Returned, runs.Legacy1[2].Kind);
 
         // The dead process is dropped and the next case starts a new one: two processes per run.

@@ -45,35 +45,49 @@ public sealed class ChildProcessHost(long memoryLimitBytes) : IDriverHost
     {
         public string? Exchange(string line, TimeSpan timeout)
         {
-            try
-            {
-                process.StandardInput.WriteLine(line);
-                process.StandardInput.Flush();
-            }
-            catch (IOException)
-            {
-                return null;
-            }
-
-            Task<string?> answer = process.StandardOutput.ReadLineAsync();
+            // Writing is inside the deadline too: a driver that never reads stdin fills the pipe (4 KB on Windows), and a
+            // synchronous write then blocks with no deadline at all (ticket P2-039). Killing the process breaks the pipe,
+            // which ends the write or read still running on the pool.
+            Task<string?> answer = Task.Run(() => Send(line));
             Stopwatch clock = Stopwatch.StartNew();
             while (!answer.Wait(Poll))
             {
                 process.Refresh();
-                if (process.HasExited || clock.Elapsed > timeout || process.PrivateMemorySize64 > memoryLimitBytes)
+                if (clock.Elapsed > timeout)
+                {
+                    Kill();
+                    throw new TimeoutException(OutcomeLine.TimedOut(timeout));
+                }
+
+                if (process.HasExited || process.PrivateMemorySize64 > memoryLimitBytes)
                 {
                     Kill();
                     return null;
                 }
             }
 
-            return answer.Result;
+            return answer.IsCompletedSuccessfully ? answer.Result : null;
         }
 
         public void Dispose()
         {
             Kill();
             process.Dispose();
+        }
+
+        /// <summary>Writes one case and reads one answer; null when the pipe broke, as when the driver died.</summary>
+        private string? Send(string line)
+        {
+            try
+            {
+                process.StandardInput.WriteLine(line);
+                process.StandardInput.Flush();
+                return process.StandardOutput.ReadLine();
+            }
+            catch (IOException)
+            {
+                return null;
+            }
         }
 
         private void Kill()
