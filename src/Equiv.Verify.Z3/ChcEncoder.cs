@@ -379,7 +379,10 @@ internal sealed class ChcEncoder
         return [.. found];
     }
 
-    /// <summary>The inputs and literals a derivation gives, decoded, with each literal keeping its own element.</summary>
+    /// <summary>
+    /// The inputs and literals a derivation gives, decoded, with each literal keeping its own element and each length
+    /// non-negative (ticket P2-041).
+    /// </summary>
     private IrInputs Decode(Expr[] inputs, Expr[] literalTerms)
     {
         ModelDecoder.Values values = new();
@@ -388,7 +391,7 @@ internal sealed class ChcEncoder
             values.Remember(literalValues[i], literalTerms[i]);
         }
 
-        return new IrInputs([.. Inputs.Select((input, i) => values.Decode(inputs[i], input.Shared.Type))]);
+        return new IrInputs([.. Inputs.Select((input, i) => ModelDecoder.Clamped(input.Shared, values.Decode(inputs[i], input.Shared.Type)))]);
     }
 
     /// <summary>

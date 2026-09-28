@@ -196,8 +196,15 @@ internal sealed class ModelDecoder
     /// negative one is at a reference nothing reads, and 0 makes the input one a CLR caller can pass.
     /// </summary>
     public IrInputs Inputs() =>
-        new([.. encoding.Inputs.Select(i => (i.Shared.Var.Name, Value: Decode(model.Eval(i.Term, completion: true), i.Shared.Type)))
-            .Select(static i => i.Name.StartsWith(ProductEncoder.LengthPrefix, StringComparison.Ordinal) ? NonNegative((IrMapValue)i.Value) : i.Value)]);
+        new([.. encoding.Inputs.Select(i => Clamped(i.Shared, Decode(model.Eval(i.Term, completion: true), i.Shared.Type)))]);
+
+    /// <summary>
+    /// <paramref name="value"/>, the decoded input <paramref name="shared"/>, with every negative length replaced by 0 when it
+    /// is a <c>length.&lt;Sort&gt;</c> input. Spacer's derivations need it too (ticket P2-041): a derivation fixes only the
+    /// lengths it reads, so it can leave another reference's length negative.
+    /// </summary>
+    internal static IrValue Clamped(SharedParameter shared, IrValue value) =>
+        shared.Var.Name.StartsWith(ProductEncoder.LengthPrefix, StringComparison.Ordinal) ? NonNegative((IrMapValue)value) : value;
 
     public IrValue Decode(Expr value, IrType type) => values.Decode(value, type);
 

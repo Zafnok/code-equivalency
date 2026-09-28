@@ -387,6 +387,8 @@ ticket id (not listed again here). P2-015 is a `corpus.ps1` finding from the sam
   compound and increment operators, apply M4-002's `IrPure` functions instead of being opaque
   (reasons `CompoundAssignment`, `Increment`, `Decrement`). Found in M4-002 (`business-layer`
   `Subtotal`'s `decimal +=`). Needs M4-002.
+- P2-041 (S) A Spacer derivation's inputs never give an array a negative length. Found by M0-012's
+  gate on PR #241 (rule 2, CsCheck seed `6rdKklVqtDVa`): P2-019's clamp covered only `ModelDecoder.Inputs`.
 
 ## P2 — First real run findings (M4-007)
 
