@@ -56,8 +56,14 @@ The ticket's second guess, `??=` on a property, did not produce `FlowCaptureRefe
 wrote it through the setter, but its read loaded a capture that was never stored, so it was opaque with
 reason `undefined`. The same fix reads such a capture through the getter (or the auto-property's map):
 `ANullCoalescingAssignmentToAPropertyCallsTheGetterThenTheSetter`, snapshot
-`NullCoalescingAssignmentToAProperty`. A captured array element stays opaque with reason
-`FlowCaptureReference` (out of scope, P1-006), pinned in `UnsupportedConstructIsOpaqueWithItsName`.
+`NullCoalescingAssignmentToAProperty`.
+
+P2-007 merged to `main` while this PR was open and took over the capture step: it captures a field, a
+single-dimensional array element or an auto-property as its heap slice (`heap.Slice`), and writes it
+in `Assign` and `Place`. After the merge this PR keeps what P2-007 does not do: reading such a capture
+(the map read or getter call a `??=` makes before it tests for null) and giving it no null shadow of
+its own. This PR's own `CapturedSlice` helper was dropped in favour of `heap.Slice`, and so was its test
+that a captured array element stays opaque, because P2-007 now lowers that case.
 
 Decision: a captured field joins the existing auto-property `sliceTargets` path rather than a new map, and a
 capture that stands for a place has no null shadow (its nullness is the null map's), per `equiv-decide`

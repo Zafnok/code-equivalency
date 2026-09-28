@@ -108,7 +108,6 @@ public sealed class IrLowererTests
     [InlineData("static int? M(int? n) => ~n;", "Unary")]
     [InlineData("static string M<T>(T t) => t?.ToString() ?? \"\";", "IsNull")]
     [InlineData("static bool? M(bool? b) => !b;", "Unary")]
-    [InlineData("static void M(int[] a, bool b) { a[0] = b ? 1 : 2; }", "FlowCaptureReference")]
     public void UnsupportedConstructIsOpaqueWithItsName(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
 
@@ -737,6 +736,61 @@ public sealed class IrLowererTests
 
         Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.C.f");
         Assert.Equal(new IrSortValue("C", 0), Assert.IsType<IrConst>(procedure.Blocks[1].Instructions[0]).Value);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>
+    /// Ticket P2-007: the CFG flow-captures an assignment's target ahead of a value that branches (a conditional
+    /// expression, here), so a field, not only a local or an auto-property (ticket M4-008), must still resolve through
+    /// the captured reference to its map.
+    /// </summary>
+    [Fact]
+    public void AFieldTargetCapturedAheadOfABranchingValueIsStillItsMap()
+    {
+        IrProcedure procedure = Method("int f; static void M(C a, bool cond) { a.f = cond ? 1 : 2; }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapWrite>());
+    }
+
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 2)]
+    public void ACapturedFieldTargetWritesTheBranchedValue(bool cond, int expected) =>
+        Assert.Equal(
+            new IrReturned(Bits(32, expected)),
+            Run(
+                Method("int f; static int M(C a, bool cond) { a.f = cond ? 1 : 2; return a.f; }"),
+                Reference(0, "C"),
+                new IrBoolValue(cond),
+                Fields("C", new IrBitVec(32)),
+                Nulls("C", 0, isNull: false)));
+
+    /// <summary>A field of a struct-typed field is the same captured-target case, one level of receiver deeper.</summary>
+    [Fact]
+    public void AFieldOfAStructTypedFieldCapturedAheadOfABranchingValueIsStillItsMap()
+    {
+        IrProcedure procedure = Method(
+            "struct P { public int X; } P p; static void M(C a, bool cond) { a.p.X = cond ? 1 : 2; }");
+
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>An array-typed field captured the same way is still its map, whichever array the branch picks.</summary>
+    [Fact]
+    public void AnArrayTypedFieldCapturedAheadOfABranchingValueIsStillItsMap()
+    {
+        IrProcedure procedure = Method("int[] data; static void M(C a, bool cond) { a.data = cond ? new int[4] : new int[2]; }");
+
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A compound assignment's target is flow-captured the same way when its value branches.</summary>
+    [Fact]
+    public void ACompoundAssignmentToAFieldTargetCapturedAheadOfABranchingValueIsStillItsMap()
+    {
+        IrProcedure procedure = Method("int f; static void M(C a, bool cond) { a.f += cond ? 1 : 2; }");
+
         Assert.Empty(Opaques(procedure));
     }
 

@@ -694,11 +694,11 @@ internal sealed class IrLowerer
             return;
         }
 
-        if (operation is IFlowCaptureOperation backed && assignedCaptures.Contains(backed.Id) && CapturedSlice(backed.Value, context) is { } slice)
+        if (operation is IFlowCaptureOperation backed && assignedCaptures.Contains(backed.Id) && heap.Slice(backed.Value, context) is { } slice)
         {
-            // The CFG captures a field an assignment writes when the value branches, as in `f ??= v` (ticket P2-006); an
-            // auto-property is its backing field's map (ticket M4-008). Either way its receiver is evaluated here, and the
-            // capture stands for the slice: a read of it reads the map, a write writes it.
+            // A field, an array element or an auto-property's backing field is its heap map (tickets M4-008, P2-007), so, as
+            // for a direct write, its receiver and index are evaluated here, ahead of a value that branches. A read of the
+            // capture, as `f ??= v` makes, reads the map (ticket P2-006).
             sliceTargets[backed.Id] = slice;
             return;
         }
@@ -729,17 +729,6 @@ internal sealed class IrLowerer
 
         Lower(operation, context);
     }
-
-    /// <summary>
-    /// The slice a captured lvalue stands for: a field that is not a lowered tuple element, or an auto-property; null, with
-    /// nothing emitted, for anything else.
-    /// </summary>
-    private HeapLowerer.Access? CapturedSlice(IOperation captured, LoweringContext context) => captured switch
-    {
-        IFieldReferenceOperation field when TypeMapper.TupleElement(field.Field) is null => heap.Field(field, context),
-        IPropertyReferenceOperation property => heap.AutoProperty(property, context),
-        _ => null,
-    };
 
     /// <summary>Whether a capture stands for a field or property place rather than holding a value of its own (ticket P2-006).</summary>
     private bool IsCapturedPlace(CaptureId id) => sliceTargets.ContainsKey(id) || propertyTargets.ContainsKey(id);

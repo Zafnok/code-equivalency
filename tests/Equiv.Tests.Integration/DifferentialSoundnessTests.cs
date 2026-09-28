@@ -132,7 +132,7 @@ public sealed class DifferentialSoundnessTests
     public void PreservingMutationIsNeverDivergent() => Sample(Precision);
 
     /// <summary>
-    /// Ticket P2-041: rule 2 at CsCheck seed <c>6rdKklVqtDVa</c>, shrunk. Spacer's derivation of the dropped
+    /// Ticket P2-043: rule 2 at CsCheck seed <c>6rdKklVqtDVa</c>, shrunk. Spacer's derivation of the dropped
     /// <c>F = x;</c> never reads <c>u</c>'s length, so it left it at -1, which no C# run can pass.
     /// </summary>
     [Fact]

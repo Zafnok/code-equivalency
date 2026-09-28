@@ -167,11 +167,11 @@ after which the index steps by one; the enumerator's `finally` is not run. A loo
 deconstruction, or whose element read is not found, stays the M4-001 enumerator calls.
 
 The CFG captures an assignment's target before a value that branches, and `f ??= v` captures `f`
-(P2-006). A captured local or parameter is that variable. A captured field (not a lowered tuple
-element) or auto-property is its map at the receiver evaluated at the capture, and any other captured
-property is its receiver and index arguments evaluated there: a read of the capture reads the map or
-calls the getter, a write writes the map or calls the setter, and the capture has no null shadow of its
-own. A captured array element stays `IrOpaque` with reason `FlowCaptureReference` (P1-006).
+(P2-006, P2-007). A captured local or parameter is that variable. A captured field (not a lowered tuple
+element), single-dimensional array element or auto-property is its map at the receiver (and index)
+evaluated at the capture, and any other captured property is its receiver and index arguments evaluated
+there: a read of the capture reads the map or calls the getter, a write writes the map or calls the
+setter, and the capture has no null shadow of its own.
 
 The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
 locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
@@ -409,7 +409,11 @@ modern method once on .NET 10, under the invariant culture. The result carries
   model has a synthesised input other than `this` and `null.*` (a heap map, a cast or type-test
   map, `typeof`, `new`), since replay builds no object graphs; a project does not emit
   (`emit-failed`); the model's two runs end alike, so the divergence is in the call trace, which a
-  driver does not observe; or a side gives no comparable outcome.
+  driver does not observe; the model's call traces differ and the two real outcomes are equal, since
+  the model's outcomes may then rest on call answers the solver chose after the traces split (ADR
+  0026, "Why"; P2-037), so equal real outcomes are no evidence against it, while differing ones still
+  give `reproduced`; or a side gives no comparable outcome. So `not-reproduced` always means the
+  model was wrong.
 
 Replay never changes the verdict, the rule id, the fingerprint or the exit code, and a run without
 `--execute` runs no code and writes no `replay`.
