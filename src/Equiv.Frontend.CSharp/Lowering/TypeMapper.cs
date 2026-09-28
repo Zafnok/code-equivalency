@@ -31,8 +31,29 @@ internal static class TypeMapper
         SpecialType.System_Int16 or SpecialType.System_UInt16 or SpecialType.System_Char => new IrBitVec(16),
         SpecialType.System_Int32 or SpecialType.System_UInt32 => new IrBitVec(32),
         SpecialType.System_Int64 or SpecialType.System_UInt64 => new IrBitVec(64),
-        _ => new IrSort(MetadataName(type, sorts)),
+        _ => Tuple(type) ?? new IrSort(MetadataName(type, sorts)),
     };
+
+    /// <summary>
+    /// The <see cref="IrTuple"/> sort of a value tuple of two or three <c>bool</c> or integral elements (ticket P2-027), or
+    /// null for any other type: a larger or smaller tuple, or one holding anything else, stays the sort of its metadata name.
+    /// </summary>
+    public static IrSort? Tuple(ITypeSymbol? type) =>
+        type is INamedTypeSymbol { IsTupleType: true, TupleElements: { Length: 2 or 3 } elements }
+        && elements.Select(static e => Map(e.Type)).ToArray() is var mapped
+        && mapped.All(static t => t is IrBool or IrBitVec)
+            ? IrTuple.Sort(mapped)
+            : null;
+
+    /// <summary>
+    /// The 1-based position of <paramref name="field"/> in its tuple when that tuple is a <see cref="Tuple"/> sort (ticket
+    /// P2-027), whether it is <c>Item1</c> or the name the tuple gives it; null for any other field.
+    /// </summary>
+    public static int? TupleElement(IFieldSymbol field) =>
+        Tuple(field.ContainingType) is null
+            ? null
+            : field.ContainingType.TupleElements.IndexOf(
+                field.ContainingType.TupleElements.First(e => SymbolEqualityComparer.Default.Equals(e.CorrespondingTupleField, field.CorrespondingTupleField))) + 1;
 
     /// <summary>
     /// C# binary numeric promotion of a single operand (ECMA-334 12.4.7): anything narrower than

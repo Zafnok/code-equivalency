@@ -2,7 +2,7 @@
 B0:
   goto B1
 B1:
-  %$0: sort "System.ValueTuple`2" = opaque "DeconstructionAssignment" at "Snippet.cs" 4:125-4:135
+  %$0: sort "tuple(bv32,bv32)" = opaque "DeconstructionAssignment" at "Snippet.cs" 4:125-4:135
   %x.7 "x": bv32 = opaque "DeconstructionAssignment" at "Snippet.cs" 4:125-4:135
   %y.8 "y": bv32 = opaque "DeconstructionAssignment" at "Snippet.cs" 4:125-4:135
   %$5: bv32 = add %x.7, %y.8
