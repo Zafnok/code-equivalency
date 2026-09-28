@@ -235,7 +235,7 @@ internal static class CompareCommand
             WithContracts(WithAssumptions(verified, lowered, matchResult), lowered, backend, Verification(config, options, runLog), error), lowered, analysis.Replay, execution, options.Testing, runLog);
         if (!options.LowerOnly)
         {
-            census = census with { UnknownByScope = ScopeCounts.Of(results) };
+            census = census with { UnknownByScope = ScopeCounts.Of(results), FailureRefinement = RefinementTime.Of(results) };
         }
 
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));

@@ -19,7 +19,8 @@ namespace Equiv.Cli;
 /// <see cref="Changed"/> and <see cref="RuntimeChangeCalls"/> are per matched pair (ADR 0034; ticket M3-030). A pair is
 /// changed unless it is congruent. <see cref="ExternalCallees"/> is every BCL member a lowered body calls, not only the
 /// ones <see cref="RuntimeChangeTable"/> already lists (ADR 0035; ticket M3-033). <see cref="UnknownByScope"/> is set
-/// only by a run that produced verdicts (ADR 0029 decision 4; ticket M3-025).
+/// only by a run that produced verdicts (ADR 0029 decision 4; ticket M3-025), and so is <see cref="FailureRefinement"/>
+/// (ADR 0037; ticket P1-013).
 /// </summary>
 internal sealed record LoweringCensus(
     SideCounts Procedures,
@@ -34,6 +35,9 @@ internal sealed record LoweringCensus(
     ExternalCallees ExternalCallees)
 {
     public ScopeCounts? UnknownByScope { get; init; }
+
+    /// <summary>The Unknown pairs ADR 0037's queries ran on and their total time (ticket P1-013); written only when some pair ran them.</summary>
+    public RefinementTime? FailureRefinement { get; init; }
 
     public static LoweringCensus Compute(IReadOnlyList<(IrProcedure Old, IrProcedure New, bool Congruent)> pairs, int removed, int added, SideCounts? projectsSkipped = null, int unlowered = 0)
     {
@@ -50,7 +54,7 @@ internal sealed record LoweringCensus(
 
     /// <summary>
     /// The census as the SARIF run property: camel-cased keys, <c>opaqueByReason</c> sorted by reason, and
-    /// <c>unknownByScope</c> last, when set.
+    /// <c>unknownByScope</c> and then <c>failureRefinement</c> last, when set.
     /// </summary>
     public Dictionary<string, object> ToProperty()
     {
@@ -61,6 +65,15 @@ internal sealed record LoweringCensus(
             {
                 ["line"] = scopes.Line,
                 ["method"] = scopes.Method,
+            };
+        }
+
+        if (FailureRefinement is { Pairs: > 0 } refinement)
+        {
+            property["failureRefinement"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["pairs"] = refinement.Pairs,
+                ["milliseconds"] = refinement.Milliseconds,
             };
         }
 
