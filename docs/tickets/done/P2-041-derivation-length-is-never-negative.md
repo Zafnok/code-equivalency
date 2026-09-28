@@ -1,5 +1,5 @@
 # P2-041 A Spacer derivation's inputs never give an array a negative length
-Status: in-progress
+Status: done (PR #254)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-019
