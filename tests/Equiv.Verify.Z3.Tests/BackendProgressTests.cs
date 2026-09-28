@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 using Equiv.Core;
 using Equiv.Core.Progress;
 using Equiv.Core.Verdicts;
@@ -11,68 +9,75 @@ using Xunit;
 
 namespace Equiv.Verify.Z3.Tests;
 
-/// <summary>The debug log names each rung the backend runs, how long it took and what it found (ticket M4-014).</summary>
-public sealed partial class BackendProgressTests
+/// <summary>Each rung the backend runs is one debug line, and no line is built below debug (ticket M4-014).</summary>
+public sealed class BackendProgressTests
 {
     private static readonly VerificationOptions Options = new(3, 10_000, []);
 
-    [Fact]
-    public void Each_Rung_Is_One_Detail()
+    [Theory]
+    [InlineData("loops/counter-shape", "bounded:unknown lockstep-induction:unknown k-induction:not-applicable chc:unsat")]
+    [InlineData("loops/loop-bound-change", "bounded:sat")]
+    [InlineData("loops/irreducible", "bounded:not-applicable lockstep-induction:not-applicable k-induction:not-applicable chc:unsat")]
+    public void Each_Rung_Is_One_Detail(string name, string expected)
     {
-        Fixture fusion = Fixture.Load("loops/fusion");
+        ArgumentNullException.ThrowIfNull(expected);
+        Fixture fixture = Fixture.Load(name);
         RecordingRunLog log = new(isDebug: true);
-        LoopLadder ladder = new(static () => new Context(), Options with { TimeoutMs = 1, InvariantModel = "fake-model", Log = log }, new FakeInvariantProposer()) { InvariantTimeoutMs = 10_000 };
 
-        Verdict verdict = ladder.Verify(fusion.Old, fusion.New);
+        Verdict verdict = new Z3Backend().Verify(fixture.Old, fixture.New, Options with { Log = log });
 
-        string[] details = [.. log.Events.Select(static e => e["detail ".Length..])];
-        Assert.All(details, static d => Assert.Matches(RungLine, d));
-        Assert.Equal(verdict.Ladder.Select(static s => s.Rung).Distinct().Count(), details.Length);
-        Assert.StartsWith("rung=bounded ", details[0], StringComparison.Ordinal);
-        Assert.StartsWith("rung=spacer ", details[^2], StringComparison.Ordinal);
-        Assert.EndsWith(" result=timeout", details[^2], StringComparison.Ordinal);
-        Assert.StartsWith("rung=llm-invariant ", details[^1], StringComparison.Ordinal);
+        Assert.Equal(expected.Split(' '), Parse(log));
+        Assert.Equal(verdict.Ladder.Length, log.Events.Count);
     }
 
-    [Theory]
-    [InlineData("loop-bound-change", "rung=bounded ", " result=sat")]
-    [InlineData("warm-up", "rung=k-induction ", " result=unsat")]
-    public void A_Rung_Reports_Its_Result(string name, string prefix, string suffix)
+    [Fact]
+    public void A_Solver_Timeout_Is_Named_Timeout()
     {
-        Fixture fixture = Fixture.Load("loops/" + name);
+        Fixture fixture = Fixture.Load("loops/fusion");
         RecordingRunLog log = new(isDebug: true);
 
-        new Z3Backend().Verify(fixture.Old, fixture.New, Options with { Log = log });
+        new Z3Backend().Verify(fixture.Old, fixture.New, Options with { TimeoutMs = 1, Log = log });
 
-        Assert.Contains(log.Events, e => e.StartsWith("detail " + prefix, StringComparison.Ordinal) && e.EndsWith(suffix, StringComparison.Ordinal));
+        Assert.Equal("chc:timeout", Parse(log)[^1]);
+    }
+
+    [Fact]
+    public void Rung_Five_Is_One_Detail_Whatever_Its_Rounds()
+    {
+        Fixture fixture = Fixture.Load("loops/fusion");
+        RecordingRunLog log = new(isDebug: true);
+        Z3Backend backend = new(static () => new Context(), static _ => new FakeInvariantProposer("(assert false)", null));
+
+        backend.Verify(fixture.Old, fixture.New, Options with { TimeoutMs = 1, InvariantModel = "fake-model", Log = log });
+
+        Assert.Single(Parse(log), static l => l.StartsWith("llm-invariant:", StringComparison.Ordinal));
     }
 
     [Fact]
     public void No_Detail_Unless_Debug()
     {
-        Fixture fusion = Fixture.Load("loops/fusion");
-        ThrowingLog log = new();
+        Fixture fixture = Fixture.Load("loops/counter-shape");
+        DetailForbiddenLog log = new();
 
-        new Z3Backend().Verify(fusion.Old, fusion.New, Options with { Log = log });
+        Verdict verdict = new Z3Backend().Verify(fixture.Old, fixture.New, Options with { Log = log });
 
-        Assert.True(log.Asked);
+        Assert.IsType<Equivalent>(verdict);
     }
 
-    [GeneratedRegex(@"^rung=[a-z-]+ took=\d+\.\d\d result=(sat|unsat|unknown|timeout)$", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
-    private static partial Regex RungLine { get; }
-
-    private sealed class ThrowingLog : IRunLog
-    {
-        public bool Asked { get; private set; }
-
-        public bool IsDebug
+    private static string[] Parse(RecordingRunLog log) =>
+        [.. log.Events.Select(static e =>
         {
-            get
-            {
-                Asked = true;
-                return false;
-            }
-        }
+            string[] parts = e.Split(' ');
+            Assert.Equal(4, parts.Length);
+            Assert.Equal("detail", parts[0]);
+            Assert.StartsWith("took=", parts[2], StringComparison.Ordinal);
+            Assert.EndsWith("s", parts[2], StringComparison.Ordinal);
+            return $"{parts[1]["rung=".Length..]}:{parts[3]["result=".Length..]}";
+        })];
+
+    private sealed class DetailForbiddenLog : IRunLog
+    {
+        public bool IsDebug => false;
 
         public void Phase(string name, int total, long totalWeight, PhaseBound? bound = null) => throw new InvalidOperationException();
 
@@ -80,7 +85,7 @@ public sealed partial class BackendProgressTests
 
         public void ItemDone(string outcome) => throw new InvalidOperationException();
 
-        public void Detail(string text) => throw new InvalidOperationException(text);
+        public void Detail(string text) => throw new InvalidOperationException("Detail called while IsDebug is false");
 
         public void PhaseDone() => throw new InvalidOperationException();
     }

@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Globalization;
 
 using Equiv.Core;
@@ -85,7 +85,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             {
                 long started = TimeProvider.System.GetTimestamp();
                 ImmutableArray<Rung> rounds = new LlmInvariantRung(createContext, options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs }, proposer, options.InvariantModel!).Prove(old, @new);
-                LogRung(rounds[^1], started);
+                LogRung(rounds[^1].Step, started);
                 rungs.AddRange(rounds);
             }
         }
@@ -94,40 +94,44 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         return verdict with { Ladder = [.. rungs.Select(static r => r.Step)] };
     }
 
-    /// <summary>Runs <paramref name="run"/> and, at debug, logs its rung, duration and result (ticket M4-014).</summary>
-    private Rung Timed(Func<Rung> run)
+    /// <summary>Runs one rung and, at <c>debug</c>, writes its <c>rung=… took=… result=…</c> line (ticket M4-014).</summary>
+    private Rung Timed(Func<Rung> rung)
     {
         long started = TimeProvider.System.GetTimestamp();
-        Rung rung = run();
-        LogRung(rung, started);
-        return rung;
+        Rung result = rung();
+        LogRung(result.Step, started);
+        return result;
     }
 
-    private void LogRung(Rung rung, long started)
+    /// <summary>One line per rung; the text is built only when the log is at <c>debug</c>. Rung 5's rounds are one rung, named by its last step.</summary>
+    private void LogRung(LadderStep step, long started)
     {
         if (!options.Log.IsDebug)
         {
             return;
         }
 
-        string took = TimeProvider.System.GetElapsedTime(started).TotalSeconds.ToString("0.00", CultureInfo.InvariantCulture);
-        string name = rung.Step.Rung switch
-        {
-            ProofMethod.Bounded => "bounded",
-            ProofMethod.LockstepInduction => "lockstep",
-            ProofMethod.KInduction => "k-induction",
-            ProofMethod.Chc => "spacer",
-            _ => "llm-invariant",
-        };
-        string result = rung.Step.Outcome switch
-        {
-            RungOutcome.Proved => "unsat",
-            RungOutcome.Refuted => "sat",
-            RungOutcome.Timeout => "timeout",
-            _ => "unknown",
-        };
-        options.Log.Detail($"rung={name} took={took} result={result}");
+        double took = TimeProvider.System.GetElapsedTime(started).TotalSeconds;
+        options.Log.Detail(string.Create(CultureInfo.InvariantCulture, $"rung={RungName(step.Rung)} took={took:0.###}s result={ResultName(step.Outcome)}"));
     }
+
+    private static string RungName(ProofMethod method) => method switch
+    {
+        ProofMethod.Bounded => "bounded",
+        ProofMethod.LockstepInduction => "lockstep-induction",
+        ProofMethod.KInduction => "k-induction",
+        ProofMethod.Chc => "chc",
+        _ => "llm-invariant",
+    };
+
+    private static string ResultName(RungOutcome outcome) => outcome switch
+    {
+        RungOutcome.Proved => "unsat",
+        RungOutcome.Refuted => "sat",
+        RungOutcome.Timeout => "timeout",
+        RungOutcome.NotApplicable => "not-applicable",
+        _ => "unknown",
+    };
 
     /// <summary>
     /// Every rung on its own, whatever the others found (VERIFICATION-MODEL.md section 7: the soundness harness runs
