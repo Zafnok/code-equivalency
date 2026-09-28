@@ -121,7 +121,7 @@ internal static class CompareCommand
     /// <summary>
     /// The pipeline. <paramref name="execution"/> is where <c>--execute</c> runs, <see cref="ExecutionEnvironment.Current"/>
     /// when null; without <c>--execute</c> nothing reads it (ADR 0035; ticket M4-009). <paramref name="runLog"/> hears the
-    /// <c>load</c>, <c>verify</c>, <c>execute</c> and <c>write</c> phases, and the backend hears it through
+    /// <c>verify</c>, <c>execute</c> and <c>write</c> phases, and the backend hears it through
     /// <see cref="VerificationOptions.Log"/> (ADR 0038; ticket M4-012); tests pass <see cref="NullRunLog.Instance"/>.
     /// </summary>
     public static int Run(
@@ -184,26 +184,17 @@ internal static class CompareCommand
         return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, new Output(sink, runLog), executing);
     }
 
-    /// <summary>The <c>load</c> phase (ADR 0038): the frontend's analysis, or null, with the message on stderr, when it cannot load.</summary>
+    /// <summary>The frontend's analysis, or null, with the message on stderr, when it cannot load (the frontend reports its own phases; ADR 0038, ticket M4-013).</summary>
     private static FrontendAnalysis? Loaded(ILanguageFrontend frontend, CompareOptions options, EquivConfig config, IRunLog runLog)
     {
-        runLog.Phase("load", 1, 1);
-        runLog.Item("solutions", 1);
         try
         {
-            FrontendAnalysis analysis = frontend.Analyze(options.LegacyPath, options.ModernPath, config, CancellationToken.None);
-            runLog.ItemDone("loaded");
-            return analysis;
+            return frontend.Analyze(options.LegacyPath, options.ModernPath, config, runLog, CancellationToken.None);
         }
         catch (FrontendLoadException exception)
         {
-            runLog.ItemDone("failed");
             Console.Error.WriteLine(exception.Message);
             return null;
-        }
-        finally
-        {
-            runLog.PhaseDone();
         }
     }
 

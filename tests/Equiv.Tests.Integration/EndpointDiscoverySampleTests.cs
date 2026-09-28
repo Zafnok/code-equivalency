@@ -1,6 +1,7 @@
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Frontend.CSharp;
 
 using Xunit;
@@ -29,7 +30,7 @@ public sealed class EndpointDiscoverySampleTests
         string legacy = Directory.GetFiles(Path.Combine(SamplesRoot, "webapi-basic", "legacy"), "*.sln").Single();
         string modern = Directory.GetFiles(Path.Combine(SamplesRoot, "webapi-basic", "modern"), "*.slnx").Single();
 
-        MatchResult result = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, TestContext.Current.CancellationToken).Match;
+        MatchResult result = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, NullRunLog.Instance, TestContext.Current.CancellationToken).Match;
 
         // Find (ticket M3-009) is the sample's second action.
         Assert.Equal(["GET /api/orders/find/{id}", "GET /api/orders/{id}"], result.Pairs.Select(static p => p.New.Value).Order(StringComparer.Ordinal), StringComparer.Ordinal);
@@ -48,7 +49,7 @@ public sealed class EndpointDiscoverySampleTests
         string legacy = Directory.GetFiles(Path.Combine(SamplesRoot, "webapi-basic", "legacy"), "*.sln").Single();
         string modern = Directory.GetFiles(Path.Combine(SamplesRoot, "webapi-basic", "modern"), "*.slnx").Single();
 
-        MatchResult result = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, TestContext.Current.CancellationToken).Match;
+        MatchResult result = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, NullRunLog.Instance, TestContext.Current.CancellationToken).Match;
         ProcedurePair pair = result.Pairs.Single(static p => string.Equals(p.New.Value, "GET /api/orders/{id}", StringComparison.Ordinal));
 
         string dump = $"""

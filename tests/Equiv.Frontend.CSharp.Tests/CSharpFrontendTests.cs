@@ -6,6 +6,7 @@ using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Frontend.CSharp.Loading;
 
 using Microsoft.CodeAnalysis;
@@ -59,7 +60,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [shared, modernOther], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         // ADR 0029 exempts only a skipped C# counterpart: a project that was never C# does not make Z() unverified.
         Assert.Equal(["O.E::Z()"], result.Added.Select(static i => i.Value), StringComparer.Ordinal);
@@ -79,7 +80,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernVacuous], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Empty(result.Added);
         UnverifiedProject skipped = Assert.Single(result.LegacySkipped);
@@ -104,7 +105,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [real], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Equal("Vacuous", Assert.Single(result.LegacySkipped).Name);
         Assert.Equal("R.C::M()", Assert.Single(result.Pairs).Old.Value);
@@ -123,7 +124,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modern], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Empty(result.LegacySkipped);
         Assert.Empty(result.ModernSkipped);
@@ -143,7 +144,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.True(Assert.Single(result.LegacySkipped).IsCSharp);
     }
@@ -170,7 +171,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], [], []));
 
         CSharpFrontend frontend = new(loader, new StableIdentityMatcher());
-        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", config, CancellationToken.None).Match;
+        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", config, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Single(result.Pairs);
         Assert.Empty(result.Added);
@@ -185,7 +186,7 @@ public sealed class CSharpFrontendTests
             ? new LoadedSolution(null!, [compilation], [], []) { NotBuilt = ["Example.Site", "_build"] }
             : new LoadedSolution(null!, [compilation], [], []));
 
-        FrontendAnalysis analysis = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None);
+        FrontendAnalysis analysis = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None);
 
         Assert.Equal(["Example.Site", "_build"], analysis.LegacyNotBuilt);
         Assert.Empty(analysis.ModernNotBuilt);
@@ -198,7 +199,7 @@ public sealed class CSharpFrontendTests
         Compilation compilation = RoslynTestCompilations.Compile("namespace N { public class C { public bool M(string s, char c) => System.Linq.Enumerable.Contains(s, c); } }");
         StubLoader loader = new(_ => new LoadedSolution(null!, [compilation], [], []));
 
-        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         ProcedurePair pair = Assert.Single(result.Pairs);
         Assert.Equal(["bcl.string-contains-char"], pair.EquivalencesApplied);
@@ -216,7 +217,7 @@ public sealed class CSharpFrontendTests
             ? new LoadedSolution(null!, [legacyCompilation], [], [])
             : new LoadedSolution(null!, [modernCompilation], [], []));
 
-        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         ProcedurePair same = result.Pairs.Single(static p => p.New.Value.Contains("::Same(", StringComparison.Ordinal));
         ProcedurePair changed = result.Pairs.Single(static p => p.New.Value.Contains("::Changed(", StringComparison.Ordinal));
@@ -241,7 +242,7 @@ public sealed class CSharpFrontendTests
             ? new LoadedSolution(null!, [legacyCompilation], [], [])
             : new LoadedSolution(null!, [modernCompilation], [], []));
 
-        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         ProcedurePair mismatched = result.Pairs.Single(static p => p.New.Value.Contains("::Sync(", StringComparison.Ordinal));
         foreach (IrProcedure body in (IrProcedure[])[mismatched.OldBody!, mismatched.NewBody!])
@@ -270,7 +271,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, NullRunLog.Instance, CancellationToken.None).Match;
 
         ProcedurePair pair = Assert.Single(result.Pairs);
         Assert.Equal(pair.Old, pair.OldBody!.Identity);
@@ -291,7 +292,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], [], []));
 
         CSharpFrontend frontend = new(loader, new StableIdentityMatcher());
-        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         ProcedureIdentity removed = Assert.Single(result.Removed);
         ProcedureIdentity added = Assert.Single(result.Added);
@@ -309,7 +310,7 @@ public sealed class CSharpFrontendTests
         CSharpFrontend frontend = new(loader, new StableIdentityMatcher());
 
         FrontendLoadException exception = Assert.Throws<FrontendLoadException>(
-            () => frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None));
+            () => frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None));
 
         Assert.Equal("legacy.sln", exception.Path);
     }
@@ -323,7 +324,7 @@ public sealed class CSharpFrontendTests
         InvalidOperationException fault = new("injected lowering fault");
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher(), FaultOn("Bad", fault))
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         ProcedurePair pair = Assert.Single(result.Pairs);
         Assert.Equal("N.C::Good(int)", pair.New.Value);
@@ -342,7 +343,7 @@ public sealed class CSharpFrontendTests
         StubLoader loader = new(_ => new LoadedSolution(null!, [RoslynTestCompilations.Compile("namespace N { public class C { public int Bad(int a) => a; } }")], [], []));
         CSharpFrontend frontend = new(loader, new StableIdentityMatcher(), FaultOn("Bad", new OperationCanceledException()));
 
-        Assert.Throws<OperationCanceledException>(() => frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None));
+        Assert.Throws<OperationCanceledException>(() => frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None));
     }
 
     /// <summary>CA2201 reserves <see cref="OutOfMemoryException"/> for the runtime; <see cref="InsufficientMemoryException"/> is its BCL subclass.</summary>
@@ -352,7 +353,7 @@ public sealed class CSharpFrontendTests
         StubLoader loader = new(_ => new LoadedSolution(null!, [RoslynTestCompilations.Compile("namespace N { public class C { public int Bad(int a) => a; } }")], [], []));
         CSharpFrontend frontend = new(loader, new StableIdentityMatcher(), FaultOn("Bad", new InsufficientMemoryException()));
 
-        Assert.Throws<InsufficientMemoryException>(() => frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None));
+        Assert.Throws<InsufficientMemoryException>(() => frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None));
     }
 
     /// <summary>The production lowering, except that a method named <paramref name="name"/> throws <paramref name="fault"/>.</summary>
@@ -365,7 +366,7 @@ public sealed class CSharpFrontendTests
     public void NullConfigThrows()
     {
         CSharpFrontend frontend = new(new StubLoader(_ => throw new InvalidOperationException()), new StableIdentityMatcher());
-        Assert.Throws<ArgumentNullException>(() => frontend.Analyze("a.sln", "b.sln", null!, CancellationToken.None));
+        Assert.Throws<ArgumentNullException>(() => frontend.Analyze("a.sln", "b.sln", null!, NullRunLog.Instance, CancellationToken.None));
     }
 
     // Declared as a separate referenced assembly, not inlined into the compilation under test: an
@@ -446,7 +447,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         ProcedurePair pair = Assert.Single(result.Pairs);
         Assert.Equal("GET /api/orders/{id}", pair.Old.Value);
@@ -503,7 +504,7 @@ public sealed class CSharpFrontendTests
 
         RenameMap renames = RenameMap.Empty with { Namespaces = RenameMap.Empty.Namespaces.Add("Old.Ns", "Different.Ns") };
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Renames = renames }, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Empty(result.Pairs);
         Assert.Empty(result.Ambiguous);
@@ -556,7 +557,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Empty(result.Pairs);
         Assert.Empty(result.Added);
@@ -605,7 +606,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Empty(result.Pairs);
         Assert.Empty(result.Added);
@@ -632,7 +633,7 @@ public sealed class CSharpFrontendTests
                 new SkippedProject("Tool", "Tool", IsCSharp: true, [], Compilation: null)]));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Equal(["S.C::M()"], result.Pairs.Select(static p => p.New.Value), StringComparer.Ordinal);
 
@@ -676,7 +677,7 @@ public sealed class CSharpFrontendTests
                 lowered.Add(compilation);
                 return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy);
             })
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Equal(["N.C::M(int)"], result.Pairs.Select(static p => p.New.Value), StringComparer.Ordinal);
         Assert.Equal(["N.C::OnlyNet20()"], result.Removed.Select(static i => i.Value), StringComparer.Ordinal);
@@ -694,7 +695,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [RoslynTestCompilations.Compile(Source, "A"), RoslynTestCompilations.Compile(Source, "B")], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Empty(result.Pairs);
         Assert.Equal(["N.C::M()"], result.Ambiguous.Select(static i => i.Value), StringComparer.Ordinal);
@@ -736,7 +737,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         Assert.Equal(["GET /api/orders/{id}"], result.Pairs.Select(static p => p.New.Value), StringComparer.Ordinal);
         Assert.Empty(result.Ambiguous);

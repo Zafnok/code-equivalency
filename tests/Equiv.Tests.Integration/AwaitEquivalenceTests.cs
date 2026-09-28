@@ -4,6 +4,7 @@ using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp;
 using Equiv.Verify.Z3;
@@ -81,7 +82,7 @@ public sealed class AwaitEquivalenceTests
     [Fact]
     public void BusinessLayerConfirmAsyncHasNoOpaque()
     {
-        ProcedurePair confirm = new CSharpFrontend().Analyze(Solution("legacy", "*.sln"), Solution("modern", "*.slnx"), EquivConfig.Default, TestContext.Current.CancellationToken)
+        ProcedurePair confirm = new CSharpFrontend().Analyze(Solution("legacy", "*.sln"), Solution("modern", "*.slnx"), EquivConfig.Default, NullRunLog.Instance, TestContext.Current.CancellationToken)
             .Match.Pairs.Single(static p => p.New.Value.Contains("OrderService::ConfirmAsync(", StringComparison.Ordinal));
 
         foreach (IrProcedure body in (IrProcedure[])[confirm.OldBody!, confirm.NewBody!])

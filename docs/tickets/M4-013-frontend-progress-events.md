@@ -1,5 +1,5 @@
 # M4-013 Frontend progress: projects loaded, procedures enumerated, pairs matched and lowered
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-012
@@ -45,3 +45,9 @@ More than 10 non-test files changed: stop and re-read.
 Making loading faster. Parallel loading. Backend events (M4-014).
 
 ## Notes
+Decision: the `load-*` events are emitted after each side finishes loading, not while MSBuildWorkspace runs, because the project count
+(the phase `total`) is only known once the loader returns, and threading a log through three loaders and their stubs is beyond "only to pass log through". The phase clock therefore
+starts after the load; the load itself is covered by the overall run clock. Live per-project load events need the loader to report its project list first (follow-up).
+Decision: a load that throws `FrontendLoadException` is one failed item in `load-legacy` or `load-modern`, so the run log still shows where it stopped; `CompareCommand` only prints the message.
+Decision: `enumerate` has one item per side (weight = its project count), `match` one item for all procedures, `lower` one item per matched pair. Skipped-project `Detail` names the project by `SkippedProject.Name` (no path is loaded for one that never opened).
+Decision: the CLI's own recording log stays in `CompareCommandProgressTests`; `Equiv.TestSupport/RecordingRunLog.cs` serves the frontend tests (Cli.Tests does not reference TestSupport).

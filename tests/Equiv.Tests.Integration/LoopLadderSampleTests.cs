@@ -2,6 +2,7 @@ using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp;
 using Equiv.Verify.Z3;
@@ -45,7 +46,7 @@ public sealed class LoopLadderSampleTests
 
     private static Verdict Verify(string sample, string member)
     {
-        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, TestContext.Current.CancellationToken).Match;
+        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, NullRunLog.Instance, TestContext.Current.CancellationToken).Match;
         ProcedurePair pair = result.Pairs.Single(p => p.New.Value.Contains(member, StringComparison.Ordinal));
         VerificationOptions options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, EquivConfig.Default.CallIdentityRenames);
         return new Z3Backend().Verify(pair.OldBody!, pair.NewBody!, options);

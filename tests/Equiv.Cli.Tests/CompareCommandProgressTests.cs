@@ -14,7 +14,7 @@ namespace Equiv.Cli.Tests;
 
 /// <summary>
 /// Ticket M4-012 criteria 1 to 3 against the fakes: <c>--verbosity</c> and <c>--log</c>, the phases
-/// <see cref="CompareCommand.Run"/> reports (<c>load</c>, <c>verify</c>, <c>execute</c>, <c>write</c>) with each item's
+/// <see cref="CompareCommand.Run"/> reports (<c>verify</c>, <c>execute</c>, <c>write</c>) with each item's
 /// weight and outcome, progress on stderr and the <c>--log</c> file only, and stdout and the SARIF file unchanged by the
 /// verbosity. The run on <c>samples/business-layer</c> is <c>CompareProgressSampleTests</c> in <c>Equiv.Tests.Integration</c>.
 /// </summary>
@@ -89,7 +89,7 @@ public sealed partial class CompareCommandProgressTests
         Assert.Equal(Lines(quietError), Lines(normalError).Where(static line => !line.StartsWith("equiv: ", StringComparison.Ordinal)), StringComparer.Ordinal);
         string[] lines = Progress(normalError);
         Assert.All(lines, static line => Assert.Matches(ProgressLine, line));
-        foreach (string phase in (string[])["load", "verify", "write"])
+        foreach (string phase in (string[])["verify", "write"])
         {
             Assert.Single(lines, line => Regex.IsMatch(line, $@"^equiv: \+\d\d:\d\d:\d\d {phase} 0/\d+ \(0%\) eta=\?", RegexOptions.None, TimeSpan.FromSeconds(1)));
             Assert.Single(lines, line => Regex.IsMatch(line, $@"^equiv: \+\d\d:\d\d:\d\d {phase} done in \d\d:\d\d:\d\d\.\d{{3}}; ", RegexOptions.None, TimeSpan.FromSeconds(1)));
@@ -116,12 +116,12 @@ public sealed partial class CompareCommandProgressTests
     }
 
     /// <summary>
-    /// The events <see cref="CompareCommand.Run"/> sends: one <c>load</c> item, one <c>verify</c> item per lowered pair
+    /// The events <see cref="CompareCommand.Run"/> sends: one <c>verify</c> item per lowered pair
     /// with its <see cref="PairWeight"/> and outcome, bounded by the pairs the solver decides, and one <c>write</c> item.
     /// The backend gets the same log.
     /// </summary>
     [Fact]
-    public void Run_Reports_Load_Verify_And_Write()
+    public void Run_Reports_Verify_And_Write()
     {
         using TempFile legacy = new();
         using TempFile modern = new();
@@ -135,7 +135,6 @@ public sealed partial class CompareCommandProgressTests
         long loop = PairWeight.Of(LoopBody(Loops), LoopBody(Loops), solver: true);
         Assert.Equal(
             [
-                "phase load 1 1", "item solutions 1", "done loaded", "phase-done",
                 Invariant($"phase verify 8 {3 + (4 * size) + loop} (5, 5000, 5)"),
                 "item T::Congruent() 1", "done congruent",
                 "item T::Unbound() 1", "done unbound",
@@ -166,7 +165,7 @@ public sealed partial class CompareCommandProgressTests
     }
 
     [Fact]
-    public void A_Load_Failure_Ends_The_Load_Phase()
+    public void A_Load_Failure_Reports_Nothing_Itself()
     {
         using TempFile legacy = new();
         using TempFile modern = new();
@@ -177,7 +176,7 @@ public sealed partial class CompareCommandProgressTests
         _ = CaptureStdErr(() => exitCode = CompareCommand.Run(Options(legacy.Path, modern.Path), [frontend], Backend(), new InMemoryReportSink(), log));
 
         Assert.Equal(ExitCodes.LoadFailure, exitCode);
-        Assert.Equal(["phase load 1 1", "item solutions 1", "done failed", "phase-done"], log.Events);
+        Assert.Empty(log.Events);
     }
 
     [Fact]

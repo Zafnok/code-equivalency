@@ -1,4 +1,5 @@
 using Equiv.Core.Configuration;
+using Equiv.Core.Progress;
 
 namespace Equiv.Core;
 
@@ -18,7 +19,8 @@ public interface ILanguageFrontend
 
     /// <summary>
     /// Loads both sides, lowers them to IR, matches procedures across them, and counts each side's analysed
-    /// lines. Throws <see cref="FrontendLoadException"/> when a path cannot be loaded enough to attempt lowering.
+    /// lines, reporting the <c>load-legacy</c>, <c>load-modern</c>, <c>enumerate</c>, <c>match</c> and <c>lower</c>
+    /// phases to <paramref name="log"/> (ADR 0038; ticket M4-013). Throws <see cref="FrontendLoadException"/> when a path cannot be loaded enough to attempt lowering.
     /// </summary>
-    FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct);
+    FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, IRunLog log, CancellationToken ct);
 }
