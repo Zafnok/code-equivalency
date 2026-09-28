@@ -95,6 +95,16 @@ public sealed class EtaEstimatorTests
                 iter: 1000);
     }
 
+    /// <summary>Ticket M4-016: CsCheck seed 571VKAzBWW29 shrunk to this; the quotient is past <see cref="long.MaxValue"/> ticks.</summary>
+    [Fact]
+    public void SaturatesInsteadOfWrappingWhenTheEstimateOverflows()
+    {
+        TimeSpan elapsed = TimeSpan.FromTicks(154_402_185_409);
+
+        Assert.Equal(TimeSpan.MaxValue, EtaEstimator.Estimate(elapsed, doneWeight: 9, totalWeight: 785_039_009, doneItems: 8559));
+        Assert.Equal(TimeSpan.FromHours(1), EtaEstimator.Estimate(elapsed, doneWeight: 9, totalWeight: 785_039_009, doneItems: 8559, TimeSpan.FromHours(1)));
+    }
+
     [Fact]
     public void IsNullWhenNoWeightIsDone()
     {
