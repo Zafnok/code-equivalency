@@ -520,13 +520,10 @@ internal sealed class IrLowerer
         ssa.Terminate(context.Current, block.ConditionKind == ControlFlowConditionKind.WhenTrue
             ? new IrBranch(condition, jump, next)
             : new IrBranch(condition, next, jump));
-        foreach (IrBlockId? opaque in (IrBlockId?[])[jumpRethrow, rethrow])
+        foreach (IrBlockId opaque in ((IrBlockId?[])[jumpRethrow, rethrow]).OfType<IrBlockId>())
         {
-            if (opaque is not null)
-            {
-                context.Current = opaque;
-                OpaqueExit("rethrow", context);
-            }
+            context.Current = opaque;
+            OpaqueExit("rethrow", context);
         }
     }
 
