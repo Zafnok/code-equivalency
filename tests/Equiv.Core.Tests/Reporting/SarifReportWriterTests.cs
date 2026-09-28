@@ -326,6 +326,7 @@ public sealed class SarifReportWriterTests
     [InlineData(ProofMethod.KInduction, "k-induction")]
     [InlineData(ProofMethod.Chc, "chc")]
     [InlineData(ProofMethod.LlmInvariant, "llm-invariant")]
+    [InlineData(ProofMethod.TraceInvariant, "trace-invariant")]
     [InlineData(ProofMethod.Congruence, "congruence")]
     public void EquivalentResultCarriesItsProofMethodAndNoBoundUnlessBounded(ProofMethod method, string name)
     {

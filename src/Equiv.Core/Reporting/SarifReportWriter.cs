@@ -366,7 +366,7 @@ public static class SarifReportWriter
 
     /// <summary>
     /// The spelling VERIFICATION-MODEL.md sections 1 and 5.1 use for a proof: <c>bounded</c>, <c>lockstep-induction</c>,
-    /// <c>k-induction</c>, <c>chc</c>, <c>llm-invariant</c>, <c>congruence</c>.
+    /// <c>k-induction</c>, <c>chc</c>, <c>llm-invariant</c>, <c>trace-invariant</c>, <c>congruence</c>.
     /// </summary>
     internal static string Name(ProofMethod method) => method switch
     {
@@ -375,6 +375,7 @@ public static class SarifReportWriter
         ProofMethod.KInduction => "k-induction",
         ProofMethod.Chc => "chc",
         ProofMethod.LlmInvariant => "llm-invariant",
+        ProofMethod.TraceInvariant => "trace-invariant",
         _ => "congruence",
     };
 
