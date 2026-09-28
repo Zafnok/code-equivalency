@@ -62,7 +62,20 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   location: location
   sku: { name: 'Standard_LRS' }
   kind: 'StorageV2'
+  // No role uses it yet; declared so the account is ready for identity-based access (Sonar S6378).
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
+    // Microsoft-managed keys, plus the free second layer of infrastructure encryption (Sonar S6388).
+    encryption: {
+      keySource: 'Microsoft.Storage'
+      requireInfrastructureEncryption: true
+      services: {
+        blob: { enabled: true, keyType: 'Account' }
+        file: { enabled: true, keyType: 'Account' }
+      }
+    }
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
     allowBlobPublicAccess: false
@@ -119,6 +132,11 @@ resource environmentStorage 'Microsoft.App/managedEnvironments/storages@2024-03-
 resource job 'Microsoft.App/jobs@2024-03-01' = {
   name: 'equiv-compare'
   location: location
+  // The image is public and the share mounts with the environment's storage key, so nothing uses
+  // this yet; it is what the queue trigger and blob inputs after M6-001 will authenticate with (Sonar S6378).
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
     environmentId: environment.id
     workloadProfileName: workloadProfileName
