@@ -1,5 +1,5 @@
 # P2-033 Verifying crashes with "IrSortValue ... was not present in the dictionary"
-Status: in-progress
+Status: done (PR #255)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -48,3 +48,6 @@ Any other `KeyNotFoundException` not tied to `IrSortValue`.
 - Criterion 3, Tomas: a `full` re-run on this branch (65 s) gives `GetExpectedWeightAndNodes(string)` EQ006
   (runtime-changed regex API) instead of a tool error; exit 1 (was 5); no `IrSortValue` or `KeyNotFoundException` in
   the log.
+- Criterion 3, Git Extensions: a `full` re-run on this branch (10003 s) has no `IrSortValue` in the log (was 8). All
+  8 methods that crashed now get a verdict: EQ006 x3, EQ003 x4, EQ002 x1 (`SolveLinuxToolsDir`). Exit is still 5,
+  from the 75 unchanged "domain sort ... do not match" errors that P2-031 and P2-032 own.
