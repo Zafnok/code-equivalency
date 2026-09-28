@@ -259,6 +259,10 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task DefaultValueOfATypeParameter() => Dump("static T M<T>(bool has, T value) where T : class => has ? value : default;");
 
+    /// <summary>Ticket P2-023 acceptance criterion 2: <c>&amp;x</c> is opaque with reason <c>AddressOf</c>, and not a shared fragment.</summary>
+    [Fact]
+    public Task AddressOf() => Dump("unsafe static int* M(int x) => &x;");
+
     /// <summary>Ticket P2-008 acceptance criterion 1: the CFG's <c>IsNull</c> of <c>?.</c> and <c>??</c> reads the operand's null shadow.</summary>
     [Fact]
     public Task NullConditionalLengthWithFallback() => Dump("static int M(string s) => s?.Length ?? 0;");
