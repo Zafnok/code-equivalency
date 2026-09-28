@@ -307,5 +307,9 @@ public sealed class IrLowererSnapshotTests
     public Task DeconstructionThroughADeconstructMethod() =>
         Dump("struct P { public int X, Y; public void Deconstruct(out int x, out int y) { x = X; y = Y; } } static int M(P p) { int x, y; (x, y) = p; return x + y; }");
 
+    /// <summary>Ticket P2-024 acceptance criterion 2: an anonymous object creation stays opaque with reason <c>AnonymousObjectCreation</c>.</summary>
+    [Fact]
+    public Task AnonymousObjectCreation() => Dump("static int M(int x, int y) { var p = new { X = x, Y = y }; return p.X + p.Y; }");
+
     private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }
