@@ -99,7 +99,11 @@ internal sealed class FragmentEncoder
         Terms = new SideTerms(
             inputs.Concat(constants).ToDictionary(static t => t.Key, static t => t.Value, StringComparer.Ordinal),
             reach,
-            context.MkOr(unreachableDisjuncts));
+            context.MkOr(unreachableDisjuncts))
+        {
+            Returned = Returned,
+            Threw = Threw,
+        };
     }
 
     public IrProcedure Procedure { get; }

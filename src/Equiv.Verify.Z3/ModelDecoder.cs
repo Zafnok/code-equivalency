@@ -67,6 +67,23 @@ internal sealed class ModelDecoder
     /// </summary>
     public static Verdict Replay(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
     {
+        (Counterexample counterexample, ModelOracle oldOracle, ModelOracle newOracle) = ReplayBoth(context, model, encoding, old, @new);
+        (IrInputs inputs, IrRun oldRun, IrRun newRun) = counterexample;
+        ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
+        return EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls, oldOracle.Threaded, newOracle.Threaded) == Difference.Real
+            ? new Divergent(counterexample)
+            : Unknown.DependingOn(counterexample, [.. Abstractions(Codebase.Legacy, oldRun), .. Abstractions(Codebase.Modern, newRun)]);
+    }
+
+    /// <summary>
+    /// Both acyclic sides replayed with taint from the model's inputs and call answers, whatever they observe: ADR 0037's
+    /// queries compare only whether each side threw, so the caller reads the outcomes and their taint (ticket P1-013).
+    /// </summary>
+    public static Counterexample Runs(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new) =>
+        ReplayBoth(context, model, encoding, old, @new).Counterexample;
+
+    private static (Counterexample Counterexample, ModelOracle Old, ModelOracle New) ReplayBoth(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
+    {
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
@@ -74,10 +91,7 @@ internal sealed class ModelDecoder
         ModelOracle newOracle = decoder.Oracle(Side.New);
         IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, Budget(old));
         IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, Budget(@new));
-        Counterexample counterexample = new(inputs, oldRun, newRun);
-        return EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls, oldOracle.Threaded, newOracle.Threaded) == Difference.Real
-            ? new Divergent(counterexample)
-            : Unknown.DependingOn(counterexample, [.. Abstractions(Codebase.Legacy, oldRun), .. Abstractions(Codebase.Modern, newRun)]);
+        return (new Counterexample(inputs, oldRun, newRun), oldOracle, newOracle);
     }
 
     /// <summary>Whether <paramref name="callee"/> is an abstraction the replay taints.</summary>
