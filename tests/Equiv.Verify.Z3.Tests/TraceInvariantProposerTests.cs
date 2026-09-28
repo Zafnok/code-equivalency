@@ -75,6 +75,19 @@ public sealed partial class TraceInvariantProposerTests
         Assert.DoesNotContain(Smt(parameters, (3, 2), (2, 3)), static s => s.Contains('*', StringComparison.Ordinal));
     }
 
+    /// <summary>A 64-bit bitvector's extreme values never overflow a template's arithmetic (ticket P1-009, found on CI).</summary>
+    [Fact]
+    public void Templates_DoNotOverflowOn64BitExtremes()
+    {
+        ImmutableArray<InvariantRequest.Variable> parameters = [new("x", "Int"), new("y", "Int")];
+
+        Assert.Equal(["(<= x y)", "(<= (- 9223372036854775808) x)", "(<= x (- 9223372036854775808))"], Smt(parameters, (long.MinValue, 1), (long.MinValue, long.MaxValue)));
+        Assert.Equal(["(<= y x)"], Smt(parameters, (0, long.MinValue), (1, -1)));
+        Assert.Equal(["(<= y x)"], Smt(parameters, (long.MaxValue, long.MinValue), (long.MaxValue - 1, -1)));
+        Assert.Equal("(<= (- 9223372036854775808) x)", new Conjunct(Template.Lower, "x", C: long.MinValue).Smt);
+        Assert.True(new Conjunct(Template.Offset, "x", "y", 1).Falsified(new Dictionary<string, string>(StringComparer.Ordinal) { ["x"] = "-9223372036854775808", ["y"] = "9223372036854775807" }));
+    }
+
     [Theory]
     [InlineData("Never", "x", "", 0, "", true)]
     [InlineData("Equal", "x", "y", 0, "x=1,y=1", false)]

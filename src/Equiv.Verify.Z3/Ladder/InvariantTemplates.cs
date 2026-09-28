@@ -8,7 +8,7 @@ namespace Equiv.Verify.Z3.Ladder;
 /// pair of a relation's arguments of one sort, <c>x = y</c>, <c>x = y + c</c> and <c>x = c*y</c> for a small constant
 /// <c>c</c>, and <c>x &lt;= y</c>; and over each argument, the range <c>lo &lt;= x &lt;= hi</c> of the bounds that are
 /// constant across the traces (a Bool's value when it never changes). <see cref="Mine"/> keeps every instance that held on
-/// every sample of every trace. A sample holds an Int argument as a <see cref="long"/>, a Bool one as a <see cref="bool"/>
+/// every sample of every trace, computing in <see cref="Int128"/> so that no 64-bit value overflows. A sample holds an Int argument as a <see cref="long"/>, a Bool one as a <see cref="bool"/>
 /// and any other as a value with equality only; an argument missing from a sample (a thrown side's value) is in no instance.
 /// </summary>
 internal static class InvariantTemplates
@@ -66,12 +66,12 @@ internal static class InvariantTemplates
             return [];
         }
 
-        long[] xs = [.. samples.Select(s => (long)s[x])];
-        long[] ys = [.. samples.Select(s => (long)s[y])];
-        long offset = xs[0] - ys[0];
-        if (Math.Abs(offset) <= MaxConstant && xs.Zip(ys).All(p => p.First - p.Second == offset))
+        Int128[] xs = [.. samples.Select(s => (Int128)(long)s[x])];
+        Int128[] ys = [.. samples.Select(s => (Int128)(long)s[y])];
+        Int128 offset = xs[0] - ys[0];
+        if (Int128.Abs(offset) <= MaxConstant && xs.Zip(ys).All(p => p.First - p.Second == offset))
         {
-            return [new Conjunct(Template.Offset, x, y, offset)];
+            return [new Conjunct(Template.Offset, x, y, (long)offset)];
         }
 
         List<Conjunct> found = [.. Scale(x, xs, y, ys), .. Scale(y, ys, x, xs)];
@@ -88,7 +88,7 @@ internal static class InvariantTemplates
     }
 
     /// <summary><c>x = c*y</c> with <c>c</c> the ratio of the first sample with <c>y</c> non-zero, when it held everywhere.</summary>
-    private static IEnumerable<Conjunct> Scale(string x, long[] xs, string y, long[] ys)
+    private static IEnumerable<Conjunct> Scale(string x, Int128[] xs, string y, Int128[] ys)
     {
         int k = Array.FindIndex(ys, static v => v != 0);
         if (k < 0 || xs[k] % ys[k] != 0)
@@ -96,9 +96,9 @@ internal static class InvariantTemplates
             return [];
         }
 
-        long factor = xs[k] / ys[k];
-        bool small = factor is not (0 or 1) && Math.Abs(factor) <= MaxConstant;
-        return small && xs.Zip(ys).All(p => p.First == factor * p.Second) ? [new Conjunct(Template.Scale, x, y, factor)] : [];
+        Int128 factor = xs[k] / ys[k];
+        bool small = factor != 0 && factor != 1 && Int128.Abs(factor) <= MaxConstant;
+        return small && xs.Zip(ys).All(p => p.First == factor * p.Second) ? [new Conjunct(Template.Scale, x, y, (long)factor)] : [];
     }
 
     /// <summary>
@@ -205,15 +205,15 @@ internal static class InvariantTemplates
         private bool Holds(long x, long y) => Template switch
         {
             Template.Equal => x == y,
-            Template.Offset => x == y + C,
-            Template.Scale => x == C * y,
+            Template.Offset => x == (Int128)y + C,
+            Template.Scale => x == (Int128)C * y,
             Template.Lower => y <= x,
             _ => x <= y,
         };
 
         /// <summary>An integer as SMT-LIB writes it: <c>(- 5)</c> for a negative one.</summary>
         private static string Number(long value) =>
-            value < 0 ? $"(- {(-value).ToString(CultureInfo.InvariantCulture)})" : value.ToString(CultureInfo.InvariantCulture);
+            value < 0 ? $"(- {(-(Int128)value).ToString(CultureInfo.InvariantCulture)})" : value.ToString(CultureInfo.InvariantCulture);
 
         private static object? Value(IReadOnlyDictionary<string, string> values, string name) =>
             values.TryGetValue(name, out string? text) ? Read(text) : null;
