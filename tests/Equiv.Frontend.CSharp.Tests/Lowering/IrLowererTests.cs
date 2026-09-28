@@ -1283,6 +1283,47 @@ public sealed class IrLowererTests
         Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
     }
 
+    /// <summary>
+    /// `if (c) return; throw;` in a `catch` is one CFG block too, but the rethrow is its conditional successor, not its
+    /// fall-through (found by the M4-007 run on `gitextensions-8522`, ticket P2-034). It lowered to a bare
+    /// NullReferenceException; now the rethrow is opaque and the path that returns still runs.
+    /// </summary>
+    [Theory]
+    [InlineData(6, 2, 3)]
+    [InlineData(6, 0, 7)]
+    public void AReturnBeforeARethrowInsideACatchLowers(int a, int b, int expected)
+    {
+        IrProcedure procedure = Method("static int M(int a, int b) { try { return a / b; } catch (DivideByZeroException) { if (a > 5) return 7; throw; } }");
+
+        Assert.Equal("rethrow", Assert.Single(Opaques(procedure)).Reason);
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
+    }
+
+    /// <summary>
+    /// The shape of Git Extensions' <c>ConfigureJoinableTaskFactoryAttribute.AfterTest</c> (ticket P2-034): a filtered
+    /// <c>catch</c> whose body is an <c>if</c> and then <c>throw;</c>, so the <c>if</c>'s false edge is the rethrow.
+    /// </summary>
+    [Fact]
+    public void AnIfThenRethrowInsideAFilteredCatchLowers() =>
+        Assert.Contains(
+            Opaques(Method("""
+                static int s;
+                static void M(System.Threading.CancellationTokenSource cts, string v)
+                {
+                    try
+                    {
+                        try { System.Threading.Thread.Sleep(1); }
+                        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+                        {
+                            if (int.TryParse(v, out var sleep) && sleep > 0) { System.Threading.Thread.Sleep(sleep); }
+                            throw;
+                        }
+                    }
+                    finally { s = 0; }
+                }
+                """)),
+            static o => string.Equals(o.Reason, "rethrow", StringComparison.Ordinal));
+
     [Fact]
     public void RethrowIsOpaqueInsideACatch() =>
         Assert.Equal(
