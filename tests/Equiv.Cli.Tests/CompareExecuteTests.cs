@@ -75,7 +75,10 @@ public sealed class CompareExecuteTests
         (int exitCode, string error, SarifLog? log) = Compare(execute: true, replay: null, new ExecutionEnvironment(IsWindows: true, new FakeReplay(Threw, OtherThrew)));
 
         Assert.Equal(ExitCodes.Divergent, exitCode);
-        Assert.Equal("note: --execute runs code from both solutions on this machine" + Environment.NewLine, error);
+        Assert.Equal(
+            "note: --execute runs code from both solutions on this machine, in a temporary working directory; it is not sandboxed, "
+            + "so absolute paths, the registry and the network are still reachable" + Environment.NewLine,
+            error);
 
         // A frontend that cannot replay leaves every result as it was.
         Assert.All(log!.Runs[0].Results, static r => Assert.False(r.TryGetProperty("replay", out string? _)));
@@ -113,6 +116,10 @@ public sealed class CompareExecuteTests
         Assert.Equal(DivergentIdentity, pair.New);
         Assert.Equal(Counterexample(), counterexample);
         Assert.False(Directory.Exists(directory));
+        Assert.StartsWith("equiv-execute-", Path.GetFileName(directory), StringComparison.Ordinal);
+
+        // The drivers start under that temporary folder, not in the caller's working directory (ticket P2-040).
+        Assert.Equal([directory], replay.Hosts);
         Assert.Equal(["legacy.exe", "modern.dll"], replay.Starts);
         Result divergent = executed.Runs[0].Results.Single(static r => string.Equals(r.RuleId, "EQ002", StringComparison.Ordinal));
         Assert.Equal(replayed, divergent.GetProperty<string>("replay"));
