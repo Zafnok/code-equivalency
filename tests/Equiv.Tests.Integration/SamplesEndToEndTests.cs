@@ -187,6 +187,47 @@ public sealed partial class SamplesEndToEndTests
         Assert.Contains(total.GetProperty<List<string>>("unprovenAssumptions"), static a => a.Contains("::Tax(", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Ticket P1-010 criterion 5 (ADR 0036 decision 2): the caller sees only <c>Score(a) &gt; 0</c>, so it is Equivalent
+    /// under an admitted contract for the Divergent <c>Score</c>, which leaves no unproven assumption. The checked-in
+    /// snapshot is the whole run.
+    /// </summary>
+    [Fact]
+    public async Task CalleeChangedInvisible_EquivalentPlusContract()
+    {
+        SampleRun run = RunSample("callee-changed-invisible");
+        Result score = Single("callee-changed-invisible", "::Score(int) diverges");
+        Result classify = Single("callee-changed-invisible", "::Classify(int) is equivalent");
+
+        Assert.Equal(await Snapshot("callee-changed-invisible"), run.NormalizedSarif);
+        Assert.Equal("EQ002", score.RuleId);
+        Assert.Equal("EQ001", classify.RuleId);
+        Assert.Equal("bounded+contract", classify.GetProperty<string>("proofMethod"));
+        Dictionary<string, string> contract = Assert.Single(classify.GetProperty<List<Dictionary<string, string>>>("contractsUsed"));
+        Assert.EndsWith("::Score(int)", contract["callee"], StringComparison.Ordinal);
+        Assert.Equal("observed-predicates", contract["proposedBy"]);
+        Assert.False(classify.TryGetProperty("unprovenAssumptions", out List<string>? _));
+    }
+
+    /// <summary>
+    /// Ticket P1-010 criterion 6: <c>Total</c> returns what <c>Tax</c> returned, so it observes the change, no contract is
+    /// used, and both verdicts and the snapshot stay as M3-015 left them.
+    /// </summary>
+    [Fact]
+    public async Task CalleeChanged_Unaffected()
+    {
+        SampleRun run = RunSample("callee-changed");
+        Result total = Single("callee-changed", "::Total(int) is equivalent");
+
+        Assert.Equal(await Snapshot("callee-changed"), run.NormalizedSarif);
+        Assert.Equal("congruence", total.GetProperty<string>("proofMethod"));
+        Assert.False(total.TryGetProperty("contractsUsed", out List<Dictionary<string, string>>? _));
+        Assert.Contains(total.GetProperty<List<string>>("unprovenAssumptions"), static a => a.Contains("::Tax(", StringComparison.Ordinal));
+    }
+
+    private static Task<string> Snapshot(string sample) =>
+        File.ReadAllTextAsync(Path.Combine(SamplesRoot, sample, "expected.sarif.json"), TestContext.Current.CancellationToken);
+
     private static Result Single(string sample, string messageContains) =>
         RunSample(sample).Log.Runs[0].Results.Single(r => r.Message.Text.Contains(messageContains, StringComparison.Ordinal));
 
