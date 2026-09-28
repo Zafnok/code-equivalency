@@ -62,8 +62,8 @@ internal sealed class ContractSearch(Func<Context> createContext, VerificationOp
             .Distinct()
             .OrderBy(static m => m.Name, StringComparer.Ordinal);
         using Context context = createContext();
-        IEnumerable<ObservedPredicate> predicates = ObservedPredicates.Of(callerOld, c => Is(c, options.CallIdentityMap.GetValueOrDefault(c.Callee.Value, c.Callee.Value)))
-            .Concat(ObservedPredicates.Of(callerNew, c => Is(c, c.Callee.Value)))
+        IEnumerable<ObservedPredicate> predicates = ObservedPredicates.Of(callerOld, c => Is(options.CallIdentityMap.GetValueOrDefault(c.Callee.Value, c.Callee.Value)))
+            .Concat(ObservedPredicates.Of(callerNew, c => Is(c.Callee.Value)))
             .DistinctBy(p => new CalleeContract([new ContractConjunct(ConjunctKind.Predicate, Predicate: p)]).Text(context), StringComparer.Ordinal);
         return new CalleeContract(
         [
@@ -75,7 +75,7 @@ internal sealed class ContractSearch(Func<Context> createContext, VerificationOp
             .. predicates.Select(static p => new ContractConjunct(ConjunctKind.Predicate, Predicate: p)),
         ]);
 
-        bool Is(IrCall call, string identity) => string.Equals(identity, callee.Identity, StringComparison.Ordinal);
+        bool Is(string identity) => string.Equals(identity, callee.Identity, StringComparison.Ordinal);
     }
 
     private static bool Eligible(CalleePair callee) =>

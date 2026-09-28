@@ -219,7 +219,7 @@ public static class SarifReportWriter
                 sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix));
                 if (!equivalent.ContractsUsed.IsEmpty)
                 {
-                    sarifResult.SetProperty("contractsUsed", equivalent.ContractsUsed.Select(static c => Describe(c)).ToList());
+                    sarifResult.SetProperty("contractsUsed", equivalent.ContractsUsed.Select(ContractProperty).ToList());
                 }
 
                 if (equivalent.BoundedBy is { } bound)
@@ -284,7 +284,7 @@ public static class SarifReportWriter
         }
     }
 
-    private static Dictionary<string, object> Describe(ContractUse contract) => new(StringComparer.Ordinal)
+    private static Dictionary<string, object> ContractProperty(ContractUse contract) => new(StringComparer.Ordinal)
     {
         ["callee"] = contract.Callee,
         ["contract"] = contract.Contract,

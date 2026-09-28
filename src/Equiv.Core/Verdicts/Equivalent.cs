@@ -23,14 +23,15 @@ public sealed record Equivalent(ProofMethod Method, int? BoundedBy = null) : Ver
 
     public ImmutableArray<ContractUse> ContractsUsed { get; init; } = [];
 
+    // Deliberate non-short-circuit '&': see the comment on Equiv.Core.Configuration.EquivConfig.Equals.
     public bool Equals(Equivalent? other) =>
         other is not null
         && base.Equals(other)
         && (Method == other.Method)
-            & (BoundedBy == other.BoundedBy)
-            & string.Equals(Invariant, other.Invariant, StringComparison.Ordinal)
-            & string.Equals(ProposedBy, other.ProposedBy, StringComparison.Ordinal)
-            & IrEquality.SequenceEqual(ContractsUsed, other.ContractsUsed);
+            & (BoundedBy == other.BoundedBy) // NOSONAR
+            & string.Equals(Invariant, other.Invariant, StringComparison.Ordinal) // NOSONAR
+            & string.Equals(ProposedBy, other.ProposedBy, StringComparison.Ordinal) // NOSONAR
+            & IrEquality.SequenceEqual(ContractsUsed, other.ContractsUsed); // NOSONAR
 
     public override int GetHashCode() => HashCode.Combine(base.GetHashCode(), Method, BoundedBy, Invariant, ProposedBy, IrEquality.Hash(ContractsUsed));
 }
