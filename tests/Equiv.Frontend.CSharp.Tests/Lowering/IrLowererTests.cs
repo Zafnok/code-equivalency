@@ -241,6 +241,36 @@ public sealed class IrLowererTests
         Assert.Equal(receiver, Assert.Single(Assert.Single(Calls(procedure)).Args));
     }
 
+    /// <summary>
+    /// Ticket P2-031: a field declared on a base class, read through a receiver typed as a derived one, keys its map with
+    /// the receiver upcast through <c>cast.&lt;Derived&gt;.&lt;Base&gt;</c>, so the key is of the map's sort.
+    /// </summary>
+    [Theory]
+    [InlineData("class B { public int f; } class C : B { int N() => f; }", "this")]
+    [InlineData("class B { public int f; } class C : B { static int N(C c) => c.f; }", "c")]
+    [InlineData("class B { public int f { get; set; } } class C : B { int N() => f; }", "this")]
+    public void AnInheritedFieldIsReadAtTheUpcastReceiver(string source, string receiver)
+    {
+        IrProcedure procedure = Source(source, "N");
+
+        IrParameter cast = Assert.Single(procedure.Parameters, static p => p.Var.Name is "cast.C.B");
+        Assert.Equal(new IrMap(new IrSort("C"), new IrSort("B")), cast.Var.Type);
+        IrParameter field = Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.B.f");
+        Assert.Equal(new IrSort("B"), ((IrMap)field.Var.Type).Key);
+        IrMapRead[] reads = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>()];
+        IrMapRead upcast = Assert.Single(reads, r => r.Map == cast.Var);
+        Assert.Equal(receiver, upcast.Key.Name);
+        Assert.Contains(reads, r => r.Map.Name.StartsWith("field.B.f", StringComparison.Ordinal) && r.Key == upcast.Target);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A field read through a receiver of its declaring type reads no cast map.</summary>
+    [Fact]
+    public void AFieldOfTheReceiversOwnTypeIsReadAtTheReceiver() =>
+        Assert.DoesNotContain(
+            Source("class C { int f; static int N(C c) => c.f; }", "N").Parameters,
+            static p => p.Var.Name.StartsWith("cast.", StringComparison.Ordinal));
+
     [Fact]
     public void AStructsThisIsOpaque() =>
         Assert.Equal("InstanceReference", Assert.Single(Opaques(Source("struct C { int f; int M() => f; }"))).Reason);
