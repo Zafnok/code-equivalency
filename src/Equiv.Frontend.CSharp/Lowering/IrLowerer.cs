@@ -748,7 +748,8 @@ internal sealed class IrLowerer
         switch (operation)
         {
             case IExpressionStatementOperation statement:
-                Lower(statement.Operation, context);
+                // A deconstruction whose value is used is not a statement's, and stays opaque (ticket P2-025).
+                _ = statement.Operation is IDeconstructionAssignmentOperation deconstruction ? Deconstruct(deconstruction, context) : Lower(statement.Operation, context);
                 return null;
             case ILocalReferenceOperation local:
                 return ssa.Load(context.Current, Local(local.Local));
@@ -1113,6 +1114,81 @@ internal sealed class IrLowerer
         StoreShadow(target, assignment.Value, value, context);
         return value;
     }
+
+    /// <summary>
+    /// A statement that deconstructs a tuple literal into locals, parameters, captured lvalues, fields and discards, one level
+    /// deep (ticket P2-025), as C# evaluates it: each field's receiver, then each element of the literal, then each store, all
+    /// left to right, so <c>(a, b) = (b, a)</c> swaps. A <c>Deconstruct</c> method, a tuple-typed value, a nested tuple, and a
+    /// property or array element target stay opaque with reason <c>DeconstructionAssignment</c>, their targets written with
+    /// unknown values, as does a deconstruction whose value is used, which is not a statement's.
+    /// </summary>
+    private IrVar? Deconstruct(IDeconstructionAssignmentOperation deconstruction, LoweringContext context)
+    {
+        ImmutableArray<IOperation> lvalues = [.. ((ITupleOperation)Declared(deconstruction.Target)).Elements.Select(Declared)];
+        if (TupleLiteral(deconstruction.Value) is not { } literal
+            || !lvalues.All(l => l is IDiscardOperation or IFieldReferenceOperation || Target(l) is not null))
+        {
+            return Opaque(deconstruction, nameof(OperationKind.DeconstructionAssignment), context);
+        }
+
+        List<HeapLowerer.Access?> slices = [];
+        foreach (IOperation lvalue in lvalues)
+        {
+            slices.Add(lvalue is IFieldReferenceOperation field ? heap.Field(field, context) : null);
+        }
+
+        List<IrVar> values = [];
+        foreach (IOperation element in literal.Elements)
+        {
+            values.Add(Value(element, context));
+        }
+
+        // Each null shadow is read before any store, so a swap of references swaps their nullness too.
+        List<IrVar?> nulls = [];
+        for (int i = 0; i < lvalues.Length; i++)
+        {
+            nulls.Add(Target(lvalues[i]) is { } target && Shadow(target) is not null ? NullFlag(literal.Elements[i], values[i], context) : null);
+        }
+
+        for (int i = 0; i < lvalues.Length; i++)
+        {
+            StoreDeconstructed(lvalues[i], slices[i], values[i], nulls[i], context);
+        }
+
+        return null;
+    }
+
+    /// <summary>One store of a deconstruction: to a field's slice, or to a variable and its null shadow; a discard stores nothing.</summary>
+    private void StoreDeconstructed(IOperation lvalue, HeapLowerer.Access? slice, IrVar value, IrVar? isNull, LoweringContext context)
+    {
+        if (slice is { } field)
+        {
+            heap.WriteSlice(field, value, context);
+        }
+        else if (Target(lvalue) is { } target)
+        {
+            ssa.Store(context.Current, target, value);
+            if (isNull is not null)
+            {
+                ssa.Store(context.Current, Shadow(target)!, isNull);
+            }
+        }
+    }
+
+    /// <summary>A declaration's declared expression, or <paramref name="target"/> itself.</summary>
+    private static IOperation Declared(IOperation target) => target is IDeclarationExpressionOperation declaration ? declaration.Expression : target;
+
+    /// <summary>
+    /// The tuple literal <paramref name="value"/> is, through the identity or tuple literal conversion the compiler wraps it in, or
+    /// null. A tuple literal conversion converts each element to its target's type in place, so either way each element is
+    /// already of its target's type.
+    /// </summary>
+    private static ITupleOperation? TupleLiteral(IOperation value) => value switch
+    {
+        ITupleOperation tuple => tuple,
+        IConversionOperation conversion when conversion.GetConversion() is { IsIdentity: true } or { IsTupleLiteralConversion: true } => TupleLiteral(conversion.Operand),
+        _ => null,
+    };
 
     /// <summary>The variable an lvalue names, or null when it is not a local or parameter of this method.</summary>
     private SsaBuilder.Variable? Target(IOperation lvalue) => lvalue switch

@@ -112,6 +112,41 @@ public sealed class IrLowererTests
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
 
     /// <summary>
+    /// Ticket P2-025: a deconstruction of a tuple literal reads every element, converted to its target's type, before it
+    /// stores any, so <c>(a, b) = (b, a)</c> swaps; declared targets are locals like any other, and a loop can step with one.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(int a, int b) { (a, b) = (b, a); return a - b; }", 5, 7, 2)]
+    [InlineData("static int M(int a, int b) { (a, b) = (a, b); return a - b; }", 5, 7, -2)]
+    [InlineData("static int M(int a, int b) { long x; int y; (x, y) = (a, 3); return (int)x * y + b; }", 5, 7, 22)]
+    [InlineData("static int M(int a, int b) { long x, y; (x, y) = ((long, long))(a, b); return (int)(x - y); }", 5, 7, -2)]
+    [InlineData("static int M(int a, int b) { var (x, y) = (a + b, a); return x - y; }", 5, 7, 7)]
+    [InlineData("static int M(int a, int b) { (int x, int y) = (b, a); return x - y; }", 5, 7, 2)]
+    [InlineData("static int M(int a, int b) { int x = 0, y = 1; for (int i = 0; i < a; i++) (x, y) = (y, x + y); return x + b; }", 5, 7, 12)]
+    public void DeconstructionOfATupleLiteralReadsEveryElementBeforeItStores(string members, int a, int b, int expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
+    }
+
+    /// <summary>
+    /// Ticket P2-025: a deconstruction the lowering does not take apart, of a value that is not a tuple literal, into a nested
+    /// tuple, a property or an array element, or whose own value is used, is one opaque with reason <c>DeconstructionAssignment</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M((int, int) p) { (int x, int y) = p; return x + y; }")]
+    [InlineData("static int M((int, int) p) { int x, y; (x, y) = ((int, int))p; return x + y; }")]
+    [InlineData("struct S { public static implicit operator S((int, int) t) => default; public void Deconstruct(out int a, out int b) { a = 1; b = 2; } } static int M(int a) { int x, y; (x, y) = (S)(a, a); return x + y; }")]
+    [InlineData("static int M(int a) { int x, y, z; (x, (y, z)) = (a, (a, a)); return x + y + z; }")]
+    [InlineData("int P { get; set; } void M(int a) { (P, _) = (a, a); }")]
+    [InlineData("static void M(int[] u, int a) { (u[0], u[1]) = (a, a); }")]
+    [InlineData("static (int, int) M(int a, int b) => (a, b) = (b, a);")]
+    public void DeconstructionItDoesNotTakeApartIsOpaque(string members) =>
+        Assert.Equal("DeconstructionAssignment", Assert.Single(Opaques(Method(members)).Select(static o => o.Reason).Distinct(StringComparer.Ordinal)));
+
+    /// <summary>
     /// Ticket P2-029 acceptance criterion 2: a call through <c>dynamic</c> is bound by the DLR at run time, so there is
     /// no callee identity to call; it stays opaque by design with reason <c>DynamicInvocation</c>.
     /// </summary>
