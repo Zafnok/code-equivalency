@@ -111,6 +111,14 @@ public sealed class IrLowererTests
     public void UnsupportedConstructIsOpaqueWithItsName(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
 
+    /// <summary>
+    /// Ticket P2-029 acceptance criterion 2: a call through <c>dynamic</c> is bound by the DLR at run time, so there is
+    /// no callee identity to call; it stays opaque by design with reason <c>DynamicInvocation</c>.
+    /// </summary>
+    [Fact]
+    public void ADynamicInvocationIsOpaqueByDesign() =>
+        Assert.Equal("DynamicInvocation", Assert.Single(Opaques(Method("static object CallIt(dynamic d) => d.DoSomething();", "CallIt"))).Reason);
+
     [Theory]
     [InlineData("int M() => p;")]
     [InlineData("void M() { p = 1; }")]
@@ -1640,6 +1648,23 @@ public sealed class IrLowererTests
         Assert.Empty(Opaques(procedure));
         Assert.Contains(procedure.Parameters, static p => p.Var.Name is "null.System.Object");
     }
+
+    /// <summary>Ticket P2-030 acceptance criterion 2: Roslyn folds <c>sizeof(int)</c> to the constant 4, which lowers like any other constant.</summary>
+    [Fact]
+    public void SizeOfABuiltInTypeFoldsToItsConstant()
+    {
+        IrProcedure procedure = Method("static int M() => sizeof(int);");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 4)), Run(procedure));
+    }
+
+    /// <summary>Ticket P2-030 acceptance criterion 1: a user-defined struct's <c>sizeof</c> is layout-dependent and stays opaque with reason <c>SizeOf</c>.</summary>
+    [Fact]
+    public void SizeOfAUserDefinedStructIsOpaque() =>
+        Assert.Contains(
+            Opaques(ErroneousBody("struct S { public int X; } static int M() => sizeof(S);")),
+            static o => string.Equals(o.Reason, "SizeOf", StringComparison.Ordinal));
 
     /// <summary>Ticket P2-002 acceptance criterion 1: <c>typeof(T)</c> for a closed <c>T</c> reads a shared <c>typeof.&lt;T&gt;</c> input, adding no trace event.</summary>
     [Fact]
