@@ -1,5 +1,5 @@
 # M4-007 First full corpus run: verdicts, seeded recall, and the success criteria
-Status: in-progress
+Status: done (PR #234)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-004, M3-022, M3-033, M4-001, M4-002, M4-004, M4-009, M4-010, P2-001
