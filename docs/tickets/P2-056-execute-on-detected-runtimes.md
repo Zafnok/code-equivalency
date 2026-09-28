@@ -33,15 +33,15 @@ ADR 0040 decision 3; ADR 0035; tickets M3-032, M4-009, P1-008.
    counterexample still reproduces or not, as before.
 5. `tools/runtime-diff` takes `--from <tfm> --to <tfm>`, defaulting to `net48` and `net10.0`.
    `corpus.ps1 -RuntimeDiff` passes the pair's detected runtimes.
-6. ADR 0035 gets "superseded in part by 0040" in its Status line. VERIFICATION-MODEL.md's execution
-   text and ARCHITECTURE.md's execution notes name the detected runtimes, not 4.8 and 10.
+6. VERIFICATION-MODEL.md's execution text and ARCHITECTURE.md's execution notes name the detected
+   runtimes, not 4.8 and 10.
 
 ## Files
 `src/Equiv.Frontend.CSharp/Execution/DriverFactory.cs`, `DriverReferences.cs`, `ReplayDriverFactory.cs`,
 `DriverSource.cs`, `src/Equiv.Execute/ChildProcessHost.cs` (only if the host needs the runtime, not
 just the extension), `src/Equiv.Cli/ExecutionEnvironment.cs`, `src/Equiv.Cli/Mcp/McpExecuteGate.cs`,
 `src/Equiv.Execute/RuntimeDiff.cs`, `tools/runtime-diff/**`, `tools/corpus/corpus.ps1`,
-`docs/VERIFICATION-MODEL.md`, `docs/ARCHITECTURE.md`, `docs/adr/0035-*.md` (Status line only), tests.
+`docs/VERIFICATION-MODEL.md`, `docs/ARCHITECTURE.md`, tests.
 
 ## Tests
 `DriverFactoryTests.FrameworkSideGetsAnExeForItsVersion`, `DriverFactoryTests.CoreSideGetsItsOwnRuntimeConfig`,

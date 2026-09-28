@@ -57,15 +57,14 @@ sides, or it will not share.
 6. The EQ006 rule text in `SarifReportWriter` says "differs between the two sides' runtimes", and
    the message names both runtimes.
 7. VERIFICATION-MODEL.md's runtime-sensitivity and EQ006 text say that a rule applies inside the
-   pair's interval. ADR 0024 and 0025 get "superseded in part by 0040" in their Status lines.
+   pair's interval.
 
 ## Files
 `src/Equiv.Frontend.CSharp/Lowering/CallIdentityFactory.cs`, `src/Equiv.Frontend.CSharp/Lowering/IrLowerer.cs`,
 `src/Equiv.Frontend.CSharp/Fingerprinting/BoundSerialiser.cs`, `src/Equiv.Frontend.CSharp/Fingerprinting/FragmentFingerprinter.cs`,
 `src/Equiv.Frontend.CSharp/Lowering/PureCatalogue.cs`, `src/Equiv.Frontend.CSharp/CSharpFrontend.cs`,
 `src/Equiv.Core/RuntimeChanges/RuntimeChangeTable.cs`, `src/Equiv.Core/Reporting/SarifReportWriter.cs`,
-`samples/same-runtime-cleanup/**`, `samples/version-bump/**`, `docs/VERIFICATION-MODEL.md`,
-`docs/adr/0024-*.md`, `docs/adr/0025-*.md` (Status line only), tests, snapshots.
+`samples/same-runtime-cleanup/**`, `samples/version-bump/**`, `docs/VERIFICATION-MODEL.md`, tests, snapshots.
 
 ## Tests
 `CallIdentityFactoryTests.SameRuntime_NothingIsRuntimeChanged`,

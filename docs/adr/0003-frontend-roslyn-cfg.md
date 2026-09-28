@@ -1,6 +1,6 @@
 # ADR 0003: Lower from Roslyn's IOperation control-flow graph
 
-Status: accepted (2026-09-17)
+Status: accepted (2026-09-17); superseded in part by 0039 (2026-09-28): a pair IOperation leaves with an unshared opaque falls back to ILAst on both sides
 
 ## Decision
 The C# frontend lowers from `ControlFlowGraph.Create(IOperation)`

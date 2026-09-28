@@ -1,8 +1,8 @@
 # ADR 0040: Each side's runtime is detected from its projects, and a runtime rule applies only if the pair crosses it
 
-Status: proposed (2026-09-28). When accepted, it supersedes in part ADR 0024 (what makes a body
-runtime-sensitive), ADR 0025 (which pure functions are side-specific) and ADR 0035 (which runtimes
-execution uses), and it extends ADR 0028 decision 3 with a fourth kind of pair.
+Status: accepted (2026-09-28). Supersedes in part ADR 0024 (what makes a body runtime-sensitive),
+ADR 0025 (which pure functions are side-specific) and ADR 0035 (which runtimes execution uses), and
+extends ADR 0028 decision 3 with a fourth kind of pair.
 
 ## Context
 `equiv` assumes that `--legacy` runs on .NET Framework 4.8 and `--modern` on .NET 10, and nothing
@@ -87,12 +87,13 @@ The runtime is a fact read from each side, never an assumption.
 ## Consequences
 - Tickets P2-053 to P2-058 implement it: detection, `changedIn`, applying the interval, execution,
   the CLI and docs, and the cleanup pairs.
-- On acceptance these change:
+- ADR 0024, 0025 and 0035 carry "superseded in part by 0040" in their Status lines from
+  acceptance.
+- As the tickets land, each changes the text that describes its behaviour:
   - README's scope line;
   - `docs/VERIFICATION-MODEL.md` sections on runtime sensitivity, EQ006 and execution;
   - `docs/ARCHITECTURE.md`'s loader and execution notes;
   - the header text of `runtime-changes.json` and `api-equivalences.json`.
-  ADR 0024, 0025 and 0035 get "superseded in part by 0040" in their Status lines.
 - `api-equivalences.json` is unchanged. Its entries equate two members that behave the same on any
   runtime that has both, and it keeps being applied to the before side.
 - Verdicts on existing 4.8-to-10 runs do not change, because every row's change point lies inside

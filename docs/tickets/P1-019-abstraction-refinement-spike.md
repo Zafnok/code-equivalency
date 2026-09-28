@@ -1,4 +1,4 @@
-# P1-014 Spike: how many `abstraction` Unknowns does refining the abstraction resolve?
+# P1-019 Spike: how many `abstraction` Unknowns does refining the abstraction resolve?
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
@@ -47,6 +47,6 @@ Interpreting strings, floating point or `decimal` is out of scope (post-MVP theo
 don't encode them. Any edit under `src/`: stop.
 
 ## Out of scope
-Implementing refinement in the backend. `opaque:` fragments (IL fallback is ADR 0039's, PR #281).
+Implementing refinement in the backend. `opaque:` fragments (IL fallback is ADR 0039, P1-014 to P1-018).
 
 ## Notes

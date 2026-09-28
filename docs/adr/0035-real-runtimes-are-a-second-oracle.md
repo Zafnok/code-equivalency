@@ -1,6 +1,6 @@
 # ADR 0035: The real runtimes are a second oracle: execution measures, confirms and bounds, and never proves
 
-Status: accepted (2026-09-24); supersedes 0031 in part (runs with `--execute` are Windows-only)
+Status: accepted (2026-09-24); supersedes 0031 in part (runs with `--execute` are Windows-only); superseded in part by 0040 (each side runs on its detected runtime)
 
 ## Context
 The 2026-09-24 census (`docs/runs/2026-09-24-census-verdict.md`) found that Z3 sees little of the
