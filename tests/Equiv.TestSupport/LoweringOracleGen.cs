@@ -285,8 +285,8 @@ public static class LoweringOracleGen
                     text.Append(pad).Append($"z = {Cell}.{TryParse}(").Append(parse.Argument.Render()).Append(", out x);\n");
                     break;
                 case Deconstruction deconstruct:
-                    text.Append(pad).Append('(').Append(string.Join(", ", deconstruct.Targets)).Append(") = (")
-                        .Append(string.Join(", ", deconstruct.Values.Select(static v => v.Render()))).Append(");\n");
+                    text.Append(pad).Append('(').AppendJoin(", ", deconstruct.Targets).Append(") = (")
+                        .AppendJoin(", ", deconstruct.Values.Select(static v => v.Render())).Append(");\n");
                     break;
                 case Step step:
                     text.Append(pad).Append(Open(step.IsChecked, pad)).Append(step.Local).Append(step.Op).Append(";\n").Append(Close(step.IsChecked, pad));

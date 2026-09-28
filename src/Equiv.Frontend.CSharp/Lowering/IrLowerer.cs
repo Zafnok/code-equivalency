@@ -1146,21 +1146,27 @@ internal sealed class IrLowerer
 
         for (int i = 0; i < lvalues.Length; i++)
         {
-            if (slices[i] is { } slice)
-            {
-                heap.WriteSlice(slice, values[i], context);
-            }
-            else if (Target(lvalues[i]) is { } target)
-            {
-                ssa.Store(context.Current, target, values[i]);
-                if (nulls[i] is { } isNull)
-                {
-                    ssa.Store(context.Current, Shadow(target)!, isNull);
-                }
-            }
+            StoreDeconstructed(lvalues[i], slices[i], values[i], nulls[i], context);
         }
 
         return null;
+    }
+
+    /// <summary>One store of a deconstruction: to a field's slice, or to a variable and its null shadow; a discard stores nothing.</summary>
+    private void StoreDeconstructed(IOperation lvalue, HeapLowerer.Access? slice, IrVar value, IrVar? isNull, LoweringContext context)
+    {
+        if (slice is { } field)
+        {
+            heap.WriteSlice(field, value, context);
+        }
+        else if (Target(lvalue) is { } target)
+        {
+            ssa.Store(context.Current, target, value);
+            if (isNull is not null)
+            {
+                ssa.Store(context.Current, Shadow(target)!, isNull);
+            }
+        }
     }
 
     /// <summary>A declaration's declared expression, or <paramref name="target"/> itself.</summary>
