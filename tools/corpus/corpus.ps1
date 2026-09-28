@@ -445,7 +445,10 @@ switch ($PSCmdlet.ParameterSetName) {
             $latestSarif = Get-ChildItem -LiteralPath $runsDir -Filter 'equiv.sarif' -Recurse -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
             if ($latestSarif) {
-                $log = Get-Content -LiteralPath $latestSarif.FullName -Raw | ConvertFrom-Json
+                # Same "" -> "(no opaque)" workaround as the Metrics branch above (ADR 0034; ConvertFrom-Json
+                # rejects an empty-string property name without -AsHashtable, absent in Windows PowerShell 5.1).
+                $sarifText = (Get-Content -LiteralPath $latestSarif.FullName -Raw) -replace '([{,]\s*)""(\s*:)', '$1"(no opaque)"$2'
+                $log = $sarifText | ConvertFrom-Json
                 $changed = [System.Collections.Generic.List[string]]::new()
                 foreach ($result in $log.runs[0].results) {
                     $identity = $result.partialFingerprints.'procedureIdentity/v1'

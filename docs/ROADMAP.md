@@ -388,6 +388,34 @@ ticket id (not listed again here). P2-015 is a `corpus.ps1` finding from the sam
   (reasons `CompoundAssignment`, `Increment`, `Decrement`). Found in M4-002 (`business-layer`
   `Subtotal`'s `decimal +=`). Needs M4-002.
 
+## P2 — First real run findings (M4-007)
+
+Verdict **continue** (`docs/runs/2026-09-27-m4-007-verdict.md`). Order by value: P2-031 and P2-032
+first (together 81 of Git Extensions' 92 pair-level crashes), then P2-039 and P2-040 (they make
+`--execute` safe to leave running), then P2-037, P2-038 and P2-036 (wrong or unconfirmed verdicts),
+then the rest. P2-023 to P2-030 are opaque reasons with no owner; P2-025 (80) and P2-027 (54) are
+the only large ones.
+
+- P2-023 (S) `&x` (reason `AddressOf`).
+- P2-024 (S) `new { ... }` (reason `AnonymousObjectCreation`).
+- P2-025 (M) `(a, b) = ...` (reason `DeconstructionAssignment`).
+- P2-026 (M) LINQ query syntax (reason `TranslatedQuery`), and the `from`-clause cast crash.
+- P2-027 (M) Tuple literals and element reads (reason `Tuple`).
+- P2-028 (S) `new T()` (reason `TypeParameterObjectCreation`).
+- P2-029 (S) Calls through `dynamic` stay opaque by design (reason `DynamicInvocation`).
+- P2-030 (S) `sizeof` (reason `SizeOf`).
+- P2-031 (M) Verifying crashes when `this` is typed at different points in the hierarchy.
+- P2-032 (S) Verifying crashes on `T[]` against `T[]?`.
+- P2-033 (M) Verifying crashes with "IrSortValue ... was not present in the dictionary".
+- P2-034 (S) Lowering crashes with a bare `NullReferenceException` on two methods.
+- P2-035 (S) The mechanical seeder crashes on the two larger corpus pairs. Needs M4-010.
+- P2-036 (M) A behaviour-preserving rename is reported Divergent. Needs M4-010.
+- P2-037 (M) A solver Divergent the real runtimes do not reproduce (`SetSsh`). Needs M4-009.
+- P2-038 (M) Replay reports `not-reproduced` for EQ006 results it cannot observe. Needs M4-009.
+- P2-039 (M) `compare --execute` hangs when a replay driver never answers. Needs M4-009, P1-008.
+- P2-040 (S) `compare --execute` runs solution code in the caller's working directory. Needs M4-009,
+  P1-008.
+
 ## M5 — Agent surface (MCP)
 
 Coding agents do migrations; M5 lets them check their own work while they do it (ADR 0033). It
