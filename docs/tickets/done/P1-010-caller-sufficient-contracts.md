@@ -1,5 +1,5 @@
 # P1-010 Caller-sufficient callee contracts: a changed callee the caller cannot observe stops being an unproven assumption
-Status: in-progress
+Status: done (PR #265)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-015, P1-005, P1-002; ADR 0036 accepted
