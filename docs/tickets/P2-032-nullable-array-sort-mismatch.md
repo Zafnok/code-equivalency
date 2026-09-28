@@ -1,5 +1,5 @@
 # P2-032 Verifying crashes on a nullable-annotation mismatch between an array type and its `?` form
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -47,3 +47,16 @@ Jagged/multidimensional array nullability, nullable generic collection types (`L
 the same one-line fix happens to cover them.
 
 ## Notes
+- Cause: `TypeMapper.MetadataName` names a named type by its metadata name (which never carries a nullable
+  annotation, so `string` vs `string?` and `List<string?>` were always fine), but every other type (arrays, type
+  parameters, pointers) by `ToDisplayString()`, whose default format (`CSharpErrorMessageFormat`) includes
+  `IncludeNullableReferenceTypeModifier`. So `string[]` and `string[]?` became sorts `|string[]|` and `|string[]?|`.
+- Decision: drop that option from the display format (`TypeMapper.Unannotated`) rather than strip annotations from
+  the symbol, so element annotations (`string?[]`), nested type arguments (`List<string?>[]`) and annotated type
+  parameters (`T?`, the one `T` vs `T?` crash in M4-007's 34) are all covered by the same one-line change.
+- AC3: not array-specific. The gap is every non-named type in sort naming; the fix covers all of them, including the
+  jagged/multidimensional and nullable-element shapes the size guard put out of scope (no extra code). A wider
+  instance remains outside sort naming: `CallIdentityFactory.Constructed` suffixes generic call identities with
+  `ToDisplayString()` too, so `M<string>()` vs `M<string?>()` are different functions. Filed as P2-041.
+- The minimal repro, lowered directly, gives a spurious Divergent rather than the crash; the crash text appears when
+  the two sorts meet in a shared function declaration (a call's domain). Both come from the same sort-name split.

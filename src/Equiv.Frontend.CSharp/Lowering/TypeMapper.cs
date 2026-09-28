@@ -18,6 +18,10 @@ internal static class TypeMapper
     /// <summary>The sort-name function that leaves every name as it is.</summary>
     public static readonly Func<string, string> Unmapped = static name => name;
 
+    /// <summary>The display format for a type with no metadata name, less nullable reference annotations (ticket P2-032).</summary>
+    private static readonly SymbolDisplayFormat Unannotated =
+        SymbolDisplayFormat.CSharpErrorMessageFormat.RemoveMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
     public static IrType Map(ITypeSymbol type) => Map(type, Unmapped);
 
     public static IrType Map(ITypeSymbol type, Func<string, string> sorts) => type.SpecialType switch
@@ -112,12 +116,16 @@ internal static class TypeMapper
     /// <summary><see cref="MetadataName(ITypeSymbol)"/>, passed through <paramref name="sorts"/>.</summary>
     public static string MetadataName(ITypeSymbol type, Func<string, string> sorts) => sorts(MetadataName(type));
 
-    /// <summary><c>Namespace.Outer+Inner`1</c> for named types; the display string for arrays, pointers and type parameters.</summary>
+    /// <summary>
+    /// <c>Namespace.Outer+Inner`1</c> for named types; the display string for arrays, pointers and type parameters, without
+    /// nullable reference annotations (ticket P2-032), which a named type's metadata name never carries either: <c>T[]</c>
+    /// and <c>T[]?</c> are one sort, and null tracking is the shadow's job.
+    /// </summary>
     public static string MetadataName(ITypeSymbol type) => type switch
     {
         INamedTypeSymbol { ContainingType: { } outer } => $"{MetadataName(outer)}+{type.MetadataName}",
         INamedTypeSymbol { ContainingNamespace.IsGlobalNamespace: false } => $"{type.ContainingNamespace.ToDisplayString()}.{type.MetadataName}",
         INamedTypeSymbol => type.MetadataName,
-        _ => type.ToDisplayString(),
+        _ => type.ToDisplayString(Unannotated),
     };
 }

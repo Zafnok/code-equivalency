@@ -44,6 +44,20 @@ public sealed class TypeMapperTests
         Assert.False(TypeMapper.IsSigned(TypeOf(type)));
     }
 
+    /// <summary>
+    /// Ticket P2-032: a nullable reference annotation, on an array, its element or a type parameter, is not part of the
+    /// sort, as it already is not for a named type; null tracking is the shadow's job, not the sort's.
+    /// </summary>
+    [Theory]
+    [InlineData("string[]?", "string[]")]
+    [InlineData("string?[]?", "string[]")]
+    [InlineData("N.Outer.Inner[]?", "N.Outer.Inner[]")]
+    [InlineData("System.Collections.Generic.List<string?>[]?", "System.Collections.Generic.List<string>[]")]
+    [InlineData("string?", "System.String")]
+    [InlineData("T?", "T")]
+    public void ANullableAnnotationIsNotPartOfTheSort(string type, string sort) =>
+        Assert.Equal(new IrSort(sort), TypeMapper.Map(TypeOf("#nullable enable\n", type)));
+
     /// <summary>Ticket P2-001: the element a new array starts with, which is the constant a literal default is.</summary>
     public static TheoryData<string, IrValue> Defaults() => new()
     {
@@ -64,10 +78,12 @@ public sealed class TypeMapperTests
     [Fact]
     public void AStructHasNoConstantDefault() => Assert.Null(TypeMapper.Default(TypeOf("System.DateTime"), TypeMapper.Unmapped));
 
-    private static ITypeSymbol TypeOf(string type)
+    private static ITypeSymbol TypeOf(string type) => TypeOf(string.Empty, type);
+
+    private static ITypeSymbol TypeOf(string prefix, string type)
     {
         Compilation compilation = RoslynTestCompilations.Compile(
-            $"namespace N {{ class Outer {{ public class Inner {{ }} }} }}\nclass G {{ }}\nclass Holder {{ public {type} F; }}");
-        return compilation.GetTypeByMetadataName("Holder")!.GetMembers("F").OfType<IFieldSymbol>().Single().Type;
+            $"{prefix}namespace N {{ class Outer {{ public class Inner {{ }} }} }}\nclass G {{ }}\nclass Holder<T> {{ public {type} F = default!; }}");
+        return compilation.GetTypeByMetadataName("Holder`1")!.GetMembers("F").OfType<IFieldSymbol>().Single().Type;
     }
 }
