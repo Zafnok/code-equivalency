@@ -111,6 +111,14 @@ public sealed class IrLowererTests
     public void UnsupportedConstructIsOpaqueWithItsName(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
 
+    /// <summary>
+    /// Ticket P2-029 acceptance criterion 2: a call through <c>dynamic</c> is bound by the DLR at run time, so there is
+    /// no callee identity to call; it stays opaque by design with reason <c>DynamicInvocation</c>.
+    /// </summary>
+    [Fact]
+    public void ADynamicInvocationIsOpaqueByDesign() =>
+        Assert.Equal("DynamicInvocation", Assert.Single(Opaques(Method("static object CallIt(dynamic d) => d.DoSomething();", "CallIt"))).Reason);
+
     [Theory]
     [InlineData("int M() => p;")]
     [InlineData("void M() { p = 1; }")]
