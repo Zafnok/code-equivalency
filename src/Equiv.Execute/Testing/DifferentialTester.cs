@@ -41,7 +41,7 @@ public sealed class DifferentialTester(IDriverHost host, TestingOptions options,
             return new TestingOutcome(DifferentialTesting.Unconstructible(plan.Reason), Observed: null);
         }
 
-        IReadOnlyList<string> cultures = RuntimeSensitive(old) || RuntimeSensitive(@new) ? [Invariant, Turkish] : [Invariant];
+        IReadOnlyList<string> cultures = Cultures(old, @new);
         using DriverStream legacy = new(host, drivers.Legacy, RuntimeDiff.CaseTimeout);
         using DriverStream modern = new(host, drivers.Modern, RuntimeDiff.CaseTimeout);
         SpeciesTally tally = new();
@@ -79,6 +79,13 @@ public sealed class DifferentialTester(IDriverHost host, TestingOptions options,
 
     private static TestingOutcome Tested(SpeciesTally tally, TestingStop stop) =>
         new(DifferentialTesting.Tested(tally.Inputs, tally.Species, tally.Singletons, tally.DiscoveryProbability, stop), Observed: null);
+
+    /// <summary>
+    /// The invariant culture, and also <c>tr-TR</c> when either body calls a member of the runtime-changes table; replay
+    /// runs a Divergent's model under the same set (ticket P2-038).
+    /// </summary>
+    internal static IReadOnlyList<string> Cultures(IrProcedure old, IrProcedure @new) =>
+        RuntimeSensitive(old) || RuntimeSensitive(@new) ? [Invariant, Turkish] : [Invariant];
 
     /// <summary>Whether <paramref name="body"/> calls a member whose behaviour the runtime-changes table says differs.</summary>
     private static bool RuntimeSensitive(IrProcedure body) =>
