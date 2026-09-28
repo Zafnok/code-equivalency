@@ -1,5 +1,5 @@
 # P1-010 Caller-sufficient callee contracts: a changed callee the caller cannot observe stops being an unproven assumption
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-015, P1-005, P1-002; ADR 0036 accepted
@@ -88,3 +88,47 @@ Recursion and call cycles (ADR 0019's clarification stands). Caching contracts a
 Contracts as user input.
 
 ## Notes
+- Decision: the backend gets the callee bodies through a second `IVerificationBackend` member,
+  `VerifyUnderContracts(old, new, callees, options)`, returning the caller's `Equivalent` with
+  `ContractsUsed` or null. `Equivalent.ContractsUsed` (`ContractUse(Callee, Contract, ProposedBy)`) carries
+  the contracts to SARIF. The orchestration lives in `CompareCommand.WithContracts`, after
+  `WithAssumptions`, and re-verifies only Equivalent results (congruent ones included) whose unproven
+  assumptions include lowered callee pairs. The Files list names none of `Equiv.Core`'s interface, the
+  verdict record or the CLI, but criterion 4 cannot be met without them.
+- Decision: the fresh-per-side encoding reuses the side-specific functions a runtime-changed callee
+  already gets (`TraceEncoder`'s `:old`/`:new` suffix). The replay oracle then answers from the same
+  functions and needs no change. `ICalleeContractEncoding` is the seam criterion 3 swaps;
+  `FreshPerSideEncoding` is its only production implementation. `Equiv.Tests.Integration` joins
+  `Equiv.Verify.Z3`'s InternalsVisibleTo for that (CLAUDE.md's exception for internal contracts).
+- Decision: K is a list of conjuncts (`threw` agrees; exception type agrees when both throw; calls
+  agree; each heap map agrees; each observed predicate agrees unless either side throws). Only
+  conjuncts the caller's product can see fail are droppable. A model that falsifies exception type,
+  calls, or a heap map the caller does not name ends the search. The caller encodes a call's exception
+  as `System.Exception` and never sees its callee's calls, so dropping those conjuncts would be unsound.
+- Decision: in a callee pair's product under K, the call traces must always agree as well as K. Found
+  while testing: lockstep's segments compare header states through cut events in the trace, and a K
+  without the trace conjunct let rung 2 "prove" `loops/warm-up`.
+- Decision: observed predicates are Bool definitions whose backward slice through `const`, binary,
+  unary and `mapread` reaches only this call's result, the heap maps it left, and the caller's
+  synthesised `In` inputs. A predicate reaching a source parameter or a phi is not one. That keeps K a
+  function of the call's outcome alone. Duplicates are merged by their SMT-LIB text.
+- Decision: `ContractVerifier` runs rung 1 on the pair unrolled, then rungs 2 and 3 for a looping pair.
+  It skips rung 1's "no input reaches the bound" query, since rungs 2 and 3 decide what it would.
+  Rungs 4 and 5 build their own query and are not asked. `MaxRounds` is 4 checks.
+- Decision: a callee pair with an `IrOpaque`, a source parameter passed by reference, differing
+  return types, a self-call or irreducible flow gets no contract.
+- Decision: a throw from `VerifyUnderContracts` keeps the caller's verdict and prints a
+  `warning:` line on stderr. There is no SARIF notification: the verdict left is sound, unlike a pair
+  whose verification crashed (ADR 0023). The contract step has no progress phase of its own.
+- Decision: a callee whose contract is used stays in `assumedCallees`, and its inherited unproven
+  assumptions are added to `assumedCallees` too, so `unprovenAssumptions` stays a subset of it.
+- Decision: the contract's SMT-LIB text is Z3's printing of K over named constants, with whitespace
+  collapsed to one line. `proposedBy` is `observed-predicates`.
+- Deviation: the Design's second candidate source, the P1-002 model proposer, is not wired. No
+  acceptance criterion or listed test covers it ("nothing beyond them"), and `proposedBy` is always
+  `observed-predicates`. It is left for a follow-up ticket.
+- The sample's `Score` is `a > 10 ? a - 1 : a`. A first IR draft used `a + 1`, which wraps at
+  `int.MaxValue` and turns the score negative, and Z3 rejected the contract on exactly that input.
+- Property budget: 40 triples per PR and 1,000 nightly, via the same `EQUIV_DIFFERENTIAL_BUDGET` and
+  `EQUIV_DIFFERENTIAL_SEED` as M0-012. At the default seed, 23 of the first 40 triples are Equivalent
+  under a contract, and the naive shared-function encoding hides an executed divergence in 2 of them.

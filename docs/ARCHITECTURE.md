@@ -59,7 +59,10 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   runtime-changes table, which are Divergent (EQ006). Mapped identities via config and the
   `api-equivalences.json` catalogue (ADR 0020). The functions also take the heap at the call
   and the call's position in the trace, because callees are stateful (ADR 0018). A verdict
-  that relies on a matched callee pair names it in the SARIF (ADR 0019).
+  that relies on a matched callee pair names it in the SARIF (ADR 0019). When that pair is not
+  Equivalent, `IVerificationBackend.VerifyUnderContracts` proves the caller again with a
+  caller-sufficient contract in place of the shared function (ADR 0036 decision 2;
+  VERIFICATION-MODEL.md section 5.2).
 
 `Equiv.Execute` runs code on the two real runtimes, the second oracle of ADR 0035. It references
 `Equiv.Core` only (an architecture test enforces it):
