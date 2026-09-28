@@ -1,4 +1,4 @@
-# P2-041 A generic call's identity differs on a nullable-annotated type argument
+# P2-042 A generic call's identity differs on a nullable-annotated type argument
 Status: todo
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
@@ -30,3 +30,4 @@ Sort names (done in P2-032); procedure identities (`RoslynIdentity` uses `FullyQ
 the modifier).
 
 ## Notes
+- Renumbered from P2-041 (filed by #246); P2-041 is the as-array ticket (#249), P2-043 the derivation-length one (#254).

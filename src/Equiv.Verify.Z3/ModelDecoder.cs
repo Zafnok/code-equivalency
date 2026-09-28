@@ -201,7 +201,7 @@ internal sealed class ModelDecoder
 
     /// <summary>
     /// <paramref name="value"/>, the decoded input <paramref name="shared"/>, with every negative length replaced by 0 when it
-    /// is a <c>length.&lt;Sort&gt;</c> input. Spacer's derivations need it too (ticket P2-041): a derivation fixes only the
+    /// is a <c>length.&lt;Sort&gt;</c> input. Spacer's derivations need it too (ticket P2-043): a derivation fixes only the
     /// lengths it reads, so it can leave another reference's length negative.
     /// </summary>
     internal static IrValue Clamped(SharedParameter shared, IrValue value) =>

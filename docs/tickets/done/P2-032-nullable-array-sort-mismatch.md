@@ -57,6 +57,6 @@ the same one-line fix happens to cover them.
 - AC3: not array-specific. The gap is every non-named type in sort naming; the fix covers all of them, including the
   jagged/multidimensional and nullable-element shapes the size guard put out of scope (no extra code). A wider
   instance remains outside sort naming: `CallIdentityFactory.Constructed` suffixes generic call identities with
-  `ToDisplayString()` too, so `M<string>()` vs `M<string?>()` are different functions. Filed as P2-041.
+  `ToDisplayString()` too, so `M<string>()` vs `M<string?>()` are different functions. Filed as P2-042.
 - The minimal repro, lowered directly, gives a spurious Divergent rather than the crash; the crash text appears when
   the two sorts meet in a shared function declaration (a call's domain). Both come from the same sort-name split.

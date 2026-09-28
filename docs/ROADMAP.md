@@ -387,7 +387,7 @@ ticket id (not listed again here). P2-015 is a `corpus.ps1` finding from the sam
   compound and increment operators, apply M4-002's `IrPure` functions instead of being opaque
   (reasons `CompoundAssignment`, `Increment`, `Decrement`). Found in M4-002 (`business-layer`
   `Subtotal`'s `decimal +=`). Needs M4-002.
-- P2-041 (S) A Spacer derivation's inputs never give an array a negative length. Found by M0-012's
+- P2-043 (S) A Spacer derivation's inputs never give an array a negative length. Found by M0-012's
   gate on PR #241 (rule 2, CsCheck seed `6rdKklVqtDVa`): P2-019's clamp covered only `ModelDecoder.Inputs`.
 
 ## P2 — First real run findings (M4-007)
@@ -417,7 +417,7 @@ the only large ones.
 - P2-039 (M) `compare --execute` hangs when a replay driver never answers. Needs M4-009, P1-008.
 - P2-040 (S) `compare --execute` runs solution code in the caller's working directory. Needs M4-009,
   P1-008.
-- P2-041 (S) A generic call's identity differs on a nullable-annotated type argument (found in
+- P2-042 (S) A generic call's identity differs on a nullable-annotated type argument (found in
   P2-032).
 
 ## M5 — Agent surface (MCP)

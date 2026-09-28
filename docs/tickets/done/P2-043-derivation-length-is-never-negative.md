@@ -1,4 +1,4 @@
-# P2-041 A Spacer derivation's inputs never give an array a negative length
+# P2-043 A Spacer derivation's inputs never give an array a negative length
 Status: done (PR #254)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
@@ -38,3 +38,5 @@ seed `6rdKklVqtDVa`.
   pass without the fix. It is not kept.
 - P2-019's Notes say "every ladder rung encodes through `ProductEncoder.Encode`". That holds for the assumption, but
   not for decoding: rung 4 has its own decoder.
+- Renumbered from P2-041 after merge: #249 (as-array model maps) took P2-041 first, and #246 filed the nullable
+  call-identity ticket as P2-041 too (now P2-042). PR #254 and its commit still say P2-041.
