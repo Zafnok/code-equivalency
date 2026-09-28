@@ -70,8 +70,20 @@ internal sealed class ReplayDriverFactory(
         (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, "modern"), number, legacy: false);
         return modernDriver is null
             ? ReplayPlan.NotConstructible(modernProblem)
-            : ReplayPlan.Runnable(new ExecutionDrivers(legacyDriver, modernDriver), oldCase.Input, newCase.Input);
+            : ReplayPlan.Runnable(new ExecutionDrivers(legacyDriver, modernDriver), oldCase.Input, newCase.Input) with { AlikeReason = AlikeReason(counterexample) };
     }
+
+    /// <summary>
+    /// Why equal real outcomes would not refute <paramref name="counterexample"/> (ticket P2-037): once its call traces
+    /// differ, a call's result or <c>threw</c> answer after the split is the solver's free choice (ADR 0026, "Why"), so the
+    /// outcomes may differ only by it. Git Extensions' <c>SetSsh</c> threw on the legacy side only through such an answer.
+    /// Traces are compared by raw identity, so a callee the call-identity map renames counts as a split: that errs towards
+    /// not constructible.
+    /// </summary>
+    private static string? AlikeReason(Counterexample counterexample) =>
+        counterexample.Old.Trace.SequenceEqual(counterexample.New.Trace)
+            ? null
+            : "the call traces differ, and the model's outcomes rest on call answers chosen after they split, which replay does not observe";
 
     public TestingPlan Plan(ProcedurePair pair, Counterexample? candidate, string directory)
     {

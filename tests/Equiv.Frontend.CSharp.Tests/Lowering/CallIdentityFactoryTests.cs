@@ -25,6 +25,21 @@ public sealed class CallIdentityFactoryTests
     public void IdentityNamesTheCalleeAndItsTypeArguments(string members, string identity) =>
         Assert.Equal(identity, Assert.Single(Calls(Method(members))).Callee.Value);
 
+    /// <summary>
+    /// Ticket P2-042: a nullable reference annotation on a type argument, its array element or a nested type argument
+    /// is not part of the identity, so a legacy call and its annotated modern form are one function.
+    /// </summary>
+    [Theory]
+    [InlineData("string", "string?", "System.Linq.Enumerable::Empty`1()<string>")]
+    [InlineData("string[]", "string?[]?", "System.Linq.Enumerable::Empty`1()<string[]>")]
+    [InlineData("System.Collections.Generic.List<string>", "System.Collections.Generic.List<string?>?", "System.Linq.Enumerable::Empty`1()<System.Collections.Generic.List<string>>")]
+    public void ANullableAnnotationOnATypeArgumentIsNotPartOfTheIdentity(string legacy, string modern, string identity)
+    {
+        Assert.Equal(identity, Assert.Single(Calls(Method($"static object M() => System.Linq.Enumerable.Empty<{legacy}>();"))).Callee.Value);
+        Assert.Equal(identity, Assert.Single(Calls(Source(
+            $"#nullable enable\nclass C {{ static object M() => System.Linq.Enumerable.Empty<{modern}>(); }}"))).Callee.Value);
+    }
+
     [Fact]
     public void RenameMapApplies()
     {

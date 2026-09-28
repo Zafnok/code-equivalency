@@ -386,7 +386,7 @@ internal sealed class ChcEncoder
 
     /// <summary>
     /// The inputs and literals a derivation gives, decoded, with each literal keeping its own element and each length
-    /// non-negative (ticket P2-041).
+    /// non-negative (ticket P2-043).
     /// </summary>
     private IrInputs Decode(Expr[] inputs, Expr[] literalTerms)
     {
