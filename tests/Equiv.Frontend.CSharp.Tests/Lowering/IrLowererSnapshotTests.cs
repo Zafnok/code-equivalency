@@ -298,6 +298,16 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task RaisedFieldLikeEvent() => Dump("public event EventHandler? Changed; int n; public void Bump() { n++; Changed?.Invoke(this, EventArgs.Empty); }", "Bump");
 
+    /// <summary>Ticket P2-005 acceptance criterion 1: <c>+=</c> on an event is one call to its <c>add</c> accessor.</summary>
+    [Fact]
+    public Task EventAdd() => Verify(IrText.Dump(Lowered.Source(
+        "using System;\nsealed class Button { public event EventHandler? Clicked; }\nclass C { static void M(Button b, EventHandler h) { b.Clicked += h; } }")));
+
+    /// <summary>Ticket P2-005 acceptance criterion 1: <c>-=</c> on an event is one call to its <c>remove</c> accessor.</summary>
+    [Fact]
+    public Task EventRemove() => Verify(IrText.Dump(Lowered.Source(
+        "using System;\nsealed class Button { public event EventHandler? Clicked; }\nclass C { static void M(Button b, EventHandler h) { b.Clicked -= h; } }")));
+
     /// <summary>Ticket P2-027 acceptance criterion 2: a tuple literal is <c>tuple.new</c> of its elements.</summary>
     [Fact]
     public Task TupleLiteral() => Dump("static (int, int) M(int a, int b) => (a, b);");

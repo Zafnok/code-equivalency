@@ -181,6 +181,11 @@ evaluated at the capture, and any other captured property is its receiver and in
 there: a read of the capture reads the map or calls the getter, a write writes the map or calls the
 setter, and the capture has no null shadow of its own.
 
+`e.E += h` and `e.E -= h` on an event are a call to its `add` or `remove` accessor with `e` (none for
+a static event) and `h`, lowered as a setter call is: no result, `e` null-checked at the call after
+`h` is evaluated, and a `threw` edge (P2-005). A field-like event is no exception, since the compiler
+calls its accessor too.
+
 The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
 locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
 each field's receiver, then every element of the literal (each already converted to its target's
