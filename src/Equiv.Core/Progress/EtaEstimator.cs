@@ -26,7 +26,8 @@ public sealed class EtaEstimator(long totalWeight)
     public TimeSpan? At75 => checkpoints[2];
 
     /// <summary>
-    /// <paramref name="elapsed"/> ÷ <paramref name="doneWeight"/> × the weight left, never more than <paramref name="ceiling"/>;
+    /// <paramref name="elapsed"/> ÷ <paramref name="doneWeight"/> × the weight left, never more than <paramref name="ceiling"/>
+    /// or <see cref="TimeSpan.MaxValue"/>;
     /// null until <see cref="MinPercent"/>% of <paramref name="totalWeight"/> or <see cref="MinItems"/> items are done.
     /// </summary>
     public static TimeSpan? Estimate(TimeSpan elapsed, long doneWeight, long totalWeight, int doneItems, TimeSpan? ceiling = null)
@@ -37,7 +38,8 @@ public sealed class EtaEstimator(long totalWeight)
         }
 
         long remaining = Math.Max(0, totalWeight - doneWeight);
-        TimeSpan estimate = TimeSpan.FromTicks((long)((Int128)elapsed.Ticks * remaining / doneWeight));
+        // A long phase with a sliver of its weight done can overshoot TimeSpan's range; saturate rather than wrap (M4-016).
+        TimeSpan estimate = TimeSpan.FromTicks((long)Int128.Min((Int128)elapsed.Ticks * remaining / doneWeight, long.MaxValue));
         return ceiling is { } bound && estimate > bound ? bound : estimate;
     }
 
