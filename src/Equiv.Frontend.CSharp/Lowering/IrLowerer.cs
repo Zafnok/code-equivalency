@@ -753,7 +753,7 @@ internal sealed class IrLowerer
         CaptureId id when sliceTargets.TryGetValue(id, out HeapLowerer.Access slice) => heap.ReadSlice(slice, context),
         CaptureId id when propertyTargets.TryGetValue(id, out PropertyAccess? property) =>
             Accessor(property.Reference, property.Reference.Property.GetMethod, property.Operands, value: null, context),
-        CaptureId id => ssa.Load(context.Current, Capture(id, reference.Type!)),
+        _ => ssa.Load(context.Current, Capture(reference.Id, reference.Type!)),
     };
 
     private IrVar Value(IOperation operation, LoweringContext context) => Lower(operation, context)!;
