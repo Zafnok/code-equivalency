@@ -95,10 +95,11 @@ public sealed class Z3BackendTests
         Fixture fixture = Fixture.Load(name);
         List<CountingContext> contexts = [];
 
-        _ = new Z3Backend(() => Track(contexts)).Verify(fixture.Old, fixture.New, Options with { TimeoutMs = 50 });
+        Verdict verdict = new Z3Backend(() => Track(contexts)).Verify(fixture.Old, fixture.New, Options with { TimeoutMs = 50 });
 
-        CountingContext context = Assert.Single(contexts);
-        Assert.Equal(1, context.Disposals);
+        // An Unknown other than a timeout also runs ADR 0037's failure-refinement queries in a context of their own (P1-013).
+        Assert.Equal(verdict is Unknown { Reason: not UnknownReason.Timeout } ? 2 : 1, contexts.Count);
+        Assert.All(contexts, static c => Assert.Equal(1, c.Disposals));
     }
 
     [Fact]

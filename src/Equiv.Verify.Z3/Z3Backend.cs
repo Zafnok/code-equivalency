@@ -22,7 +22,8 @@ namespace Equiv.Verify.Z3;
 /// reaches an <see cref="IrOpaque"/> gives <see cref="Divergent"/>, with a counterexample replayed in
 /// <see cref="IrInterpreter"/>; if not, an input reaching an opaque gives <see cref="UnknownReason.Opaque"/>. Each
 /// query gets its own <see cref="Context"/>, disposed on every path. A solver <c>unknown</c> is
-/// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason, which is not always a timeout.
+/// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason, which is not always a timeout. Any other
+/// Unknown carries <see cref="FailureRefinementQuery"/>'s two answers (ADR 0037).
 /// </summary>
 public sealed class Z3Backend : IVerificationBackend
 {
@@ -49,7 +50,13 @@ public sealed class Z3Backend : IVerificationBackend
         ArgumentNullException.ThrowIfNull(oldBody);
         ArgumentNullException.ThrowIfNull(newBody);
         ArgumentNullException.ThrowIfNull(options);
-        return new LoopLadder(createContext, options, Proposer(options)).Verify(oldBody, newBody);
+        Verdict verdict = new LoopLadder(createContext, options, Proposer(options)).Verify(oldBody, newBody);
+
+        // ADR 0037 (ticket P1-013): an Unknown other than a timeout says whether either side can fail where the other does
+        // not. The verdict stays as it is. An unbound pair never reaches the backend (ADR 0029 decision 2).
+        return verdict is Unknown { Reason: not UnknownReason.Timeout } unknown
+            ? unknown with { FailureRefinement = new FailureRefinementQuery(createContext, options).Run(oldBody, newBody, unknown.Ladder[0].Outcome != RungOutcome.NotApplicable) }
+            : verdict;
     }
 
     /// <summary>

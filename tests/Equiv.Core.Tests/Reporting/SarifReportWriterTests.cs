@@ -221,6 +221,33 @@ public sealed class SarifReportWriterTests
         Assert.EndsWith(": new: Await", method.Message.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P1-013 criteria 2 and 4 (ADR 0037): an Unknown's failure refinement is <c>properties.failureRefinement</c>, each
+    /// query's outcome with a <c>found</c> one's model, and it changes neither the rule id nor the fingerprint.
+    /// </summary>
+    [Fact]
+    public void FailureRefinementIsAPropertyAndNeverMovesTheFingerprint()
+    {
+        Counterexample model = Fixtures.Counterexample();
+        Unknown unknown = OpaqueAtLine(7);
+        VerificationResult refined = Fixtures.Result(unknown with { FailureRefinement = new(new RefinementResult(RefinementOutcome.Found, model), RefinementResult.NoneProved) });
+        VerificationResult unknownRefinement = Fixtures.Result(unknown with { FailureRefinement = new(RefinementResult.Unknown, RefinementResult.Unknown) });
+
+        Result result = SarifReportWriter.Write([refined]).Runs[0].Results[0];
+        Result plain = SarifReportWriter.Write([Fixtures.Result(unknown)]).Runs[0].Results[0];
+
+        Dictionary<string, Dictionary<string, string>> property = result.GetProperty<Dictionary<string, Dictionary<string, string>>>("failureRefinement");
+        Assert.Equal(new Dictionary<string, string>(StringComparer.Ordinal) { ["outcome"] = "found", ["model"] = CounterexampleText.Dump(model) }, property["newFailures"]);
+        Assert.Equal(new Dictionary<string, string>(StringComparer.Ordinal) { ["outcome"] = "none-proved" }, property["removedFailures"]);
+        Assert.Equal(
+            "unknown",
+            SarifReportWriter.Write([unknownRefinement]).Runs[0].Results[0].GetProperty<Dictionary<string, Dictionary<string, string>>>("failureRefinement")["newFailures"]["outcome"]);
+        Assert.False(plain.TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+        Assert.Equal(plain.RuleId, result.RuleId);
+        Assert.Equal(plain.Message.Text, result.Message.Text);
+        Assert.Equal(plain.PartialFingerprints, result.PartialFingerprints);
+    }
+
     /// <summary>Ticket M3-025 criterion 5: scope is not part of the fingerprint, so narrowing an Unknown to a line keeps it <c>unchanged</c>.</summary>
     [Fact]
     public void ScopeChangeKeepsTheBaselineUnchanged()

@@ -287,9 +287,15 @@ internal static class ProductEncoder
     /// <summary>
     /// One side's terms, for queries beyond the product's own (ticket M3-002): every variable's Z3 term by name,
     /// every block's <c>reach</c>, and whether the side reaches an <see cref="IrUnreachable"/>. An unreachable block
-    /// is an assumption, not an assertion, so that rung 1 can ask whether any input reaches its bound.
+    /// is an assumption, not an assertion, so that rung 1 can ask whether any input reaches its bound. <c>Returned</c> and
+    /// <c>Threw</c> say the side reaches a return or a throw, which ADR 0037's queries compare alone (ticket P1-013).
     /// </summary>
-    public sealed record SideTerms(IReadOnlyDictionary<string, Expr> Vars, IReadOnlyDictionary<IrBlockId, BoolExpr> Reach, BoolExpr Unreachable);
+    public sealed record SideTerms(IReadOnlyDictionary<string, Expr> Vars, IReadOnlyDictionary<IrBlockId, BoolExpr> Reach, BoolExpr Unreachable)
+    {
+        public required BoolExpr Returned { get; init; }
+
+        public required BoolExpr Threw { get; init; }
+    }
 
     /// <summary>
     /// The product query for one pair: <see cref="Assertions"/> hold on every input, <see cref="Differs"/>

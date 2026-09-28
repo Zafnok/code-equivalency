@@ -8,6 +8,7 @@ using Equiv.Core.Matching;
 using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
+using Equiv.Verify.Z3;
 
 using Microsoft.CodeAnalysis.Sarif;
 
@@ -1268,6 +1269,93 @@ public sealed class CompareCommandTests
 
         Assert.Contains("\"unknownByScope\":{\"line\":1,\"method\":2}", Census(lowerOnly: false), StringComparison.Ordinal);
         Assert.DoesNotContain("unknownByScope", Census(lowerOnly: true), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P1-013 criterion 3 (ADR 0037): the census reports how many Unknown pairs ran the failure-refinement queries
+    /// and their total time; a run where none did has no such entry.
+    /// </summary>
+    [Fact]
+    public void CensusReportsFailureRefinementTime()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity first = new("T::First()");
+        ProcedureIdentity second = new("T::Second()");
+        FailureRefinement refinement = new(RefinementResult.NoneProved, RefinementResult.Unknown);
+
+        string Census(Verdict verdict)
+        {
+            FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+            {
+                [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded),
+                [first.Value] = verdict,
+                [second.Value] = new Unknown(UnknownReason.Opaque, "new: Await") { FailureRefinement = refinement with { Elapsed = TimeSpan.FromMilliseconds(250) } },
+            });
+            InMemoryReportSink sink = new();
+            _ = CaptureStdOut(() => CompareCommand.Run(
+                new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+                [new FakeFrontend("csharp", _ => true, new MatchResult([Pair(PairIdentity), Pair(first), Pair(second)], [], [], []))], backend, sink, NullRunLog.Instance));
+            Assert.True(sink.Log!.Runs[0].TryGetSerializedPropertyValue("loweringCensus", out string? census));
+            return census!;
+        }
+
+        Assert.EndsWith(
+            "\"failureRefinement\":{\"pairs\":2,\"milliseconds\":350}}",
+            Census(new Unknown(UnknownReason.Abstraction, "opaque:f") { FailureRefinement = refinement with { Elapsed = TimeSpan.FromMilliseconds(100) } }),
+            StringComparison.Ordinal);
+        Assert.Contains("\"failureRefinement\":{\"pairs\":1,", Census(new Unknown(UnknownReason.Timeout, "gave up")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P1-013 (ADR 0037): through the real backend, an unbound pair (decided without the solver) and a pair the solver
+    /// times out on carry no <c>failureRefinement</c>; an opaque Unknown does.
+    /// </summary>
+    [Fact]
+    public void UnboundAndTimeoutPairs_AreNotQueried()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity unbound = new("T::Unbound()");
+        ProcedureIdentity hard = new("T::Rebuild(ulong,ulong)");
+        ProcedureIdentity opaque = new("T::Opaque(int)");
+        IrProcedure rebuild = IrText.Parse("""
+            proc "T::Rebuild(ulong,ulong)" (%a: bv64, %b: bv64) -> bv64 entry B0
+            B0:
+              %q: bv64 = udiv %a, %b
+              %m: bv64 = mul %q, %b
+              %r: bv64 = urem %a, %b
+              %s: bv64 = add %m, %r
+              ret %s
+            """);
+        MatchResult match = new(
+            [
+                Pair(unbound) with { NewBody = UnboundBody(unbound) },
+                new ProcedurePair(hard, hard, rebuild, IrText.Parse("""proc "T::Rebuild(ulong,ulong)" (%a: bv64, %b: bv64) -> bv64 entry B0 B0: ret %a""")),
+                new ProcedurePair(
+                    opaque,
+                    opaque,
+                    IrText.Parse("""proc "T::Opaque(int)" (%a: bv32) -> bv32 entry B0 B0: ret %a"""),
+                    IrText.Parse("""proc "T::Opaque(int)" (%a: bv32) -> bv32 entry B0 B0: %s: sort "string" = opaque "InterpolatedString" at "New.cs" 5:9-5:30 ret %a""")),
+            ],
+            [],
+            [],
+            []);
+        InMemoryReportSink sink = new();
+
+        _ = CaptureStdOut(() => CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { TimeoutMs = 50 },
+            [new FakeFrontend("csharp", _ => true, match)],
+            new Z3Backend(),
+            sink,
+            NullRunLog.Instance));
+
+        Dictionary<string, Result> results = sink.Log!.Runs[0].Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal);
+        Assert.Equal("unbound", results[unbound.Value].GetProperty<string>("unknownReason"));
+        Assert.Equal("timeout", results[hard.Value].GetProperty<string>("unknownReason"));
+        Assert.False(results[unbound.Value].TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+        Assert.False(results[hard.Value].TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+        Assert.True(results[opaque.Value].TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
     }
 
     /// <summary>Ticket M3-015 acceptance criteria 9 and 10 (ADR 0019).</summary>

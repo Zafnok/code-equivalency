@@ -132,6 +132,27 @@ public sealed class VerdictTests
         Assert.False(first.Equals(Null.Of<Verdict>()));
     }
 
+    /// <summary>
+    /// Ticket P1-013 (ADR 0037): an Unknown compares its failure refinement by outcome and model; the time the queries took is
+    /// a measurement, so it is not part of equality.
+    /// </summary>
+    [Fact]
+    public void FailureRefinementComparesByOutcomeNotByTime()
+    {
+        FailureRefinement refinement = new(new RefinementResult(RefinementOutcome.Found, new Counterexample(new IrInputs([]), SampleRun, SampleRun)), RefinementResult.NoneProved);
+        FailureRefinement later = refinement with { Elapsed = TimeSpan.FromSeconds(3) };
+        Unknown unknown = new(UnknownReason.Opaque, "d") { FailureRefinement = refinement };
+
+        Assert.Equal(refinement, later);
+        Assert.Equal(refinement.GetHashCode(), later.GetHashCode());
+        Assert.NotEqual(refinement, refinement with { RemovedFailures = RefinementResult.Unknown });
+        Assert.NotEqual(refinement, refinement with { NewFailures = RefinementResult.Unknown });
+        Assert.False(refinement.Equals(Null.Of<FailureRefinement>()));
+        Assert.Equal(unknown, unknown with { FailureRefinement = later });
+        Assert.Equal(unknown.GetHashCode(), (unknown with { FailureRefinement = later }).GetHashCode());
+        Assert.NotEqual(unknown, unknown with { FailureRefinement = null });
+    }
+
     [Fact]
     public void DependingOnNamesEachIdentityOnceAndPointsAtEverySpannedAbstraction()
     {

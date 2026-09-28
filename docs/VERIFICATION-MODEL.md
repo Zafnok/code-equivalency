@@ -545,6 +545,23 @@ Every Unknown carries `properties.scope` (ADR 0029):
   on the unrolled pair, which proves nothing past the bound. An `abstraction` Unknown is `method`
   too, since the first query found its candidate, so that query was satisfiable (ticket M3-025).
 
+Every Unknown other than `unbound` and `timeout` also carries `properties.failureRefinement` (ADR 0037;
+ticket P1-013): `{ newFailures, removedFailures }`, each `{ outcome, model? }`. The backend asks two more
+queries over rung 1's product (the pair with its shared fragments as calls, unrolled `k` times), comparing
+only whether each side returns or throws, never the value or the heap. `newFailures` asks for an input on
+which the legacy side returns and the modern side throws; `removedFailures` is the same with the sides
+swapped. A side that reaches an unshared `IrOpaque`, or the bound of a looping pair, has an unknown outcome
+(ADR 0014), so each asks first on inputs where neither side does. A model there whose replay has an
+untainted outcome on both sides (ADR 0026) is `found`, carrying the model rendered as a Divergent's is; a
+tainted one is `unknown`. Only when that query is unsatisfiable does it ask again, letting such a side
+return or throw: unsatisfiable is `none-proved`, anything else `unknown`. A query the solver gives up on is
+`unknown`, and so is every answer for a pair rung 1 could not encode. Each query gets the pair's timeout.
+A `found` answer needs an input that reaches no unshared opaque node, so on an Unknown it occurs only where
+rung 1's model of the same divergence replayed tainted. The verdict stays EQ003, and neither the rule id, the
+exit code nor the fingerprint depends on `failureRefinement`. The census reports the Unknown pairs queried
+and the time their queries took, in `loweringCensus.failureRefinement` (`pairs`, `milliseconds`), when
+there was at least one.
+
 The IR text spells a whole-body opaque `opaque body "reason"` (`IrOpaque.WholeBody`), so scope is
 read from the IR rather than guessed from the span.
 
@@ -559,7 +576,7 @@ without `IrOpaque`, whole-body opaque pairs, congruent pairs, and `IrOpaque` cou
 per side (ADR 0027). With `--il-fallback` it also counts the pairs the fallback was tried on and
 the pairs it replaced (`pairsIlFallbackTried`, `pairsLoweredFromIl`), and every result on a matched
 pair carries `properties.lowering` (`operation` or `il`; ADR 0039). It also records skipped projects per side, and, when the run produced
-verdicts, Unknown counts by scope (ADR 0029).
+verdicts, Unknown counts by scope (ADR 0029) and the failure-refinement time (ADR 0037).
 
 Only the projects a solution builds are part of the product. For a `.sln`, those are the projects
 with a `Build.0` entry for its default configuration (`Debug|Any CPU`, else the first one it
