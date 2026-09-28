@@ -85,12 +85,11 @@ Making replay or testing succeed on the pair; only stopping it from hanging.
   disposed, so both processes killed) and `Replayer` already made any non-comparable side not constructible. Bound per
   pair: `--test-budget` time + one input (at most 2 cultures x 2 sides x 10 s) + the divergence rerun (2 x 10 s) + the
   replay (2 x 10 s).
-- Criterion 4: on 2026-09-28 this branch (7389a1c, a base that predates P2-033's fix #255) ran
-  `equiv compare --execute` on the Tomas pair on Windows. It finished in 82 s wall-clock (execute phase 12.9 s,
-  708 procedures) and wrote `equiv.sarif` with 720 results: EQ001 681, EQ003 17, EQ006 15, EQ005 5, EQ002 1, EQ004 1.
-  Exactly one result names the timeout: `Graph::ImportFromFile(string)`, with
-  `differentialTesting.notConstructible: the modern side gave NotComparable "no answer within 10 s"`. No
-  `EquivReplay4` process was left running. The exit code was 5 (`InternalError`), from the one pair-level crash,
-  P2-033's `IrSortValue ... was not present in the dictionary` on `GetExpectedWeightAndNodes(string)`, which is fixed
-  on `main` but not in this branch's base. It is not an execution failure. `DriverDeadlineTests` (both cases) pass on
-  Windows, where the pipe buffer is 4 KB.
+- Criterion 4: on 2026-09-28 this branch, with `main` merged in (b52fd3e), ran `equiv compare --execute` on the Tomas
+  pair on Windows. It finished in 75 s wall-clock (execute phase 12.8 s, 708 procedures) with exit 1 (Divergent
+  present, a normal verdict exit), no tool errors, and wrote `equiv.sarif` with 721 results: EQ001 681, EQ002 1,
+  EQ003 17, EQ004 1, EQ005 5, EQ006 16. Exactly one result names the timeout: `Graph::ImportFromFile(string)`, with
+  `differentialTesting.notConstructible: the modern side gave NotComparable "no answer within 10 s"`. No `EquivReplay4`
+  process was left running. An earlier run from the pre-merge base (7389a1c) also finished (82 s), with exit 5 from
+  P2-033's crash; that crash is fixed on `main`. `DriverDeadlineTests` (both cases) pass on Windows, where the pipe
+  buffer is 4 KB.
