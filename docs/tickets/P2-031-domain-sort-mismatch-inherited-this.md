@@ -1,5 +1,5 @@
 # P2-031 Verifying crashes when the two sides' `this` is typed at different points in the hierarchy
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -51,3 +51,29 @@ upcast-at-call-boundary fix), stop and write an ADR instead.
 Multiple inheritance/interface dispatch beyond a single base class chain.
 
 ## Notes
+- Root cause (criterion 1): not calls. A call's function is declared per argument-sort list
+  (`TraceEncoder.Function`, `PureEncoder.Function`), so a derived-typed argument just names a
+  different function. The mismatch is `HeapLowerer.Member`: a field (or inlined auto-property, or
+  field-like event) is a map keyed by its *declaring* type's sort (`HeapInputs.Receiver`), but the
+  receiver was lowered at its own static type. Roslyn wraps an argument in an implicit-reference
+  `IConversionOperation` (which already reads `cast.<From>.<To>`, M3-010) but never a receiver, so
+  `this.X` / `derived.X` for an `X` declared on a base keyed a `Base`-sorted map with a `Derived`
+  term. `IrValidator` catches it in Debug; Release hands it to Z3, which throws
+  `domain sort <Derived> and parameter <Base> do not match`. One fix point for every occurrence.
+- Fix: `Member` upcasts the receiver through the same `cast.<Derived>.<Base>` map an explicit
+  conversion reads when its sort differs from the map's key sort. The null check still runs on the
+  un-cast operand's shadow (`this` and variables) and otherwise reads `null.<Base>` at the cast value,
+  exactly as an explicit `((Base)d).X` would, so an explicit and an implicit upcast lower alike.
+  No subtyping model for sorts was needed; the size guard did not trip.
+- Decision: the ServiceAnt case is the same bug, not a matcher bug. Both sides are the same method
+  (`YiBan.Common...` is ServiceAnt's own test namespace at e36009c, not a cross-namespace pairing);
+  the crash is `testEventData.TransportEntity`, an auto-property declared on `TransportTray<TEntity>`
+  read through a `TestEventDataT<TestEventData>` receiver. Regression:
+  `InheritedThisEquivalenceTests.AGenericBaseAutoPropertyReadThroughAGenericDerivedReceiverVerifies`
+  (fails without the fix, passes with it).
+- Crash counts (criterion 4): before (M4-007, `docs/runs/2026-09-27-m4-007-*`): Git Extensions 92
+  pair-level crashes, 47 of them this family; ServiceAnt 1, this family. After: not measured in this
+  PR. A `full` Git Extensions run is ~2h37m plus a fresh `.corpus/` fetch and legacy build on this
+  box, so the re-run is left to the next corpus run. Expected after: at most 45 on Git Extensions
+  (the other causes are filed as P2-032, P2-033, P2-034 and P2-026, so "most of the 92" was never
+  reachable from this ticket alone) and 0 on ServiceAnt.
