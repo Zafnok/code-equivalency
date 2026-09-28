@@ -55,7 +55,8 @@ internal sealed class PureEncoder(SortMapper sorts, IEnumerable<IrPure> applicat
         IrType tuple = pure.Args[0].Type;
         ImmutableArray<IrType> elements = IrTuple.Elements(tuple);
         IrPure build = new(new IrVar(IrTuple.New, tuple), [], IrTuple.New, [.. elements.Select(static e => new IrVar(IrTuple.New, e))]);
-        return [context.MkEq(context.MkApp(ResultFunction(side, build), [.. elements.Select((e, i) => context.MkApp(Item(side, tuple, i + 1, e), args[0]))]), args[0])];
+        Expr[] items = [.. elements.Select((e, i) => context.MkApp(Item(side, tuple, i + 1, e), args[0]))];
+        return [context.MkEq(context.MkApp(ResultFunction(side, build), items), args[0])];
     }
 
     /// <summary>The <c>tuple.item</c> function reading element <paramref name="position"/>, of type <paramref name="element"/>, of a <paramref name="tuple"/>.</summary>
