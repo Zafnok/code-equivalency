@@ -283,8 +283,11 @@ internal sealed class FragmentEncoder
                 break;
             case IrPure pure:
                 {
-                    (Expr result, ImmutableArray<BoolExpr> threw) = Functions(pure.Function).Pures.Apply(side, pure, [.. pure.Args.Select(Var)]);
+                    PureEncoder applied = Functions(pure.Function).Pures;
+                    Expr[] args = [.. pure.Args.Select(Var)];
+                    (Expr result, ImmutableArray<BoolExpr> threw) = applied.Apply(side, pure, args);
                     Define(pure.Target, result);
+                    AssertAll(applied.Axioms(side, pure, args, result));
                     for (int i = 0; i < threw.Length; i++)
                     {
                         Define(pure.Throws[i].Flag, threw[i]);

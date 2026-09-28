@@ -53,11 +53,11 @@ internal sealed class HeapLowerer(
 
     /// <summary>
     /// The heap slice an assignment target names, or null when it is not a field or a single-dimensional
-    /// array element of a variable.
+    /// array element of a variable, or is an element of a tuple lowered as a value (ticket P2-027).
     /// </summary>
     public Access? Slice(IOperation lvalue, LoweringContext context) => lvalue switch
     {
-        IFieldReferenceOperation field => Field(field, context),
+        IFieldReferenceOperation field when TypeMapper.TupleElement(field.Field) is null => Field(field, context),
         IArrayElementReferenceOperation element => Element(element, context),
         IPropertyReferenceOperation property => AutoProperty(property, context),
         _ => null,

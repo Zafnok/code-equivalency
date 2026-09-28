@@ -294,5 +294,17 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task RaisedFieldLikeEvent() => Dump("public event EventHandler? Changed; int n; public void Bump() { n++; Changed?.Invoke(this, EventArgs.Empty); }", "Bump");
 
+    /// <summary>Ticket P2-027 acceptance criterion 2: a tuple literal is <c>tuple.new</c> of its elements.</summary>
+    [Fact]
+    public Task TupleLiteral() => Dump("static (int, int) M(int a, int b) => (a, b);");
+
+    /// <summary>Ticket P2-027 acceptance criterion 2: a tuple parameter's elements read by position.</summary>
+    [Fact]
+    public Task TupleElementsByPosition() => Dump("static int M((int, int) p) => p.Item1 + p.Item2;");
+
+    /// <summary>Ticket P2-027 acceptance criterion 2: the same reads through the tuple's element names.</summary>
+    [Fact]
+    public Task TupleElementsByName() => Dump("static int M((int X, int Y) p) => p.X + p.Y;");
+
     private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }

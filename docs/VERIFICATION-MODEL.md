@@ -53,7 +53,14 @@ SSA heap slices (one map per field, one per array sort) encoded as SMT arrays. F
 point is a `Sort` in the MVP (not IEEE-modelled); a post-MVP ticket exists. Operators on
 floating point, `decimal` and user-defined operators are `IrPure` applications of named
 functions both sides share (ADR 0025, ticket M4-002), so unchanged arithmetic is provable
-without modelling its semantics.
+without modelling its semantics. A value tuple of two or three `bool` or integral elements is the
+`Sort` `tuple(<element types>)` (`tuple(bv32,bool)`), a tuple literal the pure function `tuple.new` of its
+elements, and an element read, by `Item<n>` or by the name the tuple gives it, the pure function
+`tuple.item<n>` of the tuple, since element names are compile-time only (`IrTuple` holds the spelling; P2-027).
+Unlike other pure functions these two are exact: at each `tuple.new` the encoder asserts that each
+`tuple.item<i>` of the result is its `i`-th element, and at each `tuple.item<n>` of `t` that `t` is
+`tuple.new` of its items, so a read of a literal is its element and two tuples read to have equal elements
+are equal. Both are theorems of tuples, so they are asserted unguarded.
 
 IR instructions never throw. Every exception edge is explicit in the CFG: the frontend
 lowers `checked` arithmetic to an overflow test plus a branch to a throw block, and a

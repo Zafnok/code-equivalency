@@ -34,6 +34,34 @@ internal sealed class PureEncoder(SortMapper sorts, IEnumerable<IrPure> applicat
     public FuncDecl ResultFunction(Side side, IrPure pure) =>
         Function($"pure:{Name(side, pure)}({Signature(pure)})->{SortMapper.Name(pure.Target.Type)}", pure, sorts.Sort(pure.Target.Type));
 
+    /// <summary>
+    /// What makes the tuple functions (<see cref="IrTuple"/>; ticket P2-027) each other's inverse, as ground facts about this
+    /// application only: at a <c>tuple.new</c>, each <c>tuple.item</c> of the result is its element; at a <c>tuple.item</c>,
+    /// the tuple is <c>tuple.new</c> of its items, so two tuples read to have equal elements are equal. Both are theorems of
+    /// tuples, true of every run, so neither is guarded by reachability. Empty for any other function.
+    /// </summary>
+    public IEnumerable<BoolExpr> Axioms(Side side, IrPure pure, Expr[] args, Expr result)
+    {
+        if (string.Equals(pure.Function, IrTuple.New, StringComparison.Ordinal))
+        {
+            return IrTuple.Elements(pure.Target.Type).Select((e, i) => context.MkEq(context.MkApp(Item(side, pure.Target.Type, i + 1, e), result), args[i]));
+        }
+
+        if (IrTuple.Position(pure.Function) is null)
+        {
+            return [];
+        }
+
+        IrType tuple = pure.Args[0].Type;
+        ImmutableArray<IrType> elements = IrTuple.Elements(tuple);
+        IrPure build = new(new IrVar(IrTuple.New, tuple), [], IrTuple.New, [.. elements.Select(static e => new IrVar(IrTuple.New, e))]);
+        return [context.MkEq(context.MkApp(ResultFunction(side, build), [.. elements.Select((e, i) => context.MkApp(Item(side, tuple, i + 1, e), args[0]))]), args[0])];
+    }
+
+    /// <summary>The <c>tuple.item</c> function reading element <paramref name="position"/>, of type <paramref name="element"/>, of a <paramref name="tuple"/>.</summary>
+    private FuncDecl Item(Side side, IrType tuple, int position, IrType element) =>
+        ResultFunction(side, new IrPure(new IrVar(IrTuple.Item(position), element), [], IrTuple.Item(position), [new IrVar(IrTuple.New, tuple)]));
+
     /// <summary>The Bool function saying <paramref name="pure"/>'s function raises <paramref name="exceptionType"/>, created on first use.</summary>
     public FuncDecl ThrewFunction(Side side, IrPure pure, string exceptionType) =>
         Function($"pure.threw:{Name(side, pure)}({Signature(pure)}):{exceptionType}", pure, context.BoolSort);

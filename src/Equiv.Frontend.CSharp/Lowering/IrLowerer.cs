@@ -752,8 +752,8 @@ internal sealed class IrLowerer
                 return ssa.Load(context.Current, Capture(reference.Id, reference.Type!));
             case ISimpleAssignmentOperation { IsRef: false } assignment:
                 return Assign(assignment, context);
-            case IFieldReferenceOperation field:
-                return heap.ReadSlice(heap.Field(field, context), context);
+            case IFieldReferenceOperation or ITupleOperation:
+                return FieldOrTuple(operation, context);
             case IArrayElementReferenceOperation or IEventReferenceOperation:
                 return heap.Readable(operation, receiver, context) is { } read ? heap.ReadSlice(read, context) : Opaque(operation, operation.Kind.ToString(), context);
             case IPropertyReferenceOperation property:
@@ -793,6 +793,21 @@ internal sealed class IrLowerer
                 return Opaque(operation, operation.Kind.ToString(), context);
         }
     }
+
+    /// <summary>
+    /// A field is its heap map read at the receiver, except that an element of a tuple of an <see cref="IrTuple"/> sort is the
+    /// <c>tuple.item</c> function of its position applied to the tuple, and a tuple literal of such a sort the
+    /// <c>tuple.new</c> function of its elements (ticket P2-027); any other tuple literal is opaque with reason <c>Tuple</c>.
+    /// </summary>
+    private IrVar? FieldOrTuple(IOperation operation, LoweringContext context) => operation switch
+    {
+        IFieldReferenceOperation field when TypeMapper.TupleElement(field.Field) is { } position =>
+            Pure(IrTuple.Item(position), [], runtimeSensitive: false, [Value(field.Instance!, context)], Map(field.Type!), context),
+        IFieldReferenceOperation field => heap.ReadSlice(heap.Field(field, context), context),
+        ITupleOperation tuple when TypeMapper.Tuple(tuple.Type) is { } sort =>
+            Pure(IrTuple.New, [], runtimeSensitive: false, [.. tuple.Elements.Select(e => Value(e, context))], sort, context),
+        _ => Opaque(operation, operation.Kind.ToString(), context),
+    };
 
     /// <summary>
     /// A <c>foreach</c> over an array as the index loop the compiler emits (ticket P1-004). The enumerator's capture holds the
@@ -1099,7 +1114,7 @@ internal sealed class IrLowerer
 
         if (Target(assignment.Target) is not { } target)
         {
-            return Opaque(assignment, assignment.Target.Kind.ToString(), context);
+            return Opaque(assignment, Reason(assignment.Target), context);
         }
 
         IrVar value = Value(assignment.Value, context);
@@ -1107,6 +1122,12 @@ internal sealed class IrLowerer
         StoreShadow(target, assignment.Value, value, context);
         return value;
     }
+
+    /// <summary>
+    /// Why an lvalue this lowering cannot write is opaque: its operation kind, except that the only field it cannot write
+    /// is an element of a tuple it lowers as a value (ticket P2-027), whose reason is <c>Tuple</c>.
+    /// </summary>
+    private static string Reason(IOperation lvalue) => lvalue is IFieldReferenceOperation ? "Tuple" : lvalue.Kind.ToString();
 
     /// <summary>The variable an lvalue names, or null when it is not a local or parameter of this method.</summary>
     private SsaBuilder.Variable? Target(IOperation lvalue) => lvalue switch
@@ -1409,7 +1430,7 @@ internal sealed class IrLowerer
     {
         if (Place(site.Target, context) is not { } place)
         {
-            return Opaque(site.Node, site.Target.Kind.ToString(), context);
+            return Opaque(site.Node, Reason(site.Target), context);
         }
 
         (Func<IrVar> read, Action<IrVar> write) = place;
@@ -1432,7 +1453,7 @@ internal sealed class IrLowerer
 
         HeapLowerer.Access? heapSlot = lvalue switch
         {
-            IFieldReferenceOperation field => heap.Field(field, context),
+            IFieldReferenceOperation field when TypeMapper.TupleElement(field.Field) is null => heap.Field(field, context),
             IPropertyReferenceOperation auto => heap.AutoProperty(auto, context),
             _ => null,
         };
