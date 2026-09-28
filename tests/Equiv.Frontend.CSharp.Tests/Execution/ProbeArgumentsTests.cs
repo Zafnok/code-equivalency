@@ -152,6 +152,24 @@ public sealed class ProbeArgumentsTests
     }
 
     [Fact]
+    public void SignedIntegerFractionalNumber_IsUnconstructible()
+    {
+        ProbeArguments.SideCase result = AllCase(2, "1.5");
+
+        Assert.Null(result.Input);
+    }
+
+    [Theory]
+    [InlineData(15, "1.5")] // enum E (signed)
+    [InlineData(16, "1.5")] // enum U (unsigned)
+    public void EnumFractionalNumber_IsUnconstructible(int replaceIndex, string fractional)
+    {
+        ProbeArguments.SideCase result = AllCase(replaceIndex, fractional);
+
+        Assert.Null(result.Input);
+    }
+
+    [Fact]
     public void Boolean_False_BuildsItsWireForm()
     {
         ProbeArguments.SideCase result = Case("N.C", "Flag", "false");

@@ -92,6 +92,42 @@ public sealed class McpCommandTests
         Assert.Equal(ExitCodes.Success, await server.ConfigureAwait(true));
     }
 
+    /// <summary>
+    /// Ticket M5-002 criteria 1 and 3, through the real <c>--execute</c> command-line path rather than <see cref="Session"/>'s
+    /// direct <see cref="McpCommand.ServeAsync"/> call: on Windows it prints ADR 0035's note, serves <c>probe</c> and exits 0.
+    /// </summary>
+    [Fact]
+    public async Task Create_WithExecuteOnWindows_PrintsNoteAndServesProbe()
+    {
+        using AnonymousPipeServerStream clientToServer = new(PipeDirection.Out);
+        using AnonymousPipeClientStream serverInput = new(PipeDirection.In, clientToServer.ClientSafePipeHandle);
+        using AnonymousPipeServerStream serverToClient = new(PipeDirection.Out);
+        using AnonymousPipeClientStream clientInput = new(PipeDirection.In, serverToClient.ClientSafePipeHandle);
+        ExecutionEnvironment windows = new(IsWindows: true, new FakeReplay(string.Empty, string.Empty));
+        Command command = McpCommand.Create([], new FakeBackend(NoVerdicts), windows, () => (serverInput, serverToClient));
+        TextWriter originalError = Console.Error;
+        using StringWriter error = new();
+        Console.SetError(error);
+        Task<int> server;
+        IList<McpClientTool> tools;
+        try
+        {
+            server = Task.Run(() => command.Parse(["mcp", "--execute"]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken), TestContext.Current.CancellationToken);
+            McpClient client = await McpClient.CreateAsync(new StreamClientTransport(clientToServer, clientInput), cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await client.DisposeAsync().ConfigureAwait(true);
+            await clientToServer.DisposeAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+
+        Assert.Equal(ExitCodes.Success, await server.ConfigureAwait(true));
+        Assert.Contains(ExecutionEnvironment.Note, error.ToString(), StringComparison.Ordinal);
+        Assert.Contains(tools, static t => string.Equals(t.Name, "probe", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Create_RejectsNulls()
     {
