@@ -1,5 +1,5 @@
 # P2-026 LINQ query syntax (`TranslatedQuery`) has no lowering, and one crashes the frontend
-Status: in-progress
+Status: done (PR #241)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M2-004, M4-004
