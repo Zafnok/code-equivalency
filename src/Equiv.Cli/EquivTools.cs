@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 
+using Equiv.Cli.Mcp;
 using Equiv.Core;
 using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
@@ -13,35 +14,49 @@ using ModelContextProtocol.Server;
 namespace Equiv.Cli;
 
 /// <summary>
-/// The two tools <c>equiv mcp</c> serves (ADR 0033; ticket M5-001): <c>compare</c> and <c>lower_only</c>. Each runs
+/// The tools <c>equiv mcp</c> serves (ADR 0033; ticket M5-001): <c>compare</c> and <c>lower_only</c>. Each runs
 /// <see cref="CompareCommand.Run"/>, the pipeline <c>equiv compare</c> runs, with an in-memory sink so nothing is written to
 /// disk, and returns a one-line summary followed by the SARIF log as JSON text. An input error the CLI maps to exit 3 or 4 has
 /// no log; it comes back as a tool error (<c>isError: true</c>) carrying the message the CLI prints on stderr.
+/// <paramref name="execution"/> also registers <see cref="ProbeTool"/>'s <c>probe</c> tool, only when <c>equiv mcp</c> was
+/// started with <c>--execute</c> on Windows (ADR 0035; ticket M5-002); null leaves it unregistered.
 /// </summary>
-internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend)
+internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution = null)
 {
-    /// <summary>Both tools, registered explicitly: no assembly scanning (ADR 0033).</summary>
-    public IReadOnlyList<McpServerTool> Create() =>
-    [
-        McpServerTool.Create(
-            Compare,
-            new McpServerToolCreateOptions
-            {
-                Name = "compare",
-                Title = "Compare two solutions",
-                Description = "Checks whether a legacy and a modern solution behave the same. Returns a one-line verdict summary, then the SARIF 2.1.0 log `equiv compare` writes.",
-                ReadOnly = true,
-            }),
-        McpServerTool.Create(
-            LowerOnly,
-            new McpServerToolCreateOptions
-            {
-                Name = "lower_only",
-                Title = "Lower two solutions without verifying",
-                Description = "Loads, matches and lowers a legacy and a modern solution and reports the lowering census and the added and removed procedures, without calling the solver (`equiv compare --lower-only`).",
-                ReadOnly = true,
-            }),
-    ];
+    /// <summary>The report path a tool run passes; never read, since the log goes to <see cref="LogSink"/> and no tool sets DryRun.</summary>
+    private const string NoOutPath = "";
+
+    /// <summary>Every tool, registered explicitly: no assembly scanning (ADR 0033).</summary>
+    public IReadOnlyList<McpServerTool> Create()
+    {
+        List<McpServerTool> tools =
+        [
+            McpServerTool.Create(
+                Compare,
+                new McpServerToolCreateOptions
+                {
+                    Name = "compare",
+                    Title = "Compare two solutions",
+                    Description = "Checks whether a legacy and a modern solution behave the same. Returns a one-line verdict summary, then the SARIF 2.1.0 log `equiv compare` writes.",
+                    ReadOnly = true,
+                }),
+            McpServerTool.Create(
+                LowerOnly,
+                new McpServerToolCreateOptions
+                {
+                    Name = "lower_only",
+                    Title = "Lower two solutions without verifying",
+                    Description = "Loads, matches and lowers a legacy and a modern solution and reports the lowering census and the added and removed procedures, without calling the solver (`equiv compare --lower-only`).",
+                    ReadOnly = true,
+                }),
+        ];
+        if (execution is { } executing)
+        {
+            tools.Add(new ProbeTool(frontends, executing).Create());
+        }
+
+        return tools;
+    }
 
     public CallToolResult Compare(
         [Description("Path to the legacy solution (.sln or .slnx).")] string legacy,
@@ -50,13 +65,13 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
         [Description("Path to a previous SARIF log; results already in it are reported as unchanged.")] string? baseline = null,
         [Description("Loop unrolling bound; overrides the config's, must be positive.")] int? bound = null,
         [Description("Solver timeout per procedure pair in milliseconds; overrides the config's, must be positive.")] int? timeoutMs = null) =>
-        Run(new CompareOptions(legacy, modern, string.Empty, baseline, config, FailOn: null, DryRun: false) { Bound = bound, TimeoutMs = timeoutMs });
+        Run(new CompareOptions(legacy, modern, NoOutPath, baseline, config, FailOn: null, DryRun: false) { Bound = bound, TimeoutMs = timeoutMs });
 
     public CallToolResult LowerOnly(
         [Description("Path to the legacy solution (.sln or .slnx).")] string legacy,
         [Description("Path to the modern solution (.sln or .slnx).")] string modern,
         [Description("Path to an equiv.config.json.")] string? config = null) =>
-        Run(new CompareOptions(legacy, modern, string.Empty, BaselinePath: null, config, FailOn: null, DryRun: false, LowerOnly: true));
+        Run(new CompareOptions(legacy, modern, NoOutPath, BaselinePath: null, config, FailOn: null, DryRun: false, LowerOnly: true));
 
     private CallToolResult Run(CompareOptions options)
     {

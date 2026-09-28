@@ -20,6 +20,9 @@ namespace Equiv.Execute;
 /// </summary>
 public sealed class Replayer(IDriverHost host)
 {
+    /// <summary>The culture every replay runs under first, and the <c>probe</c> tool's default (ticket M5-002).</summary>
+    public const string Culture = "invariant";
+
     private readonly DriverRunner runner = new(host, RuntimeDiff.CaseTimeout);
 
     public ReplayResult Replay(ReplayPlan plan, Counterexample model, IrProcedure old, IrProcedure @new)
@@ -53,6 +56,22 @@ public sealed class Replayer(IDriverHost host)
             _ => ReplayResult.NotReproduced(legacy[0], modern[0]),
         };
     }
+
+    /// <summary>
+    /// Runs <paramref name="plan"/>'s case on each side once under <paramref name="culture"/>, with no comparison: an
+    /// agent's own hunch about a pair (ADR 0035, ADR 0036; ticket M5-002's <c>probe</c>), never a verdict.
+    /// </summary>
+    public (ExecutionOutcome Legacy, ExecutionOutcome Modern) Run(ReplayPlan plan, string culture)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(culture);
+
+        ExecutionDrivers drivers = plan.Drivers ?? throw new InvalidOperationException($"the plan is not constructible: {plan.Reason}");
+        return (Once(drivers.Legacy, plan.Legacy, culture), Once(drivers.Modern, plan.Modern, culture));
+    }
+
+    private ExecutionOutcome Once(string driver, ExecutionInput input, string culture) =>
+        runner.Side(driver, new ExecutionRequest(new CallIdentity(driver), [input], [culture]))[0];
 
     /// <summary>Whether the model's call trace holds a runtime-changed callee, which is what makes the Divergent EQ006.</summary>
     private static bool RuntimeChanged(Counterexample model) =>
