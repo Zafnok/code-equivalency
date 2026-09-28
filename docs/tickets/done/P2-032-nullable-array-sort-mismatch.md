@@ -1,5 +1,5 @@
 # P2-032 Verifying crashes on a nullable-annotation mismatch between an array type and its `?` form
-Status: in-progress
+Status: done (PR #246)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
