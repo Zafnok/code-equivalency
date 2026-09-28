@@ -1,0 +1,152 @@
+name: Rolling release
+
+# Every main commit that is green in CI, CodeQL and SonarQube Cloud gets the next version tagged
+# and released (policy: .claude/skills/equiv-release). Patch by default; a `Release: minor` or
+# `Release: major` footer since the last tag, or a manual dispatch, picks a bigger bump.
+on:
+  # Fires once per finished workflow; the last of the three to finish for a commit is the one
+  # that finds all three green and releases. The names must match those workflows' `name:`.
+  workflow_run:
+    workflows: [CI, CodeQL, SonarQube Cloud]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version part to bump for main's current tip (it must already be green).
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: read
+
+# Near-simultaneous completions queue here instead of racing to tag the same commit twice; the
+# already-tagged check then skips the later one. Never cancelled mid-release.
+concurrency:
+  group: rolling-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    # workflow_run's branch filter matches a PR whose head branch is called main too (and
+    # CodeQL's schedule): only a push to main is a release candidate.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      # actions: read to list the three workflows' runs; contents: write to push the tag.
+      actions: read
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          # Every tag and the log since the last one, for the version and the Release: footers.
+          fetch-depth: 0
+
+      # Only main's tip is released: an older commit that turns green after a newer one landed
+      # is superseded by it. Still-running siblings mean a later completion will release; a
+      # failed one means this commit is never released and the next green commit takes the
+      # version instead.
+      - name: Check main's tip is green across the board
+        id: green
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          tip=$(git rev-parse HEAD)
+          if [[ "$EVENT_NAME" == workflow_run && "$RUN_SHA" != "$tip" ]]; then
+            echo "$RUN_SHA is no longer main's tip ($tip); nothing to release."
+            exit 0
+          fi
+          pending=()
+          failed=()
+          for wf in ci.yml codeql.yml sonar.yml; do
+            run=$(gh api "repos/$REPO/actions/workflows/$wf/runs?head_sha=$tip&event=push&branch=main&per_page=1" \
+              --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion)"')
+            case "$run" in
+              "completed success") ;;
+              "" | queued* | in_progress* | waiting* | requested* | pending*) pending+=("$wf") ;;
+              *) failed+=("$wf ($run)") ;;
+            esac
+          done
+          if (( ${#failed[@]} )); then
+            echo "::notice::$tip is not released: ${failed[*]} did not succeed."
+            exit 0
+          fi
+          if (( ${#pending[@]} )); then
+            echo "$tip: still waiting on ${pending[*]}; its completion will release."
+            exit 0
+          fi
+          echo "sha=$tip" >> "$GITHUB_OUTPUT"
+
+      - name: Tag the next version
+        id: version
+        if: steps.green.outputs.sha != ''
+        shell: bash
+        env:
+          SHA: ${{ steps.green.outputs.sha }}
+          BUMP: ${{ inputs.bump }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          # A dispatched minor/major may re-tag a commit already released as a patch (the tip
+          # usually is, by the time anyone dispatches); MinVer then reads the higher tag.
+          existing=$(git tag --points-at "$SHA" | grep '^v' || true)
+          if [[ -n "$existing" && ( "$EVENT_NAME" != workflow_dispatch || "$BUMP" == patch ) ]]; then
+            echo "$SHA is already tagged ($(tr '\n' ' ' <<< "$existing")); nothing to do."
+            exit 0
+          fi
+          # Highest release tag; prerelease tags (v1.2.3-rc.1) are ignored. sed, not head, so
+          # the pipe never closes early under pipefail.
+          last=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n 1p || true)
+          if [[ -z "$last" ]]; then
+            next=v0.1.0
+            BUMP=initial
+          else
+            if [[ -z "$BUMP" ]]; then
+              # Squash merges keep each commit's body, so a footer on any commit in the PR counts.
+              footers=$(git log "$last..$SHA" --format=%B | tr -d '\r' \
+                | grep -ioE '^Release:[[:space:]]*(major|minor)[[:space:]]*$' || true)
+              if grep -qi major <<< "$footers"; then BUMP=major
+              elif grep -qi minor <<< "$footers"; then BUMP=minor
+              else BUMP=patch
+              fi
+            fi
+            IFS=. read -r major minor patch <<< "${last#v}"
+            # 0.x: 1.0.0 is the launch and only a deliberate dispatch cuts it. A breaking change
+            # before then bumps minor (semver's 0.x rule), so a stray major footer does too.
+            if [[ "$major" == 0 && "$BUMP" == major && "$EVENT_NAME" != workflow_dispatch ]]; then
+              echo "::notice::Release: major footer before 1.0.0 bumps minor; dispatch with bump=major to launch 1.0.0."
+              BUMP=minor
+            fi
+            case "$BUMP" in
+              major) next="v$((major + 1)).0.0" ;;
+              minor) next="v$major.$((minor + 1)).0" ;;
+              patch) next="v$major.$minor.$((patch + 1))" ;;
+              *) echo "::error::unknown bump '$BUMP'"; exit 1 ;;
+            esac
+          fi
+          echo "Tagging $SHA as $next ($BUMP bump since ${last:-no tag})."
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$next" "$SHA" -m "equiv ${next#v}"
+          git push origin "refs/tags/$next"
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+
+  # A tag pushed with GITHUB_TOKEN does not trigger release.yml's own tag-push trigger.
+  release:
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
