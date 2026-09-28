@@ -1,5 +1,5 @@
 # P1-011 Spike: would equality saturation close changed pairs that congruence and Z3 cannot?
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M3-015, M4-004
@@ -55,3 +55,11 @@ Rules over constructs that do not lower (`foreach` and friends), which cannot be
 over IR. Any engine integration.
 
 ## Notes
+- Result: 0 of 1,195 changed pairs (0.0%) close under the rule set; below the 5% bar, so criterion 3 is the ROADMAP post-MVP line, not an ADR. 735 of the 1,195 (61.5%) have identical serialisations and are changed only because a side is runtime-sensitive. The other 460 differ by callee, overload, literal or statement, never by an operand reordering. Report: `docs/runs/2026-09-28-egraph-spike.md`.
+- Decision: population -> every changed pair, split by whether either body holds an opaque, instead of the SARIF-joined Unknown(opaque) set. Alternatives: wait for a full solver run to join against. Rule: the Unknown(opaque) pairs are a subset of the pairs holding an opaque, so zero closures over the superset is the exact count; a full run at 516413c on this 4-core Linux box was 5% done after 22 minutes. The SARIF join is implemented and was checked on `samples/business-layer` (6 changed pairs = census, 1 Unknown(opaque)).
+- Decision: reaching `BodyFingerprinter.Text` without touching `src/` -> the spike's assembly is named `Equiv.Tests.Integration`, which already has `InternalsVisibleTo` on `Equiv.Frontend.CSharp`, and it wraps the production lowering through `CSharpFrontend`'s internal lowering seam. Alternatives: an `InternalsVisibleTo` for the spike (changes `src/`, criterion 4); copying `BoundSerialiser` (313 lines, over the size guard, and a copy is not the canonical text). Rule: criterion 4.
+- Decision: rule guards -> each rule fires only where it is an IR identity: integral or `bool` operators with no operator method; no associativity under `checked`; operands reordered (commutativity, comparison flips) only when both are pure, since C# evaluates left to right; `x-y` only for `int`/`long`; no rule over floating point, which ADR 0025 makes uninterpreted. Alternatives: the rules unguarded. Rule: criterion 3 wants rules Z3 can prove over IR. The guards cannot hide a closure here: no residual is a reordering.
+- Decision: `a == b` ↔ `b == a` counts as a comparison flip. Rule: criterion 1's list names comparison flips without restricting them to `<`/`>`.
+- Decision: the spike is not in `Equiv.slnx`, has no lock file, and builds with style analyzers off. It is throwaway measurement code that no gate builds. Compiler warnings remain errors.
+- Linux: Git Extensions loads and lowers on Linux with `EnableWindowsTargeting=true` and the `-Prepare` reference assemblies. `corpus.ps1 -Env` prints `MSBuildSDKsPath=/usr/local/bin/sdk/...` on this box, which is the dotnet symlink's directory, not the SDK's. The run left it unset. Not fixed here (out of scope).
+- `.corpus/` SARIF files start with a UTF-8 BOM, so `JsonDocument.Parse(byte[])` rejects them; read them as text.

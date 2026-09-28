@@ -511,6 +511,7 @@ are unchanged; a later census that shows more changed pairs can move any of thes
 - Java frontend (Eclipse JDT sidecar) reusing Core, Verify, Cli unchanged.
 - Web UI: SARIF viewer + CFG split pane (React Flow). Only after users ask.
 - SonarQube: confirm `sonar.sarifReportPaths` ingestion of EQ* rules; GitHub Code Scanning upload step in `action.yml`.
+- Congruence modulo verified rewrites (equality saturation, P1-011): measured on Git Extensions 2026-09-28, 0 of 1,195 changed pairs (0.0%) close under the rule set, below ADR 0028's 5% bar; not scheduled (`docs/runs/2026-09-28-egraph-spike.md`).
 
 From the 2026-09-24 second-oracle review, unticketed until a result above asks for them:
 - Shadowing the residual in staging or production: generate a Scientist.NET experiment, or a
