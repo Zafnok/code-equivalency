@@ -1,5 +1,5 @@
 # M6-001 Run the release image as a Container Apps Job, inside the free grant
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-004
@@ -63,3 +63,38 @@ Queue triggers, blob inputs, an HTTP API, authentication, API keys, quotas, CI d
 Dedicated workload profiles, `equiv mcp` over HTTP, multi-region.
 
 ## Notes
+- Decision (`equiv-decide`): a manual execution takes no parameters unless the job's container is
+  re-declared in the start call, and the CLI's override semantics for `--env-vars`/`--command` on
+  `az containerapp job start` are not documented precisely enough to rely on offline. So the sample name
+  travels through the share: `run.ps1` uploads it to `/mnt/work/request/sample`, and the job's fixed
+  command (a bash script inline in `main.bicep`) reads it. The command is still exactly the ticket's
+  `equiv compare --legacy /mnt/work/samples/<name>/legacy/*.sln --modern .../modern/*.slnx --out
+  /mnt/work/out/<name>.sarif`, preceded by a `dotnet restore` of each sample project (parity-run.ps1 does
+  the same before compare; restore output is Linux-specific, so `deploy.ps1` uploads `samples/` without
+  `bin/` and `obj/`). The script also tees its output to `out/<name>.log` and writes `out/<name>.exit`,
+  because logs are off (no Log Analytics workspace: it is not a resource type criteria 1 and 2 name).
+- Decision (`equiv-decide`): `main.bicepparam` reads `EQUIV_VERSION`, `EQUIV_OWNER_EMAIL` and
+  `EQUIV_IMAGE_OWNER` from the environment, which `deploy.ps1` sets, because `az deployment group create`
+  cannot combine a `.bicepparam` file with inline `--parameters`. `deploy.ps1` gains optional `-OwnerEmail`
+  (default: the signed-in account when it is an email address), `-ResourceGroup` (default `equiv-aca`) and
+  `-ImageOwner` (default `zafnok`) beyond the three parameters criterion 3 names.
+- Decision (`equiv-decide`): the Azure Files mount uses `mountOptions: uid=1654,gid=1654,file_mode=0777,dir_mode=0777,nobrl`.
+  M3-004's image runs as the base image's `app` user (uid/gid 1654), and an SMB mount is otherwise owned by
+  root, which would fail the `obj/` writes MSBuildWorkspace needs. `HOME=/tmp` is set on the container so
+  NuGet and the .NET CLI have a writable home.
+- Verified without Azure (2026-09-27): `bicep build deploy/aca/main.bicep` and `bicep build-params
+  deploy/aca/main.bicepparam` are clean (Bicep CLI 0.47.16 from the `Azure.Bicep.CommandLine.win-x64` NuGet
+  package, unpacked in a scratch directory because this box has no `az`); the embedded bash passes `bash -n`;
+  the three scripts parse. Not verified: the deployment itself, the script inside the real image (Docker
+  Desktop was not running), and the CLI flags of `az containerapp job start|execution show` and
+  `az storage file upload-batch|download`, all written from documentation.
+- Blocker for criteria 4 and 5 (2026-09-27): they need a real subscription (criterion 7: ask before the
+  first `deploy.ps1`), and `ghcr.io/zafnok/equiv:<version>` does not exist yet: the repository has no `v*`
+  tag and no release (M3-004 left `release.yml` unexercised pending a `v0.1.0-rc.1` tag, which needs the
+  user's go-ahead). The first push also creates the GHCR package private; Container Apps pulls it
+  anonymously, so it must be made public. `release.yml` builds `docker build .` on `ubuntu-latest`, which
+  is linux/amd64, the only architecture Container Apps runs.
+- To do once those are unblocked: record each execution's duration and the peak memory Azure reports
+  (Azure Monitor metrics for the job resource; if it reports none, say so here) and the month's vCPU-seconds,
+  GiB-seconds and charge from Cost Management (criterion 5), plus the `sarif-parity.ps1` result against
+  CI's `parity-Linux` artifact for the same version (criterion 4).
