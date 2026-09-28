@@ -23,17 +23,31 @@ These packages are linked into the `equiv` binaries and container image, so thei
 | Microsoft.CodeAnalysis.Workspaces.MSBuild | 5.9.0 | MIT |
 | Microsoft.Diagnostics.Tracing.EventRegister | 1.1.28 | Microsoft PerfView .NET Library EULA |
 | Microsoft.Diagnostics.Tracing.TraceEvent | 3.1.3 | MIT |
+| Microsoft.Extensions.AI.Abstractions | 10.8.3 | MIT |
+| Microsoft.Extensions.Caching.Abstractions | 10.0.10 | MIT |
+| Microsoft.Extensions.Configuration.Abstractions | 10.0.8 | MIT |
+| Microsoft.Extensions.Configuration.Abstractions | 10.0.10 | MIT |
 | Microsoft.Extensions.DependencyInjection | 10.0.1 | MIT |
 | Microsoft.Extensions.DependencyInjection | 10.0.8 | MIT |
 | Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.1 | MIT |
 | Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.8 | MIT |
+| Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.10 | MIT |
+| Microsoft.Extensions.Diagnostics.Abstractions | 10.0.10 | MIT |
+| Microsoft.Extensions.FileProviders.Abstractions | 10.0.8 | MIT |
+| Microsoft.Extensions.FileProviders.Abstractions | 10.0.10 | MIT |
+| Microsoft.Extensions.Hosting.Abstractions | 10.0.10 | MIT |
 | Microsoft.Extensions.Logging | 10.0.1 | MIT |
 | Microsoft.Extensions.Logging.Abstractions | 10.0.1 | MIT |
+| Microsoft.Extensions.Logging.Abstractions | 10.0.10 | MIT |
 | Microsoft.Extensions.Options | 10.0.1 | MIT |
+| Microsoft.Extensions.Options | 10.0.10 | MIT |
 | Microsoft.Extensions.Primitives | 10.0.1 | MIT |
 | Microsoft.Extensions.Primitives | 10.0.8 | MIT |
+| Microsoft.Extensions.Primitives | 10.0.10 | MIT |
 | Microsoft.VisualStudio.SolutionPersistence | 1.0.52 | MIT |
 | Microsoft.Z3 | 5.1.0 | MIT |
+| ModelContextProtocol | 2.2.0 | Apache-2.0 |
+| ModelContextProtocol.Core | 2.2.0 | Apache-2.0 |
 | Newtonsoft.Json | 13.0.3 | MIT |
 | Newtonsoft.Json | 13.0.4 | MIT |
 | Sarif.Sdk | 5.7.0 | MIT |
@@ -44,6 +58,10 @@ These packages are linked into the `equiv` binaries and container image, so thei
 | System.Composition.Hosting | 10.0.1 | MIT |
 | System.Composition.Runtime | 10.0.1 | MIT |
 | System.Composition.TypedParts | 10.0.1 | MIT |
+
+### Apache-2.0 License
+
+Full text: <https://www.apache.org/licenses/LICENSE-2.0>
 
 ### MIT License
 
@@ -88,10 +106,8 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 | Microsoft.Bcl.AsyncInterfaces | 6.0.0 | MIT |
 | Microsoft.Bcl.AsyncInterfaces | 10.0.12 | MIT |
 | Microsoft.Extensions.Configuration | 10.0.8 | MIT |
-| Microsoft.Extensions.Configuration.Abstractions | 10.0.8 | MIT |
 | Microsoft.Extensions.Configuration.FileExtensions | 10.0.8 | MIT |
 | Microsoft.Extensions.Configuration.Json | 10.0.8 | MIT |
-| Microsoft.Extensions.FileProviders.Abstractions | 10.0.8 | MIT |
 | Microsoft.Extensions.FileProviders.Physical | 10.0.8 | MIT |
 | Microsoft.Extensions.FileSystemGlobbing | 10.0.8 | MIT |
 | Microsoft.Testing.Extensions.Telemetry | 2.4.0 | MIT |

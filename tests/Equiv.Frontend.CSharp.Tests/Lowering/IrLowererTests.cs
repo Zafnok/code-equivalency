@@ -112,6 +112,41 @@ public sealed class IrLowererTests
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
 
     /// <summary>
+    /// Ticket P2-025: a deconstruction of a tuple literal reads every element, converted to its target's type, before it
+    /// stores any, so <c>(a, b) = (b, a)</c> swaps; declared targets are locals like any other, and a loop can step with one.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(int a, int b) { (a, b) = (b, a); return a - b; }", 5, 7, 2)]
+    [InlineData("static int M(int a, int b) { (a, b) = (a, b); return a - b; }", 5, 7, -2)]
+    [InlineData("static int M(int a, int b) { long x; int y; (x, y) = (a, 3); return (int)x * y + b; }", 5, 7, 22)]
+    [InlineData("static int M(int a, int b) { long x, y; (x, y) = ((long, long))(a, b); return (int)(x - y); }", 5, 7, -2)]
+    [InlineData("static int M(int a, int b) { var (x, y) = (a + b, a); return x - y; }", 5, 7, 7)]
+    [InlineData("static int M(int a, int b) { (int x, int y) = (b, a); return x - y; }", 5, 7, 2)]
+    [InlineData("static int M(int a, int b) { int x = 0, y = 1; for (int i = 0; i < a; i++) (x, y) = (y, x + y); return x + b; }", 5, 7, 12)]
+    public void DeconstructionOfATupleLiteralReadsEveryElementBeforeItStores(string members, int a, int b, int expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
+    }
+
+    /// <summary>
+    /// Ticket P2-025: a deconstruction the lowering does not take apart, of a value that is not a tuple literal, into a nested
+    /// tuple, a property or an array element, or whose own value is used, is one opaque with reason <c>DeconstructionAssignment</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M((int, int) p) { (int x, int y) = p; return x + y; }")]
+    [InlineData("static int M((int, int) p) { int x, y; (x, y) = ((int, int))p; return x + y; }")]
+    [InlineData("struct S { public static implicit operator S((int, int) t) => default; public void Deconstruct(out int a, out int b) { a = 1; b = 2; } } static int M(int a) { int x, y; (x, y) = (S)(a, a); return x + y; }")]
+    [InlineData("static int M(int a) { int x, y, z; (x, (y, z)) = (a, (a, a)); return x + y + z; }")]
+    [InlineData("int P { get; set; } void M(int a) { (P, _) = (a, a); }")]
+    [InlineData("static void M(int[] u, int a) { (u[0], u[1]) = (a, a); }")]
+    [InlineData("static (int, int) M(int a, int b) => (a, b) = (b, a);")]
+    public void DeconstructionItDoesNotTakeApartIsOpaque(string members) =>
+        Assert.Equal("DeconstructionAssignment", Assert.Single(Opaques(Method(members)).Select(static o => o.Reason).Distinct(StringComparer.Ordinal)));
+
+    /// <summary>
     /// Ticket P2-029 acceptance criterion 2: a call through <c>dynamic</c> is bound by the DLR at run time, so there is
     /// no callee identity to call; it stays opaque by design with reason <c>DynamicInvocation</c>.
     /// </summary>
@@ -240,6 +275,36 @@ public sealed class IrLowererTests
         Assert.Equal(new IrSort("C"), receiver.Type);
         Assert.Equal(receiver, Assert.Single(Assert.Single(Calls(procedure)).Args));
     }
+
+    /// <summary>
+    /// Ticket P2-031: a field declared on a base class, read through a receiver typed as a derived one, keys its map with
+    /// the receiver upcast through <c>cast.&lt;Derived&gt;.&lt;Base&gt;</c>, so the key is of the map's sort.
+    /// </summary>
+    [Theory]
+    [InlineData("class B { public int f; } class C : B { int N() => f; }", "this")]
+    [InlineData("class B { public int f; } class C : B { static int N(C c) => c.f; }", "c")]
+    [InlineData("class B { public int f { get; set; } } class C : B { int N() => f; }", "this")]
+    public void AnInheritedFieldIsReadAtTheUpcastReceiver(string source, string receiver)
+    {
+        IrProcedure procedure = Source(source, "N");
+
+        IrParameter cast = Assert.Single(procedure.Parameters, static p => p.Var.Name is "cast.C.B");
+        Assert.Equal(new IrMap(new IrSort("C"), new IrSort("B")), cast.Var.Type);
+        IrParameter field = Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.B.f");
+        Assert.Equal(new IrSort("B"), ((IrMap)field.Var.Type).Key);
+        IrMapRead[] reads = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>()];
+        IrMapRead upcast = Assert.Single(reads, r => r.Map == cast.Var);
+        Assert.Equal(receiver, upcast.Key.Name);
+        Assert.Contains(reads, r => r.Map.Name.StartsWith("field.B.f", StringComparison.Ordinal) && r.Key == upcast.Target);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A field read through a receiver of its declaring type reads no cast map.</summary>
+    [Fact]
+    public void AFieldOfTheReceiversOwnTypeIsReadAtTheReceiver() =>
+        Assert.DoesNotContain(
+            Source("class C { int f; static int N(C c) => c.f; }", "N").Parameters,
+            static p => p.Var.Name.StartsWith("cast.", StringComparison.Ordinal));
 
     [Fact]
     public void AStructsThisIsOpaque() =>
@@ -1252,6 +1317,47 @@ public sealed class IrLowererTests
         Assert.Equal("rethrow", Assert.Single(Opaques(procedure)).Reason);
         Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
     }
+
+    /// <summary>
+    /// `if (c) return; throw;` in a `catch` is one CFG block too, but the rethrow is its conditional successor, not its
+    /// fall-through (found by the M4-007 run on `gitextensions-8522`, ticket P2-034). It lowered to a bare
+    /// NullReferenceException; now the rethrow is opaque and the path that returns still runs.
+    /// </summary>
+    [Theory]
+    [InlineData(6, 2, 3)]
+    [InlineData(6, 0, 7)]
+    public void AReturnBeforeARethrowInsideACatchLowers(int a, int b, int expected)
+    {
+        IrProcedure procedure = Method("static int M(int a, int b) { try { return a / b; } catch (DivideByZeroException) { if (a > 5) return 7; throw; } }");
+
+        Assert.Equal("rethrow", Assert.Single(Opaques(procedure)).Reason);
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
+    }
+
+    /// <summary>
+    /// The shape of Git Extensions' <c>ConfigureJoinableTaskFactoryAttribute.AfterTest</c> (ticket P2-034): a filtered
+    /// <c>catch</c> whose body is an <c>if</c> and then <c>throw;</c>, so the <c>if</c>'s false edge is the rethrow.
+    /// </summary>
+    [Fact]
+    public void AnIfThenRethrowInsideAFilteredCatchLowers() =>
+        Assert.Contains(
+            Opaques(Method("""
+                static int s;
+                static void M(System.Threading.CancellationTokenSource cts, string v)
+                {
+                    try
+                    {
+                        try { System.Threading.Thread.Sleep(1); }
+                        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+                        {
+                            if (int.TryParse(v, out var sleep) && sleep > 0) { System.Threading.Thread.Sleep(sleep); }
+                            throw;
+                        }
+                    }
+                    finally { s = 0; }
+                }
+                """)),
+            static o => string.Equals(o.Reason, "rethrow", StringComparison.Ordinal));
 
     [Fact]
     public void RethrowIsOpaqueInsideACatch() =>

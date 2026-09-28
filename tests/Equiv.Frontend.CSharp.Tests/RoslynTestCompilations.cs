@@ -35,7 +35,7 @@ internal static class RoslynTestCompilations
             assemblyName,
             assemblyName,
             LanguageNames.CSharp,
-            compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary),
+            compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true),
             metadataReferences: [.. References, .. extraReferences]));
         Document document = workspace.AddDocument(project.Id, "Snippet.cs", SourceText.From(source));
 

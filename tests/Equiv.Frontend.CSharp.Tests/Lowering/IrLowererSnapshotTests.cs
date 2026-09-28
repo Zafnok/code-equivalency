@@ -259,6 +259,10 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task DefaultValueOfATypeParameter() => Dump("static T M<T>(bool has, T value) where T : class => has ? value : default;");
 
+    /// <summary>Ticket P2-023 acceptance criterion 2: <c>&amp;x</c> is opaque with reason <c>AddressOf</c>, and not a shared fragment.</summary>
+    [Fact]
+    public Task AddressOf() => Dump("unsafe static int* M(int x) => &x;");
+
     /// <summary>Ticket P2-008 acceptance criterion 1: the CFG's <c>IsNull</c> of <c>?.</c> and <c>??</c> reads the operand's null shadow.</summary>
     [Fact]
     public Task NullConditionalLengthWithFallback() => Dump("static int M(string s) => s?.Length ?? 0;");
@@ -298,6 +302,19 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task QueryExpression() => Verify(IrText.Dump(Lowered.Source(
         "using System.Linq;\nclass C { static int M(int[] xs) { int s = 0; foreach (var x in from n in xs where n % 2 == 0 select n) s += x; return s; } }")));
+
+    /// <summary>Ticket P2-025 acceptance criterion 2: a tuple literal's elements are all read, then stored left to right, so this swaps.</summary>
+    [Fact]
+    public Task DeconstructionOfATupleLiteral() => Dump("static int M(int a, int b) { (a, b) = (b, a); return a + b; }");
+
+    /// <summary>Ticket P2-025 acceptance criterion 2: a field's receiver first, a discard's element read and dropped, a string's null shadow stored.</summary>
+    [Fact]
+    public Task DeconstructionIntoAFieldADiscardAndAString() => Dump("int f; string M(int a, string s, string t) { (f, _, s) = (a, a + 1, t); return s; }");
+
+    /// <summary>Ticket P2-025 acceptance criterion 2: a <c>Deconstruct</c> method stays opaque, and its targets are written with unknown values.</summary>
+    [Fact]
+    public Task DeconstructionThroughADeconstructMethod() =>
+        Dump("struct P { public int X, Y; public void Deconstruct(out int x, out int y) { x = X; y = Y; } } static int M(P p) { int x, y; (x, y) = p; return x + y; }");
 
     /// <summary>Ticket P2-024 acceptance criterion 2: an anonymous object creation stays opaque with reason <c>AnonymousObjectCreation</c>.</summary>
     [Fact]

@@ -16,6 +16,7 @@
 
     <!-- Equiv.Cli -->
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
+    <PackageVersion Include="ModelContextProtocol" Version="2.2.0" />
 
     <!-- tests -->
     <PackageVersion Include="xunit.v3" Version="4.0.1" />
