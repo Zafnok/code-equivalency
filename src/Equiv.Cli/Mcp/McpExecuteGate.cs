@@ -19,19 +19,24 @@ internal static class McpExecuteGate
         ExecutionEnvironment? execution,
         CancellationToken cancellationToken)
     {
+        EquivTools tools;
         if (!execute)
         {
-            return await McpCommand.ServeAsync(input, output, new EquivTools(frontends, backend), cancellationToken).ConfigureAwait(false);
+            tools = new EquivTools(frontends, backend);
         }
-
-        ExecutionEnvironment executing = execution ?? ExecutionEnvironment.Current;
-        if (!executing.IsWindows)
+        else
         {
-            await Console.Error.WriteLineAsync(ExecutionEnvironment.NeedsWindows).ConfigureAwait(false);
-            return ExitCodes.UsageError;
+            ExecutionEnvironment executing = execution ?? ExecutionEnvironment.Current;
+            if (!executing.IsWindows)
+            {
+                await Console.Error.WriteLineAsync(ExecutionEnvironment.NeedsWindows).ConfigureAwait(false);
+                return ExitCodes.UsageError;
+            }
+
+            await Console.Error.WriteLineAsync(ExecutionEnvironment.Note).ConfigureAwait(false);
+            tools = new EquivTools(frontends, backend, executing);
         }
 
-        await Console.Error.WriteLineAsync(ExecutionEnvironment.Note).ConfigureAwait(false);
-        return await McpCommand.ServeAsync(input, output, new EquivTools(frontends, backend, executing), cancellationToken).ConfigureAwait(false);
+        return await McpCommand.ServeAsync(input, output, tools, cancellationToken).ConfigureAwait(false);
     }
 }
