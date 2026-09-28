@@ -1,4 +1,4 @@
-﻿using Equiv.Core.Ir;
+using Equiv.Core.Ir;
 
 using Xunit;
 
@@ -298,6 +298,10 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task QueryExpression() => Verify(IrText.Dump(Lowered.Source(
         "using System.Linq;\nclass C { static int M(int[] xs) { int s = 0; foreach (var x in from n in xs where n % 2 == 0 select n) s += x; return s; } }")));
+
+    /// <summary>Ticket P2-024 acceptance criterion 2: an anonymous object creation stays opaque with reason <c>AnonymousObjectCreation</c>.</summary>
+    [Fact]
+    public Task AnonymousObjectCreation() => Dump("static int M(int x, int y) { var p = new { X = x, Y = y }; return p.X + p.Y; }");
 
     private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }
