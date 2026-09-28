@@ -91,11 +91,11 @@ public static class SyntaxMutator
         };
     }
 
-    // -- RenameLocals: one site, renaming the first local the method declares throughout its body. --
+    // -- RenameLocals: one site, renaming the first local the method declares, and never names in an argument, throughout its body. --
 
     private static IReadOnlyList<Func<MethodDeclarationSyntax>> RenameLocalsCandidates(MethodDeclarationSyntax method)
     {
-        VariableDeclaratorSyntax? first = Nodes<VariableDeclaratorSyntax>(method, static _ => true).FirstOrDefault();
+        VariableDeclaratorSyntax? first = Nodes<VariableDeclaratorSyntax>(method, d => !IsNamedInArgument(method, d.Identifier.Text)).FirstOrDefault();
         if (first is null)
         {
             return [];
@@ -105,6 +105,17 @@ public static class SyntaxMutator
         string renamed = FreshName(original, UsedNames(method));
         return [() => RenameIdentifier(method, original, renamed)];
     }
+
+    /// <summary>
+    /// Whether <paramref name="name"/> is written anywhere inside an argument in the body, lambdas included. A parameter
+    /// marked <c>[CallerArgumentExpression]</c> receives its argument's source text (MSTest 4's <c>Assert.AreEqual</c>
+    /// does), and <c>nameof(x)</c> is an argument too, so renaming a local written there changes a string the program
+    /// sees: the rename is then not behaviour-preserving (ticket P2-036). With no semantic model the callee cannot be
+    /// checked, so every argument counts.
+    /// </summary>
+    private static bool IsNamedInArgument(MethodDeclarationSyntax method, string name) =>
+        method.Body!.DescendantNodes().OfType<IdentifierNameSyntax>()
+            .Any(id => string.Equals(id.Identifier.Text, name, StringComparison.Ordinal) && id.FirstAncestorOrSelf<ArgumentSyntax>() is not null);
 
     private static MethodDeclarationSyntax RenameIdentifier(MethodDeclarationSyntax method, string from, string to)
     {
