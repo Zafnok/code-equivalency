@@ -23,6 +23,9 @@ namespace Equiv.Cli;
 /// </summary>
 internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution = null)
 {
+    /// <summary>The report path a tool run passes; never read, since the log goes to <see cref="LogSink"/> and no tool sets DryRun.</summary>
+    private const string NoOutPath = "";
+
     /// <summary>Every tool, registered explicitly: no assembly scanning (ADR 0033).</summary>
     public IReadOnlyList<McpServerTool> Create()
     {
@@ -62,13 +65,13 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
         [Description("Path to a previous SARIF log; results already in it are reported as unchanged.")] string? baseline = null,
         [Description("Loop unrolling bound; overrides the config's, must be positive.")] int? bound = null,
         [Description("Solver timeout per procedure pair in milliseconds; overrides the config's, must be positive.")] int? timeoutMs = null) =>
-        Run(new CompareOptions(legacy, modern, string.Empty, baseline, config, FailOn: null, DryRun: false) { Bound = bound, TimeoutMs = timeoutMs });
+        Run(new CompareOptions(legacy, modern, NoOutPath, baseline, config, FailOn: null, DryRun: false) { Bound = bound, TimeoutMs = timeoutMs });
 
     public CallToolResult LowerOnly(
         [Description("Path to the legacy solution (.sln or .slnx).")] string legacy,
         [Description("Path to the modern solution (.sln or .slnx).")] string modern,
         [Description("Path to an equiv.config.json.")] string? config = null) =>
-        Run(new CompareOptions(legacy, modern, string.Empty, BaselinePath: null, config, FailOn: null, DryRun: false, LowerOnly: true));
+        Run(new CompareOptions(legacy, modern, NoOutPath, BaselinePath: null, config, FailOn: null, DryRun: false, LowerOnly: true));
 
     private CallToolResult Run(CompareOptions options)
     {

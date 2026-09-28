@@ -10,33 +10,34 @@ namespace Equiv.Cli.Mcp;
 /// </summary>
 internal static class McpExecuteGate
 {
-    public static async Task<int> RunAsync(
+    public static Task<int> RunAsync(
         Stream input,
         Stream output,
         IReadOnlyList<ILanguageFrontend> frontends,
         IVerificationBackend backend,
         bool execute,
         ExecutionEnvironment? execution,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        Tools(frontends, backend, execute, execution) is { } tools
+            ? McpCommand.ServeAsync(input, output, tools, cancellationToken)
+            : Task.FromResult(ExitCodes.UsageError);
+
+    /// <summary>The tools to serve, or null when <c>--execute</c> was asked for off Windows.</summary>
+    private static EquivTools? Tools(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, bool execute, ExecutionEnvironment? execution)
     {
-        EquivTools tools;
         if (!execute)
         {
-            tools = new EquivTools(frontends, backend);
+            return new EquivTools(frontends, backend);
         }
-        else
+
+        ExecutionEnvironment executing = execution ?? ExecutionEnvironment.Current;
+        if (!executing.IsWindows)
         {
-            ExecutionEnvironment executing = execution ?? ExecutionEnvironment.Current;
-            if (!executing.IsWindows)
-            {
-                await Console.Error.WriteLineAsync(ExecutionEnvironment.NeedsWindows).ConfigureAwait(false);
-                return ExitCodes.UsageError;
-            }
-
-            await Console.Error.WriteLineAsync(ExecutionEnvironment.Note).ConfigureAwait(false);
-            tools = new EquivTools(frontends, backend, executing);
+            Console.Error.WriteLine(ExecutionEnvironment.NeedsWindows);
+            return null;
         }
 
-        return await McpCommand.ServeAsync(input, output, tools, cancellationToken).ConfigureAwait(false);
+        Console.Error.WriteLine(ExecutionEnvironment.Note);
+        return new EquivTools(frontends, backend, executing);
     }
 }

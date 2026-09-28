@@ -80,18 +80,11 @@ Remote transport. Batch probes. Heap or object-graph arguments.
   internal `OutcomeLine.Name` (not exposed publicly) rather than relying on `enum.ToString()` or widening
   `Equiv.Execute`'s public surface for one caller. Rule: 4 (smaller, self-contained change; the two switches independently
   enforce the same "no enum-formatting reliance" rule this repo already has for wire/report text).
-- Deviation: PR #266's `stryker (Equiv.Cli, Equiv.Cli.Tests)` leg does not clear the `--break-at 90` gate (lands at 87.65%).
-  QUALITY-GATES.md's Mutation row says the score a PR is held to is "the score of the `src/` files it changed" under
-  `--since`, and that scoping is file-level (confirmed empirically: relocating this ticket's new code within
-  `McpCommand.cs`/`EquivTools.cs`, and extracting it to a new file, left the exact same mutant set in scope both times).
-  Registering `probe` touches `EquivTools.Create()` and `McpCommand.Create()`, which pulls the whole file's pre-existing
-  mutants into this PR's score, including 10 that are equivalent by construction given today's design, not missing tests:
-  7 are `.ConfigureAwait(false)` boolean flips (plus the two `DisposeAsync` statements they sit on) in `ServeAsync`'s
-  `finally` and in `McpExecuteGate.RunAsync` — unobservable because neither this console app nor Microsoft.Testing
-  Platform's test host installs a `SynchronizationContext` for an await to capture; 2 are `CompareOptions.OutPath`
-  (`string.Empty`) in `EquivTools.Compare`/`LowerOnly` — read only under `options.DryRun` (`CompareCommand.cs:175`), which
-  the MCP tools never set. Killing them would mean either inventing a Stryker mutant-exclusion mechanism (this repo has
-  no precedent for one; that is a gate-weakening decision per `.claude/skills/equiv-adr`'s bar test, not mine to make
-  unilaterally) or reworking working, analyzer-compliant disposal code against CA2000/CA2007's opposing requirements
-  for no behavioural gain (tried; reverted, see PR #266 discussion). The spec and QUALITY-GATES.md are left as they are.
-  Flagged under "Needs your decision" in PR #266's description.
+- Decision: `McpExecuteGate` checks `--execute` in a synchronous helper (`Tools`, writing ADR 0035's lines with
+  `Console.Error.WriteLine` as `compare --execute` does) and returns `McpCommand.ServeAsync`'s task unawaited, and
+  `EquivTools` passes a `NoOutPath` constant for `CompareOptions.OutPath`. Stryker's `--since` scope is per file, so
+  touching `EquivTools.cs`/`McpCommand.cs` pulls in their whole mutant set; the awaited form added three
+  `ConfigureAwait(false)` flips and the `string.Empty` literals two more, all equivalent (no `SynchronizationContext`
+  is ever captured; `OutPath` is read only under `DryRun`, which no tool sets). Without them `Equiv.Cli` clears
+  `--break-at 90`. Alternatives: Stryker disable comments (no precedent here; weakens the gate); leave the gap (the
+  gate is blocking). Rule: 4 (smaller change, no new mechanism).
