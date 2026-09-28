@@ -419,6 +419,8 @@ the only large ones.
   P1-008.
 - P2-042 (S) A generic call's identity differs on a nullable-annotated type argument (found in
   P2-032).
+- P2-044 (M) A replay driver's protocol stdout is shared with the code under test (found by
+  P2-039's dumps). Needs P2-039.
 
 ## M5 — Agent surface (MCP)
 
