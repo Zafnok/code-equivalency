@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    P1-011: a throwaway measurement, not a product. It is not in Equiv.slnx, so no CI gate builds it.
+    The assembly name borrows the integration tests' InternalsVisibleTo grant on Equiv.Frontend.CSharp,
+    which is the only way to reach BodyFingerprinter's canonical serialisation (ADR 0024) without
+    changing src/ (criterion 4). No lock file: the spike adds no package, and a committed lock file
+    would put it in the licence gate's scan for nothing. Style analyzers are off: this is measurement
+    code that is deleted once the ADR or ROADMAP line lands, not product code; compiler warnings stay errors.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>EgraphSpike</RootNamespace>
+    <AssemblyName>Equiv.Tests.Integration</AssemblyName>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
+  </ItemGroup>
+
+</Project>
