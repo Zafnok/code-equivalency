@@ -16,7 +16,8 @@ namespace Equiv.Tests.Integration;
 
 /// <summary>
 /// Ticket P2-032 end to end: a legacy method without nullable annotations and its modern form with <c>T[]?</c>
-/// parameters and result verify, rather than Z3 throwing on a <c>T[]</c> / <c>T[]?</c> sort mismatch.
+/// parameters and result verify, rather than Z3 throwing on a <c>T[]</c> / <c>T[]?</c> sort mismatch; and (ticket P2-042)
+/// a generic call and its form with an annotated type argument are one uninterpreted function.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class NullableArrayEquivalenceTests
@@ -42,6 +43,13 @@ public sealed class NullableArrayEquivalenceTests
         Assert.IsNotType<Equivalent>(Verify(
             "class C { static string[] M(string[] a, string[] b) => a; }",
             "#nullable enable\nclass C { static string[]? M(string[]? a, string[]? b) => b; }"));
+
+    /// <summary>Ticket P2-042: <c>Empty&lt;string&gt;()</c> and <c>Empty&lt;string?&gt;()</c> are the same call.</summary>
+    [Fact]
+    public void AGenericCallAndItsAnnotatedTypeArgumentFormAreEquivalent() =>
+        Assert.IsType<Equivalent>(Verify(
+            "using System.Collections.Generic;\nusing System.Linq;\nclass C { static IEnumerable<string> M() => Enumerable.Empty<string>(); }",
+            "#nullable enable\nusing System.Collections.Generic;\nusing System.Linq;\nclass C { static IEnumerable<string?> M() => Enumerable.Empty<string?>(); }"));
 
     private static Verdict Verify(string legacy, string modern) =>
         new Z3Backend().Verify(Lower(legacy, isLegacy: true), Lower(modern, isLegacy: false), Options);

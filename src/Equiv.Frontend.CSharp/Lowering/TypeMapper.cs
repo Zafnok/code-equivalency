@@ -18,8 +18,11 @@ internal static class TypeMapper
     /// <summary>The sort-name function that leaves every name as it is.</summary>
     public static readonly Func<string, string> Unmapped = static name => name;
 
-    /// <summary>The display format for a type with no metadata name, less nullable reference annotations (ticket P2-032).</summary>
-    private static readonly SymbolDisplayFormat Unannotated =
+    /// <summary>
+    /// The display format for a type with no metadata name, less nullable reference annotations (ticket P2-032); also a
+    /// generic callee's type arguments (ticket P2-042).
+    /// </summary>
+    public static readonly SymbolDisplayFormat Unannotated =
         SymbolDisplayFormat.CSharpErrorMessageFormat.RemoveMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
     public static IrType Map(ITypeSymbol type) => Map(type, Unmapped);
