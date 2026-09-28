@@ -166,6 +166,13 @@ as `a[index]` (the `array.<Sort>` slice at the array, then the index, null- and 
 after which the index steps by one; the enumerator's `finally` is not run. A loop whose variable is a
 deconstruction, or whose element read is not found, stays the M4-001 enumerator calls.
 
+The CFG captures an assignment's target before a value that branches, and `f ??= v` captures `f`
+(P2-006, P2-007). A captured local or parameter is that variable. A captured field (not a lowered tuple
+element), single-dimensional array element or auto-property is its map at the receiver (and index)
+evaluated at the capture, and any other captured property is its receiver and index arguments evaluated
+there: a read of the capture reads the map or calls the getter, a write writes the map or calls the
+setter, and the capture has no null shadow of its own.
+
 The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
 locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
 each field's receiver, then every element of the literal (each already converted to its target's

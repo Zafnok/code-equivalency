@@ -697,7 +697,8 @@ internal sealed class IrLowerer
         if (operation is IFlowCaptureOperation backed && assignedCaptures.Contains(backed.Id) && heap.Slice(backed.Value, context) is { } slice)
         {
             // A field, an array element or an auto-property's backing field is its heap map (tickets M4-008, P2-007), so, as
-            // for a direct write, its receiver and index are evaluated here, ahead of a value that branches.
+            // for a direct write, its receiver and index are evaluated here, ahead of a value that branches. A read of the
+            // capture, as `f ??= v` makes, reads the map (ticket P2-006).
             sliceTargets[backed.Id] = slice;
             return;
         }
@@ -729,6 +730,21 @@ internal sealed class IrLowerer
         Lower(operation, context);
     }
 
+    /// <summary>Whether a capture stands for a field or property place rather than holding a value of its own (ticket P2-006).</summary>
+    private bool IsCapturedPlace(CaptureId id) => sliceTargets.ContainsKey(id) || propertyTargets.ContainsKey(id);
+
+    /// <summary>
+    /// A capture's value; for one that stands for a field or property place, a read of that place, since <c>f ??= v</c> reads
+    /// the place it may then write (ticket P2-006).
+    /// </summary>
+    private IrVar? CaptureRead(IFlowCaptureReferenceOperation reference, LoweringContext context) => reference.Id switch
+    {
+        CaptureId id when sliceTargets.TryGetValue(id, out HeapLowerer.Access slice) => heap.ReadSlice(slice, context),
+        CaptureId id when propertyTargets.TryGetValue(id, out PropertyAccess? property) =>
+            Accessor(property.Reference, property.Reference.Property.GetMethod, property.Operands, value: null, context),
+        _ => ssa.Load(context.Current, Capture(reference.Id, reference.Type!)),
+    };
+
     private IrVar Value(IOperation operation, LoweringContext context) => Lower(operation, context)!;
 
     /// <summary>
@@ -756,7 +772,7 @@ internal sealed class IrLowerer
             case IParameterReferenceOperation parameter when variables.TryGetValue(parameter.Parameter, out SsaBuilder.Variable? variable):
                 return ssa.Load(context.Current, variable);
             case IFlowCaptureReferenceOperation reference:
-                return ssa.Load(context.Current, Capture(reference.Id, reference.Type!));
+                return CaptureRead(reference, context);
             case ISimpleAssignmentOperation { IsRef: false } assignment:
                 return Assign(assignment, context);
             case IFieldReferenceOperation or ITupleOperation:
@@ -907,11 +923,17 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// The shadow of the variable an operand names, or null when it names none or is not reference-typed. A flow capture
-    /// names its own variable, whose shadow was set when it was captured (ticket P2-008), not the lvalue it may stand for.
+    /// names its own variable, whose shadow was set when it was captured (ticket P2-008), not the lvalue it may stand for;
+    /// one that stands for a field or property place has none (ticket P2-006).
     /// </summary>
     private SsaBuilder.Variable? ShadowOf(IOperation operand)
     {
-        SsaBuilder.Variable? variable = operand is IFlowCaptureReferenceOperation reference ? Capture(reference.Id, reference.Type!) : Target(operand);
+        SsaBuilder.Variable? variable = operand switch
+        {
+            IFlowCaptureReferenceOperation reference when IsCapturedPlace(reference.Id) => null,
+            IFlowCaptureReferenceOperation reference => Capture(reference.Id, reference.Type!),
+            _ => Target(operand),
+        };
         return variable is null ? null : Shadow(variable);
     }
 

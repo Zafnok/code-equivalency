@@ -332,5 +332,23 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task AnonymousObjectCreation() => Dump("static int M(int x, int y) { var p = new { X = x, Y = y }; return p.X + p.Y; }");
 
+    /// <summary>Ticket P2-006 acceptance criterion 2: <c>??=</c> on a field reads its map once, and writes it only when that was null.</summary>
+    [Fact]
+    public Task NullCoalescingAssignmentToAField() =>
+        Dump("System.Collections.Generic.List<int>? items; System.Collections.Generic.List<int> M() => items ??= new System.Collections.Generic.List<int>();");
+
+    /// <summary>Ticket P2-006 acceptance criterion 2: <c>??=</c> on a property calls the getter once, and the setter only when that returned null.</summary>
+    [Fact]
+    public Task NullCoalescingAssignmentToAProperty() =>
+        Dump("sealed class H { string? v; public string? Name { get => v; set => v = value; } } static string M(H h) => h.Name ??= \"x\";");
+
+    /// <summary>Ticket P2-006 acceptance criterion 2: a field assigned a branching value is written through its captured receiver.</summary>
+    [Fact]
+    public Task FieldAssignedABranchingValue() => Dump("sealed class H { public int F; } static void M(H h, bool b, int a) { h.F = b ? 1 : a; }");
+
+    /// <summary>Ticket P2-006 acceptance criterion 2: a compound assignment of a branching value reads and writes the captured field.</summary>
+    [Fact]
+    public Task CompoundAssignmentToAFieldOfABranchingValue() => Dump("static int f; static void M(bool b, int a) { f += b ? 1 : a; }");
+
     private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }
