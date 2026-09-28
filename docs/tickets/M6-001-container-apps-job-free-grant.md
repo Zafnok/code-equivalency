@@ -131,3 +131,6 @@ Dedicated workload profiles, `equiv mcp` over HTTP, multi-region.
   second), which is about 953 vCPU-seconds and 1,906 GiB-seconds at 1 vCPU / 2 GiB. That is 0.53% of the
   monthly grant on each meter. Cost Management lags usage by a day or more; the metered figures and the
   actual charge get recorded here once they appear.
+- Teardown (2026-09-28): `teardown.ps1 -Confirm:$false` deleted `equiv-aca` (environment, job, storage
+  account and budget) in about 12 minutes; `az group exists --name equiv-aca` then printed `false`.
+  Cost Management keeps the usage after deletion, so criterion 5's figures are read from it later.
