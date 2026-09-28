@@ -28,11 +28,13 @@ public sealed class Replayer(IDriverHost host)
 
         ExecutionOutcome legacy = Once(drivers.Legacy, plan.Legacy);
         ExecutionOutcome modern = Once(drivers.Modern, plan.Modern);
-        return (Obstacle("legacy", legacy) ?? Obstacle("modern", modern)) is { } reason
-            ? ReplayResult.NotConstructible(reason)
-            : !RuntimeComparison.Same(legacy, modern) ? ReplayResult.Reproduced
-            : plan.AlikeReason is { } alike ? ReplayResult.NotConstructible(alike)
-            : ReplayResult.NotReproduced(legacy, modern);
+        return (Obstacle("legacy", legacy) ?? Obstacle("modern", modern), RuntimeComparison.Same(legacy, modern), plan.AlikeReason) switch
+        {
+            ({ } reason, _, _) => ReplayResult.NotConstructible(reason),
+            (_, false, _) => ReplayResult.Reproduced,
+            (_, true, { } alike) => ReplayResult.NotConstructible(alike),
+            _ => ReplayResult.NotReproduced(legacy, modern),
+        };
     }
 
     private ExecutionOutcome Once(string driver, ExecutionInput input) =>
