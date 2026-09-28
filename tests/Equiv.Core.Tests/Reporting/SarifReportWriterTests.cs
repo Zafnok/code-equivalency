@@ -435,8 +435,8 @@ public sealed class SarifReportWriterTests
     }
 
     /// <summary>
-    /// Ticket M4-009: a replayed Divergent carries <c>replay</c>, with both canonical outcomes when it did not reproduce and
-    /// the reason when it could not be built. The fingerprint never moves with it.
+    /// Tickets M4-009 and P2-038: a replayed Divergent carries <c>replay</c>, with both canonical outcomes when it did not
+    /// reproduce or was not applicable, and the reason when it could not be built. The fingerprint never moves with it.
     /// </summary>
     [Fact]
     public void ReplayIsWrittenAndNeverMovesTheFingerprint()
@@ -453,6 +453,15 @@ public sealed class SarifReportWriterTests
                     new ExecutionOutcome(input, "invariant", OutcomeKind.Returned, "1")),
             },
         ]).Runs[0].Results[0];
+        Result notApplicable = SarifReportWriter.Write(
+        [
+            plain with
+            {
+                Replay = ReplayResult.NotApplicable(
+                    new ExecutionOutcome(input, "invariant", OutcomeKind.Returned, "0"),
+                    new ExecutionOutcome(input, "invariant", OutcomeKind.Returned, "0")),
+            },
+        ]).Runs[0].Results[0];
         Result notConstructible = SarifReportWriter.Write([plain with { Replay = ReplayResult.NotConstructible("emit-failed") }]).Runs[0].Results[0];
         Result none = SarifReportWriter.Write([plain]).Runs[0].Results[0];
 
@@ -462,11 +471,14 @@ public sealed class SarifReportWriterTests
         Dictionary<string, Dictionary<string, string>> outcomes = notReproduced.GetProperty<Dictionary<string, Dictionary<string, string>>>("replayOutcomes");
         Assert.Equal(("threw", "\"System.Exception\""), (outcomes["legacy"]["kind"], outcomes["legacy"]["value"]));
         Assert.Equal(("returned", "1"), (outcomes["modern"]["kind"], outcomes["modern"]["value"]));
+        Assert.Equal("not-applicable", notApplicable.GetProperty<string>("replay"));
+        Dictionary<string, Dictionary<string, string>> agreed = notApplicable.GetProperty<Dictionary<string, Dictionary<string, string>>>("replayOutcomes");
+        Assert.Equal(("returned", "0", "returned", "0"), (agreed["legacy"]["kind"], agreed["legacy"]["value"], agreed["modern"]["kind"], agreed["modern"]["value"]));
         Assert.Equal("not-constructible", notConstructible.GetProperty<string>("replay"));
         Assert.Equal("emit-failed", notConstructible.GetProperty<string>("replayReason"));
         Assert.False(none.TryGetProperty("replay", out string? _));
         Assert.All(
-            [reproduced, notReproduced, notConstructible],
+            [reproduced, notReproduced, notApplicable, notConstructible],
             r => Assert.Equal(none.PartialFingerprints["resultFingerprint/v1"], r.PartialFingerprints["resultFingerprint/v1"]));
     }
 

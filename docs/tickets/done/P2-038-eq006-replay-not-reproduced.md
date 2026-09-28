@@ -1,5 +1,5 @@
 # P2-038 Replay reports `not-reproduced` for runtime-changed-API (EQ006) results it cannot observe
-Status: todo
+Status: done (PR #262)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-009
@@ -55,3 +55,28 @@ Replay only. Do not touch the runtime-changes table or the `EQ006` rule.
 The one solver-derived `not-reproduced` result (P2-037).
 
 ## Notes
+- Decision: which of (a) tr-TR replay and (b) `not-applicable` for EQ006 -> both. Replay runs the model's input
+  under the invariant culture and, when either body calls a runtime-changes member, also under `tr-TR` (the culture set
+  differential testing already uses, now one shared helper); a divergence under either culture is `reproduced`. When
+  every culture agrees and the counterexample's call trace holds a runtime-changed callee (exactly what makes the result
+  EQ006, `VerdictRule`), the replay is `not-applicable` with both outcomes as `replayOutcomes`, since EQ006 claims the
+  API differs, not that this model input shows it. Alternatives: (a) only, which leaves the ordinal members
+  (`SubstringUntil(string,char)`, `SetEnvironmentVariable`) `not-reproduced`; (b) only, which never reproduces the
+  culture-dependent ones. Rule: 1 (mirror differential testing's culture set and VerdictRule's EQ006 test).
+- Decision: a replay where both sides throw the same exception while the model's runs do not both throw ->
+  `not-constructible`, reason `both sides threw <type>, which the model's runs do not: the receiver or an argument is not
+  the model's`. It is checked before `not-applicable`. Alternatives: only when neither model run throws; compare exception
+  types with the model. Rule: 4 (the smaller test that covers `GetHashCode` on `new T()` and `CreateFromFile` on a path
+  that does not exist).
+- Decision: `Replayer.Replay` takes the Divergent's counterexample and both bodies besides the plan, rather than the plan
+  carrying flags computed in the frontend. Alternatives: `ReplayPlan.RuntimeSensitive`/`Eq006` fields. Rule: 4 (the CLI
+  already holds both, and differential testing takes the bodies the same way).
+- Criterion 2: all fifteen identities are EQ006 (the M4-007 summary lists them as such), so after this change each is
+  `reproduced` (a divergence under `tr-TR`), `not-applicable` (equal outcomes) or, for the two below,
+  `not-constructible`; none can be `not-reproduced`. No follow-up ticket is needed. The corpus was not re-run: `--execute`
+  is Windows-only (ADR 0035) and this change was made on Linux; the next `equiv-corpus-run` on Windows shows the split.
+- Criterion 3: both `threw`/`threw` cases are the driver's inputs, not the model's. `Git.hub.Repository::GetHashCode()`
+  runs on `new Repository()`, whose string fields are null, where the model gives them values (heap reads of `this`
+  are not rebuilt by replay); `DocumentFactory::CreateFromFile(string)` gets `"s<id>"`, a path that does not exist,
+  where the model's file read is an uninterpreted call. Both are now `not-constructible` with the reason
+  `both sides threw <type>, which the model's runs do not: the receiver or an argument is not the model's`.

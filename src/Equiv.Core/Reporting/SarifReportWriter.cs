@@ -298,8 +298,8 @@ public static class SarifReportWriter
 
     /// <summary>
     /// A Divergent's replay on both real runtimes (ADR 0035 decision 2; ticket M4-009): <c>replay</c> is <c>reproduced</c>,
-    /// <c>not-reproduced</c> with both canonical outcomes as <c>replayOutcomes</c>, or <c>not-constructible</c> with
-    /// <c>replayReason</c>. Left out when the run did not replay.
+    /// <c>not-reproduced</c> or (an EQ006 Divergent's, ticket P2-038) <c>not-applicable</c> with both canonical outcomes as
+    /// <c>replayOutcomes</c>, or <c>not-constructible</c> with <c>replayReason</c>. Left out when the run did not replay.
     /// </summary>
     private static void SetReplayProperties(Result sarifResult, ReplayResult? replay)
     {
@@ -311,7 +311,7 @@ public static class SarifReportWriter
                 sarifResult.SetProperty("replay", "reproduced");
                 break;
             case { Legacy: { } legacy, Modern: { } modern }:
-                sarifResult.SetProperty("replay", "not-reproduced");
+                sarifResult.SetProperty("replay", replay.Status == ReplayStatus.NotApplicable ? "not-applicable" : "not-reproduced");
                 sarifResult.SetProperty("replayOutcomes", new Dictionary<string, object>(StringComparer.Ordinal)
                 {
                     ["legacy"] = Describe(legacy),
