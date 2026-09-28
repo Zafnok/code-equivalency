@@ -368,6 +368,30 @@ public sealed class SarifReportWriterTests
         Assert.Equal("claude-test", result.GetProperty<string>("proposedBy"));
     }
 
+    /// <summary>
+    /// Ticket P1-010 criterion 4 (ADR 0036 decision 2): a proof that used callee contracts suffixes its method with
+    /// <c>+contract</c> and lists each contract with its callee and proposer; a proof without one has neither.
+    /// </summary>
+    [Fact]
+    public void AContractEquivalentSuffixesItsMethodAndListsItsContracts()
+    {
+        Equivalent proved = new(ProofMethod.LockstepInduction)
+        {
+            ContractsUsed = [new ContractUse("N.T::Score(int)", "(= r.old r.new)", "observed-predicates")],
+        };
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(proved)]).Runs[0].Results[0];
+
+        Assert.Equal("lockstep-induction+contract", result.GetProperty<string>("proofMethod"));
+        Dictionary<string, string> contract = Assert.Single(result.GetProperty<List<Dictionary<string, string>>>("contractsUsed"));
+        Assert.Equal("N.T::Score(int)", contract["callee"]);
+        Assert.Equal("(= r.old r.new)", contract["contract"]);
+        Assert.Equal("observed-predicates", contract["proposedBy"]);
+        Result plain = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.LockstepInduction))]).Runs[0].Results[0];
+        Assert.Equal("lockstep-induction", plain.GetProperty<string>("proofMethod"));
+        Assert.False(plain.TryGetProperty("contractsUsed", out List<Dictionary<string, string>>? _));
+    }
+
     /// <summary>Ticket P1-001 criterion 4: whatever rung 4 concluded, the result says which mode it ran in.</summary>
     [Fact]
     public void EveryVerdictRungFourReachedCarriesItsMode()

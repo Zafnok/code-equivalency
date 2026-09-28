@@ -27,6 +27,9 @@ public static class SarifReportWriter
 
     private const string ToolName = "Equiv";
 
+    /// <summary>What an Equivalent's <c>proofMethod</c> ends with when its proof used a callee contract (ADR 0036 decision 2; ticket P1-010).</summary>
+    private const string ContractSuffix = "+contract";
+
     /// <summary>The <c>proofMethod</c> of a Divergent the real runtimes showed (ADR 0035 decision 3); never an Equivalent's.</summary>
     private const string ObservedProofMethod = "observed";
 
@@ -195,7 +198,8 @@ public static class SarifReportWriter
     /// <summary>
     /// The verdict's payload as result properties: a Divergent's counterexample (<c>model</c>), an Equivalent's
     /// <c>proofMethod</c> and, for a bounded proof over a loop, <c>boundedBy</c>, for a rung 4 or 5 proof the coupling
-    /// <c>invariant</c> and for rung 5 its <c>proposedBy</c> (ticket P1-002; ADR 0036), an Unknown's <c>unknownReason</c>, the <c>ladderTrace</c> of every rung the backend attempted
+    /// <c>invariant</c> and for rung 5 its <c>proposedBy</c> (ticket P1-002; ADR 0036), the <c>+contract</c> suffix and
+    /// <c>contractsUsed</c> of a proof that used callee contracts (ticket P1-010), an Unknown's <c>unknownReason</c>, the <c>ladderTrace</c> of every rung the backend attempted
     /// (VERIFICATION-MODEL.md sections 1 and 5.1; ticket M3-002), and the <c>chcMode</c> rung 4 ran in when it ran
     /// (ticket P1-001).
     /// </summary>
@@ -211,7 +215,13 @@ public static class SarifReportWriter
                 sarifResult.SetProperty("model", CounterexampleText.Dump(divergent.Counterexample));
                 break;
             case Equivalent equivalent:
-                sarifResult.SetProperty("proofMethod", Name(equivalent.Method));
+                // Ticket P1-010 (ADR 0036 decision 2): a proof that used callee contracts says so in its method and lists them.
+                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix));
+                if (!equivalent.ContractsUsed.IsEmpty)
+                {
+                    sarifResult.SetProperty("contractsUsed", equivalent.ContractsUsed.Select(static c => Describe(c)).ToList());
+                }
+
                 if (equivalent.BoundedBy is { } bound)
                 {
                     sarifResult.SetProperty("boundedBy", bound);
@@ -273,6 +283,13 @@ public static class SarifReportWriter
             sarifResult.SetProperty("abstractions", unknown.Abstractions.Select(static a => Describe(a)).ToList());
         }
     }
+
+    private static Dictionary<string, object> Describe(ContractUse contract) => new(StringComparer.Ordinal)
+    {
+        ["callee"] = contract.Callee,
+        ["contract"] = contract.Contract,
+        ["proposedBy"] = contract.ProposedBy,
+    };
 
     private static Dictionary<string, object> Describe(Abstraction abstraction)
     {
