@@ -424,6 +424,51 @@ the only large ones.
 - P2-045 (S) A field read or written through `base` lowers to IR that fails validation (found
   verifying P2-044 on the Tomas pair).
 
+## P2 — Success assessment (2026-09-28)
+
+The assessment of M4-007's results found three gaps. Every rate is stale, because 41 commits
+landed since that run, among them the fixes for 92 Git Extensions crashes. Divergent precision has
+never been measured. And code-cleanup commits are not measured at all, since the corpus holds only
+migrations and `migration-prompt.md` forbids refactoring. Order: P2-046 first, because every other
+ticket reads its run. Then P2-047 and P2-048/P2-049 (the two missing measurements), then the rate
+work, P2-050, P1-019, P2-051 and P2-052.
+
+- P2-046 (S) Second full corpus run on M4-007's four pairs. Adds a "since M4-007" table, mechanical
+  seeds on Git Extensions, the Preserving Equivalent share, a top-abstractions histogram and a
+  re-scored per-ticket unlock table.
+- P2-047 (M) Divergent audit: hand-adjudicate a fixed sample of EQ002 and EQ006 and report Divergent
+  precision. Needs P2-046.
+- P2-048 (M) Five cleanup refactorings as Preserving seed operators, and a "cleanup proof rate" per
+  seeded run. Needs M4-010, P2-035.
+- P2-049 (M) Samples for cleanup refactorings (modern syntax, extract and inline method). Each
+  non-Equivalent verdict becomes a ticket.
+- P2-050 (M) Deterministic solver budgets (Z3 `rlimit`, wall-clock as a backstop), and the
+  timeout Unknowns measured at 1x, 4x and 20x. Needs P2-046.
+- P1-019 (M) Spike: how many `abstraction` Unknowns (261 of 700 on Git Extensions) refinement would
+  resolve. An ADR only if the answer is at least 5%. Needs P2-046.
+- P2-051 (M) `runtime-diff` covers Windows Forms and `System.Drawing`, and every external callee.
+  Needs M3-033.
+- P2-052 (M) Replay and differential testing reach `internal` methods (via `InternalsVisibleTo` on the
+  emitted compilation). Needs M4-009, P1-008.
+
+### Runtimes are detected, not assumed (ADR 0040)
+
+`equiv` supports a framework migration, a version upgrade (net6 to net8) and a same-runtime commit
+(a cleanup), and reads each project's runtime instead of assuming 4.8 and 10. P2-049's cleanup samples are same-runtime pairs, so they wait for P2-055.
+
+- P2-053 (M) Detect each project's runtime (the `TargetFrameworkAttribute`, `netstandard` resolved
+  to its hosts, a `runtimes` config key) and report it in `run.properties.runtimes`.
+- P2-054 (M) Every `runtime-changes.json` row gets `changedIn`, and `RuntimeChangeTable` matches by
+  runtime interval. Needs P2-053.
+- P2-055 (L) Runtime rules (table rows, float-to-int saturation, x87) apply only inside a pair's
+  interval. New samples `same-runtime-cleanup` and `version-bump`. Needs P2-053, P2-054.
+- P2-056 (M) `--execute` and `runtime-diff` run each side on its detected runtime, and need Windows
+  only for .NET Framework. Needs P2-053.
+- P2-057 (S) `--before`/`--after` aliases, and scope wording in README and specs. Needs P2-055, P2-056.
+- P2-058 (M) Pin three public "no functional change" PRs as `cleanup` corpus pairs (Git Extensions
+  #11372 and #11284, PowerShell #19687), run them, and adjudicate every Divergent. Needs P2-055,
+  P2-047.
+
 ## M5 — Agent surface (MCP)
 
 Coding agents do migrations; M5 lets them check their own work while they do it (ADR 0033). It
