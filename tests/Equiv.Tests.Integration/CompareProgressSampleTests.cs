@@ -37,7 +37,7 @@ public sealed class CompareProgressSampleTests
             Assert.DoesNotContain("equiv: ", quietError, StringComparison.Ordinal);
             string[] progress = [.. Lines(normalError).Where(static line => line.StartsWith("equiv: ", StringComparison.Ordinal))];
             Assert.Equal(Lines(quietError), Lines(normalError).Where(static line => !line.StartsWith("equiv: ", StringComparison.Ordinal)), StringComparer.Ordinal);
-            foreach (string phase in (string[])["load", "verify", "execute", "write"])
+            foreach (string phase in (string[])["load-legacy", "load-modern", "enumerate", "match", "lower", "verify", "execute", "write"])
             {
                 Assert.Single(progress, line => Regex.IsMatch(line, $@"^equiv: \+\d\d:\d\d:\d\d {phase} 0/\d+ \(0%\) eta=\?", RegexOptions.None, RegexTimeout));
                 Assert.Single(progress, line => Regex.IsMatch(line, $@"^equiv: \+\d\d:\d\d:\d\d {phase} done in \d\d:\d\d:\d\d\.\d{{3}}; eta@25%=\S+ eta@50%=\S+ eta@75%=\S+ dropped=0$", RegexOptions.None, RegexTimeout));

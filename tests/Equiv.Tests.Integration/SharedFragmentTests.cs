@@ -4,6 +4,7 @@ using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp;
 using Equiv.TestSupport;
@@ -39,7 +40,7 @@ public sealed class SharedFragmentTests
     [Fact]
     public void BusinessLayerCappedLineCountSharesItsLambdaAndIsEquivalent()
     {
-        ProcedurePair pair = new CSharpFrontend().Analyze(Solution("legacy", "*.sln"), Solution("modern", "*.slnx"), EquivConfig.Default, TestContext.Current.CancellationToken)
+        ProcedurePair pair = new CSharpFrontend().Analyze(Solution("legacy", "*.sln"), Solution("modern", "*.slnx"), EquivConfig.Default, NullRunLog.Instance, TestContext.Current.CancellationToken)
             .Match.Pairs.Single(static p => p.New.Value.Contains("OrderService::CappedLineCount(", StringComparison.Ordinal));
         VerificationOptions options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, EquivConfig.Default.CallIdentityRenames);
 

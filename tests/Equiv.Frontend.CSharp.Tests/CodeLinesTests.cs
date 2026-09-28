@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Frontend.CSharp.Loading;
 
 using Microsoft.CodeAnalysis;
@@ -66,7 +67,7 @@ public sealed class CodeLinesTests
             new StubLoader(Solution(Compilation(("Legacy.cs", Legacy))), Solution(Compilation(("Modern.cs", Modern)))),
             new StableIdentityMatcher());
 
-        AnalysedLines lines = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, CancellationToken.None).Lines;
+        AnalysedLines lines = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Lines;
 
         Assert.Equal(new AnalysedLines(Legacy: 11, Modern: 4), lines);
     }

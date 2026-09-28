@@ -1,6 +1,7 @@
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Frontend.CSharp;
 
 using Xunit;
@@ -81,6 +82,6 @@ public sealed class ApiEquivalenceSampleTests
         new CSharpFrontend().Analyze(
             Directory.GetFiles(Path.Combine(SamplesRoot, sample, "legacy"), "*.sln").Single(),
             Directory.GetFiles(Path.Combine(SamplesRoot, sample, "modern"), "*.slnx").Single(),
-            EquivConfig.Default,
+            EquivConfig.Default, NullRunLog.Instance,
             TestContext.Current.CancellationToken).Match;
 }

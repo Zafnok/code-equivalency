@@ -1,6 +1,7 @@
 using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp;
@@ -29,7 +30,7 @@ public sealed class UnknownLocationSampleTests
     [Fact]
     public void BusinessLayerUnknownPointsAtItsConstruct()
     {
-        MatchResult match = new CSharpFrontend().Analyze(Solution("legacy", "*.sln"), Solution("modern", "*.slnx"), EquivConfig.Default, TestContext.Current.CancellationToken).Match;
+        MatchResult match = new CSharpFrontend().Analyze(Solution("legacy", "*.sln"), Solution("modern", "*.slnx"), EquivConfig.Default, NullRunLog.Instance, TestContext.Current.CancellationToken).Match;
         ProcedurePair describe = match.Pairs.Single(static p => p.New.Value.Contains("OrderService::Describe(", StringComparison.Ordinal));
         VerificationOptions options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, EquivConfig.Default.CallIdentityRenames);
 

@@ -1,6 +1,7 @@
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Frontend.CSharp;
 
 using Xunit;
@@ -25,7 +26,7 @@ public sealed class WholeBodyReasonOwnerTests
     [MemberData(nameof(Samples))]
     public void EveryWholeBodyReasonHasAnOwner(string sample)
     {
-        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, TestContext.Current.CancellationToken).Match;
+        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, NullRunLog.Instance, TestContext.Current.CancellationToken).Match;
 
         string[] unowned =
         [

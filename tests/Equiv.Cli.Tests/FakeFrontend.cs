@@ -2,6 +2,7 @@ using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Execution;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 
 namespace Equiv.Cli.Tests;
 
@@ -25,7 +26,7 @@ internal sealed class FakeFrontend(
 
     public bool Supports(string path) => supports(path);
 
-    public FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct)
+    public FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, IRunLog log, CancellationToken ct)
     {
         AnalyzeCallCount++;
         return throwOnAnalyze is not null

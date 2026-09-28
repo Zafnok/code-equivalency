@@ -33,7 +33,7 @@ public sealed class CongruenceSampleTests
     [MemberData(nameof(Samples))]
     public void CongruenceNeverContradictsTheSolverOnASample(string sample)
     {
-        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, TestContext.Current.CancellationToken).Match;
+        MatchResult result = new CSharpFrontend().Analyze(Solution(sample, "legacy"), Solution(sample, "modern"), EquivConfig.Default, NullRunLog.Instance, TestContext.Current.CancellationToken).Match;
         VerificationOptions options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, EquivConfig.Default.CallIdentityRenames);
 
         foreach (ProcedurePair pair in result.Pairs.Where(static p => CompareCommand.IsCongruent(p, p.OldBody!, p.NewBody!)))

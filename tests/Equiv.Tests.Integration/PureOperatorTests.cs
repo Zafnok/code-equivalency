@@ -4,6 +4,7 @@ using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp;
 using Equiv.Frontend.CSharp.Lowering;
@@ -169,7 +170,7 @@ public sealed class PureOperatorTests
     }
 
     private static ProcedurePair BusinessLayerPair(string member) =>
-        new CSharpFrontend().Analyze(Solution("legacy", "*.sln"), Solution("modern", "*.slnx"), EquivConfig.Default, TestContext.Current.CancellationToken)
+        new CSharpFrontend().Analyze(Solution("legacy", "*.sln"), Solution("modern", "*.slnx"), EquivConfig.Default, NullRunLog.Instance, TestContext.Current.CancellationToken)
             .Match.Pairs.Single(p => p.New.Value.Contains(member, StringComparison.Ordinal));
 
     private static string Solution(string side, string pattern) =>

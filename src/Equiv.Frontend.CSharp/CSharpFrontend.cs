@@ -6,6 +6,7 @@ using Equiv.Core.ApiEquivalences;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Endpoints;
 using Equiv.Frontend.CSharp.Execution;
@@ -72,21 +73,28 @@ public sealed class CSharpFrontend : ILanguageFrontend
         return path.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase);
     }
 
-    public FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct)
+    public FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, IRunLog log, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(log);
 
-        LoadedSolution legacy = SkipVacuousProjects(LoadOrThrow(legacyPath, ct));
-        LoadedSolution modern = SkipVacuousProjects(LoadOrThrow(modernPath, ct));
+        LoadedSolution legacy = Loaded("load-legacy", legacyPath, log, ct);
+        LoadedSolution modern = Loaded("load-modern", modernPath, log, ct);
 
+        log.Phase("enumerate", 2, legacy.Compilations.Length + modern.Compilations.Length);
         EndpointOverrides overrides = EndpointOverrides.Build(Endpoints(legacy.Compilations), Endpoints(modern.Compilations));
 
-        (ImmutableArray<SideProcedure> legacyProcedures, ImmutableArray<ProcedureIdentity> legacyAmbiguous) = Procedures(legacy.Compilations, config.Renames, overrides);
-        (ImmutableArray<SideProcedure> modernProcedures, ImmutableArray<ProcedureIdentity> modernAmbiguous) = Procedures(modern.Compilations, config.Renames, overrides);
+        (ImmutableArray<SideProcedure> legacyProcedures, ImmutableArray<ProcedureIdentity> legacyAmbiguous) = Enumerated("legacy", legacy, config, overrides, log);
+        (ImmutableArray<SideProcedure> modernProcedures, ImmutableArray<ProcedureIdentity> modernAmbiguous) = Enumerated("modern", modern, config, overrides, log);
+        log.PhaseDone();
 
+        log.Phase("match", 1, legacyProcedures.Length + modernProcedures.Length);
+        log.Item("procedures", legacyProcedures.Length + modernProcedures.Length);
         MatchResult match = _matcher.Match(
             [.. legacyProcedures.Select(static p => p.Identity)],
             [.. modernProcedures.Select(static p => p.Identity)]);
+        log.ItemDone($"{match.Pairs.Length} pairs");
+        log.PhaseDone();
         Dictionary<ProcedureIdentity, SideProcedure> legacyByIdentity = ByIdentity(legacyProcedures);
         Dictionary<ProcedureIdentity, SideProcedure> modernByIdentity = ByIdentity(modernProcedures);
 
@@ -94,7 +102,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
         (ImmutableArray<ProcedureIdentity> added, ImmutableArray<UnverifiedProject> legacySkipped) = Unverified(legacy.Skipped, match.Added, modernByIdentity, config.Renames);
         (ImmutableArray<ProcedureIdentity> removed, ImmutableArray<UnverifiedProject> modernSkipped) = Unverified(modern.Skipped, match.Removed, legacyByIdentity, config.Renames);
 
-        (ImmutableArray<ProcedurePair> pairs, ImmutableArray<LoweringFailure> loweringFailures) = Lowered(match.Pairs, legacyByIdentity, modernByIdentity, config);
+        (ImmutableArray<ProcedurePair> pairs, ImmutableArray<LoweringFailure> loweringFailures) = Lowered(match.Pairs, legacyByIdentity, modernByIdentity, config, log);
         MatchResult lowered = match with
         {
             Pairs = pairs,
@@ -127,14 +135,17 @@ public sealed class CSharpFrontend : ILanguageFrontend
         ImmutableArray<ProcedurePair> pairs,
         Dictionary<ProcedureIdentity, SideProcedure> legacyByIdentity,
         Dictionary<ProcedureIdentity, SideProcedure> modernByIdentity,
-        EquivConfig config)
+        EquivConfig config,
+        IRunLog log)
     {
+        log.Phase("lower", pairs.Length, pairs.Length);
         ImmutableArray<ProcedurePair>.Builder lowered = ImmutableArray.CreateBuilder<ProcedurePair>(pairs.Length);
         ImmutableArray<LoweringFailure>.Builder failures = ImmutableArray.CreateBuilder<LoweringFailure>();
         foreach (ProcedurePair pair in pairs)
         {
             SideProcedure legacy = legacyByIdentity[pair.Old];
             SideProcedure modern = modernByIdentity[pair.New];
+            log.Item(pair.New.Value, 1);
             try
             {
                 (IrProcedure oldBody, ImmutableArray<string> oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true);
@@ -155,13 +166,16 @@ public sealed class CSharpFrontend : ILanguageFrontend
                     NewFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false),
                     EquivalencesApplied = [.. oldApplied.Union(newApplied, StringComparer.Ordinal).Order(StringComparer.Ordinal)],
                 });
+                log.ItemDone("lowered");
             }
             catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
             {
                 failures.Add(new LoweringFailure(pair.Old, pair.New, exception));
+                log.ItemDone("failed");
             }
         }
 
+        log.PhaseDone();
         return (lowered.ToImmutable(), failures.ToImmutable());
     }
 
@@ -206,7 +220,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
                 project.Name,
                 project.AssemblyName,
                 project.IsCSharp,
-                [.. project.Diagnostics.Select(static d => d.Id.Length > 0 ? $"{d.Id}: {d.Message}" : d.Message)],
+                Reasons(project),
                 [.. own.Concat(counterpartList).Distinct()]));
         }
 
@@ -250,6 +264,69 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// <summary>Whether any of the compilation's syntax trees declares a class, struct, interface, record or enum.</summary>
     private static bool DeclaresAType(Compilation compilation) =>
         compilation.SyntaxTrees.Any(static tree => tree.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Any());
+
+    /// <summary>The reasons a project was skipped, as an <see cref="UnverifiedProject"/> and the debug log word them.</summary>
+    private static ImmutableArray<string> Reasons(SkippedProject project) =>
+        [.. project.Diagnostics.Select(static d => d.Id.Length > 0 ? $"{d.Id}: {d.Message}" : d.Message)];
+
+    /// <summary>
+    /// One side's <paramref name="phase"/> (ADR 0038; ticket M4-013): the side loaded, with an item per project it opened,
+    /// weighted by document count, then per project it skipped, each of which is also a debug <see cref="IRunLog.Detail"/>.
+    /// The events follow the load, since the project count is only known once it is done; a load that fails is one failed item.
+    /// </summary>
+    private LoadedSolution Loaded(string phase, string path, IRunLog log, CancellationToken ct)
+    {
+        LoadedSolution loaded;
+        try
+        {
+            loaded = LoadOrThrow(path, ct);
+        }
+        catch (FrontendLoadException)
+        {
+            log.Phase(phase, 1, 1);
+            log.Item(path, 1);
+            log.ItemDone("failed");
+            log.PhaseDone();
+            throw;
+        }
+
+        loaded = SkipVacuousProjects(loaded);
+        string side = phase["load-".Length..];
+        log.Phase(phase, loaded.Compilations.Length + loaded.Skipped.Length, loaded.Compilations.Sum(Documents) + loaded.Skipped.Sum(SkippedDocuments));
+        foreach (Compilation compilation in loaded.Compilations)
+        {
+            log.Item(compilation.AssemblyName!, Documents(compilation));
+            log.ItemDone("loaded");
+        }
+
+        foreach (SkippedProject project in loaded.Skipped)
+        {
+            log.Item(project.Name, SkippedDocuments(project));
+            log.ItemDone("skipped");
+            if (log.IsDebug)
+            {
+                log.Detail($"{side} project {project.Name} skipped: {string.Join("; ", Reasons(project))}");
+            }
+        }
+
+        log.PhaseDone();
+        return loaded;
+    }
+
+    /// <summary>A project's weight in the load phases: its documents, at least 1 so an empty project still counts.</summary>
+    private static int Documents(Compilation compilation) => Math.Max(1, compilation.SyntaxTrees.Count());
+
+    private static int SkippedDocuments(SkippedProject project) => project.Compilation is { } compilation ? Documents(compilation) : 1;
+
+    /// <summary>One side's item of the <c>enumerate</c> phase: <see cref="Procedures"/> over its compilations.</summary>
+    private static (ImmutableArray<SideProcedure> Procedures, ImmutableArray<ProcedureIdentity> ForcedAmbiguous) Enumerated(
+        string side, LoadedSolution loaded, EquivConfig config, EndpointOverrides overrides, IRunLog log)
+    {
+        log.Item(side, loaded.Compilations.Length);
+        (ImmutableArray<SideProcedure> Procedures, ImmutableArray<ProcedureIdentity> ForcedAmbiguous) result = Procedures(loaded.Compilations, config.Renames, overrides);
+        log.ItemDone($"{result.Procedures.Length} procedures");
+        return result;
+    }
 
     private LoadedSolution LoadOrThrow(string path, CancellationToken ct)
     {

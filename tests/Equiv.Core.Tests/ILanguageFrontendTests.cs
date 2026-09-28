@@ -1,5 +1,6 @@
 using Equiv.Core.Configuration;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 
 using Xunit;
 
@@ -14,7 +15,7 @@ public sealed class ILanguageFrontendTests
 
         public bool Supports(string path) => true;
 
-        public FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, CancellationToken ct) =>
+        public FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, IRunLog log, CancellationToken ct) =>
             new(new MatchResult([], [], [], []), new AnalysedLines(1, 2));
     }
 
@@ -27,7 +28,7 @@ public sealed class ILanguageFrontendTests
         Assert.True(frontend.Supports("anything"));
         Assert.Equal(
             new FrontendAnalysis(new MatchResult([], [], [], []), new AnalysedLines(1, 2)),
-            frontend.Analyze("a", "b", EquivConfig.Default, CancellationToken.None));
+            frontend.Analyze("a", "b", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None));
     }
 
     [Fact]
