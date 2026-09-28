@@ -748,11 +748,13 @@ internal sealed class IrLowerer
     /// A capture's value; for one that stands for a field or property place, a read of that place, since <c>f ??= v</c> reads
     /// the place it may then write (ticket P2-006).
     /// </summary>
-    private IrVar? CaptureRead(IFlowCaptureReferenceOperation reference, LoweringContext context) =>
-        sliceTargets.TryGetValue(reference.Id, out HeapLowerer.Access slice) ? heap.ReadSlice(slice, context)
-        : propertyTargets.TryGetValue(reference.Id, out PropertyAccess? property)
-            ? Accessor(property.Reference, property.Reference.Property.GetMethod, property.Operands, value: null, context)
-        : ssa.Load(context.Current, Capture(reference.Id, reference.Type!));
+    private IrVar? CaptureRead(IFlowCaptureReferenceOperation reference, LoweringContext context) => reference.Id switch
+    {
+        CaptureId id when sliceTargets.TryGetValue(id, out HeapLowerer.Access slice) => heap.ReadSlice(slice, context),
+        CaptureId id when propertyTargets.TryGetValue(id, out PropertyAccess? property) =>
+            Accessor(property.Reference, property.Reference.Property.GetMethod, property.Operands, value: null, context),
+        CaptureId id => ssa.Load(context.Current, Capture(id, reference.Type!)),
+    };
 
     private IrVar Value(IOperation operation, LoweringContext context) => Lower(operation, context)!;
 
