@@ -504,26 +504,35 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// A two-way branch. <c>if (c) throw;</c> is one block whose fall-through is the rethrow, which names no
-    /// block (ticket P2-010), so the rethrow gets a block of its own and is opaque as it is anywhere else. A <c>when</c>
+    /// block (ticket P2-010); <c>if (c) return; throw;</c> is one block whose conditional successor is the rethrow
+    /// (ticket P2-034). Either way the rethrow gets a block of its own and is opaque as it is anywhere else. A <c>when</c>
     /// filter's last block falls through, when the filter is false, to its copy's structured-exception-handling exit
     /// (ticket M4-008).
     /// </summary>
     private void Branch(BasicBlock block, ControlFlowBranch conditional, ControlFlowBranch fallThrough, LoweringContext context)
     {
         IrVar condition = Value(block.BranchValue!, context);
-        IrBlockId jump = exceptions.Destination(conditional, context);
+        IrBlockId? jumpRethrow = RethrowBlock(conditional, declined: null);
+        IrBlockId jump = jumpRethrow ?? exceptions.Destination(conditional, context);
         IrBlockId? declined = fallThrough.Semantics == ControlFlowBranchSemantics.StructuredExceptionHandling ? context.HandlerExit : null;
-        IrBlockId? rethrow = fallThrough.Semantics == ControlFlowBranchSemantics.Regular || declined is not null ? null : ssa.NewBlock();
+        IrBlockId? rethrow = RethrowBlock(fallThrough, declined);
         IrBlockId next = rethrow ?? declined ?? exceptions.Destination(fallThrough, context);
         ssa.Terminate(context.Current, block.ConditionKind == ControlFlowConditionKind.WhenTrue
             ? new IrBranch(condition, jump, next)
             : new IrBranch(condition, next, jump));
-        if (rethrow is not null)
+        foreach (IrBlockId? opaque in (IrBlockId?[])[jumpRethrow, rethrow])
         {
-            context.Current = rethrow;
-            OpaqueExit("rethrow", context);
+            if (opaque is not null)
+            {
+                context.Current = opaque;
+                OpaqueExit("rethrow", context);
+            }
         }
     }
+
+    /// <summary>A fresh block for a branch edge that is a rethrow, which names no block; null for an edge that names one.</summary>
+    private IrBlockId? RethrowBlock(ControlFlowBranch branch, IrBlockId? declined) =>
+        branch.Semantics == ControlFlowBranchSemantics.Regular || declined is not null ? null : ssa.NewBlock();
 
     /// <summary>A return runs every enclosing <c>finally</c> after evaluating its value and before exiting.</summary>
     private void Return(IrVar value, ControlFlowBranch branch, LoweringContext context)
