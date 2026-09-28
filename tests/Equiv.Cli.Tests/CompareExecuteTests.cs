@@ -3,6 +3,7 @@ using System.CommandLine;
 using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Verdicts;
 
 using Microsoft.CodeAnalysis.Sarif;
@@ -59,7 +60,7 @@ public sealed class CompareExecuteTests
         int exitCode = 0;
 
         string error = CaptureStdErr(() => exitCode = CompareCommand.Run(
-            Options(legacy.Path, modern.Path, execute: true), [frontend], Backend(), new InMemoryReportSink(), new ExecutionEnvironment(IsWindows: false, replay)));
+            Options(legacy.Path, modern.Path, execute: true), [frontend], Backend(), new InMemoryReportSink(), NullRunLog.Instance, new ExecutionEnvironment(IsWindows: false, replay)));
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
         Assert.Equal("error: --execute needs Windows and .NET Framework 4.8 (ADR 0035)" + Environment.NewLine, error);
@@ -121,8 +122,59 @@ public sealed class CompareExecuteTests
         InMemoryReportSink sink = new();
         int exitCode = 0;
         string error = CaptureStdErr(() => CaptureStdOut(() => exitCode = CompareCommand.Run(
-            Options(legacy.Path, modern.Path, execute), [new FakeFrontend("csharp", _ => true, Match(), replay: replay)], Backend(), sink, execution)));
+            Options(legacy.Path, modern.Path, execute), [new FakeFrontend("csharp", _ => true, Match(), replay: replay)], Backend(), sink, NullRunLog.Instance, execution)));
         return (exitCode, error, sink.Log);
+    }
+
+    /// <summary>A temporary folder that deletes at once is deleted once.</summary>
+    [Fact]
+    public void DeleteTemporary_DeletesOnce()
+    {
+        List<string> calls = [];
+
+        CompareCommand.DeleteTemporary("dir", calls.Add, TimeSpan.Zero);
+
+        Assert.Equal(["dir"], calls);
+    }
+
+    /// <summary>A driver that still holds its <c>.exe</c> for a moment only delays the delete (IOException or access denied).</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DeleteTemporary_RetriesWhileTheFolderIsHeld(bool denied)
+    {
+        int calls = 0;
+
+        CompareCommand.DeleteTemporary(
+            "dir",
+            _ =>
+            {
+                if (++calls < 3)
+                {
+                    throw denied ? new UnauthorizedAccessException("Access to the path 'EquivReplay1.exe' is denied.") : new IOException("in use");
+                }
+            },
+            TimeSpan.Zero);
+
+        Assert.Equal(3, calls);
+    }
+
+    /// <summary>A folder that stays held is left behind after the last attempt instead of failing the run.</summary>
+    [Fact]
+    public void DeleteTemporary_GivesUpAfterTheLastAttempt()
+    {
+        int calls = 0;
+
+        CompareCommand.DeleteTemporary("dir", _ => throw new IOException(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"attempt {++calls}")), TimeSpan.Zero);
+
+        Assert.Equal(CompareCommand.DeleteAttempts, calls);
+    }
+
+    /// <summary>Anything but a held folder is still a crash.</summary>
+    [Fact]
+    public void DeleteTemporary_RethrowsOtherExceptions()
+    {
+        Assert.Throws<InvalidOperationException>(() => CompareCommand.DeleteTemporary("dir", static _ => throw new InvalidOperationException(), TimeSpan.Zero));
     }
 
     private static CompareOptions Options(string legacy, string modern, bool execute) =>

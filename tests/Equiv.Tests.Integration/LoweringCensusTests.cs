@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 
 using Equiv.Cli;
+using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
 using Equiv.Frontend.CSharp;
 using Equiv.Verify.Z3;
@@ -38,7 +39,7 @@ public sealed partial class LoweringCensusTests
             int exitCode = ExitCodes.UsageError;
             CaptureStdOut(() => exitCode = CompareCommand.Run(
                 new CompareOptions(Legacy, Modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: true),
-                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath)));
+                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath), NullRunLog.Instance));
 
             Assert.Equal(ExitCodes.Success, exitCode);
             Run run = SarifLog.Load(outPath).Runs[0];
@@ -58,7 +59,7 @@ public sealed partial class LoweringCensusTests
         int exitCode = ExitCodes.UsageError;
         string output = CaptureStdOut(() => exitCode = CompareCommand.Run(
             new CompareOptions(Legacy, Modern, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: true),
-            [new CSharpFrontend()], new Z3Backend(), new FileReportSink("unused.sarif")));
+            [new CSharpFrontend()], new Z3Backend(), new FileReportSink("unused.sarif"), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Match counts = CountsLine.Match(output);

@@ -2,11 +2,13 @@ using System.Collections.Immutable;
 using System.CommandLine;
 using System.Globalization;
 
+using Equiv.Cli.Progress;
 using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Execution;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
 using Equiv.Execute;
@@ -26,6 +28,9 @@ namespace Equiv.Cli;
 /// </summary>
 internal static class CompareCommand
 {
+    /// <summary>How many times <see cref="DeleteTemporary"/> tries before it leaves the folder behind.</summary>
+    internal const int DeleteAttempts = 5;
+
     /// <summary>The <c>compare</c> command; <paramref name="execution"/> is where <c>--execute</c> runs, this machine when null.</summary>
     public static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution = null)
     {
@@ -48,14 +53,17 @@ internal static class CompareCommand
         Option<string?> testBudgetOption = new("--test-budget");
         testBudgetOption.Validators.Add(static result => Validate(result, TestingOptions.TryParse(target: null, result.GetValueOrDefault<string?>(), out string error), error));
         Option<string?> invariantModelOption = new("--invariant-model");
+        Option<string> verbosityOption = new("--verbosity") { DefaultValueFactory = _ => "normal" };
+        verbosityOption.AcceptOnlyFromAmong("quiet", "normal", "debug");
+        Option<string?> logOption = new("--log");
 
         Command command = new("compare")
         {
             legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption,
-            testTargetOption, testBudgetOption, invariantModelOption,
+            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption,
         };
 
-        command.SetAction(parseResult => Run(
+        command.SetAction(parseResult => RunLogged(
             new CompareOptions(
                 parseResult.GetValue(legacyOption)!,
                 parseResult.GetValue(modernOption)!,
@@ -70,14 +78,36 @@ internal static class CompareCommand
                 parseResult.GetValue(invariantModelOption))
             {
                 Testing = TestingOptions.TryParse(parseResult.GetValue(testTargetOption), parseResult.GetValue(testBudgetOption), out _)!,
+                Verbosity = ToVerbosity(parseResult.GetValue(verbosityOption)),
+                LogPath = parseResult.GetValue(logOption),
             },
             frontends,
             backend,
-            new FileReportSink(parseResult.GetValue(outOption)!),
             execution));
 
         return command;
     }
+
+    /// <summary>
+    /// <see cref="Run"/> with a <see cref="ChannelRunLog"/> built from <c>--verbosity</c> and <c>--log</c> (ticket M4-012).
+    /// Progress goes to stderr and the <c>--log</c> file, never to stdout (ADR 0038, ADR 0033).
+    /// </summary>
+    private static int RunLogged(CompareOptions options, IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution)
+    {
+        using TextWriter logFile = OpenLog(options.LogPath);
+        using ChannelRunLog runLog = new(options.Verbosity, Console.Error, logFile, TimeProvider.System);
+        return Run(options, frontends, backend, new FileReportSink(options.OutPath), runLog, execution);
+    }
+
+    /// <summary>The <c>--log</c> file, flushed after every line so a run that is killed keeps what it wrote; <see cref="TextWriter.Null"/> without one.</summary>
+    private static TextWriter OpenLog(string? path) => path is null ? TextWriter.Null : new StreamWriter(path, append: false) { AutoFlush = true };
+
+    private static Verbosity ToVerbosity(string? verbosity) => verbosity switch
+    {
+        "quiet" => Verbosity.Quiet,
+        "debug" => Verbosity.Debug,
+        _ => Verbosity.Normal,
+    };
 
     /// <summary><c>--test-target</c> and <c>--test-budget</c> are usage errors (exit 3) unless they parse (ticket P1-008).</summary>
     private static void Validate(System.CommandLine.Parsing.OptionResult result, TestingOptions? parsed, string error)
@@ -90,19 +120,23 @@ internal static class CompareCommand
 
     /// <summary>
     /// The pipeline. <paramref name="execution"/> is where <c>--execute</c> runs, <see cref="ExecutionEnvironment.Current"/>
-    /// when null; without <c>--execute</c> nothing reads it (ADR 0035; ticket M4-009).
+    /// when null; without <c>--execute</c> nothing reads it (ADR 0035; ticket M4-009). <paramref name="runLog"/> hears the
+    /// <c>load</c>, <c>verify</c>, <c>execute</c> and <c>write</c> phases, and the backend hears it through
+    /// <see cref="VerificationOptions.Log"/> (ADR 0038; ticket M4-012); tests pass <see cref="NullRunLog.Instance"/>.
     /// </summary>
     public static int Run(
         CompareOptions options,
         IReadOnlyList<ILanguageFrontend> frontends,
         IVerificationBackend backend,
         IReportSink sink,
+        IRunLog runLog,
         ExecutionEnvironment? execution = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(frontends);
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(sink);
+        ArgumentNullException.ThrowIfNull(runLog);
 
         ExecutionEnvironment? executing = options.Execute ? execution ?? ExecutionEnvironment.Current : null;
         if (!StartExecuting(executing))
@@ -139,20 +173,38 @@ internal static class CompareCommand
             return inputErrorExitCode;
         }
 
-        FrontendAnalysis analysis;
-        try
+        FrontendAnalysis? analysis = Loaded(frontend, options, config, runLog);
+        if (analysis is null)
         {
-            analysis = frontend.Analyze(options.LegacyPath, options.ModernPath, config, CancellationToken.None);
-        }
-        catch (FrontendLoadException exception)
-        {
-            Console.Error.WriteLine(exception.Message);
             return ExitCodes.LoadFailure;
         }
 
         // Two numbers, never a total: the licence measures each codebase on its own (ticket M3-014).
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"analysed lines of code: legacy={analysis.Lines.Legacy} modern={analysis.Lines.Modern}"));
-        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, sink, executing);
+        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, new Output(sink, runLog), executing);
+    }
+
+    /// <summary>The <c>load</c> phase (ADR 0038): the frontend's analysis, or null, with the message on stderr, when it cannot load.</summary>
+    private static FrontendAnalysis? Loaded(ILanguageFrontend frontend, CompareOptions options, EquivConfig config, IRunLog runLog)
+    {
+        runLog.Phase("load", 1, 1);
+        runLog.Item("solutions", 1);
+        try
+        {
+            FrontendAnalysis analysis = frontend.Analyze(options.LegacyPath, options.ModernPath, config, CancellationToken.None);
+            runLog.ItemDone("loaded");
+            return analysis;
+        }
+        catch (FrontendLoadException exception)
+        {
+            runLog.ItemDone("failed");
+            Console.Error.WriteLine(exception.Message);
+            return null;
+        }
+        finally
+        {
+            runLog.PhaseDone();
+        }
     }
 
     /// <summary>
@@ -161,8 +213,9 @@ internal static class CompareCommand
     /// Added and Removed results, no backend call, exit 0 unless a C# project was skipped.
     /// </summary>
     private static int Report(
-        CompareOptions options, FrontendAnalysis analysis, EquivConfig config, IVerificationBackend backend, SarifLog? baseline, IReportSink sink, ExecutionEnvironment? execution)
+        CompareOptions options, FrontendAnalysis analysis, EquivConfig config, IVerificationBackend backend, SarifLog? baseline, Output output, ExecutionEnvironment? execution)
     {
+        (IReportSink sink, IRunLog runLog) = output;
         MatchResult matchResult = analysis.Match;
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered = Lowered(matchResult);
         LoweringCensus census = LoweringCensus.Compute(
@@ -176,10 +229,10 @@ internal static class CompareCommand
         List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(static f => PairFailure("Lowering", f.Old, f.New, f.Exception))];
         List<ProcedureIdentity> unverifiedPairs = [.. matchResult.LoweringFailures.Select(static f => f.New)];
         (List<VerificationResult> verified, List<Notification> verifyFailures, List<ProcedureIdentity> unverifiedVerified) =
-            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config, options);
+            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config, options, runLog);
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
-        List<VerificationResult> results = Executed(WithAssumptions(verified, lowered, matchResult), lowered, analysis.Replay, execution, options.Testing);
+        List<VerificationResult> results = Executed(WithAssumptions(verified, lowered, matchResult), lowered, analysis.Replay, execution, options.Testing, runLog);
         if (!options.LowerOnly)
         {
             census = census with { UnknownByScope = ScopeCounts.Of(results) };
@@ -207,7 +260,7 @@ internal static class CompareCommand
             },
             notifications,
             unverified);
-        sink.Write(log);
+        Written(sink, log, options.OutPath, runLog);
 
         // ADR 0023: a pair that failed to verify outranks a skipped project, which outranks a verdict, because each
         // makes the result set more incomplete than the last (ARCHITECTURE.md's exit-code precedence).
@@ -220,6 +273,16 @@ internal static class CompareCommand
             (false, false, true) => ExitCodes.Success,
             _ => DecideExitCode(results, log, options.FailOn),
         };
+    }
+
+    /// <summary>The <c>write</c> phase (ADR 0038): one item, the SARIF log.</summary>
+    private static void Written(IReportSink sink, SarifLog log, string outPath, IRunLog runLog)
+    {
+        runLog.Phase("write", 1, 1);
+        runLog.Item(outPath, 1);
+        sink.Write(log);
+        runLog.ItemDone("written");
+        runLog.PhaseDone();
     }
 
     /// <summary>
@@ -249,13 +312,15 @@ internal static class CompareCommand
     /// <c>proofMethod: observed</c> when the runtimes are seen to differ (ticket P1-008). Execution never makes a result
     /// Equivalent. Projects and drivers are emitted into a temporary folder that is deleted afterwards. Without
     /// <c>--execute</c> (<paramref name="execution"/> null), or from a frontend that cannot build drivers, nothing runs.
+    /// Otherwise each result is one item of the <c>execute</c> phase (ADR 0038).
     /// </summary>
     private static List<VerificationResult> Executed(
         List<VerificationResult> results,
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered,
         IReplayDriverFactory? factory,
         ExecutionEnvironment? execution,
-        TestingOptions testing)
+        TestingOptions testing,
+        IRunLog runLog)
     {
         if (execution is null || factory is null)
         {
@@ -266,21 +331,54 @@ internal static class CompareCommand
         Replayer replayer = new(execution.Host);
         DifferentialTester tester = new(execution.Host, testing, execution.Time);
         string directory = Directory.CreateTempSubdirectory("equiv-execute-").FullName;
+        runLog.Phase("execute", results.Count, results.Count);
         try
         {
-            return
-            [
-                .. results.Select(result => (result.Verdict, pairs[result.Identity.Value]) switch
+            List<VerificationResult> executed = [];
+            foreach (VerificationResult result in results)
+            {
+                runLog.Item(result.Identity.Value, 1);
+                (VerificationResult next, string outcome) = (result.Verdict, pairs[result.Identity.Value]) switch
                 {
-                    (Divergent divergent, var (pair, _, _)) => result with { Replay = replayer.Replay(factory.Create(pair, divergent.Counterexample, directory)) },
-                    (Unknown unknown, var (pair, old, @new)) => tester.Test(factory.Plan(pair, unknown.Candidate, directory), old, @new).Apply(result),
-                    _ => result,
-                }),
-            ];
+                    (Divergent divergent, var (pair, _, _)) => (result with { Replay = replayer.Replay(factory.Create(pair, divergent.Counterexample, directory)) }, "replayed"),
+                    (Unknown unknown, var (pair, old, @new)) => (tester.Test(factory.Plan(pair, unknown.Candidate, directory), old, @new).Apply(result), "tested"),
+                    _ => (result, "skipped"),
+                };
+                executed.Add(next);
+                runLog.ItemDone(outcome);
+            }
+
+            return executed;
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            runLog.PhaseDone();
+            DeleteTemporary(directory, static d => Directory.Delete(d, recursive: true), TimeSpan.FromMilliseconds(500));
+        }
+    }
+
+    /// <summary>
+    /// Deletes <c>--execute</c>'s temporary folder, trying <see cref="DeleteAttempts"/> times <paramref name="pause"/> apart
+    /// and then leaving it to the OS's temp cleanup. A driver process that has exited can still hold its <c>.exe</c> open for
+    /// a moment on Windows ("Access to the path is denied"), and a folder left behind must not turn a finished run into
+    /// exit 5 with no SARIF.
+    /// </summary>
+    internal static void DeleteTemporary(string directory, Action<string> delete, TimeSpan pause)
+    {
+        for (int attempt = 1; attempt <= DeleteAttempts; attempt++)
+        {
+            try
+            {
+                delete(directory);
+                return;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                if (attempt < DeleteAttempts)
+                {
+                    Thread.Sleep(pause);
+                }
+            }
         }
     }
 
@@ -397,11 +495,18 @@ internal static class CompareCommand
     /// pair gets no <see cref="VerificationResult"/>, an <c>error</c> notification naming both identities and
     /// carrying the exception, and its identity in the returned unverified list; every other pair is still
     /// verified. <see cref="OperationCanceledException"/> and <see cref="OutOfMemoryException"/> propagate unchanged.
+    /// Each pair is one item of the <c>verify</c> phase, weighed by <see cref="PairWeight"/>, and the phase is bounded by
+    /// the pairs the solver decides (ADR 0038).
     /// </summary>
     private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) Verified(
-        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config, CompareOptions compare)
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config, CompareOptions compare, IRunLog runLog)
     {
-        VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames) { ChcIntMode = compare.ChcIntMode, InvariantModel = compare.InvariantModel };
+        VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames)
+        {
+            ChcIntMode = compare.ChcIntMode,
+            InvariantModel = compare.InvariantModel,
+            Log = runLog,
+        };
         if (options.InvariantModel is { } model)
         {
             // Ticket P1-002 criterion 4: rung 5 sends loop IR text to the model, so say so before any pair is verified.
@@ -412,46 +517,70 @@ internal static class CompareCommand
         List<Notification> failures = [];
         List<ProcedureIdentity> unverified = [];
 
-        foreach ((ProcedurePair pair, IrProcedure old, IrProcedure @new) in lowered)
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New, Decision? Decided, long Weight)> pairs =
+            [.. lowered.Select(static p => Weighed(p.Pair, p.Old, p.New, Decide(p.Pair, p.Old, p.New)))];
+        List<int> solverRungs = [.. pairs.Where(static p => p.Decided is null).Select(static p => PairWeight.Rungs(p.Old, p.New))];
+        runLog.Phase("verify", pairs.Count, pairs.Sum(static p => p.Weight), new PhaseBound(solverRungs.Count, config.TimeoutMs, solverRungs.DefaultIfEmpty(1).Max()));
+        foreach ((ProcedurePair pair, IrProcedure old, IrProcedure @new, Decision? decided, long weight) in pairs)
         {
-            // ADR 0029 decision 2: erroneous code is Unknown(Unbound) without asking the solver; it is never evidence of equivalence.
-            string unbound = string.Join("; ", UnboundCauses("legacy", old).Concat(UnboundCauses("modern", @new)));
-            if (unbound.Length > 0)
+            runLog.Item(pair.New.Value, weight);
+            if (decided is not null)
             {
-                results.Add(new VerificationResult(pair.New, new Unknown(UnknownReason.Unbound, unbound)) { EquivalencesApplied = pair.EquivalencesApplied });
-                continue;
-            }
-
-            // Ticket M4-006: exactly one side is async, so exception timing differs; the frontend made both bodies one opaque.
-            ImmutableArray<UnknownCause> mismatch = [.. AsyncMismatch(Codebase.Legacy, old), .. AsyncMismatch(Codebase.Modern, @new)];
-            if (!mismatch.IsEmpty)
-            {
-                results.Add(new VerificationResult(pair.New, new Unknown(UnknownReason.Opaque, Unknown.AsyncMismatchReason) { Causes = mismatch })
-                {
-                    EquivalencesApplied = pair.EquivalencesApplied,
-                });
-                continue;
-            }
-
-            // ADR 0024: identical bound code is Equivalent without the solver.
-            if (IsCongruent(pair, old, @new))
-            {
-                results.Add(new VerificationResult(pair.New, new Equivalent(ProofMethod.Congruence)) { EquivalencesApplied = pair.EquivalencesApplied });
+                results.Add(decided.Result);
+                runLog.ItemDone(decided.Outcome);
                 continue;
             }
 
             try
             {
-                results.Add(new VerificationResult(pair.New, backend.Verify(old, @new, options)) { EquivalencesApplied = pair.EquivalencesApplied });
+                Verdict verdict = backend.Verify(old, @new, options);
+                results.Add(new VerificationResult(pair.New, verdict) { EquivalencesApplied = pair.EquivalencesApplied });
+                runLog.ItemDone(verdict switch
+                {
+                    Equivalent => "equivalent",
+                    Divergent => "divergent",
+                    _ => "unknown",
+                });
             }
             catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
             {
                 failures.Add(PairFailure("Verifying", pair.Old, pair.New, exception));
                 unverified.Add(pair.New);
+                runLog.ItemDone("failed");
             }
         }
 
+        runLog.PhaseDone();
         return (results, failures, unverified);
+    }
+
+    private static (ProcedurePair Pair, IrProcedure Old, IrProcedure New, Decision? Decided, long Weight) Weighed(
+        ProcedurePair pair, IrProcedure old, IrProcedure @new, Decision? decided) =>
+        (pair, old, @new, decided, PairWeight.Of(old, @new, solver: decided is null));
+
+    /// <summary>The result of a pair decided without the solver, with its one-word outcome; null when the solver decides it.</summary>
+    private static Decision? Decide(ProcedurePair pair, IrProcedure old, IrProcedure @new)
+    {
+        // ADR 0029 decision 2: erroneous code is Unknown(Unbound) without asking the solver; it is never evidence of equivalence.
+        string unbound = string.Join("; ", UnboundCauses("legacy", old).Concat(UnboundCauses("modern", @new)));
+        if (unbound.Length > 0)
+        {
+            return new Decision(new VerificationResult(pair.New, new Unknown(UnknownReason.Unbound, unbound)) { EquivalencesApplied = pair.EquivalencesApplied }, "unbound");
+        }
+
+        // Ticket M4-006: exactly one side is async, so exception timing differs; the frontend made both bodies one opaque.
+        ImmutableArray<UnknownCause> mismatch = [.. AsyncMismatch(Codebase.Legacy, old), .. AsyncMismatch(Codebase.Modern, @new)];
+        if (!mismatch.IsEmpty)
+        {
+            return new Decision(
+                new VerificationResult(pair.New, new Unknown(UnknownReason.Opaque, Unknown.AsyncMismatchReason) { Causes = mismatch }) { EquivalencesApplied = pair.EquivalencesApplied },
+                "async-mismatch");
+        }
+
+        // ADR 0024: identical bound code is Equivalent without the solver.
+        return IsCongruent(pair, old, @new)
+            ? new Decision(new VerificationResult(pair.New, new Equivalent(ProofMethod.Congruence)) { EquivalencesApplied = pair.EquivalencesApplied }, "congruent")
+            : null;
     }
 
     /// <summary>
@@ -577,4 +706,10 @@ internal static class CompareCommand
             _ => ExitCodes.Success,
         };
     }
+
+    /// <summary>A pair's result decided without the solver, and the outcome the verify phase logs for it.</summary>
+    private sealed record Decision(VerificationResult Result, string Outcome);
+
+    /// <summary>Where <see cref="Report"/> writes: the SARIF sink and the run log (sonar(src): csharpsquid:S107).</summary>
+    private sealed record Output(IReportSink Sink, IRunLog Log);
 }

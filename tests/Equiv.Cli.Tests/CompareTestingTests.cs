@@ -3,6 +3,7 @@ using System.CommandLine;
 using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Verdicts;
 using Equiv.Execute.Testing;
 
@@ -143,7 +144,7 @@ public sealed class CompareTestingTests
             Testing = testing ?? TestingOptions.Default,
         };
         string error = CaptureStdErr(() => CaptureStdOut(() => exitCode = CompareCommand.Run(
-            options, [new FakeFrontend("csharp", _ => true, Match(), replay: replay)], Backend(), sink, new ExecutionEnvironment(IsWindows: true, replay ?? new FakeReplay(One, One)))));
+            options, [new FakeFrontend("csharp", _ => true, Match(), replay: replay)], Backend(), sink, NullRunLog.Instance, new ExecutionEnvironment(IsWindows: true, replay ?? new FakeReplay(One, One)))));
         return (exitCode, error, sink.Log);
     }
 

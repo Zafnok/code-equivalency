@@ -2,6 +2,7 @@ using Equiv.Cli;
 using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp;
@@ -50,7 +51,7 @@ public sealed class CongruenceSampleTests
         {
             int exitCode = CompareCommand.Run(
                 new CompareOptions(Solution("callee-changed", "legacy"), Solution("callee-changed", "modern"), outPath, BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
-                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath));
+                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath), NullRunLog.Instance);
 
             Assert.Equal(ExitCodes.Divergent, exitCode);
             Dictionary<string, Result> results = SarifLog.Load(outPath).Runs[0].Results

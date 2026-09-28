@@ -1,3 +1,4 @@
+using Equiv.Cli.Progress;
 using Equiv.Execute.Testing;
 
 namespace Equiv.Cli;
@@ -11,6 +12,8 @@ namespace Equiv.Cli;
 /// times out, off when null (<see cref="Core.VerificationOptions.InvariantModel"/>; ticket P1-002).
 /// <see cref="Testing"/> is <c>--test-target</c> and <c>--test-budget</c>, which bound testing each Unknown pair under
 /// <c>--execute</c> and do nothing without it (ADR 0035 decision 3; ticket P1-008).
+/// <see cref="Verbosity"/> and <see cref="LogPath"/> are <c>--verbosity</c> and <c>--log</c>: how much progress the run
+/// writes to stderr, and the file that mirrors it (ADR 0038; ticket M4-012).
 /// </summary>
 internal sealed record CompareOptions(
     string LegacyPath,
@@ -26,4 +29,8 @@ internal sealed record CompareOptions(
     string? InvariantModel = null)
 {
     public TestingOptions Testing { get; init; } = TestingOptions.Default;
+
+    public Verbosity Verbosity { get; init; } = Verbosity.Normal;
+
+    public string? LogPath { get; init; }
 }

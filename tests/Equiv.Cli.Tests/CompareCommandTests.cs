@@ -5,6 +5,7 @@ using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
+using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
 
@@ -101,7 +102,7 @@ public sealed class CompareCommandTests
     public void Run_RejectsNullOptions()
     {
         Assert.Throws<ArgumentNullException>(() => CompareCommand.Run(
-            null!, [], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+            null!, [], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance));
     }
 
     [Fact]
@@ -109,7 +110,7 @@ public sealed class CompareCommandTests
     {
         Assert.Throws<ArgumentNullException>(() => CompareCommand.Run(
             new CompareOptions("a.sln", "b.sln", "out.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            null!, new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+            null!, new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance));
     }
 
     [Fact]
@@ -117,7 +118,7 @@ public sealed class CompareCommandTests
     {
         Assert.Throws<ArgumentNullException>(() => CompareCommand.Run(
             new CompareOptions("a.sln", "b.sln", "out.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [], null!, new InMemoryReportSink()));
+            [], null!, new InMemoryReportSink(), NullRunLog.Instance));
     }
 
     [Fact]
@@ -125,7 +126,7 @@ public sealed class CompareCommandTests
     {
         Assert.Throws<ArgumentNullException>(() => CompareCommand.Run(
             new CompareOptions("a.sln", "b.sln", "out.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [], new FakeBackend(NoVerdicts), null!));
+            [], new FakeBackend(NoVerdicts), null!, NullRunLog.Instance));
     }
 
     [Fact]
@@ -140,7 +141,7 @@ public sealed class CompareCommandTests
         {
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "out.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: true),
-                [legacyOnly, both], new FakeBackend(NoVerdicts), new InMemoryReportSink());
+                [legacyOnly, both], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance);
             Assert.Equal(ExitCodes.Success, exitCode);
         });
 
@@ -156,7 +157,7 @@ public sealed class CompareCommandTests
 
         string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "out.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+            [], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
         Assert.Equal($"error: no frontend supports both legacy={legacy.Path} and modern={modern.Path}{Environment.NewLine}", errorOutput, StringComparer.Ordinal);
@@ -172,7 +173,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "out.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [legacyOnly, modernOnly], new FakeBackend(NoVerdicts), new InMemoryReportSink());
+            [legacyOnly, modernOnly], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
     }
@@ -186,7 +187,7 @@ public sealed class CompareCommandTests
 
         string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy, modern, "out.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+            [], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
         Assert.Equal($"error: file not found (legacy={legacy}, modern={modern}){Environment.NewLine}", errorOutput, StringComparer.Ordinal);
@@ -201,7 +202,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern, "out.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink());
+            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
         Assert.Equal(0, frontend.AnalyzeCallCount);
@@ -221,7 +222,7 @@ public sealed class CompareCommandTests
         {
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: true),
-                [frontend], backend, sink);
+                [frontend], backend, sink, NullRunLog.Instance);
             Assert.Equal(ExitCodes.Success, exitCode);
         });
 
@@ -246,7 +247,7 @@ public sealed class CompareCommandTests
 
         string output = CaptureStdOut(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
-            [frontend], new FakeBackend(NoVerdicts), sink));
+            [frontend], new FakeBackend(NoVerdicts), sink, NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Equal($"analysed lines of code: legacy=49000 modern=52000{Environment.NewLine}", output, StringComparer.Ordinal);
@@ -269,7 +270,7 @@ public sealed class CompareCommandTests
 
         _ = CaptureStdOut(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
-            [frontend], new FakeBackend(NoVerdicts), sink));
+            [frontend], new FakeBackend(NoVerdicts), sink, NullRunLog.Instance));
 
         // P2-013: a project the solution does not build is neither loaded nor skipped, so it does not fail the run.
         Assert.Equal(ExitCodes.Success, exitCode);
@@ -293,7 +294,7 @@ public sealed class CompareCommandTests
 
         string output = CaptureStdOut(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: true),
-            [frontend], backend, sink));
+            [frontend], backend, sink, NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Empty(backend.Calls);
@@ -316,8 +317,8 @@ public sealed class CompareCommandTests
         FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Divergent(Counterexample()) });
 
         CompareOptions regular = new(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false);
-        Assert.Equal(ExitCodes.Divergent, CompareCommand.Run(regular, [frontend], backend, new InMemoryReportSink()));
-        Assert.Equal(ExitCodes.Success, CompareCommand.Run(regular with { LowerOnly = true }, [frontend], backend, new InMemoryReportSink()));
+        Assert.Equal(ExitCodes.Divergent, CompareCommand.Run(regular, [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance));
+        Assert.Equal(ExitCodes.Success, CompareCommand.Run(regular with { LowerOnly = true }, [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance));
     }
 
     [Fact]
@@ -330,7 +331,7 @@ public sealed class CompareCommandTests
 
         CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: true),
-            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.LoadFailure, exitCode);
     }
@@ -351,7 +352,7 @@ public sealed class CompareCommandTests
 
         string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", withBaseline ? baseline.Path : null, ConfigPath: null, failOn, DryRun: false, LowerOnly: true),
-            [frontend], new FakeBackend(NoVerdicts), sink));
+            [frontend], new FakeBackend(NoVerdicts), sink, NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
         Assert.Equal($"error: --lower-only cannot be combined with --baseline or --fail-on{Environment.NewLine}", errorOutput, StringComparer.Ordinal);
@@ -383,7 +384,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], backend, sink);
+            [frontend], backend, sink, NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         await VerifyJson(Serialize(sink.Log!));
@@ -403,7 +404,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], backend, new InMemoryReportSink());
+            [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.Divergent, exitCode);
     }
@@ -422,7 +423,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
-            [frontend], backend, new InMemoryReportSink());
+            [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.UnknownPresent, exitCode);
     }
@@ -441,7 +442,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], backend, new InMemoryReportSink());
+            [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.Success, exitCode);
     }
@@ -460,7 +461,7 @@ public sealed class CompareCommandTests
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-                [frontend], backend, new InMemoryReportSink()));
+                [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance));
 
             Assert.Contains(PairIdentity.Value, exception.Message, StringComparison.Ordinal);
         }
@@ -489,7 +490,7 @@ public sealed class CompareCommandTests
 
         string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], backend, sink));
+            [frontend], backend, sink, NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.InternalError, exitCode);
         Run run = sink.Log!.Runs[0];
@@ -529,7 +530,7 @@ public sealed class CompareCommandTests
 
         string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: lowerOnly),
-            [frontend], backend, sink));
+            [frontend], backend, sink, NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.InternalError, exitCode);
         Run run = sink.Log!.Runs[0];
@@ -564,7 +565,7 @@ public sealed class CompareCommandTests
         int exitCode = ExitCodes.Success;
         CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], backend, new InMemoryReportSink()));
+            [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.InternalError, exitCode);
     }
@@ -585,7 +586,7 @@ public sealed class CompareCommandTests
 
         CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
-            [frontend], backend, new InMemoryReportSink()));
+            [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.InternalError, exitCode);
     }
@@ -600,7 +601,7 @@ public sealed class CompareCommandTests
 
         Assert.Throws<OperationCanceledException>(() => CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], backend, new InMemoryReportSink()));
+            [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance));
     }
 
     /// <summary>
@@ -618,7 +619,7 @@ public sealed class CompareCommandTests
 
         Assert.Throws<InsufficientMemoryException>(() => CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], backend, new InMemoryReportSink()));
+            [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance));
     }
 
     [Fact]
@@ -637,7 +638,7 @@ public sealed class CompareCommandTests
 
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", baselinePath, ConfigPath: null, "divergent", DryRun: false),
-                [frontend], backend, sink);
+                [frontend], backend, sink, NullRunLog.Instance);
 
             Assert.Equal(ExitCodes.InternalError, exitCode);
             Result carried = Assert.Single(sink.Log!.Runs[0].Results);
@@ -663,7 +664,7 @@ public sealed class CompareCommandTests
 
         string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.LoadFailure, exitCode);
         Assert.Equal(exception.Message + Environment.NewLine, errorOutput, StringComparer.Ordinal);
@@ -688,7 +689,7 @@ public sealed class CompareCommandTests
 
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", baselinePath, ConfigPath: null, "divergent", DryRun: false),
-                [frontend], backend, sink);
+                [frontend], backend, sink, NullRunLog.Instance);
 
             Assert.Equal(ExitCodes.Success, exitCode);
             Result result = Assert.Single(sink.Log!.Runs[0].Results);
@@ -720,7 +721,7 @@ public sealed class CompareCommandTests
 
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", baselinePath, ConfigPath: null, "divergent", DryRun: false),
-                [frontend], backend, new InMemoryReportSink());
+                [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance);
 
             Assert.Equal(ExitCodes.Success, exitCode);
         }
@@ -745,7 +746,7 @@ public sealed class CompareCommandTests
 
             int exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, configPath, "divergent", DryRun: false),
-                [frontend], backend, new InMemoryReportSink());
+                [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance);
 
             Assert.Equal(ExitCodes.Success, exitCode);
             VerificationOptions options = Assert.Single(backend.Calls);
@@ -771,7 +772,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false, ChcIntMode: false),
-            [frontend], backend, new InMemoryReportSink());
+            [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.False(Assert.Single(backend.Calls).ChcIntMode);
@@ -806,7 +807,7 @@ public sealed class CompareCommandTests
 
         string stderr = CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false, InvariantModel: model),
-            [frontend], backend, new InMemoryReportSink()));
+            [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Equal(model, Assert.Single(backend.Calls).InvariantModel);
@@ -825,7 +826,7 @@ public sealed class CompareCommandTests
 
         string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, configPath, "divergent", DryRun: false),
-            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
         Assert.Equal($"error: file not found (config={configPath}){Environment.NewLine}", errorOutput, StringComparer.Ordinal);
@@ -844,7 +845,7 @@ public sealed class CompareCommandTests
 
         string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", baselinePath, ConfigPath: null, "divergent", DryRun: false),
-            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+            [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
         Assert.Equal($"error: file not found (baseline={baselinePath}){Environment.NewLine}", errorOutput, StringComparer.Ordinal);
@@ -866,7 +867,7 @@ public sealed class CompareCommandTests
 
             string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, configPath, "divergent", DryRun: false),
-                [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+                [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance));
 
             Assert.Equal(ExitCodes.UsageError, exitCode);
             Assert.False(string.IsNullOrWhiteSpace(errorOutput));
@@ -893,7 +894,7 @@ public sealed class CompareCommandTests
 
             string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", baselinePath, ConfigPath: null, "divergent", DryRun: false),
-                [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink()));
+                [frontend], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance));
 
             Assert.Equal(ExitCodes.UsageError, exitCode);
             Assert.StartsWith($"error: '{baselinePath}' is not a valid SARIF log: ", errorOutput, StringComparison.Ordinal);
@@ -921,7 +922,7 @@ public sealed class CompareCommandTests
 
             string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, configPath, "divergent", DryRun: false),
-                [frontend], backend, new InMemoryReportSink()));
+                [frontend], backend, new InMemoryReportSink(), NullRunLog.Instance));
 
             Assert.Equal(ExitCodes.Success, exitCode);
             Assert.Contains("CFG002", errorOutput, StringComparison.Ordinal);
@@ -944,7 +945,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
-            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink);
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink, NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.UnknownPresent, exitCode);
         Assert.Empty(backend.Calls);
@@ -976,7 +977,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
-            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink);
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink, NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.UnknownPresent, exitCode);
         Assert.Empty(backend.Calls);
@@ -1001,7 +1002,7 @@ public sealed class CompareCommandTests
 
         CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
-            [new FakeFrontend("csharp", _ => true, new MatchResult([verified, unboundPair], [], [], []))], backend, sink);
+            [new FakeFrontend("csharp", _ => true, new MatchResult([verified, unboundPair], [], [], []))], backend, sink, NullRunLog.Instance);
 
         Result[] results = [.. sink.Log!.Runs[0].Results];
         Assert.Equal(["webapi.not-found", "webapi.ok-of-int"], results.Single(static r => string.Equals(r.RuleId, "EQ001", StringComparison.Ordinal)).GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
@@ -1018,7 +1019,7 @@ public sealed class CompareCommandTests
 
         CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], new FakeBackend(NoVerdicts), sink);
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], new FakeBackend(NoVerdicts), sink, NullRunLog.Instance);
 
         Assert.Contains("legacy: unbound at a.cs 3:5", Assert.Single(sink.Log!.Runs[0].Results).Message.Text, StringComparison.Ordinal);
     }
@@ -1043,7 +1044,7 @@ public sealed class CompareCommandTests
 
         string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [new FakeFrontend("csharp", _ => true, matchResult)], backend, sink));
+            [new FakeFrontend("csharp", _ => true, matchResult)], backend, sink, NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.LoadFailure, exitCode);
         Run run = sink.Log!.Runs[0];
@@ -1080,7 +1081,7 @@ public sealed class CompareCommandTests
 
         CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [new FakeFrontend("csharp", _ => true, matchResult)], backend, sink));
+            [new FakeFrontend("csharp", _ => true, matchResult)], backend, sink, NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.True(Assert.Single(sink.Log!.Runs[0].Invocations).ExecutionSuccessful);
@@ -1103,7 +1104,7 @@ public sealed class CompareCommandTests
 
         CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, failOn, DryRun: false),
-            [new FakeFrontend("csharp", _ => true, matchResult)], backend, new InMemoryReportSink()));
+            [new FakeFrontend("csharp", _ => true, matchResult)], backend, new InMemoryReportSink(), NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.LoadFailure, exitCode);
     }
@@ -1122,7 +1123,7 @@ public sealed class CompareCommandTests
 
         CaptureStdErr(() => CaptureStdOut(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: true),
-            [new FakeFrontend("csharp", _ => true, matchResult)], backend, new InMemoryReportSink())));
+            [new FakeFrontend("csharp", _ => true, matchResult)], backend, new InMemoryReportSink(), NullRunLog.Instance)));
 
         Assert.Equal(ExitCodes.LoadFailure, exitCode);
         Assert.Empty(backend.Calls);
@@ -1146,7 +1147,7 @@ public sealed class CompareCommandTests
 
             CaptureStdErr(() => CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", baselinePath, ConfigPath: null, "divergent", DryRun: false),
-                [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(NoVerdicts), sink));
+                [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(NoVerdicts), sink, NullRunLog.Instance));
 
             Result carried = Assert.Single(sink.Log!.Runs[0].Results);
             Assert.Equal(BaselineState.Unchanged, carried.BaselineState);
@@ -1171,7 +1172,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: "unknown", DryRun: false),
-            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink);
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink, NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Empty(backend.Calls);
@@ -1206,7 +1207,7 @@ public sealed class CompareCommandTests
 
         CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
-            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink);
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink, NullRunLog.Instance);
 
         Assert.Single(backend.Calls);
         Assert.Equal("bounded", Assert.Single(sink.Log!.Runs[0].Results).GetProperty<string>("proofMethod"));
@@ -1227,7 +1228,7 @@ public sealed class CompareCommandTests
 
         CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
-            [new FakeFrontend("csharp", _ => true, new MatchResult([unboundLegacy, unboundModern], [], [], []))], backend, sink);
+            [new FakeFrontend("csharp", _ => true, new MatchResult([unboundLegacy, unboundModern], [], [], []))], backend, sink, NullRunLog.Instance);
 
         Assert.Empty(backend.Calls);
         Assert.All(sink.Log!.Runs[0].Results, static r => Assert.Equal("unbound", r.GetProperty<string>("unknownReason")));
@@ -1260,7 +1261,7 @@ public sealed class CompareCommandTests
             InMemoryReportSink sink = new();
             _ = CaptureStdOut(() => CompareCommand.Run(
                 new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: lowerOnly),
-                [new FakeFrontend("csharp", _ => true, match)], backend, sink));
+                [new FakeFrontend("csharp", _ => true, match)], backend, sink, NullRunLog.Instance));
             Assert.True(sink.Log!.Runs[0].TryGetSerializedPropertyValue("loweringCensus", out string? census));
             return census!;
         }
@@ -1348,7 +1349,7 @@ public sealed class CompareCommandTests
         int exitCode = ExitCodes.UsageError;
         CaptureStdErr(() => exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
-            [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(verdicts), sink));
+            [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(verdicts), sink, NullRunLog.Instance));
         onExit?.Invoke(exitCode);
         return sink.Log!.Runs[0].Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal);
     }
@@ -1400,7 +1401,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
-            [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(NoVerdicts), sink);
+            [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(NoVerdicts), sink, NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.UnknownPresent, exitCode);
         Result result = Assert.Single(sink.Log!.Runs[0].Results);
@@ -1419,7 +1420,7 @@ public sealed class CompareCommandTests
 
         int exitCode = CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
-            [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(NoVerdicts), new InMemoryReportSink());
+            [new FakeFrontend("csharp", _ => true, matchResult)], new FakeBackend(NoVerdicts), new InMemoryReportSink(), NullRunLog.Instance);
 
         Assert.Equal(ExitCodes.Success, exitCode);
     }
