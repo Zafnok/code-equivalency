@@ -9,7 +9,7 @@ namespace Equiv.Corpus.Seeder;
 /// </summary>
 public enum MutationOperator
 {
-    /// <summary>Renames one local variable throughout the method.</summary>
+    /// <summary>Renames one local variable throughout the method, never one written inside an argument (its name can be a value there).</summary>
     RenameLocals,
 
     /// <summary>Swaps two adjacent assignments that neither throw nor read or write what the other writes.</summary>

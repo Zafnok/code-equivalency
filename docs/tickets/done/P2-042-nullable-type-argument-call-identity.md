@@ -1,5 +1,5 @@
 # P2-042 A generic call's identity differs on a nullable-annotated type argument
-Status: todo
+Status: done (PR #257)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -31,3 +31,7 @@ the modifier).
 
 ## Notes
 - Renumbered from P2-041 (filed by #246); P2-041 is the as-array ticket (#249), P2-043 the derivation-length one (#254).
+- Decision: reuse `TypeMapper.Unannotated` (made `public` on the internal class) rather than a second copy of the
+  format in `CallIdentityFactory`; it is `CSharpErrorMessageFormat` (the parameterless `ToDisplayString()` default)
+  less the nullable modifier, so every other identity spelling is unchanged.
+- Decision: the end-to-end test sits in `NullableArrayEquivalenceTests` next to P2-032's, reusing its lowering helper.

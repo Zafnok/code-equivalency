@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Equiv.Core.Matching;
 using Equiv.Core.Verdicts;
 
@@ -23,4 +25,12 @@ public interface IReplayDriverFactory
     /// one they can be built from. Never throws for a pair it cannot call: the plan is then not constructible, with the reason.
     /// </summary>
     TestingPlan Plan(ProcedurePair pair, Counterexample? candidate, string directory);
+
+    /// <summary>
+    /// Emits both sides' projects and the two drivers of <paramref name="pair"/> into <paramref name="directory"/>, and
+    /// builds one case from <paramref name="arguments"/>: JSON values in the method's own parameter order, its receiver
+    /// (if any) excluded (ADR 0035, ADR 0036; ticket M5-002's <c>probe</c>). Never throws for an argument it cannot build:
+    /// the plan is then not constructible, naming the parameter.
+    /// </summary>
+    ReplayPlan Probe(ProcedurePair pair, IReadOnlyList<JsonElement> arguments, string directory);
 }

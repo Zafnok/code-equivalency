@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
+using Equiv.Cli.Mcp;
 using Equiv.Core;
 
 using ModelContextProtocol.Protocol;
@@ -18,22 +19,25 @@ internal static class McpCommand
     /// <summary>The server name an agent sees.</summary>
     internal const string ServerName = "equiv";
 
-    /// <summary>The <c>mcp</c> command over the process's own stdin and stdout.</summary>
-    public static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend) =>
-        Create(frontends, backend, ProcessStreams);
+    /// <summary>The <c>mcp</c> command over the process's own stdin and stdout; <paramref name="execution"/> is where <c>--execute</c>
+    /// runs the <c>probe</c> tool's code, this machine when null.</summary>
+    public static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution = null) =>
+        Create(frontends, backend, execution, ProcessStreams);
 
     /// <summary>The <c>mcp</c> command over <paramref name="streams"/>: the stream the server reads, then the one it writes.</summary>
-    internal static Command Create(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, Func<(Stream Input, Stream Output)> streams)
+    internal static Command Create(
+        IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution, Func<(Stream Input, Stream Output)> streams)
     {
         ArgumentNullException.ThrowIfNull(frontends);
         ArgumentNullException.ThrowIfNull(backend);
         ArgumentNullException.ThrowIfNull(streams);
 
-        Command command = new("mcp", "Runs an MCP server over stdio that serves the compare pipeline to a coding agent.");
-        command.SetAction((_, cancellationToken) =>
+        Option<bool> executeOption = new("--execute");
+        Command command = new("mcp", "Runs an MCP server over stdio that serves the compare pipeline to a coding agent.") { executeOption };
+        command.SetAction((parseResult, cancellationToken) =>
         {
             (Stream input, Stream output) = streams();
-            return ServeAsync(input, output, new EquivTools(frontends, backend), cancellationToken);
+            return McpExecuteGate.RunAsync(input, output, frontends, backend, parseResult.GetValue(executeOption), execution, cancellationToken);
         });
         return command;
     }

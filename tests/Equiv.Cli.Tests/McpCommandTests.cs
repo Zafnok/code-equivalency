@@ -5,6 +5,7 @@ using System.Text.Json;
 
 using Equiv.Core;
 using Equiv.Core.Configuration;
+using Equiv.Core.Execution;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Progress;
@@ -41,6 +42,10 @@ public sealed class McpCommandTests
         Assert.Equal(["compare", "lower_only"], tools.Select(static t => t.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         Assert.All(tools, static t => Assert.True(t.ProtocolTool.Annotations?.ReadOnlyHint));
         McpClientTool compare = tools.Single(static t => string.Equals(t.Name, "compare", StringComparison.Ordinal));
+        Assert.Equal("Compare two solutions", compare.ProtocolTool.Title);
+        Assert.Equal(
+            "Checks whether a legacy and a modern solution behave the same. Returns a one-line verdict summary, then the SARIF 2.1.0 log `equiv compare` writes.",
+            compare.ProtocolTool.Description);
         Assert.Equal(
             ["legacy", "modern"],
             compare.ProtocolTool.InputSchema.GetProperty("required").EnumerateArray().Select(static e => e.GetString()).Order(StringComparer.Ordinal), StringComparer.Ordinal);
@@ -48,9 +53,31 @@ public sealed class McpCommandTests
             ["baseline", "bound", "config", "legacy", "modern", "timeoutMs"],
             compare.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject().Select(static p => p.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         McpClientTool lowerOnly = tools.Single(static t => string.Equals(t.Name, "lower_only", StringComparison.Ordinal));
+        Assert.Equal("Lower two solutions without verifying", lowerOnly.ProtocolTool.Title);
+        Assert.Equal(
+            "Loads, matches and lowers a legacy and a modern solution and reports the lowering census and the added and removed procedures, without calling the solver (`equiv compare --lower-only`).",
+            lowerOnly.ProtocolTool.Description);
         Assert.Equal(
             ["config", "legacy", "modern"],
             lowerOnly.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject().Select(static p => p.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
+    }
+
+    /// <summary>The summary's <c>Divergent</c> count matches EQ006 (a runtime-changed callee) as well as EQ002.</summary>
+    [Fact]
+    public async Task Compare_RuntimeChangedDivergent_CountsAsDivergent()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        CallIdentity flagged = new("System.String::IndexOf(char)", RuntimeChanged: true);
+        IrCallRecord record = new(flagged, [new IrBitVecValue(16, 'a')]);
+        Counterexample counterexample = Counterexample() with { Old = Run(1) with { Trace = [record] } };
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Divergent(counterexample) });
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        using Session session = await Session.StartAsync(frontend, backend).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
+
+        Assert.Equal("Equivalent 0, Divergent 1, Unknown 0, skipped projects 0, exit code 1", Text(result.Content[0]));
     }
 
     [Fact]
@@ -80,7 +107,7 @@ public sealed class McpCommandTests
         using AnonymousPipeClientStream serverInput = new(PipeDirection.In, clientToServer.ClientSafePipeHandle);
         using AnonymousPipeServerStream serverToClient = new(PipeDirection.Out);
         using AnonymousPipeClientStream clientInput = new(PipeDirection.In, serverToClient.ClientSafePipeHandle);
-        Command command = McpCommand.Create([], new FakeBackend(NoVerdicts), () => (serverInput, serverToClient));
+        Command command = McpCommand.Create([], new FakeBackend(NoVerdicts), execution: null, () => (serverInput, serverToClient));
 
         Task<int> server = Task.Run(() => command.Parse(["mcp"]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken), TestContext.Current.CancellationToken);
         McpClient client = await McpClient.CreateAsync(new StreamClientTransport(clientToServer, clientInput), cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
@@ -91,12 +118,48 @@ public sealed class McpCommandTests
         Assert.Equal(ExitCodes.Success, await server.ConfigureAwait(true));
     }
 
+    /// <summary>
+    /// Ticket M5-002 criteria 1 and 3, through the real <c>--execute</c> command-line path rather than <see cref="Session"/>'s
+    /// direct <see cref="McpCommand.ServeAsync"/> call: on Windows it prints ADR 0035's note, serves <c>probe</c> and exits 0.
+    /// </summary>
+    [Fact]
+    public async Task Create_WithExecuteOnWindows_PrintsNoteAndServesProbe()
+    {
+        using AnonymousPipeServerStream clientToServer = new(PipeDirection.Out);
+        using AnonymousPipeClientStream serverInput = new(PipeDirection.In, clientToServer.ClientSafePipeHandle);
+        using AnonymousPipeServerStream serverToClient = new(PipeDirection.Out);
+        using AnonymousPipeClientStream clientInput = new(PipeDirection.In, serverToClient.ClientSafePipeHandle);
+        ExecutionEnvironment windows = new(IsWindows: true, new FakeReplay(string.Empty, string.Empty));
+        Command command = McpCommand.Create([], new FakeBackend(NoVerdicts), windows, () => (serverInput, serverToClient));
+        TextWriter originalError = Console.Error;
+        using StringWriter error = new();
+        Console.SetError(error);
+        Task<int> server;
+        IList<McpClientTool> tools;
+        try
+        {
+            server = Task.Run(() => command.Parse(["mcp", "--execute"]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken), TestContext.Current.CancellationToken);
+            McpClient client = await McpClient.CreateAsync(new StreamClientTransport(clientToServer, clientInput), cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await client.DisposeAsync().ConfigureAwait(true);
+            await clientToServer.DisposeAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+
+        Assert.Equal(ExitCodes.Success, await server.ConfigureAwait(true));
+        Assert.Contains(ExecutionEnvironment.Note, error.ToString(), StringComparison.Ordinal);
+        Assert.Contains(tools, static t => string.Equals(t.Name, "probe", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Create_RejectsNulls()
     {
-        Assert.Throws<ArgumentNullException>(() => McpCommand.Create(null!, new FakeBackend(NoVerdicts), () => (Stream.Null, Stream.Null)));
-        Assert.Throws<ArgumentNullException>(() => McpCommand.Create([], null!, () => (Stream.Null, Stream.Null)));
-        Assert.Throws<ArgumentNullException>(() => McpCommand.Create([], new FakeBackend(NoVerdicts), null!));
+        Assert.Throws<ArgumentNullException>(() => McpCommand.Create(null!, new FakeBackend(NoVerdicts), execution: null, () => (Stream.Null, Stream.Null)));
+        Assert.Throws<ArgumentNullException>(() => McpCommand.Create([], null!, execution: null, () => (Stream.Null, Stream.Null)));
+        Assert.Throws<ArgumentNullException>(() => McpCommand.Create([], new FakeBackend(NoVerdicts), execution: null, null!));
     }
 
     /// <summary>The root command lists <c>mcp</c>; the process-stdio overload builds it without opening any stream.</summary>
@@ -301,6 +364,279 @@ public sealed class McpCommandTests
         Assert.Equal(["EQ004", "EQ005"], Parse(Text(result.Content[1])).Runs[0].Results.Select(static r => r.RuleId).Order(StringComparer.Ordinal), StringComparer.Ordinal);
     }
 
+    /// <summary>Ticket M5-002 criterion 1: without <c>--execute</c>, <c>probe</c> is not registered at all.</summary>
+    [Fact]
+    public async Task Probe_NotRegisteredWithoutExecute()
+    {
+        using Session session = await Session.StartAsync(new FakeFrontend("csharp", _ => true), new FakeBackend(NoVerdicts)).ConfigureAwait(true);
+
+        IList<McpClientTool> tools = await session.Client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.DoesNotContain(tools, static t => string.Equals(t.Name, "probe", StringComparison.Ordinal));
+    }
+
+    /// <summary>With no environment given, <c>--execute</c> runs on this machine: on Windows it prints the note, elsewhere it refuses.</summary>
+    [Fact]
+    public void Probe_WithoutAnEnvironment_UsesThisMachine()
+    {
+        Command command = McpCommand.Create([], new FakeBackend(NoVerdicts), execution: null, () => (Stream.Null, Stream.Null));
+        int exitCode = ExitCodes.Success;
+        string stderr = CaptureStdErr(() =>
+            exitCode = command.Parse(["mcp", "--execute"]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken).GetAwaiter().GetResult());
+
+        Assert.Equal(OperatingSystem.IsWindows() ? ExitCodes.Success : ExitCodes.UsageError, exitCode);
+        Assert.StartsWith(OperatingSystem.IsWindows() ? ExecutionEnvironment.Note : ExecutionEnvironment.NeedsWindows, stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket M5-002 criterion 1: <c>equiv mcp --execute</c> off Windows exits 3 with ADR 0035's message and serves nothing.</summary>
+    [Fact]
+    public async Task Probe_NotRegisteredOffWindows()
+    {
+        ExecutionEnvironment nonWindows = new(IsWindows: false, new FakeReplay(string.Empty, string.Empty));
+        Command command = McpCommand.Create([], new FakeBackend(NoVerdicts), nonWindows, () => (Stream.Null, Stream.Null));
+        int exitCode = ExitCodes.Success;
+        string stderr = CaptureStdErr(() =>
+            exitCode = command.Parse(["mcp", "--execute"]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken).GetAwaiter().GetResult());
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Contains(ExecutionEnvironment.NeedsWindows, stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket M5-002 criteria 1 and 3: with <c>--execute</c> on Windows, <c>probe</c> is registered and says it runs code on the host.</summary>
+    [Fact]
+    public async Task Probe_IsRegisteredWithExecuteOnWindowsAndNamesItsHostSideEffect()
+    {
+        ExecutionEnvironment windows = new(IsWindows: true, new FakeReplay(string.Empty, string.Empty));
+        using Session session = await Session.StartAsync(new FakeFrontend("csharp", _ => true), new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        IList<McpClientTool> tools = await session.Client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        McpClientTool probe = tools.Single(static t => string.Equals(t.Name, "probe", StringComparison.Ordinal));
+        Assert.Equal("Run one matched pair on both runtimes", probe.ProtocolTool.Title);
+        Assert.Equal(
+            "Runs code from both solutions on this machine: calls one matched pair's method on the legacy runtime "
+            + "and on the modern runtime with the given arguments, and returns each side's outcome. It never writes "
+            + "SARIF and never changes a compare verdict; a mismatch here is a hypothesis, not a proof (ADR 0036).",
+            probe.ProtocolTool.Description);
+        Assert.NotEqual(true, probe.ProtocolTool.Annotations?.ReadOnlyHint);
+        Assert.Equal(
+            ["arguments", "culture", "identity", "legacy", "modern"],
+            probe.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject().Select(static p => p.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
+        Assert.Equal(
+            ["arguments", "identity", "legacy", "modern"],
+            probe.ProtocolTool.InputSchema.GetProperty("required").EnumerateArray().Select(static e => e.GetString()).Order(StringComparer.Ordinal), StringComparer.Ordinal);
+    }
+
+    /// <summary>Ticket M5-002 criterion 2: an agent's own arguments come back as both runtimes' outcomes, never a verdict.</summary>
+    [Fact]
+    public async Task Probe_ReturnsBothOutcomes()
+    {
+        FakeReplay replay = new("[\"Threw\",\"System.ArgumentNullException\"]", "[\"Threw\",\"System.NullReferenceException\"]");
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null])).ConfigureAwait(true);
+
+        Assert.NotEqual(true, result.IsError);
+        using JsonDocument document = JsonDocument.Parse(Text(Assert.Single(result.Content)));
+        Assert.Equal("Threw", document.RootElement.GetProperty("legacy").GetProperty("kind").GetString());
+        Assert.Equal("\"System.ArgumentNullException\"", document.RootElement.GetProperty("legacy").GetProperty("canonical").GetString());
+        Assert.Equal("Threw", document.RootElement.GetProperty("modern").GetProperty("kind").GetString());
+        Assert.Equal("\"System.NullReferenceException\"", document.RootElement.GetProperty("modern").GetProperty("canonical").GetString());
+        Assert.False(document.RootElement.GetProperty("equal").GetBoolean());
+        Assert.Single(replay.Probes);
+    }
+
+    /// <summary>Every <see cref="OutcomeKind"/> is reported by its own name, and equal answers on both sides give <c>equal: true</c>.</summary>
+    [Theory]
+    [InlineData("[\"Returned\",1]", "Returned")]
+    [InlineData("[\"Threw\",\"E\"]", "Threw")]
+    [InlineData("[\"NotComparable\",\"X\"]", "NotComparable")]
+    [InlineData("[\"NotConstructible\",\"Y\"]", "NotConstructible")]
+    public async Task Probe_ReportsEveryOutcomeKindByName(string answer, string expectedKind)
+    {
+        FakeReplay replay = new(answer, answer);
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null])).ConfigureAwait(true);
+
+        Assert.NotEqual(true, result.IsError);
+        using JsonDocument document = JsonDocument.Parse(Text(Assert.Single(result.Content)));
+        Assert.Equal(expectedKind, document.RootElement.GetProperty("legacy").GetProperty("kind").GetString());
+        Assert.Equal(expectedKind, document.RootElement.GetProperty("modern").GetProperty("kind").GetString());
+        Assert.True(document.RootElement.GetProperty("equal").GetBoolean());
+    }
+
+    /// <summary>Differing kinds are never equal, without comparing their canonical text (the <c>&amp;&amp;</c> short-circuits).</summary>
+    [Fact]
+    public async Task Probe_DifferingKinds_AreNeverEqual()
+    {
+        FakeReplay replay = new("[\"Returned\",1]", "[\"Threw\",\"E\"]");
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null])).ConfigureAwait(true);
+
+        using JsonDocument document = JsonDocument.Parse(Text(Assert.Single(result.Content)));
+        Assert.False(document.RootElement.GetProperty("equal").GetBoolean());
+    }
+
+    /// <summary>Ticket M5-002 criterion 2: an argument that cannot be built is a tool error naming it.</summary>
+    [Fact]
+    public async Task Probe_UnconstructibleParameter_IsToolError()
+    {
+        FakeReplay replay = new(string.Empty, string.Empty) { ProbeReason = "legacy: no System.Int32 argument can be built for x from \"oops\"" };
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, ["oops"])).ConfigureAwait(true);
+
+        Assert.True(result.IsError);
+        Assert.Contains("no System.Int32 argument can be built for x", Text(Assert.Single(result.Content)), StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket M5-002 criterion 2: an identity that matches no pair is a tool error, not a crash.</summary>
+    [Fact]
+    public async Task Probe_UnknownIdentity_IsToolError()
+    {
+        FakeReplay replay = new(string.Empty, string.Empty);
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, "T::NoSuchPair()", [])).ConfigureAwait(true);
+
+        Assert.True(result.IsError);
+        Assert.Contains("no matched pair has identity 'T::NoSuchPair()'", Text(Assert.Single(result.Content)), StringComparison.Ordinal);
+        Assert.Empty(replay.Probes);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task Probe_MissingSolution_IsToolError(bool legacyMissing, bool modernMissing)
+    {
+        FakeReplay replay = new(string.Empty, string.Empty);
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        using TempFile existingLegacy = new();
+        using TempFile existingModern = new();
+        string missing = Path.Combine(Path.GetTempPath(), $"equiv-M5-002-missing-{Guid.NewGuid():N}.sln");
+        string legacy = legacyMissing ? missing : existingLegacy.Path;
+        string modern = modernMissing ? missing : existingModern.Path;
+        using Session session = await Session.StartAsync(new FakeFrontend("csharp", _ => true), new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy, modern, PairIdentity.Value, [])).ConfigureAwait(true);
+
+        Assert.True(result.IsError);
+        Assert.Equal($"error: file not found (legacy={legacy}, modern={modern})", Text(Assert.Single(result.Content)));
+    }
+
+    [Fact]
+    public async Task Probe_UnsupportedInput_IsToolError()
+    {
+        ExecutionEnvironment windows = new(IsWindows: true, new FakeReplay(string.Empty, string.Empty));
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(new FakeFrontend("csharp", _ => false), new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [])).ConfigureAwait(true);
+
+        Assert.True(result.IsError);
+        Assert.Equal($"error: no frontend supports both legacy={legacy.Path} and modern={modern.Path}", Text(Assert.Single(result.Content)));
+    }
+
+    [Fact]
+    public async Task Probe_LoadFailure_IsToolError()
+    {
+        ExecutionEnvironment windows = new(IsWindows: true, new FakeReplay(string.Empty, string.Empty));
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, throwOnAnalyze: new FrontendLoadException("no project loaded"));
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [])).ConfigureAwait(true);
+
+        Assert.True(result.IsError);
+        Assert.Equal("no project loaded", Text(Assert.Single(result.Content)));
+    }
+
+    /// <summary>A frontend with no replay factory (<see cref="FrontendAnalysis.Replay"/> null) cannot run code at all.</summary>
+    [Fact]
+    public async Task Probe_FrontendCannotRunCode_IsToolError()
+    {
+        ExecutionEnvironment windows = new(IsWindows: true, new FakeReplay(string.Empty, string.Empty));
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [])).ConfigureAwait(true);
+
+        Assert.True(result.IsError);
+        Assert.Equal("error: this frontend cannot run code", Text(Assert.Single(result.Content)));
+    }
+
+    private static Dictionary<string, object?> ProbeArgs(string legacy, string modern, string identity, object?[] arguments, string? culture = null)
+    {
+        Dictionary<string, object?> args = new(StringComparer.Ordinal) { ["legacy"] = legacy, ["modern"] = modern, ["identity"] = identity, ["arguments"] = arguments };
+        if (culture is not null)
+        {
+            args["culture"] = culture;
+        }
+
+        return args;
+    }
+
+    /// <summary>An explicit <c>culture</c> reaches the driver's case line; it is not always the invariant culture.</summary>
+    [Fact]
+    public async Task Probe_CultureReachesTheDriver()
+    {
+        FakeReplay replay = new("[\"Returned\",1]", "[\"Returned\",1]");
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null], culture: "fr-FR")).ConfigureAwait(true);
+
+        Assert.All(replay.Lines, static line => Assert.StartsWith("[\"fr-FR\"", line, StringComparison.Ordinal));
+        Assert.NotEmpty(replay.Lines);
+    }
+
+    /// <summary>The temporary directory a probe built its drivers in is deleted afterwards, as <c>--execute</c>'s replay does.</summary>
+    [Fact]
+    public async Task Probe_DeletesItsTemporaryDirectoryAfterward()
+    {
+        FakeReplay replay = new("[\"Returned\",1]", "[\"Returned\",1]");
+        ExecutionEnvironment windows = new(IsWindows: true, replay);
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []), replay: replay);
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using Session session = await Session.StartAsync(frontend, new FakeBackend(NoVerdicts), windows).ConfigureAwait(true);
+
+        await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null])).ConfigureAwait(true);
+
+        string directory = Assert.Single(replay.Probes).Directory;
+        Assert.StartsWith("equiv-probe-", Path.GetFileName(directory), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(directory));
+    }
+
     [Fact]
     public async Task LowerOnly_MissingSolution_IsToolError()
     {
@@ -484,10 +820,12 @@ public sealed class McpCommandTests
 
         public McpClient Client { get; private set; } = null!;
 
-        public static async Task<Session> StartAsync(ILanguageFrontend frontend, IVerificationBackend backend)
+        public static async Task<Session> StartAsync(ILanguageFrontend frontend, IVerificationBackend backend, ExecutionEnvironment? execution = null)
         {
             Session session = new();
-            session.server = Task.Run(() => McpCommand.ServeAsync(session.serverInput, session.serverToClient, new EquivTools([frontend], backend), TestContext.Current.CancellationToken), TestContext.Current.CancellationToken);
+            session.server = Task.Run(
+                () => McpCommand.ServeAsync(session.serverInput, session.serverToClient, new EquivTools([frontend], backend, execution), TestContext.Current.CancellationToken),
+                TestContext.Current.CancellationToken);
             using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(20));
             session.Client = await McpClient.CreateAsync(new StreamClientTransport(session.clientToServer, session.clientInput), cancellationToken: timeout.Token).ConfigureAwait(false);
