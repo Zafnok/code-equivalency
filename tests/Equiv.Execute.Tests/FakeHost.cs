@@ -17,6 +17,8 @@ internal sealed class FakeHost(Func<string, int, string, string?> answer) : IDri
         return new Session(this, driver, Starts.Count);
     }
 
+    public IDriverHost Within(string directory) => this;
+
     private sealed class Session(FakeHost host, string driver, int number) : IDriverSession
     {
         public string? Exchange(string line, TimeSpan timeout)

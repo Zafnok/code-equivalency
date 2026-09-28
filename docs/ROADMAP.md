@@ -421,6 +421,8 @@ the only large ones.
   P2-032).
 - P2-044 (M) A replay driver's protocol stdout is shared with the code under test (found by
   P2-039's dumps). Needs P2-039.
+- P2-045 (S) A field read or written through `base` lowers to IR that fails validation (found
+  verifying P2-044 on the Tomas pair).
 
 ## M5 — Agent surface (MCP)
 
@@ -481,12 +483,31 @@ keys or quotas exist. It can run alongside M4 and M5.
   changed pairs. Needs M3-015, M4-004.
 - P1-012 (M) Spike: how much of the opaque tail disappears if the fallback lowers from IL
   (ICSharpCode.Decompiler's ILAst)? It measures, and writes an ADR against ADR 0003 only if the
-  gain is at least 5% and compiler shape drift is small. Needs M4-001, M4-002, M4-004, P2-001.
+  gain is at least 5% and compiler shape drift is small. Needs M4-001, M4-002, M4-004, P2-001. Done 2026-09-28: 10.0% lowerable, 1.7% drift; wrote ADR 0039.
 - P1-013 (M) Failure refinement: every Unknown reports whether the modern side can newly fail,
   and whether it removed a failure (ADR 0037). Needs M3-016, M3-025.
 
+IL fallback lowering (ADR 0039, accepted 2026-09-28). P1-012 measured 114 of Git Extensions' 1,143
+changed pairs (10.0%) lowerable from ILSpy's ILAst with no unmapped instruction, and shape drift in
+19 (1.7%) (`docs/runs/2026-09-28-il-lowering-spike.md`). No single construct ticket for that tail
+clears the 5% bar. The fallback ships off by default until P1-018 measures verdicts, not lowerability:
+- P1-014 (L) `ICSharpCode.Decompiler` becomes a product dependency of `Equiv.Frontend.CSharp`. It
+  reads a method's ILAst and lowers control flow, integral arithmetic and calls, with identities
+  resolved through the loaded compilation, plus an IL lowering oracle and `IL-COVERAGE.md`. Needs
+  P1-012, M4-009.
+- P1-015 (L) The rest of the spike's table: fields, arrays, addresses, type tests, exceptions and
+  pure operators, through `IrLowerer`'s own collaborators. Needs P1-014.
+- P1-016 (M) `--il-fallback`: the per-pair rule in a run, `properties.lowering`, census counts and
+  `samples/il-fallback`. Needs P1-015.
+- P1-017 (M) M0-012's differential gate also verifies every pair through the IL lowering. Needs P1-016.
+- P1-018 (S) Git Extensions with and without the fallback. On by default only if the pairs it moves
+  to a decided verdict are at least 5% of changed pairs and no Equivalent regresses. Needs P1-016,
+  P1-017.
+
 Order after M4-007: P1-008 first. Then P1-013 and the two spikes (cheap, and they decide their
-own futures). Then P1-001 → P1-002 → P1-009, and P1-010.
+own futures). Then P1-001 → P1-002 → P1-009, and P1-010. P1-012 wrote ADR 0039, so P1-014 →
+P1-015 → P1-016 → P1-017 → P1-018 follow it, in parallel with the loop ladder tickets (they
+share no files).
 
 P1-005 and P1-006 are the two soundness limits ADR 0015 names. ADR 0018 moves both ahead
 of M3-003, so no build that reports sample verdicts carries them. Until they land, an

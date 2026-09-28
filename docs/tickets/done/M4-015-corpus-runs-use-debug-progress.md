@@ -1,5 +1,5 @@
 # M4-015 Corpus runs log at `debug`, report progress on demand, and time each phase in SUMMARY.md
-Status: todo
+Status: done (PR #280)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-012, M4-013, M4-014
@@ -40,3 +40,9 @@ Any change under `src/` or `tests/`: stop, that belongs in M4-012 to M4-014.
 Changing thresholds or the metrics in ADR 0028. Re-running M4-007.
 
 ## Notes
+- Decision: kept the worktree's branch `claude/corpus-runs-debug-progress-e860a3` rather than creating `M4-015-...` (as M4-014 did).
+- Decision: `-Progress` writes its report to the output stream (not `Write-Host` like `-Metrics`), so the Pester test and a caller can capture it; `-Summary` prints the markdown table for pasting under `## Phase times` rather than editing SUMMARY.md, which lives in `docs/runs/` and is written by hand.
+- Decision: ETA error at 50% = the phase-end line's `eta@50%` minus (phase-end stamp minus the stamp of the first finished-item line at or past 50%), in signed seconds; the stamps are whole seconds, so the figure is within a second. Needs `--verbosity debug` (item lines); `n/a` otherwise.
+- Decision: the current item comes only from a heartbeat (an `item=` line with no `outcome=`); the log has no item-start line, so after a finished item and before the next heartbeat it says none is reported.
+- Decision: the Pester test uses plain `throw` assertions so it runs under Windows PowerShell's bundled Pester 3.4 (the only one on the dev box) and Pester 5. It is not wired into CI: no ticket file lists a workflow change, and `build.ps1` has no Pester step.
+- The FileShare.ReadWrite check is behavioural: the test holds a write handle on the log (as equiv does) while `-Progress` reads it; with `FileShare.Read` two of the three tests fail.

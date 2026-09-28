@@ -284,6 +284,7 @@ public sealed class IrLowererTests
     [InlineData("class B { public int f; } class C : B { int N() => f; }", "this")]
     [InlineData("class B { public int f; } class C : B { static int N(C c) => c.f; }", "c")]
     [InlineData("class B { public int f { get; set; } } class C : B { int N() => f; }", "this")]
+    [InlineData("class B { public int f; } class C : B { int N() => base.f; }", "this")]
     public void AnInheritedFieldIsReadAtTheUpcastReceiver(string source, string receiver)
     {
         IrProcedure procedure = Source(source, "N");
@@ -692,16 +693,44 @@ public sealed class IrLowererTests
     }
 
     /// <summary>
-    /// Ticket P2-004 acceptance criterion 2: an event with explicit accessors can only be the target of <c>+=</c> or <c>-=</c>
-    /// (CS0079), which stays opaque, with no read of a field map.
+    /// Ticket P2-005 acceptance criterion 1: <c>+=</c> and <c>-=</c> call the event's <c>add</c> or <c>remove</c> accessor with
+    /// the receiver, when there is one, then the handler, and read no field map, whether the event is field-like or has
+    /// explicit accessors (which, by CS0079, is its only use: ticket P2-004 acceptance criterion 2).
     /// </summary>
-    [Fact]
-    public void AnEventWithExplicitAccessorsIsOpaque()
+    [Theory]
+    [InlineData("event Action? E; static void M(C c, Action h) { c.E += h; }", "C::add_E(System.Action)", new[] { "c", "h" })]
+    [InlineData("event Action? E; void M(Action h) { E -= h; }", "C::remove_E(System.Action)", new[] { "this", "h" })]
+    [InlineData("static event Action? E; static void M(Action h) { E += h; }", "C::add_E(System.Action)", new[] { "h" })]
+    [InlineData("event Action E { add { } remove { } } void M(Action h) { E += h; }", "C::add_E(System.Action)", new[] { "this", "h" })]
+    public void AnEventAssignmentCallsItsAccessor(string members, string accessor, string[] arguments)
     {
-        IrProcedure procedure = Method("event Action E { add { } remove { } } void M(Action h) { E += h; }");
+        IrProcedure procedure = Method(members);
 
-        Assert.Equal("EventAssignment", Assert.Single(Opaques(procedure)).Reason);
+        IrCall call = Assert.Single(Calls(procedure));
+        Assert.Equal(accessor, call.Callee.Value);
+        Assert.Null(call.Target);
+        Assert.Equal(arguments, call.Args.Select(static a => a.Name), StringComparer.Ordinal);
+        Assert.Empty(Opaques(procedure));
         Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("field.", StringComparison.Ordinal));
+    }
+
+    /// <summary>Ticket P2-005: <c>+=</c> on a null receiver throws <c>NullReferenceException</c> at the call, as a setter does.</summary>
+    [Fact]
+    public void AnEventAssignmentNullChecksItsReceiver()
+    {
+        IrProcedure procedure = Method("event Action? E; static void M(C o, Action h) { o.E += h; }");
+
+        Assert.Equal(new IrThrew("System.NullReferenceException"), Run(procedure, [.. procedure.Parameters.Select(p => NullTarget(p.Var, 0))]));
+    }
+
+    /// <summary>Ticket P2-005 acceptance criterion 2: a lambda handler keeps its own <c>DelegateCreation</c> reason; the call is still lowered.</summary>
+    [Fact]
+    public void ALambdaHandlerKeepsItsOwnReason()
+    {
+        IrProcedure procedure = Method("event Action? E; void M() { E += () => { }; }");
+
+        Assert.Equal("DelegateCreation", Assert.Single(Opaques(procedure)).Reason);
+        Assert.Equal("C::add_E(System.Action)", Assert.Single(Calls(procedure)).Callee.Value);
     }
 
     /// <summary>Ticket M2-004 acceptance criterion 6: a field is one SSA map keyed by its receiver.</summary>

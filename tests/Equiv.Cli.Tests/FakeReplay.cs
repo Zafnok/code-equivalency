@@ -25,6 +25,9 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
 
     public List<string> Starts { get; } = [];
 
+    /// <summary>Every folder a host was bound to with <see cref="Within"/> (ticket P2-040).</summary>
+    public List<string> Hosts { get; } = [];
+
     /// <summary>Every case line exchanged with either driver, in order (ticket M5-002: proves the culture an agent gave reaches the driver).</summary>
     public List<string> Lines { get; } = [];
 
@@ -63,6 +66,12 @@ internal sealed class FakeReplay(string legacyAnswer, string modernAnswer) : IRe
     {
         Starts.Add(driver);
         return new Session(this, driver.EndsWith(".exe", StringComparison.Ordinal) ? legacyAnswer : modernAnswer);
+    }
+
+    public IDriverHost Within(string directory)
+    {
+        Hosts.Add(directory);
+        return this;
     }
 
     private sealed class Session(FakeReplay owner, string answer) : IDriverSession

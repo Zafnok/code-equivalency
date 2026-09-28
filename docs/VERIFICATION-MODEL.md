@@ -181,6 +181,11 @@ evaluated at the capture, and any other captured property is its receiver and in
 there: a read of the capture reads the map or calls the getter, a write writes the map or calls the
 setter, and the capture has no null shadow of its own.
 
+`e.E += h` and `e.E -= h` on an event are a call to its `add` or `remove` accessor with `e` (none for
+a static event) and `h`, lowered as a setter call is: no result, `e` null-checked at the call after
+`h` is evaluated, and a `threw` edge (P2-005). A field-like event is no exception, since the compiler
+calls its accessor too.
+
 The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
 locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
 each field's receiver, then every element of the literal (each already converted to its target's
@@ -271,6 +276,24 @@ Migration-specific normalisations (applied to both sides before matching):
   such a member is never treated as the same uninterpreted function; it produces
   Divergent with ruleId EQ006 and a link to the breaking-change entry. Users may
   suppress per member in `equiv.config.json`.
+
+### 3.1 IL fallback (ADR 0039)
+
+With `--il-fallback`, a matched pair that is not congruent, and where either side's IOperation
+lowering holds an `IrOpaque` whose fingerprint the other side does not share, is lowered again on
+**both** sides from ILSpy's ILAst. The ILAst is read from the side's compilation emitted in memory
+with a portable PDB, through P1-012's structural transforms only (none that rebuilds a C#
+construct). The IL bodies replace the IOperation bodies only if they hold fewer unshared opaques;
+otherwise the pair keeps its IOperation lowering. A pair is never lowered half from each.
+
+The IL lowering produces the same IR the rules above do: every type and member reference is
+resolved to the loaded compilation's symbol and goes through the same sort and identity mapping, so
+calls, field and array maps, `cast.<From>.<To>`, `null.<T>`, the pure catalogue and ADR 0021's
+parameter naming are identical between the two lowerings. An instruction the IL table does not map
+(`docs/tickets/IL-COVERAGE.md`) is an `IrOpaque` whose reason is its ILAst key (`LdFtn[lambda]`,
+`UnboxAny`, ...), with the source span of the nearest sequence point. The table declines what the
+IOperation rules decline for a semantic reason: unboxing, reading a caught exception, `ref` locals,
+`throw` of anything but a `new`, `default` of a type parameter, lambdas and local functions.
 
 ## 4. Matching
 
@@ -550,7 +573,9 @@ fingerprint.
 
 Every run writes `run.properties.loweringCensus`: procedures per side, matched pairs, pairs
 without `IrOpaque`, whole-body opaque pairs, congruent pairs, and `IrOpaque` counts by reason
-per side (ADR 0027). It also records skipped projects per side, and, when the run produced
+per side (ADR 0027). With `--il-fallback` it also counts the pairs the fallback was tried on and
+the pairs it replaced (`pairsIlFallbackTried`, `pairsLoweredFromIl`), and every result on a matched
+pair carries `properties.lowering` (`operation` or `il`; ADR 0039). It also records skipped projects per side, and, when the run produced
 verdicts, Unknown counts by scope (ADR 0029) and the failure-refinement time (ADR 0037).
 
 Only the projects a solution builds are part of the product. For a `.sln`, those are the projects

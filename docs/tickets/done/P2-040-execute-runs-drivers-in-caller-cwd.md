@@ -1,5 +1,5 @@
 # P2-040 `compare --execute` runs solution code with the caller's working directory
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-009, P1-008
@@ -38,3 +38,6 @@ separate ADR-sized decision.
 Blocking absolute-path writes, the registry or the network.
 
 ## Notes
+- Decision: the working directory is bound with a new `IDriverHost.Within(directory)` (`In` trips CA1716), which the real `ChildProcessHost` turns into a fresh `cwd-<random>` folder per process under that directory and every fake returns itself; `ExecutionEnvironment` keeps one host built before the temporary folder exists, so a bound copy is the smallest change.
+- Decision: `equiv mcp`'s `probe` tool prints the same note, so it binds its drivers to its own `equiv-probe-*` folder too; otherwise the changed note would be false there.
+- Decision: `tools/runtime-diff` (M3-032 harness) is left inheriting the caller's directory; it is a developer tool that runs only the framework's own members, not solution code.

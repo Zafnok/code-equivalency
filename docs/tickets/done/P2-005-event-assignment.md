@@ -1,5 +1,5 @@
 # P2-005 Event `+=` and `-=` are calls to the accessors, not opaque
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-010, P1-005
@@ -33,3 +33,12 @@ One lowering arm reusing M3-010's accessor-call path. If that path needs changin
 Event reads and raising (P2-004).
 
 ## Notes
+- Decision: the arm calls `Dispatch` (M3-010's accessor-call path under `Accessor`) directly rather than `Accessor`, which
+  takes an `IPropertyReferenceOperation`; the path itself is unchanged, so the size guard holds.
+- Decision: an event with explicit accessors lowers the same way. The compiler calls `add_E`/`remove_E` for every event,
+  field-like ones inside their own type included, so there is no reason to keep it opaque. This retires P2-004's
+  `AnEventWithExplicitAccessorsIsOpaque`; its case is now a row of `AnEventAssignmentCallsItsAccessor`.
+- Decision: the property-read and event-assignment cases share one `switch` arm (`AccessorCall`) because a separate arm
+  pushed `IrLowerer.Operation` past MA0051's 60 lines.
+- Note: `IEventAssignmentOperation.EventReference` is typed `IOperation`; it is cast, not matched, because only erroneous
+  code makes it anything else, and a match would be an unreachable branch under the 100% gate.
