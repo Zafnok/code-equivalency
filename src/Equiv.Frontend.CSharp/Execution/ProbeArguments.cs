@@ -75,32 +75,30 @@ internal static class ProbeArguments
     {
         INamedTypeSymbol enumType = (INamedTypeSymbol)type;
         bool unsigned = IsUnsigned(enumType.EnumUnderlyingType!);
-        if (value.ValueKind == JsonValueKind.String)
+        return value.ValueKind switch
         {
-            IFieldSymbol? member = enumType.GetMembers().OfType<IFieldSymbol>()
-                .FirstOrDefault(f => f.HasConstantValue && string.Equals(f.Name, value.GetString(), StringComparison.Ordinal));
-            if (member is null)
-            {
-                return null;
-            }
-
-            return unsigned
-                ? Convert.ToUInt64(member.ConstantValue, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture)
-                : Convert.ToInt64(member.ConstantValue, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
-        }
-
-        if (value.ValueKind != JsonValueKind.Number)
-        {
-            return null;
-        }
-
-        if (unsigned)
-        {
-            return value.TryGetUInt64(out ulong u) ? u.ToString(CultureInfo.InvariantCulture) : null;
-        }
-
-        return value.TryGetInt64(out long i) ? i.ToString(CultureInfo.InvariantCulture) : null;
+            JsonValueKind.String => EnumByName(enumType, value.GetString(), unsigned),
+            JsonValueKind.Number => unsigned ? UnsignedNumber(value) : SignedNumber(value),
+            _ => null,
+        };
     }
+
+    private static string? EnumByName(INamedTypeSymbol enumType, string? name, bool unsigned)
+    {
+        IFieldSymbol? member = enumType.GetMembers().OfType<IFieldSymbol>()
+            .FirstOrDefault(f => f.HasConstantValue && string.Equals(f.Name, name, StringComparison.Ordinal));
+        return member is null ? null : EnumConstant(member.ConstantValue, unsigned);
+    }
+
+    private static string EnumConstant(object? constant, bool unsigned) => unsigned
+        ? Convert.ToUInt64(constant, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture)
+        : Convert.ToInt64(constant, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
+
+    private static string? UnsignedNumber(JsonElement value) =>
+        value.TryGetUInt64(out ulong u) ? u.ToString(CultureInfo.InvariantCulture) : null;
+
+    private static string? SignedNumber(JsonElement value) =>
+        value.TryGetInt64(out long i) ? i.ToString(CultureInfo.InvariantCulture) : null;
 
     private static bool IsUnsigned(ITypeSymbol underlying) =>
         underlying.SpecialType is SpecialType.System_Byte or SpecialType.System_UInt16 or SpecialType.System_UInt32 or SpecialType.System_UInt64;
