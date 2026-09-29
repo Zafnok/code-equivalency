@@ -280,13 +280,21 @@ internal sealed class MsBuildEvaluator
         return null;
     }
 
+    private static string? CreatedItemType(XElement element)
+    {
+        if (string.Equals(element.Name.LocalName, "Output", StringComparison.Ordinal))
+        {
+            return element.Attribute("ItemName")?.Value;
+        }
+
+        return string.Equals(element.Parent!.Name.LocalName, "ItemGroup", StringComparison.Ordinal) && element.Attribute("Include") is not null ? element.Name.LocalName : null;
+    }
+
     private static void CheckTarget(XElement target)
     {
         foreach (XElement element in target.Descendants())
         {
-            string? created = string.Equals(element.Name.LocalName, "Output", StringComparison.Ordinal)
-                ? element.Attribute("ItemName")?.Value
-                : string.Equals(element.Parent!.Name.LocalName, "ItemGroup", StringComparison.Ordinal) && element.Attribute("Include") is not null ? element.Name.LocalName : null;
+            string? created = CreatedItemType(element);
             if (created is not null && CreatedItemTypes.Contains(created))
             {
                 throw new UnsupportedConstructException($"a <Target> that creates {created} items (target '{target.Attribute("Name")?.Value}')");

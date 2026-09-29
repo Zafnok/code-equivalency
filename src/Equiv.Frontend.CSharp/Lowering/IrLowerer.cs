@@ -1388,13 +1388,19 @@ internal sealed class IrLowerer
     /// with no method, although it is <c>System.String</c>'s user-defined <c>op_Equality</c> or <c>op_Inequality</c> (ticket
     /// M4-002); null for any other operator.
     /// </summary>
-    private IMethodSymbol? StringEquality(IBinaryOperation binary) =>
-        binary is { OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals, LeftOperand.Type.SpecialType: SpecialType.System_String, RightOperand.Type.SpecialType: SpecialType.System_String }
-            ? compilation.GetSpecialType(SpecialType.System_String)
-                .GetMembers(binary.OperatorKind == BinaryOperatorKind.Equals ? WellKnownMemberNames.EqualityOperatorName : WellKnownMemberNames.InequalityOperatorName)
-                .OfType<IMethodSymbol>()
-                .FirstOrDefault(static m => m.Parameters is [{ Type.SpecialType: SpecialType.System_String }, { Type.SpecialType: SpecialType.System_String }])
-            : null;
+    private IMethodSymbol? StringEquality(IBinaryOperation binary)
+    {
+        if (binary is not { OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals, LeftOperand.Type.SpecialType: SpecialType.System_String, RightOperand.Type.SpecialType: SpecialType.System_String })
+        {
+            return null;
+        }
+
+        string name = binary.OperatorKind == BinaryOperatorKind.Equals ? WellKnownMemberNames.EqualityOperatorName : WellKnownMemberNames.InequalityOperatorName;
+        return compilation.GetSpecialType(SpecialType.System_String)
+            .GetMembers(name)
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(static m => m.Parameters is [{ Type.SpecialType: SpecialType.System_String }, { Type.SpecialType: SpecialType.System_String }]);
+    }
 
     /// <summary><c>x == null</c> and <c>x != null</c> compare the shadow (acceptance criterion 5); null when neither side is <c>null</c>.</summary>
     private IrVar? NullTest(IBinaryOperation binary, LoweringContext context)
