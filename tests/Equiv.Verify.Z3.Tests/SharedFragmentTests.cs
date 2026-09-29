@@ -38,7 +38,7 @@ public sealed class SharedFragmentTests
         Divergent divergent = Assert.IsType<Divergent>(Verify(Fragment("Old.cs", "f1", "slt", 1), Fragment("New.cs", "f1", "slt", 1, early: 8)));
 
         Assert.All(
-            new[] { divergent.Counterexample.Old, divergent.Counterexample.New },
+            [divergent.Counterexample.Old, divergent.Counterexample.New],
             static run => Assert.DoesNotContain(run.Trace, static c => string.Equals(c.Callee.Value, "opaque:f1", StringComparison.Ordinal)));
     }
 
