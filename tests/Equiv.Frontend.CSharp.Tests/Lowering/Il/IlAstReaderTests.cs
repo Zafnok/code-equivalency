@@ -96,10 +96,10 @@ public sealed class IlAstReaderTests
     [Fact]
     public void LocalsAndSpansComeFromThePdb()
     {
-        Compilation compilation = Compile("class C\n{\n    int f;\n    int M(int a)\n    {\n        int total = a + 1;\n        return total + f;\n    }\n}\n");
+        Compilation compilation = Compile("class C\n{\n    int f;\n    int M(int a)\n    {\n        int total = a + 1;\n        return total + ~f;\n    }\n}\n");
 
         IlAstReader.Body body = IlAstReader.Read(Method(compilation, "C", "M"), compilation);
-        IrOpaque field = IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation)).First(static o => string.Equals(o.Reason, "LdObj", StringComparison.Ordinal));
+        IrOpaque field = IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation)).First(static o => string.Equals(o.Reason, "BitNot", StringComparison.Ordinal));
 
         Assert.Contains(body.Function!.Variables, static v => v is { Name: "total", HasGeneratedName: false });
         Assert.Equal(("Snippet.cs", 7, 9), (field.Span.Path, field.Span.StartLine, field.Span.StartColumn));
@@ -113,7 +113,7 @@ public sealed class IlAstReaderTests
         string path = Path.Combine(directory, "Mapped.cs");
         Compilation compilation = CSharpCompilation.Create(
             "Mapped",
-            [CSharpSyntaxTree.ParseText(SourceText.From("class C { int f; int M() => f; }", Encoding.UTF8), path: path, cancellationToken: TestContext.Current.CancellationToken)],
+            [CSharpSyntaxTree.ParseText(SourceText.From("class C { int f; int M() => ~f; }", Encoding.UTF8), path: path, cancellationToken: TestContext.Current.CancellationToken)],
             RoslynTestCompilations.References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                 .WithSourceReferenceResolver(new SourceFileResolver([], directory, [KeyValuePair.Create(directory + Path.DirectorySeparatorChar, "/_/")])));
@@ -127,7 +127,7 @@ public sealed class IlAstReaderTests
     [Fact]
     public void ADocumentTheResolverCannotNormaliseKeepsItsName()
     {
-        Compilation compilation = Compile("class C { int f; int M() => f; }").WithOptions(
+        Compilation compilation = Compile("class C { int f; int M() => ~f; }").WithOptions(
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary).WithSourceReferenceResolver(new SourceFileResolver([], baseDirectory: null)));
 
         IrOpaque field = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation)));
@@ -139,7 +139,7 @@ public sealed class IlAstReaderTests
     [Fact]
     public void AMethodWithNoVisibleSequencePointUsesItsOwnSpan()
     {
-        Compilation compilation = Compile("class C\n{\n    int f;\n#line hidden\n    int M() => f;\n#line default\n}\n");
+        Compilation compilation = Compile("class C\n{\n    int f;\n#line hidden\n    int M() => ~f;\n#line default\n}\n");
 
         IrOpaque field = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation)));
 
