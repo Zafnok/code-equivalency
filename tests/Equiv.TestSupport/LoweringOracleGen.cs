@@ -114,7 +114,8 @@ public static class LoweringOracleGen
             }));
 
     public static Gen<OracleInput> Input { get; } =
-        Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, Gen.Enum<ArrayBinding>(), Gen.OneOfConst(DecimalEdges), static (a, b, c, d, e, s, v, m) => new OracleInput(a, b, c, d, e, s, v, m));
+        Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, Gen.Enum<ArrayBinding>(), Gen.OneOfConst(DecimalEdges))
+            .Select(static t => new OracleInput(t.Item1, t.Item2, t.Item3, t.Item4, t.Item5, t.Item6, t.Item7, t.Item8));
 
     private static Gen<int> Int => Gen.Frequency((3, Gen.OneOfConst(IntEdges)), (1, Gen.Int[-16, 16]), (1, Gen.Int));
 

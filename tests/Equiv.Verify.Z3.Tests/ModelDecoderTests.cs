@@ -50,7 +50,7 @@ public sealed class ModelDecoderTests
     {
         using Context context = new();
 
-        Assert.False(ModelDecoder.Diverges(WithHeap, WithoutHeap, Shared(WithHeap, WithoutHeap), Inputs, Returned([Heap]), Returned([]), Calls(context)));
+        Assert.False(ModelDecoder.Diverges(new(WithHeap, Returned([Heap])), new(WithoutHeap, Returned([])), Shared(WithHeap, WithoutHeap), Inputs, Calls(context)));
     }
 
     [Fact]
@@ -58,8 +58,8 @@ public sealed class ModelDecoderTests
     {
         using Context context = new();
 
-        Assert.True(ModelDecoder.Diverges(WithHeap, WithoutHeap, Shared(WithHeap, WithoutHeap), Inputs, Returned([Heap.Write(Bv(1), Bv(2))]), Returned([]), Calls(context)));
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithHeap, Shared(WithoutHeap, WithHeap), Inputs, Returned([]), Returned([Heap.Write(Bv(1), Bv(2))]), Calls(context)));
+        Assert.True(ModelDecoder.Diverges(new(WithHeap, Returned([Heap.Write(Bv(1), Bv(2))])), new(WithoutHeap, Returned([])), Shared(WithHeap, WithoutHeap), Inputs, Calls(context)));
+        Assert.True(ModelDecoder.Diverges(new(WithoutHeap, Returned([])), new(WithHeap, Returned([Heap.Write(Bv(1), Bv(2))])), Shared(WithoutHeap, WithHeap), Inputs, Calls(context)));
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
         IrRun threw = new(new IrThrew("System.Exception"), [], []);
 
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Returned([]), threw, Calls(context)));
+        Assert.True(ModelDecoder.Diverges(new(WithoutHeap, Returned([])), new(WithoutHeap, threw), Shared(WithoutHeap, WithoutHeap), Inputs, Calls(context)));
     }
 
     [Fact]
@@ -77,9 +77,9 @@ public sealed class ModelDecoderTests
         using Context context = new();
         TraceEncoder calls = Calls(context, ImmutableDictionary<string, string>.Empty.Add("Old::F", "New::F"));
 
-        Assert.False(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("Old::F"), Traced("New::F"), calls));
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("New::F"), Traced("Old::F"), calls));
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("Old::F"), Traced("Other::F"), calls));
+        Assert.False(ModelDecoder.Diverges(new(WithoutHeap, Traced("Old::F")), new(WithoutHeap, Traced("New::F")), Shared(WithoutHeap, WithoutHeap), Inputs, calls));
+        Assert.True(ModelDecoder.Diverges(new(WithoutHeap, Traced("New::F")), new(WithoutHeap, Traced("Old::F")), Shared(WithoutHeap, WithoutHeap), Inputs, calls));
+        Assert.True(ModelDecoder.Diverges(new(WithoutHeap, Traced("Old::F")), new(WithoutHeap, Traced("Other::F")), Shared(WithoutHeap, WithoutHeap), Inputs, calls));
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("F"), Traced("F"), Calls(context)));
+            ModelDecoder.EnsureDiverges(new(WithoutHeap, Traced("F")), new(WithoutHeap, Traced("F")), Shared(WithoutHeap, WithoutHeap), Inputs, Calls(context)));
 
         Assert.StartsWith("Encoder bug: the solver found a divergence between T::M(int) and T::M(int), but the replay does not diverge.", exception.Message, StringComparison.Ordinal);
         Assert.Contains("a=IrBitVecValue", exception.Message, StringComparison.Ordinal);
@@ -101,7 +101,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
 
         Exception? exception = Record.Exception(() =>
-            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("F"), Traced("G"), Calls(context)));
+            ModelDecoder.EnsureDiverges(new(WithoutHeap, Traced("F")), new(WithoutHeap, Traced("G")), Shared(WithoutHeap, WithoutHeap), Inputs, Calls(context)));
 
         Assert.Null(exception);
     }
@@ -113,7 +113,7 @@ public sealed class ModelDecoderTests
         ImmutableArray<ProductEncoder.SharedParameter> shared = Shared(WithHeap, WithHeap);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(WithHeap, WithHeap, shared, Inputs, Returned([Heap]), Returned([Heap]), Calls(context)));
+            ModelDecoder.EnsureDiverges(new(WithHeap, Returned([Heap])), new(WithHeap, Returned([Heap])), shared, Inputs, Calls(context)));
 
         string joined = string.Join(", ", shared.Select((s, i) => $"{s.Var.Name}={Inputs.Arguments[i]}"));
         Assert.Contains($"Inputs: {joined}.", exception.Message, StringComparison.Ordinal);
@@ -132,7 +132,7 @@ public sealed class ModelDecoderTests
             ]);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, run, run, Calls(context)));
+            ModelDecoder.EnsureDiverges(new(WithoutHeap, run), new(WithoutHeap, run), Shared(WithoutHeap, WithoutHeap), Inputs, Calls(context)));
 
         Assert.Contains($"Old: {ExpectedDescribe(run)}.", exception.Message, StringComparison.Ordinal);
         Assert.Contains($"New: {ExpectedDescribe(run)}.", exception.Message, StringComparison.Ordinal);
@@ -313,7 +313,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(TwoParams, TwoParams, Shared(TwoParams, TwoParams), Inputs, Traced("F"), Traced("F"), Calls(context)));
+            ModelDecoder.EnsureDiverges(new(TwoParams, Traced("F")), new(TwoParams, Traced("F")), Shared(TwoParams, TwoParams), Inputs, Calls(context)));
 
         Assert.Contains(", b=", exception.Message, StringComparison.Ordinal);
     }
@@ -325,7 +325,7 @@ public sealed class ModelDecoderTests
         IrRun run = new(new IrReturned(Value: null), [Bv(7), Bv(9)], [new IrCallRecord(new CallIdentity("F"), [Bv(1), Bv(2)]), new IrCallRecord(new CallIdentity("G"), [Bv(3)])]);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, run, run, Calls(context)));
+            ModelDecoder.EnsureDiverges(new(WithoutHeap, run), new(WithoutHeap, run), Shared(WithoutHeap, WithoutHeap), Inputs, Calls(context)));
 
         Assert.Matches(@"outs \[[^\]]*, [^\]]*\]", exception.Message);
         Assert.Matches(@"trace \[[^\]]*\), [A-Za-z]+\(", exception.Message);

@@ -73,7 +73,7 @@ internal sealed class FragmentFingerprinter(
             return null;
         }
 
-        (string text, bool runtimeSensitive) = BoundSerialiser.SerialiseFragment(method, compilation, operation, Lambda, renames, suppressedRuntimeChanges, equivalences, legacy);
+        (string text, bool runtimeSensitive) = BoundSerialiser.SerialiseFragment(method, compilation, operation, Lambda, new(renames, suppressedRuntimeChanges, equivalences, legacy));
         return runtimeSensitive ? null : new Fragment(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), reads, captured);
     }
 
