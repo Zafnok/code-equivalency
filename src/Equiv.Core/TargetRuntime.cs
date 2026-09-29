@@ -40,10 +40,12 @@ public sealed record TargetRuntime(TargetRuntime.RuntimeFamily Family, Version V
         _ => $"net{Version.Major.ToString(CultureInfo.InvariantCulture)}.{Version.Minor.ToString(CultureInfo.InvariantCulture)}",
     };
 
-    public int CompareTo(TargetRuntime? other) =>
-        other is null ? 1
-        : Family != other.Family ? Family.CompareTo(other.Family)
-        : Version.CompareTo(other.Version);
+    public int CompareTo(TargetRuntime? other) => other switch
+    {
+        null => 1,
+        _ when Family != other.Family => Family.CompareTo(other.Family),
+        _ => Version.CompareTo(other.Version),
+    };
 
     public static bool operator <(TargetRuntime? left, TargetRuntime? right) => Compare(left, right) < 0;
 
@@ -53,7 +55,12 @@ public sealed record TargetRuntime(TargetRuntime.RuntimeFamily Family, Version V
 
     public static bool operator >=(TargetRuntime? left, TargetRuntime? right) => Compare(left, right) >= 0;
 
-    private static int Compare(TargetRuntime? left, TargetRuntime? right) => left is null ? (right is null ? 0 : -1) : left.CompareTo(right);
+    private static int Compare(TargetRuntime? left, TargetRuntime? right) => (left, right) switch
+    {
+        ({ } l, _) => l.CompareTo(right),
+        (null, null) => 0,
+        _ => -1,
+    };
 
     /// <summary>The version's defined components, without trailing zeros past the minor: 4.8 is <c>4, 8</c>, 4.7.2 is <c>4, 7, 2</c>.</summary>
     private int[] Components() =>
