@@ -131,6 +131,12 @@ dotnet_diagnostic.MA0041.severity = none
 # so it is turned off for test projects only.
 [tests/**.cs]
 dotnet_diagnostic.CA1707.severity = none
+# GH-182: pinned so theory data of a possibly-unserializable type needs
+# DisableDiscoveryEnumeration (xUnit1045), and a lambda nest the compiler must rebind 100+
+# times is split into a named method (CS9236). Both sat below warning level and were
+# found only by Sonar.
+dotnet_diagnostic.xUnit1045.severity = error
+dotnet_diagnostic.CS9236.severity = error
 
 # M4-010: the corpus seeder's tests live under tools/, not tests/ (it is a tools/ console
 # project, per the check-coverage/licence-check precedent), but its test names follow the same

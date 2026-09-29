@@ -124,14 +124,18 @@ public static class PairGen
 
     private static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Pairs(Gen<Method> methods) =>
         Gen.Enum<MutationOperator>().SelectMany(op =>
-            (IsCleanup(op) ? WithCleanup(methods, op) : methods).Select(Rendered).Where(t => SyntaxMutator.Sites(op, t.Method) > 0).SelectMany(t =>
-                Gen.Int[0, SyntaxMutator.Sites(op, t.Method) - 1].Select(site =>
-                {
-                    MethodDeclarationSyntax mutated = SyntaxMutator.Apply(op, t.Method, site)!;
-                    string mutant = t.Root.ReplaceNode(t.Method, mutated).ToFullString();
-                    // The introduced temporary is on the legacy side when the operator inlines it.
-                    return op == MutationOperator.InlineTemporary ? (mutant, t.Source, op) : (t.Source, mutant, op);
-                })));
+            (IsCleanup(op) ? WithCleanup(methods, op) : methods).Select(Rendered).Where(t => SyntaxMutator.Sites(op, t.Method) > 0).SelectMany(t => Mutants(op, t)));
+
+    /// <summary>One mutant of <paramref name="rendered"/> per <paramref name="op"/> site; a named method so the lambdas in <see cref="Pairs"/> bind once (CS9236).</summary>
+    private static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Mutants(
+        MutationOperator op, (string Source, SyntaxNode Root, MethodDeclarationSyntax Method) rendered) =>
+        Gen.Int[0, SyntaxMutator.Sites(op, rendered.Method) - 1].Select(site =>
+        {
+            MethodDeclarationSyntax mutated = SyntaxMutator.Apply(op, rendered.Method, site)!;
+            string mutant = rendered.Root.ReplaceNode(rendered.Method, mutated).ToFullString();
+            // The introduced temporary is on the legacy side when the operator inlines it.
+            return op == MutationOperator.InlineTemporary ? (mutant, rendered.Source, op) : (rendered.Source, mutant, op);
+        });
 
     /// <summary>Renders <paramref name="method"/> and parses it back so <see cref="SyntaxMutator"/> can work on its Roslyn syntax.</summary>
     private static (string Source, SyntaxNode Root, MethodDeclarationSyntax Method) Rendered(Method method)
@@ -159,7 +163,10 @@ public static class PairGen
             (1, Gen.Const(default(ImmutableArray<int>?))),
             (4, Int.Array[0, 3].Select(static u => (ImmutableArray<int>?)ImmutableArray.Create(u))));
 
-    private static int Count(ImmutableArray<IStmt> block) => block.Sum(static s => 1 + s switch
+    private static int Count(ImmutableArray<IStmt> block) => block.Sum(Count);
+
+    /// <summary>The statement and those nested in it; a named method rather than a lambda so each <c>Sum</c> overload binds once (CS9236).</summary>
+    private static int Count(IStmt statement) => 1 + statement switch
     {
         If branch => Count(branch.Then) + Count(branch.Else),
         Guard guard => Count(guard.Then),
@@ -167,7 +174,7 @@ public static class PairGen
         While loop => Count(loop.Body),
         For loop => Count(loop.Body),
         _ => 0,
-    });
+    };
 
     private static Gen<ImmutableArray<IStmt>> Block(Type returnType, int depth, int min, int max) =>
         StmtGen(returnType, depth).Array[min, max].Select(static s => ImmutableArray.Create(s));
