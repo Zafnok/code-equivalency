@@ -450,6 +450,8 @@ work, P2-050, P1-019, P2-051 and P2-052.
   Needs M3-033.
 - P2-052 (M) Replay and differential testing reach `internal` methods (via `InternalsVisibleTo` on the
   emitted compilation). Needs M4-009, P1-008.
+- P2-059 (S) Soundness: rung 4 is Equivalent only when Spacer's invariant solves the clauses (Z3 5.1's
+  Spacer proved a pair that rungs 1 and 3 refute, CsCheck seed `4FfExD8adOs4`). Needs P1-001.
 
 ### Runtimes are detected, not assumed (ADR 0040)
 

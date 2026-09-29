@@ -22,7 +22,7 @@ public sealed class LadderFixtureTests
         "phis-reordered", "state-unpaired", "irreducible", "loop-opaque", "loop-hard",
         "recursion-aligned", "recursion-divergent", "recursion-heap", "recursion-array-divergent",
         "trip-count-changed", "chc-spurious", "chc-overflow-bitvectors", "fusion", "counter-shape", "array-count",
-        "int-proof-wraps",
+        "int-proof-wraps", "chc-uncertified",
     ];
 
     [Theory]

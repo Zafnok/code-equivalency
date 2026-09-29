@@ -39,7 +39,8 @@ public enum UnknownReason
 
     /// <summary>
     /// Rung 4's Spacer query found a derivation, but replaying its inputs through both procedures does not diverge, so it
-    /// is an artefact of the encoding (ticket P1-001). The detail carries both replayed runs.
+    /// is an artefact of the encoding (ticket P1-001). The detail carries both replayed runs. Also when Spacer answered
+    /// with a coupling invariant that does not solve the clauses it answers (ticket P2-059).
     /// </summary>
     ChcSpurious,
 
