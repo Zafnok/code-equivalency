@@ -138,54 +138,62 @@ internal static class CompareCommand
         ArgumentNullException.ThrowIfNull(sink);
         ArgumentNullException.ThrowIfNull(runLog);
 
+        Streams streams = options.Streams ?? Streams.Current;
         ExecutionEnvironment? executing = options.Execute ? execution ?? ExecutionEnvironment.Current : null;
-        if (!StartExecuting(executing))
+        if (!StartExecuting(executing, streams.Error))
         {
             return ExitCodes.UsageError;
         }
 
         if (!File.Exists(options.LegacyPath) || !File.Exists(options.ModernPath))
         {
-            Console.Error.WriteLine($"error: file not found (legacy={options.LegacyPath}, modern={options.ModernPath})");
+            streams.Error.WriteLine($"error: file not found (legacy={options.LegacyPath}, modern={options.ModernPath})");
             return ExitCodes.UsageError;
         }
 
         if (options.LowerOnly && (options.BaselinePath is not null || options.FailOn is not null))
         {
-            Console.Error.WriteLine("error: --lower-only cannot be combined with --baseline or --fail-on");
+            streams.Error.WriteLine("error: --lower-only cannot be combined with --baseline or --fail-on");
+            return ExitCodes.UsageError;
+        }
+
+        if (options.Bound is <= 0 || options.TimeoutMs is <= 0)
+        {
+            streams.Error.WriteLine("error: bound and timeoutMs must be positive integers");
             return ExitCodes.UsageError;
         }
 
         ILanguageFrontend? frontend = FrontendRouter.Route(frontends, options.LegacyPath, options.ModernPath);
         if (frontend is null)
         {
-            Console.Error.WriteLine($"error: no frontend supports both legacy={options.LegacyPath} and modern={options.ModernPath}");
+            streams.Error.WriteLine($"error: no frontend supports both legacy={options.LegacyPath} and modern={options.ModernPath}");
             return ExitCodes.UsageError;
         }
 
         if (options.DryRun)
         {
-            Console.WriteLine($"route: {frontend.Language} legacy={options.LegacyPath} modern={options.ModernPath} out={options.OutPath}");
+            streams.Out.WriteLine($"route: {frontend.Language} legacy={options.LegacyPath} modern={options.ModernPath} out={options.OutPath}");
         }
 
-        if (!TryLoadInputs(options.BaselinePath, options.ConfigPath, out EquivConfig config, out SarifLog? baseline, out int inputErrorExitCode))
+        if (!TryLoadInputs(options.BaselinePath, options.ConfigPath, streams.Error, out EquivConfig loaded, out SarifLog? baseline, out int inputErrorExitCode))
         {
             return inputErrorExitCode;
         }
 
-        FrontendAnalysis? analysis = Loaded(frontend, options, config, runLog);
+        EquivConfig config = loaded with { Bound = options.Bound ?? loaded.Bound, TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs };
+        FrontendAnalysis? analysis = Loaded(frontend, options, config, runLog, streams.Error);
         if (analysis is null)
         {
             return ExitCodes.LoadFailure;
         }
 
         // Two numbers, never a total: the licence measures each codebase on its own (ticket M3-014).
-        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"analysed lines of code: legacy={analysis.Lines.Legacy} modern={analysis.Lines.Modern}"));
-        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, new Output(sink, runLog), executing);
+        streams.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"analysed lines of code: legacy={analysis.Lines.Legacy} modern={analysis.Lines.Modern}"));
+        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, new Output(sink, runLog, streams.Error), executing);
     }
 
     /// <summary>The frontend's analysis, or null, with the message on stderr, when it cannot load (the frontend reports its own phases; ADR 0038, ticket M4-013).</summary>
-    private static FrontendAnalysis? Loaded(ILanguageFrontend frontend, CompareOptions options, EquivConfig config, IRunLog runLog)
+    private static FrontendAnalysis? Loaded(ILanguageFrontend frontend, CompareOptions options, EquivConfig config, IRunLog runLog, TextWriter error)
     {
         try
         {
@@ -193,7 +201,7 @@ internal static class CompareCommand
         }
         catch (FrontendLoadException exception)
         {
-            Console.Error.WriteLine(exception.Message);
+            error.WriteLine(exception.Message);
             return null;
         }
     }
@@ -206,7 +214,7 @@ internal static class CompareCommand
     private static int Report(
         CompareOptions options, FrontendAnalysis analysis, EquivConfig config, IVerificationBackend backend, SarifLog? baseline, Output output, ExecutionEnvironment? execution)
     {
-        (IReportSink sink, IRunLog runLog) = output;
+        (IReportSink sink, IRunLog runLog, TextWriter error) = output;
         MatchResult matchResult = analysis.Match;
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered = Lowered(matchResult);
         LoweringCensus census = LoweringCensus.Compute(
@@ -217,23 +225,24 @@ internal static class CompareCommand
             unlowered: matchResult.LoweringFailures.Length);
 
         // P2-011: a pair the frontend could not lower takes the same path as a pair whose verification throws (ADR 0023).
-        List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(static f => PairFailure("Lowering", f.Old, f.New, f.Exception))];
+        List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(f => PairFailure("Lowering", f.Old, f.New, f.Exception, error))];
         List<ProcedureIdentity> unverifiedPairs = [.. matchResult.LoweringFailures.Select(static f => f.New)];
         (List<VerificationResult> verified, List<Notification> verifyFailures, List<ProcedureIdentity> unverifiedVerified) =
-            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, config, options, runLog);
+            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, Verification(config, options, runLog), runLog, error);
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
-        List<VerificationResult> results = Executed(WithAssumptions(verified, lowered, matchResult), lowered, analysis.Replay, execution, options.Testing, runLog);
+        List<VerificationResult> results = Executed(
+            WithContracts(WithAssumptions(verified, lowered, matchResult), lowered, backend, Verification(config, options, runLog), error), lowered, analysis.Replay, execution, options.Testing, runLog);
         if (!options.LowerOnly)
         {
-            census = census with { UnknownByScope = ScopeCounts.Of(results) };
+            census = census with { UnknownByScope = ScopeCounts.Of(results), FailureRefinement = RefinementTime.Of(results) };
         }
 
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));
         results.AddRange(matchResult.Removed.Select(static identity => new VerificationResult(identity, new Removed())));
         results.AddRange(matchResult.Ambiguous.Select(static identity => new VerificationResult(identity, new Unknown(UnknownReason.UnmatchedOverload, AmbiguousDetail(identity)))));
 
-        (List<Notification> skippedProjectNotifications, List<ProcedureIdentity> skippedProjectProcedures) = SkippedProjects(matchResult);
+        (List<Notification> skippedProjectNotifications, List<ProcedureIdentity> skippedProjectProcedures) = SkippedProjects(matchResult, error);
         List<Notification> notifications = [.. pairFailures, .. skippedProjectNotifications];
         List<ProcedureIdentity> unverified = [.. unverifiedPairs, .. skippedProjectProcedures];
         SarifLog log = SarifReportWriter.Write(
@@ -280,17 +289,17 @@ internal static class CompareCommand
     /// ADR 0035's consequences for <c>--execute</c>: it needs Windows, else the run stops with exit 3, and it says on stderr that
     /// it runs the solutions' code. Without <c>--execute</c> (<paramref name="executing"/> null) it does nothing.
     /// </summary>
-    private static bool StartExecuting(ExecutionEnvironment? executing)
+    private static bool StartExecuting(ExecutionEnvironment? executing, TextWriter error)
     {
         switch (executing)
         {
             case null:
                 return true;
             case { IsWindows: false }:
-                Console.Error.WriteLine(ExecutionEnvironment.NeedsWindows);
+                error.WriteLine(ExecutionEnvironment.NeedsWindows);
                 return false;
             default:
-                Console.Error.WriteLine(ExecutionEnvironment.Note);
+                error.WriteLine(ExecutionEnvironment.Note);
                 return true;
         }
     }
@@ -319,9 +328,13 @@ internal static class CompareCommand
         }
 
         Dictionary<string, (ProcedurePair Pair, IrProcedure Old, IrProcedure New)> pairs = lowered.ToDictionary(static p => p.Pair.New.Value, StringComparer.Ordinal);
-        Replayer replayer = new(execution.Host);
-        DifferentialTester tester = new(execution.Host, testing, execution.Time);
         string directory = Directory.CreateTempSubdirectory("equiv-execute-").FullName;
+
+        // Every driver runs in a fresh folder under the temporary one, so a relative write by the solution's code is
+        // deleted with it instead of landing next to the caller (ticket P2-040).
+        IDriverHost host = execution.Host.Within(directory);
+        Replayer replayer = new(host);
+        DifferentialTester tester = new(host, testing, execution.Time);
         runLog.Phase("execute", results.Count, results.Count);
         try
         {
@@ -331,7 +344,7 @@ internal static class CompareCommand
                 runLog.Item(result.Identity.Value, 1);
                 (VerificationResult next, string outcome) = (result.Verdict, pairs[result.Identity.Value]) switch
                 {
-                    (Divergent divergent, var (pair, _, _)) => (result with { Replay = replayer.Replay(factory.Create(pair, divergent.Counterexample, directory)) }, "replayed"),
+                    (Divergent divergent, var (pair, old, @new)) => (result with { Replay = replayer.Replay(factory.Create(pair, divergent.Counterexample, directory), divergent.Counterexample, old, @new) }, "replayed"),
                     (Unknown unknown, var (pair, old, @new)) => (tester.Test(factory.Plan(pair, unknown.Candidate, directory), old, @new).Apply(result), "tested"),
                     _ => (result, "skipped"),
                 };
@@ -379,7 +392,7 @@ internal static class CompareCommand
     /// makes the run incomplete and outranks any verdict (<see cref="ExitCodes"/>); a project in another language is a
     /// <c>warning</c>.
     /// </summary>
-    private static (List<Notification> Notifications, List<ProcedureIdentity> Unverified) SkippedProjects(MatchResult matchResult)
+    private static (List<Notification> Notifications, List<ProcedureIdentity> Unverified) SkippedProjects(MatchResult matchResult, TextWriter error)
     {
         List<Notification> notifications = [];
         List<ProcedureIdentity> unverified = [];
@@ -391,7 +404,7 @@ internal static class CompareCommand
                 ? $"{side} project '{project.Name}' (assembly '{project.AssemblyName}')"
                 : $"a {side} project the workspace did not name";
             string text = $"{subject} was skipped: {string.Join("; ", project.Diagnostics)}";
-            Console.Error.WriteLine($"{(project.IsCSharp ? "error" : "warning")}: {text}");
+            error.WriteLine($"{(project.IsCSharp ? "error" : "warning")}: {text}");
             notifications.Add(new Notification { Level = level, Message = new Message { Text = text } });
             unverified.AddRange(project.Procedures);
         }
@@ -404,7 +417,7 @@ internal static class CompareCommand
     /// "Missing file: exit 3" is not limited to <c>--legacy</c>/<c>--modern</c>) and loads both,
     /// catching a malformed (not just wrong-shaped) <c>--config</c> file as a usage error too.
     /// </summary>
-    private static bool TryLoadInputs(string? baselinePath, string? configPath, out EquivConfig config, out SarifLog? baseline, out int exitCode)
+    private static bool TryLoadInputs(string? baselinePath, string? configPath, TextWriter error, out EquivConfig config, out SarifLog? baseline, out int exitCode)
     {
         config = EquivConfig.Default;
         baseline = null;
@@ -412,25 +425,25 @@ internal static class CompareCommand
 
         if (configPath is not null && !File.Exists(configPath))
         {
-            Console.Error.WriteLine($"error: file not found (config={configPath})");
+            error.WriteLine($"error: file not found (config={configPath})");
             exitCode = ExitCodes.UsageError;
             return false;
         }
 
         if (baselinePath is not null && !File.Exists(baselinePath))
         {
-            Console.Error.WriteLine($"error: file not found (baseline={baselinePath})");
+            error.WriteLine($"error: file not found (baseline={baselinePath})");
             exitCode = ExitCodes.UsageError;
             return false;
         }
 
         try
         {
-            config = LoadConfig(configPath);
+            config = LoadConfig(configPath, error);
         }
         catch (EquivConfigParseException exception)
         {
-            Console.Error.WriteLine(exception.Message);
+            error.WriteLine(exception.Message);
             exitCode = ExitCodes.UsageError;
             return false;
         }
@@ -447,13 +460,13 @@ internal static class CompareCommand
         }
         catch (JsonException exception)
         {
-            Console.Error.WriteLine($"error: '{baselinePath}' is not a valid SARIF log: {exception.Message}");
+            error.WriteLine($"error: '{baselinePath}' is not a valid SARIF log: {exception.Message}");
             exitCode = ExitCodes.UsageError;
             return false;
         }
     }
 
-    private static EquivConfig LoadConfig(string? configPath)
+    private static EquivConfig LoadConfig(string? configPath, TextWriter error)
     {
         if (configPath is null)
         {
@@ -463,11 +476,20 @@ internal static class CompareCommand
         EquivConfigResult result = EquivConfigLoader.Load(File.ReadAllText(configPath));
         foreach (EquivConfigDiagnostic diagnostic in result.Diagnostics)
         {
-            Console.Error.WriteLine($"warning: {diagnostic.Id} {diagnostic.Path}: {diagnostic.Message}");
+            error.WriteLine($"warning: {diagnostic.Id} {diagnostic.Path}: {diagnostic.Message}");
         }
 
         return result.Config;
     }
+
+    /// <summary>The backend's knobs for this run: the config's bound, timeout and renames, and the command line's rung options.</summary>
+    private static VerificationOptions Verification(EquivConfig config, CompareOptions options, IRunLog runLog) =>
+        new(config.Bound, config.TimeoutMs, config.CallIdentityRenames)
+        {
+            ChcIntMode = options.ChcIntMode,
+            InvariantModel = options.InvariantModel,
+            Log = runLog,
+        };
 
     /// <summary>
     /// Both lowered bodies of every matched pair. A frontend must attach them (ticket M2-003); a pair without
@@ -490,18 +512,12 @@ internal static class CompareCommand
     /// the pairs the solver decides (ADR 0038).
     /// </summary>
     private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) Verified(
-        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, EquivConfig config, CompareOptions compare, IRunLog runLog)
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, VerificationOptions options, IRunLog runLog, TextWriter error)
     {
-        VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames)
-        {
-            ChcIntMode = compare.ChcIntMode,
-            InvariantModel = compare.InvariantModel,
-            Log = runLog,
-        };
         if (options.InvariantModel is { } model)
         {
             // Ticket P1-002 criterion 4: rung 5 sends loop IR text to the model, so say so before any pair is verified.
-            Console.Error.WriteLine($"note: sending loop IR text to {model}");
+            error.WriteLine($"note: sending loop IR text to {model}");
         }
 
         List<VerificationResult> results = [];
@@ -511,7 +527,7 @@ internal static class CompareCommand
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New, Decision? Decided, long Weight)> pairs =
             [.. lowered.Select(static p => Weighed(p.Pair, p.Old, p.New, Decide(p.Pair, p.Old, p.New)))];
         List<int> solverRungs = [.. pairs.Where(static p => p.Decided is null).Select(static p => PairWeight.Rungs(p.Old, p.New))];
-        runLog.Phase("verify", pairs.Count, pairs.Sum(static p => p.Weight), new PhaseBound(solverRungs.Count, config.TimeoutMs, solverRungs.DefaultIfEmpty(1).Max()));
+        runLog.Phase("verify", pairs.Count, pairs.Sum(static p => p.Weight), new PhaseBound(solverRungs.Count, options.TimeoutMs, solverRungs.DefaultIfEmpty(1).Max()));
         foreach ((ProcedurePair pair, IrProcedure old, IrProcedure @new, Decision? decided, long weight) in pairs)
         {
             runLog.Item(pair.New.Value, weight);
@@ -535,7 +551,7 @@ internal static class CompareCommand
             }
             catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
             {
-                failures.Add(PairFailure("Verifying", pair.Old, pair.New, exception));
+                failures.Add(PairFailure("Verifying", pair.Old, pair.New, exception, error));
                 unverified.Add(pair.New);
                 runLog.ItemDone("failed");
             }
@@ -619,6 +635,63 @@ internal static class CompareCommand
         ];
     }
 
+    /// <summary>
+    /// ADR 0036 decision 2 (ticket P1-010), once every result carries its assumptions: an Equivalent result whose unproven
+    /// assumptions include lowered callee pairs goes back to <paramref name="backend"/> with those pairs, to be proved again
+    /// with a caller-sufficient contract for each. When it is, the result takes that verdict, each callee it has a contract
+    /// for leaves <see cref="VerificationResult.UnprovenAssumptions"/>, and that callee's own unproven assumptions join the
+    /// caller's assumed and unproven ones, since the contract's proof assumed them. Otherwise, and when the backend throws,
+    /// the result stays as it was; a throw is written to stderr as a warning, because the verdict it leaves is still sound.
+    /// </summary>
+    private static List<VerificationResult> WithContracts(
+        List<VerificationResult> results, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, VerificationOptions options, TextWriter error)
+    {
+        Dictionary<string, (IrProcedure Old, IrProcedure New)> bodies = lowered.ToDictionary(static p => p.Pair.New.Value, static p => (p.Old, p.New), StringComparer.Ordinal);
+        Dictionary<string, VerificationResult> byIdentity = results.ToDictionary(static r => r.Identity.Value, StringComparer.Ordinal);
+        return [.. results.Select(result => UnderContracts(result, bodies, byIdentity, backend, options, error))];
+    }
+
+    private static VerificationResult UnderContracts(
+        VerificationResult result,
+        Dictionary<string, (IrProcedure Old, IrProcedure New)> bodies,
+        Dictionary<string, VerificationResult> byIdentity,
+        IVerificationBackend backend,
+        VerificationOptions options,
+        TextWriter error)
+    {
+        ImmutableArray<CalleePair> callees = [.. result.UnprovenAssumptions.Where(bodies.ContainsKey).Select(c => new CalleePair(c, bodies[c].Old, bodies[c].New))];
+        if (result.Verdict is not Equivalent || callees.IsEmpty)
+        {
+            return result;
+        }
+
+        (IrProcedure old, IrProcedure @new) = bodies[result.Identity.Value];
+        Equivalent? proved;
+        try
+        {
+            proved = backend.VerifyUnderContracts(old, @new, callees, options);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
+        {
+            error.WriteLine($"warning: Verifying {result.Identity.Value} under callee contracts failed, so it keeps its verdict: {exception.Message}");
+            return result;
+        }
+
+        if (proved is null)
+        {
+            return result;
+        }
+
+        HashSet<string> contracted = new(proved.ContractsUsed.Select(static c => c.Callee), StringComparer.Ordinal);
+        string[] inherited = [.. contracted.SelectMany(c => byIdentity.TryGetValue(c, out VerificationResult? callee) ? callee.UnprovenAssumptions : [])];
+        return result with
+        {
+            Verdict = proved,
+            AssumedCallees = [.. result.AssumedCallees.Concat(inherited).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
+            UnprovenAssumptions = [.. result.UnprovenAssumptions.Where(c => !contracted.Contains(c)).Concat(inherited).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
+        };
+    }
+
     private static IEnumerable<string> Callees(IrProcedure body) =>
         body.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static call => call.Callee.Value);
 
@@ -626,10 +699,10 @@ internal static class CompareCommand
     /// ADR 0023's record of a pair the tool failed on: an <c>error</c> notification naming both identities and carrying
     /// the exception, also written to stderr. <paramref name="stage"/> says what failed (<c>Lowering</c>, <c>Verifying</c>).
     /// </summary>
-    private static Notification PairFailure(string stage, ProcedureIdentity old, ProcedureIdentity @new, Exception exception)
+    private static Notification PairFailure(string stage, ProcedureIdentity old, ProcedureIdentity @new, Exception exception, TextWriter error)
     {
         string text = $"{stage} {old.Value} against {@new.Value} failed: {exception.Message}";
-        Console.Error.WriteLine($"error: {text}");
+        error.WriteLine($"error: {text}");
         return new Notification
         {
             Level = FailureLevel.Error,
@@ -701,6 +774,6 @@ internal static class CompareCommand
     /// <summary>A pair's result decided without the solver, and the outcome the verify phase logs for it.</summary>
     private sealed record Decision(VerificationResult Result, string Outcome);
 
-    /// <summary>Where <see cref="Report"/> writes: the SARIF sink and the run log (sonar(src): csharpsquid:S107).</summary>
-    private sealed record Output(IReportSink Sink, IRunLog Log);
+    /// <summary>Where <see cref="Report"/> writes: the SARIF sink, the run log and the stderr stream (sonar(src): csharpsquid:S107).</summary>
+    private sealed record Output(IReportSink Sink, IRunLog Log, TextWriter Error);
 }

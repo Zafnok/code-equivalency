@@ -173,13 +173,13 @@ public sealed partial class LlmInvariantRungTests
     {
         Fixture arrays = Fixture.Load("loops/array-count");
         FakeInvariantProposer asking = new();
-        new LlmInvariantRung(static () => new Context(), Options, asking, "fake-model").Prove(arrays.Old, arrays.New);
+        new LlmInvariantRung(static () => new Context(), Options, asking, "fake-model", ProofMethod.LlmInvariant).Prove(arrays.Old, arrays.New);
         InvariantRequest request = Assert.Single(asking.Requests);
         Assert.Contains(request.Relations.SelectMany(static r => r.Parameters), static p => p.Sort.StartsWith("(Array |int[]| (Array Int Int))", StringComparison.Ordinal));
         string candidate = string.Join('\n', request.Relations.Select(static r => $"(define-fun {r.Name} ({string.Join(' ', r.Parameters.Select(static p => $"({p.Name} {p.Sort})"))}) Bool true)"));
         FakeInvariantProposer proposer = new(candidate);
 
-        new LlmInvariantRung(static () => new Context(), Options, proposer, "fake-model").Prove(arrays.Old, arrays.New);
+        new LlmInvariantRung(static () => new Context(), Options, proposer, "fake-model", ProofMethod.LlmInvariant).Prove(arrays.Old, arrays.New);
 
         Assert.StartsWith("the exit obligation fails: ", proposer.Requests[1].Rejected[0].Reason, StringComparison.Ordinal);
     }
@@ -190,7 +190,7 @@ public sealed partial class LlmInvariantRungTests
     {
         FakeInvariantProposer proposer = new(FusionInvariant);
 
-        new LlmInvariantRung(static () => new Context(), Options with { TimeoutMs = 1 }, proposer, "fake-model").Prove(Fusion.Old, Fusion.New);
+        new LlmInvariantRung(static () => new Context(), Options with { TimeoutMs = 1 }, proposer, "fake-model", ProofMethod.LlmInvariant).Prove(Fusion.Old, Fusion.New);
 
         Assert.StartsWith("Z3 gave up on the ", Assert.Single(proposer.Requests[1].Rejected).Reason, StringComparison.Ordinal);
     }
@@ -218,7 +218,7 @@ public sealed partial class LlmInvariantRungTests
         candidates.Sample(
             candidate =>
             {
-                ImmutableArray<Rung> rounds = new LlmInvariantRung(static () => new Context(), Options, new FakeInvariantProposer(candidate), "fake-model").Prove(wraps.Old, wraps.New);
+                ImmutableArray<Rung> rounds = new LlmInvariantRung(static () => new Context(), Options, new FakeInvariantProposer(candidate), "fake-model", ProofMethod.LlmInvariant).Prove(wraps.Old, wraps.New);
                 Assert.IsNotType<Equivalent>(rounds[^1].Verdict);
             },
             iter: 50,
@@ -227,7 +227,7 @@ public sealed partial class LlmInvariantRungTests
 
     /// <summary>
     /// Criteria 2 and 5 through the ladder: with a 1 ms timeout rung 4 gives up on <c>loops/fusion</c>, and rung 5, given
-    /// its own timeout, proves the pair with the fake proposer's second candidate. The snapshot holds the verdict and the
+    /// its own timeout and without the trace proposer (ticket P1-009), proves the pair with the fake proposer's second candidate. The snapshot holds the verdict and the
     /// ladder from rung 4 on (rungs 1 to 3 at 1 ms may time out or not), with each counterexample value masked: which
     /// model Z3 gives depends on what the process ran before.
     /// </summary>
@@ -235,7 +235,7 @@ public sealed partial class LlmInvariantRungTests
     public Task LadderSnapshot_FakeProposerSolvesLoopFusionAfterRungFourTimesOut()
     {
         FakeInvariantProposer proposer = new(Everywhere("true"), FusionInvariant);
-        LoopLadder ladder = new(static () => new Context(), Options with { TimeoutMs = 1 }, proposer) { InvariantTimeoutMs = 10_000 };
+        LoopLadder ladder = new(static () => new Context(), Options with { TimeoutMs = 1 }, proposer) { InvariantTimeoutMs = 10_000, Traces = null };
 
         Verdict verdict = ladder.Verify(Fusion.Old, Fusion.New);
 
@@ -252,14 +252,39 @@ public sealed partial class LlmInvariantRungTests
             ]));
     }
 
-    /// <summary>Criterion 4: without a proposer (no <c>--invariant-model</c>) the ladder stops at rung 4's Unknown.</summary>
+    /// <summary>
+    /// Criterion 4: without a proposer (no <c>--invariant-model</c>) no model is asked. Rung 5 then runs only the local trace
+    /// proposer (ticket P1-009), whose Unknown the ladder reports; without that too, it stops at rung 4's Unknown.
+    /// </summary>
     [Fact]
     public void WithoutAProposerTheLadderReportsRungFoursUnknown()
     {
-        Verdict verdict = new LoopLadder(static () => new Context(), Options with { TimeoutMs = 1, InvariantModel = null }).Verify(Fusion.Old, Fusion.New);
+        Verdict traced = new LoopLadder(static () => new Context(), Options with { TimeoutMs = 1, InvariantModel = null }).Verify(Fusion.Old, Fusion.New);
+        Verdict verdict = new LoopLadder(static () => new Context(), Options with { TimeoutMs = 1, InvariantModel = null }) { Traces = null }.Verify(Fusion.Old, Fusion.New);
 
+        Assert.Equal(UnknownReason.NoInvariant, Assert.IsType<Unknown>(traced).Reason);
+        Assert.All(traced.Ladder.SkipWhile(static s => s.Rung != ProofMethod.Chc).Skip(1), static s => Assert.Equal(ProofMethod.TraceInvariant, s.Rung));
         Assert.Equal(UnknownReason.ChcTimeout, Assert.IsType<Unknown>(verdict).Reason);
         Assert.Equal(ProofMethod.Chc, verdict.Ladder[^1].Rung);
+    }
+
+    /// <summary>
+    /// Ticket P1-009 criterion 3: rung 5 asks the trace proposer first and the model only once its candidates are all
+    /// rejected; <c>loops/fusion</c> needs an invariant the templates cannot state, so the model proves it.
+    /// </summary>
+    [Fact]
+    public void TheLadderAsksTheTraceProposerBeforeTheModel()
+    {
+        FakeInvariantProposer proposer = new(FusionInvariant);
+        LoopLadder ladder = new(static () => new Context(), Options with { TimeoutMs = 1 }, proposer) { InvariantTimeoutMs = 10_000 };
+
+        Verdict verdict = ladder.Verify(Fusion.Old, Fusion.New);
+
+        Assert.Equal(ProofMethod.LlmInvariant, Assert.IsType<Equivalent>(verdict).Method);
+        ProofMethod[] rungFive = [.. verdict.Ladder.SkipWhile(static s => s.Rung != ProofMethod.Chc).Skip(1).Select(static s => s.Rung)];
+        Assert.Equal(ProofMethod.TraceInvariant, rungFive[0]);
+        Assert.Equal([ProofMethod.TraceInvariant, ProofMethod.LlmInvariant], [.. rungFive.Distinct()]);
+        Assert.Equal(RungOutcome.Proved, verdict.Ladder[^1].Outcome);
     }
 
     /// <summary>
@@ -286,7 +311,7 @@ public sealed partial class LlmInvariantRungTests
     }
 
     private static ImmutableArray<Rung> Prove(FakeInvariantProposer proposer) =>
-        new LlmInvariantRung(static () => new Context(), Options, proposer, "fake-model").Prove(Fusion.Old, Fusion.New);
+        new LlmInvariantRung(static () => new Context(), Options, proposer, "fake-model", ProofMethod.LlmInvariant).Prove(Fusion.Old, Fusion.New);
 
     /// <summary><c>loops/fusion</c>'s relations, each defined as <paramref name="body"/>.</summary>
     private static string Everywhere(string body) => string.Join('\n', FusionSignatures.Select(s => $"(define-fun {s} Bool {body})"));

@@ -1,0 +1,10 @@
+﻿proc "C::M(int,string,string)" (%a "a": bv32, %s "s": sort "System.String", %t "t": sort "System.String", ref %field.C.f: map<sort "C", bv32>, %null.System.String: map<sort "System.String", bool>, %this: sort "C") -> sort "System.String" entry B0
+B0:
+  %s.isNull.12 "s": bool = mapread %null.System.String, %s
+  %t.isNull.13 "t": bool = mapread %null.System.String, %t
+  goto B1
+B1:
+  %$4: bv32 = const bv32 1
+  %$5: bv32 = add %a, %$4
+  %field.C.f.14: map<sort "C", bv32> = mapwrite %field.C.f, %this, %a
+  ret %t outs(%field.C.f = %field.C.f.14)

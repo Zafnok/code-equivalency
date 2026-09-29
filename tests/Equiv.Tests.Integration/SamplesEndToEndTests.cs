@@ -1,8 +1,16 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
 using Equiv.Cli;
+using Equiv.Core;
+using Equiv.Core.Ir;
+using Equiv.Core.Progress;
+using Equiv.Core.Reporting;
+using Equiv.Core.Verdicts;
+using Equiv.Frontend.CSharp;
+using Equiv.Verify.Z3;
 
 using Microsoft.CodeAnalysis.Sarif;
 
@@ -187,6 +195,99 @@ public sealed partial class SamplesEndToEndTests
         Assert.Contains(total.GetProperty<List<string>>("unprovenAssumptions"), static a => a.Contains("::Tax(", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Ticket P1-010 criterion 5 (ADR 0036 decision 2): the caller sees only <c>Score(a) &gt; 0</c>, so it is Equivalent
+    /// under an admitted contract for the Divergent <c>Score</c>, which leaves no unproven assumption. The checked-in
+    /// snapshot is the whole run.
+    /// </summary>
+    [Fact]
+    public async Task CalleeChangedInvisible_EquivalentPlusContract()
+    {
+        SampleRun run = RunSample("callee-changed-invisible");
+        Result score = Single("callee-changed-invisible", "::Score(int) diverges");
+        Result classify = Single("callee-changed-invisible", "::Classify(int) is equivalent");
+
+        Assert.Equal(await Snapshot("callee-changed-invisible"), run.NormalizedSarif);
+        Assert.Equal("EQ002", score.RuleId);
+        Assert.Equal("EQ001", classify.RuleId);
+        Assert.Equal("bounded+contract", classify.GetProperty<string>("proofMethod"));
+        Dictionary<string, string> contract = Assert.Single(classify.GetProperty<List<Dictionary<string, string>>>("contractsUsed"));
+        Assert.EndsWith("::Score(int)", contract["callee"], StringComparison.Ordinal);
+        Assert.Equal("observed-predicates", contract["proposedBy"]);
+        Assert.False(classify.TryGetProperty("unprovenAssumptions", out List<string>? _));
+    }
+
+    /// <summary>
+    /// Ticket P1-010 criterion 6: <c>Total</c> returns what <c>Tax</c> returned, so it observes the change, no contract is
+    /// used, and both verdicts and the snapshot stay as M3-015 left them.
+    /// </summary>
+    [Fact]
+    public async Task CalleeChanged_Unaffected()
+    {
+        SampleRun run = RunSample("callee-changed");
+        Result total = Single("callee-changed", "::Total(int) is equivalent");
+
+        Assert.Equal(await Snapshot("callee-changed"), run.NormalizedSarif);
+        Assert.Equal("congruence", total.GetProperty<string>("proofMethod"));
+        Assert.False(total.TryGetProperty("contractsUsed", out List<Dictionary<string, string>>? _));
+        Assert.Contains(total.GetProperty<List<string>>("unprovenAssumptions"), static a => a.Contains("::Tax(", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Ticket P1-013 criterion 5 (ADR 0037), with the ticket's recorded deviation: the modern side computes an unshared
+    /// opaque value and then adds a guard that throws, so the pair is Unknown; the new throw lies past the opaque node, so
+    /// <c>newFailures</c> is <c>unknown</c>, and the legacy side never throws, so <c>removedFailures</c> is <c>none-proved</c>.
+    /// </summary>
+    [Fact]
+    public async Task UnknownNewThrow_CarriesItsFailureRefinement()
+    {
+        SampleRun run = RunSample("unknown-new-throw");
+        Result width = Single("unknown-new-throw", "::Width(int) is unknown");
+
+        Assert.Equal(await Snapshot("unknown-new-throw"), run.NormalizedSarif);
+        Assert.Equal("EQ003", width.RuleId);
+        Dictionary<string, Dictionary<string, string>> refinement = width.GetProperty<Dictionary<string, Dictionary<string, string>>>("failureRefinement");
+        Assert.Equal("unknown", refinement["newFailures"]["outcome"]);
+        Assert.Equal("none-proved", refinement["removedFailures"]["outcome"]);
+    }
+
+    /// <summary>
+    /// Ticket P1-013 criterion 4 (ADR 0037): on every sample, a run whose backend drops the failure refinement has the same
+    /// exit code, and every result the same rule id and result fingerprint, as the real run.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Samples))]
+    public void Refinement_NeverChangesVerdictOrFingerprint(string sample)
+    {
+        SampleRun refined = RunSample(sample);
+        (string legacy, string modern) = Solutions(sample);
+        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P1-013-{Guid.NewGuid():N}.sarif");
+        try
+        {
+            int exitCode = RunProgramSilently(() => CompareCommand.Run(
+                new Equiv.Cli.CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+                [new CSharpFrontend()],
+                new WithoutRefinement(new Z3Backend()),
+                new FileReportSink(outPath),
+                NullRunLog.Instance));
+            SarifLog plain = SarifLog.Load(outPath);
+
+            Assert.Equal(refined.ExitCode, exitCode);
+            Assert.Equal(Verdicts(refined.Log), Verdicts(plain));
+            Assert.DoesNotContain(plain.Runs[0].Results, static r => r.TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+        }
+        finally
+        {
+            File.Delete(outPath);
+        }
+
+        static string[] Verdicts(SarifLog log) =>
+            [.. log.Runs[0].Results.Select(static r => $"{r.PartialFingerprints["procedureIdentity/v1"]} {r.RuleId} {r.PartialFingerprints["resultFingerprint/v1"]}").Order(StringComparer.Ordinal)];
+    }
+
+    private static Task<string> Snapshot(string sample) =>
+        File.ReadAllTextAsync(Path.Combine(SamplesRoot, sample, "expected.sarif.json"), TestContext.Current.CancellationToken);
+
     private static Result Single(string sample, string messageContains) =>
         RunSample(sample).Log.Runs[0].Results.Single(r => r.Message.Text.Contains(messageContains, StringComparison.Ordinal));
 
@@ -245,4 +346,17 @@ public sealed partial class SamplesEndToEndTests
     private static partial Regex ExitCodePattern { get; }
 
     private sealed record SampleRun(int ExitCode, string Json, string NormalizedSarif, SarifLog Log);
+
+    /// <summary><paramref name="backend"/> with every Unknown's failure refinement dropped, as the backend was before ticket P1-013.</summary>
+    private sealed class WithoutRefinement(IVerificationBackend backend) : IVerificationBackend
+    {
+        public Verdict Verify(IrProcedure oldBody, IrProcedure newBody, VerificationOptions options)
+        {
+            Verdict verdict = backend.Verify(oldBody, newBody, options);
+            return verdict is Unknown unknown ? unknown with { FailureRefinement = null } : verdict;
+        }
+
+        public Equivalent? VerifyUnderContracts(IrProcedure oldBody, IrProcedure newBody, ImmutableArray<CalleePair> callees, VerificationOptions options) =>
+            backend.VerifyUnderContracts(oldBody, newBody, callees, options);
+    }
 }

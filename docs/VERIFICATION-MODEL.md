@@ -17,6 +17,14 @@ SARIF result names them (`assumedCallees`) and flags the ones not proved in the 
 (`unprovenAssumptions`). This holds for cycles too: if every pair on a cycle of matched
 procedures is Equivalent, every pair is partially equivalent (the mutual-summary rule).
 
+A changed callee that the caller cannot observe does not stay an assumption (ADR 0036 decision 2;
+ticket P1-010). Take an Equivalent caller whose unproven assumptions include a lowered callee pair
+(f, f'). The run builds a relational contract K from what the caller observes of that call (section
+5.2). It proves on the product of f and f' that the pair satisfies K, and then proves the caller again
+with each side's call given its own outcome and heap, related to the other side's only by K. If the
+caller is still Equivalent, f moves from `unprovenAssumptions` to `contractsUsed`. The proof of K is
+itself modular, so f's own unproven assumptions join the caller's.
+
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
 No single algorithm decides equivalence for every program pair, but this sub-problem
@@ -53,7 +61,14 @@ SSA heap slices (one map per field, one per array sort) encoded as SMT arrays. F
 point is a `Sort` in the MVP (not IEEE-modelled); a post-MVP ticket exists. Operators on
 floating point, `decimal` and user-defined operators are `IrPure` applications of named
 functions both sides share (ADR 0025, ticket M4-002), so unchanged arithmetic is provable
-without modelling its semantics.
+without modelling its semantics. A value tuple of two or three `bool` or integral elements is the
+`Sort` `tuple(<element types>)` (`tuple(bv32,bool)`), a tuple literal the pure function `tuple.new` of its
+elements, and an element read, by `Item<n>` or by the name the tuple gives it, the pure function
+`tuple.item<n>` of the tuple, since element names are compile-time only (`IrTuple` holds the spelling; P2-027).
+Unlike other pure functions these two are exact: at each `tuple.new` the encoder asserts that each
+`tuple.item<i>` of the result is its `i`-th element, and at each `tuple.item<n>` of `t` that `t` is
+`tuple.new` of its items, so a read of a literal is its element and two tuples read to have equal elements
+are equal. Both are theorems of tuples, so they are asserted unguarded.
 
 IR instructions never throw. Every exception edge is explicit in the CFG: the frontend
 lowers `checked` arithmetic to an overflow test plus a branch to a throw block, and a
@@ -159,6 +174,24 @@ as `a[index]` (the `array.<Sort>` slice at the array, then the index, null- and 
 after which the index steps by one; the enumerator's `finally` is not run. A loop whose variable is a
 deconstruction, or whose element read is not found, stays the M4-001 enumerator calls.
 
+The CFG captures an assignment's target before a value that branches, and `f ??= v` captures `f`
+(P2-006, P2-007). A captured local or parameter is that variable. A captured field (not a lowered tuple
+element), single-dimensional array element or auto-property is its map at the receiver (and index)
+evaluated at the capture, and any other captured property is its receiver and index arguments evaluated
+there: a read of the capture reads the map or calls the getter, a write writes the map or calls the
+setter, and the capture has no null shadow of its own.
+
+`e.E += h` and `e.E -= h` on an event are a call to its `add` or `remove` accessor with `e` (none for
+a static event) and `h`, lowered as a setter call is: no result, `e` null-checked at the call after
+`h` is evaluated, and a `threw` edge (P2-005). A field-like event is no exception, since the compiler
+calls its accessor too.
+
+The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
+locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
+each field's receiver, then every element of the literal (each already converted to its target's
+type), then each store, all left to right, so `(a, b) = (b, a)` swaps. Anything else, a `Deconstruct`
+method or a tuple-typed value included, is `IrOpaque` with reason `DeconstructionAssignment`.
+
 C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 0013):
 
 - Checked `+ - *` and unary `-` test `IrOverflows` and branch to one shared
@@ -244,6 +277,24 @@ Migration-specific normalisations (applied to both sides before matching):
   Divergent with ruleId EQ006 and a link to the breaking-change entry. Users may
   suppress per member in `equiv.config.json`.
 
+### 3.1 IL fallback (ADR 0039)
+
+With `--il-fallback`, a matched pair that is not congruent, and where either side's IOperation
+lowering holds an `IrOpaque` whose fingerprint the other side does not share, is lowered again on
+**both** sides from ILSpy's ILAst. The ILAst is read from the side's compilation emitted in memory
+with a portable PDB, through P1-012's structural transforms only (none that rebuilds a C#
+construct). The IL bodies replace the IOperation bodies only if they hold fewer unshared opaques;
+otherwise the pair keeps its IOperation lowering. A pair is never lowered half from each.
+
+The IL lowering produces the same IR the rules above do: every type and member reference is
+resolved to the loaded compilation's symbol and goes through the same sort and identity mapping, so
+calls, field and array maps, `cast.<From>.<To>`, `null.<T>`, the pure catalogue and ADR 0021's
+parameter naming are identical between the two lowerings. An instruction the IL table does not map
+(`docs/tickets/IL-COVERAGE.md`) is an `IrOpaque` whose reason is its ILAst key (`LdFtn[lambda]`,
+`UnboxAny`, ...), with the source span of the nearest sequence point. The table declines what the
+IOperation rules decline for a semantic reason: unboxing, reading a caught exception, `ref` locals,
+`throw` of anything but a `new`, `default` of a type parameter, lambdas and local functions.
+
 ## 4. Matching
 
 Identity = assembly-agnostic namespace + type + member name + normalised parameter
@@ -284,7 +335,7 @@ Equivalent or finds a counterexample wins, and `proofMethod` names it.
 | 2 | Lockstep relational induction (mutual summaries): align loop pairs by position in the loop nesting forest and pair each header's state; cut both sides at every header and prove, from equal inputs and from each pair of equal header states, that both sides reach the same next header with equal states or leave with equal observables | **unbounded** Equivalent | both sides have the same loop forest and pairable header states; covers unchanged and cosmetically changed loops | M3-002 |
 | 3 | k-induction: rung 2 with k prior iterations assumed equal | unbounded Equivalent | bodies agree only after warm-up | M3-002 |
 | 4 | Constrained Horn clauses solved by Z3 Spacer: each side is cut at every loop header, one relation per pair of cut points, and Z3 synthesises the coupling invariant | unbounded Equivalent (the invariant in `properties.invariant`), Divergent when a derivation replays, or Unknown(chc-timeout, chc-spurious) | loops do not align (loop to LINQ, fusion, iterator rewrite), and neither side calls or applies a pure function | P1-001 |
-| 5 | LLM-proposed coupling invariant checked by Z3; a wrong guess can never yield Equivalent | unbounded Equivalent, or Unknown(no-invariant) | rung 4 timed out | P1-002 |
+| 5 | Proposed coupling invariant checked by Z3, first mined from runs of both sides (`trace-invariant`), then from a model (`llm-invariant`); a wrong guess can never yield Equivalent | unbounded Equivalent, or Unknown(no-invariant) | rung 4 timed out | P1-002, P1-009 |
 
 Recursion is handled by rung 2 with the recursive call as the induction point
 (the standard regression-verification treatment): a self-call stays a call both sides share. Rung 1 inlines it
@@ -323,7 +374,16 @@ Every derivation is replayed through the original procedures (a value the intege
 run computes): a divergence is Divergent, an opaque node reached is `Opaque`, and anything else is `ChcSpurious`
 with both runs in the detail.
 
-Rung 5 (ticket P1-002, ADR 0036) runs only when rung 4 timed out and `--invariant-model <id>` names a model; the
+Rung 5 (tickets P1-002 and P1-009, ADR 0036) runs only when rung 4 timed out. It first asks a local proposer, on by
+default because it runs in process and sends nothing (P1-009): it runs both procedures in `IrInterpreter` on up to 200
+inputs (each earlier counterexample's first, then random ones), cut at their loop headers as rung 4 cuts them and
+paired as rung 4 steps them, and defines each relation as the conjunction of every template instance that held on
+all its samples: over each pair of same-sort arguments `x = y`, `x = y + c` and `x = c*y` for small constants, and
+`x <= y`, and over each argument its range where the bounds are the same in every trace; a relation no run reached is
+`false`. Z3 checks the candidate exactly as below; after a rejection it drops each conjunct the counterexample's
+conclusion falsifies and retries. A proof is Equivalent with `proofMethod: trace-invariant` and `properties.proposedBy:
+trace`. Disjunctive invariants are out of its reach, so a pair whose loops must end at `max(n, 0)`, such as loop fusion,
+stays Unknown. Only if it fails does rung 5 ask a model, and only when `--invariant-model <id>` names one; the
 CLI then prints `note: sending loop IR text to <id>` on stderr. It sends the model the IR text of both procedures and
 rung 4's relations with their arguments' names and sorts, and asks for one SMT-LIB `define-fun` per relation, at
 most three times. Each candidate is parsed against each relation's own arguments and may name nothing else, then
@@ -333,6 +393,41 @@ bitvectors: the init, step and exit obligations must all be unsatisfiable. A par
 is Equivalent with `proofMethod: llm-invariant`, the candidate in `properties.invariant` and the model id in
 `properties.proposedBy`; otherwise the pair is `NoInvariant`. Every round, its candidate and Z3's verdict is a step of
 `properties.ladderTrace`. A wrong candidate is rejected by Z3, so it can never make a pair Equivalent.
+
+### 5.2 Callee contracts
+
+A callee contract K (ADR 0036 decision 2; ticket P1-010) relates one call's two outcomes, the legacy
+side's and the modern side's, when both are called with equal arguments on an equal heap. K is a
+conjunction. Its first candidate is built from the caller:
+- the two sides throw alike;
+- when both throw, they throw the same exception type;
+- they make the same calls;
+- they leave each heap map the same, for every map the caller's product or either callee side names;
+- for every predicate the caller applies to the call's result, or to a heap map the call left, the
+  predicate has the same value on both sides unless either side throws.
+
+A predicate is a Bool the caller computes from that call's outputs through constants, operations,
+map reads and unchanging synthesised inputs (`null.*`) only: a branch condition, a comparison, a
+`== null` test, or a Bool result itself.
+
+K is admitted when the product of f and f' cannot break it. That product is section 5's, with "some
+observable differs" replaced by "K fails or the call traces differ". A loop segment's cut events are
+trace events, so the traces must always agree. Rung 1 runs on the pair unrolled; a model of it
+rejects K. An acyclic pair with no such model admits K. A pair with loops goes on to rungs 2 and 3,
+with K as the exit condition. A rejected K loses every conjunct the model falsifies and is checked
+again, four checks in all. The caller cannot tell exception types, the callee's calls or a heap map
+it does not name apart, so a candidate whose model falsifies one of those conjuncts gets no contract.
+Neither does a callee pair that reaches an `IrOpaque`, takes a source parameter by reference,
+returns different types on the two sides, calls itself or has irreducible control flow.
+
+In the caller's product, each side's call to f gets its own result, `threw`, heap and ref-output
+functions (the `:old`/`:new` functions a runtime-changed callee gets). For every old call to f and
+every new call to f with the same argument types, the product asserts: if both are reached at the
+same position with equal arguments and an equal heap, their outcomes satisfy K. A conjunct the caller
+has no term for (exception types, calls, a map it does not name) is left out. Calls that are not
+aligned so are unrelated, exactly as shared functions leave them. The call stays in the trace. Sharing
+the functions, or `threw`, under K would assume r = r', which is the assumption being removed. The
+caller then runs through the whole ladder as usual.
 
 ## 6. Verdict semantics and SARIF mapping
 
@@ -349,8 +444,14 @@ Every verdict on a matched pair with bodies also carries `properties.assumedCall
 `properties.unprovenAssumptions` (ADR 0019), and `properties.equivalencesApplied` when a
 catalogue entry fired (ADR 0020). A result whose ladder reached rung 4 carries `properties.chcMode`, and an
 Equivalent by `chc` carries Spacer's coupling invariant in `properties.invariant` (section 5.1). An Equivalent by
-`llm-invariant` carries the admitted invariant there too, and the model that proposed it in `properties.proposedBy`
-(ADR 0036).
+`llm-invariant` or `trace-invariant` carries the admitted invariant there too, and what proposed it in
+`properties.proposedBy`: the model id, or `trace` (ADR 0036). An Equivalent whose proof used callee
+contracts (section 5.2; ticket P1-010) has `proofMethod` suffixed `+contract` (for example
+`bounded+contract`). It also carries `properties.contractsUsed`, one `{ callee, contract, proposedBy }`
+per callee: `contract` is K in SMT-LIB over `r.old`/`r.new`, `threw.*`, `type.*`, `calls.*` and
+`heap.<map>.*`, and `proposedBy` is `observed-predicates`. Each such callee is left out of
+`unprovenAssumptions`, and its own unproven assumptions are added to the caller's `assumedCallees` and
+`unprovenAssumptions`.
 
 A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
 and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the
@@ -368,19 +469,30 @@ equal elements are equal strings; a `float`, `double` or `decimal` as the number
 reference type only as `null`. A static method is called directly, and an instance method on
 `new T()`, which needs a public parameterless constructor. Each side's project is emitted with its
 references beside it, and a driver calls the legacy method once on .NET Framework 4.8 and the
-modern method once on .NET 10, under the invariant culture. The result carries
+modern method once on .NET 10, under the invariant culture, and also under `tr-TR` when either body
+calls a member of the runtime-changes table, as differential testing does (P2-038). The result carries
 `properties.replay`:
-- `reproduced`: the two canonical outcomes (M3-032's canonical form) differ;
-- `not-reproduced`: they are equal, and `properties.replayOutcomes` gives both (`kind`, `value`).
-  The model and the CLR disagree; in a corpus run that is a soundness or modelling finding and
-  gets a ticket;
+- `reproduced`: the two canonical outcomes (M3-032's canonical form) differ under some culture;
+- `not-reproduced`: they are equal under every culture, and `properties.replayOutcomes` gives both
+  invariant-culture outcomes (`kind`, `value`). The model and the CLR disagree; in a corpus run that
+  is a soundness or modelling finding and gets a ticket;
+- `not-applicable`: they are equal, `replayOutcomes` gives both, and the result is EQ006 (the model's
+  call trace holds a runtime-changed callee). EQ006 claims the member differs between runtimes, and
+  its side-specific functions are free in the model, so one call with the model's inputs need not
+  show it (a hash seed, a default encoding, an ICU detail). Not a soundness finding (P2-038);
 - `not-constructible`, with `properties.replayReason`: the method is not public, generic, an
   accessor other than a getter, or takes a parameter by reference; the receiver has no public
   parameterless constructor or the model makes it null; a parameter's type has no generator; the
   model has a synthesised input other than `this` and `null.*` (a heap map, a cast or type-test
   map, `typeof`, `new`), since replay builds no object graphs; a project does not emit
   (`emit-failed`); the model's two runs end alike, so the divergence is in the call trace, which a
-  driver does not observe; or a side gives no comparable outcome.
+  driver does not observe; the model's call traces differ and the two real outcomes are equal, since
+  the model's outcomes may then rest on call answers the solver chose after the traces split (ADR
+  0026, "Why"; P2-037), so equal real outcomes are no evidence against it, while differing ones still
+  give `reproduced`; both sides throw the same exception where the model's runs do not both throw,
+  so the driver's `new T()` or an argument is not the model's (P2-038); or a side gives no
+  comparable outcome. These come before `not-applicable`, so `not-reproduced` always means the
+  model was wrong.
 
 Replay never changes the verdict, the rule id, the fingerprint or the exit code, and a run without
 `--execute` runs no code and writes no `replay`.
@@ -433,6 +545,23 @@ Every Unknown carries `properties.scope` (ADR 0029):
   on the unrolled pair, which proves nothing past the bound. An `abstraction` Unknown is `method`
   too, since the first query found its candidate, so that query was satisfiable (ticket M3-025).
 
+Every Unknown other than `unbound` and `timeout` also carries `properties.failureRefinement` (ADR 0037;
+ticket P1-013): `{ newFailures, removedFailures }`, each `{ outcome, model? }`. The backend asks two more
+queries over rung 1's product (the pair with its shared fragments as calls, unrolled `k` times), comparing
+only whether each side returns or throws, never the value or the heap. `newFailures` asks for an input on
+which the legacy side returns and the modern side throws; `removedFailures` is the same with the sides
+swapped. A side that reaches an unshared `IrOpaque`, or the bound of a looping pair, has an unknown outcome
+(ADR 0014), so each asks first on inputs where neither side does. A model there whose replay has an
+untainted outcome on both sides (ADR 0026) is `found`, carrying the model rendered as a Divergent's is; a
+tainted one is `unknown`. Only when that query is unsatisfiable does it ask again, letting such a side
+return or throw: unsatisfiable is `none-proved`, anything else `unknown`. A query the solver gives up on is
+`unknown`, and so is every answer for a pair rung 1 could not encode. Each query gets the pair's timeout.
+A `found` answer needs an input that reaches no unshared opaque node, so on an Unknown it occurs only where
+rung 1's model of the same divergence replayed tainted. The verdict stays EQ003, and neither the rule id, the
+exit code nor the fingerprint depends on `failureRefinement`. The census reports the Unknown pairs queried
+and the time their queries took, in `loweringCensus.failureRefinement` (`pairs`, `milliseconds`), when
+there was at least one.
+
 The IR text spells a whole-body opaque `opaque body "reason"` (`IrOpaque.WholeBody`), so scope is
 read from the IR rather than guessed from the span.
 
@@ -444,8 +573,10 @@ fingerprint.
 
 Every run writes `run.properties.loweringCensus`: procedures per side, matched pairs, pairs
 without `IrOpaque`, whole-body opaque pairs, congruent pairs, and `IrOpaque` counts by reason
-per side (ADR 0027). It also records skipped projects per side, and, when the run produced
-verdicts, Unknown counts by scope (ADR 0029).
+per side (ADR 0027). With `--il-fallback` it also counts the pairs the fallback was tried on and
+the pairs it replaced (`pairsIlFallbackTried`, `pairsLoweredFromIl`), and every result on a matched
+pair carries `properties.lowering` (`operation` or `il`; ADR 0039). It also records skipped projects per side, and, when the run produced
+verdicts, Unknown counts by scope (ADR 0029) and the failure-refinement time (ADR 0037).
 
 Only the projects a solution builds are part of the product. For a `.sln`, those are the projects
 with a `Build.0` entry for its default configuration (`Debug|Any CPU`, else the first one it

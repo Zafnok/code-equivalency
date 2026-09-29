@@ -33,13 +33,14 @@ internal sealed class ModelDecoder
     private readonly Context context;
     private readonly Model model;
     private readonly ProductEncoding encoding;
-    private readonly Values values = new();
+    private readonly Values values;
 
     public ModelDecoder(Context context, Model model, ProductEncoding encoding)
     {
         this.context = context;
         this.model = model;
         this.encoding = encoding;
+        values = new(model);
         foreach ((IrSortValue literal, Expr constant) in encoding.Sorts.SortLiterals)
         {
             values.Remember(literal, model.Eval(constant, completion: true));
@@ -66,6 +67,23 @@ internal sealed class ModelDecoder
     /// </summary>
     public static Verdict Replay(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
     {
+        (Counterexample counterexample, ModelOracle oldOracle, ModelOracle newOracle) = ReplayBoth(context, model, encoding, old, @new);
+        (IrInputs inputs, IrRun oldRun, IrRun newRun) = counterexample;
+        ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
+        return EnsureDiverges(new(old, oldRun, oldOracle.Threaded), new(@new, newRun, newOracle.Threaded), shared, inputs, encoding.Calls) == Difference.Real
+            ? new Divergent(counterexample)
+            : Unknown.DependingOn(counterexample, [.. Abstractions(Codebase.Legacy, oldRun), .. Abstractions(Codebase.Modern, newRun)]);
+    }
+
+    /// <summary>
+    /// Both acyclic sides replayed with taint from the model's inputs and call answers, whatever they observe: ADR 0037's
+    /// queries compare only whether each side threw, so the caller reads the outcomes and their taint (ticket P1-013).
+    /// </summary>
+    public static Counterexample Runs(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new) =>
+        ReplayBoth(context, model, encoding, old, @new).Counterexample;
+
+    private static (Counterexample Counterexample, ModelOracle Old, ModelOracle New) ReplayBoth(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
+    {
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
@@ -73,10 +91,7 @@ internal sealed class ModelDecoder
         ModelOracle newOracle = decoder.Oracle(Side.New);
         IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, Budget(old));
         IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, Budget(@new));
-        Counterexample counterexample = new(inputs, oldRun, newRun);
-        return EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls, oldOracle.Threaded, newOracle.Threaded) == Difference.Real
-            ? new Divergent(counterexample)
-            : Unknown.DependingOn(counterexample, [.. Abstractions(Codebase.Legacy, oldRun), .. Abstractions(Codebase.Modern, newRun)]);
+        return (new Counterexample(inputs, oldRun, newRun), oldOracle, newOracle);
     }
 
     /// <summary>Whether <paramref name="callee"/> is an abstraction the replay taints.</summary>
@@ -98,68 +113,41 @@ internal sealed class ModelDecoder
         IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, stepBudget);
         IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, stepBudget);
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
-        return complete && Diverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls, oldOracle.Threaded, newOracle.Threaded) ? new Counterexample(inputs, oldRun, newRun) : null;
+        return complete && Diverges(new(old, oldRun, oldOracle.Threaded), new(@new, newRun, newOracle.Threaded), shared, inputs, encoding.Calls) ? new Counterexample(inputs, oldRun, newRun) : null;
     }
 
     /// <summary>
     /// A model whose replay agrees on every compared observable is an encoder bug: fail loudly, never report it as
     /// Divergent. Otherwise returns how the runs differ.
     /// </summary>
-    public static Difference EnsureDiverges(
-        IrProcedure old,
-        IrProcedure @new,
-        ImmutableArray<SharedParameter> shared,
-        IrInputs inputs,
-        IrRun oldRun,
-        IrRun newRun,
-        TraceEncoder calls,
-        IReadOnlyDictionary<HeapMap, IrValue>? oldThreaded = null,
-        IReadOnlyDictionary<HeapMap, IrValue>? newThreaded = null)
+    public static Difference EnsureDiverges(Replayed old, Replayed @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, TraceEncoder calls)
     {
-        Difference difference = Compare(old, @new, shared, inputs, oldRun, newRun, calls, oldThreaded, newThreaded);
+        Difference difference = Compare(old, @new, shared, inputs, calls);
         return difference != Difference.None
             ? difference
             : throw new InvalidOperationException(
-                $"Encoder bug: the solver found a divergence between {old.Identity.Value} and {@new.Identity.Value}, but the replay does not diverge. "
-                + $"Inputs: {string.Join(", ", shared.Select((s, i) => $"{s.Var.Name}={inputs.Arguments[i]}"))}. Old: {Describe(oldRun)}. New: {Describe(newRun)}.");
+                $"Encoder bug: the solver found a divergence between {old.Procedure.Identity.Value} and {@new.Procedure.Identity.Value}, but the replay does not diverge. "
+                + $"Inputs: {string.Join(", ", shared.Select((s, i) => $"{s.Var.Name}={inputs.Arguments[i]}"))}. Old: {Describe(old.Run)}. New: {Describe(@new.Run)}.");
     }
 
     /// <summary>True when the two runs differ in an observable the encoder compares that is untainted on both sides.</summary>
-    public static bool Diverges(
-        IrProcedure old,
-        IrProcedure @new,
-        ImmutableArray<SharedParameter> shared,
-        IrInputs inputs,
-        IrRun oldRun,
-        IrRun newRun,
-        TraceEncoder calls,
-        IReadOnlyDictionary<HeapMap, IrValue>? oldThreaded = null,
-        IReadOnlyDictionary<HeapMap, IrValue>? newThreaded = null) =>
-        Compare(old, @new, shared, inputs, oldRun, newRun, calls, oldThreaded, newThreaded) == Difference.Real;
+    public static bool Diverges(Replayed old, Replayed @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, TraceEncoder calls) =>
+        Compare(old, @new, shared, inputs, calls) == Difference.Real;
 
     /// <summary>
     /// How the two runs differ on the observables the encoder compares: outcome, call trace (legacy identities renamed
     /// through the call-identity map), and the final value of each by-ref shared input (<paramref name="shared"/>,
     /// valued by <paramref name="inputs"/>), a side without that parameter standing for the version its oracle threaded
-    /// through its calls (<paramref name="oldThreaded"/>, <paramref name="newThreaded"/>; ticket P1-005) or else its unchanged
+    /// through its calls (<see cref="Replayed.Threaded"/>; ticket P1-005) or else its unchanged
     /// input. A difference is real when some differing observable is untainted on both sides (ADR 0026). Two returned values
     /// compare by the values' taint, any other outcome difference by the path's. A threaded version is tainted once the run
     /// reached an abstraction. The trace compares its first differing event only,
     /// since control taint can shift every later position.
     /// </summary>
-    public static Difference Compare(
-        IrProcedure old,
-        IrProcedure @new,
-        ImmutableArray<SharedParameter> shared,
-        IrInputs inputs,
-        IrRun oldRun,
-        IrRun newRun,
-        TraceEncoder calls,
-        IReadOnlyDictionary<HeapMap, IrValue>? oldThreaded = null,
-        IReadOnlyDictionary<HeapMap, IrValue>? newThreaded = null)
+    public static Difference Compare(Replayed old, Replayed @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, TraceEncoder calls)
     {
-        Replayed oldSide = new(old, oldRun, oldThreaded ?? ImmutableDictionary<HeapMap, IrValue>.Empty);
-        Replayed newSide = new(@new, newRun, newThreaded ?? ImmutableDictionary<HeapMap, IrValue>.Empty);
+        IrRun oldRun = old.Run;
+        IrRun newRun = @new.Run;
         List<bool> tainted = [];
         if (oldRun.Outcome != newRun.Outcome)
         {
@@ -179,8 +167,8 @@ internal sealed class ModelDecoder
 
         tainted.AddRange(shared
             .Select((s, i) => (Shared: s, Input: inputs.Arguments[i]))
-            .Where(s => s.Shared.ByRef && oldSide.Final(s.Shared.Old, s.Shared.Var, s.Input) != newSide.Final(s.Shared.New, s.Shared.Var, s.Input))
-            .Select(s => oldSide.FinalTainted(s.Shared.Old, s.Shared.Var) || newSide.FinalTainted(s.Shared.New, s.Shared.Var)));
+            .Where(s => s.Shared.ByRef && old.Final(s.Shared.Old, s.Shared.Var, s.Input) != @new.Final(s.Shared.New, s.Shared.Var, s.Input))
+            .Select(s => old.FinalTainted(s.Shared.Old, s.Shared.Var) || @new.FinalTainted(s.Shared.New, s.Shared.Var)));
 
         return tainted switch
         {
@@ -196,15 +184,26 @@ internal sealed class ModelDecoder
     /// negative one is at a reference nothing reads, and 0 makes the input one a CLR caller can pass.
     /// </summary>
     public IrInputs Inputs() =>
-        new([.. encoding.Inputs.Select(i => (i.Shared.Var.Name, Value: Decode(model.Eval(i.Term, completion: true), i.Shared.Type)))
-            .Select(static i => i.Name.StartsWith(ProductEncoder.LengthPrefix, StringComparison.Ordinal) ? NonNegative((IrMapValue)i.Value) : i.Value)]);
+        new([.. encoding.Inputs.Select(i => Clamped(i.Shared, Decode(model.Eval(i.Term, completion: true), i.Shared.Type)))]);
+
+    /// <summary>
+    /// <paramref name="value"/>, the decoded input <paramref name="shared"/>, with every negative length replaced by 0 when it
+    /// is a <c>length.&lt;Sort&gt;</c> input. Spacer's derivations need it too (ticket P2-043): a derivation fixes only the
+    /// lengths it reads, so it can leave another reference's length negative.
+    /// </summary>
+    internal static IrValue Clamped(SharedParameter shared, IrValue value) =>
+        shared.Var.Name.StartsWith(ProductEncoder.LengthPrefix, StringComparison.Ordinal) ? NonNegative((IrMapValue)value) : value;
 
     public IrValue Decode(Expr value, IrType type) => values.Decode(value, type);
 
-    /// <summary>The Z3 term for a decoded or literal value, so the oracle can apply call functions to it.</summary>
+    /// <summary>
+    /// The Z3 term for a decoded or literal value, so the oracle can apply call functions to it. A replay of the original
+    /// procedures from a fragment's model (a loop rung) can reach a literal the fragment never mentions (ticket P2-033);
+    /// it denotes whatever element the model completes its constant to.
+    /// </summary>
     public Expr Encode(IrValue value) => value switch
     {
-        IrSortValue element => values.Term(element),
+        IrSortValue element => values.Term(element, () => model.Eval(encoding.Sorts.Literal(element), completion: true)),
         IrMapValue map => map.Entries.Aggregate(
             context.MkConstArray(encoding.Sorts.Sort(map.MapType.Key), Encode(map.Default)),
             (array, e) => context.MkStore(array, Encode(e.Key), Encode(e.Value))),
@@ -257,9 +256,10 @@ internal sealed class ModelDecoder
     /// Values a solver gives, as IR values: a model's, or the ground facts of rung 4's derivations (ticket P1-001). An
     /// element of an uninterpreted sort becomes <c>sort "S" n</c>: an element <see cref="Remember"/>ed for a literal keeps
     /// that literal's id, any other gets the next free id. A bitvector may come as an integer, in rung 4's integer mode,
-    /// and then denotes its bits modulo its width.
+    /// and then denotes its bits modulo its width. A map given as <c>as-array</c> is read from <paramref name="model"/>'s
+    /// interpretation of its function (ticket P2-041); without a model, it cannot be.
     /// </summary>
-    internal sealed class Values
+    internal sealed class Values(Model? model = null)
     {
         private readonly Dictionary<string, Dictionary<string, int>> ids = new(StringComparer.Ordinal);
         private readonly Dictionary<IrSortValue, Expr> elements = [];
@@ -273,19 +273,37 @@ internal sealed class ModelDecoder
             _ => DecodeMap(value, (IrMap)type),
         };
 
-        /// <summary>The solver's term for an element already decoded or remembered.</summary>
-        public Expr Term(IrSortValue element) => elements[element];
+        /// <summary>
+        /// The solver's term for an element already decoded or remembered; any other is remembered as
+        /// <paramref name="unseen"/>'s term, without taking over the id of an element already decoded to that term.
+        /// </summary>
+        public Expr Term(IrSortValue element, Func<Expr> unseen)
+        {
+            if (!elements.TryGetValue(element, out Expr? term))
+            {
+                term = unseen();
+                Known(element.Sort).TryAdd(term.ToString(), element.Id);
+                elements.Add(element, term);
+            }
+
+            return term;
+        }
 
         public void Remember(IrSortValue element, Expr value)
         {
-            if (!ids.TryGetValue(element.Sort, out Dictionary<string, int>? known))
+            Known(element.Sort)[value.ToString()] = element.Id;
+            elements[element] = value;
+        }
+
+        private Dictionary<string, int> Known(string sort)
+        {
+            if (!ids.TryGetValue(sort, out Dictionary<string, int>? known))
             {
                 known = new(StringComparer.Ordinal);
-                ids.Add(element.Sort, known);
+                ids.Add(sort, known);
             }
 
-            known[value.ToString()] = element.Id;
-            elements[element] = value;
+            return known;
         }
 
         private IrSortValue Element(string sort, Expr value)
@@ -302,13 +320,18 @@ internal sealed class ModelDecoder
         }
 
         /// <summary>
-        /// Z3 4.12 evaluates a model array, with completion, to a store chain over a constant array; any other
-        /// shape (an <c>as-array</c>, a lambda) fails loudly, naming the term, rather than decoding to a wrong map.
+        /// Z3 evaluates a model array, with completion, to a store chain over a constant array, or to <c>as-array</c> over an
+        /// auxiliary function the model interprets (ticket P2-041), whose entries are the map's written keys and whose else
+        /// value is its default. Any other shape (a lambda, an <c>as-array</c> with no interpretation) fails loudly, naming
+        /// the term, rather than decoding to a wrong map.
         /// </summary>
         private IrMapValue DecodeMap(Expr value, IrMap type) => value switch
         {
             { IsStore: true } => DecodeMap(value.Args[0], type).Write(Decode(value.Args[1], type.Key), Decode(value.Args[2], type.Value)),
             { IsConstantArray: true } => new IrMapValue(type, Decode(value.Args[0], type.Value), []),
+            { IsAsArray: true } when model?.FuncInterp(value.FuncDecl.Parameters[0].FuncDecl) is { } interpretation => interpretation.Entries.Aggregate(
+                new IrMapValue(type, Decode(interpretation.Else, type.Value), []),
+                (map, e) => map.Write(Decode(e.Args[0], type.Key), Decode(e.Value, type.Value))),
             _ => throw new InvalidOperationException($"Encoder bug: the model gives a map in a shape the decoder does not read (store chain over a constant array expected): {value}"),
         };
     }
@@ -391,9 +414,15 @@ internal sealed class ModelDecoder
         private static bool Is(HeapMap map, IrHeapSlice slice) => string.Equals(map.Name, slice.Map, StringComparison.Ordinal) && map.Type == slice.Value.Type;
     }
 
-    /// <summary>One replayed side: its procedure, its run and the heap versions its oracle threaded (ticket P1-005).</summary>
-    private sealed record Replayed(IrProcedure Procedure, IrRun Run, IReadOnlyDictionary<HeapMap, IrValue> Threaded)
+    /// <summary>
+    /// One replayed side: its procedure, its run and the heap versions its oracle threaded (ticket P1-005), none when
+    /// <paramref name="Threaded"/> is null.
+    /// </summary>
+    public sealed record Replayed(IrProcedure Procedure, IrRun Run, IReadOnlyDictionary<HeapMap, IrValue>? Threaded = null)
     {
+        /// <summary>The heap versions the side's oracle threaded through its calls.</summary>
+        public IReadOnlyDictionary<HeapMap, IrValue> Threaded { get; } = Threaded ?? ImmutableDictionary<HeapMap, IrValue>.Empty;
+
         /// <summary>
         /// Whether a version threaded through <paramref name="run"/>'s calls may depend on an abstraction: once the run has
         /// reached one, since every taint, a tainted branch's included, starts at one.

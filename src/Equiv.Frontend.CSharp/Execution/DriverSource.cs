@@ -10,7 +10,9 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// <summary>
 /// The C# source of a driver for one member (ADR 0035, ticket M3-032). Its <c>Main</c> reads one JSON line per case on
 /// stdin (<c>[culture,arg0,...]</c>), sets the current culture and UI culture, calls the member, and writes one line
-/// (<c>["Kind",canonical]</c>) on stdout. The canonical form is written by the driver's own code, never by a runtime's
+/// (<c>["Kind",canonical]</c>) on stdout, which it keeps to itself: <c>Console.Out</c> and <c>Console.Error</c> are
+/// pointed at nothing before the first case, so what the code under test prints never reaches the parent (ticket P2-044).
+/// The canonical form is written by the driver's own code, never by a runtime's
 /// <c>ToString</c>: integers in decimal, <c>float</c> and <c>double</c> as their IEEE bits in hex, <c>decimal</c> as its
 /// four <c>GetBits</c> integers, strings as ASCII JSON, <c>char</c> as its code point, an enum as its underlying integer,
 /// arrays and <c>List&lt;T&gt;</c> of those element-wise, and an exception as its type's full name. The expression that
@@ -149,6 +151,7 @@ internal static class DriverSource
         using System;
         using System.Collections.Generic;
         using System.Globalization;
+        using System.IO;
         using System.Text;
         using System.Threading;
 
@@ -156,6 +159,11 @@ internal static class DriverSource
         {
             private static void Main()
             {
+                // The protocol keeps stdout to itself: whatever the code under test prints goes nowhere, so it can neither
+                // be read as an answer nor fill the pipe the parent reads answers from (ticket P2-044).
+                TextWriter protocol = new StreamWriter(Console.OpenStandardOutput());
+                Console.SetOut(TextWriter.Null);
+                Console.SetError(TextWriter.Null);
                 string line;
                 while ((line = Console.In.ReadLine()) != null)
                 {
@@ -174,8 +182,8 @@ internal static class DriverSource
                         answer = "[\"NotConstructible\"," + W.Str(e.GetType().FullName) + "]";
                     }
 
-                    Console.Out.WriteLine(answer);
-                    Console.Out.Flush();
+                    protocol.WriteLine(answer);
+                    protocol.Flush();
                 }
             }
 

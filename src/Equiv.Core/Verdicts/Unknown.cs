@@ -40,6 +40,13 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
     public ImmutableArray<Abstraction> Abstractions { get; init; } = [];
 
     /// <summary>
+    /// Whether the modern side can fail where the legacy side does not, and the reverse (ADR 0037; ticket P1-013); null for
+    /// an Unknown the backend did not query, such as <see cref="UnknownReason.Unbound"/> and <see cref="UnknownReason.Timeout"/>.
+    /// Not part of the fingerprint.
+    /// </summary>
+    public FailureRefinement? FailureRefinement { get; init; }
+
+    /// <summary>
     /// A divergence the replay found only in tainted observables (ADR 0026): <see cref="UnknownReason.Abstraction"/>,
     /// whose detail names the tainting identities, with <paramref name="candidate"/> and <paramref name="abstractions"/>
     /// attached, and each abstraction with a span as a cause.
@@ -60,8 +67,9 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
             & IrEquality.SequenceEqual(Causes, other.Causes)
             & (Scope == other.Scope)
             & (Candidate == other.Candidate)
-            & IrEquality.SequenceEqual(Abstractions, other.Abstractions);
+            & IrEquality.SequenceEqual(Abstractions, other.Abstractions)
+            & (FailureRefinement == other.FailureRefinement);
 
     public override int GetHashCode() =>
-        HashCode.Combine(base.GetHashCode(), Reason, Detail, IrEquality.Hash(Causes), Scope, Candidate, IrEquality.Hash(Abstractions));
+        HashCode.Combine(base.GetHashCode(), Reason, Detail, IrEquality.Hash(Causes), Scope, Candidate, IrEquality.Hash(Abstractions), FailureRefinement);
 }

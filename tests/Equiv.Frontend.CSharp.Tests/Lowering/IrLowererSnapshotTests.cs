@@ -1,4 +1,4 @@
-﻿using Equiv.Core.Ir;
+using Equiv.Core.Ir;
 
 using Xunit;
 
@@ -259,6 +259,10 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task DefaultValueOfATypeParameter() => Dump("static T M<T>(bool has, T value) where T : class => has ? value : default;");
 
+    /// <summary>Ticket P2-023 acceptance criterion 2: <c>&amp;x</c> is opaque with reason <c>AddressOf</c>, and not a shared fragment.</summary>
+    [Fact]
+    public Task AddressOf() => Dump("unsafe static int* M(int x) => &x;");
+
     /// <summary>Ticket P2-008 acceptance criterion 1: the CFG's <c>IsNull</c> of <c>?.</c> and <c>??</c> reads the operand's null shadow.</summary>
     [Fact]
     public Task NullConditionalLengthWithFallback() => Dump("static int M(string s) => s?.Length ?? 0;");
@@ -293,6 +297,68 @@ public sealed class IrLowererSnapshotTests
     /// <summary>Ticket P2-004 acceptance criterion 1: a field-like event raised inside its type is its backing field's map.</summary>
     [Fact]
     public Task RaisedFieldLikeEvent() => Dump("public event EventHandler? Changed; int n; public void Bump() { n++; Changed?.Invoke(this, EventArgs.Empty); }", "Bump");
+
+    /// <summary>Ticket P2-005 acceptance criterion 1: <c>+=</c> on an event is one call to its <c>add</c> accessor.</summary>
+    [Fact]
+    public Task EventAdd() => Verify(IrText.Dump(Lowered.Source(
+        "using System;\nsealed class Button { public event EventHandler? Clicked; }\nclass C { static void M(Button b, EventHandler h) { b.Clicked += h; } }")));
+
+    /// <summary>Ticket P2-005 acceptance criterion 1: <c>-=</c> on an event is one call to its <c>remove</c> accessor.</summary>
+    [Fact]
+    public Task EventRemove() => Verify(IrText.Dump(Lowered.Source(
+        "using System;\nsealed class Button { public event EventHandler? Clicked; }\nclass C { static void M(Button b, EventHandler h) { b.Clicked -= h; } }")));
+
+    /// <summary>Ticket P2-027 acceptance criterion 2: a tuple literal is <c>tuple.new</c> of its elements.</summary>
+    [Fact]
+    public Task TupleLiteral() => Dump("static (int, int) M(int a, int b) => (a, b);");
+
+    /// <summary>Ticket P2-027 acceptance criterion 2: a tuple parameter's elements read by position.</summary>
+    [Fact]
+    public Task TupleElementsByPosition() => Dump("static int M((int, int) p) => p.Item1 + p.Item2;");
+
+    /// <summary>Ticket P2-027 acceptance criterion 2: the same reads through the tuple's element names.</summary>
+    [Fact]
+    public Task TupleElementsByName() => Dump("static int M((int X, int Y) p) => p.X + p.Y;");
+
+    /// <summary>Ticket P2-026 acceptance criterion 3: the whole query is one fingerprinted fragment the loop enumerates.</summary>
+    [Fact]
+    public Task QueryExpression() => Verify(IrText.Dump(Lowered.Source(
+        "using System.Linq;\nclass C { static int M(int[] xs) { int s = 0; foreach (var x in from n in xs where n % 2 == 0 select n) s += x; return s; } }")));
+
+    /// <summary>Ticket P2-025 acceptance criterion 2: a tuple literal's elements are all read, then stored left to right, so this swaps.</summary>
+    [Fact]
+    public Task DeconstructionOfATupleLiteral() => Dump("static int M(int a, int b) { (a, b) = (b, a); return a + b; }");
+
+    /// <summary>Ticket P2-025 acceptance criterion 2: a field's receiver first, a discard's element read and dropped, a string's null shadow stored.</summary>
+    [Fact]
+    public Task DeconstructionIntoAFieldADiscardAndAString() => Dump("int f; string M(int a, string s, string t) { (f, _, s) = (a, a + 1, t); return s; }");
+
+    /// <summary>Ticket P2-025 acceptance criterion 2: a <c>Deconstruct</c> method stays opaque, and its targets are written with unknown values.</summary>
+    [Fact]
+    public Task DeconstructionThroughADeconstructMethod() =>
+        Dump("struct P { public int X, Y; public void Deconstruct(out int x, out int y) { x = X; y = Y; } } static int M(P p) { int x, y; (x, y) = p; return x + y; }");
+
+    /// <summary>Ticket P2-024 acceptance criterion 2: an anonymous object creation stays opaque with reason <c>AnonymousObjectCreation</c>.</summary>
+    [Fact]
+    public Task AnonymousObjectCreation() => Dump("static int M(int x, int y) { var p = new { X = x, Y = y }; return p.X + p.Y; }");
+
+    /// <summary>Ticket P2-006 acceptance criterion 2: <c>??=</c> on a field reads its map once, and writes it only when that was null.</summary>
+    [Fact]
+    public Task NullCoalescingAssignmentToAField() =>
+        Dump("System.Collections.Generic.List<int>? items; System.Collections.Generic.List<int> M() => items ??= new System.Collections.Generic.List<int>();");
+
+    /// <summary>Ticket P2-006 acceptance criterion 2: <c>??=</c> on a property calls the getter once, and the setter only when that returned null.</summary>
+    [Fact]
+    public Task NullCoalescingAssignmentToAProperty() =>
+        Dump("sealed class H { string? v; public string? Name { get => v; set => v = value; } } static string M(H h) => h.Name ??= \"x\";");
+
+    /// <summary>Ticket P2-006 acceptance criterion 2: a field assigned a branching value is written through its captured receiver.</summary>
+    [Fact]
+    public Task FieldAssignedABranchingValue() => Dump("sealed class H { public int F; } static void M(H h, bool b, int a) { h.F = b ? 1 : a; }");
+
+    /// <summary>Ticket P2-006 acceptance criterion 2: a compound assignment of a branching value reads and writes the captured field.</summary>
+    [Fact]
+    public Task CompoundAssignmentToAFieldOfABranchingValue() => Dump("static int f; static void M(bool b, int a) { f += b ? 1 : a; }");
 
     private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }

@@ -1,0 +1,80 @@
+﻿proc "C::M(int[])" (%xs "xs": sort "int[]", %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable: map<sort "System.Collections.Generic.IEnumerator`1", sort "System.IDisposable">, %null.System.Collections.Generic.IEnumerable_1: map<sort "System.Collections.Generic.IEnumerable`1", bool>, %null.System.Collections.Generic.IEnumerator_1: map<sort "System.Collections.Generic.IEnumerator`1", bool>, %null.System.IDisposable: map<sort "System.IDisposable", bool>, %null.int__: map<sort "int[]", bool>) -> bv32 entry B0
+B0:
+  %xs.isNull.41 "xs": bool = mapread %null.int__, %xs
+  goto B1
+B1:
+  %s.42 "s": bv32 = const bv32 0
+  goto B2
+B2:
+  %$2: sort "System.Collections.Generic.IEnumerable`1" = opaque "TranslatedQuery" at "Snippet.cs" 2:65-2:103 fragment "3b8f9373b8d9e637b0ece1c96630144970ea2acb56e2df58e6db1d81555ad716" reads(%xs, %xs.isNull.41) threw %$3: bool
+  br %$3, B7, B8
+B3:
+  %s.48 "s": bv32 = phi [B11: %s.42, B30: %s.50]
+  br %$c0.isNull.44, B12, B17
+B4:
+  br %$c0.isNull.44, B12, B29
+B5:
+  ret %s.48
+B7:
+  throw "System.Exception"
+B8:
+  %$6: bool = mapread %null.System.Collections.Generic.IEnumerable_1, %$2
+  br %$6, B9, B10
+B9:
+  throw "System.NullReferenceException"
+B10:
+  %$c0.43: sort "System.Collections.Generic.IEnumerator`1" = call "System.Collections.Generic.IEnumerable`1::GetEnumerator()<int>"(%$2) threw %$8: bool
+  br %$8, B7, B11
+B11:
+  %$c0.isNull.44: bool = mapread %null.System.Collections.Generic.IEnumerator_1, %$c0.43
+  goto B3
+B12:
+  br %$c0.isNull.44, B14, B13
+B13:
+  %$15: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.43
+  %$16: bool = mapread %null.System.IDisposable, %$15
+  br %$16, B9, B15
+B14:
+  goto B9
+B15:
+  call "System.IDisposable::Dispose()"(%$15) threw %$17: bool
+  br %$17, B7, B16
+B16:
+  goto B14
+B17:
+  %$18: bool = call "System.Collections.IEnumerator::MoveNext()"(%$c0.43) threw %$19: bool
+  br %$19, B18, B23
+B18:
+  br %$c0.isNull.44, B20, B19
+B19:
+  %$23: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.43
+  %$24: bool = mapread %null.System.IDisposable, %$23
+  br %$24, B9, B21
+B20:
+  goto B7
+B21:
+  call "System.IDisposable::Dispose()"(%$23) threw %$25: bool
+  br %$25, B7, B22
+B22:
+  goto B20
+B23:
+  br %$18, B4, B24
+B24:
+  br %$c0.isNull.44, B26, B25
+B25:
+  %$29: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.43
+  %$30: bool = mapread %null.System.IDisposable, %$29
+  br %$30, B9, B27
+B26:
+  goto B5
+B27:
+  call "System.IDisposable::Dispose()"(%$29) threw %$31: bool
+  br %$31, B7, B28
+B28:
+  goto B26
+B29:
+  %x.49 "x": bv32 = call "System.Collections.Generic.IEnumerator`1::get_Current()<int>"(%$c0.43) threw %$35: bool
+  br %$35, B18, B30
+B30:
+  %s.50 "s": bv32 = add %s.48, %x.49
+  goto B3

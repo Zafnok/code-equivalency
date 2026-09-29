@@ -23,8 +23,11 @@ namespace Equiv.Verify.Z3.Ladder;
 /// the model as <see cref="Equivalent.ProposedBy"/>. A parse failure or a failed obligation is a rejection fed back to
 /// the proposer with its reason; when the rounds run out or the proposer gives up, the pair is
 /// <see cref="UnknownReason.NoInvariant"/>. Each round is one ladder step naming the candidate and Z3's verdict on it.
+/// The same rung checks <see cref="TraceInvariantProposer"/>'s candidates (ticket P1-009) with <paramref name="method"/>
+/// <see cref="ProofMethod.TraceInvariant"/>; a rejection carries the broken rule's facts, so a proposer can weaken its
+/// candidate.
 /// </summary>
-internal sealed class LlmInvariantRung(Func<Context> createContext, VerificationOptions options, IInvariantProposer proposer, string proposedBy)
+internal sealed class LlmInvariantRung(Func<Context> createContext, VerificationOptions options, IInvariantProposer proposer, string proposedBy, ProofMethod method)
 {
     /// <summary>The most candidates rung 5 asks for.</summary>
     public const int MaxRounds = 3;
@@ -42,22 +45,23 @@ internal sealed class LlmInvariantRung(Func<Context> createContext, Verification
             string? candidate = proposer.ProposeAsync(request, CancellationToken.None).GetAwaiter().GetResult();
             if (candidate is null)
             {
-                rounds.Add(new Rung(new LadderStep(ProofMethod.LlmInvariant, RungOutcome.Inconclusive, $"{at}: {proposedBy} proposed no invariant")));
+                rounds.Add(new Rung(new LadderStep(method, RungOutcome.Inconclusive, $"{at}: {proposedBy} proposed no invariant")));
                 break;
             }
 
             string text = OneLine(candidate);
             (Dictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)>? definitions, string? error) = Parse(context, relations, candidate);
-            string? rejection = error ?? chc.Refutes(definitions!, (uint)options.TimeoutMs);
+            ChcEncoder.Refutation? rejection = error is null ? chc.Refutes(definitions!, (uint)options.TimeoutMs) : new ChcEncoder.Refutation(error);
             if (rejection is null)
             {
-                Equivalent proved = new(ProofMethod.LlmInvariant) { Invariant = text, ProposedBy = proposedBy };
-                rounds.Add(LoopLadder.Proved(ProofMethod.LlmInvariant, $"{at}: Z3 admitted {proposedBy}'s candidate, every init, step and exit obligation unsatisfiable with wrap-around arithmetic: {text}", proved));
+                Equivalent proved = new(method) { Invariant = text, ProposedBy = proposedBy };
+                rounds.Add(LoopLadder.Proved(method, $"{at}: Z3 admitted {proposedBy}'s candidate, every init, step and exit obligation unsatisfiable with wrap-around arithmetic: {text}", proved));
                 return [.. rounds];
             }
 
-            rounds.Add(new Rung(new LadderStep(ProofMethod.LlmInvariant, RungOutcome.Inconclusive, $"{at}: Z3 rejected {proposedBy}'s candidate {text}: {rejection}")));
-            request = request with { Rejected = request.Rejected.Add(new InvariantRequest.Rejection(candidate, rejection)) };
+            rounds.Add(new Rung(new LadderStep(method, RungOutcome.Inconclusive, $"{at}: Z3 rejected {proposedBy}'s candidate {text}: {rejection.Reason}")));
+            InvariantRequest.Rejection rejected = new(candidate, rejection.Reason) { Premise = rejection.Premise, Conclusion = rejection.Conclusion };
+            request = request with { Rejected = request.Rejected.Add(rejected) };
         }
 
         string detail = $"no invariant {proposedBy} proposed was admitted in {rounds.Count.ToString(CultureInfo.InvariantCulture)} round(s)";

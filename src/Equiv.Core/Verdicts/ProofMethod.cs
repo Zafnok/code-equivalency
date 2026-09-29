@@ -28,6 +28,13 @@ public enum ProofMethod
     LlmInvariant,
 
     /// <summary>
+    /// Rung 5 with a local proposer: a coupling invariant mined from runs of both sides in <c>IrInterpreter</c>, admitted
+    /// exactly as <see cref="LlmInvariant"/> is (unbounded; ticket P1-009, ADR 0036). <see cref="Equivalent.ProposedBy"/> is
+    /// <c>trace</c>.
+    /// </summary>
+    TraceInvariant,
+
+    /// <summary>
     /// No rung: the two bound bodies fingerprint equal and neither is runtime-sensitive, so the solver is not called (ADR 0024;
     /// ticket M3-015). Unbounded, and modular like every verdict (ADR 0019).
     /// </summary>

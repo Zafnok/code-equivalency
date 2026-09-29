@@ -15,7 +15,8 @@ namespace Equiv.Verify.Z3;
 /// Calls and the call trace (VERIFICATION-MODEL.md section 5; ADR 0018; ticket M3-001). A call's result and
 /// <c>threw</c> flag are uninterpreted functions of its arguments, its position and the heap at the call, one pair per
 /// callee identity and signature, shared by both sides, except that a <see cref="CallIdentity.RuntimeChanged"/>
-/// callee gets one pair per side. So is the new version of each heap map, one <c>heap:</c> function per callee, signature
+/// callee gets one pair per side, and so does a callee in <c>freshPerSide</c>, whose calls a callee contract relates
+/// instead (ADR 0036 decision 2; ticket P1-010). So is the new version of each heap map, one <c>heap:</c> function per callee, signature
 /// and map (ticket P1-005), and the new value of each <c>ref</c> or <c>out</c> argument, one <c>refout:</c> function per
 /// callee, signature and output index (ticket M4-003). The heap at a call is one value per <see cref="Heap"/> map, in that order. A legacy identity
 /// in the config's call-identity map is renamed to its modern counterpart first. A trace is a <c>Seq</c> of
@@ -28,6 +29,7 @@ internal sealed class TraceEncoder
     private readonly Context context;
     private readonly SortMapper sorts;
     private readonly ImmutableDictionary<string, string> callIdentityMap;
+    private readonly IReadOnlySet<string> freshPerSide;
     private readonly Dictionary<string, FuncDecl> functions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> callees = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FuncDecl> boxes = new(StringComparer.Ordinal);
@@ -35,10 +37,12 @@ internal sealed class TraceEncoder
     private readonly FuncDecl eventConstructor;
     private readonly SeqSort trace;
 
-    public TraceEncoder(SortMapper sorts, IEnumerable<IrType> argumentTypes, ImmutableDictionary<string, string> callIdentityMap, ImmutableArray<HeapMap> heap)
+    public TraceEncoder(
+        SortMapper sorts, IEnumerable<IrType> argumentTypes, ImmutableDictionary<string, string> callIdentityMap, ImmutableArray<HeapMap> heap, IReadOnlySet<string>? freshPerSide = null)
     {
         this.sorts = sorts;
         this.callIdentityMap = callIdentityMap;
+        this.freshPerSide = freshPerSide ?? new HashSet<string>(StringComparer.Ordinal);
         Heap = heap;
         context = sorts.Context;
 
@@ -156,7 +160,7 @@ internal sealed class TraceEncoder
 
     private FuncDecl Function(string kind, Side side, CallIdentity callee, ImmutableArray<IrType> argumentTypes, Sort range, string suffix)
     {
-        string owner = callee.RuntimeChanged ? ":" + ProductEncoder.Prefix(side) : string.Empty;
+        string owner = callee.RuntimeChanged || freshPerSide.Contains(Canonical(side, callee)) ? ":" + ProductEncoder.Prefix(side) : string.Empty;
         string name = $"{kind}:{Canonical(side, callee)}({string.Join(',', argumentTypes.Select(SortMapper.Name))}){suffix}{owner}";
         if (!functions.TryGetValue(name, out FuncDecl? function))
         {

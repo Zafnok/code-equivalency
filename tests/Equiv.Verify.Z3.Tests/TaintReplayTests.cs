@@ -122,7 +122,7 @@ public sealed class TaintReplayTests
             """);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(procedure, procedure, ProductEncoder.Pair(procedure, procedure), new IrInputs([Bv(1)]), Returned(), Returned(), Calls(context)));
+            ModelDecoder.EnsureDiverges(new(procedure, Returned()), new(procedure, Returned()), ProductEncoder.Pair(procedure, procedure), new IrInputs([Bv(1)]), Calls(context)));
 
         Assert.StartsWith("Encoder bug:", exception.Message, StringComparison.Ordinal);
     }
@@ -196,9 +196,9 @@ public sealed class TaintReplayTests
         ImmutableArray<ProductEncoder.SharedParameter> oldHeap = ProductEncoder.Pair(withHeap, withoutHeap);
         ImmutableArray<ProductEncoder.SharedParameter> newHeap = ProductEncoder.Pair(withoutHeap, withHeap);
 
-        Assert.Equal(ModelDecoder.Difference.Real, ModelDecoder.Compare(withHeap, withoutHeap, oldHeap, inputs, changed, none, Calls(context)));
-        Assert.Equal(ModelDecoder.Difference.Abstract, ModelDecoder.Compare(withHeap, withoutHeap, oldHeap, inputs, changedTainted, none, Calls(context)));
-        Assert.Equal(ModelDecoder.Difference.Abstract, ModelDecoder.Compare(withoutHeap, withHeap, newHeap, inputs, none, changedTainted, Calls(context)));
+        Assert.Equal(ModelDecoder.Difference.Real, ModelDecoder.Compare(new(withHeap, changed), new(withoutHeap, none), oldHeap, inputs, Calls(context)));
+        Assert.Equal(ModelDecoder.Difference.Abstract, ModelDecoder.Compare(new(withHeap, changedTainted), new(withoutHeap, none), oldHeap, inputs, Calls(context)));
+        Assert.Equal(ModelDecoder.Difference.Abstract, ModelDecoder.Compare(new(withoutHeap, none), new(withHeap, changedTainted), newHeap, inputs, Calls(context)));
     }
 
     /// <summary>
@@ -228,10 +228,10 @@ public sealed class TaintReplayTests
         ImmutableArray<ProductEncoder.SharedParameter> shared = ProductEncoder.Pair(withHeap, withoutHeap);
         Dictionary<TraceEncoder.HeapMap, IrValue> threadedTo(IrMapValue value) => new() { [new TraceEncoder.HeapMap("field.C.x", heap.Type)] = value };
 
-        Assert.Equal(ModelDecoder.Difference.None, ModelDecoder.Compare(withHeap, withoutHeap, shared, inputs, changed, none, Calls(context), newThreaded: threadedTo(written)));
-        Assert.Equal(ModelDecoder.Difference.Real, ModelDecoder.Compare(withHeap, withoutHeap, shared, inputs, changed, none, Calls(context), newThreaded: threadedTo(heap)));
-        Assert.Equal(ModelDecoder.Difference.Abstract, ModelDecoder.Compare(withHeap, withoutHeap, shared, inputs, changed, afterAbstraction, Calls(context), newThreaded: threadedTo(heap)));
-        Assert.Equal(ModelDecoder.Difference.Real, ModelDecoder.Compare(withHeap, withoutHeap, shared, inputs, changed, afterAbstraction, Calls(context)));
+        Assert.Equal(ModelDecoder.Difference.None, ModelDecoder.Compare(new(withHeap, changed), new(withoutHeap, none, threadedTo(written)), shared, inputs, Calls(context)));
+        Assert.Equal(ModelDecoder.Difference.Real, ModelDecoder.Compare(new(withHeap, changed), new(withoutHeap, none, threadedTo(heap)), shared, inputs, Calls(context)));
+        Assert.Equal(ModelDecoder.Difference.Abstract, ModelDecoder.Compare(new(withHeap, changed), new(withoutHeap, afterAbstraction, threadedTo(heap)), shared, inputs, Calls(context)));
+        Assert.Equal(ModelDecoder.Difference.Real, ModelDecoder.Compare(new(withHeap, changed), new(withoutHeap, afterAbstraction), shared, inputs, Calls(context)));
     }
 
     /// <summary>
@@ -279,7 +279,7 @@ public sealed class TaintReplayTests
             B0:
               ret
             """);
-        return ModelDecoder.Compare(procedure, procedure, ProductEncoder.Pair(procedure, procedure), new IrInputs([Bv(1)]), old, @new, Calls(context));
+        return ModelDecoder.Compare(new(procedure, old), new(procedure, @new), ProductEncoder.Pair(procedure, procedure), new IrInputs([Bv(1)]), Calls(context));
     }
 
     private static IrTaint Tainted(bool outcome, bool value) => IrTaint.None with { Outcome = outcome, Value = value };

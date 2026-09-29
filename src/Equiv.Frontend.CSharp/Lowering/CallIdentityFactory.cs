@@ -96,9 +96,12 @@ internal static class CallIdentityFactory
         _ => [argument.Value],
     };
 
-    /// <summary><paramref name="identity"/>, suffixed with <c>&lt;typeArgs&gt;</c> when there are any.</summary>
+    /// <summary>
+    /// <paramref name="identity"/>, suffixed with <c>&lt;typeArgs&gt;</c> when there are any, spelled without nullable
+    /// reference annotations (ticket P2-042): <c>Empty&lt;string&gt;</c> and <c>Empty&lt;string?&gt;</c> are one function.
+    /// </summary>
     private static string Constructed(string identity, ImmutableArray<ITypeSymbol> typeArguments) =>
-        typeArguments.IsEmpty ? identity : $"{identity}<{string.Join(',', typeArguments.Select(static t => t.ToDisplayString()))}>";
+        typeArguments.IsEmpty ? identity : $"{identity}<{string.Join(',', typeArguments.Select(static t => t.ToDisplayString(TypeMapper.Unannotated)))}>";
 
     private static IEnumerable<ITypeSymbol> TypeArguments(INamedTypeSymbol? type) =>
         type is null ? [] : TypeArguments(type.ContainingType).Concat(type.TypeArguments);

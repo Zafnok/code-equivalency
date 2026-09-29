@@ -339,7 +339,14 @@ internal sealed class IrLowerer
     }
 
     private HeapLowerer NewHeap() =>
-        new(ssa, Value, ThrowIfNull, Target, (context, condition, exceptionType) => ThrowIf(condition, exceptionType, context), catalogue.Sorts);
+        new(ssa, Value, TypeOf, ThrowIfNull, Target, (context, condition, exceptionType) => ThrowIf(condition, exceptionType, context), catalogue.Sorts);
+
+    /// <summary>
+    /// The type of <paramref name="operand"/>'s lowered value: its own, except that <c>base</c> is typed as the base but
+    /// lowered to <c>this</c>, of the containing type (ticket P2-045).
+    /// </summary>
+    private ITypeSymbol TypeOf(IOperation operand) =>
+        operand is IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance } ? receiver : operand.Type!;
 
     /// <summary>
     /// Lowers one graph whose entry is <paramref name="start"/> and whose exit goes on to <paramref name="next"/>, or
@@ -504,26 +511,32 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// A two-way branch. <c>if (c) throw;</c> is one block whose fall-through is the rethrow, which names no
-    /// block (ticket P2-010), so the rethrow gets a block of its own and is opaque as it is anywhere else. A <c>when</c>
+    /// block (ticket P2-010); <c>if (c) return; throw;</c> is one block whose conditional successor is the rethrow
+    /// (ticket P2-034). Either way the rethrow gets a block of its own and is opaque as it is anywhere else. A <c>when</c>
     /// filter's last block falls through, when the filter is false, to its copy's structured-exception-handling exit
     /// (ticket M4-008).
     /// </summary>
     private void Branch(BasicBlock block, ControlFlowBranch conditional, ControlFlowBranch fallThrough, LoweringContext context)
     {
         IrVar condition = Value(block.BranchValue!, context);
-        IrBlockId jump = exceptions.Destination(conditional, context);
+        IrBlockId? jumpRethrow = RethrowBlock(conditional, declined: null);
+        IrBlockId jump = jumpRethrow ?? exceptions.Destination(conditional, context);
         IrBlockId? declined = fallThrough.Semantics == ControlFlowBranchSemantics.StructuredExceptionHandling ? context.HandlerExit : null;
-        IrBlockId? rethrow = fallThrough.Semantics == ControlFlowBranchSemantics.Regular || declined is not null ? null : ssa.NewBlock();
+        IrBlockId? rethrow = RethrowBlock(fallThrough, declined);
         IrBlockId next = rethrow ?? declined ?? exceptions.Destination(fallThrough, context);
         ssa.Terminate(context.Current, block.ConditionKind == ControlFlowConditionKind.WhenTrue
             ? new IrBranch(condition, jump, next)
             : new IrBranch(condition, next, jump));
-        if (rethrow is not null)
+        foreach (IrBlockId opaque in ((IrBlockId?[])[jumpRethrow, rethrow]).OfType<IrBlockId>())
         {
-            context.Current = rethrow;
+            context.Current = opaque;
             OpaqueExit("rethrow", context);
         }
     }
+
+    /// <summary>A fresh block for a branch edge that is a rethrow, which names no block; null for an edge that names one.</summary>
+    private IrBlockId? RethrowBlock(ControlFlowBranch branch, IrBlockId? declined) =>
+        branch.Semantics == ControlFlowBranchSemantics.Regular || declined is not null ? null : ssa.NewBlock();
 
     /// <summary>A return runs every enclosing <c>finally</c> after evaluating its value and before exiting.</summary>
     private void Return(IrVar value, ControlFlowBranch branch, LoweringContext context)
@@ -688,10 +701,11 @@ internal sealed class IrLowerer
             return;
         }
 
-        if (operation is IFlowCaptureOperation { Value: IPropertyReferenceOperation autoProperty } backed && assignedCaptures.Contains(backed.Id)
-            && heap.AutoProperty(autoProperty, context) is { } slice)
+        if (operation is IFlowCaptureOperation backed && assignedCaptures.Contains(backed.Id) && heap.Slice(backed.Value, context) is { } slice)
         {
-            // An auto-property is its backing field's map (ticket M4-008), so, as for a field, its receiver is evaluated here.
+            // A field, an array element or an auto-property's backing field is its heap map (tickets M4-008, P2-007), so, as
+            // for a direct write, its receiver and index are evaluated here, ahead of a value that branches. A read of the
+            // capture, as `f ??= v` makes, reads the map (ticket P2-006).
             sliceTargets[backed.Id] = slice;
             return;
         }
@@ -723,6 +737,21 @@ internal sealed class IrLowerer
         Lower(operation, context);
     }
 
+    /// <summary>Whether a capture stands for a field or property place rather than holding a value of its own (ticket P2-006).</summary>
+    private bool IsCapturedPlace(CaptureId id) => sliceTargets.ContainsKey(id) || propertyTargets.ContainsKey(id);
+
+    /// <summary>
+    /// A capture's value; for one that stands for a field or property place, a read of that place, since <c>f ??= v</c> reads
+    /// the place it may then write (ticket P2-006).
+    /// </summary>
+    private IrVar? CaptureRead(IFlowCaptureReferenceOperation reference, LoweringContext context) => reference.Id switch
+    {
+        CaptureId id when sliceTargets.TryGetValue(id, out HeapLowerer.Access slice) => heap.ReadSlice(slice, context),
+        CaptureId id when propertyTargets.TryGetValue(id, out PropertyAccess? property) =>
+            Accessor(property.Reference, property.Reference.Property.GetMethod, property.Operands, value: null, context),
+        _ => ssa.Load(context.Current, Capture(reference.Id, reference.Type!)),
+    };
+
     private IrVar Value(IOperation operation, LoweringContext context) => Lower(operation, context)!;
 
     /// <summary>
@@ -742,22 +771,23 @@ internal sealed class IrLowerer
         switch (operation)
         {
             case IExpressionStatementOperation statement:
-                Lower(statement.Operation, context);
+                // A deconstruction whose value is used is not a statement's, and stays opaque (ticket P2-025).
+                _ = statement.Operation is IDeconstructionAssignmentOperation deconstruction ? Deconstruct(deconstruction, context) : Lower(statement.Operation, context);
                 return null;
             case ILocalReferenceOperation local:
                 return ssa.Load(context.Current, Local(local.Local));
             case IParameterReferenceOperation parameter when variables.TryGetValue(parameter.Parameter, out SsaBuilder.Variable? variable):
                 return ssa.Load(context.Current, variable);
             case IFlowCaptureReferenceOperation reference:
-                return ssa.Load(context.Current, Capture(reference.Id, reference.Type!));
+                return CaptureRead(reference, context);
             case ISimpleAssignmentOperation { IsRef: false } assignment:
                 return Assign(assignment, context);
-            case IFieldReferenceOperation field:
-                return heap.ReadSlice(heap.Field(field, context), context);
+            case IFieldReferenceOperation or ITupleOperation:
+                return FieldOrTuple(operation, context);
             case IArrayElementReferenceOperation or IEventReferenceOperation:
                 return heap.Readable(operation, receiver, context) is { } read ? heap.ReadSlice(read, context) : Opaque(operation, operation.Kind.ToString(), context);
-            case IPropertyReferenceOperation property:
-                return Read(property, context);
+            case IPropertyReferenceOperation or IEventAssignmentOperation:
+                return AccessorCall(operation, context);
             case IConversionOperation conversion:
                 return Convert(conversion, context);
             case ITypeOfOperation typeOf when typeOf.TypeOperand is not ITypeParameterSymbol:
@@ -793,6 +823,21 @@ internal sealed class IrLowerer
                 return Opaque(operation, operation.Kind.ToString(), context);
         }
     }
+
+    /// <summary>
+    /// A field is its heap map read at the receiver, except that an element of a tuple of an <see cref="IrTuple"/> sort is the
+    /// <c>tuple.item</c> function of its position applied to the tuple, and a tuple literal of such a sort the
+    /// <c>tuple.new</c> function of its elements (ticket P2-027); any other tuple literal is opaque with reason <c>Tuple</c>.
+    /// </summary>
+    private IrVar? FieldOrTuple(IOperation operation, LoweringContext context) => operation switch
+    {
+        IFieldReferenceOperation field when TypeMapper.TupleElement(field.Field) is { } position =>
+            Pure(IrTuple.Item(position), [], runtimeSensitive: false, [Value(field.Instance!, context)], Map(field.Type!), context),
+        IFieldReferenceOperation field => heap.ReadSlice(heap.Field(field, context), context),
+        ITupleOperation tuple when TypeMapper.Tuple(tuple.Type) is { } sort =>
+            Pure(IrTuple.New, [], runtimeSensitive: false, [.. tuple.Elements.Select(e => Value(e, context))], sort, context),
+        _ => Opaque(operation, operation.Kind.ToString(), context),
+    };
 
     /// <summary>
     /// A <c>foreach</c> over an array as the index loop the compiler emits (ticket P1-004). The enumerator's capture holds the
@@ -885,11 +930,17 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// The shadow of the variable an operand names, or null when it names none or is not reference-typed. A flow capture
-    /// names its own variable, whose shadow was set when it was captured (ticket P2-008), not the lvalue it may stand for.
+    /// names its own variable, whose shadow was set when it was captured (ticket P2-008), not the lvalue it may stand for;
+    /// one that stands for a field or property place has none (ticket P2-006).
     /// </summary>
     private SsaBuilder.Variable? ShadowOf(IOperation operand)
     {
-        SsaBuilder.Variable? variable = operand is IFlowCaptureReferenceOperation reference ? Capture(reference.Id, reference.Type!) : Target(operand);
+        SsaBuilder.Variable? variable = operand switch
+        {
+            IFlowCaptureReferenceOperation reference when IsCapturedPlace(reference.Id) => null,
+            IFlowCaptureReferenceOperation reference => Capture(reference.Id, reference.Type!),
+            _ => Target(operand),
+        };
         return variable is null ? null : Shadow(variable);
     }
 
@@ -1099,7 +1150,7 @@ internal sealed class IrLowerer
 
         if (Target(assignment.Target) is not { } target)
         {
-            return Opaque(assignment, assignment.Target.Kind.ToString(), context);
+            return Opaque(assignment, Reason(assignment.Target), context);
         }
 
         IrVar value = Value(assignment.Value, context);
@@ -1107,6 +1158,88 @@ internal sealed class IrLowerer
         StoreShadow(target, assignment.Value, value, context);
         return value;
     }
+
+    /// <summary>
+    /// Why an lvalue this lowering cannot write is opaque: its operation kind, except that the only field it cannot write
+    /// is an element of a tuple it lowers as a value (ticket P2-027), whose reason is <c>Tuple</c>.
+    /// </summary>
+    private static string Reason(IOperation lvalue) => lvalue is IFieldReferenceOperation ? "Tuple" : lvalue.Kind.ToString();
+
+    /// <summary>
+    /// A statement that deconstructs a tuple literal into locals, parameters, captured lvalues, fields and discards, one level
+    /// deep (ticket P2-025), as C# evaluates it: each field's receiver, then each element of the literal, then each store, all
+    /// left to right, so <c>(a, b) = (b, a)</c> swaps. A <c>Deconstruct</c> method, a tuple-typed value, a nested tuple, and a
+    /// property, array element or lowered tuple element (ticket P2-027) target stay opaque with reason
+    /// <c>DeconstructionAssignment</c>, their targets written with unknown values, as does a deconstruction whose value is
+    /// used, which is not a statement's.
+    /// </summary>
+    private IrVar? Deconstruct(IDeconstructionAssignmentOperation deconstruction, LoweringContext context)
+    {
+        ImmutableArray<IOperation> lvalues = [.. ((ITupleOperation)Declared(deconstruction.Target)).Elements.Select(Declared)];
+        if (TupleLiteral(deconstruction.Value) is not { } literal
+            || !lvalues.All(l => l is IDiscardOperation || (l is IFieldReferenceOperation field && TypeMapper.TupleElement(field.Field) is null) || Target(l) is not null))
+        {
+            return Opaque(deconstruction, nameof(OperationKind.DeconstructionAssignment), context);
+        }
+
+        List<HeapLowerer.Access?> slices = [];
+        foreach (IOperation lvalue in lvalues)
+        {
+            slices.Add(lvalue is IFieldReferenceOperation field ? heap.Field(field, context) : null);
+        }
+
+        List<IrVar> values = [];
+        foreach (IOperation element in literal.Elements)
+        {
+            values.Add(Value(element, context));
+        }
+
+        // Each null shadow is read before any store, so a swap of references swaps their nullness too.
+        List<IrVar?> nulls = [];
+        for (int i = 0; i < lvalues.Length; i++)
+        {
+            nulls.Add(Target(lvalues[i]) is { } target && Shadow(target) is not null ? NullFlag(literal.Elements[i], values[i], context) : null);
+        }
+
+        for (int i = 0; i < lvalues.Length; i++)
+        {
+            StoreDeconstructed(lvalues[i], slices[i], values[i], nulls[i], context);
+        }
+
+        return null;
+    }
+
+    /// <summary>One store of a deconstruction: to a field's slice, or to a variable and its null shadow; a discard stores nothing.</summary>
+    private void StoreDeconstructed(IOperation lvalue, HeapLowerer.Access? slice, IrVar value, IrVar? isNull, LoweringContext context)
+    {
+        if (slice is { } field)
+        {
+            heap.WriteSlice(field, value, context);
+        }
+        else if (Target(lvalue) is { } target)
+        {
+            ssa.Store(context.Current, target, value);
+            if (isNull is not null)
+            {
+                ssa.Store(context.Current, Shadow(target)!, isNull);
+            }
+        }
+    }
+
+    /// <summary>A declaration's declared expression, or <paramref name="target"/> itself.</summary>
+    private static IOperation Declared(IOperation target) => target is IDeclarationExpressionOperation declaration ? declaration.Expression : target;
+
+    /// <summary>
+    /// The tuple literal <paramref name="value"/> is, through the identity or tuple literal conversion the compiler wraps it in, or
+    /// null. A tuple literal conversion converts each element to its target's type in place, so either way each element is
+    /// already of its target's type.
+    /// </summary>
+    private static ITupleOperation? TupleLiteral(IOperation value) => value switch
+    {
+        ITupleOperation tuple => tuple,
+        IConversionOperation conversion when conversion.GetConversion() is { IsIdentity: true } or { IsTupleLiteralConversion: true } => TupleLiteral(conversion.Operand),
+        _ => null,
+    };
 
     /// <summary>The variable an lvalue names, or null when it is not a local or parameter of this method.</summary>
     private SsaBuilder.Variable? Target(IOperation lvalue) => lvalue switch
@@ -1255,13 +1388,19 @@ internal sealed class IrLowerer
     /// with no method, although it is <c>System.String</c>'s user-defined <c>op_Equality</c> or <c>op_Inequality</c> (ticket
     /// M4-002); null for any other operator.
     /// </summary>
-    private IMethodSymbol? StringEquality(IBinaryOperation binary) =>
-        binary is { OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals, LeftOperand.Type.SpecialType: SpecialType.System_String, RightOperand.Type.SpecialType: SpecialType.System_String }
-            ? compilation.GetSpecialType(SpecialType.System_String)
-                .GetMembers(binary.OperatorKind == BinaryOperatorKind.Equals ? WellKnownMemberNames.EqualityOperatorName : WellKnownMemberNames.InequalityOperatorName)
-                .OfType<IMethodSymbol>()
-                .FirstOrDefault(static m => m.Parameters is [{ Type.SpecialType: SpecialType.System_String }, { Type.SpecialType: SpecialType.System_String }])
-            : null;
+    private IMethodSymbol? StringEquality(IBinaryOperation binary)
+    {
+        if (binary is not { OperatorKind: BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals, LeftOperand.Type.SpecialType: SpecialType.System_String, RightOperand.Type.SpecialType: SpecialType.System_String })
+        {
+            return null;
+        }
+
+        string name = binary.OperatorKind == BinaryOperatorKind.Equals ? WellKnownMemberNames.EqualityOperatorName : WellKnownMemberNames.InequalityOperatorName;
+        return compilation.GetSpecialType(SpecialType.System_String)
+            .GetMembers(name)
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(static m => m.Parameters is [{ Type.SpecialType: SpecialType.System_String }, { Type.SpecialType: SpecialType.System_String }]);
+    }
 
     /// <summary><c>x == null</c> and <c>x != null</c> compare the shadow (acceptance criterion 5); null when neither side is <c>null</c>.</summary>
     private IrVar? NullTest(IBinaryOperation binary, LoweringContext context)
@@ -1409,7 +1548,7 @@ internal sealed class IrLowerer
     {
         if (Place(site.Target, context) is not { } place)
         {
-            return Opaque(site.Node, site.Target.Kind.ToString(), context);
+            return Opaque(site.Node, Reason(site.Target), context);
         }
 
         (Func<IrVar> read, Action<IrVar> write) = place;
@@ -1432,7 +1571,8 @@ internal sealed class IrLowerer
 
         HeapLowerer.Access? heapSlot = lvalue switch
         {
-            IFieldReferenceOperation field => heap.Field(field, context),
+            IFlowCaptureReferenceOperation reference when sliceTargets.TryGetValue(reference.Id, out HeapLowerer.Access captured) => captured,
+            IFieldReferenceOperation field when TypeMapper.TupleElement(field.Field) is null => heap.Field(field, context),
             IPropertyReferenceOperation auto => heap.AutoProperty(auto, context),
             _ => null,
         };
@@ -1800,6 +1940,22 @@ internal sealed class IrLowerer
 
         IrType? returns = value is null ? Map(property.Type!) : null;
         return Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], returns, [], context);
+    }
+
+    /// <summary>A property read or an event's <c>+=</c> or <c>-=</c>: each is, unless the property's is a field, a call to an accessor.</summary>
+    private IrVar? AccessorCall(IOperation operation, LoweringContext context) =>
+        operation is IPropertyReferenceOperation property ? Read(property, context) : Subscribe((IEventAssignmentOperation)operation, context);
+
+    /// <summary>
+    /// <c>+=</c> or <c>-=</c> on an event is a call to its <c>add</c> or <c>remove</c> accessor with the receiver and the handler,
+    /// lowered as a setter call is (ticket P2-005): no result, the receiver null-checked at the call after the handler.
+    /// </summary>
+    private IrVar? Subscribe(IEventAssignmentOperation assignment, LoweringContext context)
+    {
+        IEventReferenceOperation reference = (IEventReferenceOperation)assignment.EventReference;
+        IMethodSymbol accessor = (assignment.Adds ? reference.Event.AddMethod : reference.Event.RemoveMethod)!;
+        ImmutableArray<IrVar> operands = Operands(reference.Instance, [], context);
+        return Dispatch(reference.Instance, Identity(accessor), [.. operands, Value(assignment.HandlerValue, context)], returns: null, [], context);
     }
 
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>

@@ -36,9 +36,9 @@ It proves that before and after a migration behave the same, or shows you the in
 [![Repo size](https://img.shields.io/github/repo-size/Zafnok/code-equivalency)](https://github.com/Zafnok/code-equivalency)
 [![Stars](https://img.shields.io/github/stars/Zafnok/code-equivalency?style=social)](https://github.com/Zafnok/code-equivalency/stargazers)
 
-<img src="docs/assets/demo.svg" alt="Illustrative terminal session: equiv compare reports a divergence with the counterexample name = null, then exits 0 on a sample where only local names changed" width="880">
+<img src="docs/assets/demo.svg" alt="Terminal session: equiv compare exits 1 on removed-null-check with an EQ002 counterexample where name is null, then exits 0 on renamed-locals with all three pairs Equivalent" width="880">
 
-<sub>Illustrative session built from the <code>samples/</code> READMEs, not a recording.</sub>
+<sub>Replayed from real <code>equiv compare</code> output at <code>cc56ae8</code> on two <code>samples/</code>; the SARIF message is wrapped and the comments are added.</sub>
 
 </div>
 
@@ -47,8 +47,10 @@ before and after a migration. It does not diff syntax. It lowers both versions t
 language-neutral intermediate representation (IR), encodes matched procedure pairs as
 SMT problems, and asks Z3 whether any input can make them disagree.
 
-MVP scope: **.NET Framework 4.8 → .NET 10 (C#)**. Later: Java 11 → 25, then
-cross-language rewrites. The language frontends are the only language-specific parts.
+MVP scope: **.NET Framework 4.8 → .NET 10 (C#)**. Next: detecting each side's runtime so that
+version upgrades (net6 → net8) and same-runtime cleanups are checked too (ADR 0040). Later:
+Java 11 → 25, then cross-language rewrites. The language frontends are the only
+language-specific parts.
 
 ## How it works
 
@@ -58,22 +60,40 @@ flowchart LR
     M["modern<br/>.NET 10"] --> F
     F --> Match["match procedures<br/>(identity, rename map, HTTP route)"]
     Match --> IR["Equiv.Core<br/>SSA IR"]
-    IR --> Z3["Equiv.Verify.Z3<br/>product program → SMT"]
+    IR --> Z3["Equiv.Verify.Z3<br/>product program → SMT<br/>loop ladder, rungs 1–5"]
     Z3 --> S["SARIF 2.1.0<br/>Equivalent · Divergent + counterexample<br/>Unknown · Added · Removed"]
+    Z3 -. "--execute" .-> X["Equiv.Execute<br/>replay and differential testing<br/>on both real runtimes"]
+    X -.-> S
 ```
 
 ## Status
 
-Milestones M0 (skeleton and gates), M1 (core IR, samples, SARIF, CLI shell) and M2 (the
-C# frontend) are merged, and so is M3-001, the Z3 product-program encoder for loop-free IR.
-`equiv compare` loads 4.8 and .NET 10 solutions, matches procedures (including by HTTP route),
-lowers them to IR and verifies the matched pairs. Loops and packaging are still to come.
+As of 2026-09-28 (`cc56ae8`), the MVP is complete. M0 to M4 are merged, along with M5 (the
+MCP server) and most of the first post-MVP milestone (P1). `equiv compare` loads 4.8 and .NET 10
+solutions on Windows and Linux, matches procedures (including by HTTP route), lowers them to IR and
+verifies each matched pair through a five-rung loop ladder. With `--execute` it also runs the code
+on both real runtimes. Releases ship as a single-file binary, a container and a GitHub Action.
 
-M3 is in progress. It adds the loop ladder, the soundness and precision work from the pre-M3
-review (ADRs 0018 to 0020), and the measurement work from the Unknown-rate and feasibility reviews
-(ADRs 0024 to 0029). Success is judged on a public corpus against thresholds fixed in advance
-(ADR 0028), and the first census on it decides whether the precision milestone (M4) goes ahead.
-Progress and ordering: [docs/ROADMAP.md](docs/ROADMAP.md).
+The first full corpus run (M4-007, [verdict](docs/runs/2026-09-27-m4-007-verdict.md)) came back
+**continue** against ADR 0028's thresholds, which were fixed before any data existed:
+
+- 83% to 100% of matched pairs were congruent (unchanged code).
+- 17% to 73% of the changed pairs lowered with no opaque node (37% on Git Extensions).
+- 28 of 28 hand-written seeded behaviour changes were reported Divergent or Unknown. None was
+  called Equivalent.
+
+Every ticket that run produced (P2-023 to P2-045: opaque reasons, crashes, `--execute` hangs,
+replay mismatches) is merged. Two spikes have reported since. The IL-lowering spike found that
+an IL fallback would make 10% of Git Extensions' changed pairs lowerable (ADR 0039, tickets
+P1-014 to P1-018). The equality-saturation spike found 0%, so it was dropped.
+
+What is open ([docs/ROADMAP.md](docs/ROADMAP.md), "P2 — Success assessment"):
+- a second full corpus run to replace M4-007's now-stale rates (P2-046);
+- a hand-audit of Divergent precision (P2-047);
+- measuring cleanup refactorings (P2-048, P2-049, P2-058);
+- detecting runtimes per side (ADR 0040, P2-053 to P2-057);
+- the IL fallback;
+- the hosted tier on Azure Container Apps (M6-001).
 
 What exists today:
 
@@ -88,10 +108,17 @@ What exists today:
   discovery (Web API 2 / MVC 5 / ASP.NET Core attribute routes), and lowering from
   Roslyn's CFG to IR. Coverage per `OperationKind` is in
   [docs/tickets/IOPERATION-COVERAGE.md](docs/tickets/IOPERATION-COVERAGE.md).
-- `Equiv.Cli` — `equiv compare` argument parsing, frontend routing by language, exit
-  codes, `--dry-run`, `--baseline`, `--fail-on`.
-- `Equiv.Verify.Z3` — product-program encoder, Z3 driver and counterexample replay for loop-free
-  IR (M3-001); the loop ladder is M3-002.
+- `Equiv.Cli` — `equiv compare` (argument parsing, frontend routing by language, exit codes,
+  baselines, the lowering census, run log with phase clocks and ETA) and `equiv mcp`.
+- `Equiv.Verify.Z3` — product-program encoder and Z3 driver. The loop ladder has five rungs:
+  bounded unrolling, lockstep relational induction, k-induction, Spacer CHC, then Z3-checked
+  coupling invariants proposed from traces or by an LLM. It also does abstraction taint on counterexamples,
+  caller-sufficient callee contracts, and failure refinement on every Unknown (does the modern
+  side newly throw?).
+- `Equiv.Execute` — the second oracle (ADR 0035). With `--execute`, every Divergent is replayed
+  on .NET Framework 4.8 and .NET 10, and every Unknown pair is differentially tested on generated
+  inputs. It also holds the `runtime-diff` harness (`tools/runtime-diff/`), which measures the
+  BCL on both runtimes. Execution never proves a pair Equivalent.
 - `samples/` — paired 4.8/10 solutions, each README stating the expected verdicts.
 - `tools/corpus/` — the public migration corpus `equiv` is assessed on (ADR 0028): a pinned copy
   of Amazon's Poly-MigrationBench .NET list (100 repos) and public before/after pairs such as Git
@@ -141,21 +168,52 @@ commercial licence, open an issue. Reasoning and the dependency licence policy a
 ## Usage (current surface)
 
 ```
-equiv compare --legacy <path> --modern <path>
+equiv compare --legacy <solution.sln|.slnx> --modern <solution.sln|.slnx>
               [--out equiv.sarif] [--baseline <previous.sarif>]
-              [--config equiv.config.json] [--fail-on divergent|unknown] [--dry-run]
-              [--lower-only] [--chc-int-mode true|false] [--invariant-model <id>]
+              [--config equiv.config.json] [--fail-on divergent|unknown]
+              [--dry-run] [--lower-only]
+              [--execute [--test-target 0.001] [--test-budget <inputs>[,<seconds>]]]
+              [--chc-int-mode true|false] [--invariant-model <id>]
+              [--verbosity quiet|normal|debug] [--log <path>]
+equiv mcp [--execute]
 ```
 
-`--invariant-model <id>` lets the loop ladder ask the Claude model `<id>` for a loop invariant
-when Z3 Spacer times out (rung 5); it sends the loops' IR text, needs `ANTHROPIC_API_KEY`, and
-Z3 checks every answer, so a wrong one can never prove a pair. It is off by default.
+Both paths must be solution files (`.sln` or `.slnx`); anything else is exit 3. Stdout carries
+two lines at most: `analysed lines of code: legacy=<n> modern=<n>`, and a `route:` line with
+`--dry-run`. Results go only to the SARIF file.
 
 `--dry-run` routes and loads both sides, prints the analysed line counts, and stops without
 writing SARIF. `--lower-only` loads, matches and lowers, then writes a SARIF log with the
 lowering census (`run.properties.loweringCensus`) and the Added and Removed results. It never
 runs the solver and exits 0 unless loading fails. It cannot be combined with `--baseline` or
 `--fail-on`.
+
+`--execute` runs code from both solutions on this machine, so it needs Windows with .NET Framework
+4.8 (otherwise exit 3). It replays every Divergent's counterexample on both runtimes and records
+the outcome in `properties.replay`: `reproduced`, `not-reproduced`, `not-applicable` or
+`not-constructible`. It also tests every Unknown pair on generated inputs, and a divergence it
+sees twice becomes an EQ002 with `proofMethod: observed`. Testing a pair stops once the estimated
+chance of new behaviour drops below `--test-target` (default 0.001, after at least 1,000 inputs),
+or at `--test-budget` (default `10000,60`: 10,000 inputs or 60 seconds). Execution never yields
+Equivalent. See [VERIFICATION-MODEL.md](docs/VERIFICATION-MODEL.md) for what each field means.
+
+`--invariant-model <id>` lets the loop ladder ask the Claude model `<id>` for a loop invariant
+when Z3 Spacer times out (rung 5). It sends the loops' IR text and needs `ANTHROPIC_API_KEY`.
+Z3 checks every answer, so a wrong one can never prove a pair. It is off by default. The local
+proposer, which mines invariants from runs in process and sends nothing, is on by default and
+is asked first. `--chc-int-mode` (default `true`) lets rung 4 try integer arithmetic before
+falling back to bitvectors.
+
+Progress goes to stderr, never stdout (ADR 0038). `normal` prints each phase's start and end, a
+line at most every 5%, and a heartbeat every 60 s that names the pair being worked on. `debug`
+adds one line per item and the solver's rung timings. `quiet` prints nothing. `--log <path>`
+copies the same lines to a file that is flushed line by line. The grammar is fixed, so scripts
+can parse it:
+
+```
+equiv: +00:00:06 verify 1/1 (100%) eta=00:00:00.000 worst=00:00:00.000 rate=8.0/s
+equiv: +00:00:06 verify done in 00:00:00.124; eta@25%=00:00:00.000 eta@50%=00:00:00.000 eta@75%=00:00:00.000 dropped=0
+```
 
 | Exit code | Meaning |
 |---|---|
@@ -192,6 +250,53 @@ one result from `equiv.sarif`'s `runs[0].results`:
 The counterexample is `x = 0` (`bv32 0`): legacy returns `0`, modern returns `-1` (`bv32
 4294967295` two's-complement). The exit code is 1.
 
+An `Unknown` (EQ003) says how far it can be trusted. `properties.scope` is `line` when the pair
+is equivalent unless one of the listed `relatedLocations` is reached, and `method` otherwise.
+`properties.failureRefinement` says whether the solver found, or ruled out, an input on which the
+modern side throws where the legacy side returns (`newFailures`), and the reverse
+(`removedFailures`), each as `found`, `none-proved` or `unknown` (ADR 0037).
+
+## Use from a coding agent
+
+`equiv mcp` runs the same pipeline as `equiv compare` as a [Model Context Protocol](https://modelcontextprotocol.io)
+server over stdio (ADR 0033), so a coding agent can ask "is my port equivalent?" while it works. It
+has two read-only tools that write no file:
+
+- `compare`: `legacy` and `modern` (solution paths, required), and optionally `config`, `baseline`,
+  `bound` and `timeoutMs`. The result is a one-line summary (`Equivalent n, Divergent n, Unknown n,
+  skipped projects n, exit code k`), then the SARIF log `equiv compare` would write, as JSON text.
+- `lower_only`: `legacy`, `modern` and optionally `config`; the same as `equiv compare --lower-only`.
+
+An input error `equiv compare` exits 3 or 4 on (a missing file, no frontend for the paths, no C#
+project that loads) comes back as a tool error with the same message.
+
+`equiv mcp --execute` also registers `probe` (ADR 0035, ADR 0036; ticket M5-002), which runs code
+from both solutions on this machine and so needs Windows, same as `compare --execute`: an agent that
+gets Unknown back from `compare` can name a matched pair by its normalised identity and supply its
+own arguments, and get back both runtimes' outcomes to test its own hunch. `probe` never writes
+SARIF and never changes a `compare` result; a mismatch it reports is a hypothesis, not a proof.
+Without `--execute`, or off Windows, `probe` is not registered at all, so an agent cannot turn
+execution on by itself.
+
+- `probe`: `legacy`, `modern`, `identity` and `arguments` (the method's own arguments, in order, as
+  JSON values), and optionally `culture`. The result is `{ legacy: {kind, canonical}, modern: {kind,
+  canonical}, equal }`. An argument that cannot be built, or an identity that matches no pair, comes
+  back as a tool error naming it.
+
+Every MCP host takes a stdio server as a command and its arguments; for the binary:
+
+```json
+{ "mcpServers": { "equiv": { "command": "equiv", "args": ["mcp"] } } }
+```
+
+and for the container, with the repository mounted so the paths you pass resolve inside it:
+
+```
+docker run -i --rm -v <repo>:/src equiv mcp
+```
+
+Only protocol messages go to stdout; the run's own progress and messages go to stderr.
+
 ## Building and running the gates
 
 ```
@@ -223,10 +328,12 @@ src/        production code, one project per component (see ARCHITECTURE.md)
 tests/      one test project per src project, Equiv.TestSupport (generators),
             Equiv.Tests.Architecture, Equiv.Tests.Integration
 samples/    tiny paired legacy/modern solutions used as fixtures and demos
-tools/      check-coverage (100% gate), licence-check, sonar-triage, corpus (ADR 0028)
+tools/      check-coverage (100% gate), licence-check, sonar-triage, corpus (ADR 0028),
+            runtime-diff (BCL on both runtimes), z3-feed (ADR 0030), spikes
 docs/       everything above; docs/runs/ holds corpus-run summaries
 .corpus/    git-ignored: third-party checkouts and raw output of corpus runs
-.github/    ci.yml, codeql.yml, mutation.yml, sonar.yml, dependabot.yml
+.github/    ci.yml, codeql.yml, mutation.yml, sonar.yml, sonar-triage.yml,
+            rolling-release.yml, release.yml, dependabot.yml
 .claude/    skills that encode the workflow for coding agents
 ```
 
@@ -281,8 +388,9 @@ Ubuntu 22.04 and Alpine are unsupported for the linux-x64 build.
 
 ## Running without cloning
 
-A tagged release (`.github/workflows/release.yml`, triggered on `v*`) publishes three ways to run
-`equiv` without a checkout. Every artifact carries `LICENSE` and `THIRD-PARTY-NOTICES.md`
+Every green commit on `main` (CI, CodeQL and SonarQube Cloud) publishes a patch release
+(`.github/workflows/rolling-release.yml`, then `release.yml`; versioning policy in
+`.claude/skills/equiv-release`), with three ways to run `equiv` without a checkout. Every artifact carries `LICENSE` and `THIRD-PARTY-NOTICES.md`
 (ADR 0017); the licence is BUSL-1.1, source-available and not open source, with a Change Date
 specific to that release.
 
@@ -359,6 +467,11 @@ Three scripts, run from `deploy/aca/` with the Azure CLI signed in (`az login`):
 To compare a set of runs with the Linux CI parity leg for the same version, download that run's
 `parity-Linux` artifact and run `.github/scripts/sarif-parity.ps1 -Left <OutDir> -Right <parity-Linux dir>`.
 
+<!--
+Star history chart, hidden until the repo has stars. With 0 stars star-history.com has no data
+points, so its time axis collapses to a single instant and renders a sub-second tick (".473")
+instead of dates. Restore this section once the Stars badge above shows 1 or more.
+
 ## Star history
 
 <a href="https://star-history.com/#Zafnok/code-equivalency&Date">
@@ -367,3 +480,5 @@ To compare a set of runs with the Linux CI parity leg for the same version, down
     <img alt="Star history chart" src="https://api.star-history.com/svg?repos=Zafnok/code-equivalency&type=Date">
   </picture>
 </a>
+-->
+

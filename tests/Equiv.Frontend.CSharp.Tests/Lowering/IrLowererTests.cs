@@ -111,6 +111,49 @@ public sealed class IrLowererTests
     public void UnsupportedConstructIsOpaqueWithItsName(string members, string reason) =>
         Assert.Contains(Opaques(Method(members)), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
 
+    /// <summary>
+    /// Ticket P2-025: a deconstruction of a tuple literal reads every element, converted to its target's type, before it
+    /// stores any, so <c>(a, b) = (b, a)</c> swaps; declared targets are locals like any other, and a loop can step with one.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(int a, int b) { (a, b) = (b, a); return a - b; }", 5, 7, 2)]
+    [InlineData("static int M(int a, int b) { (a, b) = (a, b); return a - b; }", 5, 7, -2)]
+    [InlineData("static int M(int a, int b) { long x; int y; (x, y) = (a, 3); return (int)x * y + b; }", 5, 7, 22)]
+    [InlineData("static int M(int a, int b) { long x, y; (x, y) = ((long, long))(a, b); return (int)(x - y); }", 5, 7, -2)]
+    [InlineData("static int M(int a, int b) { var (x, y) = (a + b, a); return x - y; }", 5, 7, 7)]
+    [InlineData("static int M(int a, int b) { (int x, int y) = (b, a); return x - y; }", 5, 7, 2)]
+    [InlineData("static int M(int a, int b) { int x = 0, y = 1; for (int i = 0; i < a; i++) (x, y) = (y, x + y); return x + b; }", 5, 7, 12)]
+    public void DeconstructionOfATupleLiteralReadsEveryElementBeforeItStores(string members, int a, int b, int expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
+    }
+
+    /// <summary>
+    /// Ticket P2-025: a deconstruction the lowering does not take apart, of a value that is not a tuple literal, into a nested
+    /// tuple, a property or an array element, or whose own value is used, is one opaque with reason <c>DeconstructionAssignment</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M((int, int) p) { (int x, int y) = p; return x + y; }")]
+    [InlineData("static int M((int, int) p) { int x, y; (x, y) = ((int, int))p; return x + y; }")]
+    [InlineData("struct S { public static implicit operator S((int, int) t) => default; public void Deconstruct(out int a, out int b) { a = 1; b = 2; } } static int M(int a) { int x, y; (x, y) = (S)(a, a); return x + y; }")]
+    [InlineData("static int M(int a) { int x, y, z; (x, (y, z)) = (a, (a, a)); return x + y + z; }")]
+    [InlineData("int P { get; set; } void M(int a) { (P, _) = (a, a); }")]
+    [InlineData("static void M(int[] u, int a) { (u[0], u[1]) = (a, a); }")]
+    [InlineData("static (int, int) M(int a, int b) => (a, b) = (b, a);")]
+    public void DeconstructionItDoesNotTakeApartIsOpaque(string members) =>
+        Assert.Equal("DeconstructionAssignment", Assert.Single(Opaques(Method(members)).Select(static o => o.Reason).Distinct(StringComparer.Ordinal)));
+
+    /// <summary>
+    /// Ticket P2-029 acceptance criterion 2: a call through <c>dynamic</c> is bound by the DLR at run time, so there is
+    /// no callee identity to call; it stays opaque by design with reason <c>DynamicInvocation</c>.
+    /// </summary>
+    [Fact]
+    public void ADynamicInvocationIsOpaqueByDesign() =>
+        Assert.Equal("DynamicInvocation", Assert.Single(Opaques(Method("static object CallIt(dynamic d) => d.DoSomething();", "CallIt"))).Reason);
+
     [Theory]
     [InlineData("int M() => p;")]
     [InlineData("void M() { p = 1; }")]
@@ -232,6 +275,37 @@ public sealed class IrLowererTests
         Assert.Equal(new IrSort("C"), receiver.Type);
         Assert.Equal(receiver, Assert.Single(Assert.Single(Calls(procedure)).Args));
     }
+
+    /// <summary>
+    /// Ticket P2-031: a field declared on a base class, read through a receiver typed as a derived one, keys its map with
+    /// the receiver upcast through <c>cast.&lt;Derived&gt;.&lt;Base&gt;</c>, so the key is of the map's sort.
+    /// </summary>
+    [Theory]
+    [InlineData("class B { public int f; } class C : B { int N() => f; }", "this")]
+    [InlineData("class B { public int f; } class C : B { static int N(C c) => c.f; }", "c")]
+    [InlineData("class B { public int f { get; set; } } class C : B { int N() => f; }", "this")]
+    [InlineData("class B { public int f; } class C : B { int N() => base.f; }", "this")]
+    public void AnInheritedFieldIsReadAtTheUpcastReceiver(string source, string receiver)
+    {
+        IrProcedure procedure = Source(source, "N");
+
+        IrParameter cast = Assert.Single(procedure.Parameters, static p => p.Var.Name is "cast.C.B");
+        Assert.Equal(new IrMap(new IrSort("C"), new IrSort("B")), cast.Var.Type);
+        IrParameter field = Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.B.f");
+        Assert.Equal(new IrSort("B"), ((IrMap)field.Var.Type).Key);
+        IrMapRead[] reads = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>()];
+        IrMapRead upcast = Assert.Single(reads, r => r.Map == cast.Var);
+        Assert.Equal(receiver, upcast.Key.Name);
+        Assert.Contains(reads, r => r.Map.Name.StartsWith("field.B.f", StringComparison.Ordinal) && r.Key == upcast.Target);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A field read through a receiver of its declaring type reads no cast map.</summary>
+    [Fact]
+    public void AFieldOfTheReceiversOwnTypeIsReadAtTheReceiver() =>
+        Assert.DoesNotContain(
+            Source("class C { int f; static int N(C c) => c.f; }", "N").Parameters,
+            static p => p.Var.Name.StartsWith("cast.", StringComparison.Ordinal));
 
     [Fact]
     public void AStructsThisIsOpaque() =>
@@ -619,16 +693,44 @@ public sealed class IrLowererTests
     }
 
     /// <summary>
-    /// Ticket P2-004 acceptance criterion 2: an event with explicit accessors can only be the target of <c>+=</c> or <c>-=</c>
-    /// (CS0079), which stays opaque, with no read of a field map.
+    /// Ticket P2-005 acceptance criterion 1: <c>+=</c> and <c>-=</c> call the event's <c>add</c> or <c>remove</c> accessor with
+    /// the receiver, when there is one, then the handler, and read no field map, whether the event is field-like or has
+    /// explicit accessors (which, by CS0079, is its only use: ticket P2-004 acceptance criterion 2).
     /// </summary>
-    [Fact]
-    public void AnEventWithExplicitAccessorsIsOpaque()
+    [Theory]
+    [InlineData("event Action? E; static void M(C c, Action h) { c.E += h; }", "C::add_E(System.Action)", new[] { "c", "h" })]
+    [InlineData("event Action? E; void M(Action h) { E -= h; }", "C::remove_E(System.Action)", new[] { "this", "h" })]
+    [InlineData("static event Action? E; static void M(Action h) { E += h; }", "C::add_E(System.Action)", new[] { "h" })]
+    [InlineData("event Action E { add { } remove { } } void M(Action h) { E += h; }", "C::add_E(System.Action)", new[] { "this", "h" })]
+    public void AnEventAssignmentCallsItsAccessor(string members, string accessor, string[] arguments)
     {
-        IrProcedure procedure = Method("event Action E { add { } remove { } } void M(Action h) { E += h; }");
+        IrProcedure procedure = Method(members);
 
-        Assert.Equal("EventAssignment", Assert.Single(Opaques(procedure)).Reason);
+        IrCall call = Assert.Single(Calls(procedure));
+        Assert.Equal(accessor, call.Callee.Value);
+        Assert.Null(call.Target);
+        Assert.Equal(arguments, call.Args.Select(static a => a.Name), StringComparer.Ordinal);
+        Assert.Empty(Opaques(procedure));
         Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("field.", StringComparison.Ordinal));
+    }
+
+    /// <summary>Ticket P2-005: <c>+=</c> on a null receiver throws <c>NullReferenceException</c> at the call, as a setter does.</summary>
+    [Fact]
+    public void AnEventAssignmentNullChecksItsReceiver()
+    {
+        IrProcedure procedure = Method("event Action? E; static void M(C o, Action h) { o.E += h; }");
+
+        Assert.Equal(new IrThrew("System.NullReferenceException"), Run(procedure, [.. procedure.Parameters.Select(p => NullTarget(p.Var, 0))]));
+    }
+
+    /// <summary>Ticket P2-005 acceptance criterion 2: a lambda handler keeps its own <c>DelegateCreation</c> reason; the call is still lowered.</summary>
+    [Fact]
+    public void ALambdaHandlerKeepsItsOwnReason()
+    {
+        IrProcedure procedure = Method("event Action? E; void M() { E += () => { }; }");
+
+        Assert.Equal("DelegateCreation", Assert.Single(Opaques(procedure)).Reason);
+        Assert.Equal("C::add_E(System.Action)", Assert.Single(Calls(procedure)).Callee.Value);
     }
 
     /// <summary>Ticket M2-004 acceptance criterion 6: a field is one SSA map keyed by its receiver.</summary>
@@ -663,6 +765,61 @@ public sealed class IrLowererTests
 
         Assert.Single(procedure.Parameters, static p => p.Var.Name is "field.C.f");
         Assert.Equal(new IrSortValue("C", 0), Assert.IsType<IrConst>(procedure.Blocks[1].Instructions[0]).Value);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>
+    /// Ticket P2-007: the CFG flow-captures an assignment's target ahead of a value that branches (a conditional
+    /// expression, here), so a field, not only a local or an auto-property (ticket M4-008), must still resolve through
+    /// the captured reference to its map.
+    /// </summary>
+    [Fact]
+    public void AFieldTargetCapturedAheadOfABranchingValueIsStillItsMap()
+    {
+        IrProcedure procedure = Method("int f; static void M(C a, bool cond) { a.f = cond ? 1 : 2; }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapWrite>());
+    }
+
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 2)]
+    public void ACapturedFieldTargetWritesTheBranchedValue(bool cond, int expected) =>
+        Assert.Equal(
+            new IrReturned(Bits(32, expected)),
+            Run(
+                Method("int f; static int M(C a, bool cond) { a.f = cond ? 1 : 2; return a.f; }"),
+                Reference(0, "C"),
+                new IrBoolValue(cond),
+                Fields("C", new IrBitVec(32)),
+                Nulls("C", 0, isNull: false)));
+
+    /// <summary>A field of a struct-typed field is the same captured-target case, one level of receiver deeper.</summary>
+    [Fact]
+    public void AFieldOfAStructTypedFieldCapturedAheadOfABranchingValueIsStillItsMap()
+    {
+        IrProcedure procedure = Method(
+            "struct P { public int X; } P p; static void M(C a, bool cond) { a.p.X = cond ? 1 : 2; }");
+
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>An array-typed field captured the same way is still its map, whichever array the branch picks.</summary>
+    [Fact]
+    public void AnArrayTypedFieldCapturedAheadOfABranchingValueIsStillItsMap()
+    {
+        IrProcedure procedure = Method("int[] data; static void M(C a, bool cond) { a.data = cond ? new int[4] : new int[2]; }");
+
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>A compound assignment's target is flow-captured the same way when its value branches.</summary>
+    [Fact]
+    public void ACompoundAssignmentToAFieldTargetCapturedAheadOfABranchingValueIsStillItsMap()
+    {
+        IrProcedure procedure = Method("int f; static void M(C a, bool cond) { a.f += cond ? 1 : 2; }");
+
         Assert.Empty(Opaques(procedure));
     }
 
@@ -1245,6 +1402,47 @@ public sealed class IrLowererTests
         Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
     }
 
+    /// <summary>
+    /// `if (c) return; throw;` in a `catch` is one CFG block too, but the rethrow is its conditional successor, not its
+    /// fall-through (found by the M4-007 run on `gitextensions-8522`, ticket P2-034). It lowered to a bare
+    /// NullReferenceException; now the rethrow is opaque and the path that returns still runs.
+    /// </summary>
+    [Theory]
+    [InlineData(6, 2, 3)]
+    [InlineData(6, 0, 7)]
+    public void AReturnBeforeARethrowInsideACatchLowers(int a, int b, int expected)
+    {
+        IrProcedure procedure = Method("static int M(int a, int b) { try { return a / b; } catch (DivideByZeroException) { if (a > 5) return 7; throw; } }");
+
+        Assert.Equal("rethrow", Assert.Single(Opaques(procedure)).Reason);
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, a), Bits(32, b)));
+    }
+
+    /// <summary>
+    /// The shape of Git Extensions' <c>ConfigureJoinableTaskFactoryAttribute.AfterTest</c> (ticket P2-034): a filtered
+    /// <c>catch</c> whose body is an <c>if</c> and then <c>throw;</c>, so the <c>if</c>'s false edge is the rethrow.
+    /// </summary>
+    [Fact]
+    public void AnIfThenRethrowInsideAFilteredCatchLowers() =>
+        Assert.Contains(
+            Opaques(Method("""
+                static int s;
+                static void M(System.Threading.CancellationTokenSource cts, string v)
+                {
+                    try
+                    {
+                        try { System.Threading.Thread.Sleep(1); }
+                        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+                        {
+                            if (int.TryParse(v, out var sleep) && sleep > 0) { System.Threading.Thread.Sleep(sleep); }
+                            throw;
+                        }
+                    }
+                    finally { s = 0; }
+                }
+                """)),
+            static o => string.Equals(o.Reason, "rethrow", StringComparison.Ordinal));
+
     [Fact]
     public void RethrowIsOpaqueInsideACatch() =>
         Assert.Equal(
@@ -1504,6 +1702,85 @@ public sealed class IrLowererTests
         Assert.DoesNotContain(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPhi>(), static p => p.Target.SourceName is "m");
     }
 
+    /// <summary>
+    /// Ticket P2-006 acceptance criterion 1: <c>??=</c> on a field makes the CFG capture the field, and the assignment's
+    /// target is that capture. The field's map is read once and written only when it held null.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 7)]
+    [InlineData(false, 5)]
+    public void ANullCoalescingAssignmentToAFieldWritesItOnlyWhenItWasNull(bool wasNull, int expected)
+    {
+        IrProcedure procedure = Method("static string? s; static string M(string t) => s ??= t;");
+        IrMapValue field = new(new IrMap(new IrSort("C"), new IrSort("System.String")), Reference(5), []);
+        IrInputs inputs = new([.. procedure.Parameters.Select(p => p.Var.Name switch
+        {
+            "t" => Reference(7),
+            "field.C.s" => field,
+            _ => (IrValue)Nulls("System.String", 5, wasNull),
+        })]);
+
+        IrRun run = IrInterpreter.Run(procedure, inputs, Equiv.TestSupport.IrGenOracle.Instance, Equiv.TestSupport.IrGen.StepBudget);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Reference(expected)), run.Outcome);
+        Assert.Equal(Reference(expected), Assert.IsType<IrMapValue>(Assert.Single(run.Outs)).Read(new IrSortValue("C", 0)));
+    }
+
+    /// <summary>
+    /// Ticket P2-006 acceptance criterion 1: a field assigned a value that branches, directly or by a compound assignment,
+    /// is captured before the value, and the assignment's target is that capture.
+    /// </summary>
+    [Theory]
+    [InlineData("static int f; static void M(bool b, int a) { f = b ? 1 : a; }", true, 1)]
+    [InlineData("static int f; static void M(bool b, int a) { f = b ? 1 : a; }", false, 9)]
+    [InlineData("static int f; static void M(bool b, int a) { f += b ? 1 : a; }", false, 9)]
+    [InlineData("static int f; static void M(bool b, int a) { f = 4; f += b ? 1 : a; }", true, 5)]
+    public void AFieldAssignedABranchingValueIsWrittenThroughTheCapture(string members, bool b, int expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        IrRun run = IrInterpreter.Run(
+            procedure,
+            new IrInputs([new IrBoolValue(b), Bits(32, 9), Fields("C", new IrBitVec(32))]),
+            Equiv.TestSupport.IrGenOracle.Instance,
+            Equiv.TestSupport.IrGen.StepBudget);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(Bits(32, expected), Assert.IsType<IrMapValue>(Assert.Single(run.Outs)).Read(new IrSortValue("C", 0)));
+    }
+
+    /// <summary>Ticket P2-006: a captured field's receiver is null-checked where the field is written, after the value.</summary>
+    [Fact]
+    public void AFieldOfANullReceiverAssignedABranchingValueThrows()
+    {
+        IrProcedure procedure = Method("sealed class H { public int F; } static void M(H h, bool b) { h.F = b ? 1 : 2; }");
+        IrInputs inputs = new([.. procedure.Parameters.Select(p => p.Var.Type switch
+        {
+            IrSort sort => Reference(0, sort.Name),
+            IrBool => new IrBoolValue(Value: true),
+            IrMap { Value: IrBool } => Nulls("C+H", 0, isNull: true),
+            _ => (IrValue)Fields("C+H", new IrBitVec(32)),
+        })]);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrThrew("System.NullReferenceException"), IrInterpreter.Run(procedure, inputs, Equiv.TestSupport.IrGenOracle.Instance, Equiv.TestSupport.IrGen.StepBudget).Outcome);
+    }
+
+    /// <summary>
+    /// Ticket P2-006: <c>??=</c> on a property captures it; the capture's read is the getter call and its write the setter
+    /// call, in a later block that runs only when the getter returned null. Before the fix the read was an undefined capture.
+    /// </summary>
+    [Fact]
+    public void ANullCoalescingAssignmentToAPropertyCallsTheGetterThenTheSetter()
+    {
+        IrProcedure procedure = Method("sealed class H { string? v; public string? Name { get => v; set => v = value; } } static string M(H h, string t) => h.Name ??= t;");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(["C.H::get_Name()", "C.H::set_Name(string)"], Calls(procedure).Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        Assert.Equal(2, procedure.Blocks.Count(static b => b.Instructions.OfType<IrCall>().Any()));
+    }
+
     [Fact]
     public void CapturedLocalIsAssignedThroughTheCapture() =>
         Assert.Equal(
@@ -1640,6 +1917,23 @@ public sealed class IrLowererTests
         Assert.Empty(Opaques(procedure));
         Assert.Contains(procedure.Parameters, static p => p.Var.Name is "null.System.Object");
     }
+
+    /// <summary>Ticket P2-030 acceptance criterion 2: Roslyn folds <c>sizeof(int)</c> to the constant 4, which lowers like any other constant.</summary>
+    [Fact]
+    public void SizeOfABuiltInTypeFoldsToItsConstant()
+    {
+        IrProcedure procedure = Method("static int M() => sizeof(int);");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, 4)), Run(procedure));
+    }
+
+    /// <summary>Ticket P2-030 acceptance criterion 1: a user-defined struct's <c>sizeof</c> is layout-dependent and stays opaque with reason <c>SizeOf</c>.</summary>
+    [Fact]
+    public void SizeOfAUserDefinedStructIsOpaque() =>
+        Assert.Contains(
+            Opaques(ErroneousBody("struct S { public int X; } static int M() => sizeof(S);")),
+            static o => string.Equals(o.Reason, "SizeOf", StringComparison.Ordinal));
 
     /// <summary>Ticket P2-002 acceptance criterion 1: <c>typeof(T)</c> for a closed <c>T</c> reads a shared <c>typeof.&lt;T&gt;</c> input, adding no trace event.</summary>
     [Fact]

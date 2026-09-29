@@ -5,6 +5,7 @@ using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
+using Equiv.Verify.Z3.Contracts;
 using Equiv.Verify.Z3.Ladder;
 
 using Microsoft.Z3;
@@ -26,9 +27,9 @@ namespace Equiv.Verify.Z3;
 /// <see cref="UnknownReason.Recursion"/> when a side calls itself, <see cref="UnknownReason.UnalignedLoop"/> when the
 /// loops do not align or an induction failed, and <see cref="UnknownReason.Timeout"/> when only the solver gave up;
 /// except that a pair that would be UnalignedLoop goes to rung 4 (<see cref="SpacerRung"/>) first, which decides it
-/// whenever neither side calls. When rung 4 times out and <paramref name="proposer"/> is given (<c>--invariant-model</c>),
-/// rung 5 (<see cref="LlmInvariantRung"/>) asks it for the invariant, one ladder step per round. Every verdict lists the
-/// rungs it ran in <see cref="Verdict.Ladder"/>.
+/// whenever neither side calls. When rung 4 times out, rung 5 (<see cref="LlmInvariantRung"/>) asks <see cref="Traces"/>
+/// for the invariant (ticket P1-009), and then, unless that proved the pair, <paramref name="proposer"/> when it is given
+/// (<c>--invariant-model</c>), one ladder step per round. Every verdict lists the rungs it ran in <see cref="Verdict.Ladder"/>.
 /// </summary>
 internal sealed class LoopLadder(Func<Context> createContext, VerificationOptions options, IInvariantProposer? proposer = null)
 {
@@ -42,6 +43,24 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// force rung 4 to time out while rung 5 still decides.
     /// </summary>
     public int? InvariantTimeoutMs { get; init; }
+
+    /// <summary>
+    /// The local proposer rung 5 asks first, on by default because it runs in process and sends nothing (ticket P1-009);
+    /// a test sets it to null to run the model's proposer alone.
+    /// </summary>
+    public IInvariantProposer? Traces { get; init; } = new TraceInvariantProposer();
+
+    /// <summary>
+    /// The callee contracts a caller's product relates its calls by (ticket P1-010; <see cref="ProductEncoder.Encode"/>), or
+    /// null to share every call function.
+    /// </summary>
+    public CallerContracts? Contracts { get; init; }
+
+    /// <summary>
+    /// The contract a callee pair's product checks in place of equal observables (ticket P1-010; <see cref="ContractVerifier"/>),
+    /// or null.
+    /// </summary>
+    public CalleeContract? Relation { get; init; }
 
     /// <summary>
     /// Runs the ladder on the pair with its shared fragments encoded as calls (<see cref="ProductEncoder.ShareFragments"/>).
@@ -66,30 +85,93 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         IrLoopAnalysis newShape = IrLoopAnalysis.Of(@new);
         bool recursive = oldShape.IsSelfRecursive || newShape.IsSelfRecursive;
         bool looping = recursive || !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
-        List<Rung> rungs = [Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible)];
+        List<Rung> rungs = [Timed(() => Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible))];
         if (looping && rungs[^1].Verdict is null)
         {
             LockstepInduction lockstep = new(this, old, @new, oldShape, newShape);
-            rungs.Add(lockstep.Prove());
+            rungs.Add(Timed(lockstep.Prove));
             if (rungs[^1].Verdict is null)
             {
-                rungs.Add(new KInduction(this, lockstep).Prove());
+                rungs.Add(Timed(() => new KInduction(this, lockstep).Prove()));
             }
 
             if (rungs[^1].Verdict is null && UndecidedReason(rungs, recursive) == UnknownReason.UnalignedLoop)
             {
-                rungs.Add(new SpacerRung(createContext, options).Prove(old, @new));
+                rungs.Add(Timed(() => new SpacerRung(createContext, options).Prove(old, @new)));
             }
 
-            if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout } && proposer is not null)
-            {
-                rungs.AddRange(new LlmInvariantRung(createContext, options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs }, proposer, options.InvariantModel!).Prove(old, @new));
-            }
+            ProposeInvariants(rungs, old, @new);
         }
 
         Verdict verdict = rungs[^1].Verdict ?? Undecided(rungs, recursive);
         return verdict with { Ladder = [.. rungs.Select(static r => r.Step)] };
     }
+
+    /// <summary>Runs one rung and, at <c>debug</c>, writes its <c>rung=… took=… result=…</c> line (ticket M4-014).</summary>
+    private Rung Timed(Func<Rung> rung)
+    {
+        long started = TimeProvider.System.GetTimestamp();
+        Rung result = rung();
+        LogRung(result.Step, started);
+        return result;
+    }
+
+    /// <summary>One line per rung; the text is built only when the log is at <c>debug</c>. Rung 5's rounds are one rung, named by its last step.</summary>
+    /// <summary>
+    /// Rung 5 after rung 4 timed out: <see cref="Traces"/> first, then the model's proposer unless that proved the pair.
+    /// </summary>
+    private void ProposeInvariants(List<Rung> rungs, IrProcedure old, IrProcedure @new)
+    {
+        VerificationOptions invariantOptions = options with { TimeoutMs = InvariantTimeoutMs ?? options.TimeoutMs };
+        if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout } && Traces is not null)
+        {
+            rungs.AddRange(Invariant(old, @new, invariantOptions, Traces, TraceInvariantProposer.Name, ProofMethod.TraceInvariant));
+        }
+
+        if (rungs[^1].Verdict is Unknown { Reason: UnknownReason.ChcTimeout or UnknownReason.NoInvariant } && proposer is not null)
+        {
+            rungs.AddRange(Invariant(old, @new, invariantOptions, proposer, options.InvariantModel!, ProofMethod.LlmInvariant));
+        }
+    }
+
+    /// <summary>Rung 5 with one proposer, logged at debug as one rung with its last round's outcome.</summary>
+    private ImmutableArray<Rung> Invariant(IrProcedure old, IrProcedure @new, VerificationOptions invariantOptions, IInvariantProposer asked, string proposedBy, ProofMethod method)
+    {
+        long started = TimeProvider.System.GetTimestamp();
+        ImmutableArray<Rung> rounds = new LlmInvariantRung(createContext, invariantOptions, asked, proposedBy, method).Prove(old, @new);
+        LogRung(rounds[^1].Step, started);
+        return rounds;
+    }
+
+    private void LogRung(LadderStep step, long started)
+    {
+        if (!options.Log.IsDebug)
+        {
+            return;
+        }
+
+        double took = TimeProvider.System.GetElapsedTime(started).TotalSeconds;
+        options.Log.Detail(string.Create(CultureInfo.InvariantCulture, $"rung={RungName(step.Rung)} took={took:0.###}s result={ResultName(step.Outcome)}"));
+    }
+
+    private static string RungName(ProofMethod method) => method switch
+    {
+        ProofMethod.Bounded => "bounded",
+        ProofMethod.LockstepInduction => "lockstep-induction",
+        ProofMethod.KInduction => "k-induction",
+        ProofMethod.Chc => "chc",
+        ProofMethod.TraceInvariant => "trace-invariant",
+        _ => "llm-invariant",
+    };
+
+    private static string ResultName(RungOutcome outcome) => outcome switch
+    {
+        RungOutcome.Proved => "unsat",
+        RungOutcome.Refuted => "sat",
+        RungOutcome.Timeout => "timeout",
+        RungOutcome.NotApplicable => "not-applicable",
+        _ => "unknown",
+    };
 
     /// <summary>
     /// Every rung on its own, whatever the others found (VERIFICATION-MODEL.md section 7: the soundness harness runs
@@ -181,7 +263,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     private T Session<T>(IrProcedure old, IrProcedure @new, Func<Context, ProductEncoding, T> body)
     {
         using Context context = createContext();
-        return body(context, ProductEncoder.Encode(context, old, @new, options.CallIdentityMap));
+        return body(context, ProductEncoder.Encode(context, old, @new, options.CallIdentityMap, Contracts, Relation));
     }
 
     /// <summary>

@@ -124,6 +124,8 @@ public sealed class TestedUnknownTests
     {
         public IDriverSession Start(string driver) => new Session(loaded, driver.EndsWith(".exe", StringComparison.Ordinal));
 
+        public IDriverHost Within(string directory) => this;
+
         private sealed class Session(PairRuntime.Loaded loaded, bool legacy) : IDriverSession
         {
             public string? Exchange(string line, TimeSpan timeout)

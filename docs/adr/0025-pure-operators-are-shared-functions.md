@@ -1,6 +1,6 @@
 # ADR 0025: Floating-point, decimal and user-defined operators are shared pure functions
 
-Status: accepted (2026-09-21)
+Status: accepted (2026-09-21); superseded in part by 0040 (runtime sensitivity applies only across the runtimes a pair crosses)
 
 ## Context
 VERIFICATION-MODEL section 2 makes `float`, `double` and `decimal` uninterpreted sorts with

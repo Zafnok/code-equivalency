@@ -14,11 +14,13 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// other SSA variable. <see cref="IrLowerer"/> reaches this through one instance (ticket P1-003).
 /// Lowering an operand, null-checking a dereferenced receiver, and resolving an lvalue to its SSA
 /// variable stay <see cref="IrLowerer"/>'s job, so this class calls back into it through the delegates
-/// given at construction rather than naming its type. Sort names go through <paramref name="sorts"/> (ticket M3-009).
+/// given at construction rather than naming its type; so is the type of an operand's lowered value, which for <c>base</c>
+/// is the containing type (ticket P2-045). Sort names go through <paramref name="sorts"/> (ticket M3-009).
 /// </summary>
 internal sealed class HeapLowerer(
     SsaBuilder ssa,
     Func<IOperation, LoweringContext, IrVar> lower,
+    Func<IOperation, ITypeSymbol> typeOf,
     Action<IOperation, IrVar, LoweringContext> throwIfNull,
     Func<IOperation, SsaBuilder.Variable?> resolveTarget,
     Action<LoweringContext, IrVar, string> throwIf,
@@ -53,11 +55,11 @@ internal sealed class HeapLowerer(
 
     /// <summary>
     /// The heap slice an assignment target names, or null when it is not a field or a single-dimensional
-    /// array element of a variable.
+    /// array element of a variable, or is an element of a tuple lowered as a value (ticket P2-027).
     /// </summary>
     public Access? Slice(IOperation lvalue, LoweringContext context) => lvalue switch
     {
-        IFieldReferenceOperation field => Field(field, context),
+        IFieldReferenceOperation field when TypeMapper.TupleElement(field.Field) is null => Field(field, context),
         IArrayElementReferenceOperation element => Element(element, context),
         IPropertyReferenceOperation property => AutoProperty(property, context),
         _ => null,
@@ -114,7 +116,10 @@ internal sealed class HeapLowerer(
 
     /// <summary>
     /// A field is a map from its receiver, or from its declaring type's token when it is static. A receiver of a
-    /// reference type is null-checked where the slice is read or written, not here (ticket P2-017).
+    /// reference type is null-checked where the slice is read or written, not here (ticket P2-017). A receiver whose
+    /// static type derives from the declaring one, which Roslyn never wraps in a conversion, is upcast through the
+    /// <c>cast.&lt;From&gt;.&lt;To&gt;</c> map an explicit one would read (ticket P2-031), so the key is of the map's sort.
+    /// <c>base</c> is lowered to <c>this</c>, so it is upcast from the containing type, not from the base it is typed as (ticket P2-045).
     /// </summary>
     private Access Member(IrVar input, ISymbol member, IOperation? instance, LoweringContext context)
     {
@@ -125,7 +130,11 @@ internal sealed class HeapLowerer(
         }
 
         IOperation? dereferenced = instance.Type!.IsValueType ? null : instance;
-        return new Access(map, Array: null, lower(instance, context), dereferenced);
+        IrVar receiver = lower(instance, context);
+        IrVar key = receiver.Type == ((IrMap)input.Type).Key
+            ? receiver
+            : MapRead(Inputs.Cast(typeOf(instance), member.ContainingType), receiver, context);
+        return new Access(map, Array: null, key, dereferenced);
     }
 
     /// <summary>

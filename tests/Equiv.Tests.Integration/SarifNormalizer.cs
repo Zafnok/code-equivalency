@@ -9,8 +9,9 @@ namespace Equiv.Tests.Integration;
 /// <c>physicalLocation</c>'s <c>artifactLocation.uri</c> becomes <c>file:///legacy/Foo.cs</c> on every OS (the
 /// directory's own file URI is the prefix, so a Linux <c>/home/...</c> root and an escaped space both match), and a
 /// bare path becomes <c>legacy/Foo.cs</c>; and
-/// <c>invocations[].startTimeUtc</c>/<c>endTimeUtc</c> and the tool driver's <c>version</c> are removed, since
-/// none of the three is deterministic across machines or SDK builds. Only string <em>values</em> are rewritten
+/// <c>invocations[].startTimeUtc</c>/<c>endTimeUtc</c> and the tool driver's <c>version</c> are removed, and the census's
+/// <c>failureRefinement.milliseconds</c> (ticket P1-013) becomes 0, since none of the four is deterministic across machines
+/// or SDK builds. Only string <em>values</em> are rewritten
 /// (never property names), so this cannot corrupt the JSON structure.
 /// </summary>
 internal static class SarifNormalizer
@@ -27,6 +28,11 @@ internal static class SarifNormalizer
             if (run.SelectToken("tool.driver") is JObject driver)
             {
                 driver.Remove("version");
+            }
+
+            if (run.SelectToken("properties.loweringCensus.failureRefinement") is JObject refinement)
+            {
+                refinement["milliseconds"] = 0;
             }
 
             foreach (JObject invocation in (run["invocations"] as JArray)?.OfType<JObject>() ?? [])

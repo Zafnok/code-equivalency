@@ -10,9 +10,9 @@ pair to a verification backend, and emits SARIF plus an exit code.
 
 ```
 Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv.Cli
-                (Roslyn lives here)     (no Roslyn,      (Z3 lives here)
-                                         no Z3)
-                                            ^
+                (Roslyn and ICSharp-    (no Roslyn,      (Z3 lives here)
+                 Code.Decompiler live    no Z3)
+                 here; ADR 0039)            ^
                                             |
         Equiv.Cli ------------------> Equiv.Execute
                                   (driver processes live here;
@@ -44,6 +44,13 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 4. Lowering: `ControlFlowGraph.Create(IOperation)` -> IR. Unsupported operations produce
    `IrOpaque` nodes, never exceptions. Coverage of the IOperation surface is tracked in
    `docs/tickets/IOPERATION-COVERAGE.md` and grows ticket by ticket.
+5. IL fallback (ADR 0039; tickets P1-014 to P1-018): with `--il-fallback`, a matched pair that is
+   not congruent and holds an opaque the other side does not share is lowered again, on both sides,
+   from ILSpy's ILAst of the side's compilation emitted in memory (`Lowering/Il/`; no other project
+   references `ICSharpCode.Decompiler`). Every type and member the ILAst names is resolved to the
+   loaded compilation's symbol and goes through step 4's own `TypeMapper` and
+   `CallIdentityFactory`, so identities and sorts come from the same code. The IL bodies replace the IOperation ones only when they hold fewer unshared opaques.
+   Coverage is tracked in `docs/tickets/IL-COVERAGE.md`.
 
 `Equiv.Verify.Z3` implements `IVerificationBackend`:
 
@@ -59,7 +66,10 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   runtime-changes table, which are Divergent (EQ006). Mapped identities via config and the
   `api-equivalences.json` catalogue (ADR 0020). The functions also take the heap at the call
   and the call's position in the trace, because callees are stateful (ADR 0018). A verdict
-  that relies on a matched callee pair names it in the SARIF (ADR 0019).
+  that relies on a matched callee pair names it in the SARIF (ADR 0019). When that pair is not
+  Equivalent, `IVerificationBackend.VerifyUnderContracts` proves the caller again with a
+  caller-sufficient contract in place of the shared function (ADR 0036 decision 2;
+  VERIFICATION-MODEL.md section 5.2).
 
 `Equiv.Execute` runs code on the two real runtimes, the second oracle of ADR 0035. It references
 `Equiv.Core` only (an architecture test enforces it):
@@ -78,12 +88,14 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 - `equiv compare --legacy <path.sln> --modern <path.sln> [--baseline prev.sarif]
   [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
   [--dry-run] [--lower-only] [--execute] [--test-target 0.001] [--test-budget 10000[,60]]
-  [--chc-int-mode true|false] [--invariant-model <id>]`.
+  [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback]`.
 - `--chc-int-mode` (default true) lets loop-ladder rung 4 ask Z3 Spacer over the integers first
   (VERIFICATION-MODEL.md section 5.1); `false` keeps it to the bitvectors.
 - `--invariant-model <id>` (off by default) turns on rung 5: when rung 4 times out, the Claude model `<id>` is asked
   for a coupling invariant over the Messages API (key in `ANTHROPIC_API_KEY`), which Z3 must admit
   (VERIFICATION-MODEL.md section 5.1; ADR 0036).
+- `--il-fallback` (off by default until P1-018's corpus run decides otherwise; ADR 0039) turns on
+  the frontend's IL fallback (step 5 above).
 - Every run prints the analysed line count of each codebase and writes both to
   `run.properties.analysedLinesOfCode`: two numbers, never a total (README "Licence"). The frontend
   counts them from the files it loaded. `--dry-run` loads both sides, prints the route and the
@@ -92,8 +104,10 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   Removed results, never calls the backend, and exits 0 unless a project was skipped (exit 4)
   (ADR 0027). It cannot be combined with `--baseline` or `--fail-on` (exit 3).
 - `--execute` replays every Divergent's model on both real runtimes (ADR 0035 decision 2; ticket
-  M4-009). It prints `note: --execute runs code from both solutions on this machine` on stderr,
-  and on an OS other than Windows it exits 3, because the legacy side needs .NET Framework 4.8.
+  M4-009). It prints a note on stderr that code from both solutions runs on this machine, in a
+  temporary working directory, and is not sandboxed. Every driver process starts in a fresh
+  `cwd-*` folder under the run's `equiv-execute-*` temporary folder, so a relative write is
+  deleted with it (P2-040); absolute paths, the registry and the network stay reachable. On an OS other than Windows it exits 3, because the legacy side needs .NET Framework 4.8.
   The frontend's analysis carries an `IReplayDriverFactory` (`Equiv.Core.Execution`) over the
   projects it loaded; the C# one emits them and compiles a driver per side, and `Equiv.Execute`'s
   `Replayer` runs them. The result gains `properties.replay` (VERIFICATION-MODEL.md section 6);
@@ -103,6 +117,25 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   discovery probability falls below `--test-target` or `--test-budget` (inputs, and optionally
   seconds, per pair) runs out. Both options are validated (exit 3) and do nothing without
   `--execute`. Without `--execute`, no user code runs.
+- `equiv mcp` runs an MCP server over stdio in the same binary and container (ADR 0033; ticket M5-001),
+  through the `ModelContextProtocol` SDK with its tools registered explicitly (no assembly scanning). It
+  has two read-only tools that call `CompareCommand.Run`, the pipeline `equiv compare` runs, with an
+  in-memory sink, so nothing is written to disk. `compare` takes `legacy`, `modern`, and optionally
+  `config`, `baseline`, `bound` and `timeoutMs` (the last two override the config's values and must be
+  positive); it returns a one-line summary (`Equivalent n, Divergent n, Unknown n, skipped projects n,
+  exit code k`), then the SARIF log as JSON text. `lower_only` takes `legacy`, `modern` and `config` and
+  is `compare --lower-only`. An input error that `compare` maps to exit 3, or to exit 4 with no SARIF log,
+  is a tool error (`isError: true`) with the message `equiv compare` prints on stderr. stdout carries
+  protocol messages only: `CompareCommand.Run` writes its own lines through the `Streams` on
+  `CompareOptions` (the console's for `compare`, stderr for `mcp`). `equiv mcp --execute` prints the same
+  stderr note as `compare --execute`, exits 3 with the same message on a non-Windows OS, and registers a
+  third tool, `probe` (ADR 0035, ADR 0036; ticket M5-002): an agent names a matched pair by its normalised
+  identity (`{ legacy, modern, identity, arguments, culture? }`) and its own JSON arguments in parameter
+  order (receiver excluded), and gets back `{ legacy: {kind, canonical}, modern: {kind, canonical}, equal
+  }` from the same `IReplayDriverFactory`/`Replayer` path `--execute`'s replay uses, built from the pair's
+  Roslyn method symbols rather than a solver model. `probe` never writes SARIF, never changes a `compare`
+  result, and is not registered at all without `--execute` or off Windows, so an agent cannot turn
+  execution on by itself.
 - Router: inspects inputs, rejects mismatched or unsupported languages (exit 3), else
   selects the frontend. One frontend in the MVP; the router exists from day one so that
   Java is a new project, not a refactor.

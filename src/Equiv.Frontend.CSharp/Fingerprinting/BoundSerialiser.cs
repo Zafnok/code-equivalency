@@ -54,15 +54,9 @@ internal sealed class BoundSerialiser : OperationWalker
 
     private bool RuntimeSensitive { get; set; }
 
-    private BoundSerialiser(
-        IMethodSymbol method,
-        Compilation compilation,
-        RenameMap renames,
-        ImmutableArray<string> suppressedRuntimeChanges,
-        ImmutableArray<ApiEquivalence> equivalences,
-        bool legacy,
-        Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas = null)
+    private BoundSerialiser(IMethodSymbol method, Compilation compilation, Settings settings, Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas = null)
     {
+        (RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences, bool legacy) = settings;
         this.method = method;
         this.lambdas = lambdas;
         this.renames = renames;
@@ -77,21 +71,24 @@ internal sealed class BoundSerialiser : OperationWalker
     }
 
     /// <summary>
+    /// How a side's symbols are spelled and which runtime changes it suppresses: its rename map, the
+    /// <c>runtime-changes.json</c> members not to flag, its API equivalences, and whether it is the legacy side.
+    /// </summary>
+    public sealed record Settings(RenameMap Renames, ImmutableArray<string> SuppressedRuntimeChanges, ImmutableArray<ApiEquivalence> Equivalences, bool Legacy);
+
+    /// <summary>
     /// The serialisation of <paramref name="method"/>'s <paramref name="operations"/> (its body, after a constructor's field and
     /// property initializers), or of an auto-accessor when there are none, and whether it is runtime-sensitive: it references
-    /// a <c>runtime-changes.json</c> member not in <paramref name="suppressedRuntimeChanges"/>, converts a floating-point value
+    /// a <c>runtime-changes.json</c> member not in <paramref name="settings"/>' suppressed runtime changes, converts a floating-point value
     /// to an integer, or, on a legacy project whose effective platform is x86, handles a floating-point value at all.
     /// </summary>
     public static (string Text, bool RuntimeSensitive) Serialise(
         IMethodSymbol method,
         Compilation compilation,
         ImmutableArray<IOperation> operations,
-        RenameMap renames,
-        ImmutableArray<string> suppressedRuntimeChanges,
-        ImmutableArray<ApiEquivalence> equivalences,
-        bool legacy)
+        Settings settings)
     {
-        BoundSerialiser serialiser = new(method, compilation, renames, suppressedRuntimeChanges, equivalences, legacy);
+        BoundSerialiser serialiser = new(method, compilation, settings);
         serialiser.text
             .Append(method.MethodKind).Append(" static=").Append(method.IsStatic).Append(" async=").Append(method.IsAsync)
             .Append(" returns=").Append(method.ReturnsVoid ? "void" : serialiser.Type(method.ReturnType))
@@ -122,12 +119,9 @@ internal sealed class BoundSerialiser : OperationWalker
         Compilation compilation,
         IOperation fragment,
         Func<IFlowAnonymousFunctionOperation, IOperation> lambdas,
-        RenameMap renames,
-        ImmutableArray<string> suppressedRuntimeChanges,
-        ImmutableArray<ApiEquivalence> equivalences,
-        bool legacy)
+        Settings settings)
     {
-        BoundSerialiser serialiser = new(method, compilation, renames, suppressedRuntimeChanges, equivalences, legacy, lambdas);
+        BoundSerialiser serialiser = new(method, compilation, settings, lambdas);
         serialiser.text.Append("Fragment").Append('\n');
         serialiser.Visit(fragment);
         return (serialiser.text.ToString(), serialiser.RuntimeSensitive);

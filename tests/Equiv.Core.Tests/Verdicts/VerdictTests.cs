@@ -72,6 +72,23 @@ public sealed class VerdictTests
         Assert.NotEqual(proved, proved with { Invariant = "true" });
     }
 
+    /// <summary>Ticket P1-010: an Equivalent carries the callee contracts its proof used, compared by value.</summary>
+    [Fact]
+    public void AnEquivalentCarriesTheContractsItUsed()
+    {
+        Equivalent proved = new(ProofMethod.Bounded) { ContractsUsed = [new ContractUse("f", "true", "p")] };
+
+        Assert.Empty(new Equivalent(ProofMethod.Bounded).ContractsUsed);
+        Assert.Equal(proved, new Equivalent(ProofMethod.Bounded) { ContractsUsed = [new ContractUse("f", "true", "p")] });
+        Assert.Equal(proved.GetHashCode(), new Equivalent(ProofMethod.Bounded) { ContractsUsed = [new ContractUse("f", "true", "p")] }.GetHashCode());
+        Assert.NotEqual(proved, proved with { ContractsUsed = [] });
+        Assert.NotEqual(proved, proved with { ProposedBy = "x" });
+        Assert.NotEqual(proved, proved with { BoundedBy = 3 });
+        Assert.NotEqual(proved, new Equivalent(ProofMethod.Chc) { ContractsUsed = proved.ContractsUsed });
+        Assert.NotEqual(proved, proved with { Ladder = [new LadderStep(ProofMethod.Bounded, RungOutcome.Proved, "d")] });
+        Assert.False(proved.Equals(Null.Of<Equivalent>()));
+    }
+
     /// <summary>Ticket P1-001: the rung 4 step records whether Spacer ran over integers or bitvectors; no other step does.</summary>
     [Fact]
     public void ALadderStepCarriesTheChcModeItRanIn()
@@ -113,6 +130,27 @@ public sealed class VerdictTests
         Assert.NotEqual(first, second with { Ladder = [] });
         Assert.NotEqual<Verdict>(new Added(), new Removed());
         Assert.False(first.Equals(Null.Of<Verdict>()));
+    }
+
+    /// <summary>
+    /// Ticket P1-013 (ADR 0037): an Unknown compares its failure refinement by outcome and model; the time the queries took is
+    /// a measurement, so it is not part of equality.
+    /// </summary>
+    [Fact]
+    public void FailureRefinementComparesByOutcomeNotByTime()
+    {
+        FailureRefinement refinement = new(new RefinementResult(RefinementOutcome.Found, new Counterexample(new IrInputs([]), SampleRun, SampleRun)), RefinementResult.NoneProved);
+        FailureRefinement later = refinement with { Elapsed = TimeSpan.FromSeconds(3) };
+        Unknown unknown = new(UnknownReason.Opaque, "d") { FailureRefinement = refinement };
+
+        Assert.Equal(refinement, later);
+        Assert.Equal(refinement.GetHashCode(), later.GetHashCode());
+        Assert.NotEqual(refinement, refinement with { RemovedFailures = RefinementResult.Unknown });
+        Assert.NotEqual(refinement, refinement with { NewFailures = RefinementResult.Unknown });
+        Assert.False(refinement.Equals(Null.Of<FailureRefinement>()));
+        Assert.Equal(unknown, unknown with { FailureRefinement = later });
+        Assert.Equal(unknown.GetHashCode(), (unknown with { FailureRefinement = later }).GetHashCode());
+        Assert.NotEqual(unknown, unknown with { FailureRefinement = null });
     }
 
     [Fact]

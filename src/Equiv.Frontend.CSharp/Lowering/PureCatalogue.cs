@@ -67,7 +67,7 @@ internal static class PureCatalogue
                     $"{t.Code}.{a.Name}",
                     [t.Type, t.Type],
                     t.Type,
-                    t == Decimal ? (a.Throws ? [DivideByZero, Overflow] : [Overflow]) : [])))
+                    ArithmeticThrows(t == Decimal, a.Throws))))
                 .Concat(Comparisons.Select(c => (c.Kind, t.Type, Entry: new Entry($"{t.Code}.{c.Name}", [t.Type, t.Type], SpecialType.System_Boolean, [])))))
             .ToFrozenDictionary(static e => (e.Kind, e.Type), static e => e.Entry);
 
@@ -87,6 +87,11 @@ internal static class PureCatalogue
                 static c => new Entry($"conv.{c.From.Code}.{c.To.Code}", [c.From.Type], c.To.Type, c.Throws) { CheckedThrows = c.Checked });
 
     private static ImmutableArray<string> None => [];
+
+    /// <summary>What <c>+ - * / %</c> can raise: only <c>decimal</c> throws, and only <c>/</c> and <c>%</c> divide by zero.</summary>
+    private static ImmutableArray<string> ArithmeticThrows(bool isDecimal, bool divides) => isDecimal ? DecimalThrows(divides) : [];
+
+    private static ImmutableArray<string> DecimalThrows(bool divides) => divides ? [DivideByZero, Overflow] : [Overflow];
 
     private static ImmutableArray<string> OverflowOnly => [Overflow];
 

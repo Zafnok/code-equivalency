@@ -1,6 +1,6 @@
 # ADR 0035: The real runtimes are a second oracle: execution measures, confirms and bounds, and never proves
 
-Status: accepted (2026-09-24); supersedes 0031 in part (runs with `--execute` are Windows-only)
+Status: accepted (2026-09-24); supersedes 0031 in part (runs with `--execute` are Windows-only); superseded in part by 0040 (each side runs on its detected runtime)
 
 ## Context
 The 2026-09-24 census (`docs/runs/2026-09-24-census-verdict.md`) found that Z3 sees little of the
@@ -85,3 +85,10 @@ There is no reflection anywhere: the driver is generated source.
   calls), M4-009 (replay), P1-008 (tested Unknowns), M5-002 (an MCP `probe` tool). M0-012 does
   not use this machinery: it runs generated net10 code in-process inside a test project, as the
   lowering oracle already does.
+
+## Clarifications
+- 2026-09-28 (P2-038). Decision 2's replay runs under the same culture set as decision 3 (the invariant culture, and
+  `tr-TR` when either body calls a runtime-changes member). An EQ006 Divergent whose replay shows equal outcomes is
+  `not-applicable`, not `not-reproduced`: EQ006 is a claim about the API, not a model counterexample, so it raises no
+  soundness alarm. A replay where both sides throw the same exception while the model's runs do not both throw is
+  `not-constructible`: the driver's receiver or argument is not the model's.

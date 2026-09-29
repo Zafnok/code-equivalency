@@ -50,6 +50,7 @@ internal sealed class FragmentEncoder
     private readonly List<(Side Side, IrOpaque Node, BoolExpr Reach)> opaques = [];
     private readonly List<BoolExpr> unreachable = [];
     private readonly List<BoolExpr> overflows = [];
+    private readonly List<CallSite> callSites = [];
 
     /// <param name="side">Names the constants <c>old.</c> or <c>new.</c> and picks the side's runtime-sensitive functions.</param>
     /// <param name="procedure">An acyclic procedure.</param>
@@ -98,12 +99,19 @@ internal sealed class FragmentEncoder
         Terms = new SideTerms(
             inputs.Concat(constants).ToDictionary(static t => t.Key, static t => t.Value, StringComparer.Ordinal),
             reach,
-            context.MkOr(unreachableDisjuncts));
+            context.MkOr(unreachableDisjuncts))
+        {
+            Returned = Returned,
+            Threw = Threw,
+        };
     }
 
     public IrProcedure Procedure { get; }
 
     public IReadOnlyList<BoolExpr> Assertions => assertions;
+
+    /// <summary>Every call this side makes, with the terms a callee contract relates across the sides (ticket P1-010).</summary>
+    public IReadOnlyList<CallSite> CallSites => callSites;
 
     public IReadOnlyList<(Side Side, IrOpaque Node, BoolExpr Reach)> Opaques => opaques;
 
@@ -279,12 +287,15 @@ internal sealed class FragmentEncoder
                 Define(phi.Target, Merge([.. predecessors.Where(p => phi.Incoming.Any(i => i.From == p.From))], p => Var(phi.Incoming.First(i => i.From == p.From).Value)));
                 break;
             case IrCall call:
-                blockEvents.Add(EncodeCall(call, Functions(call.Callee.Value).Calls, context.MkBVAdd(count!, context.MkBV(blockEvents.Count, 32)), heap));
+                blockEvents.Add(EncodeCall(call, Functions(call.Callee.Value).Calls, reached, context.MkBVAdd(count!, context.MkBV(blockEvents.Count, 32)), heap));
                 break;
             case IrPure pure:
                 {
-                    (Expr result, ImmutableArray<BoolExpr> threw) = Functions(pure.Function).Pures.Apply(side, pure, [.. pure.Args.Select(Var)]);
+                    PureEncoder applied = Functions(pure.Function).Pures;
+                    Expr[] args = [.. pure.Args.Select(Var)];
+                    (Expr result, ImmutableArray<BoolExpr> threw) = applied.Apply(side, pure, args);
                     Define(pure.Target, result);
+                    AssertAll(applied.Axioms(side, pure, args, result));
                     for (int i = 0; i < threw.Length; i++)
                     {
                         Define(pure.Throws[i].Flag, threw[i]);
@@ -393,12 +404,14 @@ internal sealed class FragmentEncoder
     /// Defines a call's result, <c>threw</c> flag, ref outputs (ticket M4-003) and the <c>after</c> of each heap pair, replaces every entry of
     /// <paramref name="heap"/> with the call's new version of that map (ticket P1-005), and returns its trace event.
     /// </summary>
-    private Expr EncodeCall(IrCall call, TraceEncoder trace, BitVecExpr position, Expr[] heap)
+    private Expr EncodeCall(IrCall call, TraceEncoder trace, BoolExpr reached, BitVecExpr position, Expr[] heap)
     {
         IrHeapPair?[] pairs = [.. trace.Heap.Select(m => call.Heap.FirstOrDefault(h => string.Equals(h.Map, m.Name, StringComparison.Ordinal) && h.Before.Type == m.Type))];
         ImmutableArray<Expr> read = [.. pairs.Select((p, i) => p is null ? heap[i] : Var(p.Before))];
+        ImmutableArray<(IrType Type, Expr Term)> args = [.. call.Args.Select(a => (a.Type, Var(a)))];
         (Expr? result, BoolExpr threw, Expr @event, ImmutableArray<Expr> written, ImmutableArray<Expr> refOuts) =
-            trace.Call(side, call, [.. call.Args.Select(a => (a.Type, Var(a)))], position, read);
+            trace.Call(side, call, args, position, read);
+        callSites.Add(new CallSite(call, reached, position, args, read, result, threw, written));
         if (call.Target is not null)
         {
             Define(call.Target, result!);
@@ -443,7 +456,12 @@ internal sealed class FragmentEncoder
         }
     }
 
-    private Expr Binary(IrBinaryOp op, Expr a, Expr b) => op switch
+    private Expr Binary(IrBinaryOp op, Expr a, Expr b) => Binary(context, op, a, b);
+
+    private Expr Unary(IrUnary unary) => Unary(context, unary, Var(unary.A));
+
+    /// <summary>A binary instruction over bitvector terms (the comparisons are Bool) or Bool terms.</summary>
+    internal static Expr Binary(Context context, IrBinaryOp op, Expr a, Expr b) => op switch
     {
         IrBinaryOp.Eq => context.MkEq(a, b),
         IrBinaryOp.Ne => context.MkNot(context.MkEq(a, b)),
@@ -451,9 +469,9 @@ internal sealed class FragmentEncoder
         _ => ProductEncoder.BitVecOps[op](context, (BitVecExpr)a, (BitVecExpr)b),
     };
 
-    private Expr Unary(IrUnary unary)
+    /// <summary><paramref name="unary"/> applied to <paramref name="a"/>, the term of its operand.</summary>
+    internal static Expr Unary(Context context, IrUnary unary, Expr a)
     {
-        Expr a = Var(unary.A);
         if (unary.Op == IrUnaryOp.BoolNot)
         {
             return context.MkNot((BoolExpr)a);
@@ -525,4 +543,19 @@ internal sealed class FragmentEncoder
             list.Add((block.Id, context.MkAnd(reached, condition)));
         }
     }
+
+    /// <summary>
+    /// One call on this side (ticket P1-010): whether its block is reached, its position, its arguments with their types,
+    /// the heap it reads and the heap it leaves (one term per <see cref="TraceEncoder.Heap"/> map), its result (null for a
+    /// call without a target) and its <c>threw</c> flag.
+    /// </summary>
+    public sealed record CallSite(
+        IrCall Call,
+        BoolExpr Reach,
+        BitVecExpr Position,
+        ImmutableArray<(IrType Type, Expr Term)> Args,
+        ImmutableArray<Expr> HeapIn,
+        Expr? Result,
+        BoolExpr Threw,
+        ImmutableArray<Expr> HeapOut);
 }

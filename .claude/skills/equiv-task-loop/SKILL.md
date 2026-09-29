@@ -37,7 +37,9 @@ description: The only way to implement a ticket in this repo. Use whenever asked
    exclusion, or disable an analyzer to get green. If a gate is wrong, stop and report;
    do not work around it.
 7. Commit small, Conventional Commits, footer `Ticket: <id>`. Snapshot files
-   (`*.verified.*`) are committed and described in the PR.
+   (`*.verified.*`) are committed and described in the PR. If the PR changes a public
+   surface (CLI, exit codes, SARIF, verdicts, file formats, `action.yml`, the image), also add
+   the `Release:` footer `equiv-release` says, and say so in the PR body.
 8. Finish: confirm every acceptance criterion holds (quote each with the test or
    command that proves it in the PR body), fill Notes with anything surprising (toolchain quirks,
    spec ambiguities), open the PR with `gh pr create` using the ticket title; body = the

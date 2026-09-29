@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Equiv.Core.Execution;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
@@ -64,6 +66,7 @@ public sealed class ReplayDriverFactoryTests : IDisposable
         ReplayPlan second = factory.Create(pair, NullName(), directory);
 
         Assert.Empty(first.Reason);
+        Assert.Null(first.AlikeReason);
         Assert.Equal(["null"], first.Legacy.Arguments);
         Assert.Equal(["null"], first.Modern.Arguments);
         string legacyProject = Path.Combine(directory, "legacy", "Greeter");
@@ -166,6 +169,31 @@ public sealed class ReplayDriverFactoryTests : IDisposable
         Assert.Equal("the divergence is in the call trace, which replay does not observe", factory.Create(pair, traceOnly, directory).Reason);
     }
 
+    /// <summary>
+    /// Ticket P2-037, Git Extensions' <c>SetSsh</c>: the legacy trace starts with a call the modern one never makes, and the
+    /// legacy run throws only because the solver chose that call's <c>threw</c> answer after the split. The replay still
+    /// runs, since real outcomes that differ reproduce the divergence, but equal ones are not evidence against the model.
+    /// </summary>
+    [Fact]
+    public void ADivergenceWhoseCallTracesSplit_RunsButEqualOutcomesAreNotEvidence()
+    {
+        CSharpCompilation project = Compile(Greeter, "Greeter");
+        IMethodSymbol greet = Method(project, "N.Greeter", "Greet");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, greet, GreetIr, project, greet, GreetIr);
+        Counterexample setSsh = NullName() with
+        {
+            Old = new IrRun(new IrThrew("System.Exception"), [], [new IrCallRecord(new Core.CallIdentity("GitExtUtils.Strings::IsNullOrEmpty(string)"), [new IrSortValue("System.String", 3)])]),
+            New = new IrRun(new IrReturned(Value: null), [], []),
+        };
+
+        ReplayPlan plan = factory.Create(pair, setSsh, directory);
+
+        Assert.NotNull(plan.Drivers);
+        Assert.Equal(
+            "the call traces differ, and the model's outcomes rest on call answers chosen after they split, which replay does not observe",
+            plan.AlikeReason);
+    }
+
     [Fact]
     public void Create_RejectsNullArguments()
     {
@@ -262,6 +290,79 @@ public sealed class ReplayDriverFactoryTests : IDisposable
         (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
 
         Assert.Equal(reason, factory.Plan(pair, NullName(), directory).Reason);
+    }
+
+    /// <summary>Ticket M5-002's <c>probe</c>: an agent's own JSON arguments build the same two drivers, with no model.</summary>
+    [Fact]
+    public void Probe_BuildsDriversFromTheAgentsOwnArguments()
+    {
+        CSharpCompilation legacy = Compile(Greeter, "Greeter");
+        CSharpCompilation modern = Compile(Greeter, "Greeter");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
+
+        ReplayPlan plan = factory.Probe(pair, [JsonDocument.Parse("\"Ada\"").RootElement], directory);
+
+        Assert.Empty(plan.Reason);
+        Assert.Equal(["\"Ada\""], plan.Legacy.Arguments);
+        Assert.Equal(["\"Ada\""], plan.Modern.Arguments);
+        Assert.Equal(
+            new ExecutionDrivers(Path.Combine(directory, "legacy", "Greeter", "EquivReplay1.exe"), Path.Combine(directory, "modern", "Greeter", "EquivReplay1.dll")),
+            plan.Drivers);
+    }
+
+    [Fact]
+    public void Probe_WrongArgumentCount_IsNotConstructibleNamingTheSide()
+    {
+        CSharpCompilation project = Compile(Greeter, "Greeter");
+        IMethodSymbol greet = Method(project, "N.Greeter", "Greet");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, greet, GreetIr, project, greet, GreetIr);
+
+        ReplayPlan plan = factory.Probe(pair, [], directory);
+
+        Assert.Null(plan.Drivers);
+        Assert.Equal("legacy: expected 1 argument(s), got 0", plan.Reason);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(directory));
+    }
+
+    [Fact]
+    public void Probe_AModernSideItCannotCall_IsNotConstructible()
+    {
+        CSharpCompilation legacy = Compile(Greeter, "Greeter");
+        CSharpCompilation modern = Compile(Greeter.Replace("public string Greet", "internal string Greet", StringComparison.Ordinal), "Greeter");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
+
+        ReplayPlan plan = factory.Probe(pair, [JsonDocument.Parse("\"Ada\"").RootElement], directory);
+
+        Assert.Equal("modern: not public", plan.Reason);
+    }
+
+    [Fact]
+    public void Probe_RejectsNulls()
+    {
+        CSharpCompilation project = Compile(Greeter, "Greeter");
+        IMethodSymbol greet = Method(project, "N.Greeter", "Greet");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, greet, GreetIr, project, greet, GreetIr);
+
+        Assert.Throws<ArgumentNullException>(() => factory.Probe(null!, [], directory));
+        Assert.Throws<ArgumentNullException>(() => factory.Probe(pair, null!, directory));
+    }
+
+    [Theory]
+    [InlineData(true, "emit-failed: legacy project Broken: ")]
+    [InlineData(false, "emit-failed: modern project Broken: ")]
+    public void Probe_EmitFailure_IsNotConstructible(bool legacyBroken, string reason)
+    {
+        CSharpCompilation good = Compile(Greeter, "Broken");
+        CSharpCompilation broken = Compile(Greeter + "namespace N { public class Bad { public int M() => missing; } }", "Broken");
+        CSharpCompilation legacy = legacyBroken ? broken : good;
+        CSharpCompilation modern = legacyBroken ? good : broken;
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
+
+        ReplayPlan plan = factory.Probe(pair, [JsonDocument.Parse("\"Ada\"").RootElement], directory);
+
+        Assert.Null(plan.Drivers);
+        Assert.StartsWith(reason, plan.Reason, StringComparison.Ordinal);
+        Assert.Contains("CS0103", plan.Reason, StringComparison.Ordinal);
     }
 
     [Theory]

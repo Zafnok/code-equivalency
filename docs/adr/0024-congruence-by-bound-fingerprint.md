@@ -1,6 +1,6 @@
 # ADR 0024: Identical bound code is Equivalent by congruence, and an unlowerable fragment present on both sides is shared
 
-Status: accepted (2026-09-21). Supersedes ADR 0014 in part: reaching an `IrOpaque` stops
+Status: accepted (2026-09-21); superseded in part by 0040 (runtime sensitivity applies only across the runtimes a pair crosses). Supersedes ADR 0014 in part: reaching an `IrOpaque` stops
 making the outcome unknown when the same fragment is on both sides.
 
 ## Context

@@ -221,6 +221,33 @@ public sealed class SarifReportWriterTests
         Assert.EndsWith(": new: Await", method.Message.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P1-013 criteria 2 and 4 (ADR 0037): an Unknown's failure refinement is <c>properties.failureRefinement</c>, each
+    /// query's outcome with a <c>found</c> one's model, and it changes neither the rule id nor the fingerprint.
+    /// </summary>
+    [Fact]
+    public void FailureRefinementIsAPropertyAndNeverMovesTheFingerprint()
+    {
+        Counterexample model = Fixtures.Counterexample();
+        Unknown unknown = OpaqueAtLine(7);
+        VerificationResult refined = Fixtures.Result(unknown with { FailureRefinement = new(new RefinementResult(RefinementOutcome.Found, model), RefinementResult.NoneProved) });
+        VerificationResult unknownRefinement = Fixtures.Result(unknown with { FailureRefinement = new(RefinementResult.Unknown, RefinementResult.Unknown) });
+
+        Result result = SarifReportWriter.Write([refined]).Runs[0].Results[0];
+        Result plain = SarifReportWriter.Write([Fixtures.Result(unknown)]).Runs[0].Results[0];
+
+        Dictionary<string, Dictionary<string, string>> property = result.GetProperty<Dictionary<string, Dictionary<string, string>>>("failureRefinement");
+        Assert.Equal(new Dictionary<string, string>(StringComparer.Ordinal) { ["outcome"] = "found", ["model"] = CounterexampleText.Dump(model) }, property["newFailures"]);
+        Assert.Equal(new Dictionary<string, string>(StringComparer.Ordinal) { ["outcome"] = "none-proved" }, property["removedFailures"]);
+        Assert.Equal(
+            "unknown",
+            SarifReportWriter.Write([unknownRefinement]).Runs[0].Results[0].GetProperty<Dictionary<string, Dictionary<string, string>>>("failureRefinement")["newFailures"]["outcome"]);
+        Assert.False(plain.TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+        Assert.Equal(plain.RuleId, result.RuleId);
+        Assert.Equal(plain.Message.Text, result.Message.Text);
+        Assert.Equal(plain.PartialFingerprints, result.PartialFingerprints);
+    }
+
     /// <summary>Ticket M3-025 criterion 5: scope is not part of the fingerprint, so narrowing an Unknown to a line keeps it <c>unchanged</c>.</summary>
     [Fact]
     public void ScopeChangeKeepsTheBaselineUnchanged()
@@ -326,6 +353,7 @@ public sealed class SarifReportWriterTests
     [InlineData(ProofMethod.KInduction, "k-induction")]
     [InlineData(ProofMethod.Chc, "chc")]
     [InlineData(ProofMethod.LlmInvariant, "llm-invariant")]
+    [InlineData(ProofMethod.TraceInvariant, "trace-invariant")]
     [InlineData(ProofMethod.Congruence, "congruence")]
     public void EquivalentResultCarriesItsProofMethodAndNoBoundUnlessBounded(ProofMethod method, string name)
     {
@@ -365,6 +393,30 @@ public sealed class SarifReportWriterTests
         Assert.Equal("llm-invariant", result.GetProperty<string>("proofMethod"));
         Assert.Equal("(define-fun inv.exit.exit () Bool true)", result.GetProperty<string>("invariant"));
         Assert.Equal("claude-test", result.GetProperty<string>("proposedBy"));
+    }
+
+    /// <summary>
+    /// Ticket P1-010 criterion 4 (ADR 0036 decision 2): a proof that used callee contracts suffixes its method with
+    /// <c>+contract</c> and lists each contract with its callee and proposer; a proof without one has neither.
+    /// </summary>
+    [Fact]
+    public void AContractEquivalentSuffixesItsMethodAndListsItsContracts()
+    {
+        Equivalent proved = new(ProofMethod.LockstepInduction)
+        {
+            ContractsUsed = [new ContractUse("N.T::Score(int)", "(= r.old r.new)", "observed-predicates")],
+        };
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(proved)]).Runs[0].Results[0];
+
+        Assert.Equal("lockstep-induction+contract", result.GetProperty<string>("proofMethod"));
+        Dictionary<string, string> contract = Assert.Single(result.GetProperty<List<Dictionary<string, string>>>("contractsUsed"));
+        Assert.Equal("N.T::Score(int)", contract["callee"]);
+        Assert.Equal("(= r.old r.new)", contract["contract"]);
+        Assert.Equal("observed-predicates", contract["proposedBy"]);
+        Result plain = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.LockstepInduction))]).Runs[0].Results[0];
+        Assert.Equal("lockstep-induction", plain.GetProperty<string>("proofMethod"));
+        Assert.False(plain.TryGetProperty("contractsUsed", out List<Dictionary<string, string>>? _));
     }
 
     /// <summary>Ticket P1-001 criterion 4: whatever rung 4 concluded, the result says which mode it ran in.</summary>
@@ -434,8 +486,8 @@ public sealed class SarifReportWriterTests
     }
 
     /// <summary>
-    /// Ticket M4-009: a replayed Divergent carries <c>replay</c>, with both canonical outcomes when it did not reproduce and
-    /// the reason when it could not be built. The fingerprint never moves with it.
+    /// Tickets M4-009 and P2-038: a replayed Divergent carries <c>replay</c>, with both canonical outcomes when it did not
+    /// reproduce or was not applicable, and the reason when it could not be built. The fingerprint never moves with it.
     /// </summary>
     [Fact]
     public void ReplayIsWrittenAndNeverMovesTheFingerprint()
@@ -452,6 +504,15 @@ public sealed class SarifReportWriterTests
                     new ExecutionOutcome(input, "invariant", OutcomeKind.Returned, "1")),
             },
         ]).Runs[0].Results[0];
+        Result notApplicable = SarifReportWriter.Write(
+        [
+            plain with
+            {
+                Replay = ReplayResult.NotApplicable(
+                    new ExecutionOutcome(input, "invariant", OutcomeKind.Returned, "0"),
+                    new ExecutionOutcome(input, "invariant", OutcomeKind.Returned, "0")),
+            },
+        ]).Runs[0].Results[0];
         Result notConstructible = SarifReportWriter.Write([plain with { Replay = ReplayResult.NotConstructible("emit-failed") }]).Runs[0].Results[0];
         Result none = SarifReportWriter.Write([plain]).Runs[0].Results[0];
 
@@ -461,11 +522,14 @@ public sealed class SarifReportWriterTests
         Dictionary<string, Dictionary<string, string>> outcomes = notReproduced.GetProperty<Dictionary<string, Dictionary<string, string>>>("replayOutcomes");
         Assert.Equal(("threw", "\"System.Exception\""), (outcomes["legacy"]["kind"], outcomes["legacy"]["value"]));
         Assert.Equal(("returned", "1"), (outcomes["modern"]["kind"], outcomes["modern"]["value"]));
+        Assert.Equal("not-applicable", notApplicable.GetProperty<string>("replay"));
+        Dictionary<string, Dictionary<string, string>> agreed = notApplicable.GetProperty<Dictionary<string, Dictionary<string, string>>>("replayOutcomes");
+        Assert.Equal(("returned", "0", "returned", "0"), (agreed["legacy"]["kind"], agreed["legacy"]["value"], agreed["modern"]["kind"], agreed["modern"]["value"]));
         Assert.Equal("not-constructible", notConstructible.GetProperty<string>("replay"));
         Assert.Equal("emit-failed", notConstructible.GetProperty<string>("replayReason"));
         Assert.False(none.TryGetProperty("replay", out string? _));
         Assert.All(
-            [reproduced, notReproduced, notConstructible],
+            [reproduced, notReproduced, notApplicable, notConstructible],
             r => Assert.Equal(none.PartialFingerprints["resultFingerprint/v1"], r.PartialFingerprints["resultFingerprint/v1"]));
     }
 

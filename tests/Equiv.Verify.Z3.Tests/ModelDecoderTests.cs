@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
+using Equiv.Core.Verdicts;
 
 using Microsoft.Z3;
 
@@ -49,7 +50,7 @@ public sealed class ModelDecoderTests
     {
         using Context context = new();
 
-        Assert.False(ModelDecoder.Diverges(WithHeap, WithoutHeap, Shared(WithHeap, WithoutHeap), Inputs, Returned([Heap]), Returned([]), Calls(context)));
+        Assert.False(ModelDecoder.Diverges(new(WithHeap, Returned([Heap])), new(WithoutHeap, Returned([])), Shared(WithHeap, WithoutHeap), Inputs, Calls(context)));
     }
 
     [Fact]
@@ -57,8 +58,8 @@ public sealed class ModelDecoderTests
     {
         using Context context = new();
 
-        Assert.True(ModelDecoder.Diverges(WithHeap, WithoutHeap, Shared(WithHeap, WithoutHeap), Inputs, Returned([Heap.Write(Bv(1), Bv(2))]), Returned([]), Calls(context)));
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithHeap, Shared(WithoutHeap, WithHeap), Inputs, Returned([]), Returned([Heap.Write(Bv(1), Bv(2))]), Calls(context)));
+        Assert.True(ModelDecoder.Diverges(new(WithHeap, Returned([Heap.Write(Bv(1), Bv(2))])), new(WithoutHeap, Returned([])), Shared(WithHeap, WithoutHeap), Inputs, Calls(context)));
+        Assert.True(ModelDecoder.Diverges(new(WithoutHeap, Returned([])), new(WithHeap, Returned([Heap.Write(Bv(1), Bv(2))])), Shared(WithoutHeap, WithHeap), Inputs, Calls(context)));
     }
 
     [Fact]
@@ -67,7 +68,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
         IrRun threw = new(new IrThrew("System.Exception"), [], []);
 
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Returned([]), threw, Calls(context)));
+        Assert.True(ModelDecoder.Diverges(new(WithoutHeap, Returned([])), new(WithoutHeap, threw), Shared(WithoutHeap, WithoutHeap), Inputs, Calls(context)));
     }
 
     [Fact]
@@ -76,9 +77,9 @@ public sealed class ModelDecoderTests
         using Context context = new();
         TraceEncoder calls = Calls(context, ImmutableDictionary<string, string>.Empty.Add("Old::F", "New::F"));
 
-        Assert.False(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("Old::F"), Traced("New::F"), calls));
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("New::F"), Traced("Old::F"), calls));
-        Assert.True(ModelDecoder.Diverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("Old::F"), Traced("Other::F"), calls));
+        Assert.False(ModelDecoder.Diverges(new(WithoutHeap, Traced("Old::F")), new(WithoutHeap, Traced("New::F")), Shared(WithoutHeap, WithoutHeap), Inputs, calls));
+        Assert.True(ModelDecoder.Diverges(new(WithoutHeap, Traced("New::F")), new(WithoutHeap, Traced("Old::F")), Shared(WithoutHeap, WithoutHeap), Inputs, calls));
+        Assert.True(ModelDecoder.Diverges(new(WithoutHeap, Traced("Old::F")), new(WithoutHeap, Traced("Other::F")), Shared(WithoutHeap, WithoutHeap), Inputs, calls));
     }
 
     [Fact]
@@ -87,7 +88,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("F"), Traced("F"), Calls(context)));
+            ModelDecoder.EnsureDiverges(new(WithoutHeap, Traced("F")), new(WithoutHeap, Traced("F")), Shared(WithoutHeap, WithoutHeap), Inputs, Calls(context)));
 
         Assert.StartsWith("Encoder bug: the solver found a divergence between T::M(int) and T::M(int), but the replay does not diverge.", exception.Message, StringComparison.Ordinal);
         Assert.Contains("a=IrBitVecValue", exception.Message, StringComparison.Ordinal);
@@ -100,7 +101,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
 
         Exception? exception = Record.Exception(() =>
-            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, Traced("F"), Traced("G"), Calls(context)));
+            ModelDecoder.EnsureDiverges(new(WithoutHeap, Traced("F")), new(WithoutHeap, Traced("G")), Shared(WithoutHeap, WithoutHeap), Inputs, Calls(context)));
 
         Assert.Null(exception);
     }
@@ -112,7 +113,7 @@ public sealed class ModelDecoderTests
         ImmutableArray<ProductEncoder.SharedParameter> shared = Shared(WithHeap, WithHeap);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(WithHeap, WithHeap, shared, Inputs, Returned([Heap]), Returned([Heap]), Calls(context)));
+            ModelDecoder.EnsureDiverges(new(WithHeap, Returned([Heap])), new(WithHeap, Returned([Heap])), shared, Inputs, Calls(context)));
 
         string joined = string.Join(", ", shared.Select((s, i) => $"{s.Var.Name}={Inputs.Arguments[i]}"));
         Assert.Contains($"Inputs: {joined}.", exception.Message, StringComparison.Ordinal);
@@ -131,7 +132,7 @@ public sealed class ModelDecoderTests
             ]);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, run, run, Calls(context)));
+            ModelDecoder.EnsureDiverges(new(WithoutHeap, run), new(WithoutHeap, run), Shared(WithoutHeap, WithoutHeap), Inputs, Calls(context)));
 
         Assert.Contains($"Old: {ExpectedDescribe(run)}.", exception.Message, StringComparison.Ordinal);
         Assert.Contains($"New: {ExpectedDescribe(run)}.", exception.Message, StringComparison.Ordinal);
@@ -209,6 +210,56 @@ public sealed class ModelDecoderTests
     }
 
     /// <summary>
+    /// Ticket P2-041: a model may give a map as <c>as-array</c> over a function it interprets; the map's entries are the
+    /// function's entries and its default the else value, nested maps included.
+    /// </summary>
+    [Fact]
+    public void AnAsArrayMapDecodesFromTheModelsInterpretationOfItsFunction()
+    {
+        using Context context = new();
+        using BitVecSort bv32 = context.MkBitVecSort(32);
+        using ArraySort inner = context.MkArraySort(bv32, bv32);
+        FuncDecl f = context.MkFuncDecl("f", bv32, bv32);
+        FuncDecl g = context.MkFuncDecl("g", bv32, inner);
+        (Expr asF, Expr asG) = AsArrays(context, f, g);
+        using Solver solver = context.MkSolver();
+        solver.Add(
+            context.MkEq(context.MkApp(f, context.MkBV(1, 32)), context.MkBV(2, 32)),
+            context.MkEq(context.MkApp(f, context.MkBV(3, 32)), context.MkBV(4, 32)),
+            context.MkEq(context.MkApp(g, context.MkBV(5, 32)), context.MkStore(context.MkConstArray(bv32, context.MkBV(0, 32)), context.MkBV(1, 32), context.MkBV(2, 32))));
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+        ModelDecoder decoder = new(context, solver.Model, ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []));
+        IrMap nested = new(new IrBitVec(32), Heap.MapType);
+
+        IrMapValue map = Assert.IsType<IrMapValue>(decoder.Decode(asF, Heap.MapType));
+        IrMapValue outer = Assert.IsType<IrMapValue>(decoder.Decode(asG, nested));
+
+        Assert.True(asF.IsAsArray);
+        Assert.Equal(Bv(2), map.Read(Bv(1)));
+        Assert.Equal(Bv(4), map.Read(Bv(3)));
+        Assert.Equal(Bv(2), ((IrMapValue)outer.Read(Bv(5))).Read(Bv(1)));
+    }
+
+    /// <summary>Ticket P2-041: an <c>as-array</c> with no model, or whose function the model does not interpret, is an encoder bug.</summary>
+    [Fact]
+    public void AnAsArrayMapWithoutAnInterpretationIsAnEncoderBug()
+    {
+        using Context context = new();
+        using BitVecSort bv32 = context.MkBitVecSort(32);
+        FuncDecl f = context.MkFuncDecl("f", bv32, bv32);
+        (Expr asF, _) = AsArrays(context, f, context.MkFuncDecl("g", bv32, bv32));
+        using Solver solver = context.MkSolver();
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+        ModelDecoder decoder = new(context, solver.Model, ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []));
+
+        InvalidOperationException uninterpreted = Assert.Throws<InvalidOperationException>(() => decoder.Decode(asF, Heap.MapType));
+        InvalidOperationException modelless = Assert.Throws<InvalidOperationException>(() => new ModelDecoder.Values().Decode(asF, Heap.MapType));
+
+        Assert.StartsWith("Encoder bug: the model gives a map in a shape the decoder does not read", uninterpreted.Message, StringComparison.Ordinal);
+        Assert.StartsWith("Encoder bug: the model gives a map in a shape the decoder does not read", modelless.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ticket P2-019 criterion 1: the encoder only assumes the lengths it reads, so a model can give a reference nothing
     /// reads a negative length; the decoded input gives it 0 and keeps the length it read.
     /// </summary>
@@ -262,7 +313,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(TwoParams, TwoParams, Shared(TwoParams, TwoParams), Inputs, Traced("F"), Traced("F"), Calls(context)));
+            ModelDecoder.EnsureDiverges(new(TwoParams, Traced("F")), new(TwoParams, Traced("F")), Shared(TwoParams, TwoParams), Inputs, Calls(context)));
 
         Assert.Contains(", b=", exception.Message, StringComparison.Ordinal);
     }
@@ -274,7 +325,7 @@ public sealed class ModelDecoderTests
         IrRun run = new(new IrReturned(Value: null), [Bv(7), Bv(9)], [new IrCallRecord(new CallIdentity("F"), [Bv(1), Bv(2)]), new IrCallRecord(new CallIdentity("G"), [Bv(3)])]);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.EnsureDiverges(WithoutHeap, WithoutHeap, Shared(WithoutHeap, WithoutHeap), Inputs, run, run, Calls(context)));
+            ModelDecoder.EnsureDiverges(new(WithoutHeap, run), new(WithoutHeap, run), Shared(WithoutHeap, WithoutHeap), Inputs, Calls(context)));
 
         Assert.Matches(@"outs \[[^\]]*, [^\]]*\]", exception.Message);
         Assert.Matches(@"trace \[[^\]]*\), [A-Za-z]+\(", exception.Message);
@@ -295,6 +346,56 @@ public sealed class ModelDecoderTests
         IrValue decoded = decoder.Decode(solver.Model.Eval(literal, completion: true), new IrSort("S"));
 
         Assert.Equal(new IrSortValue("S", 5), decoded);
+    }
+
+    /// <summary>
+    /// Ticket P2-033: a loop rung replays the original procedures from a fragment's model, so the replay can pass a
+    /// string literal the fragment never mentions to a call. The oracle must still encode it, not fail the lookup
+    /// with <see cref="KeyNotFoundException"/>.
+    /// </summary>
+    [Fact]
+    public void AReplayPassesALiteralTheFragmentNeverMentionedToACall()
+    {
+        IrProcedure oldOriginal = CallsWithLiteral("F");
+        IrProcedure newOriginal = CallsWithLiteral("G");
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
+        using Solver solver = context.MkSolver();
+        solver.Add(encoding.Assertions);
+        Assert.Equal(Status.SATISFIABLE, solver.Check());
+
+        Counterexample? counterexample = ModelDecoder.TryReplay(context, solver.Model, encoding, oldOriginal, newOriginal, stepBudget: 10);
+
+        Assert.NotNull(counterexample);
+        IrValue passed = Assert.Single(counterexample.Old.Trace).Arguments[1];
+        Assert.Equal(new IrSortValue("System.String", 1174359459), passed);
+    }
+
+    [Fact]
+    public void AnUnseenLiteralKeepsItsIdWhenItsTermDecodes()
+    {
+        using Context context = new();
+        Expr element = context.MkConst("e", context.MkUninterpretedSort("S"));
+        ModelDecoder.Values values = new();
+
+        Expr term = values.Term(new IrSortValue("S", 7), () => element);
+
+        Assert.Same(element, term);
+        Assert.Same(element, values.Term(new IrSortValue("S", 7), static () => throw new InvalidOperationException("asked twice")));
+        Assert.Equal(new IrSortValue("S", 7), values.Decode(element, new IrSort("S")));
+    }
+
+    [Fact]
+    public void AnUnseenLiteralDoesNotTakeOverAnElementAlreadyKnown()
+    {
+        using Context context = new();
+        Expr element = context.MkConst("e", context.MkUninterpretedSort("S"));
+        ModelDecoder.Values values = new();
+        values.Remember(new IrSortValue("S", 5), element);
+
+        values.Term(new IrSortValue("S", 7), () => element);
+
+        Assert.Equal(new IrSortValue("S", 5), values.Decode(element, new IrSort("S")));
     }
 
     [Fact]
@@ -340,7 +441,27 @@ public sealed class ModelDecoderTests
 
     private static IrBitVecValue Bv(ulong bits) => new(32, bits);
 
+    /// <summary>The terms <c>(_ as-array f)</c> and <c>(_ as-array g)</c>, which the .NET API only builds through the parser.</summary>
+    private static (Expr F, Expr G) AsArrays(Context context, FuncDecl f, FuncDecl g)
+    {
+        BoolExpr[] parsed = context.ParseSMTLIB2String(
+            "(assert (= (_ as-array f) (_ as-array f))) (assert (= (_ as-array g) (_ as-array g)))",
+            [],
+            [],
+            [f.Name, g.Name],
+            [f, g]);
+        return (parsed[0].Args[0], parsed[1].Args[0]);
+    }
+
     private static ImmutableArray<ProductEncoder.SharedParameter> Shared(IrProcedure old, IrProcedure @new) => ProductEncoder.Pair(old, @new);
+
+    private static IrProcedure CallsWithLiteral(string callee) => IrText.Parse($$"""
+        proc "T::M(int)" (%a: bv32) entry B0
+        B0:
+          %s: sort "System.String" = const sort "System.String" 1174359459
+          call "T::{{callee}}(int,string)"(%a, %s)
+          ret
+        """);
 
     private static IrRun Returned(ImmutableArray<IrValue> outs) => new(new IrReturned(Value: null), outs, []);
 

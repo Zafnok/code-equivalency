@@ -1,0 +1,32 @@
+﻿proc "C::M(C.H)" (%h "h": sort "C+H", %null.C_H: map<sort "C+H", bool>, %null.System.String: map<sort "System.String", bool>) -> sort "System.String" entry B0
+B0:
+  %h.isNull.16 "h": bool = mapread %null.C_H, %h
+  goto B1
+B1:
+  goto B2
+B2:
+  br %h.isNull.16, B7, B8
+B3:
+  goto B5
+B4:
+  %$c1.19: sort "System.String" = const sort "System.String" 2097959047
+  br %h.isNull.16, B7, B11
+B5:
+  %$c1.21: sort "System.String" = phi [B3: %$c0.17, B12: %$c1.19]
+  ret %$c1.21
+B7:
+  throw "System.NullReferenceException"
+B8:
+  %$c0.17: sort "System.String" = call "C.H::get_Name()"(%h) threw %$4: bool
+  br %$4, B9, B10
+B9:
+  throw "System.Exception"
+B10:
+  %$c0.isNull.18: bool = mapread %null.System.String, %$c0.17
+  br %$c0.isNull.18, B4, B3
+B11:
+  call "C.H::set_Name(string)"(%h, %$c1.19) threw %$12: bool
+  br %$12, B9, B12
+B12:
+  %$c1.isNull.20: bool = mapread %null.System.String, %$c1.19
+  goto B5

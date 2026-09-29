@@ -8,6 +8,7 @@ using Equiv.Core.Matching;
 using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
+using Equiv.Verify.Z3;
 
 using Microsoft.CodeAnalysis.Sarif;
 
@@ -1270,6 +1271,93 @@ public sealed class CompareCommandTests
         Assert.DoesNotContain("unknownByScope", Census(lowerOnly: true), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P1-013 criterion 3 (ADR 0037): the census reports how many Unknown pairs ran the failure-refinement queries
+    /// and their total time; a run where none did has no such entry.
+    /// </summary>
+    [Fact]
+    public void CensusReportsFailureRefinementTime()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity first = new("T::First()");
+        ProcedureIdentity second = new("T::Second()");
+        FailureRefinement refinement = new(RefinementResult.NoneProved, RefinementResult.Unknown);
+
+        string Census(Verdict verdict)
+        {
+            FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+            {
+                [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded),
+                [first.Value] = verdict,
+                [second.Value] = new Unknown(UnknownReason.Opaque, "new: Await") { FailureRefinement = refinement with { Elapsed = TimeSpan.FromMilliseconds(250) } },
+            });
+            InMemoryReportSink sink = new();
+            _ = CaptureStdOut(() => CompareCommand.Run(
+                new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+                [new FakeFrontend("csharp", _ => true, new MatchResult([Pair(PairIdentity), Pair(first), Pair(second)], [], [], []))], backend, sink, NullRunLog.Instance));
+            Assert.True(sink.Log!.Runs[0].TryGetSerializedPropertyValue("loweringCensus", out string? census));
+            return census!;
+        }
+
+        Assert.EndsWith(
+            "\"failureRefinement\":{\"pairs\":2,\"milliseconds\":350}}",
+            Census(new Unknown(UnknownReason.Abstraction, "opaque:f") { FailureRefinement = refinement with { Elapsed = TimeSpan.FromMilliseconds(100) } }),
+            StringComparison.Ordinal);
+        Assert.Contains("\"failureRefinement\":{\"pairs\":1,", Census(new Unknown(UnknownReason.Timeout, "gave up")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P1-013 (ADR 0037): through the real backend, an unbound pair (decided without the solver) and a pair the solver
+    /// times out on carry no <c>failureRefinement</c>; an opaque Unknown does.
+    /// </summary>
+    [Fact]
+    public void UnboundAndTimeoutPairs_AreNotQueried()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity unbound = new("T::Unbound()");
+        ProcedureIdentity hard = new("T::Rebuild(ulong,ulong)");
+        ProcedureIdentity opaque = new("T::Opaque(int)");
+        IrProcedure rebuild = IrText.Parse("""
+            proc "T::Rebuild(ulong,ulong)" (%a: bv64, %b: bv64) -> bv64 entry B0
+            B0:
+              %q: bv64 = udiv %a, %b
+              %m: bv64 = mul %q, %b
+              %r: bv64 = urem %a, %b
+              %s: bv64 = add %m, %r
+              ret %s
+            """);
+        MatchResult match = new(
+            [
+                Pair(unbound) with { NewBody = UnboundBody(unbound) },
+                new ProcedurePair(hard, hard, rebuild, IrText.Parse("""proc "T::Rebuild(ulong,ulong)" (%a: bv64, %b: bv64) -> bv64 entry B0 B0: ret %a""")),
+                new ProcedurePair(
+                    opaque,
+                    opaque,
+                    IrText.Parse("""proc "T::Opaque(int)" (%a: bv32) -> bv32 entry B0 B0: ret %a"""),
+                    IrText.Parse("""proc "T::Opaque(int)" (%a: bv32) -> bv32 entry B0 B0: %s: sort "string" = opaque "InterpolatedString" at "New.cs" 5:9-5:30 ret %a""")),
+            ],
+            [],
+            [],
+            []);
+        InMemoryReportSink sink = new();
+
+        _ = CaptureStdOut(() => CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { TimeoutMs = 50 },
+            [new FakeFrontend("csharp", _ => true, match)],
+            new Z3Backend(),
+            sink,
+            NullRunLog.Instance));
+
+        Dictionary<string, Result> results = sink.Log!.Runs[0].Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal);
+        Assert.Equal("unbound", results[unbound.Value].GetProperty<string>("unknownReason"));
+        Assert.Equal("timeout", results[hard.Value].GetProperty<string>("unknownReason"));
+        Assert.False(results[unbound.Value].TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+        Assert.False(results[hard.Value].TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+        Assert.True(results[opaque.Value].TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+    }
+
     /// <summary>Ticket M3-015 acceptance criteria 9 and 10 (ADR 0019).</summary>
     [Fact]
     public void Assumptions_ListMatchedCalleesOnly()
@@ -1337,6 +1425,97 @@ public sealed class CompareCommandTests
         Assert.Equal(["T::Tax()"], total.GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
         Assert.Equal("EQ002", results["T::Tax()"].RuleId);
         Assert.Equal(ExitCodes.Divergent, exitCode);
+    }
+
+    /// <summary>
+    /// Ticket P1-010 criterion 4 (ADR 0036 decision 2): C calls f, f calls g, and both f and g are Divergent. The backend
+    /// proves C again with a contract for f, so f leaves C's unproven assumptions and g, which f's contract assumed, joins
+    /// them; C's proof method ends in <c>+contract</c> and names the contract.
+    /// </summary>
+    [Fact]
+    public void ContractCallee_UnprovenAssumptionsAreInherited()
+    {
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+        {
+            ["T::C()"] = new Equivalent(ProofMethod.Congruence),
+            ["T::F()"] = new Divergent(Counterexample()),
+            ["T::G()"] = new Divergent(Counterexample()),
+        })
+        {
+            Contracts = new Dictionary<string, Equivalent>(StringComparer.Ordinal)
+            {
+                ["T::C()"] = new Equivalent(ProofMethod.Bounded) { ContractsUsed = [new ContractUse("T::F()", "(= threw.old threw.new)", "observed-predicates")] },
+            },
+        };
+
+        (Dictionary<string, Result> results, _) = ContractRun([Caller("T::C()", "T::F()"), Caller("T::F()", "T::G()"), Caller("T::G()")], backend);
+
+        Result c = results["T::C()"];
+        Assert.Equal("bounded+contract", c.GetProperty<string>("proofMethod"));
+        Assert.Equal(["T::F()", "T::G()"], c.GetProperty<List<string>>("assumedCallees"), StringComparer.Ordinal);
+        Assert.Equal(["T::G()"], c.GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+        Assert.Equal("T::F()", Assert.Single(c.GetProperty<List<Dictionary<string, string>>>("contractsUsed"))["callee"]);
+        Assert.Equal([("T::C()", "T::F()")], backend.ContractCalls.Select(static call => (call.Caller, string.Join(',', call.Callees))));
+        Assert.Equal("EQ002", results["T::F()"].RuleId);
+    }
+
+    /// <summary>
+    /// Ticket P1-010: only an Equivalent result with a lowered unproven callee goes back to the backend, and one the backend
+    /// finds no contract for keeps its verdict and assumptions.
+    /// </summary>
+    [Fact]
+    public void AResultWithoutAContractKeepsItsAssumptions()
+    {
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+        {
+            ["T::C()"] = new Equivalent(ProofMethod.Bounded),
+            ["T::D()"] = new Divergent(Counterexample()),
+            ["T::F()"] = new Divergent(Counterexample()),
+        });
+
+        (Dictionary<string, Result> results, _) = ContractRun([Caller("T::C()", "T::F()"), Caller("T::D()", "T::F()"), Caller("T::F()")], backend);
+
+        Assert.Equal("bounded", results["T::C()"].GetProperty<string>("proofMethod"));
+        Assert.Equal(["T::F()"], results["T::C()"].GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+        Assert.Equal(["T::C()"], backend.ContractCalls.Select(static call => call.Caller), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P1-010: a contract step that throws leaves the caller's sound verdict and says so on stderr; a contract for a
+    /// callee whose own verification crashed inherits nothing, since that callee has no result.
+    /// </summary>
+    [Fact]
+    public void AFailedContractStepKeepsTheVerdictAndACrashedCalleeLeavesNothingToInherit()
+    {
+        Dictionary<string, Verdict> verdicts = new(StringComparer.Ordinal) { ["T::C()"] = new Equivalent(ProofMethod.Bounded) };
+        Dictionary<string, Exception> crashes = new(StringComparer.Ordinal) { ["T::F()"] = new InvalidOperationException("encoder bug") };
+        FakeBackend failing = new(verdicts, crashes) { ContractFailure = new InvalidOperationException("contract bug") };
+        FakeBackend proving = new(verdicts, crashes)
+        {
+            Contracts = new Dictionary<string, Equivalent>(StringComparer.Ordinal)
+            {
+                ["T::C()"] = new Equivalent(ProofMethod.Bounded) { ContractsUsed = [new ContractUse("T::F()", "true", "observed-predicates")] },
+            },
+        };
+
+        (Dictionary<string, Result> kept, string stderr) = ContractRun([Caller("T::C()", "T::F()"), Caller("T::F()")], failing);
+        (Dictionary<string, Result> proved, _) = ContractRun([Caller("T::C()", "T::F()"), Caller("T::F()")], proving);
+
+        Assert.Equal("bounded", kept["T::C()"].GetProperty<string>("proofMethod"));
+        Assert.Contains("warning: Verifying T::C() under callee contracts failed, so it keeps its verdict: contract bug", stderr, StringComparison.Ordinal);
+        Assert.Equal("bounded+contract", proved["T::C()"].GetProperty<string>("proofMethod"));
+        Assert.False(proved["T::C()"].TryGetProperty("unprovenAssumptions", out List<string> _));
+    }
+
+    private static (Dictionary<string, Result> Results, string StdErr) ContractRun(ImmutableArray<ProcedurePair> pairs, FakeBackend backend)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        InMemoryReportSink sink = new();
+        string stderr = CaptureStdErr(() => CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult(pairs, [], [], []))], backend, sink, NullRunLog.Instance));
+        return (sink.Log!.Runs[0].Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal), stderr);
     }
 
     private static Dictionary<string, Result> AssumptionRun(

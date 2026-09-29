@@ -118,7 +118,7 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
         }
 
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
-        if (complete && ModelDecoder.Diverges(old, @new, shared, inputs, oldRun, newRun, chc.Calls))
+        if (complete && ModelDecoder.Diverges(new(old, oldRun), new(@new, newRun), shared, inputs, chc.Calls))
         {
             return LoopLadder.Refuted(ProofMethod.Chc, $"a derivation {how} replays to a divergence", replay);
         }

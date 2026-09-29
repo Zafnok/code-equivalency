@@ -753,6 +753,14 @@
             "unknownReason": "opaque",
             "scope": "line",
             "residualClaim": "equivalent unless a relatedLocation is reached",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
             "ladderTrace": [
               {
                 "rung": "bounded",
@@ -1260,6 +1268,10 @@
           "unknownByScope": {
             "line": 1,
             "method": 0
+          },
+          "failureRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {

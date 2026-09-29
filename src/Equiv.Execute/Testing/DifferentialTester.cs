@@ -12,8 +12,9 @@ namespace Equiv.Execute.Testing;
 /// sides' IR path signatures (<see cref="DifferentialTesting.SpeciesDefinition"/>); since "equal" is part of it, a
 /// divergent input is a new species for as long as none has been seen. Testing stops at the first divergence that a
 /// rerun of the same case in fresh processes repeats, at <see cref="TestingOptions.Target"/> once
-/// <see cref="MinimumInputs"/> inputs have run, or at the budget. A side that cannot build a case's arguments stops it as
-/// not constructible. Nothing here can yield Equivalent.
+/// <see cref="MinimumInputs"/> inputs have run, or at the budget. A side that cannot build a case's arguments, or whose
+/// driver gives no answer within the case timeout (ticket P2-039), stops it as not constructible, and both driver
+/// processes are killed. Nothing here can yield Equivalent.
 /// </summary>
 public sealed class DifferentialTester(IDriverHost host, TestingOptions options, TimeProvider time)
 {
@@ -27,6 +28,8 @@ public sealed class DifferentialTester(IDriverHost host, TestingOptions options,
 
     private const string Turkish = "tr-TR";
 
+    private static readonly string TimedOut = OutcomeLine.TimedOut(RuntimeDiff.CaseTimeout);
+
     public TestingOutcome Test(TestingPlan plan, IrProcedure old, IrProcedure @new)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -38,7 +41,7 @@ public sealed class DifferentialTester(IDriverHost host, TestingOptions options,
             return new TestingOutcome(DifferentialTesting.Unconstructible(plan.Reason), Observed: null);
         }
 
-        IReadOnlyList<string> cultures = RuntimeSensitive(old) || RuntimeSensitive(@new) ? [Invariant, Turkish] : [Invariant];
+        IReadOnlyList<string> cultures = Cultures(old, @new);
         using DriverStream legacy = new(host, drivers.Legacy, RuntimeDiff.CaseTimeout);
         using DriverStream modern = new(host, drivers.Modern, RuntimeDiff.CaseTimeout);
         SpeciesTally tally = new();
@@ -77,15 +80,25 @@ public sealed class DifferentialTester(IDriverHost host, TestingOptions options,
     private static TestingOutcome Tested(SpeciesTally tally, TestingStop stop) =>
         new(DifferentialTesting.Tested(tally.Inputs, tally.Species, tally.Singletons, tally.DiscoveryProbability, stop), Observed: null);
 
+    /// <summary>
+    /// The invariant culture, and also <c>tr-TR</c> when either body calls a member of the runtime-changes table; replay
+    /// runs a Divergent's model under the same set (ticket P2-038).
+    /// </summary>
+    internal static IReadOnlyList<string> Cultures(IrProcedure old, IrProcedure @new) =>
+        RuntimeSensitive(old) || RuntimeSensitive(@new) ? [Invariant, Turkish] : [Invariant];
+
     /// <summary>Whether <paramref name="body"/> calls a member whose behaviour the runtime-changes table says differs.</summary>
     private static bool RuntimeSensitive(IrProcedure body) =>
         body.Blocks.SelectMany(static b => b.Instructions).Any(static i => i is IrCall { Callee.RuntimeChanged: true } or IrPure { RuntimeSensitive: true });
 
-    /// <summary>Why a side could not run a case at all: its driver could not build the arguments or the culture.</summary>
+    /// <summary>
+    /// Why a side could not run a case at all: its driver could not build the arguments or the culture, or gave no answer
+    /// within the case timeout, so every later case would wait out the timeout too.
+    /// </summary>
     private static string? Obstacle(List<(ExecutionOutcome Legacy, ExecutionOutcome Modern)> runs) =>
         runs.SelectMany(static r => new[] { ("legacy", r.Legacy), ("modern", r.Modern) })
-            .Where(static s => s.Item2.Kind == OutcomeKind.NotConstructible)
-            .Select(static s => $"the {s.Item1} side gave NotConstructible {s.Item2.Canonical}")
+            .Where(static s => s.Item2.Kind == OutcomeKind.NotConstructible || string.Equals(s.Item2.Canonical, TimedOut, StringComparison.Ordinal))
+            .Select(static s => $"the {s.Item1} side gave {OutcomeLine.Name(s.Item2.Kind)} {s.Item2.Canonical}")
             .FirstOrDefault();
 
     private static bool Diverges(ExecutionOutcome legacy, ExecutionOutcome modern) =>

@@ -18,6 +18,13 @@ internal static class TypeMapper
     /// <summary>The sort-name function that leaves every name as it is.</summary>
     public static readonly Func<string, string> Unmapped = static name => name;
 
+    /// <summary>
+    /// The display format for a type with no metadata name, less nullable reference annotations (ticket P2-032); also a
+    /// generic callee's type arguments (ticket P2-042).
+    /// </summary>
+    public static readonly SymbolDisplayFormat Unannotated =
+        SymbolDisplayFormat.CSharpErrorMessageFormat.RemoveMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
     public static IrType Map(ITypeSymbol type) => Map(type, Unmapped);
 
     public static IrType Map(ITypeSymbol type, Func<string, string> sorts) => type.SpecialType switch
@@ -27,8 +34,29 @@ internal static class TypeMapper
         SpecialType.System_Int16 or SpecialType.System_UInt16 or SpecialType.System_Char => new IrBitVec(16),
         SpecialType.System_Int32 or SpecialType.System_UInt32 => new IrBitVec(32),
         SpecialType.System_Int64 or SpecialType.System_UInt64 => new IrBitVec(64),
-        _ => new IrSort(MetadataName(type, sorts)),
+        _ => Tuple(type) ?? new IrSort(MetadataName(type, sorts)),
     };
+
+    /// <summary>
+    /// The <see cref="IrTuple"/> sort of a value tuple of two or three <c>bool</c> or integral elements (ticket P2-027), or
+    /// null for any other type: a larger or smaller tuple, or one holding anything else, stays the sort of its metadata name.
+    /// </summary>
+    public static IrSort? Tuple(ITypeSymbol? type) =>
+        type is INamedTypeSymbol { IsTupleType: true, TupleElements: { Length: 2 or 3 } elements }
+        && elements.Select(static e => Map(e.Type)).ToArray() is var mapped
+        && mapped.All(static t => t is IrBool or IrBitVec)
+            ? IrTuple.Sort(mapped)
+            : null;
+
+    /// <summary>
+    /// The 1-based position of <paramref name="field"/> in its tuple when that tuple is a <see cref="Tuple"/> sort (ticket
+    /// P2-027), whether it is <c>Item1</c> or the name the tuple gives it; null for any other field.
+    /// </summary>
+    public static int? TupleElement(IFieldSymbol field) =>
+        Tuple(field.ContainingType) is null
+            ? null
+            : field.ContainingType.TupleElements.IndexOf(
+                field.ContainingType.TupleElements.First(e => SymbolEqualityComparer.Default.Equals(e.CorrespondingTupleField, field.CorrespondingTupleField))) + 1;
 
     /// <summary>
     /// C# binary numeric promotion of a single operand (ECMA-334 12.4.7): anything narrower than
@@ -112,12 +140,18 @@ internal static class TypeMapper
     /// <summary><see cref="MetadataName(ITypeSymbol)"/>, passed through <paramref name="sorts"/>.</summary>
     public static string MetadataName(ITypeSymbol type, Func<string, string> sorts) => sorts(MetadataName(type));
 
-    /// <summary><c>Namespace.Outer+Inner`1</c> for named types; the display string for arrays, pointers and type parameters.</summary>
+    /// <summary>
+    /// <c>Namespace.Outer+Inner`1</c> for named types; <c>System.Object</c> for <c>dynamic</c>, which is <c>object</c> at run
+    /// time and identity-convertible to it (ticket P2-029); the display string for arrays, pointers and type parameters,
+    /// without nullable reference annotations (ticket P2-032), which a named type's metadata name never carries either:
+    /// <c>T[]</c> and <c>T[]?</c> are one sort, and null tracking is the shadow's job.
+    /// </summary>
     public static string MetadataName(ITypeSymbol type) => type switch
     {
+        IDynamicTypeSymbol => "System.Object",
         INamedTypeSymbol { ContainingType: { } outer } => $"{MetadataName(outer)}+{type.MetadataName}",
         INamedTypeSymbol { ContainingNamespace.IsGlobalNamespace: false } => $"{type.ContainingNamespace.ToDisplayString()}.{type.MetadataName}",
         INamedTypeSymbol => type.MetadataName,
-        _ => type.ToDisplayString(),
+        _ => type.ToDisplayString(Unannotated),
     };
 }

@@ -5,6 +5,7 @@ using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
+using Equiv.Verify.Z3.Contracts;
 using Equiv.Verify.Z3.Ladder;
 
 using Microsoft.Z3;
@@ -21,7 +22,8 @@ namespace Equiv.Verify.Z3;
 /// reaches an <see cref="IrOpaque"/> gives <see cref="Divergent"/>, with a counterexample replayed in
 /// <see cref="IrInterpreter"/>; if not, an input reaching an opaque gives <see cref="UnknownReason.Opaque"/>. Each
 /// query gets its own <see cref="Context"/>, disposed on every path. A solver <c>unknown</c> is
-/// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason, which is not always a timeout.
+/// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason, which is not always a timeout. Any other
+/// Unknown carries <see cref="FailureRefinementQuery"/>'s two answers (ADR 0037).
 /// </summary>
 public sealed class Z3Backend : IVerificationBackend
 {
@@ -48,8 +50,53 @@ public sealed class Z3Backend : IVerificationBackend
         ArgumentNullException.ThrowIfNull(oldBody);
         ArgumentNullException.ThrowIfNull(newBody);
         ArgumentNullException.ThrowIfNull(options);
-        return new LoopLadder(createContext, options, options.InvariantModel is { } model ? proposers(model) : null).Verify(oldBody, newBody);
+        Verdict verdict = new LoopLadder(createContext, options, Proposer(options)).Verify(oldBody, newBody);
+
+        // ADR 0037 (ticket P1-013): an Unknown other than a timeout says whether either side can fail where the other does
+        // not. The verdict stays as it is. An unbound pair never reaches the backend (ADR 0029 decision 2).
+        return verdict is Unknown { Reason: not UnknownReason.Timeout } unknown
+            ? unknown with { FailureRefinement = new FailureRefinementQuery(createContext, options).Run(oldBody, newBody, unknown.Ladder[0].Outcome != RungOutcome.NotApplicable) }
+            : verdict;
     }
+
+    /// <summary>
+    /// ADR 0036 decision 2 (ticket P1-010): for each callee pair, the contract <see cref="ContractSearch"/> admits for this
+    /// caller's use of it; then the ladder on the caller with each admitted contract relating its calls to that callee, in the
+    /// encoding <see cref="ContractEncoding"/> gives them. An Equivalent names every contract in its
+    /// <see cref="Equivalent.ContractsUsed"/>, sorted by callee.
+    /// </summary>
+    public Equivalent? VerifyUnderContracts(IrProcedure oldBody, IrProcedure newBody, ImmutableArray<CalleePair> callees, VerificationOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(oldBody);
+        ArgumentNullException.ThrowIfNull(newBody);
+        ArgumentNullException.ThrowIfNull(options);
+        ContractSearch search = new(createContext, options);
+        ImmutableSortedDictionary<string, CalleeContract> admitted = callees
+            .Select(c => (c.Identity, Contract: search.Admit(oldBody, newBody, c)))
+            .Where(static c => c.Contract is not null)
+            .ToImmutableSortedDictionary(static c => c.Identity, static c => c.Contract!, StringComparer.Ordinal);
+        if (admitted.IsEmpty)
+        {
+            return null;
+        }
+
+        LoopLadder ladder = new(createContext, options, Proposer(options)) { Contracts = new CallerContracts(admitted.ToImmutableDictionary(StringComparer.Ordinal), ContractEncoding) };
+        if (ladder.Verify(oldBody, newBody) is not Equivalent equivalent)
+        {
+            return null;
+        }
+
+        using Context context = createContext();
+        return equivalent with { ContractsUsed = [.. admitted.Select(c => new ContractUse(c.Key, c.Value.Text(context), ObservedPredicates.Name))] };
+    }
+
+    /// <summary>
+    /// How a caller's product encodes a call under contract: <see cref="FreshPerSideEncoding"/>, each side its own outcome and
+    /// heap (ADR 0036 decision 2). Only a test sets another, to show what sharing the call functions would prove.
+    /// </summary>
+    internal ICalleeContractEncoding ContractEncoding { get; init; } = FreshPerSideEncoding.Instance;
+
+    private IInvariantProposer? Proposer(VerificationOptions options) => options.InvariantModel is { } model ? proposers(model) : null;
 
     /// <summary>
     /// A fresh solver holding the encoding and <paramref name="query"/>. It runs <c>solve-eqs</c> first,

@@ -27,6 +27,9 @@ public static class SarifReportWriter
 
     private const string ToolName = "Equiv";
 
+    /// <summary>What an Equivalent's <c>proofMethod</c> ends with when its proof used a callee contract (ADR 0036 decision 2; ticket P1-010).</summary>
+    private const string ContractSuffix = "+contract";
+
     /// <summary>The <c>proofMethod</c> of a Divergent the real runtimes showed (ADR 0035 decision 3); never an Equivalent's.</summary>
     private const string ObservedProofMethod = "observed";
 
@@ -195,7 +198,9 @@ public static class SarifReportWriter
     /// <summary>
     /// The verdict's payload as result properties: a Divergent's counterexample (<c>model</c>), an Equivalent's
     /// <c>proofMethod</c> and, for a bounded proof over a loop, <c>boundedBy</c>, for a rung 4 or 5 proof the coupling
-    /// <c>invariant</c> and for rung 5 its <c>proposedBy</c> (ticket P1-002; ADR 0036), an Unknown's <c>unknownReason</c>, the <c>ladderTrace</c> of every rung the backend attempted
+    /// <c>invariant</c> and for rung 5 its <c>proposedBy</c> (ticket P1-002; ADR 0036), the <c>+contract</c> suffix and
+    /// <c>contractsUsed</c> of a proof that used callee contracts (ticket P1-010), an Unknown's <c>unknownReason</c> and
+    /// <c>failureRefinement</c> (ADR 0037; ticket P1-013), the <c>ladderTrace</c> of every rung the backend attempted
     /// (VERIFICATION-MODEL.md sections 1 and 5.1; ticket M3-002), and the <c>chcMode</c> rung 4 ran in when it ran
     /// (ticket P1-001).
     /// </summary>
@@ -211,7 +216,13 @@ public static class SarifReportWriter
                 sarifResult.SetProperty("model", CounterexampleText.Dump(divergent.Counterexample));
                 break;
             case Equivalent equivalent:
-                sarifResult.SetProperty("proofMethod", Name(equivalent.Method));
+                // Ticket P1-010 (ADR 0036 decision 2): a proof that used callee contracts says so in its method and lists them.
+                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix));
+                if (!equivalent.ContractsUsed.IsEmpty)
+                {
+                    sarifResult.SetProperty("contractsUsed", equivalent.ContractsUsed.Select(ContractProperty).ToList());
+                }
+
                 if (equivalent.BoundedBy is { } bound)
                 {
                     sarifResult.SetProperty("boundedBy", bound);
@@ -229,14 +240,7 @@ public static class SarifReportWriter
 
                 break;
             case Unknown unknown:
-                sarifResult.SetProperty("unknownReason", Name(unknown.Reason));
-                sarifResult.SetProperty("scope", Name(unknown.Scope));
-                if (unknown.Scope == UnknownScope.Line)
-                {
-                    sarifResult.SetProperty("residualClaim", Unknown.ResidualClaim);
-                }
-
-                SetAbstractionProperties(sarifResult, unknown);
+                SetUnknownProperties(sarifResult, unknown);
                 break;
         }
 
@@ -257,6 +261,30 @@ public static class SarifReportWriter
     }
 
     /// <summary>
+    /// An Unknown's <c>unknownReason</c> and <c>scope</c>, a line-scoped one's <c>residualClaim</c> (ADR 0029), its
+    /// abstraction properties (ADR 0026) and, when the backend ran ADR 0037's queries, <c>failureRefinement</c> (ticket P1-013).
+    /// </summary>
+    private static void SetUnknownProperties(Result sarifResult, Unknown unknown)
+    {
+        sarifResult.SetProperty("unknownReason", Name(unknown.Reason));
+        sarifResult.SetProperty("scope", Name(unknown.Scope));
+        if (unknown.Scope == UnknownScope.Line)
+        {
+            sarifResult.SetProperty("residualClaim", Unknown.ResidualClaim);
+        }
+
+        SetAbstractionProperties(sarifResult, unknown);
+        if (unknown.FailureRefinement is { } refinement)
+        {
+            sarifResult.SetProperty("failureRefinement", new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["newFailures"] = RefinementProperty(refinement.NewFailures),
+                ["removedFailures"] = RefinementProperty(refinement.RemovedFailures),
+            });
+        }
+    }
+
+    /// <summary>
     /// An <see cref="UnknownReason.Abstraction"/> result's candidate counterexample, rendered as a Divergent's
     /// <c>model</c> is, and the abstractions it depends on, each with its identity, side and, when known, source span
     /// (ADR 0026). Both are left out when absent.
@@ -273,6 +301,28 @@ public static class SarifReportWriter
             sarifResult.SetProperty("abstractions", unknown.Abstractions.Select(static a => Describe(a)).ToList());
         }
     }
+
+    /// <summary>
+    /// One of ADR 0037's queries (ticket P1-013): its <c>outcome</c>, <c>none-proved</c>, <c>found</c> or <c>unknown</c>, and for
+    /// <c>found</c> the input and both runs as <c>model</c>, rendered as a Divergent's is.
+    /// </summary>
+    private static Dictionary<string, string> RefinementProperty(RefinementResult result)
+    {
+        Dictionary<string, string> described = new(StringComparer.Ordinal) { ["outcome"] = Name(result.Outcome) };
+        if (result.Model is { } model)
+        {
+            described["model"] = CounterexampleText.Dump(model);
+        }
+
+        return described;
+    }
+
+    private static Dictionary<string, object> ContractProperty(ContractUse contract) => new(StringComparer.Ordinal)
+    {
+        ["callee"] = contract.Callee,
+        ["contract"] = contract.Contract,
+        ["proposedBy"] = contract.ProposedBy,
+    };
 
     private static Dictionary<string, object> Describe(Abstraction abstraction)
     {
@@ -298,8 +348,8 @@ public static class SarifReportWriter
 
     /// <summary>
     /// A Divergent's replay on both real runtimes (ADR 0035 decision 2; ticket M4-009): <c>replay</c> is <c>reproduced</c>,
-    /// <c>not-reproduced</c> with both canonical outcomes as <c>replayOutcomes</c>, or <c>not-constructible</c> with
-    /// <c>replayReason</c>. Left out when the run did not replay.
+    /// <c>not-reproduced</c> or (an EQ006 Divergent's, ticket P2-038) <c>not-applicable</c> with both canonical outcomes as
+    /// <c>replayOutcomes</c>, or <c>not-constructible</c> with <c>replayReason</c>. Left out when the run did not replay.
     /// </summary>
     private static void SetReplayProperties(Result sarifResult, ReplayResult? replay)
     {
@@ -311,7 +361,7 @@ public static class SarifReportWriter
                 sarifResult.SetProperty("replay", "reproduced");
                 break;
             case { Legacy: { } legacy, Modern: { } modern }:
-                sarifResult.SetProperty("replay", "not-reproduced");
+                sarifResult.SetProperty("replay", replay.Status == ReplayStatus.NotApplicable ? "not-applicable" : "not-reproduced");
                 sarifResult.SetProperty("replayOutcomes", new Dictionary<string, object>(StringComparer.Ordinal)
                 {
                     ["legacy"] = Describe(legacy),
@@ -366,7 +416,7 @@ public static class SarifReportWriter
 
     /// <summary>
     /// The spelling VERIFICATION-MODEL.md sections 1 and 5.1 use for a proof: <c>bounded</c>, <c>lockstep-induction</c>,
-    /// <c>k-induction</c>, <c>chc</c>, <c>llm-invariant</c>, <c>congruence</c>.
+    /// <c>k-induction</c>, <c>chc</c>, <c>llm-invariant</c>, <c>trace-invariant</c>, <c>congruence</c>.
     /// </summary>
     internal static string Name(ProofMethod method) => method switch
     {
@@ -375,6 +425,7 @@ public static class SarifReportWriter
         ProofMethod.KInduction => "k-induction",
         ProofMethod.Chc => "chc",
         ProofMethod.LlmInvariant => "llm-invariant",
+        ProofMethod.TraceInvariant => "trace-invariant",
         _ => "congruence",
     };
 
@@ -394,6 +445,14 @@ public static class SarifReportWriter
 
     /// <summary>The spelling VERIFICATION-MODEL.md section 5.1 uses for rung 4's theory: <c>int</c>, <c>bitvector</c>.</summary>
     internal static string Name(ChcMode mode) => mode == ChcMode.Integers ? "int" : "bitvector";
+
+    /// <summary>The spelling VERIFICATION-MODEL.md section 6 uses for a failure-refinement outcome (ADR 0037).</summary>
+    internal static string Name(RefinementOutcome outcome) => outcome switch
+    {
+        RefinementOutcome.NoneProved => "none-proved",
+        RefinementOutcome.Found => "found",
+        _ => "unknown",
+    };
 
     /// <summary>The spelling VERIFICATION-MODEL.md section 6 uses for a scope: <c>line</c>, <c>method</c>.</summary>
     internal static string Name(UnknownScope scope) => scope == UnknownScope.Line ? "line" : "method";

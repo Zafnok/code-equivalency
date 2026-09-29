@@ -46,12 +46,12 @@ internal static class BodyFingerprinter
         if (compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax) is not { } body)
         {
             return IsAutoAccessor(method)
-                ? BoundSerialiser.Serialise(method, compilation, [], config.Renames, config.SuppressRuntimeChanges, equivalences, legacy)
+                ? BoundSerialiser.Serialise(method, compilation, [], new(config.Renames, config.SuppressRuntimeChanges, equivalences, legacy))
                 : (null, false);
         }
 
         ImmutableArray<IOperation> operations = [.. Initializers(method, syntax).Select(node => compilation.GetSemanticModel(node.SyntaxTree).GetOperation(node)!), body];
-        return BoundSerialiser.Serialise(method, compilation, operations, config.Renames, config.SuppressRuntimeChanges, equivalences, legacy);
+        return BoundSerialiser.Serialise(method, compilation, operations, new(config.Renames, config.SuppressRuntimeChanges, equivalences, legacy));
     }
 
     /// <summary>An accessor of a property that has a compiler-generated backing field.</summary>
