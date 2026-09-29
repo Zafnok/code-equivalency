@@ -21,19 +21,19 @@ internal sealed class MsBuildCondition
         _tokens = Tokenize(text);
     }
 
-    private abstract record Node;
+    private interface INode;
 
-    private sealed record Or(Node Left, Node Right) : Node;
+    private sealed record Or(INode Left, INode Right) : INode;
 
-    private sealed record And(Node Left, Node Right) : Node;
+    private sealed record And(INode Left, INode Right) : INode;
 
-    private sealed record Not(Node Operand) : Node;
+    private sealed record Not(INode Operand) : INode;
 
-    private sealed record Function(string Name, string Argument) : Node;
+    private sealed record Function(string Name, string Argument) : INode;
 
-    private sealed record Comparison(string Left, string Operator, string Right) : Node;
+    private sealed record Comparison(string Left, string Operator, string Right) : INode;
 
-    private sealed record Operand(string Text) : Node;
+    private sealed record Operand(string Text) : INode;
 
     /// <summary>Whether <paramref name="condition"/> holds; an empty condition always does.</summary>
     /// <param name="directory">The directory <c>Exists</c> resolves a relative path against: that of the file holding the condition.</param>
@@ -46,11 +46,11 @@ internal sealed class MsBuildCondition
         }
 
         MsBuildCondition parser = new(condition);
-        Node tree = parser.ParseOr();
+        INode tree = parser.ParseOr();
         return parser._position == parser._tokens.Count ? Evaluate(tree, properties, directory) : throw parser.Unsupported();
     }
 
-    private static bool Evaluate(Node node, MsBuildProperties properties, string directory) => node switch
+    private static bool Evaluate(INode node, MsBuildProperties properties, string directory) => node switch
     {
         Or or => Evaluate(or.Left, properties, directory) || Evaluate(or.Right, properties, directory),
         And and => Evaluate(and.Left, properties, directory) && Evaluate(and.Right, properties, directory),
@@ -108,9 +108,9 @@ internal sealed class MsBuildCondition
         _ => null,
     };
 
-    private Node ParseOr()
+    private INode ParseOr()
     {
-        Node node = ParseAnd();
+        INode node = ParseAnd();
         while (Accept("or"))
         {
             node = new Or(node, ParseAnd());
@@ -119,9 +119,9 @@ internal sealed class MsBuildCondition
         return node;
     }
 
-    private Node ParseAnd()
+    private INode ParseAnd()
     {
-        Node node = ParseUnary();
+        INode node = ParseUnary();
         while (Accept("and"))
         {
             node = new And(node, ParseUnary());
@@ -130,7 +130,7 @@ internal sealed class MsBuildCondition
         return node;
     }
 
-    private Node ParseUnary()
+    private INode ParseUnary()
     {
         if (Accept("!"))
         {
@@ -139,7 +139,7 @@ internal sealed class MsBuildCondition
 
         if (Accept("("))
         {
-            Node inner = ParseOr();
+            INode inner = ParseOr();
             Expect(")");
             return inner;
         }

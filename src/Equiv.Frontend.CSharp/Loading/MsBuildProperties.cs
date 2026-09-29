@@ -122,16 +122,18 @@ internal sealed class MsBuildProperties
         }
 
         StringBuilder unescaped = new(text.Length);
-        for (int i = 0; i < text.Length; i++)
+        int i = 0;
+        while (i < text.Length)
         {
             if (text[i] == '%' && i + 2 < text.Length && int.TryParse(text.AsSpan(i + 1, 2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out int code))
             {
                 unescaped.Append((char)code);
-                i += 2;
+                i += 3;
             }
             else
             {
                 unescaped.Append(text[i]);
+                i++;
             }
         }
 

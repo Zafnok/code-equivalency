@@ -239,7 +239,7 @@ internal sealed class IrLowerer
             ({ ReturnsVoid: true }, _) => null,
             ({ IsAsync: true, IsIterator: false }, INamedTypeSymbol { TypeArguments: [var result] }) => TypeMapper.Map(result, sorts),
             ({ IsAsync: true, IsIterator: false }, _) => null,
-            (_, var returned) => TypeMapper.Map(returned, sorts),
+            _ => TypeMapper.Map(method.ReturnType, sorts),
         });
 
     /// <summary>
