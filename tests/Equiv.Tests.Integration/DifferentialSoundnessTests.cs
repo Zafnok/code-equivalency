@@ -121,15 +121,15 @@ public sealed class DifferentialSoundnessTests
 
     /// <summary>Rule 1.</summary>
     [Fact]
-    public void ObservedDivergenceIsNeverEquivalent() => Sample(Soundness);
+    public void ObservedDivergenceIsNeverEquivalent() => Assert.Null(Failed(Soundness));
 
     /// <summary>Rule 2.</summary>
     [Fact]
-    public void DivergentModelReplaysAsDivergence() => Sample(Decoding);
+    public void DivergentModelReplaysAsDivergence() => Assert.Null(Failed(Decoding));
 
     /// <summary>Rule 3.</summary>
     [Fact]
-    public void PreservingMutationIsNeverDivergent() => Sample(Precision);
+    public void PreservingMutationIsNeverDivergent() => Assert.Null(Failed(Precision));
 
     /// <summary>
     /// Ticket P2-043: rule 2 at CsCheck seed <c>6rdKklVqtDVa</c>, shrunk. Spacer's derivation of the dropped
@@ -142,6 +142,9 @@ public sealed class DifferentialSoundnessTests
 
         Assert.Null(Decoding(c)?.Describe(c));
     }
+
+    /// <summary>CsCheck reports a counter-example by throwing; surfacing it as a value gives each test its assertion.</summary>
+    private static Exception? Failed(Func<Case, Failure?> rule) => Record.Exception(() => Sample(rule));
 
     private static void Sample(Func<Case, Failure?> rule) =>
         Gen.Select(PairGen.Pair, PairGen.Input.Array[InputsPerPair], static (pair, inputs) => new Case(pair.LegacySource, pair.ModernSource, pair.Operator, inputs))
