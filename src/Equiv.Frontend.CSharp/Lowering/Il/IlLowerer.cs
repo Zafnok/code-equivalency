@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Linq;
@@ -33,6 +34,14 @@ internal sealed class IlLowerer
     private const string OverflowException = "System.OverflowException";
 
     private static readonly IrBool Bool = new();
+
+    /// <summary>The stack types of IL's integers the IR has: 32 and 64 bits, not native integers or floating point.</summary>
+    private static readonly FrozenSet<StackType> Integral = new[] { StackType.I4, StackType.I8 }.ToFrozenSet();
+
+    private static readonly FrozenSet<PrimitiveType> IntegralTargets = new[]
+    {
+        PrimitiveType.I1, PrimitiveType.U1, PrimitiveType.I2, PrimitiveType.U2, PrimitiveType.I4, PrimitiveType.U4, PrimitiveType.I8, PrimitiveType.U8,
+    }.ToFrozenSet();
 
     private readonly SsaBuilder ssa = new();
     private readonly LoweringContext context = new([], [], handlerExit: null);
@@ -222,9 +231,9 @@ internal sealed class IlLowerer
     {
         LdLoc load => VariableType(load.Variable) is not null,
         StLoc store => VariableType(store.Variable) is not null,
-        BinaryNumericInstruction binary => binary.LeftInputType is StackType.I4 or StackType.I8 && binary.RightInputType is StackType.I4 or StackType.I8,
-        Comp comparison => comparison.InputType is StackType.I4 or StackType.I8,
-        Conv conversion => conversion.InputType is StackType.I4 or StackType.I8 && conversion.TargetType is >= PrimitiveType.I1 and <= PrimitiveType.U8,
+        BinaryNumericInstruction binary => Integral.Contains(binary.LeftInputType) & Integral.Contains(binary.RightInputType),
+        Comp comparison => Integral.Contains(comparison.InputType),
+        Conv conversion => Integral.Contains(conversion.InputType) & IntegralTargets.Contains(conversion.TargetType),
         CallInstruction call => symbols.Method(call.Method) is { RefKind: RefKind.None } target
             && call.ConstrainedTo is null
             && target.Parameters.All(static p => p.RefKind == RefKind.None),
@@ -280,14 +289,16 @@ internal sealed class IlLowerer
         Comp comparison => new(Compare(comparison), Boolean),
         Conv conversion => Convert(conversion),
         CallInstruction call => Call(call)!.Value,
+        IfInstruction choice => new(Conditional(choice, hint), hint),
         _ => new(Const(Constant(instruction, hint)), hint),
     };
 
     /// <summary>
     /// <paramref name="value"/> as a value of <paramref name="type"/>: a bitvector extended by its own type's sign or
     /// truncated, as IL's stack does; a bitvector as Bool is whether it is not zero, and Bool as a bitvector 1 or 0; a
-    /// reference as another reference type through an implicit reference conversion is its <c>cast</c> map read (ticket
-    /// M3-010). Null, with nothing emitted, when none of those relates the two.
+    /// value of one sort as another is its <c>cast</c> map read (ticket M3-010), since IL that verifies converts between
+    /// two types with no instruction only by an implicit reference conversion. Null, with nothing emitted, between a
+    /// bitvector and a sort, such as an enum's value as an integer.
     /// </summary>
     private IrVar? Coerce(Val value, ITypeSymbol type) => (value.Var.Type, Map(type)) switch
     {
@@ -295,8 +306,7 @@ internal sealed class IlLowerer
         (IrBitVec, IrBitVec to) => Resize(value.Var, to, TypeMapper.IsSigned(value.Type)),
         (IrBitVec from, IrBool) => Emit(IrBinaryOp.Ne, value.Var, Const(new IrBitVecValue(from.Width, 0)), Bool),
         (IrBool, IrBitVec to) => Select(value.Var, Const(new IrBitVecValue(to.Width, 1)), Const(new IrBitVecValue(to.Width, 0))),
-        (IrSort, IrSort) when compilation.ClassifyCommonConversion(value.Type, type) is { IsImplicit: true, IsReference: true } =>
-            heap.MapRead(heap.Inputs.Cast(value.Type, type), value.Var, context),
+        (IrSort, IrSort) => heap.MapRead(heap.Inputs.Cast(value.Type, type), value.Var, context),
         _ => null,
     };
 
@@ -350,11 +360,29 @@ internal sealed class IlLowerer
             // A local the compiler adds, such as Debug's return temporary, has no PDB name and no shadow: the IOperation
             // lowering has no variable for it, so its value's nullness is read where the value is used. A stack slot is
             // what the IOperation lowering's flow capture is, and has one.
-            declared = variable is { Kind: VariableKind.Local, HasGeneratedName: true } ? new SsaBuilder.Variable(template) : Shadowed(template, type);
+            declared = variable.Kind == VariableKind.Local && variable.HasGeneratedName ? new SsaBuilder.Variable(template) : Shadowed(template, type);
             variables[variable] = declared;
+            if (variable.Kind == VariableKind.Local && TypeMapper.Default(type, TypeMapper.Unmapped) is { } initial)
+            {
+                // A local starts at its default, stored ahead of everything in the entry as the heap's inputs are. C#'s
+                // definite assignment leaves only an infeasible path, such as a branch the optimiser made constant, reading
+                // a local before a store, so the default is what `.locals init` gives it and never changes a feasible run.
+                Initialize(declared, initial);
+                if (Shadow(declared) is { } shadow)
+                {
+                    Initialize(shadow, new IrBoolValue(Value: true));
+                }
+            }
         }
 
         return declared;
+    }
+
+    private void Initialize(SsaBuilder.Variable variable, IrValue value)
+    {
+        IrVar initial = ssa.Temp(value.Type);
+        ssa.Emit(new IrBlockId(0), new IrConst(initial, value));
+        ssa.StoreFirst(new IrBlockId(0), variable, initial);
     }
 
     /// <summary>A reference-typed variable is paired with a Bool <c>&lt;name&gt;.isNull</c> shadow, as the IOperation lowering pairs it.</summary>
@@ -406,9 +434,12 @@ internal sealed class IlLowerer
         }
     }
 
-    /// <summary>The type <see cref="IrLowerer.Signature"/> returns: an async method's task result, else the return type.</summary>
+    /// <summary>
+    /// The type <see cref="IrLowerer.Signature"/> returns, asked only when it returns one: an async method's task result,
+    /// the one type argument of its task-like type, else the return type.
+    /// </summary>
     private ITypeSymbol ReturnType() =>
-        method is { IsAsync: true, IsIterator: false, ReturnType: INamedTypeSymbol { TypeArguments: [var result] } } ? result : method.ReturnType;
+        method.IsAsync && !method.IsIterator ? ((INamedTypeSymbol)method.ReturnType).TypeArguments[0] : method.ReturnType;
 
     private void If(IfInstruction choice)
     {
@@ -424,6 +455,28 @@ internal sealed class IlLowerer
         Statement(choice.FalseInst);
         Jump(join);
         context.Current = join;
+    }
+
+    /// <summary>
+    /// An <c>if</c> with a value, as ILSpy inlines a <c>&amp;&amp;</c> or <c>||</c> into an expression: a branch, each arm
+    /// the value of <paramref name="type"/> it yields, and a join.
+    /// </summary>
+    private IrVar Conditional(IfInstruction choice, ITypeSymbol type)
+    {
+        IrVar condition = Value(choice.Condition, Boolean);
+        SsaBuilder.Variable selected = new(new IrVar($"$select{selects++.ToString(CultureInfo.InvariantCulture)}", Map(type)));
+        IrBlockId then = ssa.NewBlock();
+        IrBlockId otherwise = ssa.NewBlock();
+        IrBlockId join = ssa.NewBlock();
+        Terminate(new IrBranch(condition, then, otherwise));
+        context.Current = then;
+        ssa.Store(context.Current, selected, Value(choice.TrueInst, type));
+        Jump(join);
+        context.Current = otherwise;
+        ssa.Store(context.Current, selected, Value(choice.FalseInst, type));
+        Jump(join);
+        context.Current = join;
+        return ssa.Load(join, selected);
     }
 
     /// <summary>
@@ -509,9 +562,10 @@ internal sealed class IlLowerer
 
     private IrVar Arithmetic(IrBinaryOp op, IrVar left, IrVar right, bool isChecked, bool signed)
     {
-        if (isChecked && OperatorMapper.Overflow(op, signed) is { } overflow)
+        if (isChecked)
         {
-            ThrowIfOverflows(overflow, left, right);
+            // Only `add`, `sub` and `mul` check for overflow.
+            ThrowIfOverflows(OperatorMapper.Overflow(op, signed)!.Value, left, right);
         }
 
         return Emit(op, left, right, left.Type);
@@ -545,8 +599,8 @@ internal sealed class IlLowerer
     private bool IsBool(ILInstruction instruction) => instruction switch
     {
         Comp => true,
-        LdLoc load => VariableType(load.Variable) is { SpecialType: SpecialType.System_Boolean },
-        CallInstruction call => symbols.Method(call.Method) is { ReturnType.SpecialType: SpecialType.System_Boolean },
+        LdLoc load => SymbolEqualityComparer.Default.Equals(VariableType(load.Variable), Boolean),
+        CallInstruction call => symbols.Method(call.Method) is { } target && SymbolEqualityComparer.Default.Equals(target.ReturnType, Boolean),
         BinaryNumericInstruction { Operator: BinaryNumericOperator.BitAnd or BinaryNumericOperator.BitOr or BinaryNumericOperator.BitXor } binary =>
             IsBool(binary.Left) && IsBool(binary.Right),
         _ => false,
@@ -731,13 +785,6 @@ internal sealed class IlLowerer
     {
         IrVar target = ssa.Temp(type);
         ssa.Emit(context.Current, new IrBinary(target, op, left, right));
-        return target;
-    }
-
-    private IrVar Unary(IrUnaryOp op, IrVar operand)
-    {
-        IrVar target = ssa.Temp(operand.Type);
-        ssa.Emit(context.Current, new IrUnary(target, op, operand));
         return target;
     }
 

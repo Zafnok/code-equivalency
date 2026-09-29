@@ -87,7 +87,8 @@ internal sealed class IlFragment(IlSymbols symbols, Compilation compilation)
 
         public void WriteReference(IMember member, string text, bool isDefinition = false)
         {
-            this.text.Append(member.DeclaringType.ReflectionName).Append("::").Append(IdStringProvider.GetIdString(member.MemberDefinition));
+            // A member of a reference that did not load has no metadata, and so no documentation ID, only its name.
+            this.text.Append(member.DeclaringType.ReflectionName).Append("::").Append(member.MetadataToken.IsNil ? member.Name : IdStringProvider.GetIdString(member.MemberDefinition));
             if (member is IMethod { TypeArguments.Count: > 0 } method)
             {
                 this.text.Append('<').AppendJoin(',', method.TypeArguments.Select(static t => t.ReflectionName)).Append('>');

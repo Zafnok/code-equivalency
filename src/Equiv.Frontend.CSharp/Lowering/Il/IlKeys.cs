@@ -20,9 +20,12 @@ internal static class IlKeys
     {
         "ILFunction", "BlockContainer", "Block", "Nop", "Branch", "Leave", "IfInstruction", "SwitchInstruction", "SwitchSection",
         "LdLoc", "StLoc", "LdcI4", "LdcI8", "LdStr", "LdNull",
-        "BinaryNumericInstruction", "Comp", "LogicNot", "Conv",
+        "BinaryNumericInstruction", "Comp", "Conv",
         "Call", "CallVirt", "NewObj",
     }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>The instructions that take an address, whose key says whether the address is used where the IR has its place.</summary>
+    private static readonly FrozenSet<OpCode> Addresses = new[] { OpCode.LdLoca, OpCode.LdFlda, OpCode.LdsFlda, OpCode.LdElema, OpCode.AddressOf }.ToFrozenSet();
 
     /// <summary>The key of <paramref name="instruction"/>: its opcode, refined by position where the table needs it.</summary>
     public static string Key(ILInstruction instruction, IReadOnlySet<ILVariable> caughtException) => instruction switch
@@ -30,7 +33,7 @@ internal static class IlKeys
         LdLoc load when caughtException.Contains(load.Variable) && load.Parent is not StLoc => "LdLoc[caught exception]",
         LdLoca load when caughtException.Contains(load.Variable) => "LdLoca[caught exception]",
         StLoc store when store.Variable.Kind == VariableKind.Local && store.Variable.Type is ByReferenceType or PointerType => "StLoc[ref local]",
-        LdLoca or LdFlda or LdsFlda or LdElema or AddressOf => $"{instruction.OpCode}[{(IsAddressOperand(instruction) ? "address operand" : "address escapes")}]",
+        _ when Addresses.Contains(instruction.OpCode) => $"{instruction.OpCode}[{(IsAddressOperand(instruction) ? "address operand" : "address escapes")}]",
         Throw @throw => @throw.Argument is NewObj ? "Throw[new]" : "Throw[not new]",
         NewArr array when array.Indices.Count != 1 => "NewArr[rank > 1]",
         DefaultValue value when value.Type.Kind == TypeKind.TypeParameter => "DefaultValue[type parameter]",
@@ -38,7 +41,6 @@ internal static class IlKeys
         CallInstruction call when call.Method.Name.Contains("g__", StringComparison.Ordinal) => $"{instruction.OpCode}[local function]",
         CallInstruction call when IsCompilerGenerated(call.Method) => $"{instruction.OpCode}[compiler-generated method]",
         LdFtn ftn when IsCompilerGenerated(ftn.Method) => "LdFtn[lambda]",
-        LdVirtFtn ftn when IsCompilerGenerated(ftn.Method) => "LdVirtFtn[lambda]",
         BinaryNumericInstruction => "BinaryNumericInstruction",
         _ => instruction.OpCode.ToString(),
     };
@@ -49,7 +51,12 @@ internal static class IlKeys
     /// </summary>
     public static HashSet<ILVariable> CaughtException(ILFunction function)
     {
-        HashSet<ILVariable> held = [.. function.Descendants.OfType<TryCatchHandler>().Select(static h => h.Variable)];
+        HashSet<ILVariable> held = [];
+        foreach (TryCatchHandler handler in function.Descendants.OfType<TryCatchHandler>())
+        {
+            held.Add(handler.Variable);
+        }
+
         bool grew = true;
         while (grew)
         {

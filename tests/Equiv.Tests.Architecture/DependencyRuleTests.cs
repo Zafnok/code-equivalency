@@ -82,6 +82,26 @@ public sealed class DependencyRuleTests
         rule.Check(SystemArchitecture);
     }
 
+    /// <summary>
+    /// ADR 0039 (ticket P1-014): the IL fallback lives in the C# frontend, which alone references the decompiler, so the
+    /// identity and sort code it shares with the IOperation lowering is a call and not a contract between projects.
+    /// </summary>
+    [Fact]
+    public void OnlyTheCSharpFrontendReferencesTheDecompiler()
+    {
+        Assert.Contains("ICSharpCode.Decompiler", Assembly.Load("Equiv.Frontend.CSharp").GetReferencedAssemblies().Select(static a => a.Name), StringComparer.Ordinal);
+        foreach (string other in (string[])["Equiv.Core", "Equiv.Verify.Z3", "Equiv.Cli", "Equiv.Execute"])
+        {
+            Assert.DoesNotContain("ICSharpCode.Decompiler", Assembly.Load(other).GetReferencedAssemblies().Select(static a => a.Name), StringComparer.Ordinal);
+        }
+
+        IArchRule rule = Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^(Equiv\.Core|Equiv\.Verify|Equiv\.Cli|Equiv\.Execute)(\.|$)")
+            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^ICSharpCode\.Decompiler(\.|$)"))
+            .Because("ADR 0039: only Equiv.Frontend.CSharp reads IL back as ILAst.");
+
+        rule.Check(SystemArchitecture);
+    }
+
     [Fact]
     public void ExecutionContractStartsNoProcesses()
     {

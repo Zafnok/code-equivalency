@@ -63,7 +63,8 @@ internal sealed class IlSymbols(Compilation compilation, IMethodSymbol method)
 
     private IMethodSymbol? Resolve(IMethod member)
     {
-        if (DocumentationCommentId.GetFirstSymbolForDeclarationId(IdStringProvider.GetIdString(member.MemberDefinition), compilation) is not IMethodSymbol definition
+        if (member.MetadataToken.IsNil
+            || DocumentationCommentId.GetFirstSymbolForDeclarationId(IdStringProvider.GetIdString(member.MemberDefinition), compilation) is not IMethodSymbol definition
             || Type(member.DeclaringType) is not INamedTypeSymbol declaring
             || Resolved(member.TypeArguments) is not { } arguments)
         {
