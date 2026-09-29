@@ -169,20 +169,13 @@ internal sealed class BareProjectLoader(
     /// The project's references to other projects: an SDK-style one binds against the compilation MSBuildWorkspace built
     /// for it, a non-SDK one is loaded by this loader, and one that does not load is left out.
     /// </summary>
-    private async Task<Compilation?> ReferencedCompilationAsync(string include, CancellationToken ct)
-    {
-        if (sdkProjects.TryGetValue(include, out Compilation? sdk))
-        {
-            return sdk;
-        }
+    private async Task<Compilation?> ReferencedCompilationAsync(string include, CancellationToken ct) =>
+        sdkProjects.TryGetValue(include, out Compilation? sdk) ? sdk : await LoadNonSdkAsync(include, ct).ConfigureAwait(false);
 
-        if (SdkStyleProject.IsSdkStyleFile(include))
-        {
-            throw new UnsupportedConstructException($"the reference to the SDK-style project '{include}', for which MSBuildWorkspace built no compilation");
-        }
-
-        return (await LoadAsync(include, ct).ConfigureAwait(false))?.Compilation;
-    }
+    private async Task<Compilation?> LoadNonSdkAsync(string include, CancellationToken ct) =>
+        SdkStyleProject.IsSdkStyleFile(include)
+            ? throw new UnsupportedConstructException($"the reference to the SDK-style project '{include}', for which MSBuildWorkspace built no compilation")
+            : (await LoadAsync(include, ct).ConfigureAwait(false))?.Compilation;
 
     private async Task<List<MetadataReference>> ProjectReferencesAsync(EvaluatedProject project, CancellationToken ct)
     {
@@ -249,15 +242,10 @@ internal sealed class BareProjectLoader(
     private static string BaseIntermediatePath(MsBuildProperties properties) =>
         properties.Read("BaseIntermediateOutputPath").Trim() is { Length: > 0 } baseIntermediate ? baseIntermediate : @"obj\";
 
-    private static string FrameworkDisplayName(string frameworkDirectory)
-    {
-        if (ProjectPath.Resolve(frameworkDirectory, "RedistList/FrameworkList.xml") is not { } list)
-        {
-            return string.Empty;
-        }
-
-        return XDocument.Load(list).Root!.Attribute("Name")?.Value ?? string.Empty;
-    }
+    private static string FrameworkDisplayName(string frameworkDirectory) =>
+        ProjectPath.Resolve(frameworkDirectory, "RedistList/FrameworkList.xml") is { } list
+            ? XDocument.Load(list).Root!.Attribute("Name")?.Value ?? string.Empty
+            : string.Empty;
 
     private static string ProjectExtensionsPath(MsBuildProperties properties) =>
         MsBuildProperties.Unescape(properties.Read("MSBuildProjectExtensionsPath").Trim() is { Length: > 0 } configured ? configured : BaseIntermediatePath(properties));

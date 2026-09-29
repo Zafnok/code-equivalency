@@ -92,15 +92,14 @@ internal static class AssemblyReferences
         return designTime.Concat(expandNetStandard ? NetStandardFacades(facades, frameworkVersion, netStandardShims) : []);
     }
 
-    private static IEnumerable<string> NetStandardFacades(string facades, Version frameworkVersion, string? netStandardShims)
-    {
-        if (frameworkVersion >= DotNet471)
-        {
-            return ProjectPath.Resolve(facades, "netstandard.dll") is { } netstandardFacade ? [netstandardFacade] : [];
-        }
+    private static IEnumerable<string> NetStandardFacades(string facades, Version frameworkVersion, string? netStandardShims) =>
+        frameworkVersion >= DotNet471 ? NetStandardFacade(facades) : NetStandardShimFiles(netStandardShims);
 
-        return netStandardShims is null ? [] : Directory.EnumerateFiles(netStandardShims, "*.dll").Order(StringComparer.Ordinal);
-    }
+    private static IEnumerable<string> NetStandardFacade(string facades) =>
+        ProjectPath.Resolve(facades, "netstandard.dll") is { } netstandardFacade ? [netstandardFacade] : [];
+
+    private static IEnumerable<string> NetStandardShimFiles(string? netStandardShims) =>
+        netStandardShims is null ? [] : Directory.EnumerateFiles(netStandardShims, "*.dll").Order(StringComparer.Ordinal);
 
     private static bool IsFalse(MsBuildProperties properties, string name) => properties.Read(name).Trim().Equals("false", StringComparison.OrdinalIgnoreCase);
 

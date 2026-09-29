@@ -84,31 +84,23 @@ internal static class BareCompilationOptions
             assemblyIdentityComparer: DesktopAssemblyIdentityComparer.Default);
     }
 
-    /// <summary>A bare warning number is a C# one, as the compiler's command line reads it: <c>1591</c> is <c>CS1591</c>.</summary>
-    private static LanguageVersion LanguageVersionOf(string langVersion)
-    {
-        if (langVersion.Length == 0)
-        {
-            return LanguageVersion.CSharp7_3;
-        }
+    private static LanguageVersion LanguageVersionOf(string langVersion) =>
+        langVersion.Length == 0 ? LanguageVersion.CSharp7_3 : ParseLanguageVersion(langVersion);
 
-        return LanguageVersionFacts.TryParse(langVersion, out LanguageVersion parsed)
+    private static LanguageVersion ParseLanguageVersion(string langVersion) =>
+        LanguageVersionFacts.TryParse(langVersion, out LanguageVersion parsed)
             ? parsed
             : throw new UnsupportedConstructException($"the LangVersion '{langVersion}', which is not a C# language version");
-    }
 
-    private static int WarningLevelOf(string warningLevel)
-    {
-        if (warningLevel.Length == 0)
-        {
-            return 4;
-        }
+    private static int WarningLevelOf(string warningLevel) =>
+        warningLevel.Length == 0 ? 4 : ParseWarningLevel(warningLevel);
 
-        return int.TryParse(warningLevel, NumberStyles.None, CultureInfo.InvariantCulture, out int level)
+    private static int ParseWarningLevel(string warningLevel) =>
+        int.TryParse(warningLevel, NumberStyles.None, CultureInfo.InvariantCulture, out int level)
             ? level
             : throw new UnsupportedConstructException($"the WarningLevel '{warningLevel}', which is not a number");
-    }
 
+    /// <summary>A bare warning number is a C# one, as the compiler's command line reads it: <c>1591</c> is <c>CS1591</c>.</summary>
     private static string DiagnosticId(string id) =>
         int.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out int number) ? "CS" + number.ToString("0000", CultureInfo.InvariantCulture) : id;
 

@@ -81,42 +81,25 @@ internal sealed class MsBuildCondition
         };
     }
 
-    private static bool Equal(string left, string right)
-    {
-        if (Number(left) is { } l && Number(right) is { } r)
-        {
-            return l.CompareTo(r) == 0;
-        }
+    private static bool Equal(string left, string right) =>
+        Number(left) is { } l && Number(right) is { } r ? l.CompareTo(r) == 0 : EqualBooleans(left, right);
 
-        if (Boolean(left) is { } lb && Boolean(right) is { } rb)
-        {
-            return lb == rb;
-        }
+    private static bool EqualBooleans(string left, string right) =>
+        Boolean(left) is { } lb && Boolean(right) is { } rb ? lb == rb : string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 
-        return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
-    }
+    private static int Order(string left, string op, string right) =>
+        Number(left) is { } ln && Number(right) is { } rn ? ln.CompareTo(rn) : OrderVersions(left, op, right);
 
-    private static int Order(string left, string op, string right)
-    {
-        if (Number(left) is { } ln && Number(right) is { } rn)
-        {
-            return ln.CompareTo(rn);
-        }
-
-        return Version.TryParse(left, out Version? lv) && Version.TryParse(right, out Version? rv)
+    private static int OrderVersions(string left, string op, string right) =>
+        Version.TryParse(left, out Version? lv) && Version.TryParse(right, out Version? rv)
             ? lv.CompareTo(rv)
             : throw new UnsupportedConstructException($"a comparison of '{left}' {op} '{right}', which are neither numbers nor versions");
-    }
 
-    private static double? Number(string text)
-    {
-        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && long.TryParse(text.AsSpan(2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out long hex))
-        {
-            return hex;
-        }
+    private static double? Number(string text) =>
+        text.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && long.TryParse(text.AsSpan(2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out long hex) ? hex : DecimalNumber(text);
 
-        return double.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out double number) ? number : null;
-    }
+    private static double? DecimalNumber(string text) =>
+        double.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out double number) ? number : null;
 
     private static bool? Boolean(string text) => text.ToUpperInvariant() switch
     {
@@ -201,38 +184,20 @@ internal sealed class MsBuildCondition
             : throw Unsupported();
 
     /// <summary>A quoted operand without its quotes; an unterminated quote is a syntax error.</summary>
-    private string Unquote(string token)
-    {
-        if (!token.StartsWith('\''))
-        {
-            return token;
-        }
+    private string Unquote(string token) => !token.StartsWith('\'') ? token : UnquoteQuoted(token);
 
-        return token.Length > 1 && token.EndsWith('\'') ? token[1..^1] : throw Unsupported();
-    }
+    private string UnquoteQuoted(string token) => token.Length > 1 && token.EndsWith('\'') ? token[1..^1] : throw Unsupported();
 
     private UnsupportedConstructException Unsupported() => new($"a condition outside the supported grammar: \"{_text}\"");
 
-    private static int TokenLength(string text, int i)
+    private static int TokenLength(string text, int i) => text[i] switch
     {
-        char c = text[i];
-        if (char.IsWhiteSpace(c) || c is '(' or ')' or ',')
-        {
-            return 1;
-        }
-
-        if (c == '\'')
-        {
-            return QuotedLength(text, i);
-        }
-
-        if (c is '=' or '!' or '<' or '>')
-        {
-            return i + 1 < text.Length && text[i + 1] == '=' ? 2 : 1;
-        }
-
-        return c == '$' && i + 1 < text.Length && text[i + 1] == '(' ? PropertyLength(text, i) : WordLength(text, i);
-    }
+        var c when char.IsWhiteSpace(c) || c is '(' or ')' or ',' => 1,
+        '\'' => QuotedLength(text, i),
+        '=' or '!' or '<' or '>' => i + 1 < text.Length && text[i + 1] == '=' ? 2 : 1,
+        '$' when i + 1 < text.Length && text[i + 1] == '(' => PropertyLength(text, i),
+        _ => WordLength(text, i),
+    };
 
     private static List<string> Tokenize(string text)
     {

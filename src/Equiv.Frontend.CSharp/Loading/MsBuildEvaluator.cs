@@ -280,15 +280,11 @@ internal sealed class MsBuildEvaluator
         return null;
     }
 
-    private static string? CreatedItemType(XElement element)
-    {
-        if (string.Equals(element.Name.LocalName, "Output", StringComparison.Ordinal))
-        {
-            return element.Attribute("ItemName")?.Value;
-        }
+    private static string? CreatedItemType(XElement element) =>
+        string.Equals(element.Name.LocalName, "Output", StringComparison.Ordinal) ? element.Attribute("ItemName")?.Value : ItemGroupItemType(element);
 
-        return string.Equals(element.Parent!.Name.LocalName, "ItemGroup", StringComparison.Ordinal) && element.Attribute("Include") is not null ? element.Name.LocalName : null;
-    }
+    private static string? ItemGroupItemType(XElement element) =>
+        string.Equals(element.Parent!.Name.LocalName, "ItemGroup", StringComparison.Ordinal) && element.Attribute("Include") is not null ? element.Name.LocalName : null;
 
     private static void CheckTarget(XElement target)
     {

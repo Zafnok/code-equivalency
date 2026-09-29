@@ -89,15 +89,9 @@ internal static class PureCatalogue
     private static ImmutableArray<string> None => [];
 
     /// <summary>What <c>+ - * / %</c> can raise: only <c>decimal</c> throws, and only <c>/</c> and <c>%</c> divide by zero.</summary>
-    private static ImmutableArray<string> ArithmeticThrows(bool isDecimal, bool divides)
-    {
-        if (!isDecimal)
-        {
-            return [];
-        }
+    private static ImmutableArray<string> ArithmeticThrows(bool isDecimal, bool divides) => isDecimal ? DecimalThrows(divides) : [];
 
-        return divides ? [DivideByZero, Overflow] : [Overflow];
-    }
+    private static ImmutableArray<string> DecimalThrows(bool divides) => divides ? [DivideByZero, Overflow] : [Overflow];
 
     private static ImmutableArray<string> OverflowOnly => [Overflow];
 
