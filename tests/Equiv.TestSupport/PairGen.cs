@@ -104,7 +104,8 @@ public static class PairGen
     }
 
     public static Gen<PairInput> Input { get; } =
-        Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, Int, Array, static (a, b, c, d, e, s, f, u) => new PairInput(a, b, c, d, e, s, f, u));
+        Gen.Select(Int, Int, Long, Long, Gen.Bool, Gen.Bool, Int, Array)
+            .Select(static t => new PairInput(t.Item1, t.Item2, t.Item3, t.Item4, t.Item5, t.Item6, t.Item7, t.Item8));
 
     /// <summary>Whether <paramref name="op"/> is in the preserving family: the two methods behave the same on every input.</summary>
     public static bool IsPreserving(MutationOperator op) => SyntaxMutator.IsPreserving(op);

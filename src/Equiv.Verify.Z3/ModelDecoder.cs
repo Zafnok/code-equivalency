@@ -70,7 +70,7 @@ internal sealed class ModelDecoder
         (Counterexample counterexample, ModelOracle oldOracle, ModelOracle newOracle) = ReplayBoth(context, model, encoding, old, @new);
         (IrInputs inputs, IrRun oldRun, IrRun newRun) = counterexample;
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
-        return EnsureDiverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls, oldOracle.Threaded, newOracle.Threaded) == Difference.Real
+        return EnsureDiverges(new(old, oldRun, oldOracle.Threaded), new(@new, newRun, newOracle.Threaded), shared, inputs, encoding.Calls) == Difference.Real
             ? new Divergent(counterexample)
             : Unknown.DependingOn(counterexample, [.. Abstractions(Codebase.Legacy, oldRun), .. Abstractions(Codebase.Modern, newRun)]);
     }
@@ -113,68 +113,41 @@ internal sealed class ModelDecoder
         IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, stepBudget);
         IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, stepBudget);
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
-        return complete && Diverges(old, @new, shared, inputs, oldRun, newRun, encoding.Calls, oldOracle.Threaded, newOracle.Threaded) ? new Counterexample(inputs, oldRun, newRun) : null;
+        return complete && Diverges(new(old, oldRun, oldOracle.Threaded), new(@new, newRun, newOracle.Threaded), shared, inputs, encoding.Calls) ? new Counterexample(inputs, oldRun, newRun) : null;
     }
 
     /// <summary>
     /// A model whose replay agrees on every compared observable is an encoder bug: fail loudly, never report it as
     /// Divergent. Otherwise returns how the runs differ.
     /// </summary>
-    public static Difference EnsureDiverges(
-        IrProcedure old,
-        IrProcedure @new,
-        ImmutableArray<SharedParameter> shared,
-        IrInputs inputs,
-        IrRun oldRun,
-        IrRun newRun,
-        TraceEncoder calls,
-        IReadOnlyDictionary<HeapMap, IrValue>? oldThreaded = null,
-        IReadOnlyDictionary<HeapMap, IrValue>? newThreaded = null)
+    public static Difference EnsureDiverges(Replayed old, Replayed @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, TraceEncoder calls)
     {
-        Difference difference = Compare(old, @new, shared, inputs, oldRun, newRun, calls, oldThreaded, newThreaded);
+        Difference difference = Compare(old, @new, shared, inputs, calls);
         return difference != Difference.None
             ? difference
             : throw new InvalidOperationException(
-                $"Encoder bug: the solver found a divergence between {old.Identity.Value} and {@new.Identity.Value}, but the replay does not diverge. "
-                + $"Inputs: {string.Join(", ", shared.Select((s, i) => $"{s.Var.Name}={inputs.Arguments[i]}"))}. Old: {Describe(oldRun)}. New: {Describe(newRun)}.");
+                $"Encoder bug: the solver found a divergence between {old.Procedure.Identity.Value} and {@new.Procedure.Identity.Value}, but the replay does not diverge. "
+                + $"Inputs: {string.Join(", ", shared.Select((s, i) => $"{s.Var.Name}={inputs.Arguments[i]}"))}. Old: {Describe(old.Run)}. New: {Describe(@new.Run)}.");
     }
 
     /// <summary>True when the two runs differ in an observable the encoder compares that is untainted on both sides.</summary>
-    public static bool Diverges(
-        IrProcedure old,
-        IrProcedure @new,
-        ImmutableArray<SharedParameter> shared,
-        IrInputs inputs,
-        IrRun oldRun,
-        IrRun newRun,
-        TraceEncoder calls,
-        IReadOnlyDictionary<HeapMap, IrValue>? oldThreaded = null,
-        IReadOnlyDictionary<HeapMap, IrValue>? newThreaded = null) =>
-        Compare(old, @new, shared, inputs, oldRun, newRun, calls, oldThreaded, newThreaded) == Difference.Real;
+    public static bool Diverges(Replayed old, Replayed @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, TraceEncoder calls) =>
+        Compare(old, @new, shared, inputs, calls) == Difference.Real;
 
     /// <summary>
     /// How the two runs differ on the observables the encoder compares: outcome, call trace (legacy identities renamed
     /// through the call-identity map), and the final value of each by-ref shared input (<paramref name="shared"/>,
     /// valued by <paramref name="inputs"/>), a side without that parameter standing for the version its oracle threaded
-    /// through its calls (<paramref name="oldThreaded"/>, <paramref name="newThreaded"/>; ticket P1-005) or else its unchanged
+    /// through its calls (<see cref="Replayed.Threaded"/>; ticket P1-005) or else its unchanged
     /// input. A difference is real when some differing observable is untainted on both sides (ADR 0026). Two returned values
     /// compare by the values' taint, any other outcome difference by the path's. A threaded version is tainted once the run
     /// reached an abstraction. The trace compares its first differing event only,
     /// since control taint can shift every later position.
     /// </summary>
-    public static Difference Compare(
-        IrProcedure old,
-        IrProcedure @new,
-        ImmutableArray<SharedParameter> shared,
-        IrInputs inputs,
-        IrRun oldRun,
-        IrRun newRun,
-        TraceEncoder calls,
-        IReadOnlyDictionary<HeapMap, IrValue>? oldThreaded = null,
-        IReadOnlyDictionary<HeapMap, IrValue>? newThreaded = null)
+    public static Difference Compare(Replayed old, Replayed @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, TraceEncoder calls)
     {
-        Replayed oldSide = new(old, oldRun, oldThreaded ?? ImmutableDictionary<HeapMap, IrValue>.Empty);
-        Replayed newSide = new(@new, newRun, newThreaded ?? ImmutableDictionary<HeapMap, IrValue>.Empty);
+        IrRun oldRun = old.Run;
+        IrRun newRun = @new.Run;
         List<bool> tainted = [];
         if (oldRun.Outcome != newRun.Outcome)
         {
@@ -194,8 +167,8 @@ internal sealed class ModelDecoder
 
         tainted.AddRange(shared
             .Select((s, i) => (Shared: s, Input: inputs.Arguments[i]))
-            .Where(s => s.Shared.ByRef && oldSide.Final(s.Shared.Old, s.Shared.Var, s.Input) != newSide.Final(s.Shared.New, s.Shared.Var, s.Input))
-            .Select(s => oldSide.FinalTainted(s.Shared.Old, s.Shared.Var) || newSide.FinalTainted(s.Shared.New, s.Shared.Var)));
+            .Where(s => s.Shared.ByRef && old.Final(s.Shared.Old, s.Shared.Var, s.Input) != @new.Final(s.Shared.New, s.Shared.Var, s.Input))
+            .Select(s => old.FinalTainted(s.Shared.Old, s.Shared.Var) || @new.FinalTainted(s.Shared.New, s.Shared.Var)));
 
         return tainted switch
         {
@@ -441,9 +414,15 @@ internal sealed class ModelDecoder
         private static bool Is(HeapMap map, IrHeapSlice slice) => string.Equals(map.Name, slice.Map, StringComparison.Ordinal) && map.Type == slice.Value.Type;
     }
 
-    /// <summary>One replayed side: its procedure, its run and the heap versions its oracle threaded (ticket P1-005).</summary>
-    private sealed record Replayed(IrProcedure Procedure, IrRun Run, IReadOnlyDictionary<HeapMap, IrValue> Threaded)
+    /// <summary>
+    /// One replayed side: its procedure, its run and the heap versions its oracle threaded (ticket P1-005), none when
+    /// <paramref name="Threaded"/> is null.
+    /// </summary>
+    public sealed record Replayed(IrProcedure Procedure, IrRun Run, IReadOnlyDictionary<HeapMap, IrValue>? Threaded = null)
     {
+        /// <summary>The heap versions the side's oracle threaded through its calls.</summary>
+        public IReadOnlyDictionary<HeapMap, IrValue> Threaded { get; } = Threaded ?? ImmutableDictionary<HeapMap, IrValue>.Empty;
+
         /// <summary>
         /// Whether a version threaded through <paramref name="run"/>'s calls may depend on an abstraction: once the run has
         /// reached one, since every taint, a tainted branch's included, starts at one.
