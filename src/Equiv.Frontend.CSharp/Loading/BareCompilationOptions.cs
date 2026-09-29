@@ -18,9 +18,7 @@ internal static class BareCompilationOptions
     public static CSharpParseOptions Parse(MsBuildProperties properties)
     {
         string langVersion = properties.Read("LangVersion").Trim();
-        LanguageVersion version = langVersion.Length == 0 ? LanguageVersion.CSharp7_3
-            : LanguageVersionFacts.TryParse(langVersion, out LanguageVersion parsed) ? parsed
-            : throw new UnsupportedConstructException($"the LangVersion '{langVersion}', which is not a C# language version");
+        LanguageVersion version = LanguageVersionOf(langVersion);
         return new CSharpParseOptions(
             version,
             properties.Read("DocumentationFile").Trim().Length > 0 ? DocumentationMode.Diagnose : DocumentationMode.Parse,
@@ -73,9 +71,7 @@ internal static class BareCompilationOptions
             allowUnsafe: properties.IsTrue("AllowUnsafeBlocks"),
             platform: platform,
             generalDiagnosticOption: properties.IsTrue("TreatWarningsAsErrors") ? ReportDiagnostic.Error : ReportDiagnostic.Default,
-            warningLevel: warningLevel.Length == 0 ? 4
-                : int.TryParse(warningLevel, NumberStyles.None, CultureInfo.InvariantCulture, out int level) ? level
-                : throw new UnsupportedConstructException($"the WarningLevel '{warningLevel}', which is not a number"),
+            warningLevel: WarningLevelOf(warningLevel),
             specificDiagnosticOptions: specific,
             deterministic: properties.IsTrue("Deterministic"),
             nullableContextOptions: properties.Read("Nullable").Trim().ToUpperInvariant() switch
@@ -87,6 +83,22 @@ internal static class BareCompilationOptions
             },
             assemblyIdentityComparer: DesktopAssemblyIdentityComparer.Default);
     }
+
+    private static LanguageVersion LanguageVersionOf(string langVersion) =>
+        langVersion.Length == 0 ? LanguageVersion.CSharp7_3 : ParseLanguageVersion(langVersion);
+
+    private static LanguageVersion ParseLanguageVersion(string langVersion) =>
+        LanguageVersionFacts.TryParse(langVersion, out LanguageVersion parsed)
+            ? parsed
+            : throw new UnsupportedConstructException($"the LangVersion '{langVersion}', which is not a C# language version");
+
+    private static int WarningLevelOf(string warningLevel) =>
+        warningLevel.Length == 0 ? 4 : ParseWarningLevel(warningLevel);
+
+    private static int ParseWarningLevel(string warningLevel) =>
+        int.TryParse(warningLevel, NumberStyles.None, CultureInfo.InvariantCulture, out int level)
+            ? level
+            : throw new UnsupportedConstructException($"the WarningLevel '{warningLevel}', which is not a number");
 
     /// <summary>A bare warning number is a C# one, as the compiler's command line reads it: <c>1591</c> is <c>CS1591</c>.</summary>
     private static string DiagnosticId(string id) =>

@@ -88,12 +88,18 @@ internal static class AssemblyReferences
         IEnumerable<string> designTime = !IsFalse(properties, "ImplicitlyExpandDesignTimeFacades") && Directory.Exists(facades) && DependsOn(roots, "System.Runtime", frameworkDirectory)
             ? Directory.EnumerateFiles(facades, "*.dll").Order(StringComparer.Ordinal)
             : [];
-        IEnumerable<string> netStandard = IsFalse(properties, "ImplicitlyExpandNETStandardFacades") || frameworkVersion < DotNet461 || !DependsOn(roots, "netstandard", frameworkDirectory) ? []
-            : frameworkVersion >= DotNet471 ? [.. ProjectPath.Resolve(facades, "netstandard.dll") is { } netstandardFacade ? [netstandardFacade] : Array.Empty<string>()]
-            : netStandardShims is null ? []
-            : Directory.EnumerateFiles(netStandardShims, "*.dll").Order(StringComparer.Ordinal);
-        return designTime.Concat(netStandard);
+        bool expandNetStandard = !IsFalse(properties, "ImplicitlyExpandNETStandardFacades") && frameworkVersion >= DotNet461 && DependsOn(roots, "netstandard", frameworkDirectory);
+        return designTime.Concat(expandNetStandard ? NetStandardFacades(facades, frameworkVersion, netStandardShims) : []);
     }
+
+    private static IEnumerable<string> NetStandardFacades(string facades, Version frameworkVersion, string? netStandardShims) =>
+        frameworkVersion >= DotNet471 ? NetStandardFacade(facades) : NetStandardShimFiles(netStandardShims);
+
+    private static IEnumerable<string> NetStandardFacade(string facades) =>
+        ProjectPath.Resolve(facades, "netstandard.dll") is { } netstandardFacade ? [netstandardFacade] : [];
+
+    private static IEnumerable<string> NetStandardShimFiles(string? netStandardShims) =>
+        netStandardShims is null ? [] : Directory.EnumerateFiles(netStandardShims, "*.dll").Order(StringComparer.Ordinal);
 
     private static bool IsFalse(MsBuildProperties properties, string name) => properties.Read(name).Trim().Equals("false", StringComparison.OrdinalIgnoreCase);
 

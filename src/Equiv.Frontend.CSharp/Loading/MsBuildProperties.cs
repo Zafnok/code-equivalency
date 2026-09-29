@@ -45,11 +45,12 @@ internal sealed class MsBuildProperties
         _environment = environment;
     }
 
-    public PropertyValue this[string name] =>
-        _values.TryGetValue(name, out PropertyValue? value) ? value
-        : ToolPaths.Contains(name) ? new PropertyValue(string.Empty, $"MSBuild's tool path $({name})", ToolPath: true)
-        : _environment(name) is { } variable ? new PropertyValue(variable)
-        : PropertyValue.Empty;
+    public PropertyValue this[string name] => _values.TryGetValue(name, out PropertyValue? value) ? value : ToolPathOrEnvironment(name);
+
+    private PropertyValue ToolPathOrEnvironment(string name) =>
+        ToolPaths.Contains(name) ? new PropertyValue(string.Empty, $"MSBuild's tool path $({name})", ToolPath: true) : FromEnvironment(name);
+
+    private PropertyValue FromEnvironment(string name) => _environment(name) is { } variable ? new PropertyValue(variable) : PropertyValue.Empty;
 
     /// <summary>Sets a property the project defines; a global property keeps its value.</summary>
     public void Set(string name, PropertyValue value)
@@ -106,10 +107,11 @@ internal sealed class MsBuildProperties
             i = end + 1;
         }
 
-        return unsupported is not null ? PropertyValue.Poisoned(unsupported)
-            : toolPath ? new PropertyValue(expanded.ToString(), $"MSBuild's tool path in '{text}'", ToolPath: true)
-            : new PropertyValue(expanded.ToString());
+        return unsupported is not null ? PropertyValue.Poisoned(unsupported) : Expanded(expanded.ToString(), toolPath, text);
     }
+
+    private static PropertyValue Expanded(string expanded, bool toolPath, string text) =>
+        toolPath ? new PropertyValue(expanded, $"MSBuild's tool path in '{text}'", ToolPath: true) : new PropertyValue(expanded);
 
     /// <summary>MSBuild's <c>%XX</c> escapes, decoded.</summary>
     public static string Unescape(string text)
@@ -140,10 +142,12 @@ internal sealed class MsBuildProperties
     {
         string name = inner.Trim();
         return name.StartsWith('[') || name.Contains('.', StringComparison.Ordinal) || name.Contains('(', StringComparison.Ordinal)
-                ? PropertyValue.Poisoned($"the property function $({inner})")
-            : name.Contains(':', StringComparison.Ordinal) ? PropertyValue.Poisoned($"the registry property $({inner})")
-            : this[name];
+            ? PropertyValue.Poisoned($"the property function $({inner})")
+            : RegistryOrProperty(name, inner);
     }
+
+    private PropertyValue RegistryOrProperty(string name, string inner) =>
+        name.Contains(':', StringComparison.Ordinal) ? PropertyValue.Poisoned($"the registry property $({inner})") : this[name];
 
     /// <summary>The index of the parenthesis that closes the one at <paramref name="open"/>, or -1.</summary>
     private static int Close(string text, int open)
