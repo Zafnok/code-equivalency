@@ -71,7 +71,7 @@ public sealed class TypeMapperTests
     };
 
     [Theory]
-    [MemberData(nameof(Defaults))]
+    [MemberData(nameof(Defaults), DisableDiscoveryEnumeration = true)]
     public void DefaultIsTheConstantOfADefault(string type, IrValue expected) =>
         Assert.Equal(expected, TypeMapper.Default(TypeOf(type), TypeMapper.Unmapped));
 

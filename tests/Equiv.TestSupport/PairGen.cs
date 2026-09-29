@@ -124,14 +124,18 @@ public static class PairGen
 
     private static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Pairs(Gen<Method> methods) =>
         Gen.Enum<MutationOperator>().SelectMany(op =>
-            (IsCleanup(op) ? WithCleanup(methods, op) : methods).Select(Rendered).Where(t => SyntaxMutator.Sites(op, t.Method) > 0).SelectMany(t =>
-                Gen.Int[0, SyntaxMutator.Sites(op, t.Method) - 1].Select(site =>
-                {
-                    MethodDeclarationSyntax mutated = SyntaxMutator.Apply(op, t.Method, site)!;
-                    string mutant = t.Root.ReplaceNode(t.Method, mutated).ToFullString();
-                    // The introduced temporary is on the legacy side when the operator inlines it.
-                    return op == MutationOperator.InlineTemporary ? (mutant, t.Source, op) : (t.Source, mutant, op);
-                })));
+            (IsCleanup(op) ? WithCleanup(methods, op) : methods).Select(Rendered).Where(t => SyntaxMutator.Sites(op, t.Method) > 0).SelectMany(t => Mutants(op, t)));
+
+    /// <summary>One mutant of <paramref name="rendered"/> per <paramref name="op"/> site; a named method so the lambdas in <see cref="Pairs"/> bind once (CS9236).</summary>
+    private static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Mutants(
+        MutationOperator op, (string Source, SyntaxNode Root, MethodDeclarationSyntax Method) rendered) =>
+        Gen.Int[0, SyntaxMutator.Sites(op, rendered.Method) - 1].Select(site =>
+        {
+            MethodDeclarationSyntax mutated = SyntaxMutator.Apply(op, rendered.Method, site)!;
+            string mutant = rendered.Root.ReplaceNode(rendered.Method, mutated).ToFullString();
+            // The introduced temporary is on the legacy side when the operator inlines it.
+            return op == MutationOperator.InlineTemporary ? (mutant, rendered.Source, op) : (rendered.Source, mutant, op);
+        });
 
     /// <summary>Renders <paramref name="method"/> and parses it back so <see cref="SyntaxMutator"/> can work on its Roslyn syntax.</summary>
     private static (string Source, SyntaxNode Root, MethodDeclarationSyntax Method) Rendered(Method method)
