@@ -30,6 +30,7 @@
     ./tools/corpus/corpus.ps1 -Select -Count 3
     ./tools/corpus/corpus.ps1 -Fetch gitextensions-8522
     ./tools/corpus/corpus.ps1 -RuntimeDiff gitextensions-8522 -Top 200
+    ./tools/corpus/corpus.ps1 -RuntimeDiff gitextensions-8522 -Top all   # every external callee (P2-051)
     ./tools/corpus/corpus.ps1 -Fetch madelson/DistributedLock
     ./tools/corpus/corpus.ps1 -PrepareAgent madelson/DistributedLock
     ./tools/corpus/corpus.ps1 -Unchanged gitextensions-8522
@@ -84,10 +85,11 @@ param(
     [Parameter(ParameterSetName = 'Progress')] [switch]$Summary,
 
     # ADR 0035 decision 1 (M3-033): runs tools/runtime-diff on the union of both sides' top-N
-    # externalCallees from a pair's most recent census SARIF. Reports land under
-    # .corpus/runs/<slug>/runtime-diff/, never under .corpus/pairs/ (that tree is census input, not output).
+    # externalCallees from a pair's most recent census SARIF; -Top all takes every one (P2-051). Reports
+    # land under .corpus/runs/<slug>/runtime-diff/, never under .corpus/pairs/ (that tree is census input,
+    # not output). A member whose report is already there is not run again, so a long run resumes.
     [Parameter(ParameterSetName = 'RuntimeDiff', Mandatory)] [string]$RuntimeDiff,
-    [Parameter(ParameterSetName = 'RuntimeDiff')] [int]$Top = 200,
+    [Parameter(ParameterSetName = 'RuntimeDiff')] [ValidatePattern('^(all|[1-9][0-9]*)$')] [string]$Top = '200',
 
     # Re-download the Poly-MigrationBench .NET list and report what changed. Writes only with -Apply.
     [Parameter(ParameterSetName = 'Refresh', Mandatory)] [switch]$Refresh,
@@ -761,8 +763,9 @@ switch ($PSCmdlet.ParameterSetName) {
         # A generic method's identity carries an equiv-only <T1,T2> instantiation suffix (CallIdentityFactory);
         # runtime-diff resolves --member against real Roslyn symbols and knows nothing of it.
         $strip = { param($m) $m -replace '<[^>]*>$', '' }
-        $legacyTop = @($census.externalCallees.legacy | Select-Object -First $Top | ForEach-Object { & $strip $_.member })
-        $modernTop = @($census.externalCallees.modern | Select-Object -First $Top | ForEach-Object { & $strip $_.member })
+        $first = if ($Top -eq 'all') { [int]::MaxValue } else { [int]$Top }
+        $legacyTop = @($census.externalCallees.legacy | Select-Object -First $first | ForEach-Object { & $strip $_.member })
+        $modernTop = @($census.externalCallees.modern | Select-Object -First $first | ForEach-Object { & $strip $_.member })
         $members = @($legacyTop + $modernTop | Sort-Object -Unique)
         Show-Step ("members {0} distinct (top {1} of {2} legacy, top {1} of {3} modern)" -f
             $members.Count, $Top, $legacyTop.Count, $modernTop.Count)
@@ -786,6 +789,7 @@ switch ($PSCmdlet.ParameterSetName) {
                 $index++
                 $safe = ($member -replace '[^A-Za-z0-9_.-]', '_')
                 $out = Join-Path $outDir "$safe.json"
+                if (Test-Path -LiteralPath $out) { continue }
                 Show-Step ("[{0}/{1}] runtime-diff --member `"{2}`"" -f $index, $members.Count, $member)
                 dotnet run --project $runtimeDiffProject -c Release --no-build -- --member $member --seed 0 --cases 64 --out $out 2>&1 |
                     ForEach-Object { "$_" } | ForEach-Object { Show-Step "  $_" }
