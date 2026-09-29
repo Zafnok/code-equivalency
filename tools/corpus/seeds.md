@@ -34,3 +34,19 @@ Equivalent is a soundness bug and preempts all other work.
 | S08 | A thrown exception type changes (`ArgumentException` to `InvalidOperationException`) | Exception type is observable; the message is not. |
 | S09 | A field or property write is deleted | The final heap is observable (ADR 0018). |
 | S10 | `x.ToString()` on a number becomes `x.ToString(CultureInfo.InvariantCulture)` | Common analyzer-driven edit that changes output under a non-invariant culture. |
+
+## Mechanical operators, Preserving family
+
+`corpus.ps1 -SeedMechanical` (ticket M4-010) also seeds with the M0-012 mutation operators in
+`tools/corpus/seeder`. The Preserving family changes no behaviour by construction, so a Divergent
+verdict on one of these seeds is a precision bug. The M0-012 six are `RenameLocals`,
+`ReorderIndependentStatements`, `InvertIf`, `Commute`, `IntroduceTemporary` and `InlineTemporary`.
+Ticket P2-048 adds five cleanup refactorings. Their Equivalent share is the cleanup proof rate:
+
+| Operator | Rewrite |
+|---|---|
+| `IfToConditional` | `if (c) x = a; else x = b;` to `x = c ? a : b;` (and two `return`s to one), for a local or parameter `x` and `a`, `b` of exactly its type. |
+| `CoalesceNullCheck` | `x != null ? x : y` or `x == null ? y : x` to `x ?? y`, for a reference-typed local or parameter `x`, a `y` of its type and no user-defined `==`. |
+| `ConcatToInterpolation` | A `+` chain of `string` operands to one interpolated string. It is not applied to a chain that folds to a constant. |
+| `GuardClause` | A `void` method's last statement `if (c) { S }`, with no `else`, to `if (!c) return;` then `S`, for a `bool` `c`. |
+| `ForToForeach` | `for (int i = 0; i < a.Length; i++)` over an array `a` the body never writes, where `i` appears only as `a[i]` reads, to `foreach (var item in a)`. |

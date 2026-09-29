@@ -173,7 +173,9 @@ naming the same item with a growing time.
     hand-written seed is (criterion 3 of M4-007's own acceptance criteria): write it up as
     `P2-nnn-soundness-<slug>.md` and stop to show the user before doing anything else with this run.
   - **Divergent, operator in the `Preserving` family** (`RenameLocals`, `ReorderIndependentStatements`,
-    `InvertIf`, `Commute`, `IntroduceTemporary`, `InlineTemporary`): a precision bug, not a soundness
+    `InvertIf`, `Commute`, `IntroduceTemporary`, `InlineTemporary`, and P2-048's cleanup operators
+    `IfToConditional`, `CoalesceNullCheck`, `ConcatToInterpolation`, `GuardClause`, `ForToForeach`;
+    `tools/corpus/seeds.md` lists them): a precision bug, not a soundness
     one — the two methods behave identically by construction, so a Divergent verdict is `equiv`
     wrongly disagreeing. File it as an ordinary precision ticket, not a `P2-nnn-soundness-` one.
 
@@ -252,6 +254,17 @@ Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | ownin
   (n/a if that denominator is 0)
 - Unconfirmed list size: <n> (procedure identities only, in `.corpus/`'s own seeds.json; never
   quoted here)
+
+Preserving family, one row per operator seeds.json records (ticket P2-048):
+
+| Operator | Applied | Equivalent | Unknown (reason: n, ...) | Divergent |
+|---|---|---|---|---|
+| RenameLocals | <n> | <n> | <n> (<reason>: <n>, ...) | <n> |
+| ... one row each for ReorderIndependentStatements, InvertIf, Commute, IntroduceTemporary, InlineTemporary, IfToConditional, CoalesceNullCheck, ConcatToInterpolation, GuardClause, ForToForeach | | | | |
+
+- Cleanup proof rate: Equivalent / applied, over the five cleanup operators (`IfToConditional`,
+  `CoalesceNullCheck`, `ConcatToInterpolation`, `GuardClause`, `ForToForeach`): <n>/<n>. Reported
+  only; no threshold.
 
 ## Findings
 One line each, with the ticket it became (`P2-nnn`, or an existing ticket id).

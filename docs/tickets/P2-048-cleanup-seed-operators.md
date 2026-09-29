@@ -68,3 +68,30 @@ Running the corpus (P2-046 or a later run picks this up). Engine fixes for what 
 New corpus pairs.
 
 ## Notes
+- Decision: the cleanup operators' type guards (exact target type, `string` operands, array) use a
+  semantic model. `SyntaxMutator` binds the method's own file against the BCL references that
+  `CompileCheck` already uses, and does so only after a syntactic shape matches. On corpus code,
+  a type that does not resolve becomes an error type, so it offers no site. That is conservative:
+  fewer sites, never a wrong one.
+- Decision: the guards are stricter than the ticket's minimum wherever meaning could change
+  unseen. `CoalesceNullCheck` needs a reference type and the built-in or `string` null test, because
+  `??` never calls a user-defined `==`. `GuardClause` needs a `bool` condition, and no name that `S`
+  declares may appear elsewhere in the method. `ForToForeach` refuses when `a` is captured by a
+  lambda, is taken by `ref`, or when `i` sits inside a lambda. It also refuses a member access on a
+  value-type element, which could mutate the element in place where the item is a copy.
+  `ConcatToInterpolation` refuses constant chains and multi-line operands, which older language
+  versions cannot put in an interpolation.
+- Decision: PairGen gives each cleanup operator methods that contain the construct it rewrites
+  (`WithCleanup`), because the base generator never makes most of them (a string local, an `if`
+  with no `else`, a `u.Length` loop). Only the cleanup operators draw from those methods, so the
+  other operators' pairs are generated as before. `GuardClause` draws only `void` methods: with
+  one generic cleanup mix its site rate fell to about 1 in 30, and CsCheck's `Where` then gave up
+  ("Failing Where max count") on some seeds.
+- Decision: `PairRuntime.Decode` replays a model's array at the model's own length, up to 64.
+  Before, it truncated to 3, which was safe only while no generated method read `u.Length`.
+- Decision: `PairGenLoweringTests.EveryGeneratedSideLowersWithoutOpaque` now tolerates exactly
+  one opaque, reason `InterpolatedString`, and only on `ConcatToInterpolation` pairs.
+  IOPERATION-COVERAGE marks interpolated strings opaque by design, so every one of those pairs is
+  Unknown, never Divergent. Its cleanup proof rate will be 0 until interpolation lowers.
+- `PreservingMutationIsNeverDivergent` stayed green with all five operators in the draw, so no
+  precision ticket was filed and every operator is in the gate.
