@@ -55,12 +55,9 @@ internal static class ReplayArguments
             }
         }
 
-        foreach (IrParameter parameter in @new.Parameters)
+        if (@new.Parameters.Any(parameter => !newValues.ContainsKey(parameter.Var.Name) && !Take(values, parameter, newValues)))
         {
-            if (!newValues.ContainsKey(parameter.Var.Name) && !Take(values, parameter, newValues))
-            {
-                return null;
-            }
+            return null;
         }
 
         return values.Count == 0 ? (oldValues, newValues) : null;
