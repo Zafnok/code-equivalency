@@ -34,7 +34,7 @@ internal sealed class FakeFrontend(
         AnalyzeCallCount++;
         return throwOnAnalyze is not null
             ? throw throwOnAnalyze
-            : new FrontendAnalysis(matchResult ?? new MatchResult([], [], [], []), lines ?? new AnalysedLines(0, 0)) 
+            : new FrontendAnalysis(matchResult ?? new MatchResult([], [], [], []), lines ?? new AnalysedLines(0, 0))
             {
                 LegacyNotBuilt = [.. legacyNotBuilt ?? []],
                 LegacyRuntimes = [.. legacyRuntimes ?? []],

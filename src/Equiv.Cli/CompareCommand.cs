@@ -271,7 +271,7 @@ internal static class CompareCommand
 
     /// <summary>The run's property bag (ADR 0027; tickets M3-014, P2-013, P2-053).</summary>
     private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census) =>
-        new Dictionary<string, object>(StringComparer.Ordinal)
+        new(StringComparer.Ordinal)
         {
             ["loweringCensus"] = census.ToProperty(),
             ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
