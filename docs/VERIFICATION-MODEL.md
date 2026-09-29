@@ -586,6 +586,22 @@ never opened, so they are neither loaded nor skipped, and every run names them o
 projects loaded over C# projects built: skipped projects count against it, projects not built do
 not (ticket P2-013).
 
+Every loaded project has a runtime, read from each side and never assumed (ADR 0040 decision 1;
+ticket P2-053). A project's runtime is its compilation's `TargetFrameworkAttribute`: .NET Framework
+4.x or .NET (Core), ordered with every .NET Framework version before every .NET (Core) version. A
+multi-targeted project is the flavour that is analysed, its last (P2-016). A `netstandard` project,
+or one whose target framework is neither, runs on its hosts: the executable and test projects on
+the same side that reference it, directly or transitively. A test project is one that references
+xunit, NUnit or MSTest. With no host it takes the side's `runtimes` entry from `equiv.config.json`,
+`"runtimes": { "legacy": "<tfm>", "modern": "<tfm>" }`, where each value is a .NET Framework or .NET
+target framework as a moniker (`.NETFramework,Version=v4.8`) or a short name (`net48`, `net8.0`);
+anything else is `CFG009`. Otherwise it is unhosted and keeps its own target framework
+(`netstandard2.0`, or `unknown` without the attribute). Every run lists the result in
+`run.properties.runtimes` (`legacy`, `modern`): one `{ project, runtime, source }` per loaded
+project, by assembly name, where `source` is `attribute`, `host`, `config` or `unhosted`. A project
+with several hosts on different runtimes lists them all in `runtime`, in runtime order, separated
+by `, `. Nothing uses the runtime yet.
+
 Counts in the census are per lowered body of a matched pair. `procedures` counts, per side, the
 matched pairs plus the removed (legacy) or added (modern) procedures. `opaqueByReason` counts the
 bodies on each side that hold at least one `IrOpaque` with that reason, sorted by reason. A body is

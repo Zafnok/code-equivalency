@@ -210,8 +210,8 @@ internal static class CompareCommand
     }
 
     /// <summary>
-    /// The lowering census, the analysed line counts and the projects each solution does not build go into the run's
-    /// property bag on every run (ADR 0027; tickets M3-014, P2-013), and every skipped project is a notification (ADR 0029). <c>--lower-only</c> stops there: the
+    /// The lowering census, the analysed line counts, the projects each solution does not build and each project's runtime go
+    /// into the run's property bag on every run (ADR 0027; tickets M3-014, P2-013, P2-053), and every skipped project is a notification (ADR 0029). <c>--lower-only</c> stops there: the
     /// Added and Removed results, no backend call, exit 0 unless a C# project was skipped.
     /// </summary>
     private static int Report(
@@ -251,16 +251,7 @@ internal static class CompareCommand
         SarifLog log = SarifReportWriter.Write(
             results,
             baseline,
-            new Dictionary<string, object>(StringComparer.Ordinal)
-            {
-                ["loweringCensus"] = census.ToProperty(),
-                ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
-                ["projectsNotBuilt"] = new Dictionary<string, object>(StringComparer.Ordinal)
-                {
-                    [LegacySide] = (List<string>)[.. analysis.LegacyNotBuilt],
-                    [ModernSide] = (List<string>)[.. analysis.ModernNotBuilt],
-                },
-            },
+            RunProperties(analysis, census),
             notifications,
             unverified);
         Written(sink, log, options.OutPath, runLog);
@@ -277,6 +268,24 @@ internal static class CompareCommand
             _ => DecideExitCode(results, log, options.FailOn),
         };
     }
+
+    /// <summary>The run's property bag (ADR 0027; tickets M3-014, P2-013, P2-053).</summary>
+    private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census) =>
+        new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["loweringCensus"] = census.ToProperty(),
+            ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
+            ["projectsNotBuilt"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [LegacySide] = (List<string>)[.. analysis.LegacyNotBuilt],
+                [ModernSide] = (List<string>)[.. analysis.ModernNotBuilt],
+            },
+            ["runtimes"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [LegacySide] = SarifReportWriter.RuntimesProperty(analysis.LegacyRuntimes),
+                [ModernSide] = SarifReportWriter.RuntimesProperty(analysis.ModernRuntimes),
+            },
+        };
 
     /// <summary>The <c>write</c> phase (ADR 0038): one item, the SARIF log.</summary>
     private static void Written(IReportSink sink, SarifLog log, string outPath, IRunLog runLog)

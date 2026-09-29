@@ -29,7 +29,7 @@ namespace Equiv.Frontend.CSharp;
 /// <see cref="LoweringFailure"/>, not the end of the run (P2-011). The legacy body is lowered with the enabled
 /// API-equivalence entries and the modern body with none; the pair lists the entries that fired (ADR 0020; M3-009). The
 /// analysis carries a <see cref="ReplayDriverFactory"/> over the loaded projects, which emits nothing until a replay asks
-/// (ticket M4-009).
+/// (ticket M4-009). Each loaded project gets its runtime (<see cref="RuntimeDetection"/>, ADR 0040; P2-053).
 /// </summary>
 public sealed class CSharpFrontend : ILanguageFrontend
 {
@@ -79,7 +79,9 @@ public sealed class CSharpFrontend : ILanguageFrontend
         ArgumentNullException.ThrowIfNull(log);
 
         LoadedSolution legacy = Loaded("load-legacy", legacyPath, log, ct);
+        legacy = legacy with { Runtimes = RuntimeDetection.Detect(legacy.Compilations, config.LegacyRuntime) };
         LoadedSolution modern = Loaded("load-modern", modernPath, log, ct);
+        modern = modern with { Runtimes = RuntimeDetection.Detect(modern.Compilations, config.ModernRuntime) };
 
         log.Phase("enumerate", 2, legacy.Compilations.Length + modern.Compilations.Length);
         EndpointOverrides overrides = EndpointOverrides.Build(Endpoints(legacy.Compilations), Endpoints(modern.Compilations));
@@ -117,9 +119,15 @@ public sealed class CSharpFrontend : ILanguageFrontend
         {
             LegacyNotBuilt = legacy.NotBuilt,
             ModernNotBuilt = modern.NotBuilt,
+            LegacyRuntimes = Reported(legacy.Runtimes),
+            ModernRuntimes = Reported(modern.Runtimes),
             Replay = new ReplayDriverFactory(Targets(legacyByIdentity), Targets(modernByIdentity)),
         };
     }
+
+    /// <summary>A side's project runtimes as <see cref="FrontendAnalysis"/> reports them (P2-053).</summary>
+    private static ImmutableArray<(string Project, string Runtime, string Source)> Reported(ImmutableArray<ProjectRuntime> runtimes) =>
+        [.. runtimes.Select(static r => (r.Project, r.Runtime, r.Source))];
 
     /// <summary>Each procedure's symbol and compilation, for replay under <c>--execute</c> (ticket M4-009).</summary>
     private static Dictionary<ProcedureIdentity, ReplayTarget> Targets(Dictionary<ProcedureIdentity, SideProcedure> byIdentity) =>

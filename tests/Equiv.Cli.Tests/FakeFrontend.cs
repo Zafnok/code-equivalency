@@ -10,6 +10,7 @@ namespace Equiv.Cli.Tests;
 /// A frontend with a configurable <see cref="Supports"/> predicate and a canned <see cref="Analyze"/> result or exception.
 /// Without a canned <see cref="MatchResult"/> it matches nothing; without canned <see cref="AnalysedLines"/> it counts 0 on both sides.
 /// <paramref name="replay"/> is the analysis's replay factory (ticket M4-009); without one it cannot replay.
+/// <paramref name="legacyRuntimes"/> and <paramref name="modernRuntimes"/> are each side's project runtimes (ticket P2-053).
 /// </summary>
 internal sealed class FakeFrontend(
     string language,
@@ -18,7 +19,9 @@ internal sealed class FakeFrontend(
     FrontendLoadException? throwOnAnalyze = null,
     AnalysedLines? lines = null,
     string[]? legacyNotBuilt = null,
-    IReplayDriverFactory? replay = null) : ILanguageFrontend
+    IReplayDriverFactory? replay = null,
+    (string Project, string Runtime, string Source)[]? legacyRuntimes = null,
+    (string Project, string Runtime, string Source)[]? modernRuntimes = null) : ILanguageFrontend
 {
     public int AnalyzeCallCount { get; private set; }
 
@@ -31,6 +34,12 @@ internal sealed class FakeFrontend(
         AnalyzeCallCount++;
         return throwOnAnalyze is not null
             ? throw throwOnAnalyze
-            : new FrontendAnalysis(matchResult ?? new MatchResult([], [], [], []), lines ?? new AnalysedLines(0, 0)) { LegacyNotBuilt = [.. legacyNotBuilt ?? []], Replay = replay };
+            : new FrontendAnalysis(matchResult ?? new MatchResult([], [], [], []), lines ?? new AnalysedLines(0, 0)) 
+            {
+                LegacyNotBuilt = [.. legacyNotBuilt ?? []],
+                LegacyRuntimes = [.. legacyRuntimes ?? []],
+                ModernRuntimes = [.. modernRuntimes ?? []],
+                Replay = replay,
+            };
     }
 }

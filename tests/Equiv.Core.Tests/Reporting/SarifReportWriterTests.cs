@@ -783,4 +783,18 @@ public sealed class SarifReportWriterTests
             File.Delete(path);
         }
     }
+
+    /// <summary>Ticket P2-053 acceptance criterion 5: one <c>{ project, runtime, source }</c> object per loaded project.</summary>
+    [Fact]
+    public void RuntimesPropertyListsEachProject()
+    {
+        IReadOnlyList<IReadOnlyDictionary<string, string>> property = SarifReportWriter.RuntimesProperty([("App", "net48", "attribute"), ("Std", "net48, net8.0", "host")]);
+
+        Assert.Equal(
+            [
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["project"] = "App", ["runtime"] = "net48", ["source"] = "attribute" },
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["project"] = "Std", ["runtime"] = "net48, net8.0", ["source"] = "host" },
+            ],
+            property);
+    }
 }

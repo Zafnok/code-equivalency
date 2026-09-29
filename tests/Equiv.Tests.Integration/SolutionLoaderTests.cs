@@ -44,6 +44,10 @@ public sealed class SolutionLoaderTests
 
         Assert.Single(loaded.Compilations);
         Assert.DoesNotContain(loaded.Diagnostics, static d => d.Kind is not LoadDiagnosticKind.WorkspaceWarning);
+
+        // P2-053: MSBuild's generated TargetFrameworkAttribute gives the runtime on both sides.
+        ProjectRuntime runtime = Assert.Single(RuntimeDetection.Detect(loaded.Compilations, configured: null));
+        Assert.Equal((string.Equals(side, "legacy", StringComparison.Ordinal) ? "net48" : "net10.0", RuntimeDetection.Attribute), (runtime.Runtime, runtime.Source));
     }
 
     [Fact]

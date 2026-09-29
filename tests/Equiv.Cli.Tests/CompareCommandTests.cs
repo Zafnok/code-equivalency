@@ -375,7 +375,13 @@ public sealed class CompareCommandTests
             [added],
             [removed],
             []);
-        FakeFrontend frontend = new("csharp", _ => true, matchResult, lines: new AnalysedLines(120, 135));
+        FakeFrontend frontend = new(
+            "csharp",
+            _ => true,
+            matchResult,
+            lines: new AnalysedLines(120, 135),
+            legacyRuntimes: [("App", "net48", "attribute"), ("Shared", "net48", "host")],
+            modernRuntimes: [("App", "net8.0", "attribute"), ("Shared", "netstandard2.0", "unhosted")]);
         FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
         {
             [pairA.Value] = new Equivalent(ProofMethod.Bounded),
