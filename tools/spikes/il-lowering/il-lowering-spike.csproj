@@ -4,9 +4,8 @@
     P1-012: a throwaway measurement, not a product. It is not in Equiv.slnx, so no CI gate builds it.
     As P1-011's spike does, the assembly name borrows the integration tests' InternalsVisibleTo grant on
     Equiv.Frontend.CSharp, so the spike can wrap the production lowering and keep src/ unchanged (criterion 5).
-    ICSharpCode.Decompiler is referenced here only (ADR 0002 row: spike tool only, not shipped). Central package
-    management stays on, but the package's version is pinned here, not in Directory.Packages.props. No lock file, so
-    the spike stays out of the licence gate's scan. Style analyzers are off: this is measurement code, deleted
+    ICSharpCode.Decompiler's version is the central one since P1-014 made it a product dependency of
+    Equiv.Frontend.CSharp (ADR 0002). No lock file, so the spike stays out of the licence gate's scan. Style analyzers are off: this is measurement code, deleted
     once the ADR or ROADMAP line lands. Compiler warnings stay errors.
   -->
   <PropertyGroup>
@@ -21,7 +20,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
-    <PackageVersion Include="ICSharpCode.Decompiler" Version="11.1.0.9782" />
     <PackageReference Include="ICSharpCode.Decompiler" />
   </ItemGroup>
 

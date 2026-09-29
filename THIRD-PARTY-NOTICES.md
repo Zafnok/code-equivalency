@@ -14,6 +14,7 @@ These packages are linked into the `equiv` binaries and container image, so thei
 | Component | Version | Licence |
 |---|---|---|
 | Humanizer.Core | 2.14.1 | MIT |
+| ICSharpCode.Decompiler | 11.1.0.9782 | MIT |
 | Microsoft.Build.Framework | 17.11.48 | MIT |
 | Microsoft.CodeAnalysis.Analyzers | 5.9.0-1.26328.17 | MIT |
 | Microsoft.CodeAnalysis.CSharp | 5.9.0 | MIT |

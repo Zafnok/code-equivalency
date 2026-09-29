@@ -108,7 +108,7 @@ internal sealed class HeapLowerer(
     /// The backing field of a property that is neither virtual nor an override and whose accessors have no body, or null:
     /// a property with a body, or one an override may replace, is called.
     /// </summary>
-    private static IFieldSymbol? Inlined(IPropertySymbol property) =>
+    internal static IFieldSymbol? Inlined(IPropertySymbol property) =>
         !property.IsVirtual && !property.IsOverride && Bodiless(property.GetMethod) && Bodiless(property.SetMethod) ? BackingField(property) : null;
 
     private static bool Bodiless(IMethodSymbol? accessor) =>
