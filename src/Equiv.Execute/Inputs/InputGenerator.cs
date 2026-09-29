@@ -8,7 +8,8 @@ namespace Equiv.Execute.Inputs;
 /// Type-directed inputs for a member's parameters (ticket M3-032), deterministic from a seed. The first cases walk every
 /// combination of the parameters' edge values, the first parameter varying fastest; the rest draw random values. A
 /// member whose every parameter has finitely many values (<c>bool</c>, an enum, <c>null</c>) stops once every
-/// combination is listed.
+/// combination is listed. A <c>System.Drawing</c> value type (ticket P2-051) takes each of its component's edge values in
+/// every component, then <c>1, 2, ...</c>, then a random value per component.
 /// </summary>
 internal static class InputGenerator
 {
@@ -87,12 +88,16 @@ internal static class InputGenerator
         ExecutionTypeKind.Unsigned32 => Unsigned(uint.MaxValue),
         ExecutionTypeKind.Signed64 => Signed(long.MinValue, long.MaxValue),
         ExecutionTypeKind.Unsigned64 => Unsigned(ulong.MaxValue),
-        ExecutionTypeKind.Binary32 => [.. Singles.Select(static f => Bits(BitConverter.SingleToUInt32Bits(f), 8))],
+        ExecutionTypeKind.Binary32 => SingleEdges,
         ExecutionTypeKind.Binary64 => [.. Doubles.Select(static d => Bits(BitConverter.DoubleToUInt64Bits(d), 16))],
         ExecutionTypeKind.DecimalNumber => [.. Decimals.Select(static m => Decimal(decimal.GetBits(m)))],
         ExecutionTypeKind.Text => Strings,
         ExecutionTypeKind.Enum => [.. parameter.EnumValues, Undefined(parameter.EnumValues)],
         ExecutionTypeKind.NullOnly => ["null"],
+        ExecutionTypeKind.Signed32Pair => Tuples(Signed(int.MinValue, int.MaxValue), 2, static i => Integer(i)),
+        ExecutionTypeKind.Signed32Quad => Tuples(Signed(int.MinValue, int.MaxValue), 4, static i => Integer(i)),
+        ExecutionTypeKind.Binary32Pair => Tuples(SingleEdges, 2, static i => Bits(BitConverter.SingleToUInt32Bits(i), 8)),
+        ExecutionTypeKind.Binary32Quad => Tuples(SingleEdges, 4, static i => Bits(BitConverter.SingleToUInt32Bits(i), 8)),
         _ => throw new ArgumentOutOfRangeException(nameof(parameter), parameter.TypeName, "No input can be built for this parameter type."),
     };
 
@@ -111,8 +116,31 @@ internal static class InputGenerator
         ExecutionTypeKind.Binary64 => Bits(random.Next(), 16),
         ExecutionTypeKind.DecimalNumber => Decimal([(int)random.Next(), (int)random.Next(), (int)random.Next(), RandomDecimalFlags(random)]),
         ExecutionTypeKind.Text => RandomString(random),
+        ExecutionTypeKind.Signed32Pair => RandomTuple(ExecutionTypeKind.Signed32, 2, random),
+        ExecutionTypeKind.Signed32Quad => RandomTuple(ExecutionTypeKind.Signed32, 4, random),
+        ExecutionTypeKind.Binary32Pair => RandomTuple(ExecutionTypeKind.Binary32, 2, random),
+        ExecutionTypeKind.Binary32Quad => RandomTuple(ExecutionTypeKind.Binary32, 4, random),
         _ => edges[(int)(random.Next() % (ulong)edges.Count)],
     };
+
+    private static IReadOnlyList<string> SingleEdges => [.. Singles.Select(static f => Bits(BitConverter.SingleToUInt32Bits(f), 8))];
+
+    /// <summary>Each of <paramref name="component"/>'s edges in every component, then the components <c>1, 2, ...</c>.</summary>
+    private static IReadOnlyList<string> Tuples(IReadOnlyList<string> component, int arity, Func<int, string> ordinal) =>
+        [.. component.Select(c => Tuple(Enumerable.Repeat(c, arity))), Tuple(Enumerable.Range(1, arity).Select(ordinal))];
+
+    private static string RandomTuple(ExecutionTypeKind component, int arity, SplitMix random)
+    {
+        List<string> components = [];
+        for (int i = 0; i < arity; i++)
+        {
+            components.Add(Random(component, [], random));
+        }
+
+        return Tuple(components);
+    }
+
+    private static string Tuple(IEnumerable<string> components) => $"[{string.Join(',', components)}]";
 
     private static IReadOnlyList<string> Signed(long min, long max) => ["0", "1", "-1", Integer(min), Integer(max)];
 
