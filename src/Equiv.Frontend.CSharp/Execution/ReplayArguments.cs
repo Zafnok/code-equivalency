@@ -55,12 +55,9 @@ internal static class ReplayArguments
             }
         }
 
-        if (@new.Parameters.Any(parameter => !newValues.ContainsKey(parameter.Var.Name) && !Take(values, parameter, newValues)))
-        {
-            return null;
-        }
-
-        return values.Count == 0 ? (oldValues, newValues) : null;
+        return !@new.Parameters.Any(parameter => !newValues.ContainsKey(parameter.Var.Name) && !Take(values, parameter, newValues)) && values.Count == 0
+            ? (oldValues, newValues)
+            : null;
     }
 
     /// <summary>
