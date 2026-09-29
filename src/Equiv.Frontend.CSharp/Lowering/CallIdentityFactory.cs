@@ -40,6 +40,13 @@ internal static class CallIdentityFactory
         return Of(method, renames, suppressedRuntimeChanges) with { External = IsExternal(method.ContainingAssembly, compilation) };
     }
 
+    /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be.</summary>
+    public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges)
+    {
+        CallIdentity callee = new(value);
+        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, suppressedRuntimeChanges, out _) };
+    }
+
     private static bool IsExternal(IAssemblySymbol assembly, Compilation compilation) =>
         compilation.GetMetadataReference(assembly) is PortableExecutableReference && ReferenceAssemblies.IsReferenceAssembly(assembly);
 
@@ -49,13 +56,6 @@ internal static class CallIdentityFactory
     /// </summary>
     public static CallIdentity Await(INamedTypeSymbol awaiter, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges) =>
         Of(Constructed("await:" + RoslynIdentity.TypeName(awaiter, renames), [.. TypeArguments(awaiter)]), suppressedRuntimeChanges);
-
-    /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be.</summary>
-    public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges)
-    {
-        CallIdentity callee = new(value);
-        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, suppressedRuntimeChanges, out _) };
-    }
 
     /// <summary>
     /// A call's source arguments as an API-equivalence adapter addresses them (ADR 0020; ticket M3-009), in evaluation

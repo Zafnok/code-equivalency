@@ -144,6 +144,9 @@ public static class IrText
         private static string Callee(CallIdentity callee) =>
             Quote(callee.Value) + (callee.RuntimeChanged ? "!" : string.Empty) + (callee.External ? "@" : string.Empty);
 
+        private static string HeapPairs(ImmutableArray<IrHeapPair> heap) =>
+            heap.IsEmpty ? string.Empty : $" heap({string.Join(", ", heap.Select(static h => $"{Quote(h.Map)} {Use(h.Before)} -> {Definition(h.After)}"))})";
+
         public string Visit(IrConst instruction) => $"{Definition(instruction.Target)} = const {Value(instruction.Value)}";
 
         public string Visit(IrBinary instruction) =>
@@ -162,9 +165,6 @@ public static class IrText
             + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw))
             + (instruction.RefOuts.IsEmpty ? string.Empty : $" refout({string.Join(", ", instruction.RefOuts.Select(Definition))})")
             + HeapPairs(instruction.Heap);
-
-        private static string HeapPairs(ImmutableArray<IrHeapPair> heap) =>
-            heap.IsEmpty ? string.Empty : $" heap({string.Join(", ", heap.Select(static h => $"{Quote(h.Map)} {Use(h.Before)} -> {Definition(h.After)}"))})";
 
         public string Visit(IrMapRead instruction) =>
             $"{Definition(instruction.Target)} = mapread {Use(instruction.Map)}, {Use(instruction.Key)}";
