@@ -92,6 +92,8 @@ public sealed class ConfigEqualityTests
             { baseline, baseline with { TimeoutMs = 6000 } },
             { baseline, baseline with { SuppressRuntimeChanges = ["System.String::IndexOf("] } },
             { baseline, baseline with { SuppressApiEquivalences = ["webapi."] } },
+            { baseline, baseline with { LegacyRuntime = TargetRuntime.Parse("net48") } },
+            { baseline, baseline with { ModernRuntime = TargetRuntime.Parse("net8.0") } },
         };
     }
 

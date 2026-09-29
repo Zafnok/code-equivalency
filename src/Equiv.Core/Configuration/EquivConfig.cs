@@ -25,6 +25,15 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
     /// </summary>
     public ImmutableArray<string> SuppressApiEquivalences { get; init; } = [];
 
+    /// <summary>
+    /// <c>runtimes.legacy</c> (ADR 0040 decision 1; ticket P2-053): the runtime of a legacy-side <c>netstandard</c> project
+    /// that no executable or test project hosts. Null when unset.
+    /// </summary>
+    public TargetRuntime? LegacyRuntime { get; init; }
+
+    /// <summary><c>runtimes.modern</c>: as <see cref="LegacyRuntime"/>, for the modern side.</summary>
+    public TargetRuntime? ModernRuntime { get; init; }
+
     // Deliberate non-short-circuit '&' after the null check, matching Equiv.Core.Ir.IrEquality's
     // documented rationale: '&&' always compiles to a branch per operand, which would need extra
     // tests per field to keep this repo's 100% branch-coverage gate; the operands here are cheap
@@ -36,8 +45,10 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
             & (Bound == other.Bound) // NOSONAR
             & (TimeoutMs == other.TimeoutMs) // NOSONAR
             & IrEquality.SequenceEqual(SuppressRuntimeChanges, other.SuppressRuntimeChanges) // NOSONAR
-            & IrEquality.SequenceEqual(SuppressApiEquivalences, other.SuppressApiEquivalences); // NOSONAR
+            & IrEquality.SequenceEqual(SuppressApiEquivalences, other.SuppressApiEquivalences) // NOSONAR
+            & (LegacyRuntime == other.LegacyRuntime) // NOSONAR
+            & (ModernRuntime == other.ModernRuntime); // NOSONAR
 
     public override int GetHashCode() =>
-        HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences));
+        HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime);
 }

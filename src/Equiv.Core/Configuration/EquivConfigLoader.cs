@@ -14,7 +14,7 @@ namespace Equiv.Core.Configuration;
 public static class EquivConfigLoader
 {
     private static readonly FrozenSet<string> KnownProperties =
-        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "suppressRuntimeChanges", "suppressApiEquivalences" }.ToFrozenSet(StringComparer.Ordinal);
+        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "suppressRuntimeChanges", "suppressApiEquivalences", "runtimes" }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Parses <paramref name="json"/> and validates it against the schema. Throws <see cref="EquivConfigParseException"/>
@@ -45,11 +45,14 @@ public static class EquivConfigLoader
         int timeoutMs = ReadPositiveInt(root, "timeoutMs", EquivConfig.Default.TimeoutMs, EquivConfigDiagnosticIds.InvalidTimeout, diagnostics);
         ImmutableArray<string> suppressRuntimeChanges = ReadStringArray(root, "suppressRuntimeChanges", EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry, diagnostics);
         ImmutableArray<string> suppressApiEquivalences = ReadStringArray(root, "suppressApiEquivalences", EquivConfigDiagnosticIds.InvalidSuppressApiEquivalencesEntry, diagnostics);
+        (TargetRuntime? legacyRuntime, TargetRuntime? modernRuntime) = ReadRuntimes(root, diagnostics);
 
         EquivConfig config = new(renames, callIdentityRenames, bound, timeoutMs)
         {
             SuppressRuntimeChanges = suppressRuntimeChanges,
             SuppressApiEquivalences = suppressApiEquivalences,
+            LegacyRuntime = legacyRuntime,
+            ModernRuntime = modernRuntime,
         };
         return new EquivConfigResult(config, diagnostics.ToImmutable());
     }
@@ -145,6 +148,53 @@ public static class EquivConfigLoader
         }
 
         return items.ToImmutable();
+    }
+
+    /// <summary>
+    /// <c>"runtimes": { "legacy": "&lt;tfm&gt;", "modern": "&lt;tfm&gt;" }</c> (ADR 0040; ticket P2-053). Each value is a
+    /// .NET Framework or .NET (Core) moniker or short name that <see cref="TargetRuntime.Parse"/> accepts; either key may be absent.
+    /// </summary>
+    private static (TargetRuntime? Legacy, TargetRuntime? Modern) ReadRuntimes(JsonElement root, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    {
+        const string Property = "runtimes";
+        if (!root.TryGetProperty(Property, out JsonElement element))
+        {
+            return (null, null);
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidRuntimes, Property, $"\"{Property}\" must be an object with \"legacy\" and/or \"modern\""));
+            return (null, null);
+        }
+
+        TargetRuntime? legacy = null;
+        TargetRuntime? modern = null;
+        foreach (JsonProperty entry in element.EnumerateObject())
+        {
+            string path = $"{Property}/{entry.Name}";
+            if (entry.Name is not ("legacy" or "modern"))
+            {
+                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidRuntimes, path, $"unknown side \"{entry.Name}\" (expected \"legacy\" or \"modern\")"));
+                continue;
+            }
+
+            TargetRuntime? runtime = entry.Value.ValueKind == JsonValueKind.String ? TargetRuntime.Parse(entry.Value.GetString()!) : null;
+            if (runtime is null)
+            {
+                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidRuntimes, path, "value must be a .NET Framework or .NET target framework, such as \"net48\" or \"net8.0\""));
+            }
+            else if (string.Equals(entry.Name, "legacy", StringComparison.Ordinal))
+            {
+                legacy = runtime;
+            }
+            else
+            {
+                modern = runtime;
+            }
+        }
+
+        return (legacy, modern);
     }
 
     private static int ReadPositiveInt(JsonElement root, string property, int defaultValue, string diagnosticId, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
