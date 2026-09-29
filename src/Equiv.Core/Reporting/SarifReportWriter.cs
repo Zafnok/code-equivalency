@@ -346,6 +346,13 @@ public static class SarifReportWriter
         return described;
     }
 
+    /// <summary>An outcome's kind and its canonical JSON text, as the driver wrote it.</summary>
+    private static Dictionary<string, string> Describe(ExecutionOutcome outcome) => new(StringComparer.Ordinal)
+    {
+        ["kind"] = outcome.Kind == OutcomeKind.Threw ? "threw" : "returned",
+        ["value"] = outcome.Canonical,
+    };
+
     /// <summary>
     /// A Divergent's replay on both real runtimes (ADR 0035 decision 2; ticket M4-009): <c>replay</c> is <c>reproduced</c>,
     /// <c>not-reproduced</c> or (an EQ006 Divergent's, ticket P2-038) <c>not-applicable</c> with both canonical outcomes as
@@ -403,13 +410,6 @@ public static class SarifReportWriter
                 break;
         }
     }
-
-    /// <summary>An outcome's kind and its canonical JSON text, as the driver wrote it.</summary>
-    private static Dictionary<string, string> Describe(ExecutionOutcome outcome) => new(StringComparer.Ordinal)
-    {
-        ["kind"] = outcome.Kind == OutcomeKind.Threw ? "threw" : "returned",
-        ["value"] = outcome.Canonical,
-    };
 
     /// <summary>The spelling the census uses for a side: <c>legacy</c>, <c>modern</c>.</summary>
     /// <summary>
