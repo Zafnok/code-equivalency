@@ -98,6 +98,10 @@ dotnet_diagnostic.MA0029.severity = error
 # relying on the next Sonar analysis of main.
 dotnet_diagnostic.IDE0090.severity = error
 
+# GH-273: collection initialization can be simplified (a collection expression). Pinned to error so
+# the build catches a regression instead of relying on the next Sonar analysis of main.
+dotnet_diagnostic.IDE0300.severity = error
+
 # GH-36: implicit culture-sensitive ToString in interpolated strings sat below warning
 # level, which is how the whole rule-wide batch went unfixed until Sonar filed it.
 # Pinned to error so the build catches a regression.

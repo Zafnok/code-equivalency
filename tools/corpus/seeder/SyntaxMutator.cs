@@ -155,7 +155,7 @@ public static class SyntaxMutator
     private static MethodDeclarationSyntax Swap(MethodDeclarationSyntax method, StatementSyntax first, StatementSyntax second) =>
         method.ReplaceNodes([first, second], (original, _) => ReferenceEquals(original, first) ? second : first);
 
-    // -- InvertIf: if (c) A else B -> if (!c) B else A. --
+    // -- InvertIf: an if/else with condition c and branches A, B becomes the negated condition with B, A. --
 
     private static MethodDeclarationSyntax InvertIf(MethodDeclarationSyntax method, IfStatementSyntax branch)
     {
@@ -251,10 +251,10 @@ public static class SyntaxMutator
             .NormalizeWhitespace()
             .WithTriviaFrom(target);
         StatementSyntax rewritten = rebuild(SyntaxFactory.IdentifierName(temporary).WithTriviaFrom(value));
-        return method.ReplaceNode(target, new StatementSyntax[] { declare, rewritten });
+        return method.ReplaceNode(target, [declare, rewritten]);
     }
 
-    // -- DropNullCheck: if (x == null) A else B -> the branch a non-null x takes. --
+    // -- DropNullCheck: an if/else testing a variable against null becomes the branch a non-null value takes. --
 
     private static IReadOnlyList<Func<MethodDeclarationSyntax>> DropNullCheckCandidates(MethodDeclarationSyntax method) =>
         [.. Nodes<IfStatementSyntax>(method, static branch => IsListElement(branch) && Unwrap(branch.Condition) is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression } b
@@ -398,12 +398,12 @@ public static class SyntaxMutator
         MethodDeclarationSyntax method, Func<StatementSyntax, StatementSyntax, bool> pairs, Func<MethodDeclarationSyntax, StatementSyntax, StatementSyntax, MethodDeclarationSyntax> apply)
     {
         List<Func<MethodDeclarationSyntax>> candidates = [];
-        foreach (BlockSyntax block in Nodes<BlockSyntax>(method, static _ => true))
+        foreach (SyntaxList<StatementSyntax> statements in Nodes<BlockSyntax>(method, static _ => true).Select(static block => block.Statements))
         {
-            for (int i = 0; i + 1 < block.Statements.Count; i++)
+            for (int i = 0; i + 1 < statements.Count; i++)
             {
-                StatementSyntax first = block.Statements[i];
-                StatementSyntax second = block.Statements[i + 1];
+                StatementSyntax first = statements[i];
+                StatementSyntax second = statements[i + 1];
                 if (pairs(first, second))
                 {
                     candidates.Add(() => apply(method, first, second));
