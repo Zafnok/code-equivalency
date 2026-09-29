@@ -28,6 +28,7 @@ internal sealed class ReplayDriverFactory(
     IReadOnlyDictionary<ProcedureIdentity, ReplayTarget> modern) : IReplayDriverFactory
 {
     private const string EmitFailed = "emit-failed";
+    private const string ModernSide = "modern";
 
     private readonly Dictionary<(Compilation, string), string?> emitted = [];
 
@@ -67,7 +68,7 @@ internal sealed class ReplayDriverFactory(
             return ReplayPlan.NotConstructible(legacyProblem);
         }
 
-        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, "modern"), number, legacy: false);
+        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, ModernSide), number, legacy: false);
         return modernDriver is null
             ? ReplayPlan.NotConstructible(modernProblem)
             : ReplayPlan.Runnable(new ExecutionDrivers(legacyDriver, modernDriver), oldCase.Input, newCase.Input) with { AlikeReason = AlikeReason(counterexample) };
@@ -103,7 +104,7 @@ internal sealed class ReplayDriverFactory(
             return TestingPlan.NotConstructible(legacyProblem);
         }
 
-        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, "modern"), number, legacy: false);
+        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, ModernSide), number, legacy: false);
         return modernDriver is null
             ? TestingPlan.NotConstructible(modernProblem)
             : TestingPlan.Runnable(
@@ -133,7 +134,7 @@ internal sealed class ReplayDriverFactory(
             return ReplayPlan.NotConstructible(legacyProblem);
         }
 
-        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, "modern"), number, legacy: false);
+        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, ModernSide), number, legacy: false);
         return modernDriver is null
             ? ReplayPlan.NotConstructible(modernProblem)
             : ReplayPlan.Runnable(new ExecutionDrivers(legacyDriver, modernDriver), oldCase.Input, newCase.Input);
@@ -182,7 +183,7 @@ internal sealed class ReplayDriverFactory(
     /// <summary>Emits <paramref name="target"/>'s project, once, and compiles a driver beside it; or returns why it could not.</summary>
     private (string? Driver, string Problem) Driver(ReplayTarget target, string sideDirectory, int number, bool legacy)
     {
-        string side = legacy ? "legacy" : "modern";
+        string side = legacy ? "legacy" : ModernSide;
         string project = Path.Combine(sideDirectory, target.Compilation.AssemblyName!);
         if (!emitted.TryGetValue((target.Compilation, sideDirectory), out string? failure))
         {

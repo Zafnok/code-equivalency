@@ -21,6 +21,8 @@ internal sealed class MsBuildEvaluator
     /// <summary>The value MSBuild gives the <c>Solution*</c> properties when a project is evaluated on its own.</summary>
     public const string Undefined = "*Undefined*";
 
+    private const string False = "false";
+
     private static readonly FrozenSet<string> CreatedItemTypes = FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "Compile", "Reference", "ProjectReference");
 
     private static readonly FrozenSet<string> PathItemTypes = FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "Compile", "ProjectReference");
@@ -64,12 +66,12 @@ internal sealed class MsBuildEvaluator
         ["Platform"] = "AnyCPU",
         ["DesignTimeBuild"] = "true",
         ["BuildingInsideVisualStudio"] = "true",
-        ["BuildProjectReferences"] = "false",
-        ["BuildingProject"] = "false",
+        ["BuildProjectReferences"] = False,
+        ["BuildingProject"] = False,
         ["ProvideCommandLineArgs"] = "true",
         ["SkipCompilerExecution"] = "true",
         ["ContinueOnError"] = "ErrorAndContinue",
-        ["ShouldUnsetParentConfigurationAndPlatform"] = "false",
+        ["ShouldUnsetParentConfigurationAndPlatform"] = False,
         ["OS"] = "Windows_NT",
         ["MSBuildRuntimeType"] = "Full",
         ["MSBuildProjectFullPath"] = projectPath,
@@ -219,7 +221,7 @@ internal sealed class MsBuildEvaluator
 
     private void CommonProps()
     {
-        if (!_properties.Read("ImportDirectoryBuildProps").Equals("false", StringComparison.OrdinalIgnoreCase)
+        if (!_properties.Read("ImportDirectoryBuildProps").Equals(False, StringComparison.OrdinalIgnoreCase)
             && FindAbove("Directory.Build.props") is { } props)
         {
             Process(props);
@@ -242,7 +244,7 @@ internal sealed class MsBuildEvaluator
             Process(user);
         }
 
-        if (!_properties.Read("ImportDirectoryBuildTargets").Equals("false", StringComparison.OrdinalIgnoreCase)
+        if (!_properties.Read("ImportDirectoryBuildTargets").Equals(False, StringComparison.OrdinalIgnoreCase)
             && FindAbove("Directory.Build.targets") is { } targets)
         {
             Process(targets);
@@ -254,7 +256,7 @@ internal sealed class MsBuildEvaluator
     /// <summary>The files a restore generates next to the assets file (<c>obj/&lt;project file&gt;.nuget.g.props</c> and friends).</summary>
     private void ProjectExtensions(string switchProperty, string extension)
     {
-        if (_properties.Read(switchProperty).Equals("false", StringComparison.OrdinalIgnoreCase)
+        if (_properties.Read(switchProperty).Equals(False, StringComparison.OrdinalIgnoreCase)
             || ProjectPath.Resolve(_projectDirectory, MsBuildProperties.Unescape(_properties.Read("MSBuildProjectExtensionsPath"))) is not { } directory)
         {
             return;

@@ -28,6 +28,9 @@ namespace Equiv.Cli;
 /// </summary>
 internal static class CompareCommand
 {
+    private const string LegacySide = "legacy";
+    private const string ModernSide = "modern";
+
     /// <summary>How many times <see cref="DeleteTemporary"/> tries before it leaves the folder behind.</summary>
     internal const int DeleteAttempts = 5;
 
@@ -254,8 +257,8 @@ internal static class CompareCommand
                 ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
                 ["projectsNotBuilt"] = new Dictionary<string, object>(StringComparer.Ordinal)
                 {
-                    ["legacy"] = (List<string>)[.. analysis.LegacyNotBuilt],
-                    ["modern"] = (List<string>)[.. analysis.ModernNotBuilt],
+                    [LegacySide] = (List<string>)[.. analysis.LegacyNotBuilt],
+                    [ModernSide] = (List<string>)[.. analysis.ModernNotBuilt],
                 },
             },
             notifications,
@@ -396,8 +399,8 @@ internal static class CompareCommand
     {
         List<Notification> notifications = [];
         List<ProcedureIdentity> unverified = [];
-        foreach ((string side, UnverifiedProject project) in matchResult.LegacySkipped.Select(static p => ("legacy", p))
-            .Concat(matchResult.ModernSkipped.Select(static p => ("modern", p))))
+        foreach ((string side, UnverifiedProject project) in matchResult.LegacySkipped.Select(static p => (LegacySide, p))
+            .Concat(matchResult.ModernSkipped.Select(static p => (ModernSide, p))))
         {
             FailureLevel level = project.IsCSharp ? FailureLevel.Error : FailureLevel.Warning;
             string subject = project.Name.Length > 0
@@ -569,7 +572,7 @@ internal static class CompareCommand
     private static Decision? Decide(ProcedurePair pair, IrProcedure old, IrProcedure @new)
     {
         // ADR 0029 decision 2: erroneous code is Unknown(Unbound) without asking the solver; it is never evidence of equivalence.
-        string unbound = string.Join("; ", UnboundCauses("legacy", old).Concat(UnboundCauses("modern", @new)));
+        string unbound = string.Join("; ", UnboundCauses(LegacySide, old).Concat(UnboundCauses(ModernSide, @new)));
         if (unbound.Length > 0)
         {
             return new Decision(new VerificationResult(pair.New, new Unknown(UnknownReason.Unbound, unbound)) { EquivalencesApplied = pair.EquivalencesApplied }, "unbound");
@@ -597,8 +600,8 @@ internal static class CompareCommand
     internal static bool IsCongruent(ProcedurePair pair, IrProcedure old, IrProcedure @new) =>
         pair.OldFingerprint is { RuntimeSensitive: false } fingerprint
         && fingerprint == pair.NewFingerprint
-        && !UnboundCauses("legacy", old).Any()
-        && !UnboundCauses("modern", @new).Any();
+        && !UnboundCauses(LegacySide, old).Any()
+        && !UnboundCauses(ModernSide, @new).Any();
 
     /// <summary>
     /// ADR 0019, once every verdict is known: each result of a lowered pair lists the matched pairs (lowered or not) that
