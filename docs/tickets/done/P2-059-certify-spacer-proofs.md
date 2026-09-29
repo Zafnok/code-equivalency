@@ -1,5 +1,5 @@
 # P2-059 Rung 4 proves a pair only when Spacer's invariant solves the clauses
-Status: in-progress
+Status: done (PR #299)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-001

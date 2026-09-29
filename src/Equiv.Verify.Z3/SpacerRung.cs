@@ -123,12 +123,9 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
         }
 
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
-        if (complete && ModelDecoder.Diverges(new(old, oldRun), new(@new, newRun), shared, inputs, chc.Calls))
-        {
-            return LoopLadder.Refuted(ProofMethod.Chc, $"a derivation {how} replays to a divergence", replay);
-        }
-
-        return Spurious($"a derivation {how} does not replay to a divergence: {CounterexampleText.Dump(replay)}");
+        return complete && ModelDecoder.Diverges(new(old, oldRun), new(@new, newRun), shared, inputs, chc.Calls)
+            ? LoopLadder.Refuted(ProofMethod.Chc, $"a derivation {how} replays to a divergence", replay)
+            : Spurious($"a derivation {how} does not replay to a divergence: {CounterexampleText.Dump(replay)}");
     }
 
     private static Rung Proved(ChcEncoder chc, ChcAnswer answer, string how) =>
