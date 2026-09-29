@@ -49,19 +49,35 @@ internal static class ProbeArguments
     /// <summary><paramref name="value"/> as a wire argument of <paramref name="type"/>, or null when none can be built from it.</summary>
     private static string? Wire(ITypeSymbol type, JsonElement value) => DriverFactory.Classify(type) switch
     {
-        ExecutionTypeKind.Boolean => value.ValueKind switch { JsonValueKind.True => "true", JsonValueKind.False => "false", _ => null },
+        ExecutionTypeKind.Boolean => Boolean(value),
         ExecutionTypeKind.Character or ExecutionTypeKind.UnsignedByte or ExecutionTypeKind.Unsigned16 or ExecutionTypeKind.Unsigned32 or ExecutionTypeKind.Unsigned64
-            => value.ValueKind == JsonValueKind.Number && value.TryGetUInt64(out ulong u) ? u.ToString(CultureInfo.InvariantCulture) : null,
+            => UnsignedNumber(value),
         ExecutionTypeKind.SignedByte or ExecutionTypeKind.Signed16 or ExecutionTypeKind.Signed32 or ExecutionTypeKind.Signed64
-            => value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long i) ? i.ToString(CultureInfo.InvariantCulture) : null,
-        ExecutionTypeKind.Binary32 => value.ValueKind == JsonValueKind.Number ? Bits(BitConverter.SingleToUInt32Bits(value.GetSingle()), "X8") : null,
-        ExecutionTypeKind.Binary64 => value.ValueKind == JsonValueKind.Number ? Bits(BitConverter.DoubleToUInt64Bits(value.GetDouble()), "X16") : null,
-        ExecutionTypeKind.DecimalNumber => value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out decimal m) ? Decimal(m) : null,
+            => SignedNumber(value),
+        ExecutionTypeKind.Binary32 => Binary32(value),
+        ExecutionTypeKind.Binary64 => Binary64(value),
+        ExecutionTypeKind.DecimalNumber => DecimalNumber(value),
         ExecutionTypeKind.Text => Text(value),
         ExecutionTypeKind.Enum => Enum(type, value),
         ExecutionTypeKind.NullOnly => value.ValueKind == JsonValueKind.Null ? "null" : null,
         _ => null,
     };
+
+    private static string? Boolean(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.True => "true",
+        JsonValueKind.False => "false",
+        _ => null,
+    };
+
+    private static string? Binary32(JsonElement value) =>
+        value.ValueKind == JsonValueKind.Number ? Bits(BitConverter.SingleToUInt32Bits(value.GetSingle()), "X8") : null;
+
+    private static string? Binary64(JsonElement value) =>
+        value.ValueKind == JsonValueKind.Number ? Bits(BitConverter.DoubleToUInt64Bits(value.GetDouble()), "X16") : null;
+
+    private static string? DecimalNumber(JsonElement value) =>
+        value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out decimal m) ? Decimal(m) : null;
 
     private static string? Text(JsonElement value) => value.ValueKind switch
     {
@@ -95,10 +111,10 @@ internal static class ProbeArguments
         : Convert.ToInt64(constant, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
 
     private static string? UnsignedNumber(JsonElement value) =>
-        value.TryGetUInt64(out ulong u) ? u.ToString(CultureInfo.InvariantCulture) : null;
+        value.ValueKind == JsonValueKind.Number && value.TryGetUInt64(out ulong u) ? u.ToString(CultureInfo.InvariantCulture) : null;
 
     private static string? SignedNumber(JsonElement value) =>
-        value.TryGetInt64(out long i) ? i.ToString(CultureInfo.InvariantCulture) : null;
+        value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long i) ? i.ToString(CultureInfo.InvariantCulture) : null;
 
     private static bool IsUnsigned(ITypeSymbol underlying) =>
         underlying.SpecialType is SpecialType.System_Byte or SpecialType.System_UInt16 or SpecialType.System_UInt32 or SpecialType.System_UInt64;
