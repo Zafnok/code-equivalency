@@ -167,8 +167,8 @@ internal sealed partial class IlLowerer
     private sealed record FilterExit(BlockContainer Container, IrBlockId Taken, IrBlockId Declined);
 
     /// <summary>
-    /// The IR blocks of what one pass lowers: each container's blocks and exit and each handler's first block, and, for
-    /// what it does not lower itself, the pass it was copied from.
+    /// The IR blocks of what one pass lowers: each container's blocks and exit and each handler's first block, and, for a
+    /// handler it does not lower itself, the pass it was copied from.
     /// </summary>
     private sealed class Scope(Scope? parent)
     {
@@ -181,10 +181,10 @@ internal sealed partial class IlLowerer
         /// <summary>In a filter's copy, the filter and where its verdict goes; null elsewhere.</summary>
         public FilterExit? Filter { get; init; }
 
-        public IrBlockId Block(IlBlock block) => Blocks.TryGetValue(block, out IrBlockId? id) ? id : parent!.Block(block);
-
-        public IrBlockId Exit(BlockContainer container) => Exits.TryGetValue(container, out IrBlockId? id) ? id : parent!.Exit(container);
-
+        /// <summary>
+        /// A handler's first block, which the pass that lowered its <c>try</c> made; a copy's own blocks and exits are all
+        /// its own, since nothing leaves a <c>finally</c> or a filter but by its end.
+        /// </summary>
         public IrBlockId Handler(TryCatchHandler handler) => Handlers.TryGetValue(handler, out IrBlockId? id) ? id : parent!.Handler(handler);
     }
 }

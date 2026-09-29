@@ -45,6 +45,12 @@ internal sealed partial class IlLowerer
     /// <summary>The stack types of IL's floating point, whose operators are <see cref="PureCatalogue"/>'s functions.</summary>
     private static readonly FrozenSet<StackType> FloatingPoint = new[] { StackType.F4, StackType.F8 }.ToFrozenSet();
 
+    /// <summary>A floating-point comparison's stack type and sign when it is ordered: an unsigned one is IL's unordered <c>.un</c>.</summary>
+    private static readonly FrozenSet<(StackType, Sign)> Ordered = new[]
+    {
+        (StackType.F4, Sign.None), (StackType.F4, Sign.Signed), (StackType.F8, Sign.None), (StackType.F8, Sign.Signed),
+    }.ToFrozenSet();
+
     private static readonly FrozenDictionary<PrimitiveType, SpecialType> IntegralTargets = new Dictionary<PrimitiveType, SpecialType>
     {
         [PrimitiveType.I1] = SpecialType.System_SByte,
@@ -250,7 +256,7 @@ internal sealed partial class IlLowerer
                 Store(store);
                 return;
             case Branch branch:
-                Jump(Unwind(Crossed(branch, branch.TargetBlock.Parent!), scope.Block(branch.TargetBlock)));
+                Jump(Unwind(Crossed(branch, branch.TargetBlock.Parent!), scope.Blocks[branch.TargetBlock]));
                 return;
             case Leave leave:
                 Leave(leave);
@@ -280,7 +286,7 @@ internal sealed partial class IlLowerer
                 _ = Address(address);
                 return;
             default:
-                _ = Natural(instruction, Int32);
+                _ = Natural(instruction, Object);
                 return;
         }
     }
@@ -306,13 +312,13 @@ internal sealed partial class IlLowerer
         StLoc store => VariableType(store.Variable) is not null,
         LdObj load => Addressable(load.Target),
         StObj store => Addressable(store.Target),
-        BinaryNumericInstruction binary => Integral.IsSupersetOf([binary.LeftInputType, binary.RightInputType]) || IsFloatingPoint(binary),
+        BinaryNumericInstruction binary => Integral.IsSupersetOf([binary.LeftInputType, binary.RightInputType]) || FloatingPoint.Contains(binary.LeftInputType),
         Comp comparison => Integral.Contains(comparison.InputType)
-            || (FloatingPoint.Contains(comparison.InputType) && comparison.Sign != Sign.Unsigned)
-            || (comparison is { InputType: StackType.Obj, Kind: ComparisonKind.Equality or ComparisonKind.Inequality } && (comparison.Left is LdNull || comparison.Right is LdNull)),
+            || Ordered.Contains((comparison.InputType, comparison.Sign))
+            || (comparison.InputType == StackType.Obj && comparison.Right is LdNull),
         Conv conversion => (Integral.Contains(InputType(conversion)) && (IntegralTargets.ContainsKey(conversion.TargetType) || FloatingPointTargets.ContainsKey(conversion.TargetType)))
             || (FloatingPoint.Contains(conversion.InputType) && (IntegralTargets.ContainsKey(conversion.TargetType) || FloatingPointTargets.ContainsKey(conversion.TargetType))),
-        CallInstruction call => Callable(call) && (!IsTypeOf(call) || Typed(call.Arguments[0])),
+        CallInstruction call => Callable(call) && (!IsTypeOf(call) || symbols.Type(((LdTypeToken)call.Arguments[0]).Type) is { TypeKind: not TypeKind.TypeParameter }),
         Throw thrown => Callable((NewObj)thrown.Argument),
         DefaultValue value => symbols.Type(value.Type) is { } type && TypeMapper.Default(type, TypeMapper.Unmapped) is not null,
         _ => Typed(instruction),
@@ -322,10 +328,10 @@ internal sealed partial class IlLowerer
     private bool Typed(ILInstruction instruction) => instruction switch
     {
         NewArr array => array.Indices[0].ResultType == StackType.I4 && symbols.Type(array.Type) is { } element && element is not IArrayTypeSymbol && TypeMapper.Default(element, TypeMapper.Unmapped) is not null,
-        Box box => symbols.Type(box.Type) is { IsValueType: true, TypeKind: not TypeKind.TypeParameter, OriginalDefinition.SpecialType: not SpecialType.System_Nullable_T },
+        Box box => symbols.Type(box.Type) is { TypeKind: not TypeKind.TypeParameter, OriginalDefinition.SpecialType: not SpecialType.System_Nullable_T },
         IsInst test => IsTestable(test.Type),
         CastClass test => IsTestable(test.Type),
-        LdTypeToken token => token.Parent is CallInstruction call && IsTypeOf(call) && symbols.Type(token.Type) is { TypeKind: not TypeKind.TypeParameter },
+        LdTypeToken => false,
         LdFtn function => symbols.Method(function.Method) is not null,
         LdVirtFtn function => symbols.Method(function.Method) is not null,
         TryCatch region => region.Handlers.All(h => h.Filter is LdcI4 { Value: 1 } or BlockContainer && symbols.Type(h.Variable.Type) is not null),
@@ -380,6 +386,7 @@ internal sealed partial class IlLowerer
     /// </summary>
     private Val Natural(ILInstruction instruction, ITypeSymbol hint) => instruction switch
     {
+        _ when IsAddress(instruction) => new(Opaque(instruction, IlKeys.Key(instruction, caught), Map(hint), fingerprint: false)!, hint),
         LdLoc load => Load(load.Variable),
         LdStr text => Literal(SpecialType.System_String, text.Value),
         LdcF4 constant => Literal(SpecialType.System_Single, constant.Value),
@@ -391,7 +398,6 @@ internal sealed partial class IlLowerer
         Conv conversion => Convert(conversion),
         CallInstruction call => Call(call)!.Value,
         IfInstruction choice => new(Conditional(choice, hint), hint),
-        _ when IsAddress(instruction) => new(Opaque(instruction, IlKeys.Key(instruction, caught), Map(hint), fingerprint: false)!, hint),
         _ => Heap(instruction, hint),
     };
 
@@ -526,8 +532,8 @@ internal sealed partial class IlLowerer
 
     /// <summary>
     /// Whether <paramref name="source"/>'s value is null, or null when it provably is not: a <c>new</c>, a new array,
-    /// <c>typeof</c> and <c>this</c> are not, <c>null</c> is, a variable carries its shadow, whether it is read or its
-    /// address is, an <c>as</c> or a downcast its test's, and anything else asks the <c>null.&lt;Sort&gt;</c> map.
+    /// <c>typeof</c> and <c>this</c> are not, <c>null</c> is, a variable carries its shadow, an <c>as</c> or a downcast
+    /// its test's, and anything else asks the <c>null.&lt;Sort&gt;</c> map.
     /// </summary>
     private IrVar? Nullness(ILInstruction source, IrVar value) => source switch
     {
@@ -536,7 +542,6 @@ internal sealed partial class IlLowerer
         CallInstruction call when IsTypeOf(call) => null,
         LdLoc load when IsThis(load.Variable) => null,
         LdLoc load when variables.TryGetValue(load.Variable, out SsaBuilder.Variable? variable) && Shadow(variable) is { } shadow => ssa.Load(context.Current, shadow),
-        _ when places.TryGetValue(source, out Place? place) && place is VariablePlace local && Shadow(local.Variable) is { } shadow => ssa.Load(context.Current, shadow),
         LdNull => Const(new IrBoolValue(Value: true)),
         _ => heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context),
     };
@@ -574,7 +579,7 @@ internal sealed partial class IlLowerer
         }
         else
         {
-            Jump(Unwind(crossed, scope.Exit(leave.TargetContainer)));
+            Jump(Unwind(crossed, scope.Exits[leave.TargetContainer]));
         }
     }
 
@@ -647,8 +652,7 @@ internal sealed partial class IlLowerer
     /// <summary>
     /// An integral operator, or <c>&amp;</c>, <c>|</c> or <c>^</c> of two Bool values; its <see cref="Sign"/>, not its
     /// operands' types, decides a signed or unsigned division, remainder, right shift and overflow check. On floating
-    /// point it is <see cref="PureCatalogue"/>'s function, and <c>-0.0 - x</c>, which is how ILSpy reads <c>neg</c>, is
-    /// <c>neg</c>.
+    /// point it is <see cref="PureCatalogue"/>'s function, and IL's <c>neg</c> is <c>neg</c>.
     /// </summary>
     private Val Binary(BinaryNumericInstruction binary)
     {
@@ -656,8 +660,7 @@ internal sealed partial class IlLowerer
         {
             ITypeSymbol type = Stack(binary.LeftInputType);
             return new(
-                binary is { Operator: BinaryNumericOperator.Sub, Left: LdcF4 { Value: 0 and var single } } && float.IsNegative(single)
-                    || binary is { Operator: BinaryNumericOperator.Sub, Left: LdcF8 { Value: 0 and var @double } } && double.IsNegative(@double)
+                IsNegation(binary)
                     ? Apply(PureCatalogue.Negation(type)!, [Value(binary.Right, type)], type)
                     : Apply(PureCatalogue.Binary(Kind(binary.Operator), type, type)!, [Value(binary.Left, type), Value(binary.Right, type)], type),
                 type);
@@ -682,11 +685,17 @@ internal sealed partial class IlLowerer
         return new(result, operands);
     }
 
-    /// <summary>Whether a binary operator is <c>+ - * / %</c> of two floating-point operands of one width.</summary>
-    private static bool IsFloatingPoint(BinaryNumericInstruction binary) =>
-        FloatingPoint.Contains(binary.LeftInputType)
-        && binary.LeftInputType == binary.RightInputType
-        && binary.Operator is BinaryNumericOperator.Add or BinaryNumericOperator.Sub or BinaryNumericOperator.Mul or BinaryNumericOperator.Div or BinaryNumericOperator.Rem;
+    /// <summary>
+    /// Whether a binary operator is on floating point: IL has only <c>+ - * / %</c> on it, of two operands of one width.
+    /// </summary>
+    private static bool IsFloatingPoint(BinaryNumericInstruction binary) => FloatingPoint.Contains(binary.LeftInputType);
+
+    /// <summary>
+    /// Whether <paramref name="binary"/> is IL's <c>neg</c>, which ILSpy reads as a subtraction from a <c>0.0</c> it makes
+    /// itself, with no IL range, where C#'s <c>0.0 - x</c> has its own: the two differ when <c>x</c> is <c>0.0</c>.
+    /// </summary>
+    private static bool IsNegation(BinaryNumericInstruction binary) =>
+        binary.Operator == BinaryNumericOperator.Sub && binary.Left is LdcF4 or LdcF8 && binary.Left.ILRangeIsEmpty;
 
     /// <summary>The C# operator of a floating-point <paramref name="op"/>; <see cref="BinaryNumericOperator.Rem"/> is the last.</summary>
     private static BinaryOperatorKind Kind(BinaryNumericOperator op) => op switch
@@ -747,14 +756,13 @@ internal sealed partial class IlLowerer
     /// <summary>
     /// An integral comparison by its <see cref="Sign"/>, an equality of two values one of which is Bool, a floating-point
     /// comparison's <see cref="PureCatalogue"/> function (ILSpy reads IL's unordered comparisons as the negation of an
-    /// ordered one), or a reference against <c>null</c>, which reads its null shadow.
+    /// ordered one), or a reference against <c>null</c>, which ILSpy puts on the right, reading its null shadow.
     /// </summary>
     private IrVar Compare(Comp comparison)
     {
         if (comparison.InputType == StackType.Obj)
         {
-            ILInstruction operand = comparison.Left is LdNull ? comparison.Right : comparison.Left;
-            IrVar isNull = NullFlag(operand, Receiver(operand, Object).Var);
+            IrVar isNull = NullFlag(comparison.Left, Receiver(comparison.Left, Object).Var);
             return comparison.Kind == ComparisonKind.Equality ? isNull : Not(isNull);
         }
 
@@ -854,7 +862,7 @@ internal sealed partial class IlLowerer
     /// <c>int</c>, as C#'s <c>Length</c> is: no array is longer.
     /// </summary>
     private static StackType InputType(Conv conversion) =>
-        conversion is { InputType: StackType.I, Argument: LdLen } ? StackType.I4 : conversion.InputType;
+        conversion.InputType == StackType.I && conversion.Argument is LdLen ? StackType.I4 : conversion.InputType;
 
     /// <summary>Throws when <paramref name="result"/> does not round-trip to <paramref name="value"/>, or when the signed side of a signedness change is negative.</summary>
     private void ThrowIfItDoesNotFit(IrVar value, IrVar result, bool fromSigned, bool toSigned)
@@ -877,7 +885,8 @@ internal sealed partial class IlLowerer
     /// <see cref="IrLowerer"/> dispatches one. <c>typeof(T)</c> is the shared <c>typeof</c> input (ticket P2-002); an
     /// operator of <c>decimal</c> or a user-defined one is its <see cref="PureCatalogue"/> function (ticket M4-002), and an
     /// auto-property's accessor reads or writes its backing field's map (ticket M4-008), each as <see cref="IrLowerer"/>
-    /// lowers it; a struct's constructor called on an address writes the value it makes there. Null for a call with no result.
+    /// lowers it. A struct's constructor is only ever a <c>newobj</c> here: ILSpy reads one called on a local's address as
+    /// the local's store of a <c>newobj</c>, and Roslyn stores one into a field or element. Null for a call with no result.
     /// </summary>
     private Val? Call(CallInstruction call)
     {
@@ -889,9 +898,9 @@ internal sealed partial class IlLowerer
 
         bool instance = call is not NewObj && !target.IsStatic;
         Val? receiver = instance ? Interface(Receiver(call.Arguments[0], target.ContainingType), target.ContainingType) : null;
-        if (call is CallVirt && receiver is { } bound)
+        if (call is CallVirt)
         {
-            target = Overriding(target, bound.Type);
+            target = Overriding(target, receiver!.Value.Type);
         }
 
         (ImmutableArray<IrVar> arguments, ImmutableArray<Place> written) = Arguments(call, target, instance ? 1 : 0);
@@ -900,26 +909,25 @@ internal sealed partial class IlLowerer
             return Backing(call, field, receiver, arguments);
         }
 
-        if (target is { ContainingType.SpecialType: SpecialType.System_Decimal, MethodKind: MethodKind.UserDefinedOperator or MethodKind.Conversion }
-            && Decimal(target, arguments) is { } catalogued)
+        bool isOperator = target.MethodKind is MethodKind.UserDefinedOperator or MethodKind.Conversion;
+        if (isOperator && target.ContainingType.SpecialType == SpecialType.System_Decimal)
         {
-            return catalogued;
+            return Decimal(target, arguments);
         }
 
-        if (call is CallVirt && receiver is { Type.IsValueType: false } checkedReceiver)
+        if (call is CallVirt && !receiver!.Value.Type.IsValueType)
         {
-            ThrowIfNull(call.Arguments[0], checkedReceiver.Var);
+            ThrowIfNull(call.Arguments[0], receiver.Value.Var);
         }
 
         CallIdentity identity = CallIdentityFactory.Of(target, compilation, RenameMap.Empty, []);
-        bool constructs = call is NewObj || (target.MethodKind == MethodKind.Constructor && IsAddress(call.Arguments[0]));
-        ImmutableArray<IrVar> operands = receiver is { } self && !constructs ? [self.Var, .. arguments] : arguments;
-        if (target.MethodKind is MethodKind.UserDefinedOperator or MethodKind.Conversion)
+        ImmutableArray<IrVar> operands = receiver is { } self ? [self.Var, .. arguments] : arguments;
+        if (isOperator)
         {
             return new(Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType);
         }
 
-        ITypeSymbol? result = constructs ? target.ContainingType : target.ReturnsVoid ? null : target.ReturnType;
+        ITypeSymbol? result = call is NewObj ? target.ContainingType : target.ReturnsVoid ? null : target.ReturnType;
         IrVar? value = result is null ? null : ssa.Temp(Map(result));
         IrVar threw = ssa.Temp(Bool);
         ImmutableArray<IrVar> outputs = [.. written.Select(p => ssa.Temp(Map(p.Type)))];
@@ -930,13 +938,6 @@ internal sealed partial class IlLowerer
         }
 
         ThrowIf(threw, PureCatalogue.AnyException);
-        if (constructs && call is not NewObj)
-        {
-            // `call .ctor(ldloca s, ...)`: the struct the constructor makes is stored at the address it was called on.
-            Write(places[call.Arguments[0]], value!, call);
-            return null;
-        }
-
         return value is null ? null : new(value, result!);
     }
 
@@ -1027,9 +1028,11 @@ internal sealed partial class IlLowerer
         return written.All(static a => a is LdLoca or LdLoc { Variable.Kind: VariableKind.Parameter }) && distinct.Count == written.Length;
     }
 
-    /// <summary>Whether <paramref name="call"/> is <c>typeof(T)</c>: <c>Type.GetTypeFromHandle</c> of a type token.</summary>
-    private static bool IsTypeOf(CallInstruction call) =>
-        call.Arguments is [LdTypeToken] && call.Method is { Name: "GetTypeFromHandle", DeclaringType.FullName: "System.Type" };
+    /// <summary>
+    /// Whether <paramref name="call"/> is <c>typeof(T)</c>: a call of a type token alone, which C# only passes to
+    /// <c>Type.GetTypeFromHandle</c> (a <c>TypeHandle</c> is read from the type it returns).
+    /// </summary>
+    private static bool IsTypeOf(CallInstruction call) => call.Arguments.Count == 1 && call.Arguments[0] is LdTypeToken;
 
     /// <summary>
     /// A receiver as it is, read from its address when it is given by one, or, when it is not lowered, an opaque of
@@ -1098,28 +1101,23 @@ internal sealed partial class IlLowerer
 
     /// <summary>
     /// A <c>decimal</c> operator as the IOperation lowering applies it (ticket M4-002): a binary operator, <c>++</c> and
-    /// <c>--</c> (an addition or subtraction of <c>1m</c>), <c>-</c> and a numeric conversion its <see cref="PureCatalogue"/>
-    /// function, <c>+</c> its operand. Null for any other, such as a conversion the catalogue lacks.
+    /// <c>--</c> (an addition or subtraction of <c>1m</c>), <c>-</c> and a numeric conversion, each its
+    /// <see cref="PureCatalogue"/> function. The catalogue has every operator <c>System.Decimal</c> declares but <c>+</c>,
+    /// which Roslyn never calls (a test pins both).
     /// </summary>
-    private Val? Decimal(IMethodSymbol target, ImmutableArray<IrVar> arguments)
+    private Val Decimal(IMethodSymbol target, ImmutableArray<IrVar> arguments)
     {
         ITypeSymbol decimalType = compilation.GetSpecialType(SpecialType.System_Decimal);
         ImmutableArray<IrVar> operands = target.Parameters.Length == 1 && DecimalOperators.ContainsKey(target.Name)
             ? [arguments[0], Const(TypeMapper.Constant(decimalType, 1))]
             : arguments;
-        PureCatalogue.Entry? entry = target.Name switch
+        PureCatalogue.Entry entry = target.Name switch
         {
-            WellKnownMemberNames.UnaryPlusOperatorName => null,
-            WellKnownMemberNames.UnaryNegationOperatorName => PureCatalogue.Negation(decimalType),
-            _ when DecimalOperators.TryGetValue(target.Name, out BinaryOperatorKind kind) => PureCatalogue.Binary(kind, decimalType, decimalType),
-            _ => PureCatalogue.Conversion(target.Parameters[0].Type, target.ReturnType),
+            WellKnownMemberNames.UnaryNegationOperatorName => PureCatalogue.Negation(decimalType)!,
+            _ when DecimalOperators.TryGetValue(target.Name, out BinaryOperatorKind kind) => PureCatalogue.Binary(kind, decimalType, decimalType)!,
+            _ => PureCatalogue.Conversion(target.Parameters[0].Type, target.ReturnType)!,
         };
-        return (target.Name, entry) switch
-        {
-            (WellKnownMemberNames.UnaryPlusOperatorName, _) => new(arguments[0], decimalType),
-            (_, { } catalogued) => new(Apply(catalogued, operands, target.ReturnType), target.ReturnType),
-            _ => null,
-        };
+        return new(Apply(entry, operands, target.ReturnType), target.ReturnType);
     }
 
     /// <summary>A catalogued function (ticket M4-002), with the exceptions it raises in this context; the IL lowering has no x87 side.</summary>

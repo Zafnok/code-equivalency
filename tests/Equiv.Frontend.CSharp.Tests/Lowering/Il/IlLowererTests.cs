@@ -243,6 +243,7 @@ public sealed class IlLowererTests
     [Theory]
     [InlineData("static bool M(object o, int a) => o == G(a); static object G(int a) => null;", "Comp", "C::G(int)")]
     [InlineData("static int M(nint n, int a) => (int)n + F(a); static int F(int a) => a;", "Conv", "C::F(int)")]
+    [InlineData("static bool M(nint n, int a) => n < F(a); static int F(int a) => a;", "Comp", "C::F(int)")]
     [InlineData("static unsafe int* M(int* p) => p;", "LdLoc", null)]
     [InlineData("static unsafe int*[] M(int*[] a) => a;", "LdLoc", null)]
     [InlineData("static void M(int[] a) { ref int r = ref a[0]; r = F(1); } static int F(int a) => a;", "StObj", "C::F(int)")]
@@ -532,6 +533,257 @@ public sealed class IlLowererTests
 
         Assert.Empty(Opaques(procedure));
         Assert.Equal(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"return {result}"), Outcome(run.Outcome));
+    }
+
+    /// <summary>
+    /// Floating-point and <c>decimal</c> operators, comparisons and conversions are the <see cref="PureCatalogue"/> functions
+    /// the IOperation lowering applies to the same C#: <c>-x</c>, which ILSpy reads as <c>0.0 - x</c>, is <c>neg</c>, and
+    /// C#'s <c>0.0 - x</c> a subtraction; every operator <c>System.Decimal</c> declares but <c>+</c>, which Roslyn never
+    /// calls, is catalogued. (A narrow integer converted to floating point is converted from its stack type, <c>int</c> or
+    /// <c>long</c>, which IL widens it to: the same value, under another function's name.)
+    /// </summary>
+    [Theory]
+    [InlineData("static double M(double a, float f, long l, ulong ul, uint u) => -a + (0.0 - a) + (a - 1.5) + f * f / 1.5f - (-f) + (0f - f) + (double)ul + (double)u + (double)l + (float)a + a % 2.0;")]
+    [InlineData("static bool M(double a, float f) { bool x = a < 1.5; bool y = a >= 2.0; bool z = f > 0.5f; bool w = f <= 0f; return x & y & z & w; }")]
+    [InlineData("static int M(double a, float f) => (int)a + checked((int)a) + (int)f + (byte)a + (int)(ulong)a;")]
+    [InlineData("static decimal M(decimal a, decimal b, byte y, sbyte z, short s, ushort us, char c, int i, uint u, long l, ulong ul, float f, double d) { a++; b--; decimal r = -a + +b - a * b / (a % b); bool t = a == b || a != b || a < b || a <= b || a > b || a >= b; return r + y + z + s + us + c + i + u + l + ul + (decimal)f + (decimal)d + (t ? 1m : 0m); }")]
+    [InlineData("static long M(decimal m) => (byte)m + (sbyte)m + (char)m + (short)m + (ushort)m + (int)m + (uint)m + (long)m + (long)(ulong)m + (long)(double)(float)m + (long)(double)m;")]
+    public void FloatingPointAndDecimalAreTheOperationLoweringsFunctions(string members)
+    {
+        Compilation compilation = Compile(members);
+        IMethodSymbol method = Method(compilation, "M");
+        static ImmutableArray<string> Functions(IrProcedure procedure) =>
+            [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>().Select(static p => p.Function).Order(StringComparer.Ordinal)];
+
+        IrProcedure il = IlLowerer.Lower(method, compilation);
+
+        Assert.Empty(Opaques(il));
+        Assert.Equal(Functions(IrLowerer.Lower(method, compilation, RenameMap.Empty, [])), Functions(il), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// An address is its place where the IR has one: a <c>ref</c>, <c>out</c> or <c>in</c> parameter is its variable, written
+    /// through with its null shadow; a call's <c>ref</c> and <c>out</c> arguments are its outputs, an <c>in</c> one the value
+    /// at its address; a slot holding an element's address is that element, checked where it is taken.
+    /// </summary>
+    [Theory]
+    [InlineData("static void M(ref int x, out int y, in int z) { y = x + z; x++; }", "x=4 y=7")]
+    [InlineData("static int M(int a) { F(ref a); G(out int b); return a + b + In(a); } static void F(ref int x) { } static void G(out int y) { y = 1; } static int In(in int x) => x;", "refouts 1 1 0")]
+    [InlineData("static string M(ref string s, string t) { s = t; G(out t); return t; } static void G(out string t) { t = null; }", "refouts 1")]
+    [InlineData("static void M(ref int x) => F(ref x); static void F(ref int x) { }", "refouts 1")]
+    [InlineData("static int M(int[] a) { a[0] += 1; return a[0]; }", "return 8")]
+    public void AnAddressIsItsPlace(string members, string expected)
+    {
+        IrProcedure procedure = Lower(members);
+        IrMapValue elements = new(new IrMap(new IrSort("int[]"), new IrMap(new IrBitVec(32), new IrBitVec(32))), new IrMapValue(new IrMap(new IrBitVec(32), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 7), ImmutableDictionary<IrValue, IrValue>.Empty), ImmutableDictionary<IrValue, IrValue>.Empty);
+        IrRun run = RunWith(
+            procedure,
+            ("x", IrBitVecValue.FromSigned(32, 3)),
+            ("z", IrBitVecValue.FromSigned(32, 4)),
+            ("array.int__", elements),
+            ("length.int__", new IrMapValue(new IrMap(new IrSort("int[]"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 1), ImmutableDictionary<IrValue, IrValue>.Empty)));
+        ImmutableArray<IrCall> calls = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>()];
+        string actual = expected[..3] switch
+        {
+            "x=4" => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"x={((IrBitVecValue)run.Outs[0]).TwosComplement} y={((IrBitVecValue)run.Outs[1]).TwosComplement}"),
+            "ref" => $"refouts {string.Join(' ', calls.Select(static c => c.RefOuts.Length))}",
+            _ => Outcome(run.Outcome),
+        };
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(expected, actual);
+    }
+
+    /// <summary>
+    /// An address is opaque where the IR has no place: an element of a many-dimensional array or at a native index, a
+    /// tuple's element, a <c>ref</c> field, a struct's <c>this</c>, a <c>ref</c> returned, and an element passed by
+    /// <c>ref</c>, which the call's outputs cannot write.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(int[,] a) { a[0, 1] += 1; return a[0, 1]; }", "LdElema[address operand]")]
+    [InlineData("static int M(int[] a, nint i) => a[i];", "LdElema[address operand]")]
+    [InlineData("static int M((int, int) t) => t.Item1;", "LdFlda[address operand]")]
+    [InlineData("ref struct R { public ref int F; } static int M(R r) => r.F;", "LdObj")]
+    [InlineData("struct S { public int X; public int Y() => X; } static int M(S s) => s.Y();", null)]
+    [InlineData("static ref int M(ref int x) => ref x;", "LdLoc")]
+    [InlineData("static void M(int[] a) => F(ref a[0]); static void F(ref int x) { }", "Call")]
+    public void AnAddressWithNoPlaceIsOpaque(string members, string? reason)
+    {
+        Compilation compilation = Compile(members);
+        IMethodSymbol method = reason is null ? compilation.GetTypeByMetadataName("C+S")!.GetMembers("Y").OfType<IMethodSymbol>().Single() : Method(compilation, "M");
+
+        IrProcedure procedure = IlLowerer.Lower(method, compilation);
+
+        Assert.Empty(IrValidator.Validate(procedure));
+        Assert.Contains(Opaques(procedure), o => string.Equals(o.Reason, reason ?? "LdFlda[address operand]", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A named method's pointer is the element of its call identity, for an instance method, a virtual one after its
+    /// receiver's null check, and a static one; a lambda's is opaque.
+    /// </summary>
+    [Fact]
+    public void AFunctionPointerNamesItsMethod()
+    {
+        const string Members = "int N() => 1; static int S() => 1; Func<int> M() => N; static Func<string> V(object o) => o.ToString; static Func<int> P() => new Func<int>(S);";
+        Compilation compilation = Compile(Members);
+        INamedTypeSymbol intPtr = compilation.GetSpecialType(SpecialType.System_IntPtr);
+        IrValue Named(string name) => TypeMapper.Constant(intPtr, CallIdentityFactory.Of(name.Contains('.', StringComparison.Ordinal) ? compilation.GetSpecialType(SpecialType.System_Object).GetMembers("ToString").OfType<IMethodSymbol>().Single() : Method(compilation, name), compilation, RenameMap.Empty, []).Value);
+        IrProcedure instance = Lower(Members);
+        IrProcedure @virtual = Lower(Members, "V");
+
+        Assert.Contains(instance.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>(), c => c.Value == Named("N"));
+        Assert.Contains(@virtual.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>(), c => c.Value == Named("object.ToString"));
+        Assert.Equal(new IrThrew("System.NullReferenceException"), RunWith(@virtual, ("null.System.Object", Nulls("System.Object", isNull: true))).Outcome);
+        Assert.DoesNotContain(Opaques(Lower(Members, "P")), static o => o.Reason.StartsWith("LdFtn", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A type test of an operand already of the tested type passes on every non-null operand, with no <c>istype</c> read;
+    /// one of an operand that cannot be null reads only <c>istype</c>; one of unrelated types is opaque.
+    /// </summary>
+    [Fact]
+    public void ATypeTestReadsOnlyWhatItNeeds()
+    {
+        const string Members = "class B { } class D : B { } static D M() => (D)(B)new D(); static D N() => (B)new D() as D; static D P() => (D)new B(); static D Q() => new B() as D; static string R(Exception e) => (string)(object)e;";
+
+        Assert.DoesNotContain(Lower(Members).Parameters, static p => p.Var.Name.StartsWith("istype.", StringComparison.Ordinal));
+        Assert.DoesNotContain(Lower(Members, "N").Parameters, static p => p.Var.Name.StartsWith("istype.", StringComparison.Ordinal));
+        Assert.Equal(new IrThrew("System.InvalidCastException"), RunWith(Lower(Members, "P")).Outcome);
+        Assert.Equal(new IrReturned(new IrSortValue("C+D", 0)), RunWith(Lower(Members, "Q")).Outcome);
+        Assert.Contains(Opaques(Lower(Members, "R")), static o => string.Equals(o.Reason, "CastClass", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <c>new T[n]</c> throws on a negative length unless the length is a constant, and <c>Length</c> reads the length map;
+    /// a creation of several dimensions, by a native length, of arrays, or of a struct with no default is opaque.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(int n) => new int[n].Length + new int[3].Length;", 2, "return 5")]
+    [InlineData("static int M(int n) => new int[n].Length + new int[3].Length;", -1, "throw System.OverflowException")]
+    [InlineData("static int M(long n) => new int[n].Length;", 0, "NewArr")]
+    [InlineData("static int M(int n) => new int[n][].Length;", 0, "NewArr")]
+    [InlineData("static int M(int n) => new DateTime[n].Length;", 0, "NewArr")]
+    public void AnArrayIsCreatedAndMeasured(string members, int n, string expected)
+    {
+        IrProcedure procedure = Lower(members);
+        ImmutableArray<IrOpaque> opaques = Opaques(procedure);
+        string actual = opaques.IsEmpty
+            ? Outcome(RunWith(procedure, ("n", IrBitVecValue.FromSigned(32, n)), ("new.int__", Fresh("int[]"))).Outcome)
+            : opaques.Select(static o => o.Reason).First(static r => r.StartsWith("NewArr", StringComparison.Ordinal));
+
+        Assert.Equal(expected, actual);
+    }
+
+    /// <summary>
+    /// A box is its value's <c>cast</c> to the reference type it is used as (ticket M3-010), and <c>typeof</c> the shared
+    /// input, never null; a box of a type parameter or a nullable, and <c>typeof</c> of a type parameter or a pointer, are opaque.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M(int a) => a;", "cast.System.Int32.System.Object")]
+    [InlineData("static IComparable M(int a) => a;", "cast.System.Int32.System.IComparable")]
+    [InlineData("static int M() => typeof(string).Name.Length;", "typeof.System.String")]
+    [InlineData("static object M<T>(T t) => t;", "Box")]
+    [InlineData("static object M(int? a) => a;", "Box")]
+    [InlineData("static Type M<T>() => typeof(T);", "LdTypeToken")]
+    [InlineData("static unsafe Type M() => typeof(int*);", "LdTypeToken")]
+    public void ABoxAndATypeAreTheirInputs(string members, string expected)
+    {
+        IrProcedure procedure = Lower(members);
+
+        Assert.Contains(expected, procedure.Parameters.Select(static p => p.Var.Name).Concat(Opaques(procedure).Select(static o => o.Reason)), StringComparer.Ordinal);
+        Assert.DoesNotContain(procedure.Parameters, static p => string.Equals(p.Var.Name, "null.System.Type", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An exception goes to the first handler whose type it converts to: past a <c>when</c> filter that declines, or that
+    /// throws, to the next; a known type never to a later handler once one takes it; one of no known type that two handlers
+    /// could take is <c>call-throw-in-try</c>, as the IOperation lowering routes it.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 1, "return 2")]
+    [InlineData(0, 9, "return 3")]
+    [InlineData(0, 0, "return 3")]
+    [InlineData(2, 1, "return 5")]
+    public void AFilterDeclinesToTheNextHandler(int a, int b, string expected)
+    {
+        IrProcedure procedure = Lower("static int M(int a, int b) { try { return 10 / a; } catch (DivideByZeroException) when (10 / b > 1) { return 2; } catch (ArithmeticException) { return 3; } catch (Exception) { return 4; } }");
+
+        Assert.Equal(expected, Outcome(RunWith(procedure, ("a", IrBitVecValue.FromSigned(32, a)), ("b", IrBitVecValue.FromSigned(32, b))).Outcome));
+        Assert.Contains(Opaques(Lower("static int M(int a) { try { return F(a); } catch (InvalidOperationException) { return 2; } catch (ArgumentException) { return 3; } } static int F(int a) => a;")), static o => string.Equals(o.Reason, "call-throw-in-try", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A <c>callvirt</c> names the override the receiver's static type binds, as C# and the IOperation lowering do, generic
+    /// ones constructed as the call is; a constructor's call of its base is a call with <c>this</c>; a thrown object whose
+    /// constructor is refused is opaque, and so is where the method goes after it.
+    /// </summary>
+    [Fact]
+    public void ACallNamesTheOverrideItBinds()
+    {
+        const string Members = "class B { public virtual int M<T>(T t) => 1; public virtual int N() => 2; } class D : B { public override int M<T>(T t) => 3; public override int N() => 4; }"
+            + " static int P(D d) => d.M(1) + d.N() + d.GetHashCode(); int f; C(int a) { f = a; }"
+            + " class E : Exception { public E(ref int a, ref int b) { } } static void T(int a) => throw new E(ref a, ref a);";
+        Compilation compilation = Compile(Members);
+        static ImmutableArray<string> Calls(IrProcedure procedure) => [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee.Value).Order(StringComparer.Ordinal)];
+        IMethodSymbol method = Method(compilation, "P");
+
+        Assert.Equal(Calls(IrLowerer.Lower(method, compilation, RenameMap.Empty, [])), Calls(IlLowerer.Lower(method, compilation)), StringComparer.Ordinal);
+        Assert.Contains("System.Object::.ctor()", Calls(Lower(Members, ".ctor")), StringComparer.Ordinal);
+        Assert.Contains(Opaques(Lower(Members, "T")), static o => string.Equals(o.Reason, "Throw[new]", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A reference receiver of an interface's method is converted to the interface through its <c>cast</c> map, as C#'s
+    /// conversion is, unless it already is one; a struct's, called through <c>constrained.</c>, is the struct's value.
+    /// </summary>
+    [Theory]
+    [InlineData("static void M(IDisposable d) => d.Dispose();", false)]
+    [InlineData("static void M(System.IO.StringWriter w) => ((IDisposable)w).Dispose();", true)]
+    [InlineData("static void M(System.Collections.Generic.List<int> l) { using (var e = l.GetEnumerator()) { } }", false)]
+    public void AnInterfacesReceiverIsOfTheInterface(string members, bool cast)
+    {
+        IrProcedure procedure = Lower(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Contains(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>(), static c => string.Equals(c.Callee.Value, "System.IDisposable::Dispose()", StringComparison.Ordinal));
+        Assert.Equal(cast, procedure.Parameters.Any(static p => p.Var.Name.StartsWith("cast.", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// A member of a reference that did not load is refused, never an exception: a field, a struct's default, box, array
+    /// and element, a type test, a method's pointer, a <c>catch</c> of its type, and <c>typeof</c> of it.
+    /// </summary>
+    [Theory]
+    [InlineData("int M(S s) => s.X;", "LdFlda[address operand]")]
+    [InlineData("S M() => default;", "DefaultValue")]
+    [InlineData("object M(S s) => s;", "Box")]
+    [InlineData("int M() => new S[2].Length;", "NewArr")]
+    [InlineData("int M(S[] a) => a[0].X;", "LdElema[address operand]")]
+    [InlineData("object M(object o) => (D)o;", "CastClass")]
+    [InlineData("Func<int> M(K k) => k.N;", "LdFtn")]
+    [InlineData("Func<int> M(K k) => k.V;", "LdVirtFtn")]
+    [InlineData("int M(int a) { try { return F(a); } catch (E) { return 2; } } static int F(int a) => a;", "TryCatch")]
+    [InlineData("Type M() => typeof(S);", "Call")]
+    public void AnUnloadedReferenceIsRefused(string members, string reason)
+    {
+        Compilation library = RoslynTestCompilations.Compile(
+            "public struct S { public int X; } public class E : System.Exception { } public class K { public int N() => 1; public virtual int V() => 2; } public class B { } public class D : B { }",
+            "Unloaded");
+        string path = Path.Combine(Path.GetTempPath(), $"equiv-il-{Guid.NewGuid():N}.dll");
+        using (MemoryStream image = new())
+        {
+            Assert.True(library.Emit(image, cancellationToken: TestContext.Current.CancellationToken).Success);
+            File.WriteAllBytes(path, image.ToArray());
+        }
+
+        Compilation compilation = RoslynTestCompilations.Compile($"using System;\nclass C\n{{\n{members}\n}}\n", [MetadataReference.CreateFromFile(path)]);
+        File.Delete(path);
+
+        IrProcedure procedure = IlLowerer.Lower(Method(compilation, "M"), compilation);
+
+        Assert.Empty(IrValidator.Validate(procedure));
+        Assert.Contains(Opaques(procedure), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
     }
 
     /// <summary>Compiles <paramref name="members"/> in class <c>C</c>, then runs <c>M</c> by reflection and its IL lowering by the interpreter.</summary>

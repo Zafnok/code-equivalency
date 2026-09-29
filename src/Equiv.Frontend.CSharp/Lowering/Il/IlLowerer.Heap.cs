@@ -54,7 +54,7 @@ internal sealed partial class IlLowerer
 
     /// <summary>
     /// Whether <paramref name="address"/> names a place the IR has: a local's or parameter's address (not a caught
-    /// exception's), a <c>ref</c>, <c>out</c> or <c>in</c> parameter, a slot holding one, a field that resolves (of an object,
+    /// exception's), a <c>ref</c>, <c>out</c> or <c>in</c> parameter, a slot holding one that was stored, a field that resolves (of an object,
     /// or of a struct at an address that is one), a static field, an element of an array by an <c>int</c> index, or a
     /// temporary. Not a struct's <c>this</c>, which the IOperation lowering does not model either.
     /// </summary>
@@ -62,10 +62,10 @@ internal sealed partial class IlLowerer
     {
         LdLoca load => !caught.Contains(load.Variable) && VariableType(load.Variable) is not null,
         LdLoc { Variable: { Kind: VariableKind.Parameter, Index: >= 0 } } => true,
-        LdLoc load => IsAddressSlot(load.Variable) && load.Variable.StoreInstructions is [StLoc store] && Addressable(store.Value),
+        LdLoc load => slots.ContainsKey(load.Variable),
         LdFlda field => Field(field.Field) is { } symbol && TypeMapper.TupleElement(symbol) is null && (!symbol.ContainingType.IsValueType || Addressable(field.Target)),
         LdsFlda field => Field(field.Field) is not null,
-        LdElema element => element is { Indices: [{ ResultType: StackType.I4 }], WithSystemIndex: false } && symbols.Type(element.Type) is not null,
+        LdElema element => element.Indices.Count == 1 && element.Indices[0].ResultType == StackType.I4 && symbols.Type(element.Type) is not null,
         AddressOf temporary => symbols.Type(temporary.Type) is not null,
         _ => false,
     };
@@ -306,14 +306,14 @@ internal sealed partial class IlLowerer
     }
 
     /// <summary>
-    /// A boxing conversion (ticket M3-010): the value's <c>cast</c> to the reference type it is used as, <paramref name="hint"/>,
-    /// or to <c>object</c> when that is not one.
+    /// A boxing conversion (ticket M3-010): the value's <c>cast</c> to the reference type it is used as,
+    /// <paramref name="hint"/>, as the IOperation lowering's conversion to that type is (IL that verifies uses a box only
+    /// as an <c>object</c> or an interface it implements).
     /// </summary>
     private Val Box(Box box, ITypeSymbol hint)
     {
         ITypeSymbol from = symbols.Type(box.Type)!;
-        ITypeSymbol to = hint.IsReferenceType ? hint : Object;
-        return new(heap.MapRead(heap.Inputs.Cast(from, to), Value(box.Argument, from), context), to);
+        return new(heap.MapRead(heap.Inputs.Cast(from, hint), Value(box.Argument, from), context), hint);
     }
 
     /// <summary>A virtual method's pointer: its receiver, null-checked, then the method's element.</summary>
