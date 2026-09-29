@@ -2,6 +2,7 @@ using CsCheck;
 
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
+using Equiv.Corpus.Seeder;
 using Equiv.Frontend.CSharp.Lowering;
 using Equiv.TestSupport;
 
@@ -34,7 +35,11 @@ public sealed class PairGenLoweringTests
                     IMethodSymbol method = compilation.GetTypeByMetadataName("Oracle")!.GetMembers("M").OfType<IMethodSymbol>().Single();
                     IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
                     Assert.Empty(IrValidator.Validate(procedure));
-                    Assert.Empty(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>());
+                    // Ticket P2-048: an interpolated string is opaque by design (IOPERATION-COVERAGE.md, InterpolatedString),
+                    // so the modern side of a ConcatToInterpolation pair has that opaque and no other.
+                    Assert.DoesNotContain(
+                        procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>(),
+                        o => pair.Operator != MutationOperator.ConcatToInterpolation || !string.Equals(o.Reason, "InterpolatedString", StringComparison.Ordinal));
                 }
             },
             seed: Seed,

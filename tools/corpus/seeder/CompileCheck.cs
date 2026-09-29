@@ -16,7 +16,8 @@ namespace Equiv.Corpus.Seeder;
 /// </summary>
 internal static class CompileCheck
 {
-    private static readonly Lazy<ImmutableArray<MetadataReference>> References = new(static () =>
+    /// <summary>The BCL, which is all this tool ever resolves against; <see cref="SyntaxMutator"/>'s semantic checks share it.</summary>
+    internal static readonly Lazy<ImmutableArray<MetadataReference>> References = new(static () =>
         [.. ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
             .Select(static path => (MetadataReference)MetadataReference.CreateFromFile(path))]);
