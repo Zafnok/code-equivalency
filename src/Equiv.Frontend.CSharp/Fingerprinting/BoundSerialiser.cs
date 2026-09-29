@@ -299,9 +299,20 @@ internal sealed class BoundSerialiser : OperationWalker
     private static bool IsIntegral(ITypeSymbol type) => Integral.Contains(Underlying(type).SpecialType);
 
     /// <summary>A nullable value type's underlying type, and an enum's underlying integral type.</summary>
-    private static ITypeSymbol Underlying(ITypeSymbol type) => type is INamedTypeSymbol named
-        ? named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T ? Underlying(named.TypeArguments[0]) : named.EnumUnderlyingType ?? named
-        : type;
+    private static ITypeSymbol Underlying(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol named)
+        {
+            return type;
+        }
+
+        if (named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        {
+            return Underlying(named.TypeArguments[0]);
+        }
+
+        return named.EnumUnderlyingType ?? named;
+    }
 
     /// <summary>
     /// A member entry whose modern argument list is the legacy call's source arguments in order and unchanged: rewriting only

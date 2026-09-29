@@ -79,18 +79,27 @@ internal static class ProbeArguments
         {
             IFieldSymbol? member = enumType.GetMembers().OfType<IFieldSymbol>()
                 .FirstOrDefault(f => f.HasConstantValue && string.Equals(f.Name, value.GetString(), StringComparison.Ordinal));
-            return member is null
-                ? null
-                : unsigned
-                    ? Convert.ToUInt64(member.ConstantValue, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture)
-                    : Convert.ToInt64(member.ConstantValue, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
+            if (member is null)
+            {
+                return null;
+            }
+
+            return unsigned
+                ? Convert.ToUInt64(member.ConstantValue, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture)
+                : Convert.ToInt64(member.ConstantValue, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture);
         }
 
-        return value.ValueKind == JsonValueKind.Number
-            ? unsigned
-                ? (value.TryGetUInt64(out ulong u) ? u.ToString(CultureInfo.InvariantCulture) : null)
-                : (value.TryGetInt64(out long i) ? i.ToString(CultureInfo.InvariantCulture) : null)
-            : null;
+        if (value.ValueKind != JsonValueKind.Number)
+        {
+            return null;
+        }
+
+        if (unsigned)
+        {
+            return value.TryGetUInt64(out ulong u) ? u.ToString(CultureInfo.InvariantCulture) : null;
+        }
+
+        return value.TryGetInt64(out long i) ? i.ToString(CultureInfo.InvariantCulture) : null;
     }
 
     private static bool IsUnsigned(ITypeSymbol underlying) =>
