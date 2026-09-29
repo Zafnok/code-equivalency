@@ -459,12 +459,7 @@ public static class SyntaxMutator
 
         HashSet<string> moved = [.. last.Statement.DescendantNodes().Select(DeclaredName).OfType<string>()];
         bool clashes = method.DescendantTokens().Any(t => t.IsKind(SyntaxKind.IdentifierToken) && !last.Statement.FullSpan.Contains(t.SpanStart) && moved.Contains(t.Text));
-        if (clashes || Model(method).GetTypeInfo(last.Condition).Type is not { SpecialType: SpecialType.System_Boolean })
-        {
-            return [];
-        }
-
-        return [() => GuardClause(method, last)];
+        return clashes || Model(method).GetTypeInfo(last.Condition).Type is not { SpecialType: SpecialType.System_Boolean } ? [] : [() => GuardClause(method, last)];
     }
 
     private static string? DeclaredName(SyntaxNode node) => node switch

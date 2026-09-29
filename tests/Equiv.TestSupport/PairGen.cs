@@ -22,7 +22,9 @@ namespace Equiv.TestSupport;
 /// literal bounds of at most three, <c>throw</c>, and null tests on <c>s</c>. As in <see cref="LoweringOracleGen"/>,
 /// every expression reads a variable, so none is a compile-time constant; literals are only right operands, and never a
 /// zero divisor. A value written to <c>F</c> or <c>u</c> never branches, because the CFG captures the target of an
-/// assignment whose value branches, which is opaque until ticket P2-006. Methods stay under 40 statements.
+/// assignment whose value branches, which is opaque until ticket P2-006. Methods stay under 40 statements. The cleanup
+/// operators of ticket P2-048 draw from methods with one more construct (<see cref="WithCleanup"/>), the only place a
+/// method has a string local, an <c>if</c> with no <c>else</c>, or a loop bounded by <c>u.Length</c>.
 /// </summary>
 public static class PairGen
 {
@@ -83,9 +85,46 @@ public static class PairGen
     /// <summary>As <see cref="Pair"/>, over methods that also call a lambda (ticket M4-004).</summary>
     public static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> FragmentPair { get; } = Pairs(FragmentMethod);
 
+    /// <summary>
+    /// A generated method with one construct a P2-048 cleanup operator rewrites, which the base generator rarely or
+    /// never makes: an <c>if</c>/<c>else</c> assigning one local, or returning, from both branches; a trailing <c>if</c>
+    /// with no <c>else</c> in a <c>void</c> method; a null check or concatenation over the string local <c>w</c>; or an
+    /// index loop over <c>u</c>, whichever <paramref name="op"/> rewrites, so that a site is drawn often enough for
+    /// CsCheck's <c>Where</c>. Only the cleanup operators draw from it, so the other operators' pairs are as before.
+    /// </summary>
+    private static Gen<Method> WithCleanup(Gen<Method> methods, MutationOperator op) => op == MutationOperator.GuardClause
+        ? methods.Where(static m => m.ReturnType == typeof(void)).SelectMany(static m => ExprGen(typeof(bool), 2, flat: false).Select(c => m with { Body = [.. m.Body[..^1], new Guard(c, [m.Body[^1]])] }))
+        : methods.SelectMany(m => Cleanup(m, op));
+
+    private static Gen<Method> Cleanup(Method m, MutationOperator op)
+    {
+        Gen<IExpr> condition = ExprGen(typeof(bool), 2, flat: false);
+        Gen<int> at = Gen.Int[0, m.Body.Length - 1];
+        Name s = new(typeof(string), "s");
+        Name w = new(typeof(string), "w");
+        Method strings = m with { Locals = [.. m.Locals, new Declare(w.Id, s)] };
+        Gen<Method> assigned = Gen.OneOfConst(Types).SelectMany(type => Gen.Select(condition, ExprGen(type, 2, flat: false), ExprGen(type, 2, flat: false), at, (c, p, q, i) =>
+            Insert(m, i, new If(c, [new Assign(LocalName(type), p)], [new Assign(LocalName(type), q)]))));
+        return op switch
+        {
+            MutationOperator.IfToConditional when m.ReturnType != typeof(void) => Gen.OneOf(
+                assigned,
+                Gen.Select(condition, ExprGen(m.ReturnType, Depth, flat: false), (c, q) => m with { Body = [.. m.Body[..^1], new If(c, [m.Body[^1]], [new Return(q)])] })),
+            MutationOperator.IfToConditional => assigned,
+            MutationOperator.CoalesceNullCheck => Gen.Select(Gen.Bool, at, (isNull, i) =>
+                Insert(strings, i, new Assign(w.Id, isNull ? new Conditional(new NullTest(IsNull: true), w, s) : new Conditional(new NullTest(IsNull: false), s, w)))),
+            MutationOperator.ConcatToInterpolation => Gen.Select(Gen.Bool, at, (literal, i) => Insert(strings, i, new Assign(w.Id, new Concat(literal ? [new Text("t"), s, w] : [s, w])))),
+            _ => Gen.Select(Gen.OneOfConst(Field, "x"), Gen.OneOfConst("+", "^", "|"), at, (target, arithmetic, i) => Insert(m, i, new ArrayLoop(target, arithmetic))),
+        };
+    }
+
+    private static Method Insert(Method method, int at, IStmt statement) => method with { Body = method.Body.Insert(at, statement) };
+
+    private static bool IsCleanup(MutationOperator op) => op is >= MutationOperator.IfToConditional and <= MutationOperator.ForToForeach;
+
     private static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Pairs(Gen<Method> methods) =>
         Gen.Enum<MutationOperator>().SelectMany(op =>
-            methods.Select(Rendered).Where(t => SyntaxMutator.Sites(op, t.Method) > 0).SelectMany(t =>
+            (IsCleanup(op) ? WithCleanup(methods, op) : methods).Select(Rendered).Where(t => SyntaxMutator.Sites(op, t.Method) > 0).SelectMany(t =>
                 Gen.Int[0, SyntaxMutator.Sites(op, t.Method) - 1].Select(site =>
                 {
                     MethodDeclarationSyntax mutated = SyntaxMutator.Apply(op, t.Method, site)!;
@@ -123,6 +162,7 @@ public static class PairGen
     private static int Count(ImmutableArray<IStmt> block) => block.Sum(static s => 1 + s switch
     {
         If branch => Count(branch.Then) + Count(branch.Else),
+        Guard guard => Count(guard.Then),
         Switch choice => choice.Cases.Sum(static c => Count(c.Body)) + Count(choice.Default),
         While loop => Count(loop.Body),
         For loop => Count(loop.Body),

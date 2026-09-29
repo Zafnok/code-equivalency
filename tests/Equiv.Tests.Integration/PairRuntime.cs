@@ -31,6 +31,9 @@ internal static class PairRuntime
 {
     private const string FieldMap = "field.Oracle.F";
 
+    /// <summary>The longest array a model is replayed at its own length.</summary>
+    private const long MaxReplayedLength = 64;
+
     private static readonly ImmutableArray<MetadataReference> References =
         [.. ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
@@ -72,8 +75,9 @@ internal static class PairRuntime
     /// <summary>
     /// A Divergent model as C# arguments. The model's inputs are the shared inputs of the product encoding: the legacy
     /// side's parameters, then the modern side's that the legacy side lacks (ADR 0021), which for two methods with one
-    /// signature pair by name. An array longer than three is replayed as three elements long, because no generated
-    /// method reads past index 2 or reads the length. A value the model cannot give a C# run is a problem, not an input.
+    /// signature pair by name. An array is replayed at the model's length, since a P2-048 loop reads <c>u.Length</c>;
+    /// one longer than <see cref="MaxReplayedLength"/> is replayed as three elements long, which every other generated
+    /// method cannot tell apart, since none reads past index 2. A value the model cannot give a C# run is a problem, not an input.
     /// </summary>
     private static (PairInput? Model, string? Problem) Decode(IrProcedure old, IrProcedure @new, IrInputs inputs)
     {
@@ -95,7 +99,7 @@ internal static class PairRuntime
             }
 
             IrMapValue? elements = model.TryGetValue("array.int__", out IrValue? slices) ? (IrMapValue)((IrMapValue)slices).Read(array) : null;
-            u = [.. Enumerable.Range(0, (int)Math.Min(length, 3)).Select(i => elements is null ? 0 : (int)Bits(elements.Read(IrBitVecValue.FromSigned(32, i))))];
+            u = [.. Enumerable.Range(0, (int)(length <= MaxReplayedLength ? length : 3)).Select(i => elements is null ? 0 : (int)Bits(elements.Read(IrBitVecValue.FromSigned(32, i))))];
         }
 
         return (new PairInput(
