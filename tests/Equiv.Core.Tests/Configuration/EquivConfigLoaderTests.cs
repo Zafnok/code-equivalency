@@ -203,6 +203,28 @@ public sealed class EquivConfigLoaderTests
         Assert.Equal(["webapi."], result.Config.SuppressApiEquivalences);
     }
 
+    /// <summary>Ticket P2-053 acceptance criterion 4: <c>runtimes</c> takes a target framework per side, and anything else is CFG009.</summary>
+    [Fact]
+    public void Runtimes_AreValidated()
+    {
+        EquivConfigResult both = EquivConfigLoader.Load("""{ "runtimes": { "legacy": ".NETFramework,Version=v4.8", "modern": "net8.0" } }""");
+        Assert.True(both.IsValid);
+        Assert.Equal(TargetRuntime.Parse("net48"), both.Config.LegacyRuntime);
+        Assert.Equal(TargetRuntime.Parse("net8.0"), both.Config.ModernRuntime);
+
+        EquivConfigResult none = EquivConfigLoader.Load("{}");
+        Assert.Null(none.Config.LegacyRuntime);
+        Assert.Null(none.Config.ModernRuntime);
+
+        EquivConfigResult invalid = EquivConfigLoader.Load("""{ "runtimes": { "legacy": "netstandard2.0", "modern": "net10.0", "other": "net48" } }""");
+        Assert.Equal(
+            [new EquivConfigDiagnostic("CFG009", "/runtimes/legacy", "value must be a .NET Framework or .NET target framework, such as \"net48\" or \"net8.0\""),
+             new EquivConfigDiagnostic("CFG009", "/runtimes/other", "unknown side \"other\" (expected \"legacy\" or \"modern\")")],
+            invalid.Diagnostics);
+        Assert.Null(invalid.Config.LegacyRuntime);
+        Assert.Equal(TargetRuntime.Parse("net10.0"), invalid.Config.ModernRuntime);
+    }
+
     /// <summary>Every diagnostic's exact id, JSON-pointer path and message, so a report names the offending entry.</summary>
     [Theory]
     [InlineData("""[]""", "CFG001", "/", "equiv.config.json must contain a JSON object")]
@@ -216,6 +238,8 @@ public sealed class EquivConfigLoaderTests
     [InlineData("""{ "suppressApiEquivalences": ["a", "b", ""] }""", "CFG008", "/suppressApiEquivalences/2", "value must be a non-empty string")]
     [InlineData("""{ "bound": "x" }""", "CFG002", "/bound", "\"bound\" must be a positive integer")]
     [InlineData("""{ "bound": 1.5 }""", "CFG002", "/bound", "\"bound\" must be a positive integer")]
+    [InlineData("""{ "runtimes": "net48" }""", "CFG009", "/runtimes", "\"runtimes\" must be an object with \"legacy\" and/or \"modern\"")]
+    [InlineData("""{ "runtimes": { "modern": 8 } }""", "CFG009", "/runtimes/modern", "value must be a .NET Framework or .NET target framework, such as \"net48\" or \"net8.0\"")]
     [InlineData("""{ "timeoutMs": 0 }""", "CFG003", "/timeoutMs", "\"timeoutMs\" must be a positive integer")]
     public void EachDiagnosticNamesItsPathAndProblem(string json, string id, string path, string message) =>
         Assert.Equal(new EquivConfigDiagnostic(id, path, message), Assert.Single(EquivConfigLoader.Load(json).Diagnostics));

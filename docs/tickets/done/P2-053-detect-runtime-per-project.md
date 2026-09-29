@@ -1,5 +1,5 @@
 # P2-053 Detect each project's runtime and report it
-Status: todo
+Status: done (PR #292)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none (ADR 0040, accepted 2026-09-28)
@@ -51,3 +51,11 @@ Any change to lowering, encoding or verdicts belongs to P2-055. More than one ne
 Using the runtime (P2-054 to P2-056). Loading non-SDK projects that target .NET Core.
 
 ## Notes
+- Decision: `TargetRuntime.RuntimeFamily` is an enum nested in `TargetRuntime`, so Core gains one type. `TargetRuntime.Parse` returns null for anything that is neither .NET Framework nor .NET (Core), `netstandard` included.
+- Decision: the per-project result is frontend-internal (`Loading/ProjectRuntime.cs`, `Loading/RuntimeDetection.cs`, held on `LoadedSolution.Runtimes`); Core's `FrontendAnalysis` carries only the reported `(Project, Runtime, Source)` strings, since P2-055 and P2-056 consume the runtime inside the frontend.
+- Decision: `project` is the assembly name, the key P2-016's `LastFlavour` and ADR 0029's skipped-project matching already use.
+- Decision: a hosted project whose hosts run on several runtimes is one entry, `runtime` listing them in runtime order joined by `, ` (criterion 5 says one entry per project).
+- Decision: a test project is one that references `xunit.core`, `xunit.v3.core`, `nunit.framework` or `Microsoft.VisualStudio.TestPlatform.TestFramework`; an executable is `OutputKind` Console, Windows or WindowsRuntime application. A host without a readable runtime hosts nothing.
+- Decision: a project with no `TargetFrameworkAttribute`, or one naming neither family (`.NETPortable`), is resolved like `netstandard`; unhosted it reports its moniker as written, or `unknown`.
+- Decision: the config file is `equiv.config.json` (the ticket's `equiv.json`); the new diagnostic is `CFG009`.
+- Decision: the SARIF property is built in `CompareCommand.RunProperties` beside `projectsNotBuilt`, with the list shape in `SarifReportWriter.RuntimesProperty`.

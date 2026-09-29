@@ -209,6 +209,22 @@
         "projectsNotBuilt": {
           "legacy": [],
           "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.WebApiBasic",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.WebApiBasic",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
         }
       }
     }

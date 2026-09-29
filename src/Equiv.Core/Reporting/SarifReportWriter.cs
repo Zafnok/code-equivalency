@@ -412,6 +412,18 @@ public static class SarifReportWriter
     };
 
     /// <summary>The spelling the census uses for a side: <c>legacy</c>, <c>modern</c>.</summary>
+    /// <summary>
+    /// One side's <c>run.properties.runtimes</c> list (ADR 0040; ticket P2-053): an object per loaded project, with its
+    /// <c>project</c>, <c>runtime</c> and <c>source</c>.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyDictionary<string, string>> RuntimesProperty(IEnumerable<(string Project, string Runtime, string Source)> runtimes) =>
+        [.. runtimes.Select(static r => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["project"] = r.Project,
+            ["runtime"] = r.Runtime,
+            ["source"] = r.Source,
+        })];
+
     internal static string Name(Codebase side) => side == Codebase.Legacy ? "legacy" : "modern";
 
     /// <summary>

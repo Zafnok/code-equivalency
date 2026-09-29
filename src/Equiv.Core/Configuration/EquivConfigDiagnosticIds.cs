@@ -26,4 +26,7 @@ public static class EquivConfigDiagnosticIds
 
     /// <summary>"suppressApiEquivalences" is present but not an array of non-empty strings.</summary>
     public const string InvalidSuppressApiEquivalencesEntry = "CFG008";
+
+    /// <summary>"runtimes" is present but not an object whose only keys, "legacy" and "modern", name a .NET Framework or .NET (Core) target framework.</summary>
+    public const string InvalidRuntimes = "CFG009";
 }

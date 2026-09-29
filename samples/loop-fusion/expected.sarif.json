@@ -176,6 +176,22 @@
         "projectsNotBuilt": {
           "legacy": [],
           "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.LoopFusion",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.LoopFusion",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
         }
       }
     }
