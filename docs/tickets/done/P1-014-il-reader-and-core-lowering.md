@@ -1,5 +1,5 @@
 # P1-014 IL fallback, part 1: read a method's ILAst and lower its control flow, integral arithmetic and calls
-Status: in-progress
+Status: done (PR #298)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-012, M4-009; ADR 0039 accepted

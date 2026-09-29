@@ -231,9 +231,9 @@ internal sealed class IlLowerer
     {
         LdLoc load => VariableType(load.Variable) is not null,
         StLoc store => VariableType(store.Variable) is not null,
-        BinaryNumericInstruction binary => Integral.Contains(binary.LeftInputType) & Integral.Contains(binary.RightInputType),
+        BinaryNumericInstruction binary => Integral.IsSupersetOf([binary.LeftInputType, binary.RightInputType]),
         Comp comparison => Integral.Contains(comparison.InputType),
-        Conv conversion => Integral.Contains(conversion.InputType) & IntegralTargets.Contains(conversion.TargetType),
+        Conv conversion => Integral.Contains(conversion.InputType) && IntegralTargets.Contains(conversion.TargetType),
         CallInstruction call => symbols.Method(call.Method) is { RefKind: RefKind.None } target
             && call.ConstrainedTo is null
             && target.Parameters.All(static p => p.RefKind == RefKind.None),
@@ -676,7 +676,12 @@ internal sealed class IlLowerer
             return new(Pure(PureCatalogue.UserDefined(identity), identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType);
         }
 
-        ITypeSymbol? result = call is NewObj ? target.ContainingType : target.ReturnsVoid ? null : target.ReturnType;
+        ITypeSymbol? result = target.ReturnsVoid ? null : target.ReturnType;
+        if (call is NewObj)
+        {
+            result = target.ContainingType;
+        }
+
         IrVar? value = result is null ? null : ssa.Temp(Map(result));
         IrVar threw = ssa.Temp(Bool);
         ssa.Emit(context.Current, new IrCall(value, threw, identity, operands));
@@ -703,9 +708,7 @@ internal sealed class IlLowerer
     /// </summary>
     private Val? Backing(CallInstruction call, IFieldSymbol field, Val? receiver, ImmutableArray<IrVar> arguments)
     {
-        IrVar? key = receiver is { } self
-            ? Map(self.Type) == Map(field.ContainingType) ? self.Var : heap.MapRead(heap.Inputs.Cast(self.Type, field.ContainingType), self.Var, context)
-            : null;
+        IrVar? key = receiver is { } self ? Upcast(self, field.ContainingType) : null;
         if (key is not null)
         {
             ThrowIfNull(call.Arguments[0], key);
@@ -720,6 +723,10 @@ internal sealed class IlLowerer
         heap.WriteSlice(access, arguments[^1], context);
         return null;
     }
+
+    /// <summary><paramref name="value"/> as a key of a map of <paramref name="type"/>'s members: itself, or its <c>cast</c> read when it is of a derived type.</summary>
+    private IrVar Upcast(Val value, INamedTypeSymbol type) =>
+        Map(value.Type) == Map(type) ? value.Var : heap.MapRead(heap.Inputs.Cast(value.Type, type), value.Var, context);
 
     /// <summary>An <see cref="IrPure"/> of <paramref name="function"/>, which may throw an exception of any type, and a branch on its flag.</summary>
     private IrVar Pure(string function, bool runtimeSensitive, ImmutableArray<IrVar> args, IrType result)

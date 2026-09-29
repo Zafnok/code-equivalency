@@ -175,32 +175,7 @@ internal static class IlAstReader
             .DistinctBy(static d => d.Name, StringComparer.Ordinal)
             .ToImmutableDictionary(static d => d.Name, static d => d.FilePath, StringComparer.Ordinal);
 
-    /// <summary>A reference's module: a project reference emitted as its compilation is, a file read from its path, else none.</summary>
-    private static PortableFile? Load(MetadataReference? reference) => reference switch
-    {
-        CompilationReference project => Modules.GetValue(project.Compilation, Emit)?.File,
-        PortableExecutableReference { FilePath: { } path } => FromPath(path),
-        _ => null,
-    };
-
     private static PortableFile Image(string name, byte[] image) => new(name, new MemoryStream(image), PEStreamOptions.PrefetchEntireImage);
-
-    /// <summary>A module read from <paramref name="path"/>, or none when the file has gone or is no longer a module.</summary>
-    private static PortableFile? FromPath(string path)
-    {
-        try
-        {
-            return Image(path, File.ReadAllBytes(path));
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (BadImageFormatException)
-        {
-            return null;
-        }
-    }
 
     /// <summary>Resolves an assembly reference from the compilation's own references, by simple name, each once.</summary>
     internal sealed class Resolver : IAssemblyResolver
@@ -215,15 +190,42 @@ internal static class IlAstReader
             }
         }
 
-        public MetadataFile? Resolve(IAssemblyReference reference) => byName.TryGetValue(reference.Name, out Lazy<PortableFile?>? file) ? file.Value : null;
+        public MetadataFile? Resolve(IAssemblyReference reference) => Find(reference);
 
         public MetadataFile? ResolveModule(MetadataFile mainModule, string moduleName) => null;
 
-        public Task<MetadataFile?> ResolveAsync(IAssemblyReference reference) => Task.FromResult(Resolve(reference));
+        public Task<MetadataFile?> ResolveAsync(IAssemblyReference reference) => Task.FromResult<MetadataFile?>(Find(reference));
 
         public Task<MetadataFile?> ResolveModuleAsync(MetadataFile mainModule, string moduleName) => Task.FromResult<MetadataFile?>(null);
 
         public IDisposable BeginSnapshot() => new MemoryStream();
+
+        private PortableFile? Find(IAssemblyReference reference) => byName.TryGetValue(reference.Name, out Lazy<PortableFile?>? file) ? file.Value : null;
+
+        /// <summary>A reference's module: a project reference emitted as its compilation is, a file read from its path, else none.</summary>
+        private static PortableFile? Load(MetadataReference? reference) => reference switch
+        {
+            CompilationReference project => Modules.GetValue(project.Compilation, Emit)?.File,
+            PortableExecutableReference { FilePath: { } path } => FromPath(path),
+            _ => null,
+        };
+
+        /// <summary>A module read from <paramref name="path"/>, or none when the file has gone or is no longer a module.</summary>
+        private static PortableFile? FromPath(string path)
+        {
+            try
+            {
+                return Image(path, File.ReadAllBytes(path));
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (BadImageFormatException)
+            {
+                return null;
+            }
+        }
     }
 
     /// <summary>
