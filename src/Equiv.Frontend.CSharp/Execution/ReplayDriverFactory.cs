@@ -62,16 +62,10 @@ internal sealed class ReplayDriverFactory(
         }
 
         int number = ++drivers;
-        (string? legacyDriver, string legacyProblem) = Driver(old, Path.Combine(directory, "legacy"), number, legacy: true);
-        if (legacyDriver is null)
-        {
-            return ReplayPlan.NotConstructible(legacyProblem);
-        }
-
-        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, ModernSide), number, legacy: false);
-        return modernDriver is null
-            ? ReplayPlan.NotConstructible(modernProblem)
-            : ReplayPlan.Runnable(new ExecutionDrivers(legacyDriver, modernDriver), oldCase.Input, newCase.Input) with { AlikeReason = AlikeReason(counterexample) };
+        (ExecutionDrivers? pairDrivers, string problem) = SideDrivers(old, @new, directory, number);
+        return pairDrivers is null
+            ? ReplayPlan.NotConstructible(problem)
+            : ReplayPlan.Runnable(pairDrivers, oldCase.Input, newCase.Input) with { AlikeReason = AlikeReason(counterexample) };
     }
 
     /// <summary>
@@ -98,17 +92,11 @@ internal sealed class ReplayDriverFactory(
         }
 
         int number = ++drivers;
-        (string? legacyDriver, string legacyProblem) = Driver(old, Path.Combine(directory, "legacy"), number, legacy: true);
-        if (legacyDriver is null)
-        {
-            return TestingPlan.NotConstructible(legacyProblem);
-        }
-
-        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, ModernSide), number, legacy: false);
-        return modernDriver is null
-            ? TestingPlan.NotConstructible(modernProblem)
+        (ExecutionDrivers? pairDrivers, string problem) = SideDrivers(old, @new, directory, number);
+        return pairDrivers is null
+            ? TestingPlan.NotConstructible(problem)
             : TestingPlan.Runnable(
-                new ExecutionDrivers(legacyDriver, modernDriver),
+                pairDrivers,
                 [.. @new.Method.Parameters.Zip(old.Method.Parameters, static (n, l) => DriverFactory.Parameter(n.Type, RefKind.None, l.Type))],
                 Seeds(pair, old, candidate));
     }
@@ -128,16 +116,10 @@ internal sealed class ReplayDriverFactory(
         }
 
         int number = ++drivers;
-        (string? legacyDriver, string legacyProblem) = Driver(old, Path.Combine(directory, "legacy"), number, legacy: true);
-        if (legacyDriver is null)
-        {
-            return ReplayPlan.NotConstructible(legacyProblem);
-        }
-
-        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, ModernSide), number, legacy: false);
-        return modernDriver is null
-            ? ReplayPlan.NotConstructible(modernProblem)
-            : ReplayPlan.Runnable(new ExecutionDrivers(legacyDriver, modernDriver), oldCase.Input, newCase.Input);
+        (ExecutionDrivers? pairDrivers, string problem) = SideDrivers(old, @new, directory, number);
+        return pairDrivers is null
+            ? ReplayPlan.NotConstructible(problem)
+            : ReplayPlan.Runnable(pairDrivers, oldCase.Input, newCase.Input);
     }
 
     /// <summary>
@@ -178,6 +160,19 @@ internal sealed class ReplayDriverFactory(
 
         ReplayArguments.SideCase seed = ReplayArguments.Case(old.Method, pair.OldBody!, oldValues, ReplayArguments.Nullness(oldValues, newValues));
         return seed.Input is { } input ? [input] : [];
+    }
+
+    /// <summary>Compiles a driver for each side of the pair, in that order; or returns why one could not be.</summary>
+    private (ExecutionDrivers? Drivers, string Problem) SideDrivers(ReplayTarget old, ReplayTarget @new, string directory, int number)
+    {
+        (string? legacyDriver, string legacyProblem) = Driver(old, Path.Combine(directory, "legacy"), number, legacy: true);
+        if (legacyDriver is null)
+        {
+            return (null, legacyProblem);
+        }
+
+        (string? modernDriver, string modernProblem) = Driver(@new, Path.Combine(directory, ModernSide), number, legacy: false);
+        return modernDriver is null ? (null, modernProblem) : (new ExecutionDrivers(legacyDriver, modernDriver), string.Empty);
     }
 
     /// <summary>Emits <paramref name="target"/>'s project, once, and compiles a driver beside it; or returns why it could not.</summary>
