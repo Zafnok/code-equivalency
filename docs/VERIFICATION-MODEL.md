@@ -346,7 +346,7 @@ Rung 1's result is a proof only when no input reaches the bound; otherwise it on
 decide. A pair with loops or a self-call that no rung decides is Unknown: `Opaque` when a failed obligation reaches
 an `IrOpaque`, `Recursion` when a side calls itself, `UnalignedLoop` when the loops do not align or neither
 induction proves them and rung 4 does not apply, `ChcTimeout` when Spacer gave up, `ChcSpurious` when Spacer's
-derivation does not replay to a divergence, `Timeout` when only the solver gave up. A header's state is its phis plus every other value
+derivation does not replay to a divergence or its invariant does not solve the clauses, `Timeout` when only the solver gave up. A header's state is its phis plus every other value
 live on entry to it (loop-invariant values, heap maps, values used after the loop). A rung 2 obligation's model is a
 counterexample only when it comes from the base (real inputs) and replays to a divergence through the original
 procedures; a step's model may start from an unreachable state. Every result lists the rungs it ran, with their
@@ -372,7 +372,9 @@ no exact operation of either side can overflow, since only then is every bitvect
 rung 4 asks over the bitvectors. `properties.chcMode` names the arithmetic the answer holds in: `int` or `bitvector`.
 Every derivation is replayed through the original procedures (a value the integers allow may be one no bitvector
 run computes): a divergence is Divergent, an opaque node reached is `Opaque`, and anything else is `ChcSpurious`
-with both runs in the detail.
+with both runs in the detail. Every invariant is checked too before it is a proof (ticket P2-059): it must solve the
+clauses of the query that found it, rule by rule, since Z3's Spacer has answered unsatisfiable with one that does
+not; one that fails is `ChcSpurious`.
 
 Rung 5 (tickets P1-002 and P1-009, ADR 0036) runs only when rung 4 timed out. It first asks a local proposer, on by
 default because it runs in process and sends nothing (P1-009): it runs both procedures in `IrInterpreter` on up to 200

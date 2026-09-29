@@ -32,3 +32,9 @@ an MVP verdict for aligned loops.
 M3-002 grows from M to L. Two P1 tickets exist. EQ006 and the runtime-changes table
 (M2-006) are added because assumed-equal BCL calls are the larger false-proof risk
 once loops are handled.
+
+## Clarifications
+- 2026-09-29 (P2-059). **An answer that does not check.** Rung 4's `ChcSpurious` also covers an
+  unsatisfiable Spacer answer whose invariant does not solve the clauses it answers, which Z3 5.1's
+  Spacer gave on a diverging pair with inlining off. Rung 4 checks every invariant against the clauses
+  of its arithmetic, rule by rule, before it is Equivalent; no new reason or rule id.

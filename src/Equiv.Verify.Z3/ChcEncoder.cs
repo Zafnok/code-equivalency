@@ -149,12 +149,13 @@ internal sealed class ChcEncoder
     }
 
     /// <summary>
-    /// Whether <paramref name="answer"/>, the definitions an unsatisfiable divergence query of an integer-mode encoder of
-    /// the same pair and context gave, also solve this wrapping encoder's divergence query
-    /// (<see cref="ChcArithmetic.WrappingIntegers"/>): with every relation replaced by its definition, and <c>bad</c> by
-    /// false, no rule has a counterexample within <paramref name="timeoutMs"/>. Then no derivation reaches <c>bad</c> over
-    /// the bitvectors, whether or not an integer operation can overflow: the plain integers only found the invariant. The two
-    /// encoders declare the same relations. Spacer's answer leaves out some relations, the unreachable ones and ones no
+    /// Whether <paramref name="answer"/>, the definitions an unsatisfiable divergence query gave, solve this encoder's
+    /// divergence query: with every relation replaced by its definition, and <c>bad</c> by false, no rule has a
+    /// counterexample within <paramref name="timeoutMs"/>. The answer comes from this encoder's own query, which a proof
+    /// checks because Spacer can answer wrongly (ticket P2-059), or from an integer-mode encoder of the same pair and
+    /// context when this one wraps (<see cref="ChcArithmetic.WrappingIntegers"/>): then no derivation reaches <c>bad</c>
+    /// over the bitvectors, whether or not an integer operation can overflow, and the plain integers only found the
+    /// invariant. Encoders of one pair and context declare the same relations. Spacer's answer leaves out some relations, the unreachable ones and ones no
     /// derivation of <c>bad</c> passes through; each of those reads as false, and as true once a rule concludes it from
     /// premises that hold (a reachable relation), which only weakens premises, so the check stops after at most one round
     /// per relation.

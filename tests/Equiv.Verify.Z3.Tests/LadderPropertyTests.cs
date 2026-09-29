@@ -116,10 +116,17 @@ public sealed class LadderPropertyTests
     [Fact]
     public void NoRungProvesATerminatingCallFreeMutant()
     {
-        Mutants(CallFreeLooping).Where(static m => Terminates(m.Original, m.Witness) && Terminates(m.Mutant, m.Witness)).Sample(
-            static m => Assert.DoesNotContain(Independently((m.Original, m.Mutant), CallFreeOptions), static r => r.Step.Outcome == RungOutcome.Proved),
-            iter: 30,
-            print: static m => $"{m.Description}\n{IrText.Dump(m.Original)}\n{IrText.Dump(m.Mutant)}");
+        TerminatingCallFreeMutants.Sample(NoRungProves, iter: 30, print: Print);
+    }
+
+    /// <summary>
+    /// The seed on which rung 4 proved a mutant that rungs 1 and 3 refute (ticket P2-059): Spacer's answer did not solve
+    /// the clauses. <c>Fixtures/loops/chc-uncertified.ir</c> holds the pair.
+    /// </summary>
+    [Fact]
+    public void NoRungProvesTheMutantOfSeed4FfExD8adOs4()
+    {
+        TerminatingCallFreeMutants.Sample(NoRungProves, iter: 1, seed: "4FfExD8adOs4", print: Print);
     }
 
     /// <summary>Looping procedures that call or apply a pure function in a reachable block, which rung 4 does not apply to.</summary>
@@ -127,6 +134,15 @@ public sealed class LadderPropertyTests
         IrLoopAnalysis.Of(p) is { Loops.IsEmpty: false } analysis && analysis.ReversePostorder.SelectMany(static b => b.Instructions).Any(static i => i is IrCall or IrPure));
 
     private static Gen<IrProcedure> CallFreeLooping => IrGen.CallFreeProcedure.Where(static p => !IrLoopAnalysis.Of(p).Loops.IsEmpty);
+
+    /// <summary>Call-free looping procedures' kept mutants whose witness makes both runs terminate.</summary>
+    private static Gen<IrMutant> TerminatingCallFreeMutants =>
+        Mutants(CallFreeLooping).Where(static m => Terminates(m.Original, m.Witness) && Terminates(m.Mutant, m.Witness));
+
+    private static void NoRungProves(IrMutant m) =>
+        Assert.DoesNotContain(Independently((m.Original, m.Mutant), CallFreeOptions), static r => r.Step.Outcome == RungOutcome.Proved);
+
+    private static string Print(IrMutant m) => $"{m.Description}\n{IrText.Dump(m.Original)}\n{IrText.Dump(m.Mutant)}";
 
     private static Gen<IrMutant> Mutants(Gen<IrProcedure> procedures) =>
         procedures.SelectMany(IrGen.Mutation).Where(static m => m is not null).Select(static m => m!);

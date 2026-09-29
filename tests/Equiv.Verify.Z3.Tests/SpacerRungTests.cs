@@ -31,6 +31,24 @@ public sealed class SpacerRungTests
         Assert.Equal("Spacer found a coupling invariant over the bitvectors, since integer mode is off", rung.Step.Detail);
     }
 
+    /// <summary>
+    /// Ticket P2-059: on this diverging pair Spacer answers the bitvector clauses unsatisfiable with an invariant that
+    /// does not solve them, so the answer is no proof.
+    /// </summary>
+    [Fact]
+    public void AnAnswerThatDoesNotSolveTheClausesIsSpurious()
+    {
+        Fixture fixture = Fixture.Load("loops/chc-uncertified");
+
+        Rung rung = Prove(fixture.Old, fixture.New, Options with { ChcIntMode = false });
+
+        Unknown unknown = Assert.IsType<Unknown>(rung.Verdict);
+        Assert.Equal(UnknownReason.ChcSpurious, unknown.Reason);
+        Assert.Equal(RungOutcome.Inconclusive, rung.Step.Outcome);
+        Assert.Equal(ChcMode.BitVectors, rung.Step.Mode);
+        Assert.Equal("Spacer found a coupling invariant over the bitvectors, since integer mode is off, but it does not solve the clauses", rung.Step.Detail);
+    }
+
     [Fact]
     public void ADerivationThroughASortLiteralReplaysWithTheLiteralsElement()
     {
