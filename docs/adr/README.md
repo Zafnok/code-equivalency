@@ -24,7 +24,7 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0015 | A call's heap effect and array aliasing are named limits, not defects |
 | 0016 | SonarQube's overall backlog becomes batched GitHub issues, filtered by a checked-in policy |
 | 0017 | BUSL-1.1 with a three-seat, 50k-LOC free tier; permissive-only dependencies |
-| 0018 | The final heap is observable, and a call is a function of its position and the heap |
+| 0018 | The final heap is observable, and a call is a function of its position and the heap (amended by 0041) |
 | 0019 | Verdicts are modular, and an Equivalent names the callee pairs it assumed |
 | 0020 | A shipped catalogue of known-equivalent API pairs, applied visibly |
 | 0021 | Source-language parameters are shared by position, synthesised inputs by name |
@@ -47,3 +47,4 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0038 | A run reports its progress on stderr, with a clock per phase, an ETA, and a writer that never blocks the pipeline |
 | 0039 | A pair that IOperation leaves with an unshared opaque is lowered from ILAst instead; IOperation stays primary |
 | 0040 | Each side's runtime is detected from its projects, and a runtime rule applies only if the pair crosses it |
+| 0041 | A call to a string or primitive member with only string and primitive arguments reaches no heap map |

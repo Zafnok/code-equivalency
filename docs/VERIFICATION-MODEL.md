@@ -8,8 +8,8 @@ For a matched procedure pair (P_old, P_new) with the same input signature, we cl
 **Equivalent** iff for every input state the observable outputs are equal. Observable
 outputs are: the return value, the final values of `ref`/`out` parameters, the final heap
 (every field and array slice either side touches; ADR 0018), the sequence of opaque calls
-made (callee identity, arguments, and the heap at the call), and whether the procedure
-throws (exception type, not message).
+made (callee identity, arguments, and the heap at the call; a closed call's event has no heap,
+ADR 0041), and whether the procedure throws (exception type, not message).
 
 Verdicts are modular (ADR 0019). A call to another matched procedure is an uninterpreted
 function that both sides share, so a verdict assumes those callee pairs are equivalent. The
@@ -24,6 +24,12 @@ ticket P1-010). Take an Equivalent caller whose unproven assumptions include a l
 with each side's call given its own outcome and heap, related to the other side's only by K. If the
 caller is still Equivalent, f moves from `unprovenAssumptions` to `contractsUsed`. The proof of K is
 itself modular, so f's own unproven assumptions join the caller's.
+
+A call is closed when its callee's containing type, every parameter type and every type argument
+are inert: `bool`, `char`, the 8- to 64-bit integers, `float`, `double`, `decimal`, `string`, an enum, or
+`Nullable<T>` of an inert `T` (ADR 0041). A closed call reads and writes no heap map. This assumes that
+an inert type's members run no user code installed as ambient state (a `CultureInfo` subclass set as
+the current culture whose getters write the program's fields).
 
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
@@ -83,7 +89,7 @@ Instructions:
 | `IrOverflows(var, overflowOp, a, b)` | Bool: would the checked operation overflow; `overflowOp` in SAdd, UAdd, SSub, USub, SMul, UMul, SDiv |
 | `IrUnary(var, op, a)` | negation, not, conversions with explicit target width and signedness |
 | `IrPhi(var, [(block, var)])` | SSA merge |
-| `IrCall(var?, threw?, callee identity, args, refouts, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `refouts` are the new versions of the call's `ref` and `out` arguments, in parameter order, each a definition; a `ref` argument's value at the call is also one of `args`, an `out` one's is not (M4-003). `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005). Result, `threw`, each ref output (one function per output index) and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018) |
+| `IrCall(var?, threw?, callee identity, args, refouts, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `refouts` are the new versions of the call's `ref` and `out` arguments, in parameter order, each a definition; a `ref` argument's value at the call is also one of `args`, an `out` one's is not (M4-003). `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005), except at a `closed` call (section 1), which has no heap pairs (ADR 0041; P2-060). Result, `threw`, each ref output (one function per output index) and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018); a closed call's are functions of callee, arguments and position |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
 | `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025) |
 | `IrOpaque(var?, reason, sourceSpan, fingerprint?, reads, threw?, heap)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024). A fingerprinted fragment has what that call needs: a `threw` flag the frontend branches on and the heap pairs an `IrCall` has; `reads` and each pair's `before` are uses, `threw` and each `after` definitions (M4-004) |
@@ -322,7 +328,12 @@ is (identity, arguments, heap at the call). The heap at a call ranges over every
 names on either side, in name order (P1-005). A call reads a map it pairs at its `before`; any
 other map it reads at the version the encoder threads through that side's calls, which starts at
 the shared input and is replaced by each call's new version of the map. A side that does not have
-the map as a parameter reports that threaded version as its final value.
+the map as a parameter reports that threaded version as its final value. A callee identity every
+call to which in the product is closed (ADR 0041) is encoded without the heap: its functions take the
+arguments and the position only, it leaves every map, threaded or not, as it was, and its event is
+(identity, arguments). A closed call whose identity also has an open call has no heap pairs, so it
+leaves its own side's maps unchanged, and it reads and writes the threaded maps as that open call
+does.
 
 ### 5.1 Loop ladder
 
@@ -713,8 +724,9 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   200 pairs per PR, 5,000 nightly. Each pair is verified twice: once lowered from IOperation,
   and once with both sides forced through the IL lowering (ADR 0039; P1-017). Both verdicts
   are held to all three rules. A model whose run records an ordinary call also fixes that
-  call's outputs, which no C# argument can (ADR 0026, clarification of 2026-09-30). So rule 2
-  does not count a replay of such a model that fails to diverge.
+  call's outputs, which no C# argument can (ADR 0026, clarifications of 2026-09-30). So rule 2
+  does not count a replay of such a model that fails to diverge. That includes a closed call
+  (ADR 0041): it writes no heap, but its result and `threw` flag are still the model's choice.
 - Snapshot tests (Verify): IR dump and SARIF for every sample in `samples/`.
 - Congruence (property test, ADR 0024): whenever congruence reports Equivalent on a
   generated or sample pair, the solver on the same pair never reports Divergent.
