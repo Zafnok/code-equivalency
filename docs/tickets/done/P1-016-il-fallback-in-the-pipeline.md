@@ -1,5 +1,5 @@
 # P1-016 IL fallback, part 3: `--il-fallback` lowers a pair with an unshared opaque again from IL, and SARIF says which lowering it used
-Status: in-progress
+Status: done (PR #303)
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-015
