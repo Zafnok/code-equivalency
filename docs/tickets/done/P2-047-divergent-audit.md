@@ -1,5 +1,5 @@
 # P2-047 Divergent audit: how many Divergent results are real?
-Status: in-progress
+Status: done (PR #310)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-046
