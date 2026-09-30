@@ -447,8 +447,8 @@ public sealed class IlLowererTests
     {
         IrProcedure procedure = Lower("static int M(int[] a, int i) => a[i];");
         IrValue array = new IrSortValue("int[]", 4);
-        static (string, IrValue) Length(int length) => ("length.int__", new IrMapValue(new IrMap(new IrSort("int[]"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, length), ImmutableDictionary<IrValue, IrValue>.Empty));
-        (string, IrValue) Elements = ("array.int__", new IrMapValue(new IrMap(new IrSort("int[]"), new IrMap(new IrBitVec(32), new IrBitVec(32))), new IrMapValue(new IrMap(new IrBitVec(32), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 7), ImmutableDictionary<IrValue, IrValue>.Empty), ImmutableDictionary<IrValue, IrValue>.Empty));
+        static (string, IrValue) Length(int length) => ("length.int__", new IrMapValue(new IrMap(new IrSort("int[]"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, length), []));
+        (string, IrValue) Elements = ("array.int__", new IrMapValue(new IrMap(new IrSort("int[]"), new IrMap(new IrBitVec(32), new IrBitVec(32))), new IrMapValue(new IrMap(new IrBitVec(32), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 7), []), []));
 
         Assert.Equal(new IrThrew("System.NullReferenceException"), RunWith(procedure, ("a", array), ("i", IrBitVecValue.FromSigned(32, 5)), ("null.int__", Nulls("int[]", isNull: true))).Outcome);
         Assert.Equal(new IrThrew("System.IndexOutOfRangeException"), RunWith(procedure, ("a", array), ("i", IrBitVecValue.FromSigned(32, 5)), Length(3)).Outcome);
@@ -466,8 +466,8 @@ public sealed class IlLowererTests
         const string Members = "static string M(object o) => (string)o; static string N(object o) => o as string;";
         IrProcedure downcast = Lower(Members);
         IrProcedure tryCast = Lower(Members, "N");
-        static (string, IrValue) IsType(bool passes) => ("istype.System.Object.System.String", new IrMapValue(new IrMap(new IrSort("System.Object"), new IrBool()), new IrBoolValue(passes), ImmutableDictionary<IrValue, IrValue>.Empty));
-        (string, IrValue) cast = ("cast.System.Object.System.String", new IrMapValue(new IrMap(new IrSort("System.Object"), new IrSort("System.String")), new IrSortValue("System.String", 9), ImmutableDictionary<IrValue, IrValue>.Empty));
+        static (string, IrValue) IsType(bool passes) => ("istype.System.Object.System.String", new IrMapValue(new IrMap(new IrSort("System.Object"), new IrBool()), new IrBoolValue(passes), []));
+        (string, IrValue) cast = ("cast.System.Object.System.String", new IrMapValue(new IrMap(new IrSort("System.Object"), new IrSort("System.String")), new IrSortValue("System.String", 9), []));
 
         Assert.Equal(new IrThrew("System.InvalidCastException"), RunWith(downcast, IsType(passes: false)).Outcome);
         Assert.Equal(new IrReturned(new IrSortValue("System.String", 0)), RunWith(downcast, IsType(passes: false), ("null.System.Object", Nulls("System.Object", isNull: true))).Outcome);
@@ -522,7 +522,7 @@ public sealed class IlLowererTests
 
         Assert.Empty(Opaques(il));
         Assert.Equal(Functions(operation), Functions(il), StringComparer.Ordinal);
-        Assert.Equal(Constants(operation).ToHashSet(), Constants(il).ToHashSet());
+        Assert.Equal(Constants(operation).ToHashSet(), [.. Constants(il)]);
     }
 
     /// <summary>
@@ -544,9 +544,9 @@ public sealed class IlLowererTests
         IrRun run = RunWith(
             procedure,
             new StructOracle(),
-            ("field.C_S.X", new IrMapValue(new IrMap(new IrSort("C+S"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 7), ImmutableDictionary<IrValue, IrValue>.Empty)),
-            ("field.C_S.Y", new IrMapValue(new IrMap(new IrSort("C+S"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 3), ImmutableDictionary<IrValue, IrValue>.Empty)),
-            ("field.C_A.P", new IrMapValue(new IrMap(new IrSort("C+A"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 7), ImmutableDictionary<IrValue, IrValue>.Empty)),
+            ("field.C_S.X", new IrMapValue(new IrMap(new IrSort("C+S"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 7), [])),
+            ("field.C_S.Y", new IrMapValue(new IrMap(new IrSort("C+S"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 3), [])),
+            ("field.C_A.P", new IrMapValue(new IrMap(new IrSort("C+A"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 7), [])),
             ("new.C_S", Fresh("C+S")),
             ("new.C_A", Fresh("C+A")));
 
@@ -595,7 +595,7 @@ public sealed class IlLowererTests
     public void AnAddressIsItsPlace(string members, string expected)
     {
         IrProcedure procedure = Lower(members);
-        IrMapValue elements = new(new IrMap(new IrSort("int[]"), new IrMap(new IrBitVec(32), new IrBitVec(32))), new IrMapValue(new IrMap(new IrBitVec(32), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 7), ImmutableDictionary<IrValue, IrValue>.Empty), ImmutableDictionary<IrValue, IrValue>.Empty);
+        IrMapValue elements = new(new IrMap(new IrSort("int[]"), new IrMap(new IrBitVec(32), new IrBitVec(32))), new IrMapValue(new IrMap(new IrBitVec(32), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 7), []), []);
         IrRun run = RunWith(
             procedure,
             ("x", IrBitVecValue.FromSigned(32, 3)),
@@ -896,16 +896,16 @@ public sealed class IlLowererTests
         IrBitVec bits => new IrBitVecValue(bits.Width, 0),
         IrBool => new IrBoolValue(Value: false),
         IrSort sort => new IrSortValue(sort.Name, 1),
-        _ => new IrMapValue((IrMap)type, Default(((IrMap)type).Value), ImmutableDictionary<IrValue, IrValue>.Empty),
+        _ => new IrMapValue((IrMap)type, Default(((IrMap)type).Value), []),
     };
 
     /// <summary>Every array of <paramref name="sort"/> one element long.</summary>
     private static IrMapValue Lengths(string sort) =>
-        new(new IrMap(new IrSort(sort), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 1), ImmutableDictionary<IrValue, IrValue>.Empty);
+        new(new IrMap(new IrSort(sort), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 1), []);
 
     /// <summary>Every value of <paramref name="sort"/> null, or none.</summary>
     private static IrMapValue Nulls(string sort, bool isNull) =>
-        new(new IrMap(new IrSort(sort), new IrBool()), new IrBoolValue(isNull), ImmutableDictionary<IrValue, IrValue>.Empty);
+        new(new IrMap(new IrSort(sort), new IrBool()), new IrBoolValue(isNull), []);
 
     /// <summary>A body's k-th new value of <paramref name="sort"/> is element 100 + k, none of which an input holds.</summary>
     private static IrMapValue Fresh(string sort) =>
