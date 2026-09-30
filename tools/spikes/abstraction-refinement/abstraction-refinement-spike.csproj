@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    P1-019: a throwaway measurement, not a product. It is not in Equiv.slnx, so no CI gate builds it.
+    The assembly name borrows the integration tests' InternalsVisibleTo grant on Equiv.Frontend.CSharp and
+    Equiv.Verify.Z3, as the P1-011 spike did, so src/ is unchanged (criterion 5). No lock file: the spike adds
+    no package. Style analyzers are off: this is measurement code that is deleted once the ROADMAP line or ADR
+    lands, not product code; compiler warnings stay errors.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>AbstractionSpike</RootNamespace>
+    <AssemblyName>Equiv.Tests.Integration</AssemblyName>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
+    <ProjectReference Include="..\..\..\src\Equiv.Verify.Z3\Equiv.Verify.Z3.csproj" />
+  </ItemGroup>
+
+</Project>
