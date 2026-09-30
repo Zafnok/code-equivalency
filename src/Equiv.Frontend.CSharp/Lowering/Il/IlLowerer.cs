@@ -791,11 +791,11 @@ internal sealed partial class IlLowerer
         ITypeSymbol operands = Stack(comparison.InputType);
         IrVar left = Value(comparison.Left, operands);
         IrVar right = Value(comparison.Right, operands);
-        return Emit(Operation(comparison.Kind, unsigned: comparison.Sign == Sign.Unsigned), left, right, Bool);
+        return Emit(Comparison(comparison.Kind, unsigned: comparison.Sign == Sign.Unsigned), left, right, Bool);
     }
 
     /// <summary>The IR comparison of <paramref name="kind"/> on integers; <see cref="ComparisonKind.GreaterThanOrEqual"/> is the last.</summary>
-    private static IrBinaryOp Operation(ComparisonKind kind, bool unsigned) => kind switch
+    private static IrBinaryOp Comparison(ComparisonKind kind, bool unsigned) => kind switch
     {
         ComparisonKind.Equality => IrBinaryOp.Eq,
         ComparisonKind.Inequality => IrBinaryOp.Ne,

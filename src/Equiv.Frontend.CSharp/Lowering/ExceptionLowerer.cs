@@ -91,9 +91,6 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
                 (clause, taken, next) => Filter(ExceptionRegions.Filter(clause), ExceptionRegions.Handler(clause), taken, next, context));
     }
 
-    /// <summary>A clause with a <c>when</c> filter, which it tries first, or null for a <c>catch</c> with none.</summary>
-    private static ControlFlowRegion? Filtered(ControlFlowRegion clause) => clause.Kind == ControlFlowRegionKind.Catch ? null : clause;
-
     /// <summary>
     /// Where an exception whose route is known goes: the throw block of <paramref name="exceptionType"/> behind the
     /// <paramref name="uncaught"/> finallys, or nothing when an unfiltered clause always takes it (null); and, tried before
@@ -111,12 +108,15 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
         IrBlockId? next = uncaught is null ? null : Unwind(uncaught, ThrowBlock(exceptionType), copy);
         for (int i = candidates.Length - 1; i >= 0; i--)
         {
-            IrBlockId taken = Unwind(candidates[i].Finallys, candidates[i].Handler, copy);
+            IrBlockId taken = Unwind(candidates[i].Finallys, candidates[i].Entry, copy);
             next = candidates[i].FilteredBy is { } filtered ? filter(filtered, taken, next!) : taken;
         }
 
         return next!;
     }
+
+    /// <summary>A clause with a <c>when</c> filter, which it tries first, or null for a <c>catch</c> with none.</summary>
+    private static ControlFlowRegion? Filtered(ControlFlowRegion clause) => clause.Kind == ControlFlowRegionKind.Catch ? null : clause;
 
     /// <summary>
     /// Where an exception of no known type goes when more than one <c>catch</c> could take it: a block that is opaque with
@@ -236,9 +236,9 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
     }
 
     /// <summary>
-    /// A clause that may take an exception: the finallys that run before its handler does, the handler's first block,
+    /// A clause that may take an exception: the finallys that run before its handler does, the handler's first block (its entry),
     /// and, for a filtered clause, the region whose filter is tried first (null for a <c>catch</c> with no filter).
     /// </summary>
-    internal sealed record Clause<TRegion>(IReadOnlyList<TRegion> Finallys, IrBlockId Handler, TRegion? FilteredBy)
+    internal sealed record Clause<TRegion>(IReadOnlyList<TRegion> Finallys, IrBlockId Entry, TRegion? FilteredBy)
         where TRegion : class;
 }
