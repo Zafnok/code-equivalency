@@ -479,6 +479,20 @@ work, P2-050, P1-019, P2-051 and P2-052.
 - P2-063 (S) Corpus tooling: `seeds.json` records the mutated line, `-Metrics` reads `unknownReason`,
   and the skill warns that overlapping runs on one checkout are void. Found by P2-046.
 
+The 2026-09-30 goal review measured the backlog against two product goals: prove an in-place
+migration (framework to Core, or a version bump) equivalent and narrow what is left for a human, and
+prove or refute a small cleanup. It found three gaps that no ticket owned:
+- about 1,085 flagged results on Git Extensions, in no order;
+- one real migration behind every judgement;
+- no version upgrade in the corpus.
+
+- P2-064 (L) Every run ends with a short review list: flagged results grouped by cause and ranked
+  (SARIF `rank`, `run.properties.reviewList`, stdout). Needs P2-062.
+- P2-065 (M) Full runs of the five migration pairs never run (Duplicati, OpenRA, and the three eShop
+  pairs, two of them migration-tool output), reported against Git Extensions.
+- P2-066 (M) Pin two public .NET-to-.NET version upgrades (a pure bump, and a bump with fixes) and run
+  them; every EQ006 must cite a row inside the pair's interval. Needs P2-055, P2-056, P2-047.
+
 ## M5 — Agent surface (MCP)
 
 Coding agents do migrations; M5 lets them check their own work while they do it (ADR 0033). It
