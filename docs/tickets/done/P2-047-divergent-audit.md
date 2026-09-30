@@ -1,5 +1,5 @@
 # P2-047 Divergent audit: how many Divergent results are real?
-Status: todo
+Status: done (PR #310)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-046
@@ -51,3 +51,19 @@ More than 150 results audited, or any edit under `src/`, means the ticket has be
 Fixing a false positive. Making precision a pass/fail gate (a new ADR against ADR 0028).
 
 ## Notes
+- The audit read P2-046's runs in the `corpus-runs-debug-progress` worktree's `.corpus/`: Git
+  Extensions `20260929-1918-full-rerun` (the void first pair excluded) and each agent pair's
+  `20260929-1608-full`; replay from the matching `--execute` runs.
+- ServiceAnt's 4 EQ002 the Goal names were M4-007's. P2-046 has 0 EQ002 and 0 EQ006 on ServiceAnt, and 0
+  on lethek, so the agent pairs contribute only the Tomas pair's 17.
+- Replay settled 1 of 77 (`reproduced`). The other 76 were `not-constructible`, mostly because the
+  divergence is in the call trace or the method is not public (P2-052), so almost everything was
+  classified by hand trace.
+- Decision: an EQ006 is a false positive only when the documented change cannot be reached through the
+  call's arguments. EQ006's model havocs the API result, so its values are no witness. For EQ002 the
+  model's input is the witness.
+- Decision: a `GetHashCode` EQ006 is undetermined, not a false positive. The method's return value does
+  differ between runtimes. Whether anyone relies on it is a ranking question (P2-064).
+- Decision: Git Extensions sample seed 47 (the ticket number), `random.Random(47).shuffle` over the
+  fingerprint-sorted results of each rule.
+- Existing owners checked: no open ticket owned any of the eight causes.

@@ -290,6 +290,8 @@ Write `docs/runs/<yyyy-mm-dd>-<mode>-verdict.md`:
   to Git Extensions alone and say so in the verdict file. The unchanged-share rule still uses the
   agent median;
 - the outcome of each ADR 0028 rule for the Git Extensions pair and for the agent median;
+- optional: "Divergent precision (from the latest audit)", quoted from the newest
+  `docs/runs/*-divergent-audit.md` and citing it. Reported only; it sets no threshold (P2-047);
 - one line: **continue**, **re-scope** or **stop**.
 
 Then do what the ticket in hand says (M3-022: reorder M4 and write `P2` tickets; M4-007: write
