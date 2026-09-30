@@ -132,10 +132,10 @@ internal static class ProductEncoder
             .. Pair(old, @new).Select(s => (s, context.MkConst(s.InputName, sorts.Sort(s.Type)))),
         ];
 
-        IrCall[] allCalls = [.. Calls(old), .. Calls(@new)];
+        IrCall[] allCalls = [.. CallsOf(old), .. CallsOf(@new)];
         IEnumerable<IrType> argumentTypes = allCalls.SelectMany(static c => c.Args.Select(static a => a.Type));
         HashSet<string> freshPerSide = new(contracts is { Encoding.FreshPerSide: true } ? contracts.Callees.Keys : [], StringComparer.Ordinal);
-        IEnumerable<(Side, IrCall)> sites = [.. Calls(old).Select(static c => (Side.Old, c)), .. Calls(@new).Select(static c => (Side.New, c))];
+        IEnumerable<(Side, IrCall)> sites = [.. CallsOf(old).Select(static c => (Side.Old, c)), .. CallsOf(@new).Select(static c => (Side.New, c))];
         TraceEncoder calls = new(sorts, argumentTypes, callIdentityMap, HeapMaps(allCalls), freshPerSide, sites);
         ImmutableArray<Expr> heapInputs = [.. calls.Heap.Select(m => inputs.First(i => string.Equals(i.Shared.Var.Name, m.Name, StringComparison.Ordinal) && i.Shared.Type == m.Type).Term)];
         PureEncoder pures = new(sorts, old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrPure>()));
@@ -221,7 +221,7 @@ internal static class ProductEncoder
             .ThenBy(static m => SortMapper.Name(m.Type), StringComparer.Ordinal),
     ];
 
-    private static IEnumerable<IrCall> Calls(IrProcedure procedure) => procedure.Blocks.SelectMany(static b => b.Instructions.OfType<IrCall>());
+    private static IEnumerable<IrCall> CallsOf(IrProcedure procedure) => procedure.Blocks.SelectMany(static b => b.Instructions.OfType<IrCall>());
 
     /// <summary>One side's parameter names and the input term each is bound to.</summary>
     private static Dictionary<string, Expr> Bound(ImmutableArray<(SharedParameter Shared, Expr Term)> inputs, Func<SharedParameter, IrParameter?> side) =>
