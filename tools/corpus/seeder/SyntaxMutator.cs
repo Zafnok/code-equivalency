@@ -9,14 +9,18 @@ namespace Equiv.Corpus.Seeder;
 /// sites of an operator are the nodes it applies to, found in one traversal of <see cref="SyntaxNode.DescendantNodesAndSelf"/>
 /// so that <see cref="Sites"/> and <see cref="Apply"/> agree on numbering (both call <see cref="Candidates"/> afresh on
 /// the same <paramref name="method"/> instance, so a candidate's closure always resolves against the tree it was found
-/// in). Unlike M0-012's original DSL-based mutator, this one works on real C# syntax: no semantic model, so every
-/// predicate here is syntactic and deliberately conservative (an operator that might change meaning in a way it cannot
-/// see just does not offer that site). Corpus mutants that still fail to compile are caught by
-/// <see cref="CompileCheck"/>, not by this class.
+/// in). Unlike M0-012's original DSL-based mutator, this one works on real C# syntax, and its predicates are
+/// deliberately conservative (an operator that might change meaning in a way it cannot see just does not offer that
+/// site). The M0-012 operators are purely syntactic. The P2-048 cleanup operators also need types (a conditional's
+/// branches of exactly the target's type, <c>string</c> operands, an array), so they bind the method's own file
+/// against the BCL alone (<see cref="Model"/>): a type that does not resolve there is an error type, and no site
+/// depends on one. Corpus mutants that still fail to compile are caught by <see cref="CompileCheck"/>, not by this class.
 /// </summary>
 public static class SyntaxMutator
 {
     private const string TemporaryName = "equivSeedTemp";
+
+    private const string ItemName = "item";
 
     private static readonly Dictionary<SyntaxKind, SyntaxKind> ComparisonFlips = new()
     {
@@ -53,8 +57,8 @@ public static class SyntaxMutator
 
     private static readonly SyntaxKind[] ShiftKinds = [SyntaxKind.LeftShiftExpression, SyntaxKind.RightShiftExpression, SyntaxKind.UnsignedRightShiftExpression];
 
-    /// <summary>The first six members behave identically on every input; the rest usually change behaviour but may not.</summary>
-    public static bool IsPreserving(MutationOperator op) => op <= MutationOperator.InlineTemporary;
+    /// <summary>The members up to <see cref="MutationOperator.ForToForeach"/> behave identically on every input; the rest usually change behaviour but may not.</summary>
+    public static bool IsPreserving(MutationOperator op) => op <= MutationOperator.ForToForeach;
 
     public static int Sites(MutationOperator op, MethodDeclarationSyntax method)
     {
@@ -82,6 +86,11 @@ public static class SyntaxMutator
             MutationOperator.InvertIf => [.. Nodes<IfStatementSyntax>(method, static _ => true).Select(branch => (Func<MethodDeclarationSyntax>)(() => InvertIf(method, branch)))],
             MutationOperator.Commute => BinaryCandidates(method, IsCommutable, static b => b.WithLeft(b.Right).WithRight(b.Left)),
             MutationOperator.IntroduceTemporary or MutationOperator.InlineTemporary => TemporaryCandidates(method),
+            MutationOperator.IfToConditional => IfToConditionalCandidates(method),
+            MutationOperator.CoalesceNullCheck => CoalesceCandidates(method),
+            MutationOperator.ConcatToInterpolation => InterpolationCandidates(method),
+            MutationOperator.GuardClause => GuardClauseCandidates(method),
+            MutationOperator.ForToForeach => ForeachCandidates(method),
             MutationOperator.FlipComparison => BinaryCandidates(method, static b => ComparisonFlips.ContainsKey(b.Kind()), FlipComparison),
             MutationOperator.ChangeConstant => BinaryCandidates(method, IsChangeableConstant, ChangeConstant),
             MutationOperator.DropNullCheck => DropNullCheckCandidates(method),
@@ -252,6 +261,386 @@ public static class SyntaxMutator
             .WithTriviaFrom(target);
         StatementSyntax rewritten = rebuild(SyntaxFactory.IdentifierName(temporary).WithTriviaFrom(value));
         return method.ReplaceNode(target, [declare, rewritten]);
+    }
+
+    // -- IfToConditional: an if/else whose branches assign one local, or both return, becomes one ?: (ticket P2-048). --
+
+    /// <summary>
+    /// Each branch is one statement, braced or not. Both branches' values must have exactly the target's type (the
+    /// local's or parameter's, or the method's return type), so the conditional's type is that type and no conversion
+    /// moves into or out of it. An <c>async</c> method's <c>return</c> is not its declared type, and a <c>ref</c> return
+    /// is not a value, so neither offers the return form.
+    /// </summary>
+    private static List<Func<MethodDeclarationSyntax>> IfToConditionalCandidates(MethodDeclarationSyntax method)
+    {
+        List<(IfStatementSyntax Branch, StatementSyntax Then, StatementSyntax Else)> shapes = [];
+        foreach (IfStatementSyntax branch in Nodes<IfStatementSyntax>(method, static _ => true))
+        {
+            if (Only(branch.Statement) is { } then && branch.Else is { } otherwise && Only(otherwise.Statement) is { } other && IsConditionalShape(then, other))
+            {
+                shapes.Add((branch, then, other));
+            }
+        }
+
+        if (shapes.Count == 0)
+        {
+            return [];
+        }
+
+        SemanticModel model = Model(method);
+        List<Func<MethodDeclarationSyntax>> candidates = [];
+        foreach ((IfStatementSyntax branch, StatementSyntax then, StatementSyntax other) in shapes)
+        {
+            StatementSyntax? rewritten = (then, other) switch
+            {
+                (ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax a } assign, ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax b })
+                    when LocalOrParameterType(model, a.Left) is { } type && HasExactType(model, a.Right, type) && HasExactType(model, b.Right, type) =>
+                    assign.WithExpression(a.WithRight(Conditional(branch.Condition, a.Right, b.Right))),
+                (ReturnStatementSyntax { Expression: { } p } ret, ReturnStatementSyntax { Expression: { } q })
+                    when ReturnType(model, method) is { } type && HasExactType(model, p, type) && HasExactType(model, q, type) =>
+                    ret.WithExpression(Conditional(branch.Condition, p, q)),
+                _ => null,
+            };
+            if (rewritten is not null)
+            {
+                candidates.Add(() => method.ReplaceNode(branch, rewritten.NormalizeWhitespace().WithTriviaFrom(branch)));
+            }
+        }
+
+        return candidates;
+    }
+
+    /// <summary>Two simple assignments to one bare name, or two <c>return</c>s of a value.</summary>
+    private static bool IsConditionalShape(StatementSyntax then, StatementSyntax other) => (then, other) switch
+    {
+        (ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression, Left: IdentifierNameSyntax x } },
+            ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression, Left: IdentifierNameSyntax y } }) => SameName(x, y),
+        (ReturnStatementSyntax { Expression: not null }, ReturnStatementSyntax { Expression: not null }) => true,
+        _ => false,
+    };
+
+    /// <summary>The statement itself, or the one statement of a block that has exactly one; otherwise null.</summary>
+    private static StatementSyntax? Only(StatementSyntax statement) => statement switch
+    {
+        BlockSyntax { Statements.Count: 1 } block => block.Statements[0],
+        BlockSyntax => null,
+        _ => statement,
+    };
+
+    private static ITypeSymbol? ReturnType(SemanticModel model, MethodDeclarationSyntax method) =>
+        method.Modifiers.Any(SyntaxKind.AsyncKeyword) || method.ReturnType is RefTypeSyntax ? null : model.GetDeclaredSymbol(method)?.ReturnType;
+
+    private static ConditionalExpressionSyntax Conditional(ExpressionSyntax condition, ExpressionSyntax whenTrue, ExpressionSyntax whenFalse) =>
+        SyntaxFactory.ConditionalExpression(AsOperand(condition), AsOperand(whenTrue), AsOperand(whenFalse));
+
+    // -- CoalesceNullCheck: x != null ? x : y, or x == null ? y : x, becomes x ?? y (ticket P2-048). --
+
+    /// <summary>
+    /// <c>x</c> must be a reference-typed local or parameter (a nullable value type's <c>??</c> unwraps, which changes
+    /// the result's type) and <c>y</c> of exactly its type, so both forms have one type. The null test must be the
+    /// built-in reference comparison, or <c>string</c>'s, which is the same on <c>null</c>; <c>??</c> never calls a
+    /// user-defined <c>==</c>, so a type with one offers no site.
+    /// </summary>
+    private static List<Func<MethodDeclarationSyntax>> CoalesceCandidates(MethodDeclarationSyntax method)
+    {
+        List<(ConditionalExpressionSyntax Conditional, BinaryExpressionSyntax Test, IdentifierNameSyntax Tested, ExpressionSyntax Fallback)> shapes = [];
+        foreach (ConditionalExpressionSyntax conditional in Nodes<ConditionalExpressionSyntax>(method, static _ => true))
+        {
+            if (CoalesceParts(conditional) is { } parts)
+            {
+                shapes.Add((conditional, parts.Test, parts.Tested, parts.Fallback));
+            }
+        }
+
+        if (shapes.Count == 0)
+        {
+            return [];
+        }
+
+        SemanticModel model = Model(method);
+        return [.. shapes
+            .Where(s => LocalOrParameterType(model, s.Tested) is { IsReferenceType: true } type && HasExactType(model, s.Fallback, type) && IsReferenceNullTest(model, s.Test))
+            .Select(s => (Func<MethodDeclarationSyntax>)(() => method.ReplaceNode(
+                s.Conditional,
+                SyntaxFactory.BinaryExpression(SyntaxKind.CoalesceExpression, s.Tested.WithoutTrivia(), AsOperand(s.Fallback)).NormalizeWhitespace().WithTriviaFrom(s.Conditional))))];
+    }
+
+    private static (BinaryExpressionSyntax Test, IdentifierNameSyntax Tested, ExpressionSyntax Fallback)? CoalesceParts(ConditionalExpressionSyntax conditional)
+    {
+        if (Unwrap(conditional.Condition) is not BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression } test)
+        {
+            return null;
+        }
+
+        ExpressionSyntax? tested = null;
+        if (test.Right.IsKind(SyntaxKind.NullLiteralExpression))
+        {
+            tested = test.Left;
+        }
+        else if (test.Left.IsKind(SyntaxKind.NullLiteralExpression))
+        {
+            tested = test.Right;
+        }
+
+        bool isNotNull = test.IsKind(SyntaxKind.NotEqualsExpression);
+        ExpressionSyntax kept = isNotNull ? conditional.WhenTrue : conditional.WhenFalse;
+        ExpressionSyntax fallback = isNotNull ? conditional.WhenFalse : conditional.WhenTrue;
+        return tested is not null && Unwrap(tested) is IdentifierNameSyntax x && Unwrap(kept) is IdentifierNameSyntax k && SameName(x, k) ? (test, x, fallback) : null;
+    }
+
+    private static bool IsReferenceNullTest(SemanticModel model, BinaryExpressionSyntax test) =>
+        model.GetSymbolInfo(test).Symbol is IMethodSymbol { MethodKind: MethodKind.BuiltinOperator } or IMethodSymbol { ContainingType.SpecialType: SpecialType.System_String };
+
+    // -- ConcatToInterpolation: a + chain of strings becomes one interpolated string (ticket P2-048). --
+
+    /// <summary>
+    /// Every operand must be <c>string</c>, so no <c>ToString</c> (culture-sensitive or user-defined) enters on either
+    /// side, and both sides treat a <c>null</c> operand as empty. A chain Roslyn folds to a constant offers no site,
+    /// because an interpolated constant needs a newer language version than the code may use; nor does one with an
+    /// operand that spans lines, which a non-verbatim interpolation hole cannot hold before C# 11.
+    /// </summary>
+    private static List<Func<MethodDeclarationSyntax>> InterpolationCandidates(MethodDeclarationSyntax method)
+    {
+        BinaryExpressionSyntax[] chains = [.. Nodes<BinaryExpressionSyntax>(method, static b => b.IsKind(SyntaxKind.AddExpression) && b.Parent is not BinaryExpressionSyntax { RawKind: (int)SyntaxKind.AddExpression })];
+        if (chains.Length == 0)
+        {
+            return [];
+        }
+
+        SemanticModel model = Model(method);
+        ITypeSymbol text = model.Compilation.GetSpecialType(SpecialType.System_String);
+        List<Func<MethodDeclarationSyntax>> candidates = [];
+        foreach (BinaryExpressionSyntax chain in chains)
+        {
+            ExpressionSyntax[] operands = [.. ChainOperands(chain)];
+            if (operands.All(o => HasExactType(model, o, text) && !o.WithoutTrivia().ToFullString().Contains('\n', StringComparison.Ordinal)) && !model.GetConstantValue(chain).HasValue)
+            {
+                candidates.Add(() => method.ReplaceNode(chain, Interpolation(operands).WithTriviaFrom(chain)));
+            }
+        }
+
+        return candidates;
+    }
+
+    private static IEnumerable<ExpressionSyntax> ChainOperands(ExpressionSyntax expr) =>
+        expr is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.AddExpression } add ? ChainOperands(add.Left).Concat(ChainOperands(add.Right)) : [expr];
+
+    private static InterpolatedStringExpressionSyntax Interpolation(IEnumerable<ExpressionSyntax> operands) =>
+        SyntaxFactory.InterpolatedStringExpression(SyntaxFactory.Token(SyntaxKind.InterpolatedStringStartToken), SyntaxFactory.List(operands.Select(InterpolationPart)));
+
+    /// <summary>A plain (not verbatim, not raw) string literal becomes text, its braces doubled; anything else a hole.</summary>
+    private static InterpolatedStringContentSyntax InterpolationPart(ExpressionSyntax operand)
+    {
+        if (operand is LiteralExpressionSyntax { Token: { RawKind: (int)SyntaxKind.StringLiteralToken } token } && token.Text.StartsWith('"'))
+        {
+            string text = token.Text[1..^1].Replace("{", "{{", StringComparison.Ordinal).Replace("}", "}}", StringComparison.Ordinal);
+            return SyntaxFactory.InterpolatedStringText(SyntaxFactory.Token(default, SyntaxKind.InterpolatedStringTextToken, text, token.ValueText, default));
+        }
+
+        // A top-level "::" (global::X) would end the hole as a format specifier's ':' does.
+        ExpressionSyntax hole = AsOperand(operand);
+        return SyntaxFactory.Interpolation(hole is ParenthesizedExpressionSyntax || !hole.DescendantTokens().Any(static t => t.IsKind(SyntaxKind.ColonColonToken)) ? hole : SyntaxFactory.ParenthesizedExpression(hole));
+    }
+
+    // -- GuardClause: a void method's trailing if (c) { S } becomes if (!c) return; S (ticket P2-048). --
+
+    /// <summary>
+    /// The condition must be <c>bool</c>, so that <c>!</c> negates what <c>if</c> tested (a type with its own
+    /// <c>operator true</c> could disagree). <c>S</c>'s declarations move out to the method's scope, so no name one of
+    /// them declares may appear anywhere else in the method, where it would clash or be read before it is declared.
+    /// </summary>
+    private static List<Func<MethodDeclarationSyntax>> GuardClauseCandidates(MethodDeclarationSyntax method)
+    {
+        if (method.ReturnType is not PredefinedTypeSyntax { Keyword.RawKind: (int)SyntaxKind.VoidKeyword }
+            || method.Body!.Statements.LastOrDefault() is not IfStatementSyntax { Else: null } last)
+        {
+            return [];
+        }
+
+        HashSet<string> moved = [.. last.Statement.DescendantNodes().Select(DeclaredName).OfType<string>()];
+        bool clashes = method.DescendantTokens().Any(t => t.IsKind(SyntaxKind.IdentifierToken) && !last.Statement.FullSpan.Contains(t.SpanStart) && moved.Contains(t.Text));
+        return clashes || Model(method).GetTypeInfo(last.Condition).Type is not { SpecialType: SpecialType.System_Boolean } ? [] : [() => GuardClause(method, last)];
+    }
+
+    private static string? DeclaredName(SyntaxNode node) => node switch
+    {
+        VariableDeclaratorSyntax d => d.Identifier.Text,
+        SingleVariableDesignationSyntax v => v.Identifier.Text,
+        ForEachStatementSyntax f => f.Identifier.Text,
+        CatchDeclarationSyntax c => c.Identifier.Text,
+        LocalFunctionStatementSyntax l => l.Identifier.Text,
+        ParameterSyntax p => p.Identifier.Text,
+        LabeledStatementSyntax l => l.Identifier.Text,
+        _ => null,
+    };
+
+    private static MethodDeclarationSyntax GuardClause(MethodDeclarationSyntax method, IfStatementSyntax last)
+    {
+        IfStatementSyntax guard = SyntaxFactory.IfStatement(SyntaxFactory.PrefixUnaryExpression(SyntaxKind.LogicalNotExpression, AsOperand(last.Condition)), SyntaxFactory.ReturnStatement())
+            .NormalizeWhitespace()
+            .WithTriviaFrom(last);
+        return method.ReplaceNode(last, [guard, .. UnwrapBlock(last.Statement)]);
+    }
+
+    // -- ForToForeach: an index loop over an array that only reads a[i] becomes a foreach (ticket P2-048). --
+
+    /// <summary>
+    /// <c>a</c> must be a single-dimensional array held in a local or by-value parameter that the body never writes and
+    /// that nothing in the method can write behind the loop's back (no lambda or local function names it, no <c>ref</c>
+    /// is taken to it), since <c>foreach</c> reads <c>a</c> once and the <c>for</c> reads it every iteration. Every use
+    /// of <c>i</c> is an <c>a[i]</c> read outside any lambda (a captured <c>i</c> is one variable, a captured item one
+    /// per iteration), never written or passed by reference, and, for a value-type element, never the receiver of a
+    /// member access, which could mutate the element in place where the item is a copy.
+    /// </summary>
+    private static List<Func<MethodDeclarationSyntax>> ForeachCandidates(MethodDeclarationSyntax method)
+    {
+        List<(ForStatementSyntax Loop, string Index, IdentifierNameSyntax Array)> shapes = [];
+        foreach (ForStatementSyntax loop in Nodes<ForStatementSyntax>(method, static _ => true))
+        {
+            if (ArrayLoop(loop) is { } shape)
+            {
+                shapes.Add((loop, shape.Index, shape.Array));
+            }
+        }
+
+        if (shapes.Count == 0)
+        {
+            return [];
+        }
+
+        SemanticModel model = Model(method);
+        HashSet<string> used = UsedNames(method);
+        return [.. shapes
+            .Where(s => IsForeachable(method, model, s.Loop, s.Index, s.Array))
+            .Select(s => (Func<MethodDeclarationSyntax>)(() => ToForeach(method, s.Loop, s.Index, s.Array, FreshName(ItemName, used))))];
+    }
+
+    private static (string Index, IdentifierNameSyntax Array)? ArrayLoop(ForStatementSyntax loop)
+    {
+        if (loop is not
+            {
+                Declaration: { Type: PredefinedTypeSyntax { Keyword.RawKind: (int)SyntaxKind.IntKeyword }, Variables: [{ Initializer.Value: LiteralExpressionSyntax { Token.Value: 0 } } index] },
+                Initializers.Count: 0,
+                Condition: BinaryExpressionSyntax
+                {
+                    RawKind: (int)SyntaxKind.LessThanExpression,
+                    Left: IdentifierNameSyntax bound,
+                    Right: MemberAccessExpressionSyntax { RawKind: (int)SyntaxKind.SimpleMemberAccessExpression, Expression: IdentifierNameSyntax array, Name.Identifier.Text: "Length" },
+                },
+                Incrementors: [ExpressionSyntax increment],
+            })
+        {
+            return null;
+        }
+
+        ExpressionSyntax? step = increment switch
+        {
+            PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.PostIncrementExpression } post => post.Operand,
+            PrefixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.PreIncrementExpression } pre => pre.Operand,
+            _ => null,
+        };
+        string name = index.Identifier.Text;
+        return step is IdentifierNameSyntax stepped && string.Equals(bound.Identifier.Text, name, StringComparison.Ordinal) && string.Equals(stepped.Identifier.Text, name, StringComparison.Ordinal)
+            ? (name, array)
+            : null;
+    }
+
+    private static bool IsForeachable(MethodDeclarationSyntax method, SemanticModel model, ForStatementSyntax loop, string index, IdentifierNameSyntax array)
+    {
+        if (ArrayType(model, array) is not { } type)
+        {
+            return false;
+        }
+
+        string name = array.Identifier.Text;
+        bool escapes = method.Body!.DescendantNodes().OfType<IdentifierNameSyntax>()
+            .Any(id => string.Equals(id.Identifier.Text, name, StringComparison.Ordinal)
+                && (IsInsideNestedFunction(id, method.Body) || IsByReference(id) || (loop.Statement.Span.Contains(id.Span) && IsWritten(id))));
+        return !escapes && loop.Statement.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
+            .Where(id => string.Equals(id.Identifier.Text, index, StringComparison.Ordinal))
+            .All(id => !IsInsideNestedFunction(id, loop.Statement) && LoopRead(id, name) is { } read && !IsWritten(read)
+                && (type.ElementType.IsReferenceType || read.Parent is not (MemberAccessExpressionSyntax or ConditionalAccessExpressionSyntax)));
+    }
+
+    /// <summary>The type of a single-dimensional array held in a by-value local or parameter, or null.</summary>
+    private static IArrayTypeSymbol? ArrayType(SemanticModel model, IdentifierNameSyntax array) => model.GetSymbolInfo(array).Symbol switch
+    {
+        ILocalSymbol { IsRef: false, Type: IArrayTypeSymbol { Rank: 1 } local } => local,
+        IParameterSymbol { RefKind: RefKind.None, Type: IArrayTypeSymbol { Rank: 1 } parameter } => parameter,
+        _ => null,
+    };
+
+    /// <summary>The <c>a[i]</c> whose whole argument <paramref name="index"/> is, or null.</summary>
+    private static ElementAccessExpressionSyntax? LoopRead(IdentifierNameSyntax index, string array) =>
+        index.Parent is ArgumentSyntax { RefKindKeyword.RawKind: (int)SyntaxKind.None, NameColon: null, Parent: BracketedArgumentListSyntax { Arguments.Count: 1, Parent: ElementAccessExpressionSyntax { Expression: IdentifierNameSyntax target } read } }
+            && string.Equals(target.Identifier.Text, array, StringComparison.Ordinal) ? read : null;
+
+    private static bool IsInsideNestedFunction(SyntaxNode node, SyntaxNode scope) =>
+        node.Ancestors().TakeWhile(a => a != scope).Any(static a => a is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax);
+
+    private static bool IsByReference(ExpressionSyntax expr) =>
+        (expr.Parent is ArgumentSyntax argument && !argument.RefKindKeyword.IsKind(SyntaxKind.None)) || expr.Parent is RefExpressionSyntax;
+
+    private static bool IsWritten(ExpressionSyntax expr) => IsByReference(expr) || expr.Parent switch
+    {
+        AssignmentExpressionSyntax assignment => assignment.Left == expr,
+        PrefixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.PreIncrementExpression or (int)SyntaxKind.PreDecrementExpression } => true,
+        PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.PostIncrementExpression or (int)SyntaxKind.PostDecrementExpression } => true,
+        _ => false,
+    };
+
+    /// <summary>
+    /// The header is built alone and normalised, since brand new tokens carry no trivia (<c>var</c> against the item's
+    /// name would lex as one identifier); the loop's own body, each <c>a[i]</c> now the item, then goes back in as it was.
+    /// </summary>
+    private static MethodDeclarationSyntax ToForeach(MethodDeclarationSyntax method, ForStatementSyntax loop, string index, IdentifierNameSyntax array, string item)
+    {
+        string name = array.Identifier.Text;
+        ElementAccessExpressionSyntax[] reads = [.. loop.Statement.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
+            .Where(id => string.Equals(id.Identifier.Text, index, StringComparison.Ordinal))
+            .Select(id => LoopRead(id, name)!)];
+        StatementSyntax body = loop.Statement.ReplaceNodes(reads, (original, _) => SyntaxFactory.IdentifierName(item).WithTriviaFrom(original));
+        ForEachStatementSyntax header = SyntaxFactory.ForEachStatement(SyntaxFactory.IdentifierName("var"), SyntaxFactory.Identifier(item), array.WithoutTrivia(), SyntaxFactory.Block()).NormalizeWhitespace();
+        ForEachStatementSyntax rewritten = header
+            .WithCloseParenToken(header.CloseParenToken.WithTrailingTrivia(loop.CloseParenToken.TrailingTrivia))
+            .WithStatement(body)
+            .WithTriviaFrom(loop);
+        return method.ReplaceNode(loop, rewritten);
+    }
+
+    // -- Semantic helpers for the P2-048 operators. --
+
+    /// <summary>
+    /// The method's own file bound against the BCL alone, as <see cref="CompileCheck"/> compiles it. Built only once an
+    /// operator has found a syntactic site, since binding costs far more than a syntax walk.
+    /// </summary>
+    private static SemanticModel Model(MethodDeclarationSyntax method) =>
+        CSharpCompilation.Create("EquivSeederModel", [method.SyntaxTree], CompileCheck.References.Value, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
+            .GetSemanticModel(method.SyntaxTree);
+
+    private static ITypeSymbol? LocalOrParameterType(SemanticModel model, ExpressionSyntax expr) => model.GetSymbolInfo(expr).Symbol switch
+    {
+        ILocalSymbol local => local.Type,
+        IParameterSymbol parameter => parameter.Type,
+        _ => null,
+    };
+
+    /// <summary>Whether <paramref name="expr"/> has exactly <paramref name="type"/> and is not converted where it stands; an error type never counts.</summary>
+    private static bool HasExactType(SemanticModel model, ExpressionSyntax expr, ITypeSymbol type) =>
+        type.TypeKind != TypeKind.Error && model.GetTypeInfo(expr) is { Type: { } actual, ConvertedType: { } converted }
+        && SymbolEqualityComparer.Default.Equals(actual, type) && SymbolEqualityComparer.Default.Equals(converted, type);
+
+    private static bool SameName(IdentifierNameSyntax x, IdentifierNameSyntax y) => string.Equals(x.Identifier.Text, y.Identifier.Text, StringComparison.Ordinal);
+
+    /// <summary>
+    /// <paramref name="expr"/> without its outer trivia, parenthesised unless it is a primary expression, so it keeps
+    /// its meaning as a <c>?:</c> or <c>??</c> operand, after <c>!</c>, or in an interpolation hole.
+    /// </summary>
+    private static ExpressionSyntax AsOperand(ExpressionSyntax expr)
+    {
+        ExpressionSyntax bare = expr.WithoutTrivia();
+        return bare is IdentifierNameSyntax or LiteralExpressionSyntax or ParenthesizedExpressionSyntax or MemberAccessExpressionSyntax
+            or InvocationExpressionSyntax or ElementAccessExpressionSyntax or CheckedExpressionSyntax ? bare : SyntaxFactory.ParenthesizedExpression(bare);
     }
 
     // -- DropNullCheck: an if/else testing a variable against null becomes the branch a non-null value takes. --

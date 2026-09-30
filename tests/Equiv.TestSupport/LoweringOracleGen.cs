@@ -280,7 +280,7 @@ public static class LoweringOracleGen
                         .Append(Close(update.IsChecked, pad));
                     break;
                 case Call call:
-                    text.Append(pad).Append(call.Method).Append('(').Append(call.Argument.Render()).Append(");\n");
+                    text.Append(pad).Append(call.Callee).Append('(').Append(call.Argument.Render()).Append(");\n");
                     break;
                 case Parse parse:
                     text.Append(pad).Append($"z = {Cell}.{TryParse}(").Append(parse.Argument.Render()).Append(", out x);\n");
@@ -381,7 +381,7 @@ public static class LoweringOracleGen
     internal sealed record Deconstruction(ImmutableArray<string> Targets, ImmutableArray<IExpr> Values) : IStmt;
 
     /// <summary><c>Method(Argument);</c> as a statement.</summary>
-    internal sealed record Call(string Method, IExpr Argument) : IStmt;
+    internal sealed record Call(string Callee, IExpr Argument) : IStmt;
 
     /// <summary><c>z = o.TryParse(Argument, out x);</c> (ticket M4-003).</summary>
     internal sealed record Parse(IExpr Argument) : IStmt;

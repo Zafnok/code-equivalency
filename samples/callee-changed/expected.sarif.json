@@ -195,6 +195,22 @@
         "projectsNotBuilt": {
           "legacy": [],
           "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.CalleeChanged",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.CalleeChanged",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
         }
       }
     }

@@ -3,6 +3,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
+    <PackageReference Include="ICSharpCode.Decompiler" />
   </ItemGroup>
 
   <ItemGroup>

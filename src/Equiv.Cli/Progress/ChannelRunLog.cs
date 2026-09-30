@@ -117,14 +117,14 @@ internal sealed class ChannelRunLog : IRunLog, IDisposable
     {
         using PeriodicTimer timer = new(IsDebug ? TimeSpan.FromSeconds(10) : TimeSpan.FromSeconds(60), time);
         Task<bool> read = channel.Reader.WaitToReadAsync().AsTask();
-        Task<bool> tick = timer.WaitForNextTickAsync().AsTask();
+        Task<bool> tick = NextTick();
         while (true)
         {
             // The timer is disposed only after this loop, so every tick is a real one.
             if (await Task.WhenAny(read, tick).ConfigureAwait(false) == tick)
             {
                 Heartbeat();
-                tick = timer.WaitForNextTickAsync().AsTask();
+                tick = NextTick();
                 continue;
             }
 
@@ -140,6 +140,9 @@ internal sealed class ChannelRunLog : IRunLog, IDisposable
 
             read = channel.Reader.WaitToReadAsync().AsTask();
         }
+
+        // Each call makes a fresh ValueTask and converts it at once, so none is consumed twice.
+        Task<bool> NextTick() => timer.WaitForNextTickAsync().AsTask();
     }
 
     private void Handle(RunEvent next)

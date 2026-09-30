@@ -13,7 +13,9 @@ namespace Equiv.Frontend.CSharp.Tests.Execution;
 /// <summary>
 /// A <see cref="DriverFactory"/> over the test host's runtime assemblies plus a small library, <c>Odd</c>, built once into
 /// the test output folder in a legacy and a modern version: the legacy one alone has <c>Members.OnlyLegacy()</c>, the
-/// modern one alone <c>Small.C</c> and <c>Members.OnlyModern()</c>.
+/// modern one alone <c>Small.C</c> and <c>Members.OnlyModern()</c>. A stand-in <c>System.Windows.Forms</c> (ticket
+/// P2-051) is a legacy reference and the modern side's Windows Desktop pack, so a driver that uses it runs on
+/// <c>Microsoft.WindowsDesktop.App</c>; <c>System.Drawing</c>'s value types are the test host's own.
 /// </summary>
 internal static class DriverLibraries
 {
@@ -85,6 +87,28 @@ internal static class DriverLibraries
         public class Global { public class Nested { public static int Z() => 1; } }
         """;
 
+    private const string Forms = """
+        namespace System.Windows.Forms
+        {
+            public interface IWin32Window { System.IntPtr Handle { get; } }
+            public struct Message { public int Msg; }
+            public class Control : IWin32Window
+            {
+                public System.IntPtr Handle => System.IntPtr.Zero;
+                public string Text => string.Empty;
+            }
+
+            public static class TextRenderer
+            {
+                public static System.Drawing.Size MeasureText(string text) => new System.Drawing.Size(text.Length, 1);
+                public static int Draw(IWin32Window owner) => 0;
+                public static int Dispatch(Message message) => message.Msg;
+            }
+
+            public static class MessageBox { public static int Show(string text) => 0; }
+        }
+        """;
+
     private static readonly Lazy<DriverFactory> Shared = new(Build);
 
     public static DriverFactory Factory => Shared.Value;
@@ -112,15 +136,16 @@ internal static class DriverLibraries
             "modern",
             Odd.Replace("/*MODERN*/", "C = 3", StringComparison.Ordinal).Replace("/*ONLYMODERN*/", "public static int OnlyModern() => 0;", StringComparison.Ordinal),
             runtime);
-        return new DriverFactory(() => new DriverReferences([.. runtime, legacy], [.. runtime, modern]));
+        string forms = Library("forms", Forms, runtime, "System.Windows.Forms");
+        return new DriverFactory(() => new DriverReferences([.. runtime, legacy, forms], [.. runtime, modern], [forms]));
     }
 
-    private static string Library(string side, string source, IReadOnlyList<string> references)
+    private static string Library(string side, string source, IReadOnlyList<string> references, string name = "Odd")
     {
-        string path = Path.Combine(AppContext.BaseDirectory, "odd", side, "Odd.dll");
+        string path = Path.Combine(AppContext.BaseDirectory, "odd", side, name + ".dll");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         CSharpCompilation compilation = CSharpCompilation.Create(
-            "Odd",
+            name,
             [CSharpSyntaxTree.ParseText(source, cancellationToken: TestContext.Current.CancellationToken)],
             [.. references.Select(static r => MetadataReference.CreateFromFile(r))],
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));

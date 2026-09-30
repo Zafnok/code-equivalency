@@ -39,6 +39,7 @@ public sealed class BareProjectLoaderTests : IDisposable
             "TargetFrameworkAttribute(\".NETFramework,Version=v4.8\", FrameworkDisplayName = \".NET Framework 4.8\")",
             compilation.SyntaxTrees.Last().ToString(),
             StringComparison.Ordinal);
+        Assert.Equal(".NETFramework,Version=v4.8", RuntimeDetection.Declared(compilation)); // P2-053: the bare loader's attribute reads back through Roslyn.
         Assert.Equal(["mscorlib.dll", "System.dll", "System.Core.dll"], compilation.References.Select(static r => Path.GetFileName(((PortableExecutableReference)r).FilePath)), StringComparer.Ordinal);
         Assert.Equal(["DEBUG", "TRACE"], compilation.SyntaxTrees.First().Options.PreprocessorSymbolNames, StringComparer.Ordinal);
     }

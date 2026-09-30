@@ -121,9 +121,9 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   through the `ModelContextProtocol` SDK with its tools registered explicitly (no assembly scanning). It
   has two read-only tools that call `CompareCommand.Run`, the pipeline `equiv compare` runs, with an
   in-memory sink, so nothing is written to disk. `compare` takes `legacy`, `modern`, and optionally
-  `config`, `baseline`, `bound` and `timeoutMs` (the last two override the config's values and must be
-  positive); it returns a one-line summary (`Equivalent n, Divergent n, Unknown n, skipped projects n,
-  exit code k`), then the SARIF log as JSON text. `lower_only` takes `legacy`, `modern` and `config` and
+  `config`, `baseline`, `bound`, `timeoutMs` (these two override the config's values and must be
+  positive) and `ilFallback` (`--il-fallback`); it returns a one-line summary (`Equivalent n, Divergent n, Unknown n, skipped projects n,
+  exit code k`), then the SARIF log as JSON text. `lower_only` takes `legacy`, `modern`, `config` and `ilFallback` and
   is `compare --lower-only`. An input error that `compare` maps to exit 3, or to exit 4 with no SARIF log,
   is a tool error (`isError: true`) with the message `equiv compare` prints on stderr. stdout carries
   protocol messages only: `CompareCommand.Run` writes its own lines through the `Streams` on

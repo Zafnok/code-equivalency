@@ -13,6 +13,7 @@ using Equiv.Frontend.CSharp.Execution;
 using Equiv.Frontend.CSharp.Fingerprinting;
 using Equiv.Frontend.CSharp.Loading;
 using Equiv.Frontend.CSharp.Lowering;
+using Equiv.Frontend.CSharp.Lowering.Il;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -29,7 +30,8 @@ namespace Equiv.Frontend.CSharp;
 /// <see cref="LoweringFailure"/>, not the end of the run (P2-011). The legacy body is lowered with the enabled
 /// API-equivalence entries and the modern body with none; the pair lists the entries that fired (ADR 0020; M3-009). The
 /// analysis carries a <see cref="ReplayDriverFactory"/> over the loaded projects, which emits nothing until a replay asks
-/// (ticket M4-009).
+/// (ticket M4-009). Each loaded project gets its runtime (<see cref="RuntimeDetection"/>, ADR 0040; P2-053). Under
+/// <c>--il-fallback</c> a pair may keep bodies lowered from IL instead (<see cref="IlFallback"/>, ADR 0039; P1-016).
 /// </summary>
 public sealed class CSharpFrontend : ILanguageFrontend
 {
@@ -79,7 +81,9 @@ public sealed class CSharpFrontend : ILanguageFrontend
         ArgumentNullException.ThrowIfNull(log);
 
         LoadedSolution legacy = Loaded("load-legacy", legacyPath, log, ct);
+        legacy = legacy with { Runtimes = RuntimeDetection.Detect(legacy.Compilations, config.LegacyRuntime) };
         LoadedSolution modern = Loaded("load-modern", modernPath, log, ct);
+        modern = modern with { Runtimes = RuntimeDetection.Detect(modern.Compilations, config.ModernRuntime) };
 
         log.Phase("enumerate", 2, legacy.Compilations.Length + modern.Compilations.Length);
         EndpointOverrides overrides = EndpointOverrides.Build(Endpoints(legacy.Compilations), Endpoints(modern.Compilations));
@@ -117,9 +121,15 @@ public sealed class CSharpFrontend : ILanguageFrontend
         {
             LegacyNotBuilt = legacy.NotBuilt,
             ModernNotBuilt = modern.NotBuilt,
+            LegacyRuntimes = Reported(legacy.Runtimes),
+            ModernRuntimes = Reported(modern.Runtimes),
             Replay = new ReplayDriverFactory(Targets(legacyByIdentity), Targets(modernByIdentity)),
         };
     }
+
+    /// <summary>A side's project runtimes as <see cref="FrontendAnalysis"/> reports them (P2-053).</summary>
+    private static ImmutableArray<(string Project, string Runtime, string Source)> Reported(ImmutableArray<ProjectRuntime> runtimes) =>
+        [.. runtimes.Select(static r => (r.Project, r.Runtime, r.Source))];
 
     /// <summary>Each procedure's symbol and compilation, for replay under <c>--execute</c> (ticket M4-009).</summary>
     private static Dictionary<ProcedureIdentity, ReplayTarget> Targets(Dictionary<ProcedureIdentity, SideProcedure> byIdentity) =>
@@ -150,22 +160,19 @@ public sealed class CSharpFrontend : ILanguageFrontend
             {
                 (IrProcedure oldBody, ImmutableArray<string> oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true);
                 (IrProcedure newBody, ImmutableArray<string> newApplied) = _lower(modern.Symbol, modern.Compilation, config, false);
-                if (legacy.Symbol.IsAsync != modern.Symbol.IsAsync)
-                {
-                    // Ticket M4-006: a sync method throws to its caller and an async one into its task, so the pair is decided
-                    // from the two signatures, before either body: both are one opaque the CLI makes Unknown without the solver.
-                    oldBody = IrLowerer.Opaque(oldBody, Unknown.AsyncMismatchReason, ToSourceSpan(legacy.Symbol.Locations[0]));
-                    newBody = IrLowerer.Opaque(newBody, Unknown.AsyncMismatchReason, ToSourceSpan(modern.Symbol.Locations[0]));
-                }
-
-                lowered.Add(pair with
-                {
-                    OldBody = oldBody,
-                    NewBody = newBody,
-                    OldFingerprint = BodyFingerprinter.Compute(legacy.Symbol, legacy.Compilation, config, legacy: true),
-                    NewFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false),
-                    EquivalencesApplied = [.. oldApplied.Union(newApplied, StringComparer.Ordinal).Order(StringComparer.Ordinal)],
-                });
+                lowered.Add(Relowered(
+                    pair with
+                    {
+                        OldBody = oldBody,
+                        NewBody = newBody,
+                        OldFingerprint = BodyFingerprinter.Compute(legacy.Symbol, legacy.Compilation, config, legacy: true),
+                        NewFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false),
+                        EquivalencesApplied = [.. oldApplied.Union(newApplied, StringComparer.Ordinal).Order(StringComparer.Ordinal)],
+                    },
+                    legacy,
+                    modern,
+                    config,
+                    log));
                 log.ItemDone("lowered");
             }
             catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
@@ -177,6 +184,43 @@ public sealed class CSharpFrontend : ILanguageFrontend
 
         log.PhaseDone();
         return (lowered.ToImmutable(), failures.ToImmutable());
+    }
+
+    /// <summary>
+    /// <paramref name="pair"/>, lowered from IOperation and fingerprinted, with the bodies it keeps. Under <c>--il-fallback</c>
+    /// <see cref="IlFallback"/> may lower both sides again from IL, once congruence is decided on the fingerprints (ADR 0039;
+    /// ticket P1-016); IL-lowered bodies applied no API equivalence. Then, when exactly one side is <c>async</c>, both bodies
+    /// are one opaque, whichever lowering they came from (ticket M4-006).
+    /// </summary>
+    private static ProcedurePair Relowered(ProcedurePair pair, SideProcedure legacy, SideProcedure modern, EquivConfig config, IRunLog log)
+    {
+        if (config.IlFallback)
+        {
+            bool congruent = pair.OldFingerprint is { RuntimeSensitive: false } fingerprint && fingerprint == pair.NewFingerprint;
+            (IrProcedure old, IrProcedure @new, bool tried, string lowering) = IlFallback.Choose(
+                new IlFallback.Side(legacy.Symbol, legacy.Compilation, pair.OldBody!),
+                new IlFallback.Side(modern.Symbol, modern.Compilation, pair.NewBody!),
+                congruent,
+                log);
+            pair = pair with
+            {
+                OldBody = old,
+                NewBody = @new,
+                Lowering = lowering,
+                IlFallbackTried = tried,
+                EquivalencesApplied = string.Equals(lowering, IlFallback.Il, StringComparison.Ordinal) ? [] : pair.EquivalencesApplied,
+            };
+        }
+
+        // Ticket M4-006: a sync method throws to its caller and an async one into its task, so the pair is decided from the
+        // two signatures, before either body: both are one opaque the CLI makes Unknown without the solver.
+        return legacy.Symbol.IsAsync == modern.Symbol.IsAsync
+            ? pair
+            : pair with
+            {
+                OldBody = IrLowerer.Opaque(pair.OldBody!, Unknown.AsyncMismatchReason, ToSourceSpan(legacy.Symbol.Locations[0])),
+                NewBody = IrLowerer.Opaque(pair.NewBody!, Unknown.AsyncMismatchReason, ToSourceSpan(modern.Symbol.Locations[0])),
+            };
     }
 
     /// <summary>

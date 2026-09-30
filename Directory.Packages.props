@@ -4,6 +4,8 @@
     <!-- Equiv.Frontend.CSharp -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
+    <!-- ADR 0039 (ticket P1-014): the IL fallback reads a method back as ILSpy's ILAst -->
+    <PackageVersion Include="ICSharpCode.Decompiler" Version="11.1.0.9782" />
 
     <!-- tools/corpus/seeder (M4-010): plain Roslyn syntax rewriting, no workspace/MSBuild -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />

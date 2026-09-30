@@ -248,6 +248,78 @@ public sealed class DriverFactoryTests
         Assert.Throws<ArgumentNullException>(() => factory.Create(null!, "."));
     }
 
+    /// <summary>Ticket P2-051: a Windows Forms member resolves, and its .NET 10 driver runs on the Windows Desktop runtime.</summary>
+    [Fact]
+    public void ResolvesAWindowsFormsMemberOnBothRuntimes()
+    {
+        ExecutionSignature measure = Single("System.Windows.Forms.TextRenderer::MeasureText(string)");
+
+        Assert.Equal([ExecutionTypeKind.Text], measure.Parameters.Select(static p => p.Kind));
+        Assert.Empty(measure.NotConstructible);
+        Assert.Contains("return Returned(W.T(W.I(r.Width), W.I(r.Height)));", DriverLibraries.Source(measure.Member.Value), StringComparison.Ordinal);
+        (string legacyConfig, string modernConfig) = Configs(measure.Member.Value);
+        Assert.Contains("sku=\".NETFramework,Version=v4.8\"", legacyConfig, StringComparison.Ordinal);
+        Assert.Contains("\"tfm\": \"net10.0-windows\"", modernConfig, StringComparison.Ordinal);
+        Assert.Contains("\"name\": \"Microsoft.WindowsDesktop.App\"", modernConfig, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket P2-051: a <c>System.Drawing</c> member resolves, and its point, size and rectangle arguments are built.</summary>
+    [Fact]
+    public void ResolvesASystemDrawingMemberOnBothRuntimes()
+    {
+        ExecutionSignature contains = Single("System.Drawing.Rectangle::Contains(System.Drawing.Point)");
+
+        Assert.Equal([ExecutionTypeKind.Signed32Quad, ExecutionTypeKind.Signed32Pair], contains.Parameters.Select(static p => p.Kind));
+        Assert.Empty(contains.NotConstructible);
+        Assert.Equal(
+            [ExecutionTypeKind.Binary32Quad, ExecutionTypeKind.Binary32Pair],
+            Single("System.Drawing.RectangleF::Inflate(System.Drawing.SizeF)").Parameters.Select(static p => p.Kind));
+        string source = DriverLibraries.Source(contains.Member.Value);
+        Assert.Contains(
+            "global::System.Drawing.Rectangle p0 = new global::System.Drawing.Rectangle(checked((int)R.I(R.At(a[1], 0))), checked((int)R.I(R.At(a[1], 1))), checked((int)R.I(R.At(a[1], 2))), checked((int)R.I(R.At(a[1], 3))));",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains("global::System.Drawing.Point p1 = new global::System.Drawing.Point(checked((int)R.I(R.At(a[2], 0))), checked((int)R.I(R.At(a[2], 1))));", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "global::System.Drawing.SizeF p1 = new global::System.Drawing.SizeF(R.F(R.At(a[2], 0)), R.F(R.At(a[2], 1)));",
+            DriverLibraries.Source("System.Drawing.RectangleF::Inflate(System.Drawing.SizeF)"),
+            StringComparison.Ordinal);
+        Assert.Contains("return Returned(W.T(W.F(r.X), W.F(r.Y)));", DriverLibraries.Source("System.Drawing.RectangleF::get_Location()"), StringComparison.Ordinal);
+        Assert.Contains(
+            "return Returned(W.T(W.I(r.X), W.I(r.Y), W.I(r.Width), W.I(r.Height)));",
+            DriverLibraries.Source("System.Drawing.Rectangle::Inflate(System.Drawing.Rectangle,int,int)"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "return Returned(W.T(W.F(r.X), W.F(r.Y), W.F(r.Width), W.F(r.Height)));",
+            DriverLibraries.Source("System.Drawing.RectangleF::Inflate(System.Drawing.RectangleF,float,float)"),
+            StringComparison.Ordinal);
+        Assert.Contains("\"name\": \"Microsoft.NETCore.App\"", Configs(contains.Member.Value).Modern, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket P2-051: a window, a window message, or the desktop session keeps a member from running.</summary>
+    [Theory]
+    [InlineData("System.Windows.Forms.Control::get_Text()")]
+    [InlineData("System.Windows.Forms.TextRenderer::Draw(System.Windows.Forms.IWin32Window)")]
+    [InlineData("System.Windows.Forms.TextRenderer::Dispatch(System.Windows.Forms.Message)")]
+    [InlineData("System.Windows.Forms.MessageBox::Show(string)")]
+    public void WindowHandleParameter_IsNotConstructible(string member) =>
+        Assert.Contains("needs a live window handle or a message loop", Single(member).NotConstructible, StringComparer.Ordinal);
+
+    /// <summary>The legacy driver's <c>app.config</c> and the modern driver's <c>runtimeconfig.json</c> for <paramref name="member"/>.</summary>
+    private static (string Legacy, string Modern) Configs(string member)
+    {
+        string directory = Directory.CreateTempSubdirectory("driver-factory-").FullName;
+        try
+        {
+            ExecutionDrivers drivers = Factory.Create(new ExecutionRequest(new CallIdentity(member), [], []), directory);
+            return (File.ReadAllText(drivers.Legacy + ".config"), File.ReadAllText(Path.ChangeExtension(drivers.Modern, ".runtimeconfig.json")));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void TheInstalledFactoryLocatesItsReferencesLazily() => Assert.NotNull(new DriverFactory());
 }

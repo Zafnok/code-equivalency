@@ -59,11 +59,12 @@ internal static class CompareCommand
         Option<string> verbosityOption = new("--verbosity") { DefaultValueFactory = _ => "normal" };
         verbosityOption.AcceptOnlyFromAmong("quiet", "normal", "debug");
         Option<string?> logOption = new("--log");
+        Option<bool> ilFallbackOption = new("--il-fallback");
 
         Command command = new("compare")
         {
             legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption,
-            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption,
+            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption, ilFallbackOption,
         };
 
         command.SetAction(parseResult => RunLogged(
@@ -83,6 +84,7 @@ internal static class CompareCommand
                 Testing = TestingOptions.TryParse(parseResult.GetValue(testTargetOption), parseResult.GetValue(testBudgetOption), out _)!,
                 Verbosity = ToVerbosity(parseResult.GetValue(verbosityOption)),
                 LogPath = parseResult.GetValue(logOption),
+                IlFallback = parseResult.GetValue(ilFallbackOption),
             },
             frontends,
             backend,
@@ -183,7 +185,7 @@ internal static class CompareCommand
             return inputErrorExitCode;
         }
 
-        EquivConfig config = loaded with { Bound = options.Bound ?? loaded.Bound, TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs };
+        EquivConfig config = loaded with { Bound = options.Bound ?? loaded.Bound, TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs, IlFallback = options.IlFallback };
         FrontendAnalysis? analysis = Loaded(frontend, options, config, runLog, streams.Error);
         if (analysis is null)
         {
@@ -210,8 +212,8 @@ internal static class CompareCommand
     }
 
     /// <summary>
-    /// The lowering census, the analysed line counts and the projects each solution does not build go into the run's
-    /// property bag on every run (ADR 0027; tickets M3-014, P2-013), and every skipped project is a notification (ADR 0029). <c>--lower-only</c> stops there: the
+    /// The lowering census, the analysed line counts, the projects each solution does not build and each project's runtime go
+    /// into the run's property bag on every run (ADR 0027; tickets M3-014, P2-013, P2-053), and every skipped project is a notification (ADR 0029). <c>--lower-only</c> stops there: the
     /// Added and Removed results, no backend call, exit 0 unless a C# project was skipped.
     /// </summary>
     private static int Report(
@@ -225,7 +227,10 @@ internal static class CompareCommand
             removed: matchResult.Removed.Length,
             added: matchResult.Added.Length,
             projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length),
-            unlowered: matchResult.LoweringFailures.Length);
+            unlowered: matchResult.LoweringFailures.Length) with
+        {
+            IlFallback = options.IlFallback ? (matchResult.Pairs.Count(static p => p.IlFallbackTried), matchResult.Pairs.Count(static p => string.Equals(p.Lowering, "il", StringComparison.Ordinal))) : null,
+        };
 
         // P2-011: a pair the frontend could not lower takes the same path as a pair whose verification throws (ADR 0023).
         List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(f => PairFailure("Lowering", f.Old, f.New, f.Exception, error))];
@@ -251,16 +256,7 @@ internal static class CompareCommand
         SarifLog log = SarifReportWriter.Write(
             results,
             baseline,
-            new Dictionary<string, object>(StringComparer.Ordinal)
-            {
-                ["loweringCensus"] = census.ToProperty(),
-                ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
-                ["projectsNotBuilt"] = new Dictionary<string, object>(StringComparer.Ordinal)
-                {
-                    [LegacySide] = (List<string>)[.. analysis.LegacyNotBuilt],
-                    [ModernSide] = (List<string>)[.. analysis.ModernNotBuilt],
-                },
-            },
+            RunProperties(analysis, census),
             notifications,
             unverified);
         Written(sink, log, options.OutPath, runLog);
@@ -277,6 +273,24 @@ internal static class CompareCommand
             _ => DecideExitCode(results, log, options.FailOn),
         };
     }
+
+    /// <summary>The run's property bag (ADR 0027; tickets M3-014, P2-013, P2-053).</summary>
+    private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census) =>
+        new(StringComparer.Ordinal)
+        {
+            ["loweringCensus"] = census.ToProperty(),
+            ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
+            ["projectsNotBuilt"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [LegacySide] = (List<string>)[.. analysis.LegacyNotBuilt],
+                [ModernSide] = (List<string>)[.. analysis.ModernNotBuilt],
+            },
+            ["runtimes"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [LegacySide] = SarifReportWriter.RuntimesProperty(analysis.LegacyRuntimes),
+                [ModernSide] = SarifReportWriter.RuntimesProperty(analysis.ModernRuntimes),
+            },
+        };
 
     /// <summary>The <c>write</c> phase (ADR 0038): one item, the SARIF log.</summary>
     private static void Written(IReportSink sink, SarifLog log, string outPath, IRunLog runLog)
@@ -536,7 +550,7 @@ internal static class CompareCommand
             runLog.Item(pair.New.Value, weight);
             if (decided is not null)
             {
-                results.Add(decided.Result);
+                results.Add(decided.Result with { Lowering = pair.Lowering });
                 runLog.ItemDone(decided.Outcome);
                 continue;
             }
@@ -544,7 +558,7 @@ internal static class CompareCommand
             try
             {
                 Verdict verdict = backend.Verify(old, @new, options);
-                results.Add(new VerificationResult(pair.New, verdict) { EquivalencesApplied = pair.EquivalencesApplied });
+                results.Add(new VerificationResult(pair.New, verdict) { EquivalencesApplied = pair.EquivalencesApplied, Lowering = pair.Lowering });
                 runLog.ItemDone(verdict switch
                 {
                     Equivalent => "equivalent",

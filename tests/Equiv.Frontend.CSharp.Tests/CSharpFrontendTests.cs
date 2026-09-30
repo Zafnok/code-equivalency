@@ -207,6 +207,35 @@ public sealed class CSharpFrontendTests
         Assert.DoesNotContain("System.String::Contains(char)", IrText.Dump(pair.NewBody!), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P1-016: under <c>--il-fallback</c> a pair that is not congruent and holds an unshared opaque keeps the IL bodies
+    /// when they hold fewer, and every pair says which lowering it kept; a congruent pair keeps its IOperation bodies and the
+    /// equivalences they applied. Without the flag no pair names a lowering.
+    /// </summary>
+    [Fact]
+    public void UnderTheIlFallbackEveryPairNamesItsLowering()
+    {
+        const string Contains = "public bool Has(string s, char c) => System.Linq.Enumerable.Contains(s, c);";
+        Compilation legacyCompilation = RoslynTestCompilations.Compile(
+            $"namespace N {{ public class C {{ {Contains} public int? Add(int? a, int b) {{ if (a.HasValue) {{ return new int?(a.GetValueOrDefault() + b); }} return null; }} }} }}");
+        Compilation modernCompilation = RoslynTestCompilations.Compile($"namespace N {{ public class C {{ {Contains} public int? Add(int? a, int b) => a + b; }} }}");
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
+        CSharpFrontend frontend = new(loader, new StableIdentityMatcher());
+
+        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = true }, NullRunLog.Instance, CancellationToken.None).Match;
+        MatchResult plain = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
+
+        ProcedurePair add = result.Pairs.Single(static p => p.New.Value.Contains("::Add(", StringComparison.Ordinal));
+        ProcedurePair has = result.Pairs.Single(static p => p.New.Value.Contains("::Has(", StringComparison.Ordinal));
+        Assert.Equal(("il", true), (add.Lowering, add.IlFallbackTried));
+        Assert.DoesNotContain(add.NewBody!.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
+        Assert.Equal(("operation", false), (has.Lowering, has.IlFallbackTried));
+        Assert.Equal(["bcl.string-contains-char"], has.EquivalencesApplied);
+        Assert.All(plain.Pairs, static p => Assert.Equal((null, false), (p.Lowering, p.IlFallbackTried)));
+    }
+
     /// <summary>Ticket M3-015 acceptance criterion 1: every lowered pair carries both bodies' fingerprints.</summary>
     [Fact]
     public void FingerprintsBothBodiesOfEveryLoweredPair()

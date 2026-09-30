@@ -41,6 +41,12 @@
       "reason": "GH-40: SolutionLoadException is internal by design (M2-001) -- it carries Roslyn-side diagnostics, and Equiv.Core cannot see Roslyn, so it never crosses the frontend assembly boundary (the frontend maps it to Equiv.Core.FrontendLoadException). There is no cross-assembly catch site to name it. Same rationale already recorded in .editorconfig's CA1064/CA1032 entry for this file."
     },
     {
+      "rule": "csharpsquid:S3871",
+      "verdict": "accept",
+      "paths": ["src/Equiv.Frontend.CSharp/Loading/UnsupportedConstructException.cs"],
+      "reason": "GH-180: UnsupportedConstructException is internal by design (M3-029, ADR 0029), for the same reason as SolutionLoadException: the bare MSBuild evaluator throws it and catches it inside the frontend assembly (BareProjectLoader and MsBuildEvaluator are its only catch sites), turning it into a skipped-project diagnostic. It never crosses the assembly boundary, so there is no external catch site to name it. Same rationale already recorded in .editorconfig's M3-029 entry for this file."
+    },
+    {
       "rule": "external_roslyn:MA0185",
       "verdict": "accept",
       "paths": ["src/Equiv.Frontend.CSharp/Lowering/TypeMapper.cs"],

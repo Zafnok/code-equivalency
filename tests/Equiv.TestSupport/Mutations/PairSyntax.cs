@@ -21,7 +21,7 @@ internal static class PairSyntax
 
     public const string Temporary = "t";
 
-    public static string Keyword(Type type) => OracleMethod.Keyword(type);
+    public static string Keyword(Type type) => type == typeof(string) ? "string" : OracleMethod.Keyword(type);
 
     /// <summary>The whole compilation unit: the class, its field and the one method.</summary>
     public static string RenderMethod(Method method)
@@ -65,16 +65,7 @@ internal static class PairSyntax
                     Nested(branch.Else, text, indent, ref loops);
                     break;
                 case Switch choice:
-                    text.Append(pad).Append("switch (").Append(choice.Scrutinee.Render()).Append(")\n").Append(pad).Append("{\n");
-                    foreach (Case section in choice.Cases)
-                    {
-                        text.Append(pad).Append("    case ").Append(section.Label.ToString(CultureInfo.InvariantCulture)).Append(":\n");
-                        Section(section.Body, text, indent + 1, ref loops);
-                    }
-
-                    text.Append(pad).Append("    default:\n");
-                    Section(choice.Default, text, indent + 1, ref loops);
-                    text.Append(pad).Append("}\n");
+                    RenderSwitch(choice, text, indent, ref loops);
                     break;
                 case While loop:
                     // The counter bounds the loop, so every generated method terminates.
@@ -85,6 +76,13 @@ internal static class PairSyntax
                         .Append(pad).Append("    ").Append(counter).Append("++;\n");
                     RenderBlock(loop.Body, text, indent + 1, ref loops);
                     text.Append(pad).Append("}\n");
+                    break;
+                case Guard guard:
+                    text.Append(pad).Append("if (").Append(guard.Condition.Render()).Append(")\n");
+                    Nested(guard.Then, text, indent, ref loops);
+                    break;
+                case ArrayLoop scan:
+                    RenderArrayLoop(scan, text, pad, "i" + (loops++).ToString(CultureInfo.InvariantCulture));
                     break;
                 case For loop:
                     string index = "i" + (loops++).ToString(CultureInfo.InvariantCulture);
@@ -97,6 +95,27 @@ internal static class PairSyntax
 
         return false;
     }
+
+    private static void RenderSwitch(Switch choice, StringBuilder text, int indent, ref int loops)
+    {
+        string pad = new(' ', indent * 4);
+        text.Append(pad).Append("switch (").Append(choice.Scrutinee.Render()).Append(")\n").Append(pad).Append("{\n");
+        foreach (Case section in choice.Cases)
+        {
+            text.Append(pad).Append("    case ").Append(section.Label.ToString(CultureInfo.InvariantCulture)).Append(":\n");
+            Section(section.Body, text, indent + 1, ref loops);
+        }
+
+        text.Append(pad).Append("    default:\n");
+        Section(choice.Default, text, indent + 1, ref loops);
+        text.Append(pad).Append("}\n");
+    }
+
+    private static void RenderArrayLoop(ArrayLoop scan, StringBuilder text, string pad, string index) =>
+        text.Append(CultureInfo.InvariantCulture, $"{pad}for (int {index} = 0; {index} < {Array}.Length; {index}++)\n")
+            .Append(CultureInfo.InvariantCulture, $"{pad}{{\n")
+            .Append(CultureInfo.InvariantCulture, $"{pad}    {scan.Target} = unchecked({scan.Target} {scan.Op} {Array}[{index}]);\n")
+            .Append(CultureInfo.InvariantCulture, $"{pad}}}\n");
 
     private static void Nested(ImmutableArray<IStmt> block, StringBuilder text, int indent, ref int loops)
     {
@@ -220,6 +239,26 @@ internal static class PairSyntax
         public string Render() => $"((System.Func<int, int>)(v => {Body.Render()}))({Argument.Render()})";
     }
 
+    /// <summary>A <c>string</c> literal of plain characters (ticket P2-048).</summary>
+    public sealed record Text(string Value) : IExpr
+    {
+        public Type Type => typeof(string);
+
+        public bool CannotThrow => true;
+
+        public string Render() => $"\"{Value}\"";
+    }
+
+    /// <summary><c>(p1 + p2 + ...)</c> over <c>string</c> parts: what <c>ConcatToInterpolation</c> rewrites (ticket P2-048).</summary>
+    public sealed record Concat(ImmutableArray<IExpr> Parts) : IExpr
+    {
+        public Type Type => typeof(string);
+
+        public bool CannotThrow => true;
+
+        public string Render() => $"({string.Join(" + ", Parts.Select(static p => p.Render()))})";
+    }
+
     /// <summary>A comparison of two numbers or two bools.</summary>
     public sealed record Relation(string Op, IExpr Left, IExpr Right) : IExpr
     {
@@ -247,6 +286,15 @@ internal static class PairSyntax
     public sealed record Throw : IStmt;
 
     public sealed record If(IExpr Condition, ImmutableArray<IStmt> Then, ImmutableArray<IStmt> Else) : IStmt;
+
+    /// <summary>An <c>if</c> with no <c>else</c>, which is what <c>GuardClause</c> rewrites (ticket P2-048).</summary>
+    public sealed record Guard(IExpr Condition, ImmutableArray<IStmt> Then) : IStmt;
+
+    /// <summary>
+    /// <c>for (int i = 0; i &lt; u.Length; i++) { Target = unchecked(Target Op u[i]); }</c>, which is what
+    /// <c>ForToForeach</c> rewrites (ticket P2-048); <see cref="Target"/> is <c>F</c> or <c>x</c>.
+    /// </summary>
+    public sealed record ArrayLoop(string Target, string Op) : IStmt;
 
     public sealed record Case(int Label, ImmutableArray<IStmt> Body);
 

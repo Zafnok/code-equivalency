@@ -17,6 +17,9 @@ public sealed class ChildProcessHost(long memoryLimitBytes, string? workingRoot 
 
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(20);
 
+    /// <summary>How long disposing a session waits for its killed process to exit and release the driver's files.</summary>
+    private static readonly TimeSpan ExitWait = TimeSpan.FromSeconds(10);
+
     // Every line either way is ASCII (JsonText), so no code page can change it.
     private static readonly Encoding Wire = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
@@ -80,6 +83,10 @@ public sealed class ChildProcessHost(long memoryLimitBytes, string? workingRoot 
         public void Dispose()
         {
             Kill();
+
+            // Kill only signals: until the process is gone it still holds the driver's files, so a caller that deletes
+            // the driver's folder next can fail with UnauthorizedAccessException (seen once in RuntimeDiffTests, PR #291).
+            process.WaitForExit(ExitWait);
             process.Dispose();
         }
 

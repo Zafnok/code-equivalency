@@ -15,7 +15,9 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// Lowering an operand, null-checking a dereferenced receiver, and resolving an lvalue to its SSA
 /// variable stay <see cref="IrLowerer"/>'s job, so this class calls back into it through the delegates
 /// given at construction rather than naming its type; so is the type of an operand's lowered value, which for <c>base</c>
-/// is the containing type (ticket P2-045). Sort names go through <paramref name="sorts"/> (ticket M3-009).
+/// is the containing type (ticket P2-045). Sort names go through <paramref name="sorts"/> (ticket M3-009). The IL lowering
+/// (ticket P1-015) reaches only the members keyed by lowered values, gives an access the nullness it has already read,
+/// and passes none of the callbacks that take an <see cref="IOperation"/>.
 /// </summary>
 internal sealed class HeapLowerer(
     SsaBuilder ssa,
@@ -108,7 +110,7 @@ internal sealed class HeapLowerer(
     /// The backing field of a property that is neither virtual nor an override and whose accessors have no body, or null:
     /// a property with a body, or one an override may replace, is called.
     /// </summary>
-    private static IFieldSymbol? Inlined(IPropertySymbol property) =>
+    internal static IFieldSymbol? Inlined(IPropertySymbol property) =>
         !property.IsVirtual && !property.IsOverride && Bodiless(property.GetMethod) && Bodiless(property.SetMethod) ? BackingField(property) : null;
 
     private static bool Bodiless(IMethodSymbol? accessor) =>
@@ -164,6 +166,13 @@ internal sealed class HeapLowerer(
     public Access Element(IrVar array, IrVar index, ITypeSymbol elementType, IOperation dereferenced) =>
         new(Versioned(Inputs.Elements((IrSort)array.Type, TypeMapper.Map(elementType, sorts))), array, index, dereferenced);
 
+    /// <summary>
+    /// Element <paramref name="index"/> of the array <paramref name="array"/> references, whose nullness is
+    /// <paramref name="isNull"/>, null when it cannot be null (ticket P1-015).
+    /// </summary>
+    public Access Element(IrVar array, IrVar index, ITypeSymbol elementType, IrVar? isNull) =>
+        new(Versioned(Inputs.Elements((IrSort)array.Type, TypeMapper.Map(elementType, sorts))), array, index, Dereferenced: null) { IsNull = isNull };
+
     /// <summary><c>a.Length</c> on an array variable is the length map read at its reference; every other property stays opaque.</summary>
     public IrVar? ArrayLength(IPropertyReferenceOperation property, LoweringContext context) =>
         property is { Property: { Name: "Length", ContainingType.SpecialType: SpecialType.System_Array }, Instance: { } instance } && resolveTarget(instance) is not null
@@ -198,16 +207,25 @@ internal sealed class HeapLowerer(
     /// </summary>
     public IrVar Allocate(IrSort array, IrType element, IrVar length, IrValue @default, LoweringContext context)
     {
-        SsaBuilder.Variable count = Count(Inputs.Fresh(array));
-        IrVar allocated = ssa.Load(context.Current, count);
-        IrVar reference = MapRead(Inputs.Fresh(array), allocated, context);
-        ssa.Store(context.Current, count, Emit(IrBinaryOp.Add, allocated, Const(new IrBitVecValue(32, 1), context), Index, context));
-
+        IrVar reference = Fresh(array, context);
         IrVar lengths = Inputs.Length(array);
         Inputs.Write(lengths);
         Overwrite(Versioned(lengths), reference, length, context);
         Overwrite(Versioned(Inputs.Elements(array, element)), reference, Const(new IrMapValue(new IrMap(Index, element), @default, []), context), context);
         return reference;
+    }
+
+    /// <summary>
+    /// The next element of <c>new.&lt;Sort&gt;</c> by this body's count of <paramref name="sort"/>: a new array's reference,
+    /// or a struct value with one field changed (ticket P1-015).
+    /// </summary>
+    public IrVar Fresh(IrSort sort, LoweringContext context)
+    {
+        SsaBuilder.Variable count = Count(Inputs.Fresh(sort));
+        IrVar allocated = ssa.Load(context.Current, count);
+        IrVar fresh = MapRead(Inputs.Fresh(sort), allocated, context);
+        ssa.Store(context.Current, count, Emit(IrBinaryOp.Add, allocated, Const(new IrBitVecValue(32, 1), context), Index, context));
+        return fresh;
     }
 
     /// <summary>Element <paramref name="index"/> of a new array's initialiser: a write with no null or bounds check, as the index is in range.</summary>
@@ -272,7 +290,11 @@ internal sealed class HeapLowerer(
     /// </summary>
     private void Check(Access access, LoweringContext context)
     {
-        if (access.Dereferenced is { } dereferenced)
+        if (access.IsNull is { } isNull)
+        {
+            throwIf(context, isNull, "System.NullReferenceException");
+        }
+        else if (access.Dereferenced is { } dereferenced)
         {
             throwIfNull(dereferenced, access.Array ?? access.Key, context);
         }
@@ -284,7 +306,7 @@ internal sealed class HeapLowerer(
     }
 
     /// <summary>The length of the array <paramref name="array"/> references, from its sort's length map.</summary>
-    private IrVar Length(IrVar array, LoweringContext context) => MapRead(ssa.Load(context.Current, Versioned(Inputs.Length((IrSort)array.Type))), array, context);
+    public IrVar Length(IrVar array, LoweringContext context) => MapRead(ssa.Load(context.Current, Versioned(Inputs.Length((IrSort)array.Type))), array, context);
 
     private IrVar MapWrite(IrVar map, IrVar key, IrVar value, LoweringContext context)
     {
@@ -311,7 +333,11 @@ internal sealed class HeapLowerer(
     /// One access to a heap slice: the SSA variable holding the map's current version, the array reference
     /// whose slice of it is accessed (null for a field, whose map is keyed directly), and the key: a field's
     /// receiver or an array's bv32 index, bounded by that array's length. <see cref="Dereferenced"/> is the operand
-    /// whose value (the array, else the receiver key) is null-checked at the access, or null when it cannot be null.
+    /// whose value (the array, else the receiver key) is null-checked at the access, or null when it cannot be null;
+    /// <see cref="IsNull"/> is instead that value's nullness, already read, for an access the IL lowering makes (ticket P1-015).
     /// </summary>
-    internal readonly record struct Access(SsaBuilder.Variable Map, IrVar? Array, IrVar Key, IOperation? Dereferenced);
+    internal readonly record struct Access(SsaBuilder.Variable Map, IrVar? Array, IrVar Key, IOperation? Dereferenced)
+    {
+        public IrVar? IsNull { get; init; }
+    }
 }

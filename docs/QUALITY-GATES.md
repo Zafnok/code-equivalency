@@ -40,7 +40,7 @@ are pinned in `Directory.Packages.props` (Central Package Management) and listed
 The `gates` legs (ci.yml) and `stryker` legs (mutation.yml) record a passing run under a
 fingerprint of the checked-out code: `.github/scripts/code-fingerprint.sh` hashes every
 tracked file except prose that nothing reads (`docs/**` other than
-`docs/tickets/IOPERATION-COVERAGE.md`, `.claude/**`, and the root `CLAUDE.md`,
+`docs/tickets/IOPERATION-COVERAGE.md` and `docs/tickets/IL-COVERAGE.md`, `.claude/**`, and the root `CLAUDE.md`,
 `CONTRIBUTING.md`, `README.md`). A later PR push with the same fingerprint on the same leg
 skips the build, tests and Stryker and reports the earlier pass, so a push that only edits
 a ticket or an ADR comes back green in about a minute. The job still runs, so the required

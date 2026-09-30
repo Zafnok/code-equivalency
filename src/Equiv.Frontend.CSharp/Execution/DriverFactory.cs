@@ -14,7 +14,9 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// <summary>
 /// Resolves a BCL member against each runtime's reference assemblies and compiles its driver twice (ADR 0035, ticket
 /// M3-032): a .NET Framework 4.8 console executable with an <c>app.config</c> naming <c>supportedRuntime v4.0</c>, and
-/// a .NET 10 console assembly with a <c>runtimeconfig.json</c>, run through <c>dotnet</c>. Members are named by their
+/// a .NET 10 console assembly with a <c>runtimeconfig.json</c>, run through <c>dotnet</c>. The Windows Desktop assemblies
+/// (<c>System.Windows.Forms</c>, <c>System.Drawing</c>) count as the runtime on both sides (ticket P2-051): a .NET 10
+/// driver that uses one targets <c>net10.0-windows</c> and runs on <c>Microsoft.WindowsDesktop.App</c>. Members are named by their
 /// <see cref="CallIdentity"/> (<see cref="RoslynIdentity"/>), so a runtime-changes row's prefix selects them directly. Each
 /// driver's source is written beside it as <c>EquivDriver.cs</c>, for whoever reads a witness.
 /// </summary>
@@ -40,6 +42,18 @@ public sealed class DriverFactory : IExecutionDriverFactory
         }
         """;
 
+    internal const string DesktopRuntimeConfig = """
+        {
+          "runtimeOptions": {
+            "tfm": "net10.0-windows",
+            "framework": { "name": "Microsoft.WindowsDesktop.App", "version": "10.0.0" }
+          }
+        }
+        """;
+
+    /// <summary>Why a member whose receiver or parameter is a window, or that drives the desktop session, is not run.</summary>
+    internal const string NeedsWindow = "needs a live window handle or a message loop";
+
     private readonly Lazy<Runtime> legacy;
 
     private readonly Lazy<Runtime> modern;
@@ -53,8 +67,8 @@ public sealed class DriverFactory : IExecutionDriverFactory
     internal DriverFactory(Func<DriverReferences> references)
     {
         Lazy<DriverReferences> located = new(references);
-        legacy = new(() => new Runtime(".NET Framework 4.8", located.Value.Legacy, LanguageVersion.CSharp7_3));
-        modern = new(() => new Runtime(".NET 10", located.Value.Modern, LanguageVersion.Latest));
+        legacy = new(() => new Runtime(".NET Framework 4.8", located.Value.Legacy, [], LanguageVersion.CSharp7_3));
+        modern = new(() => new Runtime(".NET 10", located.Value.Modern, located.Value.Desktop, LanguageVersion.Latest));
     }
 
     public IReadOnlyList<ExecutionSignature> Resolve(string member)
@@ -70,10 +84,12 @@ public sealed class DriverFactory : IExecutionDriverFactory
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        string legacyDriver = Emit(legacy.Value, request.Member.Value, Path.Combine(directory, "legacy", AssemblyName + ".exe"));
+        string legacyDriver = Path.Combine(directory, "legacy", AssemblyName + ".exe");
+        Emit(legacy.Value, request.Member.Value, legacyDriver);
         File.WriteAllText(legacyDriver + ".config", AppConfig);
-        string modernDriver = Emit(modern.Value, request.Member.Value, Path.Combine(directory, "modern", AssemblyName + ".dll"));
-        File.WriteAllText(Path.ChangeExtension(modernDriver, ".runtimeconfig.json"), RuntimeConfig);
+        string modernDriver = Path.Combine(directory, "modern", AssemblyName + ".dll");
+        bool desktop = Emit(modern.Value, request.Member.Value, modernDriver);
+        File.WriteAllText(Path.ChangeExtension(modernDriver, ".runtimeconfig.json"), desktop ? DesktopRuntimeConfig : RuntimeConfig);
         return new ExecutionDrivers(legacyDriver, modernDriver);
     }
 
@@ -96,6 +112,16 @@ public sealed class DriverFactory : IExecutionDriverFactory
         SpecialType.System_String => ExecutionTypeKind.Text,
         _ when type.TypeKind == TypeKind.Enum => ExecutionTypeKind.Enum,
         _ when type.IsReferenceType => ExecutionTypeKind.NullOnly,
+        _ => Drawing(type),
+    };
+
+    /// <summary>The <c>System.Drawing</c> value types the generators build from their components (ticket P2-051).</summary>
+    private static ExecutionTypeKind Drawing(ITypeSymbol type) => type.ToDisplayString() switch
+    {
+        "System.Drawing.Point" or "System.Drawing.Size" => ExecutionTypeKind.Signed32Pair,
+        "System.Drawing.Rectangle" => ExecutionTypeKind.Signed32Quad,
+        "System.Drawing.PointF" or "System.Drawing.SizeF" => ExecutionTypeKind.Binary32Pair,
+        "System.Drawing.RectangleF" => ExecutionTypeKind.Binary32Quad,
         _ => ExecutionTypeKind.Unsupported,
     };
 
@@ -143,7 +169,23 @@ public sealed class DriverFactory : IExecutionDriverFactory
         {
             yield return "returns a pointer";
         }
+
+        if (IsDesktopSession(method.ContainingType) || (HasReceiver(method) && IsWindow(method.ContainingType)) || method.Parameters.Any(static p => IsWindow(p.Type)))
+        {
+            yield return NeedsWindow;
+        }
     }
+
+    /// <summary>A window (<c>IWin32Window</c>, which every <c>Control</c> is) or a window message.</summary>
+    private static bool IsWindow(ITypeSymbol type) =>
+        type.ToDisplayString() is WindowInterface or "System.Windows.Forms.Message"
+        || type.AllInterfaces.Any(static i => string.Equals(i.ToDisplayString(), WindowInterface, StringComparison.Ordinal));
+
+    private const string WindowInterface = "System.Windows.Forms.IWin32Window";
+
+    /// <summary>A type whose static members run or post to a message loop, or act on the user's desktop session.</summary>
+    private static bool IsDesktopSession(INamedTypeSymbol type) => type.ToDisplayString() is
+        "System.Windows.Forms.Application" or "System.Windows.Forms.Clipboard" or "System.Windows.Forms.Cursor" or "System.Windows.Forms.MessageBox" or "System.Windows.Forms.SendKeys";
 
     /// <summary>A parameter, with an enum's defined values taken from both runtimes, since a runtime may add members.</summary>
     internal static ExecutionParameter Parameter(ITypeSymbol type, RefKind refKind, ITypeSymbol legacyType)
@@ -189,7 +231,8 @@ public sealed class DriverFactory : IExecutionDriverFactory
         return members;
     }
 
-    private static string Emit(Runtime runtime, string identity, string path)
+    /// <summary>Compiles the driver for <paramref name="identity"/> to <paramref name="path"/>; true when it uses a Windows Desktop assembly.</summary>
+    private static bool Emit(Runtime runtime, string identity, string path)
     {
         if (!Members(runtime, identity).TryGetValue(identity, out IMethodSymbol? method))
         {
@@ -212,13 +255,17 @@ public sealed class DriverFactory : IExecutionDriverFactory
             throw new InvalidOperationException($"the {runtime.Name} driver for {identity} does not compile: {string.Join("; ", errors)}");
         }
 
-        return path;
+        return compilation.GetUsedAssemblyReferences().OfType<PortableExecutableReference>().Any(r => runtime.Desktop.Contains(r.FilePath!));
     }
 
-    /// <summary>One runtime's reference assemblies, as an empty compilation that driver source is added to.</summary>
+    /// <summary>
+    /// One runtime's reference assemblies, as an empty compilation that driver source is added to. A Windows Desktop
+    /// assembly replaces the base pack's one of the same file name (<c>System.Drawing.dll</c>, <c>WindowsBase.dll</c>),
+    /// as the SDK's conflict resolution does for a <c>net10.0-windows</c> project.
+    /// </summary>
     private sealed class Runtime
     {
-        public Runtime(string name, IReadOnlyList<string> references, LanguageVersion languageVersion)
+        public Runtime(string name, IReadOnlyList<string> references, IReadOnlyList<string> desktop, LanguageVersion languageVersion)
         {
             if (references.Count == 0)
             {
@@ -226,15 +273,20 @@ public sealed class DriverFactory : IExecutionDriverFactory
             }
 
             Name = name;
+            Desktop = new HashSet<string>(desktop, StringComparer.OrdinalIgnoreCase);
+            HashSet<string> replaced = new(desktop.Select(static d => Path.GetFileName(d)), StringComparer.OrdinalIgnoreCase);
             Parse = new CSharpParseOptions(languageVersion);
             Probe = CSharpCompilation.Create(
                 AssemblyName,
                 [],
-                [.. references.Select(static r => MetadataReference.CreateFromFile(r))],
+                [.. references.Where(r => !replaced.Contains(Path.GetFileName(r))).Concat(desktop).Select(static r => MetadataReference.CreateFromFile(r))],
                 new CSharpCompilationOptions(OutputKind.ConsoleApplication, optimizationLevel: OptimizationLevel.Release, deterministic: true));
         }
 
         public string Name { get; }
+
+        /// <summary>The Windows Desktop reference assemblies' paths.</summary>
+        public HashSet<string> Desktop { get; }
 
         public CSharpParseOptions Parse { get; }
 

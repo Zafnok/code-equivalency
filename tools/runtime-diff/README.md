@@ -1,6 +1,6 @@
 # runtime-diff
 
-Calls a BCL member on .NET Framework 4.8 and on .NET 10 with generated arguments, and reports
+Calls a BCL, Windows Forms or `System.Drawing` member on .NET Framework 4.8 and on .NET 10 with generated arguments, and reports
 every case whose outcome differs (ADR 0035, the second oracle; ticket M3-032). It is a thin
 console over `Equiv.Execute` and the C# frontend's `DriverFactory`.
 
@@ -37,13 +37,15 @@ change the exit code.
 ## What runs
 
 For each overload, the frontend compiles two drivers. One is a .NET Framework 4.8 executable
-with an `app.config`. The other is a .NET 10 assembly run through `dotnet`. Each driver's C#
+with an `app.config`. The other is a .NET 10 assembly run through `dotnet`, on `Microsoft.WindowsDesktop.App` (`net10.0-windows`) when it uses a Windows Forms or `System.Drawing` assembly. Each driver's C#
 source is written beside it as `EquivDriver.cs`. Both read one JSON line per case on stdin:
 `[culture,arg0,arg1,...]`, with an instance member's receiver as `arg0`. They set the current
 culture and UI culture, call the member, and write `["Kind",canonical]` on stdout.
 
 - **Cultures:** `invariant`, `en-US`, `tr-TR`, `de-DE` and `ja-JP`.
-- **Runs:** each side runs every case twice, each time in a fresh process. A case gets 10 seconds
+- **Runs:** each side runs every case twice, each time in a fresh process whose working directory is a
+  new folder under the tool's temporary one, so a member that creates or deletes a relative path touches
+  nothing of the caller's. A case gets 10 seconds
   and a process 1 GiB of private memory. A case that gets no answer is `NotComparable`, with the
   value `"no answer"`.
 - **Inputs:** each parameter type has edge values, which come first, in every combination.
@@ -57,10 +59,16 @@ culture and UI culture, call the member, and write `["Kind",canonical]` on stdou
     null.
   - Enums: every defined value on either runtime, plus one undefined value.
   - `bool`, and `null` for any other reference type.
+  - `System.Drawing.Point`, `Size` and `Rectangle` (and their `F` variants): each `int` (or
+    `float`) edge value in every component, then `1, 2, ...`, then a random value per component
+    (ticket P2-051).
 
   A member that takes any other parameter type, or a `ref`, `in` or `out` parameter, is not
   run. The same goes for a generic member, an operator, a setter, an event accessor, a
-  constructor of an abstract type, and a member returning a pointer. The report lists why.
+  constructor of an abstract type, and a member returning a pointer. So does a member whose receiver
+  or parameter is a window (`IWin32Window`, any `Control`) or a window `Message`, or a member of
+  `Application`, `Clipboard`, `Cursor`, `MessageBox` or `SendKeys`: it needs a live window handle
+  or a message loop, or acts on the desktop session. The report lists why.
 
 ## Canonical outcomes
 
@@ -76,6 +84,7 @@ because a formatting change between runtimes is not a behaviour change:
 | `string` | a JSON string, ASCII only: every other character is a `\uXXXX` escape |
 | `bool`, `null` | `true`, `false`, `null` |
 | array, `List<T>` of the above | a JSON array, element by element |
+| `System.Drawing` point, size, rectangle | a JSON array of its components: `[x,y]`, `[width,height]`, `[x,y,width,height]` |
 | exception | `Threw` with the type's full name only |
 | `void` | `null` |
 

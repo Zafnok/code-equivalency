@@ -54,7 +54,7 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
             ChcAnswer found = integers.Query(overflows: false, Timeout);
             if (found.Status == Status.UNSATISFIABLE && new ChcEncoder(context, old, @new, ChcArithmetic.WrappingIntegers, options.CallIdentityMap).Solves(found.Answer, Timeout))
             {
-                return InMode(Conclude(integers, found, old, @new, "over the integers that holds with wrap-around arithmetic too"), ChcMode.BitVectors);
+                return InMode(Proved(integers, found, "over the integers that holds with wrap-around arithmetic too"), ChcMode.BitVectors);
             }
 
             Rung rung = Conclude(integers, found, old, @new, "over the integers");
@@ -93,10 +93,15 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
 
     private static Rung InMode(Rung rung, ChcMode mode) => rung with { Step = rung.Step with { Mode = mode } };
 
-    /// <summary>What <paramref name="chc"/>'s divergence query answering <paramref name="answer"/> means.</summary>
+    /// <summary>
+    /// What <paramref name="chc"/>'s divergence query answering <paramref name="answer"/> means. An unsatisfiable answer is
+    /// a proof only when its invariant solves the clauses it answers (ticket P2-059): Z3 5.1's Spacer has answered
+    /// unsatisfiable with one that does not.
+    /// </summary>
     private Rung Conclude(ChcEncoder chc, ChcAnswer answer, IrProcedure old, IrProcedure @new, string how) => answer.Status switch
     {
-        Status.UNSATISFIABLE => LoopLadder.Proved(ProofMethod.Chc, $"Spacer found a coupling invariant {how}", new Equivalent(ProofMethod.Chc) { Invariant = chc.Invariant(answer.Answer) }),
+        Status.UNSATISFIABLE when chc.Solves(answer.Answer, Timeout) => Proved(chc, answer, how),
+        Status.UNSATISFIABLE => Spurious($"Spacer found a coupling invariant {how}, but it does not solve the clauses"),
         Status.SATISFIABLE => Replay(chc, old, @new, chc.DerivationInputs(answer.Answer, Timeout), how),
         _ => TimedOut($"Spacer gave up {how}: {answer.Reason} with a {options.TimeoutMs.ToString(CultureInfo.InvariantCulture)} ms timeout"),
     };
@@ -118,14 +123,16 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
         }
 
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
-        if (complete && ModelDecoder.Diverges(new(old, oldRun), new(@new, newRun), shared, inputs, chc.Calls))
-        {
-            return LoopLadder.Refuted(ProofMethod.Chc, $"a derivation {how} replays to a divergence", replay);
-        }
-
-        string detail = $"a derivation {how} does not replay to a divergence: {CounterexampleText.Dump(replay)}";
-        return new Rung(new LadderStep(ProofMethod.Chc, RungOutcome.Inconclusive, detail), new Unknown(UnknownReason.ChcSpurious, detail));
+        return complete && ModelDecoder.Diverges(new(old, oldRun), new(@new, newRun), shared, inputs, chc.Calls)
+            ? LoopLadder.Refuted(ProofMethod.Chc, $"a derivation {how} replays to a divergence", replay)
+            : Spurious($"a derivation {how} does not replay to a divergence: {CounterexampleText.Dump(replay)}");
     }
+
+    private static Rung Proved(ChcEncoder chc, ChcAnswer answer, string how) =>
+        LoopLadder.Proved(ProofMethod.Chc, $"Spacer found a coupling invariant {how}", new Equivalent(ProofMethod.Chc) { Invariant = chc.Invariant(answer.Answer) });
+
+    private static Rung Spurious(string detail) =>
+        new(new LadderStep(ProofMethod.Chc, RungOutcome.Inconclusive, detail), new Unknown(UnknownReason.ChcSpurious, detail));
 
     private static Rung TimedOut(string detail) =>
         new(new LadderStep(ProofMethod.Chc, RungOutcome.Timeout, detail), new Unknown(UnknownReason.ChcTimeout, detail));

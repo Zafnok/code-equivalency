@@ -31,14 +31,8 @@ internal static class ExceptionRegions
         ImmutableArray<Candidate>.Builder candidates = ImmutableArray.CreateBuilder<Candidate>();
         bool caught = false;
         int clauses = 0;
-        for (ControlFlowRegion? region = block.EnclosingRegion; region is not null; region = region.EnclosingRegion)
+        foreach (ControlFlowRegion wrapper in TryWrappers(block))
         {
-            if (region.Kind != ControlFlowRegionKind.Try)
-            {
-                continue;
-            }
-
-            ControlFlowRegion wrapper = region.EnclosingRegion!;
             if (wrapper.Kind == ControlFlowRegionKind.TryAndFinally)
             {
                 if (!caught)
@@ -52,7 +46,7 @@ internal static class ExceptionRegions
             foreach (ControlFlowRegion clause in wrapper.NestedRegions.Where(static n => n.Kind is ControlFlowRegionKind.Catch or ControlFlowRegionKind.FilterAndHandler))
             {
                 clauses++;
-                if (!caught && (thrown is null || compilation.ClassifyConversion(thrown, clause.ExceptionType!).IsImplicit))
+                if (!caught && MayTake(compilation, thrown, clause))
                 {
                     candidates.Add(new Candidate(finallys.ToImmutable(), clause));
                     caught = clause.Kind == ControlFlowRegionKind.Catch;
@@ -62,6 +56,22 @@ internal static class ExceptionRegions
 
         return new ExceptionRoute(candidates.ToImmutable(), caught ? null : finallys.ToImmutable(), thrown is null && clauses > 1);
     }
+
+    /// <summary>The region wrapping each <c>Try</c> region <paramref name="block"/> sits in, innermost first.</summary>
+    private static IEnumerable<ControlFlowRegion> TryWrappers(BasicBlock block)
+    {
+        for (ControlFlowRegion? region = block.EnclosingRegion; region is not null; region = region.EnclosingRegion)
+        {
+            if (region.Kind == ControlFlowRegionKind.Try)
+            {
+                yield return region.EnclosingRegion!;
+            }
+        }
+    }
+
+    /// <summary>Whether <paramref name="clause"/> may take an exception of <paramref name="thrown"/>; every clause may when the type is unknown.</summary>
+    private static bool MayTake(CSharpCompilation compilation, ITypeSymbol? thrown, ControlFlowRegion clause) =>
+        thrown is null || compilation.ClassifyConversion(thrown, clause.ExceptionType!).IsImplicit;
 
     /// <summary>
     /// The innermost region a block sits in that is never lowered in place but copied: a <c>finally</c>, onto each path

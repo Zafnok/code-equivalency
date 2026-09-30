@@ -17,7 +17,9 @@ namespace Equiv.Core.Reporting;
 /// Neither is part of the result's fingerprint. <see cref="Replay"/> is a Divergent's replay on both real runtimes under
 /// <c>--execute</c> (ADR 0035 decision 2; ticket M4-009), null otherwise; it is never part of the fingerprint either.
 /// <see cref="Testing"/> is an Unknown's run on generated inputs under <c>--execute</c> (ADR 0035 decision 3; ticket
-/// P1-008), null otherwise, and is not part of the fingerprint.
+/// P1-008), null otherwise, and is not part of the fingerprint. <see cref="Lowering"/> is the pair's
+/// <see cref="Matching.ProcedurePair.Lowering"/> (ADR 0039; ticket P1-016), null when the run did not use <c>--il-fallback</c>;
+/// it is not part of the fingerprint.
 /// </summary>
 public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
 {
@@ -30,4 +32,6 @@ public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verd
     public ReplayResult? Replay { get; init; }
 
     public DifferentialTesting? Testing { get; init; }
+
+    public string? Lowering { get; init; }
 }

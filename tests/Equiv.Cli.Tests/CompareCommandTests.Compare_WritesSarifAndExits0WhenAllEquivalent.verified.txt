@@ -172,7 +172,33 @@
           legacy: 120,
           modern: 135
         },
-        projectsNotBuilt: {}
+        projectsNotBuilt: {},
+        runtimes: {
+          legacy: [
+            {
+              project: App,
+              runtime: net48,
+              source: attribute
+            },
+            {
+              project: Shared,
+              runtime: net48,
+              source: host
+            }
+          ],
+          modern: [
+            {
+              project: App,
+              runtime: net8.0,
+              source: attribute
+            },
+            {
+              project: Shared,
+              runtime: netstandard2.0,
+              source: unhosted
+            }
+          ]
+        }
       }
     }
   ]

@@ -375,7 +375,13 @@ public sealed class CompareCommandTests
             [added],
             [removed],
             []);
-        FakeFrontend frontend = new("csharp", _ => true, matchResult, lines: new AnalysedLines(120, 135));
+        FakeFrontend frontend = new(
+            "csharp",
+            _ => true,
+            matchResult,
+            lines: new AnalysedLines(120, 135),
+            legacyRuntimes: [("App", "net48", "attribute"), ("Shared", "net48", "host")],
+            modernRuntimes: [("App", "net8.0", "attribute"), ("Shared", "netstandard2.0", "unhosted")]);
         FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
         {
             [pairA.Value] = new Equivalent(ProofMethod.Bounded),
@@ -1185,6 +1191,73 @@ public sealed class CompareCommandTests
         Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Contains("\"pairsCongruent\":1", census, StringComparison.Ordinal);
         Assert.Contains("\"changedPairs\":0", census, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P1-016 criterion 1: <c>--il-fallback</c> is off unless given, the frontend hears it through the config, and a run
+    /// without it writes no <c>lowering</c> and no fallback counts.
+    /// </summary>
+    [Fact]
+    public void IlFallbackIsOffByDefault()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        Command command = CompareCommand.Create([], new FakeBackend(NoVerdicts));
+        FakeFrontend off = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        FakeFrontend on = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        InMemoryReportSink sink = new();
+        CompareOptions options = new(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false);
+        FakeBackend backend = new(ImmutableDictionary<string, Verdict>.Empty.Add(PairIdentity.Value, new Equivalent(ProofMethod.Bounded)));
+
+        CompareCommand.Run(options, [off], backend, sink, NullRunLog.Instance);
+        CompareCommand.Run(options with { IlFallback = true }, [on], backend, new InMemoryReportSink(), NullRunLog.Instance);
+
+        Assert.False(command.Parse(["--legacy", "a.sln", "--modern", "b.sln"]).GetValue<bool>("--il-fallback"));
+        Assert.True(command.Parse(["--legacy", "a.sln", "--modern", "b.sln", "--il-fallback"]).GetValue<bool>("--il-fallback"));
+        Assert.False(off.LastConfig!.IlFallback);
+        Assert.True(on.LastConfig!.IlFallback);
+        Run run = sink.Log!.Runs[0];
+        Assert.False(Assert.Single(run.Results).TryGetProperty("lowering", out string? _));
+        Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
+        Assert.DoesNotContain("IlFallback", census, StringComparison.Ordinal);
+        Assert.DoesNotContain("LoweredFromIl", census, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P1-016 criterion 4: under <c>--il-fallback</c> every result on a matched pair carries the lowering its pair kept,
+    /// whether the solver or congruence decided it, and the census counts the pairs tried and the pairs lowered from IL.
+    /// </summary>
+    [Fact]
+    public void IlFallbackMarksEachResultsLowering()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        BodyFingerprint fingerprint = new("ab", RuntimeSensitive: false);
+        ProcedureIdentity kept = new("T::Kept()");
+        ProcedureIdentity congruent = new("T::Congruent()");
+        ProcedurePair fromIl = Pair(PairIdentity) with { Lowering = "il", IlFallbackTried = true };
+        ProcedurePair keptOperation = Pair(kept) with { Lowering = "operation", IlFallbackTried = true };
+        ProcedurePair notTried = Pair(congruent) with { Lowering = "operation", OldFingerprint = fingerprint, NewFingerprint = fingerprint };
+        FakeBackend backend = new(ImmutableDictionary<string, Verdict>.Empty
+            .Add(PairIdentity.Value, new Equivalent(ProofMethod.Bounded))
+            .Add(kept.Value, new Unknown(UnknownReason.Opaque, "new: Conversion")));
+        InMemoryReportSink sink = new();
+
+        CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { IlFallback = true },
+            [new FakeFrontend("csharp", _ => true, new MatchResult([fromIl, keptOperation, notTried], [new ProcedureIdentity("T::Added()")], [], []))],
+            backend,
+            sink,
+            NullRunLog.Instance);
+
+        Run run = sink.Log!.Runs[0];
+        Dictionary<string, Result> results = run.Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal);
+        Assert.Equal("il", results[PairIdentity.Value].GetProperty<string>("lowering"));
+        Assert.Equal("operation", results[kept.Value].GetProperty<string>("lowering"));
+        Assert.Equal("operation", results[congruent.Value].GetProperty<string>("lowering"));
+        Assert.False(results["T::Added()"].TryGetProperty("lowering", out string? _));
+        Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
+        Assert.Contains("\"pairsIlFallbackTried\":2,\"pairsLoweredFromIl\":1", census, StringComparison.Ordinal);
     }
 
     /// <summary>Ticket M3-015 acceptance criterion 5: every other pair goes to the backend as before.</summary>

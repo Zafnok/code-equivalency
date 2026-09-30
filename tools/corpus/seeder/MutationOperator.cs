@@ -2,7 +2,7 @@ namespace Equiv.Corpus.Seeder;
 
 /// <summary>
 /// How <see cref="SyntaxMutator"/> derives one method from another (ticket M0-012, moved here by ticket M4-010 so the
-/// differential soundness gate and the corpus seeder share one implementation). The first six are the preserving
+/// differential soundness gate and the corpus seeder share one implementation). The first eleven are the preserving
 /// family (<see cref="SyntaxMutator.IsPreserving"/>): the two methods behave identically on every input. The rest are
 /// the changing family, which usually changes behaviour but may not: neither gate assumes a mutant differs, only that
 /// it might.
@@ -26,6 +26,21 @@ public enum MutationOperator
 
     /// <summary><see cref="IntroduceTemporary"/> the other way round: the legacy method has the temporary, the modern one inlines it.</summary>
     InlineTemporary,
+
+    /// <summary><c>if (c) x = a; else x = b;</c> to <c>x = c ? a : b;</c>, and the same for two <c>return</c>s, when <c>a</c> and <c>b</c> have exactly the target's type (ticket P2-048).</summary>
+    IfToConditional,
+
+    /// <summary><c>x != null ? x : y</c> and <c>x == null ? y : x</c> to <c>x ?? y</c>, for a reference-typed local or parameter <c>x</c> and a <c>y</c> of its type (ticket P2-048).</summary>
+    CoalesceNullCheck,
+
+    /// <summary>A <c>+</c> chain of <c>string</c> operands to one interpolated string (ticket P2-048).</summary>
+    ConcatToInterpolation,
+
+    /// <summary>A <c>void</c> method's last statement <c>if (c) { S }</c> to <c>if (!c) return;</c> followed by <c>S</c> (ticket P2-048).</summary>
+    GuardClause,
+
+    /// <summary><c>for (int i = 0; i &lt; a.Length; i++)</c> over an array whose body reads <c>i</c> only as <c>a[i]</c> to <c>foreach (var item in a)</c> (ticket P2-048).</summary>
+    ForToForeach,
 
     /// <summary>Turns one comparison into its neighbour: <c>&lt;</c> and <c>&lt;=</c>, <c>&gt;</c> and <c>&gt;=</c>, <c>==</c> and <c>!=</c>.</summary>
     FlipComparison,

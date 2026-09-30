@@ -225,7 +225,7 @@ internal sealed class IrLowerer
     /// An <c>async</c> method that is not an iterator returns its task's result: the type argument of a generic task-like
     /// type, and nothing for <c>Task</c>, <c>ValueTask</c> or <c>void</c> (ticket M4-006).
     /// </summary>
-    private static (ImmutableArray<IrParameter> Parameters, IrType? ReturnType) Signature(IMethodSymbol method, Func<string, string> sorts) => (
+    internal static (ImmutableArray<IrParameter> Parameters, IrType? ReturnType) Signature(IMethodSymbol method, Func<string, string> sorts) => (
         [.. method.Parameters.Select(p => new IrParameter(
             new IrVar(IrParameterNames.IsSynthesised(p.Name) ? "$" + p.Name : p.Name, TypeMapper.Map(p.Type, sorts), p.Name),
             p.RefKind switch
@@ -239,7 +239,7 @@ internal sealed class IrLowerer
             ({ ReturnsVoid: true }, _) => null,
             ({ IsAsync: true, IsIterator: false }, INamedTypeSymbol { TypeArguments: [var result] }) => TypeMapper.Map(result, sorts),
             ({ IsAsync: true, IsIterator: false }, _) => null,
-            (_, var returned) => TypeMapper.Map(returned, sorts),
+            _ => TypeMapper.Map(method.ReturnType, sorts),
         });
 
     /// <summary>
@@ -288,7 +288,7 @@ internal sealed class IrLowerer
         return Opaque(lowered.Identity, lowered.Parameters, lowered.ReturnType, reason, [span]);
     }
 
-    private static IrProcedure Opaque(ProcedureIdentity identity, ImmutableArray<IrParameter> parameters, IrType? returnType, string reason, ImmutableArray<SourceSpan> spans)
+    internal static IrProcedure Opaque(ProcedureIdentity identity, ImmutableArray<IrParameter> parameters, IrType? returnType, string reason, ImmutableArray<SourceSpan> spans)
     {
         IrVar? value = returnType is null ? null : new IrVar("$0", returnType);
         IrBlock block = new(

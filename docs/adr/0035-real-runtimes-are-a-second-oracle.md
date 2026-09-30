@@ -92,3 +92,9 @@ There is no reflection anywhere: the driver is generated source.
   `not-applicable`, not `not-reproduced`: EQ006 is a claim about the API, not a model counterexample, so it raises no
   soundness alarm. A replay where both sides throw the same exception while the model's runs do not both throw is
   `not-constructible`: the driver's receiver or argument is not the model's.
+- 2026-09-29 (P2-051). The measured "runtime" of decision 1 includes the Windows Desktop assemblies that .NET
+  Framework 4.8 ships (`System.Windows.Forms`, `System.Drawing`) and their .NET 10 `Microsoft.WindowsDesktop.App`
+  counterparts: a driver that uses one compiles against the `Microsoft.WindowsDesktop.App.Ref` pack, targets
+  `net10.0-windows` and runs on that shared framework, and the 4.8 driver references the framework's own copies. A member
+  whose receiver or parameter is a window (`IWin32Window`, a `Control`) or a window message, or that drives the desktop
+  session (`Application`, `Clipboard`, `Cursor`, `MessageBox`, `SendKeys`), is not constructible and is not run.

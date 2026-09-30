@@ -147,6 +147,12 @@ public static class SarifReportWriter
         SetReplayProperties(sarifResult, result.Replay);
         SetTestingProperty(sarifResult, result.Testing);
 
+        // ADR 0039: under --il-fallback, which lowering the pair's bodies came from.
+        if (result.Lowering is { } lowering)
+        {
+            sarifResult.SetProperty("lowering", lowering);
+        }
+
         SetLocations(sarifResult, result);
         return sarifResult;
     }
@@ -346,6 +352,13 @@ public static class SarifReportWriter
         return described;
     }
 
+    /// <summary>An outcome's kind and its canonical JSON text, as the driver wrote it.</summary>
+    private static Dictionary<string, string> Describe(ExecutionOutcome outcome) => new(StringComparer.Ordinal)
+    {
+        ["kind"] = outcome.Kind == OutcomeKind.Threw ? "threw" : "returned",
+        ["value"] = outcome.Canonical,
+    };
+
     /// <summary>
     /// A Divergent's replay on both real runtimes (ADR 0035 decision 2; ticket M4-009): <c>replay</c> is <c>reproduced</c>,
     /// <c>not-reproduced</c> or (an EQ006 Divergent's, ticket P2-038) <c>not-applicable</c> with both canonical outcomes as
@@ -404,14 +417,19 @@ public static class SarifReportWriter
         }
     }
 
-    /// <summary>An outcome's kind and its canonical JSON text, as the driver wrote it.</summary>
-    private static Dictionary<string, string> Describe(ExecutionOutcome outcome) => new(StringComparer.Ordinal)
-    {
-        ["kind"] = outcome.Kind == OutcomeKind.Threw ? "threw" : "returned",
-        ["value"] = outcome.Canonical,
-    };
-
     /// <summary>The spelling the census uses for a side: <c>legacy</c>, <c>modern</c>.</summary>
+    /// <summary>
+    /// One side's <c>run.properties.runtimes</c> list (ADR 0040; ticket P2-053): an object per loaded project, with its
+    /// <c>project</c>, <c>runtime</c> and <c>source</c>.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyDictionary<string, string>> RuntimesProperty(IEnumerable<(string Project, string Runtime, string Source)> runtimes) =>
+        [.. runtimes.Select(static r => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["project"] = r.Project,
+            ["runtime"] = r.Runtime,
+            ["source"] = r.Source,
+        })];
+
     internal static string Name(Codebase side) => side == Codebase.Legacy ? "legacy" : "modern";
 
     /// <summary>

@@ -34,11 +34,15 @@ public sealed class DriverReferencesTests : IDisposable
         string runtime = Touch([.. packs, "10.0.12", "ref", "net10.0", "System.Runtime.dll"]);
         Touch([.. packs, "10.0.13-preview", "ref", "net10.0", "Preview.dll"]);
         Touch([.. packs, "9.0.1", "ref", "net10.0", "Nine.dll"]);
+        string[] desktop = ["dotnet", "packs", "Microsoft.WindowsDesktop.App.Ref"];
+        Touch([.. desktop, "10.0.9", "ref", "net10.0", "Old.dll"]);
+        string forms = Touch([.. desktop, "10.0.12", "ref", "net10.0", "System.Windows.Forms.dll"]);
 
         DriverReferences references = DriverReferences.Find(Path.Combine(root, "x86"), Path.Combine(root, "dotnet", "shared", "Microsoft.NETCore.App", "10.0.12"));
 
         Assert.Equal([system, mscorlib], references.Legacy, StringComparer.Ordinal);
         Assert.Equal([runtime], references.Modern, StringComparer.Ordinal);
+        Assert.Equal([forms], references.Desktop, StringComparer.Ordinal);
     }
 
     [Fact]
@@ -54,6 +58,8 @@ public sealed class DriverReferencesTests : IDisposable
         Assert.Empty(references.Modern);
         Assert.Empty(none.Legacy);
         Assert.Empty(none.Modern);
+        Assert.Empty(references.Desktop);
+        Assert.Empty(new DriverReferences([], []).Desktop);
     }
 
     [Fact]
