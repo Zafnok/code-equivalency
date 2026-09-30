@@ -106,6 +106,33 @@ public sealed class InputGeneratorTests
         Assert.All(Column(ExecutionTypeKind.Text, 100).Skip(10), static v => Assert.Matches("^\"[ -~]*\"$", v));
     }
 
+    /// <summary>Ticket P2-051: <c>System.Drawing</c>'s value types from generated integers or floats, as JSON arrays.</summary>
+    [Fact]
+    public void DrawingValueTypesAreGenerated()
+    {
+        Assert.Equal(
+            ["[0,0]", "[1,1]", "[-1,-1]", "[-2147483648,-2147483648]", "[2147483647,2147483647]", "[1,2]"],
+            Column(ExecutionTypeKind.Signed32Pair, 6),
+            StringComparer.Ordinal);
+        Assert.Equal("[1,2,3,4]", Column(ExecutionTypeKind.Signed32Quad, 6)[5]);
+        Assert.Equal("[\"0x3F800000\",\"0x40000000\"]", Column(ExecutionTypeKind.Binary32Pair, 12)[11]);
+        Assert.Equal("[\"0xFFC00000\",\"0xFFC00000\",\"0xFFC00000\",\"0xFFC00000\"]", Column(ExecutionTypeKind.Binary32Quad, 12)[5]);
+
+        foreach ((ExecutionTypeKind kind, string pattern) in new[]
+        {
+            (ExecutionTypeKind.Signed32Pair, "^\\[-?[0-9]+,-?[0-9]+\\]$"),
+            (ExecutionTypeKind.Signed32Quad, "^\\[-?[0-9]+(,-?[0-9]+){3}\\]$"),
+            (ExecutionTypeKind.Binary32Pair, "^\\[\"0x[0-9A-F]{8}\",\"0x[0-9A-F]{8}\"\\]$"),
+            (ExecutionTypeKind.Binary32Quad, "^\\[\"0x[0-9A-F]{8}\"(,\"0x[0-9A-F]{8}\"){3}\\]$"),
+        })
+        {
+            List<string> random = [.. Column(kind, 100).Skip(12)];
+            Assert.All(random, v => Assert.Matches(pattern, v));
+            Assert.True(random.Distinct(StringComparer.Ordinal).Skip(80).Any(), kind.ToString());
+            Assert.All(random, static v => Assert.True(v.Split(',').Distinct(StringComparer.Ordinal).Skip(1).Any(), v));
+        }
+    }
+
     [Fact]
     public void TheSameSeedGivesTheSameInputs()
     {

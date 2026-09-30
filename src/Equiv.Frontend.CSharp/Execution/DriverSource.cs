@@ -15,7 +15,8 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// The canonical form is written by the driver's own code, never by a runtime's
 /// <c>ToString</c>: integers in decimal, <c>float</c> and <c>double</c> as their IEEE bits in hex, <c>decimal</c> as its
 /// four <c>GetBits</c> integers, strings as ASCII JSON, <c>char</c> as its code point, an enum as its underlying integer,
-/// arrays and <c>List&lt;T&gt;</c> of those element-wise, and an exception as its type's full name. The expression that
+/// arrays and <c>List&lt;T&gt;</c> of those element-wise, a <c>System.Drawing</c> point, size or rectangle as the array of
+/// its components (ticket P2-051), and an exception as its type's full name. The expression that
 /// canonicalises the result is chosen from the member's static return type, so there is no reflection. The source is
 /// C# 7.3, the newest the .NET Framework 4.8 side compiles by default.
 /// </summary>
@@ -95,11 +96,28 @@ internal static class DriverSource
             ExecutionTypeKind.Text => $"R.S({value})",
             ExecutionTypeKind.Enum => IsUnsigned(((INamedTypeSymbol)type).EnumUnderlyingType!) ? $"({display})R.U({value})" : $"({display})R.I({value})",
             ExecutionTypeKind.NullOnly => $"({display}){value}",
+            ExecutionTypeKind.Signed32Pair or ExecutionTypeKind.Signed32Quad => FromComponents(type, value, static item => $"checked((int)R.I({item}))"),
+            ExecutionTypeKind.Binary32Pair or ExecutionTypeKind.Binary32Quad => FromComponents(type, value, static item => $"R.F({item})"),
             _ => throw new InvalidOperationException($"no input can be built for {type.ToDisplayString()}"),
         };
         declarations.Add($"{display} {name} = {decoded};");
         return name;
     }
+
+    /// <summary>A <c>System.Drawing</c> value built by its component constructor from the JSON array in <paramref name="value"/>.</summary>
+    private static string FromComponents(ITypeSymbol type, string value, Func<string, string> component)
+    {
+        IEnumerable<string> components = Components(type).Select((_, i) => component($"R.At({value}, {i.ToString(CultureInfo.InvariantCulture)})"));
+        return $"new {type.ToDisplayString(Qualified)}({string.Join(", ", components)})";
+    }
+
+    /// <summary>A <c>System.Drawing</c> value type's components, in its constructor's order.</summary>
+    private static string[] Components(ITypeSymbol type) => type.Name switch
+    {
+        "Point" or "PointF" => ["X", "Y"],
+        "Size" or "SizeF" => ["Width", "Height"],
+        _ => ["X", "Y", "Width", "Height"],
+    };
 
     private static string Call(IMethodSymbol method, string? receiver, List<string> arguments)
     {
@@ -127,13 +145,25 @@ internal static class DriverSource
         _ => Composite(type, expression, depth),
     };
 
-    /// <summary>An enum as its underlying integer; a one-dimensional array or a <c>List&lt;T&gt;</c> element-wise.</summary>
+    /// <summary>
+    /// An enum as its underlying integer; a one-dimensional array or a <c>List&lt;T&gt;</c> element-wise; a
+    /// <c>System.Drawing</c> value type component-wise.
+    /// </summary>
     private static string? Composite(ITypeSymbol type, string expression, int depth) => type switch
     {
         INamedTypeSymbol { EnumUnderlyingType: { } underlying } => Canonical(underlying, $"(({underlying.ToDisplayString(Qualified)}){expression})", depth),
         IArrayTypeSymbol array => array.IsSZArray ? Sequence(array.ElementType, expression, depth) : null,
-        _ => IsList(type) ? Sequence(((INamedTypeSymbol)type).TypeArguments[0], expression, depth) : null,
+        _ when IsList(type) => Sequence(((INamedTypeSymbol)type).TypeArguments[0], expression, depth),
+        _ => DriverFactory.Classify(type) switch
+        {
+            ExecutionTypeKind.Signed32Pair or ExecutionTypeKind.Signed32Quad => Tuple(type, expression, "W.I"),
+            ExecutionTypeKind.Binary32Pair or ExecutionTypeKind.Binary32Quad => Tuple(type, expression, "W.F"),
+            _ => null,
+        },
     };
+
+    private static string Tuple(ITypeSymbol type, string expression, string writer) =>
+        $"W.T({string.Join(", ", Components(type).Select(c => $"{writer}({expression}.{c})"))})";
 
     private static string? Sequence(ITypeSymbol element, string expression, int depth)
     {
@@ -223,6 +253,7 @@ internal static class DriverSource
             public static double D(object v) { return BitConverter.Int64BitsToDouble(long.Parse(((string)v).Substring(2), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture)); }
             public static decimal M(object v) { List<object> b = (List<object>)v; return new decimal(new[] { (int)I(b[0]), (int)I(b[1]), (int)I(b[2]), (int)I(b[3]) }); }
             public static string S(object v) { return (string)v; }
+            public static object At(object v, int i) { return ((List<object>)v)[i]; }
         }
 
         internal static class W
@@ -264,6 +295,8 @@ internal static class DriverSource
 
                 return s.Append('"').ToString();
             }
+
+            public static string T(params string[] components) { return "[" + string.Join(",", components) + "]"; }
 
             public static string Seq<T>(IEnumerable<T> xs, Func<T, string> f)
             {
