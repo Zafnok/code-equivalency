@@ -19,6 +19,21 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
+  </ItemGroup>
+
+  <!--
+    Microsoft.Z3 restores only from the local .z3-feed that tools/z3-feed/fetch.ps1 fills (ADR 0030), or from the global
+    packages folder once some restore has put it there. GitHub's automatic dependency submission restores every project
+    outside Equiv.slnx on a clean runner without running fetch.ps1, so with neither present the reference is left out and
+    that restore succeeds. Building the spike needs one of them, as every Equiv.Verify.Z3 build does.
+  -->
+  <PropertyGroup>
+    <SpikeGlobalPackages>$(NUGET_PACKAGES)</SpikeGlobalPackages>
+    <SpikeGlobalPackages Condition="'$(SpikeGlobalPackages)' == '' and '$(USERPROFILE)' != ''">$(USERPROFILE)\.nuget\packages</SpikeGlobalPackages>
+    <SpikeGlobalPackages Condition="'$(SpikeGlobalPackages)' == ''">$(HOME)/.nuget/packages</SpikeGlobalPackages>
+  </PropertyGroup>
+
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\..\.z3-feed') or Exists('$(SpikeGlobalPackages)/microsoft.z3')">
     <ProjectReference Include="..\..\..\src\Equiv.Verify.Z3\Equiv.Verify.Z3.csproj" />
   </ItemGroup>
 
