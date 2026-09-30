@@ -4,6 +4,7 @@ using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Corpus.Seeder;
 using Equiv.Frontend.CSharp.Lowering;
+using Equiv.Frontend.CSharp.Lowering.Il;
 using Equiv.TestSupport;
 
 using Microsoft.CodeAnalysis;
@@ -20,6 +21,8 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 public sealed class PairGenLoweringTests
 {
     private const int Pairs = 300;
+
+    private const int IlPairs = 100;
 
     private const string Seed = "000000000000";
 
@@ -44,6 +47,27 @@ public sealed class PairGenLoweringTests
             },
             seed: Seed,
             iter: Pairs,
+            print: static pair => $"{pair.Operator}\n{pair.LegacySource}\n{pair.ModernSource}");
+
+    /// <summary>
+    /// Ticket P1-017: both sides of every pair that holds an IL fallback construct compile and lower from IL to valid IR,
+    /// which is what the differential gate's IL mode verifies.
+    /// </summary>
+    [Fact]
+    public void EveryIlPairSideLowersFromIl() =>
+        PairGen.IlPair.Sample(
+            static pair =>
+            {
+                foreach (string source in (string[])[pair.LegacySource, pair.ModernSource])
+                {
+                    Compilation compilation = RoslynTestCompilations.Compile(source);
+                    Assert.DoesNotContain(compilation.GetDiagnostics(TestContext.Current.CancellationToken), static d => d.Severity == DiagnosticSeverity.Error);
+                    IMethodSymbol method = compilation.GetTypeByMetadataName("Oracle")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+                    Assert.Empty(IrValidator.Validate(IlLowerer.Lower(method, compilation)));
+                }
+            },
+            seed: Seed,
+            iter: IlPairs,
             print: static pair => $"{pair.Operator}\n{pair.LegacySource}\n{pair.ModernSource}");
 
     /// <summary>Every input renders as the arguments a failure prints.</summary>

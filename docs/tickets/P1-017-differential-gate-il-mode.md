@@ -83,3 +83,6 @@ one-line mapping fix.
   interpolated string is a call, and a call reads the heap (ADR 0018), so the swap is not
   preserving under the tool's call model. `IsSimple` now treats `InterpolatedStringExpression`
   as a call. That the call cannot really read `Oracle.F` is P2-060.
+- Decision: `PairGenLoweringTests.EveryIlPairSideLowersFromIl` (Frontend unit tests) lowers
+  `IlPair`'s sides from IL to valid IR. It covers `PairGen`'s new code outside the integration
+  run, which Sonar's coverage (`build.ps1` without `-Integration`) does not see.
