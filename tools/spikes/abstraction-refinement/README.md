@@ -38,5 +38,9 @@ dotnet $spike <run>/equiv.sarif
 dotnet $spike <run>/equiv.sarif <legacySolution> <modernSolution>
 ```
 
+Setting `ABSTRACTION_SPIKE_DUMP` to a folder writes each re-queried pair's IR text there. It is for
+diagnosis only: IR text holds source spans and constants, so point it at `.corpus/` or a scratch
+folder, never at `docs/`.
+
 `<run>/equiv.sarif` is a full `equiv compare` run (not `--lower-only`), and the two solutions come
 from `.corpus/pairs/gitextensions-8522/pair.json`.

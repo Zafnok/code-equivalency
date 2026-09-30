@@ -621,6 +621,10 @@ From the 2026-09-24 second-oracle review, unticketed until a result above asks f
 - ARDiff-style refinement (Badihi et al., FSE 2020): start with unchanged fragments as
   uninterpreted functions and refine only on spurious counterexamples. It extends ADR 0024's shared
   fragments.
+  Measured by P1-019 on Git Extensions 2026-09-30: interpreting the only closed-form `IrPure` kinds
+  (`IntPtr ==`, `!=`) resolves 7 of 726 Unknowns (1.0%), all to Divergent. That is below ADR 0028's
+  5% bar, so it is not scheduled. 195 of the 238 `abstraction` Unknowns hold an opaque fragment, and
+  the other 36 need floating point, `string` or operator bodies (`docs/runs/2026-09-30-abstraction-spike.md`).
 - Abstract semantic differencing (Partush and Yahav, OOPSLA 2014): relational abstract domains
   for loops where the ladder and CHC time out.
 - Partition verdicts (PASDA, Glock et al., JSS 2024): Equivalent on some input partitions and

@@ -62,7 +62,7 @@ internal static class SelfTest
         IrProcedure @new = IrText.Parse(newText);
         (Verdict baseline, Verdict refined) = Refiner.Query(backend, old, @new, options);
         bool ok = baseline is Unknown { Reason: UnknownReason.Abstraction }
-            && string.Equals(Refiner.Outcome(refined), expected, StringComparison.Ordinal)
+            && Refiner.Outcome(refined).StartsWith(expected, StringComparison.Ordinal)
             && Refiner.Count(Refiner.Interpret(old)) == 0;
         Console.WriteLine($"{(ok ? "ok  " : "FAIL")} {name}: shared {Refiner.Outcome(baseline)}, interpreted {Refiner.Outcome(refined)} (expected {expected})");
         return ok;

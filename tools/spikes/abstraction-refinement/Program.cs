@@ -55,6 +55,12 @@ internal static class Program
                 }
                 else
                 {
+                    if (Environment.GetEnvironmentVariable("ABSTRACTION_SPIKE_DUMP") is { Length: > 0 } dump)
+                    {
+                        // Diagnosis only, into .corpus/ or a scratch folder, never into docs/: IR text holds source spans.
+                        File.WriteAllText(Path.Combine(dump, Uri.EscapeDataString(result.Identity) + ".ir"), IrText.Dump(old) + "\n---\n" + IrText.Dump(@new));
+                    }
+
                     Stopwatch clock = Stopwatch.StartNew();
                     (Verdict shared, Verdict refined) = Refiner.Query(backend, old, @new, options);
                     baseline = Refiner.Outcome(shared);
@@ -196,7 +202,7 @@ internal static class Report
             Console.WriteLine($"| `{row.Identity}` | {string.Join(", ", row.Kinds.Select(static k => k.Kind).Distinct().Select(static k => $"`{k}`"))} | {row.Baseline} | {row.Outcome} |");
         }
 
-        int resolved = queried.Count(static r => r.Outcome is "Equivalent" or "Divergent");
+        int resolved = queried.Count(static r => r.Outcome.StartsWith("Equivalent", StringComparison.Ordinal) || r.Outcome.StartsWith("Divergent", StringComparison.Ordinal));
         Console.WriteLine();
         Console.WriteLine(Invariant($"re-queried {queried.Count}; resolved (Equivalent or Divergent) {resolved}: {Share(resolved, total)} of abstraction Unknowns, {Share(resolved, unknowns)} of all Unknowns (ADR 0028's bar: 5% of all Unknowns)"));
         foreach (string outcome in queried.GroupBy(static r => r.Outcome).OrderByDescending(static g => g.Count()).Select(static g => $"{g.Key} {g.Count()}"))
