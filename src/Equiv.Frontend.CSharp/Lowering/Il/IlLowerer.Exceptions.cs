@@ -98,37 +98,41 @@ internal sealed partial class IlLowerer
             return filter.Declined;
         }
 
-        List<ILInstruction> finallys = [];
-        ImmutableArray<ExceptionLowerer.Clause<ILInstruction>>.Builder candidates = ImmutableArray.CreateBuilder<ExceptionLowerer.Clause<ILInstruction>>();
-        bool taken = false;
-        int clauses = 0;
+        Route route = new();
         for (ILInstruction child = position; child.Parent is { } parent; child = parent)
         {
-            if (parent is TryFinally or TryFault && child == ((TryInstruction)parent).TryBlock && !taken)
+            if (parent is TryFinally or TryFault && child == ((TryInstruction)parent).TryBlock && !route.Taken)
             {
-                finallys.Add(parent);
+                route.Finallys.Add(parent);
             }
-
-            if (parent is not TryCatch region || child != region.TryBlock)
+            else if (parent is TryCatch region && child == region.TryBlock)
             {
-                continue;
-            }
-
-            foreach (TryCatchHandler handler in region.Handlers)
-            {
-                clauses++;
-                if (!taken && (type is null || compilation.ClassifyCommonConversion(type, symbols.Type(handler.Variable.Type)!).IsImplicit))
-                {
-                    bool filtered = handler.Filter is BlockContainer;
-                    candidates.Add(new ExceptionLowerer.Clause<ILInstruction>([.. finallys], scope.Handler(handler), filtered ? handler : null));
-                    taken = !filtered;
-                }
+                Offer(route, region, type);
             }
         }
 
-        return type is null && clauses > 1
+        List<ILInstruction>? uncaught = route.Taken ? null : route.Finallys;
+        return type is null && route.Clauses > 1
             ? exceptions.Ambiguous(exceptionType)
-            : exceptions.Raise(exceptionType, candidates.ToImmutable(), taken ? null : finallys, Copy, Filter);
+            : exceptions.Raise(exceptionType, route.Candidates.ToImmutable(), uncaught, Copy, Filter);
+    }
+
+    /// <summary>
+    /// Each handler of <paramref name="region"/> that may take an exception of <paramref name="type"/> (any, when it is
+    /// null), until one with no filter always does, behind the finallys the route has left so far.
+    /// </summary>
+    private void Offer(Route route, TryCatch region, ITypeSymbol? type)
+    {
+        foreach (TryCatchHandler handler in region.Handlers)
+        {
+            route.Clauses++;
+            if (!route.Taken && (type is null || compilation.ClassifyCommonConversion(type, symbols.Type(handler.Variable.Type)!).IsImplicit))
+            {
+                bool filtered = handler.Filter is BlockContainer;
+                route.Candidates.Add(new ExceptionLowerer.Clause<ILInstruction>([.. route.Finallys], scope.Handler(handler), filtered ? handler : null));
+                route.Taken = !filtered;
+            }
+        }
     }
 
     /// <summary>A copy of a <c>finally</c> or <c>fault</c> block that runs and then continues at <paramref name="continuation"/>.</summary>
@@ -165,6 +169,21 @@ internal sealed partial class IlLowerer
 
     /// <summary>A filter copy's container, and where its verdict goes.</summary>
     private sealed record FilterExit(BlockContainer Container, IrBlockId Taken, IrBlockId Declined);
+
+    /// <summary>
+    /// An exception's route out of the regions around it, as walked so far: the finallys it leaves, the clauses that may
+    /// take it, how many clauses it passed, and whether an unfiltered one always takes it.
+    /// </summary>
+    private sealed class Route
+    {
+        public List<ILInstruction> Finallys { get; } = [];
+
+        public ImmutableArray<ExceptionLowerer.Clause<ILInstruction>>.Builder Candidates { get; } = ImmutableArray.CreateBuilder<ExceptionLowerer.Clause<ILInstruction>>();
+
+        public int Clauses { get; set; }
+
+        public bool Taken { get; set; }
+    }
 
     /// <summary>
     /// The IR blocks of what one pass lowers: each container's blocks and exit and each handler's first block, and, for a

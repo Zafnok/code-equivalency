@@ -160,10 +160,10 @@ internal sealed partial class IlLowerer
     {
         VariablePlace local => new(ssa.Load(context.Current, local.Variable), local.Type),
         SlicePlace slice => new(heap.ReadSlice(slice.Access, context), slice.Type),
-        _ => Field((MemberPlace)place, Read(((MemberPlace)place).Parent)),
+        _ => MemberOf((MemberPlace)place, Read(((MemberPlace)place).Parent)),
     };
 
-    private Val Field(MemberPlace member, Val instance) => new(heap.ReadSlice(heap.Backing(member.Field, instance.Var, context), context), member.Type);
+    private Val MemberOf(MemberPlace member, Val instance) => new(heap.ReadSlice(heap.Backing(member.Field, instance.Var, context), context), member.Type);
 
     /// <summary>
     /// Writes <paramref name="value"/>, which <paramref name="source"/> made, at <paramref name="place"/>: a variable and its

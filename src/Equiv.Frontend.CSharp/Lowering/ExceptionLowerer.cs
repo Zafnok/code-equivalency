@@ -80,18 +80,19 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
         }
 
         ExceptionRegions.ExceptionRoute route = ExceptionRegions.Route(compilation, context.Source, type);
+        ImmutableArray<ControlFlowRegion>? uncaught = route.Uncaught is { } finallys ? Kept(finallys) : null;
         return route.Ambiguous
             ? Ambiguous(exceptionType)
             : Raise(
                 exceptionType,
-                [.. route.Candidates.Select(c => new Clause<ControlFlowRegion>(
-                    Kept(c.Finallys),
-                    Handler(ExceptionRegions.Handler(c.Clause), context),
-                    c.Clause.Kind == ControlFlowRegionKind.Catch ? null : c.Clause))],
-                route.Uncaught is { } uncaught ? Kept(uncaught) : null,
+                [.. route.Candidates.Select(c => new Clause<ControlFlowRegion>(Kept(c.Finallys), Handler(ExceptionRegions.Handler(c.Clause), context), Filtered(c.Clause)))],
+                uncaught,
                 (region, continuation) => Copy(region, continuation, context),
                 (clause, taken, next) => Filter(ExceptionRegions.Filter(clause), ExceptionRegions.Handler(clause), taken, next, context));
     }
+
+    /// <summary>A clause with a <c>when</c> filter, which it tries first, or null for a <c>catch</c> with none.</summary>
+    private static ControlFlowRegion? Filtered(ControlFlowRegion clause) => clause.Kind == ControlFlowRegionKind.Catch ? null : clause;
 
     /// <summary>
     /// Where an exception whose route is known goes: the throw block of <paramref name="exceptionType"/> behind the
@@ -111,7 +112,7 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
         for (int i = candidates.Length - 1; i >= 0; i--)
         {
             IrBlockId taken = Unwind(candidates[i].Finallys, candidates[i].Handler, copy);
-            next = candidates[i].Filter is { } filtered ? filter(filtered, taken, next!) : taken;
+            next = candidates[i].FilteredBy is { } filtered ? filter(filtered, taken, next!) : taken;
         }
 
         return next!;
@@ -238,6 +239,6 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
     /// A clause that may take an exception: the finallys that run before its handler does, the handler's first block,
     /// and, for a filtered clause, the region whose filter is tried first (null for a <c>catch</c> with no filter).
     /// </summary>
-    internal sealed record Clause<TRegion>(IReadOnlyList<TRegion> Finallys, IrBlockId Handler, TRegion? Filter)
+    internal sealed record Clause<TRegion>(IReadOnlyList<TRegion> Finallys, IrBlockId Handler, TRegion? FilteredBy)
         where TRegion : class;
 }

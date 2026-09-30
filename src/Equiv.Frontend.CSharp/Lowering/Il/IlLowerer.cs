@@ -707,6 +707,17 @@ internal sealed partial class IlLowerer
         _ => BinaryOperatorKind.Remainder,
     };
 
+    /// <summary>The C# comparison of <paramref name="kind"/>; <see cref="ComparisonKind.GreaterThanOrEqual"/> is the last.</summary>
+    private static BinaryOperatorKind Kind(ComparisonKind kind) => kind switch
+    {
+        ComparisonKind.Equality => BinaryOperatorKind.Equals,
+        ComparisonKind.Inequality => BinaryOperatorKind.NotEquals,
+        ComparisonKind.LessThan => BinaryOperatorKind.LessThan,
+        ComparisonKind.LessThanOrEqual => BinaryOperatorKind.LessThanOrEqual,
+        ComparisonKind.GreaterThan => BinaryOperatorKind.GreaterThan,
+        _ => BinaryOperatorKind.GreaterThanOrEqual,
+    };
+
     /// <summary>The IR operator of <paramref name="op"/>; <see cref="BinaryNumericOperator.ShiftRight"/> is the last.</summary>
     private static IrBinaryOp Operation(BinaryNumericOperator op, bool signed) => op switch
     {
@@ -780,28 +791,18 @@ internal sealed partial class IlLowerer
         ITypeSymbol operands = Stack(comparison.InputType);
         IrVar left = Value(comparison.Left, operands);
         IrVar right = Value(comparison.Right, operands);
-        bool unsigned = comparison.Sign == Sign.Unsigned;
-        IrBinaryOp op = comparison.Kind switch
-        {
-            ComparisonKind.Equality => IrBinaryOp.Eq,
-            ComparisonKind.Inequality => IrBinaryOp.Ne,
-            ComparisonKind.LessThan => unsigned ? IrBinaryOp.Ult : IrBinaryOp.Slt,
-            ComparisonKind.LessThanOrEqual => unsigned ? IrBinaryOp.Ule : IrBinaryOp.Sle,
-            ComparisonKind.GreaterThan => unsigned ? IrBinaryOp.Ugt : IrBinaryOp.Sgt,
-            _ => unsigned ? IrBinaryOp.Uge : IrBinaryOp.Sge,
-        };
-        return Emit(op, left, right, Bool);
+        return Emit(Operation(comparison.Kind, unsigned: comparison.Sign == Sign.Unsigned), left, right, Bool);
     }
 
-    /// <summary>The C# comparison of <paramref name="kind"/>; <see cref="ComparisonKind.GreaterThanOrEqual"/> is the last.</summary>
-    private static BinaryOperatorKind Kind(ComparisonKind kind) => kind switch
+    /// <summary>The IR comparison of <paramref name="kind"/> on integers; <see cref="ComparisonKind.GreaterThanOrEqual"/> is the last.</summary>
+    private static IrBinaryOp Operation(ComparisonKind kind, bool unsigned) => kind switch
     {
-        ComparisonKind.Equality => BinaryOperatorKind.Equals,
-        ComparisonKind.Inequality => BinaryOperatorKind.NotEquals,
-        ComparisonKind.LessThan => BinaryOperatorKind.LessThan,
-        ComparisonKind.LessThanOrEqual => BinaryOperatorKind.LessThanOrEqual,
-        ComparisonKind.GreaterThan => BinaryOperatorKind.GreaterThan,
-        _ => BinaryOperatorKind.GreaterThanOrEqual,
+        ComparisonKind.Equality => IrBinaryOp.Eq,
+        ComparisonKind.Inequality => IrBinaryOp.Ne,
+        ComparisonKind.LessThan => unsigned ? IrBinaryOp.Ult : IrBinaryOp.Slt,
+        ComparisonKind.LessThanOrEqual => unsigned ? IrBinaryOp.Ule : IrBinaryOp.Sle,
+        ComparisonKind.GreaterThan => unsigned ? IrBinaryOp.Ugt : IrBinaryOp.Sgt,
+        _ => unsigned ? IrBinaryOp.Uge : IrBinaryOp.Sge,
     };
 
     /// <summary>Whether <paramref name="instruction"/>'s value is a C# <c>bool</c>, which the IR keeps as Bool although IL's stack has an int.</summary>
@@ -922,12 +923,25 @@ internal sealed partial class IlLowerer
 
         CallIdentity identity = CallIdentityFactory.Of(target, compilation, RenameMap.Empty, []);
         ImmutableArray<IrVar> operands = receiver is { } self ? [self.Var, .. arguments] : arguments;
-        if (isOperator)
-        {
-            return new(Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType);
-        }
+        return isOperator
+            ? new(Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType)
+            : Invoke(identity, operands, written, Result(call, target));
+    }
 
-        ITypeSymbol? result = call is NewObj ? target.ContainingType : target.ReturnsVoid ? null : target.ReturnType;
+    /// <summary>What a call yields: a <c>new</c> its type's new object, else the callee's result, if any.</summary>
+    private static ITypeSymbol? Result(CallInstruction call, IMethodSymbol target) => (call, target.ReturnsVoid) switch
+    {
+        (NewObj, _) => target.ContainingType,
+        (_, true) => null,
+        _ => target.ReturnType,
+    };
+
+    /// <summary>
+    /// The <see cref="IrCall"/> itself: its result, if any, of <paramref name="result"/>, each <c>ref</c> or <c>out</c>
+    /// variable in <paramref name="written"/> stored from its output, and then its <c>threw</c> branch.
+    /// </summary>
+    private Val? Invoke(CallIdentity identity, ImmutableArray<IrVar> operands, ImmutableArray<Place> written, ITypeSymbol? result)
+    {
         IrVar? value = result is null ? null : ssa.Temp(Map(result));
         IrVar threw = ssa.Temp(Bool);
         ImmutableArray<IrVar> outputs = [.. written.Select(p => ssa.Temp(Map(p.Type)))];
@@ -1072,7 +1086,7 @@ internal sealed partial class IlLowerer
             MemberPlace member = new(places[call.Arguments[0]], field);
             if (arguments.IsEmpty)
             {
-                return Field(member, instance);
+                return MemberOf(member, instance);
             }
 
             Write(member, arguments[^1], call);
