@@ -87,13 +87,13 @@ public static class PairGen
             Method,
             Gen.OneOf(
                 Gen.Select(Gen.OneOfConst(Arithmetic), Maybes, Gen.Bool, static (op, maybe, literal) => (op, maybe, literal))
-                    .SelectMany(static t => RightOperand(typeof(int), t.op, t.literal, 2, flat: false).Select(right => (IStmt)new Assign("x", new Lifted(t.op, t.maybe, right)))),
-                Maybes.Select(static maybe => (IStmt)new Assign("y", new Widened(maybe))),
-                Gen.Select(Gen.Bool, Gen.Bool, static (leading, isNull) => (IStmt)new Assign("z", new Interpolated(leading, isNull))),
+                    .SelectMany(static t => RightOperand(typeof(int), t.op, t.literal, 2, flat: false).Select(right => (IlConstruct)new Lifted(t.op, t.maybe, right))),
+                Maybes.Select(static maybe => (IlConstruct)new Widened(maybe)),
+                Gen.Select(Gen.Bool, Gen.Bool, static (leading, isNull) => (IlConstruct)new Interpolated(leading, isNull)),
                 Gen.Select(ExprGen(typeof(int), 1, flat: false), ExprGen(typeof(bool), 1, flat: false), Gen.Int[-1, 3], ExprGen(typeof(int), 1, flat: false).Array[3], static (scrutinee, flag, label, arms) =>
-                    (IStmt)new Assign("x", new Positional(scrutinee, flag, label, [.. arms])))),
+                    (IlConstruct)new Positional(scrutinee, flag, label, [.. arms]))),
             Gen.Int[0, MaxStatements],
-            static (method, statement, at) => method with { Body = method.Body.Insert(at % method.Body.Length, statement) });
+            static (method, construct, at) => method with { Body = method.Body.Insert(at % method.Body.Length, new Assign(LocalName(construct.Type), construct)) });
 
     /// <summary><c>(c ? (int?)v : null)</c>: an <c>int?</c> whose nullness a run decides.</summary>
     private static Gen<Maybe> Maybes => Gen.Select(ExprGen(typeof(bool), 1, flat: false), ExprGen(typeof(int), 1, flat: false), static (condition, value) => new Maybe(condition, value));
@@ -298,57 +298,48 @@ public static class PairGen
         return values.Where(v => v != 0 || op is not ("/" or "%")).Select(v => (IExpr)new Literal(operandType, v));
     }
 
-    /// <summary><c>(Condition ? (int?)Value : null)</c>, whose type is <c>int?</c>: a nullable conversion.</summary>
-    private sealed record Maybe(IExpr Condition, IExpr Value) : IExpr
+    /// <summary>
+    /// A construct of <see cref="IlMethod"/>, assigned to the local of its <see cref="Type"/>. None is taken to be unable to
+    /// throw: each holds a call once lowered from IL, or an operand or arm that may throw.
+    /// </summary>
+    private abstract record IlConstruct(Type Type) : IExpr
     {
-        public Type Type => typeof(int?);
+        public bool CannotThrow => false;
 
-        public bool CannotThrow => Condition.CannotThrow && Value.CannotThrow;
+        public abstract string Render();
+    }
 
+    /// <summary><c>(Condition ? (int?)Value : null)</c>: an <c>int?</c> whose nullness a run decides, made by a nullable conversion.</summary>
+    private sealed record Maybe(IExpr Condition, IExpr Value)
+    {
         public string Render() => $"({Condition.Render()} ? (int?){Value.Render()} : null)";
     }
 
     /// <summary><c>unchecked(Operand Op Right).GetValueOrDefault()</c>: a lifted <c>int?</c> operator, null when <see cref="Operand"/> is.</summary>
-    private sealed record Lifted(string Op, Maybe Operand, IExpr Right) : IExpr
+    private sealed record Lifted(string Op, Maybe Operand, IExpr Right) : IlConstruct(typeof(int))
     {
-        public Type Type => typeof(int);
-
-        public bool CannotThrow => Op is not ("/" or "%") && Operand.CannotThrow && Right.CannotThrow;
-
-        public string Render() => $"unchecked({Operand.Render()} {Op} {Right.Render()}).GetValueOrDefault()";
+        public override string Render() => $"unchecked({Operand.Render()} {Op} {Right.Render()}).GetValueOrDefault()";
     }
 
     /// <summary><c>((long?)Operand).GetValueOrDefault()</c>: a lifted conversion from <c>int?</c> to <c>long?</c>.</summary>
-    private sealed record Widened(Maybe Operand) : IExpr
+    private sealed record Widened(Maybe Operand) : IlConstruct(typeof(long))
     {
-        public Type Type => typeof(long);
-
-        public bool CannotThrow => Operand.CannotThrow;
-
-        public string Render() => $"((long?){Operand.Render()}).GetValueOrDefault()";
+        public override string Render() => $"((long?){Operand.Render()}).GetValueOrDefault()";
     }
 
     /// <summary><c>($"t{s}" == null)</c> or <c>($"{s}t" != null)</c>: an interpolated string, which C# makes a concatenation.</summary>
-    private sealed record Interpolated(bool Leading, bool IsNull) : IExpr
+    private sealed record Interpolated(bool Leading, bool IsNull) : IlConstruct(typeof(bool))
     {
-        public Type Type => typeof(bool);
-
-        public bool CannotThrow => true;
-
-        public string Render() => $"({(Leading ? "$\"t{s}\"" : "$\"{s}t\"")} {(IsNull ? "==" : "!=")} null)";
+        public override string Render() => $"({(Leading ? "$\"t{s}\"" : "$\"{s}t\"")} {(IsNull ? "==" : "!=")} null)";
     }
 
     /// <summary>
     /// <c>((Scrutinee, Flag) switch { (Label, true) =&gt; Arms[0], (_, false) =&gt; Arms[1], _ =&gt; Arms[2] })</c>: positional
     /// patterns on a tuple, none of which subsumes a later one.
     /// </summary>
-    private sealed record Positional(IExpr Scrutinee, IExpr Flag, int Label, ImmutableArray<IExpr> Arms) : IExpr
+    private sealed record Positional(IExpr Scrutinee, IExpr Flag, int Label, ImmutableArray<IExpr> Arms) : IlConstruct(typeof(int))
     {
-        public Type Type => typeof(int);
-
-        public bool CannotThrow => Scrutinee.CannotThrow && Flag.CannotThrow && Arms.All(static a => a.CannotThrow);
-
-        public string Render() =>
+        public override string Render() =>
             $"(({Scrutinee.Render()}, {Flag.Render()}) switch {{ ({Label.ToString(System.Globalization.CultureInfo.InvariantCulture)}, true) => {Arms[0].Render()}, (_, false) => {Arms[1].Render()}, _ => {Arms[2].Render()} }})";
     }
 
