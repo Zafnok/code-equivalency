@@ -340,7 +340,7 @@ internal sealed class ModelDecoder
     /// Answers a call from the model: the side's result, <c>threw</c>, ref output (ticket M4-003) and heap functions applied to the arguments, the
     /// position and the heap at the call (ticket P1-005). The heap at the call is the slice the interpreter passes for a map
     /// the call pairs, else <see cref="Threaded"/>'s version, which starts at the shared input and takes each call's new
-    /// version, as the encoder threads it. A map the call pairs that the encoding's heap does not range over (a replay of
+    /// version, as the encoder threads it. A closed callee (ADR 0041) is given no heap and changes none. A map the call pairs that the encoding's heap does not range over (a replay of
     /// the original procedures from a fragment's model) is left as it is. A pure function is answered from its result and
     /// flag functions applied to the arguments (ticket M4-002).
     /// </summary>
@@ -376,19 +376,19 @@ internal sealed class ModelDecoder
         public IrCallResult Answer(CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
         {
             ImmutableArray<IrType> types = [.. arguments.Select(static a => a.Type)];
-            IrValue[] read = [.. Heap.Select((m, i) => heap.FirstOrDefault(h => Is(m, h)) is { } slice ? slice.Value : threaded[i])];
-            Expr[] applied = [.. arguments.Select(decoder.Encode), decoder.context.MkBV(position, 32), .. read.Select(decoder.Encode)];
             TraceEncoder calls = decoder.encoding.Calls;
+            IrValue[] read = calls.IsClosed(side, callee) ? [] : [.. Heap.Select((m, i) => heap.FirstOrDefault(h => Is(m, h)) is { } slice ? slice.Value : threaded[i])];
+            Expr[] applied = [.. arguments.Select(decoder.Encode), decoder.context.MkBV(position, 32), .. read.Select(decoder.Encode)];
             IrValue? value = resultType is null
                 ? null
                 : decoder.Decode(decoder.model.Eval(decoder.context.MkApp(calls.ResultFunction(side, callee, types, resultType), applied), completion: true), resultType);
             bool threw = decoder.model.Eval(decoder.context.MkApp(calls.ThrewFunction(side, callee, types), applied), completion: true).IsTrue;
-            for (int i = 0; i < threaded.Length; i++)
+            for (int i = 0; i < read.Length; i++)
             {
                 threaded[i] = decoder.Decode(decoder.model.Eval(decoder.context.MkApp(calls.HeapFunction(side, callee, types, i), applied), completion: true), Heap[i].Type);
             }
 
-            reads.Add([.. Heap.Select((m, i) => new IrHeapSlice(m.Name, read[i]))]);
+            reads.Add([.. read.Select((v, i) => new IrHeapSlice(Heap[i].Name, v))]);
             return new IrCallResult(value, threw)
             {
                 RefOuts = [.. refOuts.Select((type, i) => decoder.Decode(decoder.model.Eval(decoder.context.MkApp(calls.RefOutFunction(side, callee, types, i, type), applied), completion: true), type))],

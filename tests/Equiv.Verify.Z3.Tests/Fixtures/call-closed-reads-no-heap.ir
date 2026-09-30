@@ -1,0 +1,21 @@
+# Equivalent
+# ADR 0041, P2-060: call-reads-heap with a closed callee before the open one. A closed call cannot read the field, so its event carries no heap and the two sides' events agree although x differs at it.
+proc "C::M()" (ref %field.C.x: map<sort "C", bv32>, %this: sort "C") entry B0
+B0:
+  %zero: bv32 = const bv32 0
+  %one: bv32 = const bv32 1
+  %x1: map<sort "C", bv32> = mapwrite %field.C.x, %this, %one
+  %n: bv32 = call closed "System.Math::Abs(int)"(%zero)
+  %x2: map<sort "C", bv32> = mapwrite %x1, %this, %zero
+  call "C::Save(C)"(%this) heap("field.C.x" %x2 -> %x3: map<sort "C", bv32>)
+  ret outs(%field.C.x = %x3)
+---
+proc "C::M()" (ref %field.C.x: map<sort "C", bv32>, %this: sort "C") entry B0
+B0:
+  %zero: bv32 = const bv32 0
+  %two: bv32 = const bv32 2
+  %x1: map<sort "C", bv32> = mapwrite %field.C.x, %this, %two
+  %n: bv32 = call closed "System.Math::Abs(int)"(%zero)
+  %x2: map<sort "C", bv32> = mapwrite %x1, %this, %zero
+  call "C::Save(C)"(%this) heap("field.C.x" %x2 -> %x3: map<sort "C", bv32>)
+  ret outs(%field.C.x = %x3)
