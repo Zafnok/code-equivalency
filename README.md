@@ -173,7 +173,7 @@ equiv compare --legacy <solution.sln|.slnx> --modern <solution.sln|.slnx>
               [--config equiv.config.json] [--fail-on divergent|unknown]
               [--dry-run] [--lower-only]
               [--execute [--test-target 0.001] [--test-budget <inputs>[,<seconds>]]]
-              [--chc-int-mode true|false] [--invariant-model <id>]
+              [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback]
               [--verbosity quiet|normal|debug] [--log <path>]
 equiv mcp [--execute]
 ```
@@ -203,6 +203,12 @@ Z3 checks every answer, so a wrong one can never prove a pair. It is off by defa
 proposer, which mines invariants from runs in process and sends nothing, is on by default and
 is asked first. `--chc-int-mode` (default `true`) lets rung 4 try integer arithmetic before
 falling back to bitvectors.
+
+`--il-fallback` (off by default; ADR 0039) lowers a matched pair again from IL on both sides when
+it is not congruent and either side holds an opaque the other lacks, and keeps the IL bodies only
+when they hold fewer such opaques. Every result on a matched pair then says which lowering it used,
+in `properties.lowering` (`operation` or `il`), and the census counts `pairsIlFallbackTried` and
+`pairsLoweredFromIl`.
 
 Progress goes to stderr, never stdout (ADR 0038). `normal` prints each phase's start and end, a
 line at most every 5%, and a heartbeat every 60 s that names the pair being worked on. `debug`
@@ -263,9 +269,9 @@ server over stdio (ADR 0033), so a coding agent can ask "is my port equivalent?"
 has two read-only tools that write no file:
 
 - `compare`: `legacy` and `modern` (solution paths, required), and optionally `config`, `baseline`,
-  `bound` and `timeoutMs`. The result is a one-line summary (`Equivalent n, Divergent n, Unknown n,
+  `bound`, `timeoutMs` and `ilFallback` (`--il-fallback`). The result is a one-line summary (`Equivalent n, Divergent n, Unknown n,
   skipped projects n, exit code k`), then the SARIF log `equiv compare` would write, as JSON text.
-- `lower_only`: `legacy`, `modern` and optionally `config`; the same as `equiv compare --lower-only`.
+- `lower_only`: `legacy`, `modern` and optionally `config` and `ilFallback`; the same as `equiv compare --lower-only`.
 
 An input error `equiv compare` exits 3 or 4 on (a missing file, no frontend for the paths, no C#
 project that loads) comes back as a tool error with the same message.

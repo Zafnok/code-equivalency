@@ -630,6 +630,17 @@ public sealed class SarifReportWriterTests
         Assert.False(result.TryGetProperty("ladderTrace", out List<Dictionary<string, string>> _));
     }
 
+    /// <summary>ADR 0039; ticket P1-016 criterion 4: a result says which lowering its pair kept, and only when it has one.</summary>
+    [Fact]
+    public void Sarif_WritesTheLoweringWhenSet()
+    {
+        IList<Result> results = SarifReportWriter.Write(
+            [Fixtures.Result(new Equivalent(ProofMethod.Bounded)) with { Lowering = "il" }, Fixtures.Result(new Added())]).Runs[0].Results;
+
+        Assert.Equal("il", results[0].GetProperty<string>("lowering"));
+        Assert.False(results[1].TryGetProperty("lowering", out string? _));
+    }
+
     /// <summary>ADR 0020; ticket M3-009 acceptance criterion 4.</summary>
     [Fact]
     public void Sarif_ListsEquivalencesApplied()

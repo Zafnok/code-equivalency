@@ -59,11 +59,12 @@ internal static class CompareCommand
         Option<string> verbosityOption = new("--verbosity") { DefaultValueFactory = _ => "normal" };
         verbosityOption.AcceptOnlyFromAmong("quiet", "normal", "debug");
         Option<string?> logOption = new("--log");
+        Option<bool> ilFallbackOption = new("--il-fallback");
 
         Command command = new("compare")
         {
             legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption,
-            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption,
+            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption, ilFallbackOption,
         };
 
         command.SetAction(parseResult => RunLogged(
@@ -83,6 +84,7 @@ internal static class CompareCommand
                 Testing = TestingOptions.TryParse(parseResult.GetValue(testTargetOption), parseResult.GetValue(testBudgetOption), out _)!,
                 Verbosity = ToVerbosity(parseResult.GetValue(verbosityOption)),
                 LogPath = parseResult.GetValue(logOption),
+                IlFallback = parseResult.GetValue(ilFallbackOption),
             },
             frontends,
             backend,
@@ -183,7 +185,7 @@ internal static class CompareCommand
             return inputErrorExitCode;
         }
 
-        EquivConfig config = loaded with { Bound = options.Bound ?? loaded.Bound, TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs };
+        EquivConfig config = loaded with { Bound = options.Bound ?? loaded.Bound, TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs, IlFallback = options.IlFallback };
         FrontendAnalysis? analysis = Loaded(frontend, options, config, runLog, streams.Error);
         if (analysis is null)
         {
@@ -225,7 +227,10 @@ internal static class CompareCommand
             removed: matchResult.Removed.Length,
             added: matchResult.Added.Length,
             projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length),
-            unlowered: matchResult.LoweringFailures.Length);
+            unlowered: matchResult.LoweringFailures.Length) with
+        {
+            IlFallback = options.IlFallback ? (matchResult.Pairs.Count(static p => p.IlFallbackTried), matchResult.Pairs.Count(static p => string.Equals(p.Lowering, "il", StringComparison.Ordinal))) : null,
+        };
 
         // P2-011: a pair the frontend could not lower takes the same path as a pair whose verification throws (ADR 0023).
         List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(f => PairFailure("Lowering", f.Old, f.New, f.Exception, error))];
@@ -545,7 +550,7 @@ internal static class CompareCommand
             runLog.Item(pair.New.Value, weight);
             if (decided is not null)
             {
-                results.Add(decided.Result);
+                results.Add(decided.Result with { Lowering = pair.Lowering });
                 runLog.ItemDone(decided.Outcome);
                 continue;
             }
@@ -553,7 +558,7 @@ internal static class CompareCommand
             try
             {
                 Verdict verdict = backend.Verify(old, @new, options);
-                results.Add(new VerificationResult(pair.New, verdict) { EquivalencesApplied = pair.EquivalencesApplied });
+                results.Add(new VerificationResult(pair.New, verdict) { EquivalencesApplied = pair.EquivalencesApplied, Lowering = pair.Lowering });
                 runLog.ItemDone(verdict switch
                 {
                     Equivalent => "equivalent",

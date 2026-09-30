@@ -50,7 +50,7 @@ public sealed class McpCommandTests
             ["legacy", "modern"],
             compare.ProtocolTool.InputSchema.GetProperty("required").EnumerateArray().Select(static e => e.GetString()).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         Assert.Equal(
-            ["baseline", "bound", "config", "legacy", "modern", "timeoutMs"],
+            ["baseline", "bound", "config", "ilFallback", "legacy", "modern", "timeoutMs"],
             compare.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject().Select(static p => p.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         McpClientTool lowerOnly = tools.Single(static t => string.Equals(t.Name, "lower_only", StringComparison.Ordinal));
         Assert.Equal("Lower two solutions without verifying", lowerOnly.ProtocolTool.Title);
@@ -58,7 +58,7 @@ public sealed class McpCommandTests
             "Loads, matches and lowers a legacy and a modern solution and reports the lowering census and the added and removed procedures, without calling the solver (`equiv compare --lower-only`).",
             lowerOnly.ProtocolTool.Description);
         Assert.Equal(
-            ["config", "legacy", "modern"],
+            ["config", "ilFallback", "legacy", "modern"],
             lowerOnly.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject().Select(static p => p.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
     }
 
@@ -218,6 +218,25 @@ public sealed class McpCommandTests
         await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path, config: config.Path, bound: 4, timeoutMs: 40)).ConfigureAwait(true);
 
         Assert.Equal([(9, 900), (4, 40)], backend.Calls.Select(static o => (o.Bound, o.TimeoutMs)));
+    }
+
+    /// <summary>Ticket P1-016 criterion 1: both tools take <c>ilFallback</c>, off unless given, and pass it to the frontend as <c>--il-fallback</c> does.</summary>
+    [Theory]
+    [InlineData("compare")]
+    [InlineData("lower_only")]
+    public async Task IlFallbackIsOffUnlessGiven(string tool)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        using Session session = await Session.StartAsync(frontend, EquivalentBackend()).ConfigureAwait(true);
+
+        await session.CallAsync(tool, Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
+        bool off = frontend.LastConfig!.IlFallback;
+        await session.CallAsync(tool, Args(legacy: legacy.Path, modern: modern.Path, ilFallback: true)).ConfigureAwait(true);
+
+        Assert.False(off);
+        Assert.True(frontend.LastConfig!.IlFallback);
     }
 
     /// <summary><c>baseline</c> works as <c>--baseline</c> does: a result already in the baseline is unchanged, so the run exits 0 and says so.</summary>
@@ -732,13 +751,14 @@ public sealed class McpCommandTests
     }
 
     /// <summary>A tool call's arguments; a null one is left out, as an agent that does not pass an optional argument does.</summary>
-    private static Dictionary<string, object?> Args(string legacy, string modern, string? config = null, string? baseline = null, int? bound = null, int? timeoutMs = null)
+    private static Dictionary<string, object?> Args(string legacy, string modern, string? config = null, string? baseline = null, int? bound = null, int? timeoutMs = null, bool? ilFallback = null)
     {
         Dictionary<string, object?> arguments = new(StringComparer.Ordinal) { ["legacy"] = legacy, ["modern"] = modern };
         AddIfPresent(arguments, "config", config);
         AddIfPresent(arguments, "baseline", baseline);
         AddIfPresent(arguments, "bound", bound);
         AddIfPresent(arguments, "timeoutMs", timeoutMs);
+        AddIfPresent(arguments, "ilFallback", ilFallback);
         return arguments;
     }
 

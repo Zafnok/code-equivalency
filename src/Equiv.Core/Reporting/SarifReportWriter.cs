@@ -147,6 +147,12 @@ public static class SarifReportWriter
         SetReplayProperties(sarifResult, result.Replay);
         SetTestingProperty(sarifResult, result.Testing);
 
+        // ADR 0039: under --il-fallback, which lowering the pair's bodies came from.
+        if (result.Lowering is { } lowering)
+        {
+            sarifResult.SetProperty("lowering", lowering);
+        }
+
         SetLocations(sarifResult, result);
         return sarifResult;
     }

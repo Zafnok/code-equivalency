@@ -31,7 +31,7 @@ namespace Equiv.Frontend.CSharp.Lowering.Il;
 /// mapped one whose operands the IR has no type for, is an <see cref="IrOpaque"/> whose reason is its
 /// <see cref="IlKeys.Key"/> and whose span is its nearest sequence point; one that is a function of the locals it reads
 /// carries <see cref="IlFragment"/>'s fingerprint, as a fragment of <see cref="IrLowerer"/> carries its own (ADR 0024
-/// decision 2). No run uses this yet (ticket P1-016).
+/// decision 2). A run uses it under <c>--il-fallback</c>, through <see cref="IlFallback"/> (ticket P1-016).
 /// </summary>
 internal sealed partial class IlLowerer
 {
@@ -107,14 +107,16 @@ internal sealed partial class IlLowerer
     private readonly HashSet<ILVariable> caught;
     private readonly SourceSpan bodySpan;
     private readonly IrType? returnType;
+    private readonly bool x87;
 
     /// <summary>The statement being lowered, whose enclosing regions decide where an exception raised in it goes.</summary>
     private ILInstruction position;
     private int selects;
 
-    private IlLowerer(IMethodSymbol method, Compilation compilation, IlAstReader.Body body, SourceSpan bodySpan, IrType? returnType)
+    private IlLowerer(IMethodSymbol method, Compilation compilation, IlAstReader.Body body, SourceSpan bodySpan, IrType? returnType, bool x87)
     {
         this.method = method;
+        this.x87 = x87;
         this.compilation = compilation;
         this.bodySpan = bodySpan;
         this.returnType = returnType;
@@ -139,9 +141,10 @@ internal sealed partial class IlLowerer
 
     /// <summary>
     /// <paramref name="method"/>'s body, read from <paramref name="compilation"/>'s IL. A method with no ILAst is one
-    /// whole-body opaque whose reason is <see cref="IlAstReader"/>'s.
+    /// whole-body opaque whose reason is <see cref="IlAstReader"/>'s. <paramref name="x87"/> marks floating point runtime-sensitive,
+    /// as <see cref="IrLowerer"/> does on the legacy side of a project that runs on x87 (ticket M4-002).
     /// </summary>
-    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation)
+    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, bool x87 = false)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
@@ -150,7 +153,7 @@ internal sealed partial class IlLowerer
         IlAstReader.Body body = IlAstReader.Read(method, compilation);
         return body.Failure is { } failure
             ? IrLowerer.Opaque(RoslynIdentity.Of(method, RenameMap.Empty), parameters, returnType, failure, [span])
-            : new IlLowerer(method, compilation, body, span, returnType).Procedure(parameters, body.Function!);
+            : new IlLowerer(method, compilation, body, span, returnType, x87).Procedure(parameters, body.Function!);
     }
 
     /// <summary>The procedure: the C# parameters, then the heap inputs the lowering used, as <see cref="IrLowerer"/> orders them.</summary>
@@ -1134,9 +1137,9 @@ internal sealed partial class IlLowerer
         return new(Apply(entry, operands, target.ReturnType), target.ReturnType);
     }
 
-    /// <summary>A catalogued function (ticket M4-002), with the exceptions it raises in this context; the IL lowering has no x87 side.</summary>
+    /// <summary>A catalogued function (ticket M4-002), with the exceptions it raises in this context, runtime-sensitive as on the x87 legacy side.</summary>
     private IrVar Apply(PureCatalogue.Entry entry, ImmutableArray<IrVar> args, ITypeSymbol result, bool isChecked = false) =>
-        Pure(entry.Function, entry.Raises(isChecked), entry.RuntimeSensitive(x87: false), args, Map(result));
+        Pure(entry.Function, entry.Raises(isChecked), entry.RuntimeSensitive(x87), args, Map(result));
 
     /// <summary>
     /// An <see cref="IrPure"/> of <paramref name="function"/>, then, per exception it raises, a branch on its flag to where

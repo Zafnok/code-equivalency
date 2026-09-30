@@ -25,6 +25,9 @@ internal sealed class FakeFrontend(
 {
     public int AnalyzeCallCount { get; private set; }
 
+    /// <summary>The config the last <see cref="Analyze"/> was given.</summary>
+    public EquivConfig? LastConfig { get; private set; }
+
     public string Language { get; } = language;
 
     public bool Supports(string path) => supports(path);
@@ -32,6 +35,7 @@ internal sealed class FakeFrontend(
     public FrontendAnalysis Analyze(string legacyPath, string modernPath, EquivConfig config, IRunLog log, CancellationToken ct)
     {
         AnalyzeCallCount++;
+        LastConfig = config;
         return throwOnAnalyze is not null
             ? throw throwOnAnalyze
             : new FrontendAnalysis(matchResult ?? new MatchResult([], [], [], []), lines ?? new AnalysedLines(0, 0))
