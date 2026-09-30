@@ -43,9 +43,8 @@ internal sealed record DriverReferences(string FrameworkPacks, string FrameworkR
         }
 
         string shared = Path.Combine(Dotnet, "shared");
-        return Newest(Path.Combine(shared, CoreApp), target) is { } core
-            ? new DriverRuntime(target, Path.GetFileName(core), Newest(Path.Combine(shared, DesktopApp), target) is { } desktop ? Path.GetFileName(desktop) : string.Empty)
-            : null;
+        string desktop = Path.GetFileName(Newest(Path.Combine(shared, DesktopApp), target)) ?? string.Empty;
+        return Newest(Path.Combine(shared, CoreApp), target) is { } core ? new DriverRuntime(target, Path.GetFileName(core), desktop) : null;
     }
 
     /// <summary>
