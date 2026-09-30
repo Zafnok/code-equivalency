@@ -77,3 +77,9 @@ one-line mapping fix.
   Unknown(abstraction) and 4 Unknown(unaligned-loop), against 5 and 1. A pair costs Z3 about
   twice as much from IL as from IOperation. Wall-clock with CsCheck's parallel sampling: main's
   class (M0-012's three facts) 32.6 s, `GeneratedPairsAreSoundUnderBothLowerings` 39.3 s.
+- Finding (one-line fix, `tools/corpus/seeder/SyntaxMutator.cs`): the nightly budget (5,000 pairs)
+  failed rule 3 under the IL lowering. ReorderIndependentStatements had swapped `F = b;` with
+  `z = ($"t{s}" == null);`, because `IsSimple` counted an interpolated string as simple. An
+  interpolated string is a call, and a call reads the heap (ADR 0018), so the swap is not
+  preserving under the tool's call model. `IsSimple` now treats `InterpolatedStringExpression`
+  as a call. That the call cannot really read `Oracle.F` is P2-060.

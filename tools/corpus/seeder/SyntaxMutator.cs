@@ -704,10 +704,14 @@ public static class SyntaxMutator
         where TNode : SyntaxNode =>
         method.Body!.DescendantNodesAndSelf(DoesNotCrossScope).OfType<TNode>().Where(matches);
 
-    /// <summary>Every expression this deep cannot itself throw: no calls, indexers, casts, awaits, checked contexts or division/modulo.</summary>
+    /// <summary>
+    /// Every expression this deep cannot itself throw: no calls, indexers, casts, awaits, checked contexts or division/modulo.
+    /// An interpolated string is a call (<c>string.Concat</c>, <c>string.Format</c> or a handler's), which reads and writes
+    /// the heap (ADR 0018), so an assignment of one is never independent of a field write (ticket P1-017).
+    /// </summary>
     private static bool IsSimple(ExpressionSyntax expr) => !expr.DescendantNodesAndSelf().Any(static n => n switch
     {
-        InvocationExpressionSyntax or ElementAccessExpressionSyntax or ObjectCreationExpressionSyntax or CastExpressionSyntax
+        InvocationExpressionSyntax or InterpolatedStringExpressionSyntax or ElementAccessExpressionSyntax or ObjectCreationExpressionSyntax or CastExpressionSyntax
             or AwaitExpressionSyntax or AssignmentExpressionSyntax or CheckedExpressionSyntax or ConditionalAccessExpressionSyntax
             or ThrowExpressionSyntax or PostfixUnaryExpressionSyntax => true,
         PrefixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.PreIncrementExpression or (int)SyntaxKind.PreDecrementExpression } => true,
