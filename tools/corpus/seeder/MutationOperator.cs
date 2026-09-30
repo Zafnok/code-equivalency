@@ -18,10 +18,10 @@ public enum MutationOperator
     /// <summary><c>if (c) A else B</c> to <c>if (!c) B else A</c>.</summary>
     InvertIf,
 
-    /// <summary><c>x + y</c> to <c>y + x</c>, for a commutative operator whose operands cannot throw.</summary>
+    /// <summary><c>x + y</c> to <c>y + x</c>, for a built-in operator that commutes (never <c>string</c> or delegate <c>+</c>) whose operands neither throw nor call (ticket P2-061).</summary>
     Commute,
 
-    /// <summary>Evaluates an assigned or returned value into a new local first: <c>x = e;</c> to <c>var t = e; x = t;</c>.</summary>
+    /// <summary>Evaluates an assigned or returned value into a new local first: <c>x = e;</c> to <c>var t = e; x = t;</c>, for a bare-name target <c>x</c> (ticket P2-061).</summary>
     IntroduceTemporary,
 
     /// <summary><see cref="IntroduceTemporary"/> the other way round: the legacy method has the temporary, the modern one inlines it.</summary>

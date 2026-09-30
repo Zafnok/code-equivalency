@@ -1,5 +1,5 @@
 # P2-061 Three behaviour-preserving mechanical seeds on Git Extensions are reported Divergent
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-046
@@ -50,3 +50,38 @@ Preserving Unknown share (38 of 194).
 
 ## Notes
 - Found by P2-046 (`docs/runs/2026-09-30-full-gitextensions-8522/SUMMARY.md`, mechanical seeds).
+- Size guard: not P2-031/P2-032 sort handling. All three seeds really change behaviour; `equiv` is right each time.
+- `.corpus/` is not on this box, so the seeded methods were read from Git Extensions' public source at the modern
+  commit (5190ba5) and each seeded shape reproduced standalone in `PreservingSeedDivergenceTests`
+  (`Equiv.Tests.Integration`), with the WinForms and tree-node types as a separate assembly.
+- S186 (`Commute`), criterion 1: the method builds a command line from a `+` chain of `string` operands, and the seed
+  swapped two of them. The two IRs call `string.Concat` with the operands in a different order, so the result and the
+  argument passed on to the process start differ. Classification: **seeder bug** (`string`'s `+` is concatenation, not
+  commutative).
+- S177 (`Commute`), criterion 1: the method returns a `+` of two `string` properties of `this` (then a third,
+  null-conditional operand). The seed swapped the first two: the getter calls come in the other order in the call
+  trace and the concatenation's operands are swapped. Classification: **seeder bug**, same cause as S186; the
+  getter-order half alone would be one too (ADR 0018: the call trace is observable).
+- S150 (`InlineTemporary`), criterion 1: the method is one statement, a WinForms control field's `Enabled` set to
+  another control field's `Checked`. With the temporary, the `Checked` getter is called before the receiver field is
+  read; inlined, the field is read first. The getter is an external call, which reads and writes every `field.*` map
+  (ADR 0018), so the temporary side reads the field from the map the getter wrote and the inlined side from the one
+  before it: a getter that reassigns the field changes which control is enabled. Classification: **correct**. The seed
+  changes behaviour whenever the getter can write that field, and `equiv` cannot rule that out, so the precondition is
+  tightened.
+- Fix (criterion 2): `Commute` now binds the method against the BCL (as the P2-048 operators do) and offers a site
+  only when the operator is built-in and not on `string` or a delegate, and every name in both operands is a local,
+  parameter or field (no member access, so no property getter), with every nested operator built-in and not on
+  `string`. `IntroduceTemporary`/`InlineTemporary` offer an assignment only when its target is a bare name, so no
+  receiver is read before the value. Tests: `SyntaxMutatorTests` (seeder) for the sites kept and refused;
+  `PreservingSeedDivergenceTests` shows each seeded shape Divergent and the sites still offered (an integer sum
+  commuted, a temporary before a bare-name target) Equivalent.
+- Deviation: criterion 3 (re-run Equivalent for each seeder-bug seed) cannot hold. The two `Commute` seeds really change
+  behaviour, so an Equivalent verdict on them would make `equiv` unsound (as in P2-036). After the fix the seeder no longer
+  produces any of the three seeds, which `SyntaxMutatorTests` shows on the same shapes. No re-run on the corpus either:
+  `.corpus/` is not on this box, so the next `-SeedMechanical` run on Git Extensions (P2-047 or later) confirms it.
+- Decision: `Commute` rejects every member access, a field one included, because the seeder's BCL-only model cannot tell
+  a corpus field from a property, and a null receiver makes a field read throw. It costs `Commute` sites, never
+  soundness; PairGen's operands are locals, parameters and a static field, so the differential gate keeps its sites
+  (`DifferentialSoundnessTests` and `PairGenTests` pass).
+- Decision: `object`'s reference `==` still commutes: it is built-in and calls nothing.
