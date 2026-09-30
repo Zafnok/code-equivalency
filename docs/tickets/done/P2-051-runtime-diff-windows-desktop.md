@@ -1,5 +1,5 @@
 # P2-051 `runtime-diff` measures Windows Forms and System.Drawing members, and every external callee
-Status: in-progress
+Status: done (PR #291)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-033
@@ -66,3 +66,4 @@ Third-party packages.
 - Surprise: `externalCallees` spells `System.IntPtr` where .NET 10's symbols spell `nint`, so IntPtr members never resolve; harmless today, since no input can be built for IntPtr.
 - Surprise: restoring `runtime-changes.json` with `Copy-Item` kept its older timestamp, so the incremental build silently re-embedded nothing and the first "after" census equalled "before". Touch the file before rebuilding.
 - Decision: `tools/runtime-diff/Program.cs` now gives its host `.Within(work)`. The run's drivers had the caller's working directory, and with every external callee in scope, `File`/`Directory` members created about 80 files and folders with generated names in the repository root (untracked; not committed). `compare --execute` already did this (P2-040).
+- Decision: no `Release:` footer. New runtime-changes rows change no surface equiv-release lists (CLI, exit codes, SARIF shape, verdict meanings, file formats); M3-033's measured rows shipped as a patch too.
