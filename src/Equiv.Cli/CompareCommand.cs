@@ -145,11 +145,6 @@ internal static class CompareCommand
 
         Streams streams = options.Streams ?? Streams.Current;
         ExecutionEnvironment? executing = options.Execute ? execution ?? ExecutionEnvironment.Current : null;
-        if (!StartExecuting(executing, streams.Error))
-        {
-            return ExitCodes.UsageError;
-        }
-
         if (!File.Exists(options.LegacyPath) || !File.Exists(options.ModernPath))
         {
             streams.Error.WriteLine($"error: file not found (legacy={options.LegacyPath}, modern={options.ModernPath})");
@@ -190,6 +185,11 @@ internal static class CompareCommand
         if (analysis is null)
         {
             return ExitCodes.LoadFailure;
+        }
+
+        if (!StartExecuting(executing, analysis, streams.Error))
+        {
+            return ExitCodes.UsageError;
         }
 
         // Two numbers, never a total: the licence measures each codebase on its own (ticket M3-014).
@@ -303,22 +303,20 @@ internal static class CompareCommand
     }
 
     /// <summary>
-    /// ADR 0035's consequences for <c>--execute</c>: it needs Windows, else the run stops with exit 3, and it says on stderr that
-    /// it runs the solutions' code. Without <c>--execute</c> (<paramref name="executing"/> null) it does nothing.
+    /// ADR 0035's consequences for <c>--execute</c>, once the solutions are loaded: a side on .NET Framework needs Windows,
+    /// else the run stops with exit 3 naming the project and its runtime (ADR 0040 decision 3; ticket P2-056), and it says
+    /// on stderr that it runs the solutions' code. Without <c>--execute</c> (<paramref name="executing"/> null) it does nothing.
     /// </summary>
-    private static bool StartExecuting(ExecutionEnvironment? executing, TextWriter error)
+    private static bool StartExecuting(ExecutionEnvironment? executing, FrontendAnalysis analysis, TextWriter error)
     {
-        switch (executing)
+        if (executing is null)
         {
-            case null:
-                return true;
-            case { IsWindows: false }:
-                error.WriteLine(ExecutionEnvironment.NeedsWindows);
-                return false;
-            default:
-                error.WriteLine(ExecutionEnvironment.Note);
-                return true;
+            return true;
         }
+
+        string? refusal = executing.Refusal(analysis);
+        error.WriteLine(refusal ?? ExecutionEnvironment.Note);
+        return refusal is null;
     }
 
     /// <summary>

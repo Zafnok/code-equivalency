@@ -137,7 +137,12 @@ internal static class DriverLibraries
             Odd.Replace("/*MODERN*/", "C = 3", StringComparison.Ordinal).Replace("/*ONLYMODERN*/", "public static int OnlyModern() => 0;", StringComparison.Ordinal),
             runtime);
         string forms = Library("forms", Forms, runtime, "System.Windows.Forms");
-        return new DriverFactory(() => new DriverReferences([.. runtime, legacy, forms], [.. runtime, modern], [forms]));
+        return new DriverFactory(
+            DriverFactory.DefaultLegacy,
+            DriverFactory.DefaultModern,
+            target => target.Family == TargetRuntime.RuntimeFamily.NetFramework
+                ? new DriverRuntime(target, string.Empty) { References = [.. runtime, legacy, forms] }
+                : new DriverRuntime(target, "10.0.1", "10.0.1") { References = [.. runtime, modern], Desktop = [forms] });
     }
 
     private static string Library(string side, string source, IReadOnlyList<string> references, string name = "Odd")

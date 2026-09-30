@@ -1,5 +1,5 @@
 # P2-056 `--execute` and `runtime-diff` run each side on its own runtime
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-053
@@ -59,3 +59,16 @@ project could be hosted on: use the first in `run.properties.runtimes` order and
 line.
 
 ## Notes
+- Decision: `DriverRuntime` (frontend-internal, new) says how a driver runs on one `TargetRuntime`: extension, C# version, and the `app.config` or `runtimeconfig.json` it writes. `DriverReferences` becomes the locator for any runtime: `Host(runtime)` (the installed runtime only, for replay drivers, which compile against their project's own references) and `For(runtime)` (plus reference assemblies, for member drivers). One driver template stays (`DriverSource`).
+- Decision: `rollForward: Disable` forbids even patch roll-forward, so `runtimeconfig.json` names the exact installed shared framework version: the newest numbered `shared/Microsoft.NETCore.App/<major.minor>.*` of the `dotnet` install equiv runs on (previews ignored), and likewise `Microsoft.WindowsDesktop.App` for a desktop driver.
+- Decision: the .NET reference pack is matched on `<major.minor>.*`, not the ticket's `<major>.*`, so `netcoreapp3.0` and `netcoreapp3.1` never take each other's pack; for net5.0 and later the two are the same.
+- Decision: a .NET Framework 4.x runtime counts as installed when `%WINDIR%\Microsoft.NET\Framework\v4.0.30319` exists (every 4.x runs on that CLR); a member driver also needs the targeting pack `v<version>` with its `FrameworkList.xml`.
+- Decision: C# version by runtime: .NET Framework and .NET Core 2.x 7.3, 3.x 8, net5 9, net6 10, net7 11, net8 12, net9 13, net10 14, anything newer `Latest`.
+- Decision: a project hosted on several runtimes replays on the first in `run.properties.runtimes` order (runtime order); an unhosted project, which has none, makes its side `not-constructible` with `the <side> project <name> has no detected runtime` (there is no tfm to call "not installed").
+- Decision: in `runtime-diff`, a runtime that is not installed makes `Resolve` return one signature for the `--member` text whose only not-constructible reason is `runtime <tfm> not installed`, so the tool reports it and exits 0; `Create` throws the same reason.
+- Decision: the one Windows check is `Equiv.Execute.WindowsRequirement.Refusal` (public, since `Equiv.Execute` cannot see `Equiv.Cli`); `ExecutionEnvironment.Refusal(analysis)` wraps it for `compare` and `probe`, `RuntimeDiff` calls it with `--from`/`--to`. Message: `<project> runs on <tfm>, and .NET Framework needs Windows (ADR 0040)`, prefixed `error: --execute: ` or `runtime-diff: `.
+- Decision: `compare --execute` checks after loading, since the runtimes come from the loaded projects, so off Windows a framework pair now loads before exit 3. `equiv mcp --execute` no longer refuses at startup (no solution is known there): it always prints the note and registers `probe`, and `probe` refuses a framework pair per call.
+- Decision: `runtime-diff`'s report format is unchanged (no `from`/`to` fields); criterion 5 asks only for the flags.
+- Decision: `corpus.ps1 -RuntimeDiff` passes, per side, the runtime most of that side's projects run on in the census SARIF's `run.properties.runtimes` (a hosted project counts its first; `netstandard` and `unknown` count for nothing); a census from before P2-053 keeps `runtime-diff`'s defaults.
+- Deviation: `ReplayIntegrationTests.SameRuntimePairReplays` lives in `Equiv.Frontend.CSharp.Tests` (which now references `Equiv.Execute`), not `Equiv.Tests.Integration`, because CI runs the integration project on Windows only and the ticket wants it on Linux too. It builds two projects over the test host's runtime, locates that runtime as `--execute` does, and runs both drivers through the real `ChildProcessHost`.
+- Deviation: README's `--execute` and `probe` paragraphs said both need Windows unconditionally; corrected, since this ticket made that false (README is otherwise P2-057's).

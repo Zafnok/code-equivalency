@@ -123,7 +123,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
             ModernNotBuilt = modern.NotBuilt,
             LegacyRuntimes = Reported(legacy.Runtimes),
             ModernRuntimes = Reported(modern.Runtimes),
-            Replay = new ReplayDriverFactory(Targets(legacyByIdentity), Targets(modernByIdentity)),
+            Replay = new ReplayDriverFactory(Targets(legacyByIdentity, legacy.Runtimes), Targets(modernByIdentity, modern.Runtimes), DriverReferences.Installed().Host),
         };
     }
 
@@ -131,9 +131,19 @@ public sealed class CSharpFrontend : ILanguageFrontend
     private static ImmutableArray<(string Project, string Runtime, string Source)> Reported(ImmutableArray<ProjectRuntime> runtimes) =>
         [.. runtimes.Select(static r => (r.Project, r.Runtime, r.Source))];
 
-    /// <summary>Each procedure's symbol and compilation, for replay under <c>--execute</c> (ticket M4-009).</summary>
-    private static Dictionary<ProcedureIdentity, ReplayTarget> Targets(Dictionary<ProcedureIdentity, SideProcedure> byIdentity) =>
-        byIdentity.ToDictionary(static p => p.Key, static p => new ReplayTarget(p.Value.Symbol, p.Value.Compilation));
+    /// <summary>
+    /// Each procedure's symbol, compilation and its project's runtime, for replay under <c>--execute</c> (tickets M4-009,
+    /// P2-056). A project hosted on several runtimes runs on the first in runtime order, as <c>run.properties.runtimes</c>
+    /// lists them; an unhosted one has none.
+    /// </summary>
+    private static Dictionary<ProcedureIdentity, ReplayTarget> Targets(Dictionary<ProcedureIdentity, SideProcedure> byIdentity, ImmutableArray<ProjectRuntime> runtimes)
+    {
+        Dictionary<string, TargetRuntime?> byProject = runtimes.DistinctBy(static r => r.Project, StringComparer.Ordinal)
+            .ToDictionary(static r => r.Project, static r => r.Runtimes.FirstOrDefault(), StringComparer.Ordinal);
+        return byIdentity.ToDictionary(
+            static p => p.Key,
+            p => new ReplayTarget(p.Value.Symbol, p.Value.Compilation, byProject.GetValueOrDefault(p.Value.Compilation.AssemblyName!)));
+    }
 
     /// <summary>
     /// Both bodies of every pair in <paramref name="pairs"/>, lowered. A pair whose lowering throws is left out and

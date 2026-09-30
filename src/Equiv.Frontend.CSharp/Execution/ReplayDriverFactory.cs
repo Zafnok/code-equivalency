@@ -17,15 +17,18 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// <see cref="IReplayDriverFactory"/> over the projects one <see cref="CSharpFrontend.Analyze"/> loaded (ADR 0035 decision
 /// 2; ticket M4-009). Each project a replay needs is emitted once, into <c>&lt;directory&gt;/&lt;side&gt;/&lt;assembly&gt;</c>
 /// (<see cref="ProjectEmitter"/>), and each replay's driver is compiled against that project's own references into the same
-/// folder: <c>EquivReplay&lt;n&gt;.exe</c> with an <c>app.config</c> on the legacy side, run on .NET Framework 4.8, and
-/// <c>EquivReplay&lt;n&gt;.dll</c> with a <c>runtimeconfig.json</c> on the modern side, run on .NET 10. Its source is written
-/// beside it, so a reproduced divergence is one the user can read and run. <see cref="Plan"/> builds the same two drivers
+/// folder, for that project's detected runtime (<see cref="ReplayTarget.Runtime"/>; ADR 0040 decision 3, ticket P2-056):
+/// <c>EquivReplay&lt;n&gt;.exe</c> with an <c>app.config</c> on .NET Framework, <c>EquivReplay&lt;n&gt;.dll</c> with a
+/// <c>runtimeconfig.json</c> on .NET (<see cref="DriverRuntime"/>). A same-runtime pair runs both sides on that one runtime.
+/// A runtime <paramref name="hosts"/> does not find installed makes the plan not constructible, and none is used in its
+/// place. Its source is written beside it, so a reproduced divergence is one the user can read and run. <see cref="Plan"/> builds the same two drivers
 /// for an Unknown pair to be tested on generated inputs (ticket P1-008). <see cref="Probe"/> builds them for one case an
 /// agent supplies itself, with no model in play (ADR 0035, ADR 0036; ticket M5-002).
 /// </summary>
 internal sealed class ReplayDriverFactory(
     IReadOnlyDictionary<ProcedureIdentity, ReplayTarget> legacy,
-    IReadOnlyDictionary<ProcedureIdentity, ReplayTarget> modern) : IReplayDriverFactory
+    IReadOnlyDictionary<ProcedureIdentity, ReplayTarget> modern,
+    Func<TargetRuntime, DriverRuntime?> hosts) : IReplayDriverFactory
 {
     private const string EmitFailed = "emit-failed";
     private const string ModernSide = "modern";
@@ -179,6 +182,11 @@ internal sealed class ReplayDriverFactory(
     private (string? Driver, string Problem) Driver(ReplayTarget target, string sideDirectory, int number, bool legacy)
     {
         string side = legacy ? "legacy" : ModernSide;
+        if (Host(target) is not { } host)
+        {
+            return (null, target.Runtime is { } runtime ? DriverFactory.NotInstalled(runtime) : $"the {side} project {target.Compilation.AssemblyName} has no detected runtime");
+        }
+
         string project = Path.Combine(sideDirectory, target.Compilation.AssemblyName!);
         if (!emitted.TryGetValue((target.Compilation, sideDirectory), out string? failure))
         {
@@ -192,12 +200,12 @@ internal sealed class ReplayDriverFactory(
         }
 
         string name = "EquivReplay" + number.ToString(CultureInfo.InvariantCulture);
-        string path = Path.Combine(project, name + (legacy ? ".exe" : ".dll"));
+        string path = Path.Combine(project, name + host.Extension);
         string source = DriverSource.Generate(target.Method, constructReceiver: true);
         File.WriteAllText(Path.ChangeExtension(path, ".cs"), source);
         CSharpCompilation driver = CSharpCompilation.Create(
             name,
-            [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(legacy ? LanguageVersion.CSharp7_3 : LanguageVersion.Latest))],
+            [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(host.Language))],
             [.. target.Compilation.References, target.Compilation.ToMetadataReference()],
             new CSharpCompilationOptions(OutputKind.ConsoleApplication, optimizationLevel: OptimizationLevel.Release, deterministic: true));
         EmitResult result = driver.Emit(path);
@@ -206,7 +214,10 @@ internal sealed class ReplayDriverFactory(
             return (null, $"the {side} driver does not compile: {string.Join("; ", result.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error))}");
         }
 
-        File.WriteAllText(legacy ? path + ".config" : Path.ChangeExtension(path, ".runtimeconfig.json"), legacy ? DriverFactory.AppConfig : DriverFactory.RuntimeConfig);
+        host.WriteConfig(path, desktop: false);
         return (path, string.Empty);
     }
+
+    /// <summary>The installed runtime <paramref name="target"/>'s project runs on, or null when it has none or it is not installed.</summary>
+    private DriverRuntime? Host(ReplayTarget target) => target.Runtime is { } runtime ? hosts(runtime) : null;
 }

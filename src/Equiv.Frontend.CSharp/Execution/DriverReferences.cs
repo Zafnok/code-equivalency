@@ -1,46 +1,83 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
+
+using Equiv.Core;
 
 namespace Equiv.Frontend.CSharp.Execution;
 
 /// <summary>
-/// The reference assemblies a driver compiles against (ADR 0035, ticket M3-032): the installed .NET Framework 4.8
-/// targeting pack for the legacy side, which holds <c>System.Windows.Forms</c> and <c>System.Drawing</c> too, and the newest
-/// installed <c>Microsoft.NETCore.App.Ref</c> 10.x pack for the modern side, with the newest
-/// <c>Microsoft.WindowsDesktop.App.Ref</c> 10.x pack as <see cref="Desktop"/> (ticket P2-051). A side with nothing
-/// installed has no paths.
+/// Where a driver's runtime and reference assemblies are installed, for any detected runtime (ADR 0040 decision 3; tickets
+/// M3-032, P2-051, P2-056). .NET Framework 4.x: the CLR under <see cref="FrameworkRuntime"/>, and the targeting pack
+/// <c>v&lt;version&gt;</c> under <see cref="FrameworkPacks"/>, which holds <c>System.Windows.Forms</c> and
+/// <c>System.Drawing</c> too. .NET (Core): the newest installed <c>shared/Microsoft.NETCore.App/&lt;major.minor&gt;.*</c>
+/// under <see cref="Dotnet"/>, the newest <c>packs/Microsoft.NETCore.App.Ref/&lt;major.minor&gt;.*</c>, and their Windows
+/// Desktop counterparts when both are installed. A runtime that is not installed is never replaced by another one.
 /// </summary>
-internal sealed record DriverReferences(IReadOnlyList<string> Legacy, IReadOnlyList<string> Modern, IReadOnlyList<string> Desktop)
+internal sealed record DriverReferences(string FrameworkPacks, string FrameworkRuntime, string Dotnet)
 {
-    public DriverReferences(IReadOnlyList<string> legacy, IReadOnlyList<string> modern)
-        : this(legacy, modern, [])
-    {
-    }
+    private const string CoreApp = "Microsoft.NETCore.App";
+    private const string DesktopApp = "Microsoft.WindowsDesktop.App";
 
     public static DriverReferences Installed() =>
-        Find(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), RuntimeEnvironment.GetRuntimeDirectory());
+        Find(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), RuntimeEnvironment.GetRuntimeDirectory(), Environment.GetFolderPath(Environment.SpecialFolder.Windows));
 
     /// <summary>
-    /// The targeting pack under <paramref name="programFilesX86"/>, and the reference pack of the .NET install whose
-    /// shared runtime is <paramref name="runtimeDirectory"/> (<c>&lt;root&gt;/shared/Microsoft.NETCore.App/&lt;version&gt;</c>),
-    /// with its Windows Desktop reference pack.
+    /// The targeting packs under <paramref name="programFilesX86"/>, the .NET Framework CLR under <paramref name="windows"/>,
+    /// and the .NET install whose shared runtime is <paramref name="runtimeDirectory"/>
+    /// (<c>&lt;root&gt;/shared/Microsoft.NETCore.App/&lt;version&gt;</c>).
     /// </summary>
-    public static DriverReferences Find(string programFilesX86, string runtimeDirectory)
+    public static DriverReferences Find(string programFilesX86, string runtimeDirectory, string windows) => new(
+        Path.Combine(programFilesX86, "Reference Assemblies", "Microsoft", "Framework", ".NETFramework"),
+        Path.Combine(windows, "Microsoft.NET", "Framework", "v4.0.30319"),
+        Path.GetFullPath(Path.Combine(runtimeDirectory, "..", "..", "..")));
+
+    /// <summary>The installed runtime a driver for <paramref name="target"/> runs on, without reference assemblies; null when it is not installed.</summary>
+    public DriverRuntime? Host(TargetRuntime target)
     {
-        string framework = Path.Combine(programFilesX86, "Reference Assemblies", "Microsoft", "Framework", ".NETFramework", "v4.8");
-        string packs = Path.GetFullPath(Path.Combine(runtimeDirectory, "..", "..", "..", "packs"));
-        return new DriverReferences(Framework(framework), Pack(packs, "Microsoft.NETCore.App.Ref"), Pack(packs, "Microsoft.WindowsDesktop.App.Ref"));
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (target.Family == TargetRuntime.RuntimeFamily.NetFramework)
+        {
+            return Directory.Exists(FrameworkRuntime) ? new DriverRuntime(target, string.Empty) : null;
+        }
+
+        string shared = Path.Combine(Dotnet, "shared");
+        return Newest(Path.Combine(shared, CoreApp), target) is { } core
+            ? new DriverRuntime(target, Path.GetFileName(core), Newest(Path.Combine(shared, DesktopApp), target) is { } desktop ? Path.GetFileName(desktop) : string.Empty)
+            : null;
     }
 
-    /// <summary>The <c>net10.0</c> reference assemblies of the newest 10.x version of the pack <paramref name="name"/>.</summary>
-    private static List<string> Pack(string packs, string name)
+    /// <summary>
+    /// The installed runtime for <paramref name="target"/> with the reference assemblies a member driver compiles against;
+    /// null when the runtime or its reference pack is not installed.
+    /// </summary>
+    public DriverRuntime? For(TargetRuntime target)
     {
-        string versions = Path.Combine(packs, name);
-        string? pack = Directory.Exists(versions)
-            ? Directory.EnumerateDirectories(versions, "10.*").MaxBy(static d => Version.TryParse(Path.GetFileName(d), out Version? version) ? version : null)
-            : null;
-        return pack is null ? [] : Dlls(Path.Combine(pack, "ref", "net10.0"), static _ => true);
+        if (Host(target) is not { } host)
+        {
+            return null;
+        }
+
+        string packs = Path.Combine(Dotnet, "packs");
+        List<string> references = host.IsFramework
+            ? Framework(Path.Combine(FrameworkPacks, "v" + target.Version.ToString()))
+            : Pack(packs, CoreApp + ".Ref", target);
+        List<string> desktop = host.DesktopVersion.Length > 0 ? Pack(packs, DesktopApp + ".Ref", target) : [];
+        return references.Count == 0 ? null : host with { References = references, Desktop = desktop };
     }
+
+    /// <summary>The newest numbered <c>&lt;major.minor&gt;.*</c> folder under <paramref name="versions"/>, or null.</summary>
+    private static string? Newest(string versions, TargetRuntime target) =>
+        Directory.Exists(versions)
+            ? Directory.EnumerateDirectories(versions, string.Create(CultureInfo.InvariantCulture, $"{target.Version.Major}.{target.Version.Minor}.*"))
+                .Where(static d => Version.TryParse(Path.GetFileName(d), out _))
+                .MaxBy(static d => Version.Parse(Path.GetFileName(d)))
+            : null;
+
+    /// <summary>The <c>ref/&lt;tfm&gt;</c> reference assemblies of the newest installed version of the pack <paramref name="name"/>.</summary>
+    private static List<string> Pack(string packs, string name, TargetRuntime target) =>
+        Newest(Path.Combine(packs, name), target) is { } pack ? Dlls(Path.Combine(pack, "ref", target.ToString()), static _ => true) : [];
 
     /// <summary>
     /// The targeting pack's assemblies that its <c>RedistList/FrameworkList.xml</c> names. The folder also holds native

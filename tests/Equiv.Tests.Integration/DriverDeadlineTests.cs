@@ -87,7 +87,7 @@ public sealed class DriverDeadlineTests : IDisposable
         CSharpCompilation compilation = CSharpCompilation.Create(
             name,
             [CSharpSyntaxTree.ParseText(source, cancellationToken: TestContext.Current.CancellationToken)],
-            [.. DriverReferences.Installed().Modern.Select(static r => MetadataReference.CreateFromFile(r))],
+            [.. DriverReferences.Installed().For(DriverFactory.DefaultModern)!.References.Select(static r => MetadataReference.CreateFromFile(r))],
             new CSharpCompilationOptions(OutputKind.ConsoleApplication));
         string path = Path.Combine(folder, name + ".dll");
         EmitResult result;
@@ -97,7 +97,7 @@ public sealed class DriverDeadlineTests : IDisposable
         }
 
         Assert.True(result.Success, string.Join("; ", result.Diagnostics));
-        File.WriteAllText(Path.ChangeExtension(path, ".runtimeconfig.json"), DriverFactory.RuntimeConfig);
+        DriverReferences.Installed().For(DriverFactory.DefaultModern)!.WriteConfig(path, desktop: false);
         return path;
     }
 }

@@ -6,8 +6,8 @@ using Equiv.Core.Verdicts;
 namespace Equiv.Core.Execution;
 
 /// <summary>
-/// Turns a Divergent's model into drivers that call the legacy method on .NET Framework 4.8 and the modern method on
-/// .NET 10 (ADR 0035 decision 2; ticket M4-009), and an Unknown pair into drivers to test on generated inputs (decision 3;
+/// Turns a Divergent's model into drivers that call each side's method on its project's detected runtime (ADR 0035
+/// decision 2, ADR 0040 decision 3; tickets M4-009, P2-056), and an Unknown pair into drivers to test on generated inputs (decision 3;
 /// ticket P1-008). Implemented by a language frontend, which alone holds the loaded projects.
 /// </summary>
 public interface IReplayDriverFactory

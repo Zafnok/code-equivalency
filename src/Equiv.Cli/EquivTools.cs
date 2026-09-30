@@ -19,7 +19,7 @@ namespace Equiv.Cli;
 /// disk, and returns a one-line summary followed by the SARIF log as JSON text. An input error the CLI maps to exit 3 or 4 has
 /// no log; it comes back as a tool error (<c>isError: true</c>) carrying the message the CLI prints on stderr.
 /// <paramref name="execution"/> also registers <see cref="ProbeTool"/>'s <c>probe</c> tool, only when <c>equiv mcp</c> was
-/// started with <c>--execute</c> on Windows (ADR 0035; ticket M5-002); null leaves it unregistered.
+/// started with <c>--execute</c> (ADR 0035; tickets M5-002, P2-056); null leaves it unregistered.
 /// </summary>
 internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, ExecutionEnvironment? execution = null)
 {

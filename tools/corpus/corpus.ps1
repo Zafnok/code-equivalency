@@ -741,7 +741,7 @@ switch ($PSCmdlet.ParameterSetName) {
 
     'RuntimeDiff' {
         # ADR 0035 decision 1 (M3-033): the most-called BCL members a pair's lowered bodies call, from the
-        # census (M3-030/M3-033's externalCallees), run for real on both runtimes.
+        # census (M3-030/M3-033's externalCallees), run for real on the pair's detected runtimes (P2-056).
         $slug = Resolve-Slug $RuntimeDiff
         $runsDir = Join-Path (Get-PairDir $slug) 'runs'
         $sarif = @(Get-ChildItem -LiteralPath $runsDir -Directory -Filter '*census*' -ErrorAction SilentlyContinue |
@@ -755,9 +755,32 @@ switch ($PSCmdlet.ParameterSetName) {
         # changedReasonSets keys "no opaque" as "" (ADR 0034); externalCallees never does, but the same
         # replace is harmless and keeps this in step with -Metrics's parsing.
         $text = (Get-Content -LiteralPath $sarif[0] -Raw) -replace '([{,]\s*)""(\s*:)', '$1"(no opaque)"$2'
-        $census = ($text | ConvertFrom-Json).runs[0].properties.loweringCensus
+        $properties = ($text | ConvertFrom-Json).runs[0].properties
+        $census = $properties.loweringCensus
         if ($null -eq $census -or -not $census.PSObject.Properties['externalCallees']) {
             throw "no loweringCensus.externalCallees in $($sarif[0]); needs M3-033"
+        }
+
+        # ADR 0040 decision 3 (P2-056): each side runs on the runtime the census detected for it
+        # (run.properties.runtimes, P2-053), the one most of that side's projects run on; a hosted project
+        # counts the first of its runtimes, and netstandard or unknown ones count for nothing. A census
+        # from before P2-053, or a side with no such project, keeps runtime-diff's own default.
+        $runtimeArgs = @()
+        foreach ($side in @(@{ Name = 'legacy'; Flag = '--from' }, @{ Name = 'modern'; Flag = '--to' })) {
+            $tfm = $null
+            if ($null -ne $properties.runtimes -and $properties.runtimes.PSObject.Properties[$side.Name]) {
+                $tfm = @($properties.runtimes.($side.Name) |
+                    ForEach-Object { ($_.runtime -split ',')[0].Trim() } |
+                    Where-Object { $_ -match '^net(coreapp)?[0-9]' } |
+                    Group-Object | Sort-Object Count -Descending | Select-Object -First 1 -ExpandProperty Name)
+            }
+            if ($tfm) {
+                $runtimeArgs += @($side.Flag, "$tfm")
+                Show-Step ("runtime {0} {1} (detected)" -f $side.Name, $tfm)
+            }
+            else {
+                Show-Step ("runtime {0} runtime-diff's default (none detected)" -f $side.Name)
+            }
         }
 
         # A generic method's identity carries an equiv-only <T1,T2> instantiation suffix (CallIdentityFactory);
@@ -791,7 +814,7 @@ switch ($PSCmdlet.ParameterSetName) {
                 $out = Join-Path $outDir "$safe.json"
                 if (Test-Path -LiteralPath $out) { continue }
                 Show-Step ("[{0}/{1}] runtime-diff --member `"{2}`"" -f $index, $members.Count, $member)
-                dotnet run --project $runtimeDiffProject -c Release --no-build -- --member $member --seed 0 --cases 64 --out $out 2>&1 |
+                dotnet run --project $runtimeDiffProject -c Release --no-build -- --member $member @runtimeArgs --seed 0 --cases 64 --out $out 2>&1 |
                     ForEach-Object { "$_" } | ForEach-Object { Show-Step "  $_" }
             }
         }

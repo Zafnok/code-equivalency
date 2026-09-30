@@ -15,6 +15,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
+    <!-- P2-056: ReplayIntegrationTests replays a same-runtime pair through the real driver host, on any OS. -->
+    <ProjectReference Include="..\..\src\Equiv.Execute\Equiv.Execute.csproj" />
     <ProjectReference Include="..\Equiv.TestSupport\Equiv.TestSupport.csproj" />
   </ItemGroup>
 
