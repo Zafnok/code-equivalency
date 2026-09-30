@@ -1,5 +1,5 @@
 # P2-060 A call writes only the heap its callee can reach, so a BCL call cannot change a user field
-Status: in-progress
+Status: done (PR #312)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-017
