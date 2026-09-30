@@ -12,6 +12,9 @@ namespace Equiv.Core.Matching;
 /// frontend lowered the pair. <see cref="OldFingerprint"/> and <see cref="NewFingerprint"/> are the bound fingerprints
 /// of those bodies (ADR 0024; ticket M3-015); null when a side has no body. <see cref="EquivalencesApplied"/> is the sorted,
 /// distinct ids of the API-equivalence catalogue entries that fired while either body was lowered (ADR 0020; ticket M3-009).
+/// <see cref="Lowering"/> is the lowering both bodies came from under <c>--il-fallback</c>, <c>operation</c> or <c>il</c>, and
+/// <see cref="IlFallbackTried"/> whether the pair was lowered again from IL to choose it (ADR 0039; ticket P1-016); without the
+/// flag they are null and false.
 /// </summary>
 public sealed record ProcedurePair(
     ProcedureIdentity Old,
@@ -24,4 +27,8 @@ public sealed record ProcedurePair(
     public BodyFingerprint? OldFingerprint { get; init; }
 
     public BodyFingerprint? NewFingerprint { get; init; }
+
+    public string? Lowering { get; init; }
+
+    public bool IlFallbackTried { get; init; }
 }

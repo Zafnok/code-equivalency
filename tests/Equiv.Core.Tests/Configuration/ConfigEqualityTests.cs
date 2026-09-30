@@ -94,6 +94,7 @@ public sealed class ConfigEqualityTests
             { baseline, baseline with { SuppressApiEquivalences = ["webapi."] } },
             { baseline, baseline with { LegacyRuntime = TargetRuntime.Parse("net48") } },
             { baseline, baseline with { ModernRuntime = TargetRuntime.Parse("net8.0") } },
+            { baseline, baseline with { IlFallback = true } },
         };
     }
 
