@@ -111,12 +111,16 @@ internal sealed partial class IlLowerer
         return new SlicePlace(heap.Backing(field, Upcast(receiver, field.ContainingType), context) with { IsNull = Checked(isNull, address.DelayExceptions) }, field.Type);
     }
 
+    /// <summary>
+    /// An element is the array's slice of its sort's map, of the array's own element type: ILSpy types the address by IL's
+    /// opcode, which is a <c>short</c> for a <c>char[]</c>'s <c>stelem.i2</c> and a <c>byte</c> for a <c>bool[]</c>'s
+    /// <c>ldelem.u1</c>, but an array's elements are one map whatever opcode reaches them.
+    /// </summary>
     private SlicePlace Element(LdElema address)
     {
-        ITypeSymbol element = symbols.Type(address.Type)!;
-        IArrayTypeSymbol type = compilation.CreateArrayTypeSymbol(element);
-        Val array = Receiver(address.Array, type);
-        IrVar reference = Coerce(array, type)!;
+        Val array = Receiver(address.Array, compilation.CreateArrayTypeSymbol(symbols.Type(address.Type)!));
+        IrVar reference = array.Var;
+        ITypeSymbol element = ((IArrayTypeSymbol)array.Type).ElementType;
         IrVar index = Value(address.Indices[0], Int32);
         IrVar? isNull = Checked(Nullness(address.Array, array.Var), address.DelayExceptions);
         if (!address.DelayExceptions)

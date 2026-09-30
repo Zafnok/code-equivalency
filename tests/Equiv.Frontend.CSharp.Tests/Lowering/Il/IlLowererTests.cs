@@ -329,6 +329,25 @@ public sealed class IlLowererTests
     }
 
     /// <summary>
+    /// Ticket P1-015 acceptance criterion 1: the keys <c>IL-COVERAGE.md</c> marks <c>lowered</c> are exactly the keys the
+    /// lowering lowers, every key of P1-012's mapping table among them, and each names a test.
+    /// </summary>
+    [Fact]
+    public void EveryLoweredKeyIsLoweredInTheTable()
+    {
+        ImmutableArray<string[]> rows =
+        [
+            .. File.ReadLines(Path.Combine(IlSamples.RepoRoot, "docs", "tickets", "IL-COVERAGE.md"))
+                .Where(static l => l.StartsWith("| ", StringComparison.Ordinal) && !l.StartsWith("| ILAst key", StringComparison.Ordinal))
+                .Select(static l => l.Split('|')),
+        ];
+        ImmutableHashSet<string> lowered = [.. rows.Where(static r => r[2].TrimStart().StartsWith("lowered", StringComparison.Ordinal)).Select(static r => r[1].Trim())];
+
+        Assert.Equal(IlKeys.Lowered.Order(StringComparer.Ordinal), lowered.Order(StringComparer.Ordinal), StringComparer.Ordinal);
+        Assert.All(rows.Where(r => lowered.Contains(r[1].Trim())), static r => Assert.Contains("Tests.", r[^3], StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// ADR 0024 decision 2: an opaque of an unmapped key that only reads locals has a fingerprint of what it does, the same
     /// for the same operation on other locals, with its reads and a shadow after each reference; one that takes
     /// a local's address, reads through a <c>ref</c> or a caught exception, or calls a runtime-changed member has none.
@@ -572,6 +591,7 @@ public sealed class IlLowererTests
     [InlineData("static string M(ref string s, string t) { s = t; G(out t); return t; } static void G(out string t) { t = null; }", "refouts 1")]
     [InlineData("static void M(ref int x) => F(ref x); static void F(ref int x) { }", "refouts 1")]
     [InlineData("static int M(int[] a) { a[0] += 1; return a[0]; }", "return 8")]
+    [InlineData("static int M(int[] a, char[] c, bool[] b) { c[0] = 'x'; b[0] = c[0] == 'x'; return a[0] + (b[0] ? 1 : 0); }", "return 8")]
     public void AnAddressIsItsPlace(string members, string expected)
     {
         IrProcedure procedure = Lower(members);
@@ -581,7 +601,9 @@ public sealed class IlLowererTests
             ("x", IrBitVecValue.FromSigned(32, 3)),
             ("z", IrBitVecValue.FromSigned(32, 4)),
             ("array.int__", elements),
-            ("length.int__", new IrMapValue(new IrMap(new IrSort("int[]"), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 1), ImmutableDictionary<IrValue, IrValue>.Empty)));
+            ("length.int__", Lengths("int[]")),
+            ("length.char__", Lengths("char[]")),
+            ("length.bool__", Lengths("bool[]")));
         ImmutableArray<IrCall> calls = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>()];
         string actual = expected[..3] switch
         {
@@ -592,6 +614,7 @@ public sealed class IlLowererTests
 
         Assert.Empty(Opaques(procedure));
         Assert.Equal(expected, actual);
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("cast.", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -875,6 +898,10 @@ public sealed class IlLowererTests
         IrSort sort => new IrSortValue(sort.Name, 1),
         _ => new IrMapValue((IrMap)type, Default(((IrMap)type).Value), ImmutableDictionary<IrValue, IrValue>.Empty),
     };
+
+    /// <summary>Every array of <paramref name="sort"/> one element long.</summary>
+    private static IrMapValue Lengths(string sort) =>
+        new(new IrMap(new IrSort(sort), new IrBitVec(32)), IrBitVecValue.FromSigned(32, 1), ImmutableDictionary<IrValue, IrValue>.Empty);
 
     /// <summary>Every value of <paramref name="sort"/> null, or none.</summary>
     private static IrMapValue Nulls(string sort, bool isNull) =>
