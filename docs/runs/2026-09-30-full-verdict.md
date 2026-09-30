@@ -105,7 +105,7 @@ contains it. The 5% rule is ADR 0028's: a reason at or above 5% of changed pairs
 
 | Reason | Changed pairs it is in | Alone | Alone, share of changed pairs | Owner | Outcome |
 |---|---|---|---|---|---|
-| DelegateCreation | 328 | 194 | 17.0% | none open (M4-004 done: shares identical fragments only) | **P2-060 filed** |
+| DelegateCreation | 328 | 194 | 17.0% | none open (M4-004 done: shares identical fragments only) | **P2-067 filed** |
 | switch-pattern | 203 | 79 | 6.9% | P1-014, P1-015, P1-016 (ADR 0039 IL fallback) | owned |
 | Binary | 105 | 39 | 3.4% | ADR 0039 | below 5% |
 | Conversion | 100 | 22 | 1.9% | ADR 0039 | below 5% |
@@ -152,7 +152,7 @@ the forms Git Extensions uses are the forms those tickets lowered. Also in the c
 Every new crash, `not-reproduced` replay and Preserving seed reported Divergent is a ticket
 (M4-007 criterion 6). There are no crashes and no `not-reproduced`.
 
-- **P2-060** `DelegateCreation` is 17.0% of changed pairs on its own and has no open owner.
+- **P2-067** `DelegateCreation` is 17.0% of changed pairs on its own and has no open owner.
 - **P2-061** Three Preserving seeds turned an Equivalent result into Divergent (S150, S177, S186 on
   Git Extensions). Four other Preserving seeds are Divergent, but their methods already were without
   any seed. Ten Preserving seeds are EQ006 (runtime change; six Git Extensions, four Tomas); each was
