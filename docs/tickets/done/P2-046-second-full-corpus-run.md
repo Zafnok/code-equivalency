@@ -1,5 +1,5 @@
 # P2-046 Second full corpus run: measure again after the M4-007 fixes
-Status: done (PR #TBD)
+Status: done (PR #305)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-031, P2-032, P2-033, P2-034, P2-035, P2-039, P2-045 (all done)
