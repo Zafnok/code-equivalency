@@ -123,20 +123,15 @@ public sealed class RuntimeChangeTable
         return new RuntimeChangeTable(coveredFromRuntime, builder.ToImmutable());
     }
 
-    private static TargetRuntime? ParseChangedIn(string member, JsonElement element)
-    {
-        if (!element.TryGetProperty("changedIn", out JsonElement value))
-        {
-            throw new InvalidDataException($"runtime-changes row '{member}' has no changedIn");
-        }
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.Null => null,
-            JsonValueKind.String when TargetRuntime.Parse(value.GetString()!) is { } runtime => runtime,
-            _ => throw new InvalidDataException($"runtime-changes row '{member}' has malformed changedIn {value.GetRawText()}"),
-        };
-    }
+    private static TargetRuntime? ParseChangedIn(string member, JsonElement element) =>
+        !element.TryGetProperty("changedIn", out JsonElement value)
+            ? throw new InvalidDataException($"runtime-changes row '{member}' has no changedIn")
+            : value.ValueKind switch
+            {
+                JsonValueKind.Null => null,
+                JsonValueKind.String when TargetRuntime.Parse(value.GetString()!) is { } runtime => runtime,
+                _ => throw new InvalidDataException($"runtime-changes row '{member}' has malformed changedIn {value.GetRawText()}"),
+            };
 
     private static RuntimeChangeWitness? ParseWitness(JsonElement element) =>
         element.TryGetProperty("witness", out JsonElement witness) ? BuildWitness(witness) : null;
