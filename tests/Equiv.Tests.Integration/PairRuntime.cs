@@ -9,6 +9,7 @@ using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Lowering;
+using Equiv.Frontend.CSharp.Lowering.Il;
 using Equiv.TestSupport;
 using Equiv.Verify.Z3;
 
@@ -24,8 +25,9 @@ namespace Equiv.Tests.Integration;
 /// Compiles, runs and verifies a <see cref="PairGen"/> pair (ticket M0-012). Each side is its own compilation of the
 /// class <c>Oracle</c>, lowered by the real frontend and emitted, and the two lowered methods go to the real
 /// <see cref="Z3Backend"/> with the default bound and timeout. Execution is in-process, as in the lowering oracle: both
-/// images load into one collectible <see cref="AssemblyLoadContext"/>. <see cref="Analyse"/> memoises by the two
-/// sources, so the three rules of <see cref="DifferentialSoundnessTests"/> verify each pair once.
+/// images load into one collectible <see cref="AssemblyLoadContext"/>. Both sides are lowered by one <see cref="Lowering"/>
+/// (ticket P1-017): the IOperation lowering or the IL lowering. <see cref="Analyse"/> memoises by the two sources and the
+/// lowering, so the three rules of <see cref="DifferentialSoundnessTests"/> verify each pair once per lowering.
 /// </summary>
 internal static class PairRuntime
 {
@@ -42,7 +44,7 @@ internal static class PairRuntime
     /// <summary>The key a static field's map is read at: element 0 of its declaring type's sort.</summary>
     private static readonly IrSortValue Token = new("Oracle", 0);
 
-    private static readonly ConcurrentDictionary<(string Legacy, string Modern), Lazy<Analysis>> Analyses = new();
+    private static readonly ConcurrentDictionary<(string Legacy, string Modern, Lowering Lowering), Lazy<Analysis>> Analyses = new();
 
     public static CSharpCompilation Compile(string source, string assemblyName) => CSharpCompilation.Create(
         assemblyName,
@@ -50,26 +52,27 @@ internal static class PairRuntime
         References,
         new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-    public static Analysis Analyse(string legacy, string modern) =>
-        Analyses.GetOrAdd((legacy, modern), static key => new Lazy<Analysis>(() => Verify(key.Legacy, key.Modern))).Value;
+    /// <summary>The pair verified with both sides lowered by <paramref name="lowering"/>, by default <see cref="Lowering.Operation"/>.</summary>
+    public static Analysis Analyse(string legacy, string modern, Lowering? lowering = null) =>
+        Analyses.GetOrAdd((legacy, modern, lowering ?? Lowering.Operation), static key => new Lazy<Analysis>(() => Verify(key.Legacy, key.Modern, key.Lowering))).Value;
 
-    private static Analysis Verify(string legacy, string modern)
+    private static Analysis Verify(string legacy, string modern, Lowering lowering)
     {
-        (IrProcedure old, byte[] oldImage) = Lower(legacy, "Legacy");
-        (IrProcedure @new, byte[] newImage) = Lower(modern, "Modern");
+        (IrProcedure old, byte[] oldImage) = Lower(legacy, "Legacy", lowering);
+        (IrProcedure @new, byte[] newImage) = Lower(modern, "Modern", lowering);
         Verdict verdict = new Z3Backend().Verify(old, @new, new VerificationOptions(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, []));
         (PairInput? model, string? problem) = verdict is Divergent divergent ? Decode(old, @new, divergent.Counterexample.Inputs) : (null, null);
         return new Analysis(verdict, model, problem, oldImage, newImage) { Old = old, New = @new };
     }
 
-    private static (IrProcedure Procedure, byte[] Image) Lower(string source, string assemblyName)
+    private static (IrProcedure Procedure, byte[] Image) Lower(string source, string assemblyName, Lowering lowering)
     {
         CSharpCompilation compilation = Compile(source, assemblyName);
         using MemoryStream image = new();
         EmitResult emitted = compilation.Emit(image, cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(emitted.Success, string.Join('\n', emitted.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error)));
         IMethodSymbol method = compilation.GetTypeByMetadataName("Oracle")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-        return (IrLowerer.Lower(method, compilation, RenameMap.Empty, []), image.ToArray());
+        return (lowering.Lower(method, compilation), image.ToArray());
     }
 
     /// <summary>
@@ -119,6 +122,23 @@ internal static class PairRuntime
     private static bool IsNull(Dictionary<string, IrValue> model, IrValue reference) =>
         model.Any(e => e.Key.StartsWith("null.", StringComparison.Ordinal) && e.Value is IrMapValue nulls && nulls.MapType.Key == reference.Type
             && nulls.Read(reference) is IrBoolValue { Value: true });
+
+    /// <summary>
+    /// How both sides of a pair are lowered, named as SARIF's <c>properties.lowering</c> names it; memoised by reference, so
+    /// each is one instance.
+    /// </summary>
+    internal sealed class Lowering(string name, Func<IMethodSymbol, Compilation, IrProcedure> lower)
+    {
+        /// <summary>The primary lowering, from IOperation (ADR 0003).</summary>
+        public static Lowering Operation { get; } = new(IlFallback.Operation, static (method, compilation) => IrLowerer.Lower(method, compilation, RenameMap.Empty, []));
+
+        /// <summary>The fallback lowering, from ILAst (ADR 0039), forced on both sides whether or not the pair has an opaque.</summary>
+        public static Lowering Il { get; } = new(IlFallback.Il, static (method, compilation) => IlLowerer.Lower(method, compilation));
+
+        public IrProcedure Lower(IMethodSymbol method, Compilation compilation) => lower(method, compilation);
+
+        public override string ToString() => name;
+    }
 
     /// <summary>A verified pair: the verdict, its model as C# arguments (or why it has none), both emitted images and both lowered bodies.</summary>
     internal sealed record Analysis(Verdict Verdict, PairInput? Model, string? ModelProblem, byte[] Legacy, byte[] Modern)

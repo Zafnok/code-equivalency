@@ -76,6 +76,29 @@ public static class PairGen
             static (method, fragment, at) => method with { Body = method.Body.Insert(at % method.Body.Length, new Assign("x", fragment)) });
 
     /// <summary>
+    /// A generated method with one more statement somewhere before its last (ticket P1-017) that assigns a local one of the
+    /// constructs ADR 0039's IL fallback exists for, which the IOperation lowering leaves opaque: a lifted <c>int?</c>
+    /// operator, a lifted conversion to <c>long?</c>, an interpolated string, or a <c>switch</c> expression on a tuple with
+    /// positional patterns. The value branches, so it is never written to <c>F</c> or <c>u</c>, and it holds no cast
+    /// outside a nullable one, so the temporary operators never move it.
+    /// </summary>
+    private static Gen<Method> IlMethod { get; } =
+        Gen.Select(
+            Method,
+            Gen.OneOf(
+                Gen.Select(Gen.OneOfConst(Arithmetic), Maybes, Gen.Bool, static (op, maybe, literal) => (op, maybe, literal))
+                    .SelectMany(static t => RightOperand(typeof(int), t.op, t.literal, 2, flat: false).Select(right => (IStmt)new Assign("x", new Lifted(t.op, t.maybe, right)))),
+                Maybes.Select(static maybe => (IStmt)new Assign("y", new Widened(maybe))),
+                Gen.Select(Gen.Bool, Gen.Bool, static (leading, isNull) => (IStmt)new Assign("z", new Interpolated(leading, isNull))),
+                Gen.Select(ExprGen(typeof(int), 1, flat: false), ExprGen(typeof(bool), 1, flat: false), Gen.Int[-1, 3], ExprGen(typeof(int), 1, flat: false).Array[3], static (scrutinee, flag, label, arms) =>
+                    (IStmt)new Assign("x", new Positional(scrutinee, flag, label, [.. arms])))),
+            Gen.Int[0, MaxStatements],
+            static (method, statement, at) => method with { Body = method.Body.Insert(at % method.Body.Length, statement) });
+
+    /// <summary><c>(c ? (int?)v : null)</c>: an <c>int?</c> whose nullness a run decides.</summary>
+    private static Gen<Maybe> Maybes => Gen.Select(ExprGen(typeof(bool), 1, flat: false), ExprGen(typeof(int), 1, flat: false), static (condition, value) => new Maybe(condition, value));
+
+    /// <summary>
     /// A legacy and a modern method, and the operator that derived one from the other. The mutation operators
     /// themselves live in <c>Equiv.Corpus.Seeder</c> (ticket M4-010) and work on Roslyn syntax, so the generated
     /// method is rendered to C# once and reparsed before <see cref="SyntaxMutator"/> sees it.
@@ -84,6 +107,9 @@ public static class PairGen
 
     /// <summary>As <see cref="Pair"/>, over methods that also call a lambda (ticket M4-004).</summary>
     public static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> FragmentPair { get; } = Pairs(FragmentMethod);
+
+    /// <summary>As <see cref="Pair"/>, over methods that also hold one construct the IL fallback exists for (ticket P1-017).</summary>
+    public static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> IlPair { get; } = Pairs(IlMethod);
 
     /// <summary>
     /// A generated method with one construct a P2-048 cleanup operator rewrites, which the base generator rarely or
@@ -270,6 +296,60 @@ public static class PairGen
 
         Gen<long> values = operandType == typeof(int) ? Int.Select(static v => (long)v) : Long;
         return values.Where(v => v != 0 || op is not ("/" or "%")).Select(v => (IExpr)new Literal(operandType, v));
+    }
+
+    /// <summary><c>(Condition ? (int?)Value : null)</c>, whose type is <c>int?</c>: a nullable conversion.</summary>
+    private sealed record Maybe(IExpr Condition, IExpr Value) : IExpr
+    {
+        public Type Type => typeof(int?);
+
+        public bool CannotThrow => Condition.CannotThrow && Value.CannotThrow;
+
+        public string Render() => $"({Condition.Render()} ? (int?){Value.Render()} : null)";
+    }
+
+    /// <summary><c>unchecked(Operand Op Right).GetValueOrDefault()</c>: a lifted <c>int?</c> operator, null when <see cref="Operand"/> is.</summary>
+    private sealed record Lifted(string Op, Maybe Operand, IExpr Right) : IExpr
+    {
+        public Type Type => typeof(int);
+
+        public bool CannotThrow => Op is not ("/" or "%") && Operand.CannotThrow && Right.CannotThrow;
+
+        public string Render() => $"unchecked({Operand.Render()} {Op} {Right.Render()}).GetValueOrDefault()";
+    }
+
+    /// <summary><c>((long?)Operand).GetValueOrDefault()</c>: a lifted conversion from <c>int?</c> to <c>long?</c>.</summary>
+    private sealed record Widened(Maybe Operand) : IExpr
+    {
+        public Type Type => typeof(long);
+
+        public bool CannotThrow => Operand.CannotThrow;
+
+        public string Render() => $"((long?){Operand.Render()}).GetValueOrDefault()";
+    }
+
+    /// <summary><c>($"t{s}" == null)</c> or <c>($"{s}t" != null)</c>: an interpolated string, which C# makes a concatenation.</summary>
+    private sealed record Interpolated(bool Leading, bool IsNull) : IExpr
+    {
+        public Type Type => typeof(bool);
+
+        public bool CannotThrow => true;
+
+        public string Render() => $"({(Leading ? "$\"t{s}\"" : "$\"{s}t\"")} {(IsNull ? "==" : "!=")} null)";
+    }
+
+    /// <summary>
+    /// <c>((Scrutinee, Flag) switch { (Label, true) =&gt; Arms[0], (_, false) =&gt; Arms[1], _ =&gt; Arms[2] })</c>: positional
+    /// patterns on a tuple, none of which subsumes a later one.
+    /// </summary>
+    private sealed record Positional(IExpr Scrutinee, IExpr Flag, int Label, ImmutableArray<IExpr> Arms) : IExpr
+    {
+        public Type Type => typeof(int);
+
+        public bool CannotThrow => Scrutinee.CannotThrow && Flag.CannotThrow && Arms.All(static a => a.CannotThrow);
+
+        public string Render() =>
+            $"(({Scrutinee.Render()}, {Flag.Render()}) switch {{ ({Label.ToString(System.Globalization.CultureInfo.InvariantCulture)}, true) => {Arms[0].Render()}, (_, false) => {Arms[1].Render()}, _ => {Arms[2].Render()} }})";
     }
 
     private static Gen<IExpr> Bool(int depth, Gen<IExpr> leaf, bool flat)

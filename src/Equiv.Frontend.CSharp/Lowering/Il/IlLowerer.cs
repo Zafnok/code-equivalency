@@ -108,15 +108,17 @@ internal sealed partial class IlLowerer
     private readonly SourceSpan bodySpan;
     private readonly IrType? returnType;
     private readonly bool x87;
+    private readonly Func<IrBinaryOp, IrBinaryOp> mapped;
 
     /// <summary>The statement being lowered, whose enclosing regions decide where an exception raised in it goes.</summary>
     private ILInstruction position;
     private int selects;
 
-    private IlLowerer(IMethodSymbol method, Compilation compilation, IlAstReader.Body body, SourceSpan bodySpan, IrType? returnType, bool x87)
+    private IlLowerer(IMethodSymbol method, Compilation compilation, IlAstReader.Body body, SourceSpan bodySpan, IrType? returnType, bool x87, Func<IrBinaryOp, IrBinaryOp> mapped)
     {
         this.method = method;
         this.x87 = x87;
+        this.mapped = mapped;
         this.compilation = compilation;
         this.bodySpan = bodySpan;
         this.returnType = returnType;
@@ -144,16 +146,24 @@ internal sealed partial class IlLowerer
     /// whole-body opaque whose reason is <see cref="IlAstReader"/>'s. <paramref name="x87"/> marks floating point runtime-sensitive,
     /// as <see cref="IrLowerer"/> does on the legacy side of a project that runs on x87 (ticket M4-002).
     /// </summary>
-    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, bool x87 = false)
+    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, bool x87 = false) => Lower(method, compilation, x87, static op => op);
+
+    /// <summary>
+    /// Seam for the differential soundness gate (ticket P1-017): <paramref name="mapped"/> rewrites the IR operator each
+    /// integral arithmetic or comparison instruction maps to, so a test can break a mapping on purpose and show the gate
+    /// catches it. The product maps every operator to itself.
+    /// </summary>
+    internal static IrProcedure Lower(IMethodSymbol method, Compilation compilation, bool x87, Func<IrBinaryOp, IrBinaryOp> mapped)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
+        ArgumentNullException.ThrowIfNull(mapped);
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = IrLowerer.Signature(method, TypeMapper.Unmapped);
         SourceSpan span = CSharpFrontend.ToSourceSpan(method.DeclaringSyntaxReferences is [var syntax, ..] ? syntax.GetSyntax().GetLocation() : method.Locations[0]);
         IlAstReader.Body body = IlAstReader.Read(method, compilation);
         return body.Failure is { } failure
             ? IrLowerer.Opaque(RoslynIdentity.Of(method, RenameMap.Empty), parameters, returnType, failure, [span])
-            : new IlLowerer(method, compilation, body, span, returnType, x87).Procedure(parameters, body.Function!);
+            : new IlLowerer(method, compilation, body, span, returnType, x87, mapped).Procedure(parameters, body.Function!);
     }
 
     /// <summary>The procedure: the C# parameters, then the heap inputs the lowering used, as <see cref="IrLowerer"/> orders them.</summary>
@@ -670,7 +680,7 @@ internal sealed partial class IlLowerer
         }
 
         bool signed = binary.Sign == Sign.Signed;
-        IrBinaryOp op = Operation(binary.Operator, signed);
+        IrBinaryOp op = mapped(Operation(binary.Operator, signed));
         if (op is IrBinaryOp.And or IrBinaryOp.Or or IrBinaryOp.Xor && IsBool(binary.Left) && IsBool(binary.Right))
         {
             return new(Emit(op, Value(binary.Left, Boolean), Value(binary.Right, Boolean), Bool), Boolean);
@@ -788,13 +798,13 @@ internal sealed partial class IlLowerer
 
         if (comparison is { Kind: ComparisonKind.Equality or ComparisonKind.Inequality, InputType: StackType.I4 } && (IsBool(comparison.Left) || IsBool(comparison.Right)))
         {
-            return Emit(comparison.Kind == ComparisonKind.Equality ? IrBinaryOp.Eq : IrBinaryOp.Ne, Value(comparison.Left, Boolean), Value(comparison.Right, Boolean), Bool);
+            return Emit(mapped(comparison.Kind == ComparisonKind.Equality ? IrBinaryOp.Eq : IrBinaryOp.Ne), Value(comparison.Left, Boolean), Value(comparison.Right, Boolean), Bool);
         }
 
         ITypeSymbol operands = Stack(comparison.InputType);
         IrVar left = Value(comparison.Left, operands);
         IrVar right = Value(comparison.Right, operands);
-        return Emit(Comparison(comparison.Kind, unsigned: comparison.Sign == Sign.Unsigned), left, right, Bool);
+        return Emit(mapped(Comparison(comparison.Kind, unsigned: comparison.Sign == Sign.Unsigned)), left, right, Bool);
     }
 
     /// <summary>The IR comparison of <paramref name="kind"/> on integers; <see cref="ComparisonKind.GreaterThanOrEqual"/> is the last.</summary>
