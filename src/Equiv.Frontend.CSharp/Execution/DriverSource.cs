@@ -96,8 +96,8 @@ internal static class DriverSource
             ExecutionTypeKind.Text => $"R.S({value})",
             ExecutionTypeKind.Enum => IsUnsigned(((INamedTypeSymbol)type).EnumUnderlyingType!) ? $"({display})R.U({value})" : $"({display})R.I({value})",
             ExecutionTypeKind.NullOnly => $"({display}){value}",
-            ExecutionTypeKind.Signed32Pair or ExecutionTypeKind.Signed32Quad => Construct(type, value, static item => $"checked((int)R.I({item}))"),
-            ExecutionTypeKind.Binary32Pair or ExecutionTypeKind.Binary32Quad => Construct(type, value, static item => $"R.F({item})"),
+            ExecutionTypeKind.Signed32Pair or ExecutionTypeKind.Signed32Quad => FromComponents(type, value, static item => $"checked((int)R.I({item}))"),
+            ExecutionTypeKind.Binary32Pair or ExecutionTypeKind.Binary32Quad => FromComponents(type, value, static item => $"R.F({item})"),
             _ => throw new InvalidOperationException($"no input can be built for {type.ToDisplayString()}"),
         };
         declarations.Add($"{display} {name} = {decoded};");
@@ -105,7 +105,7 @@ internal static class DriverSource
     }
 
     /// <summary>A <c>System.Drawing</c> value built by its component constructor from the JSON array in <paramref name="value"/>.</summary>
-    private static string Construct(ITypeSymbol type, string value, Func<string, string> component)
+    private static string FromComponents(ITypeSymbol type, string value, Func<string, string> component)
     {
         IEnumerable<string> components = Components(type).Select((_, i) => component($"R.At({value}, {i.ToString(CultureInfo.InvariantCulture)})"));
         return $"new {type.ToDisplayString(Qualified)}({string.Join(", ", components)})";
