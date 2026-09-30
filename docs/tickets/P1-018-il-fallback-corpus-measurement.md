@@ -1,5 +1,5 @@
 # P1-018 Measure the IL fallback's decided-verdict gain on the corpus, and turn it on by default only if it clears 5%
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-016, P1-017
@@ -50,3 +50,14 @@ shows they block the gain). Lambdas. The other corpus pairs: they are pure retar
 already decides.
 
 ## Notes
+- Decision: three runs at one commit, not two. The two measured runs are `full` without and with
+  `--il-fallback`, and neither takes `--execute`: replay turns some Unknowns into observed Divergents
+  (M4-009), which would mix into the move being measured. A third run, `--il-fallback --execute`,
+  supplies criterion 2's `properties.replay` for the Divergents only the IL run produces.
+- Decision: the three runs ran concurrently on one box, with starts staggered until the previous run
+  had finished loading (the 2026-09-30 full run lost a pair of runs to MSBuild lock collisions). So
+  wall-clock times are under shared load, but equally so for both measured runs.
+- Decision: the gain's denominator is ADR 0034's changed pairs from the census (`matchedPairs -
+  pairsCongruent`). The 19 `unmatched-overload` results are not matched pairs. The numerator counts
+  IL-lowered pairs that move out of Unknown(opaque), which is ADR 0039's wording. Moves out of any
+  other Unknown reason are reported next to it but do not count.
