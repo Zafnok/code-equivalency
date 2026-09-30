@@ -10,8 +10,8 @@ namespace Equiv.Frontend.CSharp.Lowering.Il;
 /// The ILAst key of an instruction (P1-012's mapping table, ADR 0039): its <see cref="OpCode"/>, refined by a bracketed
 /// context where the same opcode is lowerable in one position and not in another. The spelling is the spike's
 /// (<c>tools/spikes/il-lowering/MappingTable.cs</c>), so an opaque's reason names the row of <c>docs/tickets/IL-COVERAGE.md</c>
-/// that covers it. <see cref="Lowered"/> is the subset <see cref="IlLowerer"/> lowers (ticket P1-014): control flow,
-/// locals, integral and <c>bool</c> constants and arithmetic, and calls. Every other key is an <see cref="Equiv.Core.Ir.IrOpaque"/>.
+/// that covers it. <see cref="Lowered"/> is the subset <see cref="IlLowerer"/> lowers: every key the spike's table maps
+/// (tickets P1-014 and P1-015). Every other key is an <see cref="Equiv.Core.Ir.IrOpaque"/>.
 /// </summary>
 internal static class IlKeys
 {
@@ -19,9 +19,13 @@ internal static class IlKeys
     public static readonly FrozenSet<string> Lowered = new[]
     {
         "ILFunction", "BlockContainer", "Block", "Nop", "Branch", "Leave", "IfInstruction", "SwitchInstruction", "SwitchSection",
-        "LdLoc", "StLoc", "LdcI4", "LdcI8", "LdStr", "LdNull",
+        "TryCatch", "TryCatchHandler", "TryFinally", "TryFault", "Throw[new]",
+        "LdLoc", "StLoc", "LdLoca[address operand]",
+        "LdcI4", "LdcI8", "LdcF4", "LdcF8", "LdcDecimal", "LdStr", "LdNull", "DefaultValue",
         "BinaryNumericInstruction", "Comp", "Conv",
         "Call", "CallVirt", "NewObj",
+        "LdObj", "StObj", "LdFlda[address operand]", "LdsFlda[address operand]", "LdElema[address operand]", "LdLen", "NewArr", "AddressOf[address operand]",
+        "IsInst", "CastClass", "Box", "LdTypeToken", "LdFtn", "LdVirtFtn",
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>The instructions that take an address, whose key says whether the address is used where the IR has its place.</summary>

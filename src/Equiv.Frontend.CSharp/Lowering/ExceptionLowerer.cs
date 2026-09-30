@@ -19,31 +19,41 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// Each region being lowered -- the main pass, or one copy of a <c>finally</c> -- gets its own
 /// <see cref="LoweringContext"/>, so a method reading it can never see state an unrelated call left
 /// behind (the bug ticket M2-004 PR #30 fixed: <c>Raise</c> resolving a <c>catch</c> through a block
-/// map a <c>finally</c> copy had swapped in).
+/// map a <c>finally</c> copy had swapped in). The IL lowering (ticket P1-015) shares the throw blocks, the copies of each
+/// <c>finally</c> and <c>when</c> filter, and the order in which a route's clauses and finallys are composed, through the
+/// members that take regions of any type, which IrLowerer's CFG regions go through too; it constructs this with no CFG,
+/// since it never reaches the members that read one.
 /// </summary>
 internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compilation, ControlFlowGraph cfg, SwitchChains chains, ArrayForEachLoops loops, SourceSpan bodySpan, Action<BasicBlock, LoweringContext> fill)
 {
     private readonly Dictionary<string, IrBlockId> throwBlocks = new(StringComparer.Ordinal);
-    private readonly Dictionary<(int Region, IrBlockId Continuation), IrBlockId> copies = [];
-    private readonly Dictionary<(int Region, IrBlockId Taken, IrBlockId Declined), IrBlockId> filters = [];
+    private readonly Dictionary<(object Region, IrBlockId Continuation), IrBlockId> copies = [];
+    private readonly Dictionary<(object Region, IrBlockId Taken, IrBlockId Declined), IrBlockId> filters = [];
     private IrBlockId? neverReached;
 
     /// <summary>
     /// Runs <paramref name="finallys"/> in order and then continues at <paramref name="destination"/>. The <c>finally</c> of an
     /// array <c>foreach</c> lowered as an index loop is not run: it disposes an enumerator the index loop does not have (ticket P1-004).
     /// </summary>
-    public IrBlockId Unwind(ImmutableArray<ControlFlowRegion> finallys, IrBlockId destination, LoweringContext context)
+    public IrBlockId Unwind(ImmutableArray<ControlFlowRegion> finallys, IrBlockId destination, LoweringContext context) =>
+        Unwind(Kept(finallys), destination, (region, continuation) => Copy(region, continuation, context));
+
+    /// <summary>
+    /// Runs <paramref name="finallys"/>, innermost first, and then continues at <paramref name="destination"/>: the
+    /// outermost is copied first, to continue at the destination, and each inner one to continue at the copy outside it.
+    /// </summary>
+    public static IrBlockId Unwind<TRegion>(IReadOnlyList<TRegion> finallys, IrBlockId destination, Func<TRegion, IrBlockId, IrBlockId> copy)
     {
-        for (int i = finallys.Length - 1; i >= 0; i--)
+        for (int i = finallys.Count - 1; i >= 0; i--)
         {
-            if (!loops.IsElided(finallys[i]))
-            {
-                destination = Copy(finallys[i], destination, context);
-            }
+            destination = copy(finallys[i], destination);
         }
 
         return destination;
     }
+
+    /// <summary>The finallys that run: all but an array <c>foreach</c>'s lowered as an index loop (ticket P1-004).</summary>
+    private ImmutableArray<ControlFlowRegion> Kept(ImmutableArray<ControlFlowRegion> finallys) => [.. finallys.Where(f => !loops.IsElided(f))];
 
     /// <summary>
     /// The block a CFG branch jumps to, with every <c>finally</c> it leaves copied in front of it. A branch
@@ -70,24 +80,54 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
         }
 
         ExceptionRegions.ExceptionRoute route = ExceptionRegions.Route(compilation, context.Source, type);
-        if (route.Ambiguous)
-        {
-            IrBlockId unknown = ssa.NewBlock();
-            ssa.Emit(unknown, new IrOpaque(Target: null, "call-throw-in-try", bodySpan));
-            ssa.Terminate(unknown, new IrThrow(exceptionType, []));
-            return unknown;
-        }
+        ImmutableArray<ControlFlowRegion>? uncaught = route.Uncaught is { } finallys ? Kept(finallys) : null;
+        return route.Ambiguous
+            ? Ambiguous(exceptionType)
+            : Raise(
+                exceptionType,
+                [.. route.Candidates.Select(c => new Clause<ControlFlowRegion>(Kept(c.Finallys), Handler(ExceptionRegions.Handler(c.Clause), context), Filtered(c.Clause)))],
+                uncaught,
+                (region, continuation) => Copy(region, continuation, context),
+                (clause, taken, next) => Filter(ExceptionRegions.Filter(clause), ExceptionRegions.Handler(clause), taken, next, context));
+    }
 
-        IrBlockId? next = route.Uncaught is { } uncaught ? Unwind(uncaught, ThrowBlock(exceptionType), context) : null;
-        for (int i = route.Candidates.Length - 1; i >= 0; i--)
+    /// <summary>
+    /// Where an exception whose route is known goes: the throw block of <paramref name="exceptionType"/> behind the
+    /// <paramref name="uncaught"/> finallys, or nothing when an unfiltered clause always takes it (null); and, tried before
+    /// that, each clause of <paramref name="candidates"/> from the last to the first: its handler behind its own finallys,
+    /// with a filtered clause's filter in front, which goes on to what the next clause does when it declines.
+    /// </summary>
+    public IrBlockId Raise<TRegion>(
+        string exceptionType,
+        ImmutableArray<Clause<TRegion>> candidates,
+        IReadOnlyList<TRegion>? uncaught,
+        Func<TRegion, IrBlockId, IrBlockId> copy,
+        Func<TRegion, IrBlockId, IrBlockId, IrBlockId> filter)
+        where TRegion : class
+    {
+        IrBlockId? next = uncaught is null ? null : Unwind(uncaught, ThrowBlock(exceptionType), copy);
+        for (int i = candidates.Length - 1; i >= 0; i--)
         {
-            (ImmutableArray<ControlFlowRegion> finallys, ControlFlowRegion clause) = route.Candidates[i];
-            ControlFlowRegion handler = ExceptionRegions.Handler(clause);
-            IrBlockId taken = Unwind(finallys, Handler(handler, context), context);
-            next = clause == handler ? taken : Filter(ExceptionRegions.Filter(clause), handler, taken, next!, context);
+            IrBlockId taken = Unwind(candidates[i].Finallys, candidates[i].Entry, copy);
+            next = candidates[i].FilteredBy is { } filtered ? filter(filtered, taken, next!) : taken;
         }
 
         return next!;
+    }
+
+    /// <summary>A clause with a <c>when</c> filter, which it tries first, or null for a <c>catch</c> with none.</summary>
+    private static ControlFlowRegion? Filtered(ControlFlowRegion clause) => clause.Kind == ControlFlowRegionKind.Catch ? null : clause;
+
+    /// <summary>
+    /// Where an exception of no known type goes when more than one <c>catch</c> could take it: a block that is opaque with
+    /// reason <c>call-throw-in-try</c> and then throws.
+    /// </summary>
+    public IrBlockId Ambiguous(string exceptionType)
+    {
+        IrBlockId unknown = ssa.NewBlock();
+        ssa.Emit(unknown, new IrOpaque(Target: null, "call-throw-in-try", bodySpan));
+        ssa.Terminate(unknown, new IrThrow(exceptionType, []));
+        return unknown;
     }
 
     /// <summary>
@@ -97,26 +137,21 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
     /// <see cref="LoweringContext"/>, whose structured-exception-handling exit, the filter's false edge, is
     /// <paramref name="declined"/>.
     /// </summary>
-    private IrBlockId Filter(ControlFlowRegion filter, ControlFlowRegion handler, IrBlockId taken, IrBlockId declined, LoweringContext context)
-    {
-        if (filters.TryGetValue((filter.FirstBlockOrdinal, taken, declined), out IrBlockId? existing))
+    private IrBlockId Filter(ControlFlowRegion filter, ControlFlowRegion handler, IrBlockId taken, IrBlockId declined, LoweringContext context) =>
+        Filter(filter, taken, declined, () =>
         {
-            return existing;
-        }
+            (Dictionary<int, IrBlockId> map, ImmutableArray<BasicBlock> blocks) = Blocks(filter);
+            map[handler.FirstBlockOrdinal] = taken;
+            LoweringContext copy = new(map, context.MainBlocks, declined) { Declined = declined };
+            return (map[filter.FirstBlockOrdinal], () => Fill(blocks, copy));
+        });
 
-        (Dictionary<int, IrBlockId> map, ImmutableArray<BasicBlock> blocks) = Blocks(filter);
-        map[handler.FirstBlockOrdinal] = taken;
-        IrBlockId entry = map[filter.FirstBlockOrdinal];
-        filters[(filter.FirstBlockOrdinal, taken, declined)] = entry;
-
-        LoweringContext copy = new(map, context.MainBlocks, declined) { Declined = declined };
-        foreach (BasicBlock block in blocks)
-        {
-            fill(block, copy);
-        }
-
-        return entry;
-    }
+    /// <summary>
+    /// The copy of <paramref name="filter"/> that goes to <paramref name="taken"/> or <paramref name="declined"/>, made once:
+    /// <paramref name="copy"/> gives its entry, which is recorded before its blocks are filled.
+    /// </summary>
+    public IrBlockId Filter(object filter, IrBlockId taken, IrBlockId declined, Func<(IrBlockId Entry, Action Fill)> copy) =>
+        Once(filters, (filter, taken, declined), copy);
 
     /// <summary>
     /// A copy of a <c>finally</c> region that runs and then continues at <paramref name="continuation"/>
@@ -125,24 +160,41 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
     /// <see cref="LoweringContext"/>, whose structured-exception-handling exit is the jump to
     /// <paramref name="continuation"/>.
     /// </summary>
-    private IrBlockId Copy(ControlFlowRegion region, IrBlockId continuation, LoweringContext context)
+    private IrBlockId Copy(ControlFlowRegion region, IrBlockId continuation, LoweringContext context) =>
+        Copy(region, continuation, () =>
+        {
+            (Dictionary<int, IrBlockId> map, ImmutableArray<BasicBlock> blocks) = Blocks(region);
+            LoweringContext copy = new(map, context.MainBlocks, continuation);
+            return (map[region.FirstBlockOrdinal], () => Fill(blocks, copy));
+        });
+
+    /// <summary>
+    /// The copy of <paramref name="region"/> that continues at <paramref name="continuation"/>, made once:
+    /// <paramref name="copy"/> gives its entry, which is recorded before its blocks are filled.
+    /// </summary>
+    public IrBlockId Copy(object region, IrBlockId continuation, Func<(IrBlockId Entry, Action Fill)> copy) =>
+        Once(copies, (region, continuation), copy);
+
+    private static IrBlockId Once<TKey>(Dictionary<TKey, IrBlockId> made, TKey key, Func<(IrBlockId Entry, Action Fill)> copy)
+        where TKey : notnull
     {
-        if (copies.TryGetValue((region.FirstBlockOrdinal, continuation), out IrBlockId? existing))
+        if (made.TryGetValue(key, out IrBlockId? existing))
         {
             return existing;
         }
 
-        (Dictionary<int, IrBlockId> map, ImmutableArray<BasicBlock> blocks) = Blocks(region);
-        IrBlockId entry = map[region.FirstBlockOrdinal];
-        copies[(region.FirstBlockOrdinal, continuation)] = entry;
+        (IrBlockId entry, Action fill) = copy();
+        made[key] = entry;
+        fill();
+        return entry;
+    }
 
-        LoweringContext copy = new(map, context.MainBlocks, continuation);
+    private void Fill(ImmutableArray<BasicBlock> blocks, LoweringContext copy)
+    {
         foreach (BasicBlock block in blocks)
         {
             fill(block, copy);
         }
-
-        return entry;
     }
 
     /// <summary>A copied region's own blocks, those not in a region nested in it that is copied too, each given a new IR block.</summary>
@@ -170,7 +222,8 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
     private static IrBlockId Handler(ControlFlowRegion handler, LoweringContext context) =>
         context.BlockIds.TryGetValue(handler.FirstBlockOrdinal, out IrBlockId? lowered) ? lowered : context.MainBlocks[handler.FirstBlockOrdinal];
 
-    private IrBlockId ThrowBlock(string exceptionType)
+    /// <summary>The one block that throws <paramref name="exceptionType"/> out of the method.</summary>
+    public IrBlockId ThrowBlock(string exceptionType)
     {
         if (!throwBlocks.TryGetValue(exceptionType, out IrBlockId? thrown))
         {
@@ -181,4 +234,11 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
 
         return thrown;
     }
+
+    /// <summary>
+    /// A clause that may take an exception: the finallys that run before its handler does, the handler's first block (its entry),
+    /// and, for a filtered clause, the region whose filter is tried first (null for a <c>catch</c> with no filter).
+    /// </summary>
+    internal sealed record Clause<TRegion>(IReadOnlyList<TRegion> Finallys, IrBlockId Entry, TRegion? FilteredBy)
+        where TRegion : class;
 }
