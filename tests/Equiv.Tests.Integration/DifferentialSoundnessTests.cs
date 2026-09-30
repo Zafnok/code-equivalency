@@ -150,14 +150,6 @@ public sealed class DifferentialSoundnessTests
     [Fact]
     public void GeneratedPairsAreSoundUnderBothLowerings() => Assert.Null(Failed(BothLowerings, Rules));
 
-    /// <summary>Temporary (P1-017 criterion 2 measurement, reverted before merge): M0-012's pass alone, over PairGen.Pair.</summary>
-    [Fact]
-    public void TemporaryBaselineM0012() =>
-        Assert.Null(Record.Exception(() => Gen.Select(PairGen.Pair, PairGen.Input.Array[InputsPerPair], static (pair, inputs) => new Case(pair.LegacySource, pair.ModernSource, pair.Operator, inputs))
-            .Sample(c => Check(c, [Baseline], Rules) is null, seed: Seed, iter: Pairs)));
-
-    private static readonly PairRuntime.Lowering Baseline = new("operation-baseline", static (method, compilation) => PairRuntime.Lowering.Operation.Lower(method, compilation));
-
     /// <summary>A deliberately broken IL mapping fails rule 1 within the pull-request budget, and the failure prints its seed.</summary>
     [Fact]
     public void ABrokenIlMappingIsCaught()
