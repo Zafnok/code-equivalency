@@ -1,5 +1,5 @@
 # P2-051 `runtime-diff` measures Windows Forms and System.Drawing members, and every external callee
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-033
@@ -56,3 +56,12 @@ Generic-instantiation resolution (the `<T1,T2>` suffix; `tools/runtime-diff` REA
 Third-party packages.
 
 ## Notes
+- Decision: the ticket's `GeneratorTests.DrawingValueTypesAreGenerated` is `InputGeneratorTests.DrawingValueTypesAreGenerated`; the M3-032 generators are `Equiv.Execute.Inputs.InputGenerator`, whose tests already live there.
+- Decision: the `System.Drawing` structs are four `ExecutionTypeKind` values (`Signed32Pair`, `Signed32Quad`, `Binary32Pair`, `Binary32Quad`), chosen by the type's name; the wire form is a JSON array of the components in constructor order. Edges are each component edge in every component, then `1, 2, ...`. A returned struct is canonicalised component-wise, so Windows Forms members returning `Size` are comparable.
+- Decision: the .NET 10 driver gets the `Microsoft.WindowsDesktop.App` runtimeconfig (`net10.0-windows`) only when its compilation uses a Windows Desktop pack assembly (`GetUsedAssemblyReferences`); a BCL member's driver keeps `Microsoft.NETCore.App`, so it still runs where the desktop framework is absent. A desktop-pack file replaces the base pack's file of the same name (`System.Drawing.dll`, `WindowsBase.dll`, `Microsoft.VisualBasic.dll`), as SDK conflict resolution does.
+- Decision: besides a window (`IWin32Window`, every `Control`) or `Message` receiver or parameter, members of `Application`, `Clipboard`, `Cursor`, `MessageBox` and `SendKeys` are not constructible with the same reason: generated inputs would show dialogs, send keystrokes or change the desktop session of the machine running the tool.
+- Decision: `-Top` is a string validated as `all` or a positive integer; a member whose report already exists is skipped, so a multi-hour run resumes.
+- Decision: `Environment::GetCommandLineArgs()` and `Marshal::GetLastWin32Error()` diverge only because of the harness (the driver's own file name; the start-up's residual last error) and get no row; SUMMARY.md says so. Two witnesses carry machine-specific values and are written with a placeholder the row's reason names.
+- Decision: the congruence-loss census re-ran both sides (main's table, then with the new rows) from this branch, because lowering changed since 2026-09-26.
+- Surprise: `externalCallees` spells `System.IntPtr` where .NET 10's symbols spell `nint`, so IntPtr members never resolve; harmless today, since no input can be built for IntPtr.
+- Surprise: restoring `runtime-changes.json` with `Copy-Item` kept its older timestamp, so the incremental build silently re-embedded nothing and the first "after" census equalled "before". Touch the file before rebuilding.
