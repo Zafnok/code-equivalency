@@ -438,7 +438,9 @@ work, P2-050, P1-019, P2-051 and P2-052.
   re-scored per-ticket unlock table. Done 2026-09-30: 0 pair-level crashes (92 before), unchanged share 91.6%, lowerable share 39.1%,
   Preserving Equivalent share 70.1%, verdict continue (`docs/runs/2026-09-30-full-verdict.md`).
 - P2-047 (M) Divergent audit: hand-adjudicate a fixed sample of EQ002 and EQ006 and report Divergent
-  precision. Needs P2-046.
+  precision. Needs P2-046. Done 2026-09-30: 77 results, 2 confirmed, 51 false positive, 24
+  undetermined, Divergent precision 3.8% (`docs/runs/2026-09-30-divergent-audit.md`); eight causes
+  filed as P2-068 to P2-075.
 - P2-048 (M) Five cleanup refactorings as Preserving seed operators, and a "cleanup proof rate" per
   seeded run. Needs M4-010, P2-035.
 - P2-049 (M) Samples for cleanup refactorings (modern syntax, extract and inline method). Each
@@ -494,6 +496,25 @@ prove or refute a small cleanup. It found three gaps that no ticket owned:
   pairs, two of them migration-tool output), reported against Git Extensions.
 - P2-066 (M) Pin two public .NET-to-.NET version upgrades (a pure bump, and a bump with fixes) and run
   them; every EQ006 must cite a row inside the pair's interval. Needs P2-055, P2-056, P2-047.
+
+P2-047's audit found Divergent precision of 3.8% (2 of 53 adjudicated). Each false-positive cause is
+one ticket, in order of how many false positives it accounts for. Four causes (P2-068 to P2-071)
+give one call two identities. Three (P2-073 to P2-075) are EQ006 rows that match on the member alone.
+
+- P2-073 (M) An EQ006 row fires only when the call's constant arguments can reach the change
+  (regex without case-insensitive ranges, constant paths and formats). 15 false positives.
+- P2-068 (M) A call to a one-line forwarder is the same call as its BCL target. 11.
+- P2-069 (L) An unchanged call site that a dependency upgrade rebinds (class to interface, generic
+  instantiation, namespace move) is Unknown, not Divergent. 9.
+- P2-074 (M) A path row does not fire on a path from a valid-path source or behind a validating
+  guard. Needs P2-073. 7.
+- P2-070 (M) Identical source that binds to a different BCL overload is the same call (table
+  entries). 3.
+- P2-071 (M) An effect-free BCL call (pure getter, empty-collection constructor) is not a trace
+  event. 3.
+- P2-075 (S) The ICU and `ListViewGroup` rows match only the members their change affects. 2.
+- P2-072 (M) Two identical bodies with a rethrowing catch lower to different call traces. 1, but
+  it is a lowering bug on identical source.
 
 ## M5 — Agent surface (MCP)
 
