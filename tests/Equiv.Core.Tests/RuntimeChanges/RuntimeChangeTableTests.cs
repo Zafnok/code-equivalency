@@ -12,6 +12,9 @@ public sealed class RuntimeChangeTableTests
 {
     private const int CuratedRowCount = 13;
 
+    /// <summary>The rows ticket P2-054's backfill left with an unknown change point, as its PR lists them.</summary>
+    private const int UnknownChangePointCount = 32;
+
     private const string RowTag = "row: ";
 
     private const string ExcludedTag = "excluded: ";
@@ -20,6 +23,8 @@ public sealed class RuntimeChangeTableTests
 
     private static readonly ImmutableHashSet<string> AllowedReasons =
         ["not a BCL member", "build-time only", "not reachable from .NET Framework code", "configuration only"];
+
+    private static readonly TargetRuntime Boundary = TargetRuntime.Parse("netcoreapp1.0")!;
 
     [Fact]
     public void Table_LoadsAndValidatesRows()
@@ -99,8 +104,8 @@ public sealed class RuntimeChangeTableTests
     }
 
     [Theory]
-    [InlineData("""{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "source": "guessed" }""", "unknown source 'guessed'")]
-    [InlineData("""{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x" }""", "has no source")]
+    [InlineData("""{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "guessed" }""", "unknown source 'guessed'")]
+    [InlineData("""{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null }""", "has no source")]
     public void UnknownSourceIsRejected(string row, string message)
     {
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() => Parse($"[{row}]"));
@@ -113,7 +118,7 @@ public sealed class RuntimeChangeTableTests
     [InlineData("measured", RuntimeChangeSource.Measured)]
     public void KnownSourcesAreAccepted(string source, RuntimeChangeSource expected)
     {
-        RuntimeChangeTable table = Parse($$"""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "source": "{{source}}" }]""");
+        RuntimeChangeTable table = Parse($$"""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "{{source}}" }]""");
 
         Assert.Equal(expected, Assert.Single(table.Rows).Source);
     }
@@ -126,7 +131,7 @@ public sealed class RuntimeChangeTableTests
             [{
                 "member": "A::B(",
                 "reason": "r",
-                "url": "https://learn.microsoft.com/x",
+                "url": "https://learn.microsoft.com/x", "changedIn": null,
                 "source": "measured",
                 "witness": { "input": ["ss", "sharp-s"], "culture": "invariant", "legacy": 0, "modern": -1 }
             }]
@@ -143,9 +148,95 @@ public sealed class RuntimeChangeTableTests
     [Fact]
     public void ACuratedRowHasNoWitness()
     {
-        RuntimeChangeTable table = Parse("""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "source": "curated" }]""");
+        RuntimeChangeTable table = Parse("""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "curated" }]""");
 
         Assert.Null(Assert.Single(table.Rows).Witness);
+    }
+
+    /// <summary>Ticket P2-054: the rows the backfill could not place (listed in its PR) are the only unknown change points.</summary>
+    [Fact]
+    public void EveryRowHasAParseableChangedIn()
+    {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+
+        Assert.Equal(TargetRuntime.Parse("netcoreapp3.0"), table.CoveredFrom);
+        Assert.InRange(table.Rows.Count(static row => row.ChangedIn is null), 0, UnknownChangePointCount);
+        Assert.All(
+            table.Rows.Where(static row => row.ChangedIn is not null),
+            static row => Assert.True(row.ChangedIn >= Boundary, $"'{row.Member}' changed before .NET existed"));
+    }
+
+    [Fact]
+    public void RowAppliesOnlyInsideTheInterval()
+    {
+        RuntimeChangeTable table = Parse("""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": "net9.0", "source": "curated" }]""");
+        CallIdentity identity = new("A::B(int32)");
+
+        Assert.True(table.TryMatch(identity, Interval("net8.0", "net10.0"), out RuntimeChange match));
+        Assert.Equal(TargetRuntime.Parse("net9.0"), match.ChangedIn);
+        Assert.True(table.TryMatch(identity, Interval("net48", "net9.0"), out _));
+        Assert.False(table.TryMatch(identity, Interval("net9.0", "net10.0"), out _));
+        Assert.False(table.TryMatch(identity, Interval("net48", "net8.0"), out _));
+        Assert.False(table.TryMatch(identity, Interval("net8.0", "net10.0"), ["A::B("], out _));
+        Assert.False(table.TryMatch(new CallIdentity("C::D()"), Interval("net8.0", "net10.0"), out _));
+    }
+
+    [Fact]
+    public void UnknownChangePointAppliesWhenRuntimesDiffer()
+    {
+        RuntimeChangeTable table = Parse("""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "measured" }]""");
+        CallIdentity identity = new("A::B(int32)");
+
+        Assert.True(table.TryMatch(identity, Interval("net9.0", "net10.0"), out RuntimeChange match));
+        Assert.Null(match.ChangedIn);
+        Assert.True(table.TryMatch(identity, Interval("net48", "net472"), out _));
+    }
+
+    [Fact]
+    public void SameRuntimeMatchesNothing()
+    {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        RuntimeInterval same = Interval("net10.0", "net10.0");
+
+        Assert.All(table.Rows, row => Assert.False(table.TryMatch(new CallIdentity(row.Member + "x()"), same, out _), row.Member));
+        Assert.True(table.TryMatch(new CallIdentity("System.String::IndexOf(char)"), Interval("net48", "net10.0"), out _));
+    }
+
+    [Fact]
+    public void NullIntervalThrows()
+    {
+        Assert.Throws<ArgumentNullException>(static () => RuntimeChangeTable.Load().TryMatch(null!, Interval("net48", "net10.0"), out _));
+        Assert.Throws<ArgumentNullException>(static () => RuntimeChangeTable.Load().TryMatch(new CallIdentity("A::B()"), null!, out _));
+    }
+
+    [Theory]
+    [InlineData("\"netstandard2.0\"", "malformed changedIn \"netstandard2.0\"")]
+    [InlineData("5", "malformed changedIn 5")]
+    public void MalformedChangedInIsRejected(string changedIn, string message)
+    {
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+            Parse($$"""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": {{changedIn}}, "source": "curated" }]"""));
+
+        Assert.Contains("'A::B('", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(message, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MissingChangedInIsRejected()
+    {
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(static () =>
+            Parse("""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "source": "curated" }]"""));
+
+        Assert.Contains("'A::B(' has no changedIn", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MalformedCoveredFromIsRejected()
+    {
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(static () =>
+            ParseDocument("""{ "coveredFrom": "netstandard2.0", "rows": [] }"""));
+
+        Assert.Contains("coveredFrom 'netstandard2.0'", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -181,9 +272,14 @@ public sealed class RuntimeChangeTableTests
         Assert.Empty(tableMembers.Except(reviewed, StringComparer.Ordinal));
     }
 
+    private static RuntimeInterval Interval(string first, string second) => new(TargetRuntime.Parse(first)!, TargetRuntime.Parse(second)!);
+
     private static string RepoRoot => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
-    private static RuntimeChangeTable Parse(string json)
+    /// <summary>Parses <paramref name="rows"/>, a JSON array of rows, as a table covering .NET from <c>netcoreapp3.0</c>.</summary>
+    private static RuntimeChangeTable Parse(string rows) => ParseDocument($$"""{ "coveredFrom": "netcoreapp3.0", "rows": {{rows}} }""");
+
+    private static RuntimeChangeTable ParseDocument(string json)
     {
         using MemoryStream stream = new(System.Text.Encoding.UTF8.GetBytes(json));
         return RuntimeChangeTable.Parse(stream);

@@ -11,6 +11,8 @@ namespace Equiv.Core.RuntimeChanges;
 /// matches a call's <see cref="CallIdentity.Value"/> by prefix against <see cref="Rows"/>; a member
 /// listed in <c>equiv.config.json</c>'s <c>suppressRuntimeChanges</c> is excluded by the suppressing
 /// overload, which the frontend's flagging uses (ticket M3-001), so a suppressed call is never flagged.
+/// The <see cref="RuntimeInterval"/> overloads also skip a row whose <see cref="RuntimeChange.ChangedIn"/> the pair's
+/// runtimes do not cross (ADR 0040 decision 2; ticket P2-054).
 /// </summary>
 public sealed class RuntimeChangeTable
 {
@@ -18,10 +20,14 @@ public sealed class RuntimeChangeTable
 
     private static readonly Lazy<RuntimeChangeTable> Cached = new(LoadFromResource);
 
-    private RuntimeChangeTable(ImmutableArray<RuntimeChange> rows)
+    private RuntimeChangeTable(TargetRuntime coveredFrom, ImmutableArray<RuntimeChange> rows)
     {
+        CoveredFrom = coveredFrom;
         Rows = rows;
     }
+
+    /// <summary>The oldest .NET version whose changes the table lists; see <see cref="RuntimeInterval.UncoveredRange(TargetRuntime)"/>.</summary>
+    public TargetRuntime CoveredFrom { get; }
 
     /// <summary>Every row, in file order.</summary>
     public ImmutableArray<RuntimeChange> Rows { get; }
@@ -43,6 +49,29 @@ public sealed class RuntimeChangeTable
     }
 
     /// <summary>
+    /// As <see cref="TryMatch(CallIdentity, out RuntimeChange)"/>, but only a row that applies inside <paramref name="interval"/>:
+    /// one whose <see cref="RuntimeChange.ChangedIn"/> the interval crosses, or, when that is unknown, any row once the runtimes differ.
+    /// </summary>
+    public bool TryMatch(CallIdentity identity, RuntimeInterval interval, out RuntimeChange match) =>
+        TryMatch(identity, interval, [], out match);
+
+    /// <summary>As the three-argument <see cref="RuntimeInterval"/> overload, but a row whose <see cref="RuntimeChange.Member"/> is in <paramref name="suppressed"/> never matches.</summary>
+    public bool TryMatch(CallIdentity identity, RuntimeInterval interval, ImmutableArray<string> suppressed, out RuntimeChange match)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        ArgumentNullException.ThrowIfNull(interval);
+
+        match = Rows.FirstOrDefault(row =>
+            AppliesWithin(row, interval)
+            && identity.Value.StartsWith(row.Member, StringComparison.Ordinal)
+            && !suppressed.Contains(row.Member, StringComparer.Ordinal))!;
+        return match is not null;
+    }
+
+    private static bool AppliesWithin(RuntimeChange row, RuntimeInterval interval) =>
+        row.ChangedIn is { } changedIn ? interval.Crosses(changedIn) : !interval.IsEmpty;
+
+    /// <summary>
     /// True when <paramref name="member"/> parses as an identity prefix: a non-empty qualified type,
     /// then exactly one <c>"::"</c>, matching the shape <see cref="Equiv.Core.Matching.ProcedureIdentityNormalizer.Member"/>
     /// produces (<c>Namespace.Type::Member(...)</c> or, for a whole-type row, <c>Namespace.Type::</c>).
@@ -62,16 +91,22 @@ public sealed class RuntimeChangeTable
     }
 
     /// <summary>
-    /// Parses a table in the embedded resource's format. A row whose <c>source</c> is missing, or is
-    /// not <c>curated</c>, <c>documented</c> or <c>measured</c> (ADR 0035), is rejected with
-    /// <see cref="InvalidDataException"/>.
+    /// Parses a table in the embedded resource's format: an object with <c>coveredFrom</c> and <c>rows</c>. A row whose
+    /// <c>source</c> is missing, or is not <c>curated</c>, <c>documented</c> or <c>measured</c> (ADR 0035), or whose
+    /// <c>changedIn</c> is missing or is neither null nor a .NET Framework or .NET target framework moniker (ADR 0040),
+    /// is rejected with <see cref="InvalidDataException"/>, as is a malformed <c>coveredFrom</c>.
     /// </summary>
     internal static RuntimeChangeTable Parse(Stream stream)
     {
         using JsonDocument document = JsonDocument.Parse(stream, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip });
 
+        JsonElement root = document.RootElement;
+        string coveredFrom = root.GetProperty("coveredFrom").GetString()!;
+        TargetRuntime coveredFromRuntime = TargetRuntime.Parse(coveredFrom)
+            ?? throw new InvalidDataException($"runtime-changes coveredFrom '{coveredFrom}' is not a target framework moniker");
+
         ImmutableArray<RuntimeChange>.Builder builder = ImmutableArray.CreateBuilder<RuntimeChange>();
-        foreach (JsonElement element in document.RootElement.EnumerateArray())
+        foreach (JsonElement element in root.GetProperty("rows").EnumerateArray())
         {
             string member = element.GetProperty("member").GetString()!;
             builder.Add(new RuntimeChange(
@@ -81,10 +116,26 @@ public sealed class RuntimeChangeTable
                 ParseSource(member, element))
             {
                 Witness = ParseWitness(element),
+                ChangedIn = ParseChangedIn(member, element),
             });
         }
 
-        return new RuntimeChangeTable(builder.ToImmutable());
+        return new RuntimeChangeTable(coveredFromRuntime, builder.ToImmutable());
+    }
+
+    private static TargetRuntime? ParseChangedIn(string member, JsonElement element)
+    {
+        if (!element.TryGetProperty("changedIn", out JsonElement value))
+        {
+            throw new InvalidDataException($"runtime-changes row '{member}' has no changedIn");
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Null => null,
+            JsonValueKind.String when TargetRuntime.Parse(value.GetString()!) is { } runtime => runtime,
+            _ => throw new InvalidDataException($"runtime-changes row '{member}' has malformed changedIn {value.GetRawText()}"),
+        };
     }
 
     private static RuntimeChangeWitness? ParseWitness(JsonElement element) =>

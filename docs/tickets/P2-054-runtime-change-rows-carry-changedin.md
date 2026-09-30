@@ -1,5 +1,5 @@
 # P2-054 Every runtime-change row says which runtime changed it
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-053
@@ -55,3 +55,10 @@ hand edit to more than 20 rows means the script is wrong: fix the script.
 New rows. Measuring change points with `runtime-diff` (P2-056 makes that possible).
 
 ## Notes
+- Decision: the root of `runtime-changes.json` becomes `{ "coveredFrom": ..., "rows": [...] }`; a row must have `changedIn` (null allowed), and a missing one is rejected like a missing `source`, so `EveryRowHasAParseableChangedIn` cannot pass on an omitted field.
+- Decision: the backfill is a Windows PowerShell 5.1 script, like `tools/z3-feed/fetch.ps1`. It inserts one line per row and indents the array, so the diff stays reviewable, and it refuses to run twice.
+- Decision: `UncoveredRange` treats the .NET Framework to .NET boundary as covered, because the `netcoreapp1.0` rows (fx-core, unsupported-apis) cover it. Only a .NET (Core) side older than `coveredFrom` leaves a gap. Otherwise every Framework pair in the corpus would get the run-level notification.
+- Decision: a `RuntimeInterval` overload with suppression, `TryMatch(identity, interval, suppressed, out match)`, sits beside the ticket's three-argument one. The frontend's flagging needs suppression, so P2-055 can switch callers without touching Core again.
+- Deviation: the ticket was written against 367 rows with three measured ones. The table now has 426 rows, 62 of them measured (runtime-diff runs after the ticket was written). A measured witness proves only that net48 and net10.0 differ, not where the behaviour changed, and at least one measured row changed after the boundary: `Size::Ceiling` float-to-int saturation, at net9.0 per ADR 0040. So only measured rows whose reason is .NET Framework's upfront path-character validation get `netcoreapp1.0`, as the ticket's three rows do. The other 30 measured rows stay null, which applies whenever the runtimes differ. That is sound, and P2-056 can measure the real point.
+- Null `changedIn` (32 rows, the cap in `EveryRowHasAParseableChangedIn`): curated `System.String::GetHashCode(` and `System.Text.Encoding::get_Default(` (their reasons name no version and their URLs are API pages), plus the 30 measured rows above.
+- The header text now says rows record changes at the runtime `changedIn` names (criterion 5). `docs/runtime-changes-review.md` needed no change: it keys on `member`.
