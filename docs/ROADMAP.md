@@ -516,6 +516,14 @@ give one call two identities. Three (P2-073 to P2-075) are EQ006 rows that match
 - P2-072 (M) Two identical bodies with a rethrowing catch lower to different call traces. 1, but
   it is a lowering bug on identical source.
 
+Run time (found 2026-09-30 during P1-018). A Git Extensions `full` run takes 8h57m. That is over a
+hosted GitHub runner's 6-hour job limit, and six pairs that all end Unknown spend 5.4 of its 6.8 verify
+hours. Neither ticket may change a decided verdict.
+- P2-076 (M) A rung that reports a timeout returns within its budget: one "5000 ms" bounded query took
+  126.5 minutes. The contracts pass (2h07m, unlogged) becomes a phase.
+- P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time.
+  Needs P2-050, P2-076.
+
 ## M5 — Agent surface (MCP)
 
 Coding agents do migrations; M5 lets them check their own work while they do it (ADR 0033). It
