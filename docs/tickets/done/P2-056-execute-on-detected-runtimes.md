@@ -1,5 +1,5 @@
 # P2-056 `--execute` and `runtime-diff` run each side on its own runtime
-Status: in-progress
+Status: done (PR #316)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-053
