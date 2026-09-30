@@ -1,5 +1,5 @@
 # P1-017 M0-012's differential soundness gate also verifies every generated pair through the IL lowering
-Status: in-progress
+Status: done (PR #304)
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-016
@@ -86,3 +86,10 @@ one-line mapping fix.
 - Decision: `PairGenLoweringTests.EveryIlPairSideLowersFromIl` (Frontend unit tests) lowers
   `IlPair`'s sides from IL to valid IR. It covers `PairGen`'s new code outside the integration
   run, which Sonar's coverage (`build.ps1` without `-Integration`) does not see.
+- CI measurement (criterion 2): MTP's `--output detailed` prints no per-test lines on the Windows
+  runner, so CI gives only project totals. The integration project took 23 m 44 s against main's
+  21 m 37 s (+2 m 07 s, +9.8%). That includes a temporary test that re-ran M0-012's whole
+  operation-only pass as a baseline, and the two other new tests. Classes run in parallel, so
+  the gate's own share cannot be read from it. The test-level figure is the local one: 32.6 s
+  for main's class, 39.3 s for `GeneratedPairsAreSoundUnderBothLowerings` (+20%). The nightly
+  budget passes locally in 14 m 40 s for the class, against the job's 120-minute limit.
