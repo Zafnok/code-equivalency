@@ -108,5 +108,10 @@ one of the new members and now count as changed.
   take `System.Drawing.Color`. Of the 705 Windows Forms and `System.Drawing` members that did run, only
   `ButtonRenderer::DrawButton`, `Font::FromLogFont`, `RectangleF::Union` and `Size::Ceiling` diverge beyond
   rows that already covered them.
+- This run's drivers ran with the caller's working directory (the repository root): `tools/runtime-diff`
+  built its `ChildProcessHost` without `Within`, unlike `compare --execute` since P2-040, so `File`,
+  `Directory` and stream members created files and folders named after generated strings there. None of the
+  divergences above depends on the working directory (`GetFullPath`'s witness names it with a placeholder).
+  Fixed in this ticket: each driver now runs in a fresh folder under the tool's temporary one.
 - `externalCallees` spells `System.IntPtr` where .NET 10's symbols give `nint`, so such members never match.
   No input can be built for `IntPtr` anyway, so nothing is lost today.

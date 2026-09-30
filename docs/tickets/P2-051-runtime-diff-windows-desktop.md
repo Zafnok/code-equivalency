@@ -65,3 +65,4 @@ Third-party packages.
 - Decision: the congruence-loss census re-ran both sides (main's table, then with the new rows) from this branch, because lowering changed since 2026-09-26.
 - Surprise: `externalCallees` spells `System.IntPtr` where .NET 10's symbols spell `nint`, so IntPtr members never resolve; harmless today, since no input can be built for IntPtr.
 - Surprise: restoring `runtime-changes.json` with `Copy-Item` kept its older timestamp, so the incremental build silently re-embedded nothing and the first "after" census equalled "before". Touch the file before rebuilding.
+- Decision: `tools/runtime-diff/Program.cs` now gives its host `.Within(work)`. The run's drivers had the caller's working directory, and with every external callee in scope, `File`/`Directory` members created about 80 files and folders with generated names in the repository root (untracked; not committed). `compare --execute` already did this (P2-040).

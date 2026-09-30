@@ -43,7 +43,9 @@ source is written beside it as `EquivDriver.cs`. Both read one JSON line per cas
 culture and UI culture, call the member, and write `["Kind",canonical]` on stdout.
 
 - **Cultures:** `invariant`, `en-US`, `tr-TR`, `de-DE` and `ja-JP`.
-- **Runs:** each side runs every case twice, each time in a fresh process. A case gets 10 seconds
+- **Runs:** each side runs every case twice, each time in a fresh process whose working directory is a
+  new folder under the tool's temporary one, so a member that creates or deletes a relative path touches
+  nothing of the caller's. A case gets 10 seconds
   and a process 1 GiB of private memory. A case that gets no answer is `NotComparable`, with the
   value `"no answer"`.
 - **Inputs:** each parameter type has edge values, which come first, in every combination.
