@@ -234,6 +234,9 @@ Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | ownin
 - By proofMethod: ...
 - Unknown by scope: line <n>, method <n>. Line-scoped Unknown share: <%>
 - Top Unknown reasons: ...
+- Top abstractions: the entries of `properties.abstractions` over every `abstraction` Unknown, grouped by
+  kind (an `IrPure` operator name, or `opaque` with its fragment reason once P2-062 lands), top 15, with
+  counts. Identities and kinds only, never `candidateCounterexample` values.
 
 ## Tests (full only)
 - legacy <pass/fail/skip>, modern <pass/fail/skip>
@@ -248,6 +251,9 @@ Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | ownin
 - By verdict: EQ001 (Preserving, precision bug) <n>, EQ001 (Changing, confirmed miss) <n>,
   EQ001 (Changing, unconfirmed) <n>, EQ002 <n>, EQ003 line-scoped with cause on seed's line <n>,
   EQ003 other <n>
+- Preserving family, one row per operator: applied, Equivalent, Unknown, Divergent (EQ002 + EQ006).
+  Then the **Preserving Equivalent share**, `Equivalent / applied` over the whole family, next to seeded
+  recall and labelled reported only: ADR 0028 sets no threshold for it.
 - Recall = (EQ002 + line-scoped EQ003 on the seed's line) / confirmed behaviour-changing seeds
   (n/a if that denominator is 0)
 - Unconfirmed list size: <n> (procedure identities only, in `.corpus/`'s own seeds.json; never
