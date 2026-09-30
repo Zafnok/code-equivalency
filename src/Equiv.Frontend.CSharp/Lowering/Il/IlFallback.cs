@@ -76,7 +76,7 @@ internal static class IlFallback
     private static IrProcedure? Relowered(string side, Side procedure, bool x87, IRunLog log, Func<IMethodSymbol, Compilation, bool, IrProcedure> lower)
     {
         IrProcedure? body = procedure.Symbol.IsAsync || procedure.Symbol.IsIterator ? null : lower(procedure.Symbol, procedure.Compilation, x87);
-        string? reason = body is null ? StateMachine : body.Blocks is [{ Instructions: [IrOpaque { WholeBody: true } opaque] }] && Unreadable.Contains(opaque.Reason) ? opaque.Reason : null;
+        string? reason = body is null ? StateMachine : ReadFailure(body);
         if (reason is null)
         {
             return body;
@@ -89,6 +89,10 @@ internal static class IlFallback
 
         return null;
     }
+
+    /// <summary>The reason <paramref name="body"/> has no ILAst: a whole-body opaque with one of <see cref="IlAstReader"/>'s read failures.</summary>
+    private static string? ReadFailure(IrProcedure body) =>
+        body.Blocks is [{ Instructions: [IrOpaque { WholeBody: true } opaque] }] && Unreadable.Contains(opaque.Reason) ? opaque.Reason : null;
 
     private static ImmutableArray<IrOpaque> Opaques(IrProcedure body) => [.. body.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>()];
 
