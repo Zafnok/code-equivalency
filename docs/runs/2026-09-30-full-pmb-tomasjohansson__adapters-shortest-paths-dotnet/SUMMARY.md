@@ -37,7 +37,7 @@ Top opaque reasons (legacy / modern), up to 15:
 | reason | legacy | modern | owning ticket or "none" |
 |---|---|---|---|
 | Binary | 48 | 48 | P1-014 (ADR 0039) |
-| DelegateCreation | 24 | 24 | none open (M4-004 shares identical fragments; this run files P2-060) |
+| DelegateCreation | 24 | 24 | none open (M4-004 shares identical fragments; this run files P2-067) |
 | Conversion | 10 | 10 | P1-014 (ADR 0039) |
 | DefaultValue | 5 | 5 | none (0.7%, below 5%) |
 | CaughtException | 3 | 3 | none (1.1%, below 5%) |
@@ -56,7 +56,7 @@ Top reason sets (up to 15; "" = no opaque):
 | "Binary" | 7 | P1-014 (ADR 0039) |
 | "CaughtException" | 2 | none (1.1%, below 5%) |
 | "Conversion" | 1 | P1-014 (ADR 0039) |
-| "DelegateCreation" | 1 | none open (M4-004 shares identical fragments; this run files P2-060) |
+| "DelegateCreation" | 1 | none open (M4-004 shares identical fragments; this run files P2-067) |
 
 | runtime-change calls | legacy | modern |
 |---|---|---|

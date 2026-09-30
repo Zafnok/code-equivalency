@@ -37,7 +37,7 @@ Top opaque reasons (legacy / modern), up to 15:
 
 | reason | legacy | modern | owning ticket or "none" |
 |---|---|---|---|
-| DelegateCreation | 5 | 5 | none open (M4-004 shares identical fragments; this run files P2-060) |
+| DelegateCreation | 5 | 5 | none open (M4-004 shares identical fragments; this run files P2-067) |
 | Conversion | 1 | 1 | P1-014 (ADR 0039) |
 
 ## Changed code

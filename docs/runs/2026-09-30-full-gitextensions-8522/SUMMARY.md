@@ -37,7 +37,7 @@ Top opaque reasons (legacy / modern), up to 15:
 
 | reason | legacy | modern | owning ticket or "none" |
 |---|---|---|---|
-| DelegateCreation | 1700 | 1699 | none open (M4-004 shares identical fragments; this run files P2-060) |
+| DelegateCreation | 1700 | 1699 | none open (M4-004 shares identical fragments; this run files P2-067) |
 | switch-pattern | 1199 | 1196 | P1-014, P1-015, P1-016 (ADR 0039 IL fallback) |
 | Conversion | 763 | 762 | P1-014 (ADR 0039) |
 | Binary | 652 | 652 | P1-014 (ADR 0039) |
@@ -62,14 +62,14 @@ Top reason sets (up to 15; "" = no opaque):
 | reason set | changed pairs | owning tickets or "none" |
 |---|---|---|
 | "" | 447 | n/a |
-| "DelegateCreation" | 194 | none open (M4-004 shares identical fragments; this run files P2-060) |
+| "DelegateCreation" | 194 | none open (M4-004 shares identical fragments; this run files P2-067) |
 | "switch-pattern" | 79 | P1-014, P1-015, P1-016 (ADR 0039 IL fallback) |
 | "Binary" | 39 | P1-014 (ADR 0039) |
-| "DelegateCreation+switch-pattern" | 34 | P1-014, P1-015, P1-016 (ADR 0039 IL fallback); none open (M4-004 shares identical fragments; this run files P2-060) |
+| "DelegateCreation+switch-pattern" | 34 | P1-014, P1-015, P1-016 (ADR 0039 IL fallback); none open (M4-004 shares identical fragments; this run files P2-067) |
 | "InterpolatedString" | 26 | P1-014 (ADR 0039) |
 | "Conversion" | 22 | P1-014 (ADR 0039) |
-| "DelegateCreation+InterpolatedString" | 16 | P1-014 (ADR 0039); none open (M4-004 shares identical fragments; this run files P2-060) |
-| "Conversion+DelegateCreation" | 15 | P1-014 (ADR 0039); none open (M4-004 shares identical fragments; this run files P2-060) |
+| "DelegateCreation+InterpolatedString" | 16 | P1-014 (ADR 0039); none open (M4-004 shares identical fragments; this run files P2-067) |
+| "Conversion+DelegateCreation" | 15 | P1-014 (ADR 0039); none open (M4-004 shares identical fragments; this run files P2-067) |
 | "iterator" | 14 | none (1.2%, below 5%) |
 | "CaughtException" | 13 | none (1.1%, below 5%) |
 | "InterpolatedString+switch-pattern" | 10 | P1-014 (ADR 0039); P1-014, P1-015, P1-016 (ADR 0039 IL fallback) |
@@ -155,6 +155,6 @@ Top reason sets (up to 15; "" = no opaque):
 - No `not-reproduced` replay: 0, against 16 in M4-007 (P2-037, P2-038).
 - No hand-written or mechanical seed is a confirmed miss. Five Changing seeds came back Equivalent; all five are commutative operand swaps (see above).
 - Three Preserving seeds turned an Equivalent result into Divergent (EQ002): S150 `FormDeleteTag::EnableOrDisableRemotesCombobox`, S177 `SubmoduleNode::DisplayText`, S186 `PowerShellHelper::RunPowerShell` (`InlineTemporary`, `Commute`, `Commute`). Filed as P2-061. Four other Preserving seeds were already Divergent without any seed (S001, S109, S182, S247), so they are results of the migration, not of the seed.
-- `DelegateCreation` alone is 17.0% of changed pairs and has no open owner: P2-060.
+- `DelegateCreation` alone is 17.0% of changed pairs and has no open owner: P2-067.
 - The SARIF does not say why an opaque fragment is opaque, so the abstractions histogram cannot group them by reason: P2-062.
 - `seeds.json` records the method's first line, not the mutated line: P2-063.
