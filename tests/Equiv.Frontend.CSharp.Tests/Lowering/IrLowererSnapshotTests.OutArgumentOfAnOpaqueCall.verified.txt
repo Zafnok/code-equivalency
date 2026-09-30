@@ -3,7 +3,7 @@ B0:
   %s.isNull.9 "s": bool = mapread %null.System.String, %s
   goto B1
 B1:
-  %$2: bool = call "System.Int32::TryParse(string,out int)"(%s) threw %$3: bool refout(%n.10 "n": bv32)
+  %$2: bool = call closed "System.Int32::TryParse(string,out int)"(%s) threw %$3: bool refout(%n.10 "n": bv32)
   br %$3, B6, B7
 B2:
   goto B4
