@@ -66,3 +66,10 @@ untainted observables agree while the solver said they differ remains an encoder
   unchanged. Found by the IL mode of the gate, where `$"{s}t"` lowers to `String.Concat`, which the
   heap model lets write `Oracle.F`; the same pair written `s + "t"` gives the same Divergent from
   IOperation. Narrowing what a call may write is P2-060.
+- 2026-09-30 (P2-060). The same holds for a call's result and `threw` flag, not only its heap writes.
+  Two sides that make the same call at the same position get the same answer, and code that differs
+  after the call can diverge only for some answers. ADR 0041 stops a closed call from writing the
+  heap. Even so, the gate's nightly budget found a model in which `Nullable<int>.GetValueOrDefault()`
+  threw on one side before a statement the other side runs first. No real call throws there. So rule
+  2 keeps excusing a model whose run records any call, closed or open. Rules 1 and 3 are unchanged.
+  A Divergent that rests on an answer the real member cannot give is P2-068.

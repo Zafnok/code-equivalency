@@ -23,8 +23,9 @@ map. Both lowerings mark a call closed by the same rule. The encoder encodes a c
 closed only when every call to it in the product is closed. A closed call that shares its identity
 with an open one lacks heap pairs, so it leaves its own side's maps unchanged, but it reads and
 writes the maps the encoder threads, as the open call does. The two calls then share one function
-and one event shape. The differential gate's rule 2 excuses a replay that does not diverge only when
-the model's run records an open call.
+and one event shape. A closed call's result and `threw` flag stay free functions that the solver
+chooses, so the differential gate's rule 2 still excuses a replay that does not diverge whenever the
+model's run records a call, closed or open.
 
 ## Why
 - A callee reaches a heap map only through a reference: to the map's object, or to user code that
@@ -41,6 +42,11 @@ the model's run records an open call.
   the other no longer makes the traces differ.
 - Position stays an argument. The callee may still read ambient state such as the current culture,
   so two calls with equal arguments are still not forced to agree (ADR 0018).
+- Rule 2 keeps its exemption for closed calls because of a measurement. With the exemption narrowed
+  to open calls, the gate passes its 200-pair PR budget but fails the 5,000-pair nightly budget
+  (seed `9v8KtBVEhjFh`, DropNullCheck under IL). There the model has `Nullable<int>.GetValueOrDefault()`
+  throw, which no real call does. That is a closed call's `threw` flag, not the heap, so this ADR does
+  not remove it.
 - Deciding closure per identity in the encoder keeps each identity at one function arity and one
   event shape. That matters only when one site cannot see the callee's symbol, such as an
   API-equivalence adapter's modern member, which is always open.
@@ -67,7 +73,10 @@ the model's run records an open call.
   pairs, and the validator rejects one that has. `ICallOracle` is unchanged, because the model oracle
   asks the encoding which identities are closed.
 - VERIFICATION-MODEL sections 1, 2 (the `IrCall` row), 5 and 7 (rule 2) change in the PR that
-  accepts this ADR. ADR 0026's 2026-09-30 clarification still holds for open calls.
+  accepts this ADR. ADR 0026 gains a second 2026-09-30 clarification: a Divergent can rest on a call's
+  result or `threw` flag too, not only on its heap writes.
+- A Divergent that rests on a BCL call's `threw` flag or result, which the real member cannot give,
+  is still reported as EQ002. Ticket P2-068 owns that.
 - Ticket P2-060 implements it and pins the gate's pair. `tools/corpus/seeder/SyntaxMutator.cs` treats an
   interpolated string as a call when reordering statements (P1-017). It stays as it is: an
   interpolated string with a non-string hole is still an open call.

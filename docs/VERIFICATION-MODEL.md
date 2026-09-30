@@ -723,10 +723,10 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   changing operator can produce an equivalent mutant, so no rule assumes a mutant differs.
   200 pairs per PR, 5,000 nightly. Each pair is verified twice: once lowered from IOperation,
   and once with both sides forced through the IL lowering (ADR 0039; P1-017). Both verdicts
-  are held to all three rules. A model whose run records an open call (ADR 0041) also fixes
-  that call's outputs, which no C# argument can (ADR 0026, clarification of 2026-09-30). So rule 2
-  does not count a replay of such a model that fails to diverge. A model whose run records only
-  closed calls is held to rule 2.
+  are held to all three rules. A model whose run records an ordinary call also fixes that
+  call's outputs, which no C# argument can (ADR 0026, clarifications of 2026-09-30). So rule 2
+  does not count a replay of such a model that fails to diverge. That includes a closed call
+  (ADR 0041): it writes no heap, but its result and `threw` flag are still the model's choice.
 - Snapshot tests (Verify): IR dump and SARIF for every sample in `samples/`.
 - Congruence (property test, ADR 0024): whenever congruence reports Equivalent on a
   generated or sample pair, the solver on the same pair never reports Divergent.
