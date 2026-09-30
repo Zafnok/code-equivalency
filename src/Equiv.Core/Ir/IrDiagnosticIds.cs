@@ -38,4 +38,7 @@ public static class IrDiagnosticIds
 
     /// <summary>A heap pair's map is not a by-ref parameter of map type, or its before or after is not of that type (ticket P1-005).</summary>
     public const string HeapPairMap = "IR012";
+
+    /// <summary>A closed <see cref="IrCall"/> has heap pairs, though it reaches no heap map (ADR 0041; ticket P2-060).</summary>
+    public const string ClosedCallHeap = "IR013";
 }

@@ -327,6 +327,16 @@ public sealed class IrValidatorTests
         Assert.Empty(Ids(HeapCall.Replace("{{pairs}}", "\"field.C.x\" %field.C.x -> %x1: map<bv32, bv32>, \"field.C.y\" %field.C.y -> %y1: map<bv32, bv32>", StringComparison.Ordinal)));
     }
 
+    /// <summary>ADR 0041 (ticket P2-060): a closed call reaches no heap map, so it has no heap pairs.</summary>
+    [Fact]
+    public void IrCallValidator_RejectsAClosedCallWithHeapPairs()
+    {
+        string closed = HeapCall.Replace("call \"F\"", "call closed \"F\"", StringComparison.Ordinal);
+
+        Assert.Equal([IrDiagnosticIds.ClosedCallHeap], Ids(closed.Replace("{{pairs}}", "\"field.C.x\" %field.C.x -> %x1: map<bv32, bv32>", StringComparison.Ordinal)));
+        Assert.Empty(Ids(closed.Replace(" heap({{pairs}})", string.Empty, StringComparison.Ordinal)));
+    }
+
     [Fact]
     public void IrCallValidator_RejectsARepeatedMap()
     {

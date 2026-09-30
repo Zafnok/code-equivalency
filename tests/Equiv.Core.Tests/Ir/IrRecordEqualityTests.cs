@@ -54,6 +54,11 @@ public sealed class IrRecordEqualityTests
     public void CallHeap() =>
         AssertStructural(() => new IrCall(A, Threw: null, new CallIdentity("F"), [B]) { Heap = [new IrHeapPair("m", A, B)] }, c => c with { Heap = [] });
 
+    /// <summary>ADR 0041 (ticket P2-060): whether a call is closed is part of it.</summary>
+    [Fact]
+    public void CallClosed() =>
+        AssertStructural(() => new IrCall(A, Threw: null, new CallIdentity("F"), [B]) { Closed = true }, c => c with { Closed = false });
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
