@@ -53,3 +53,16 @@ untainted observables agree while the solver said they differ remains an encoder
 - VERIFICATION-MODEL section 6 (the Unknown row, the candidate counterexample, the replay rule)
   changed in the PR that accepted this ADR.
 - Ticket: M3-016. M4-004 and M4-002 depend on it.
+
+## Clarifications
+- 2026-09-30 (P1-017). "With position keying, a divergence can only depend on a call result after
+  the traces already differ" holds for the call's return value, but not for its heap writes (ADR
+  0018): two sides that make the same call at the same position get the same, arbitrary heap back,
+  and code that differs after the call can diverge on it. A Divergent can therefore depend on what
+  the solver chose for an ordinary call, which is the modular assumption this ADR keeps untainted,
+  so its model is an input plus a callee behaviour, not an input alone. The differential gate's
+  rule 2 (VERIFICATION-MODEL section 7) replays a model as C# arguments only, so a model whose run
+  records a call and does not diverge in C# is not a decoding failure there. Rules 1 and 3 are
+  unchanged. Found by the IL mode of the gate, where `$"{s}t"` lowers to `String.Concat`, which the
+  heap model lets write `Oracle.F`; the same pair written `s + "t"` gives the same Divergent from
+  IOperation. Narrowing what a call may write is P2-060.

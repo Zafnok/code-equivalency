@@ -1,9 +1,12 @@
 using System.Collections.Immutable;
+using System.Globalization;
 
 using CsCheck;
 
+using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 using Equiv.Corpus.Seeder;
+using Equiv.Frontend.CSharp.Lowering.Il;
 using Equiv.TestSupport;
 
 using Xunit;
@@ -21,7 +24,9 @@ namespace Equiv.Tests.Integration;
 /// <item>precision: if the operator is preserving, the verdict is not Divergent.</item>
 /// </list>
 /// A failure prints the shrunk pair as its two classes, the operator, the input and both observables, which is a
-/// ready-made regression test. <see cref="Budget"/> sets the pair count and the seed.
+/// ready-made regression test. <see cref="Budget"/> sets the pair count and the seed. Each pair is verified twice, once
+/// with both sides lowered from IOperation and once with both forced through the IL lowering (ADR 0039; ticket P1-017),
+/// and each verdict is held to all three rules; a failure names the rule and the lowering that broke it.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class DifferentialSoundnessTests
@@ -40,6 +45,28 @@ public sealed class DifferentialSoundnessTests
     /// not only the one it shrank to. Must be empty before M3-003 lands.
     /// </summary>
     private static readonly ImmutableArray<(string Symptom, string Ticket)> Skips = [];
+
+    /// <summary>
+    /// The pairs the gate draws (ticket P1-017): one in four holds a construct the IL fallback exists for, which the
+    /// IOperation lowering leaves opaque.
+    /// </summary>
+    internal static readonly Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Generated =
+        Gen.Frequency((3, PairGen.Pair), (1, PairGen.IlPair));
+
+    private static readonly ImmutableArray<PairRuntime.Lowering> BothLowerings = [PairRuntime.Lowering.Operation, PairRuntime.Lowering.Il];
+
+    private static readonly ImmutableArray<Rule> Rules = [new(1, Soundness), new(2, Decoding), new(3, Precision)];
+
+    /// <summary>
+    /// The IL lowering with <c>!=</c> read as <c>==</c>: a mapping bug under which a flipped equality looks Equivalent while
+    /// every input that reaches it runs differently, which rule 1 must catch.
+    /// </summary>
+    private static readonly PairRuntime.Lowering BrokenIl = new("il with != read as ==", static (method, compilation) =>
+        IlLowerer.Lower(method, compilation, x87: false, static op => op switch
+        {
+            IrBinaryOp.Ne => IrBinaryOp.Eq,
+            _ => op,
+        }));
 
     /// <summary>The legacy side of the pair <see cref="ADerivationThatNeverReadsALengthReplaysAsDivergence"/> pins.</summary>
     private const string NeverReadsLengthLegacy = """
@@ -119,17 +146,20 @@ public sealed class DifferentialSoundnessTests
 
     private static string Seed => Environment.GetEnvironmentVariable("EQUIV_DIFFERENTIAL_SEED") is { Length: > 0 } seed ? seed : Budget.Seed;
 
-    /// <summary>Rule 1.</summary>
+    /// <summary>Rules 1 to 3, under the IOperation lowering and under the IL lowering.</summary>
     [Fact]
-    public void ObservedDivergenceIsNeverEquivalent() => Assert.Null(Failed(Soundness));
+    public void GeneratedPairsAreSoundUnderBothLowerings() => Assert.Null(Failed(BothLowerings, Rules));
 
-    /// <summary>Rule 2.</summary>
+    /// <summary>A deliberately broken IL mapping fails rule 1 within the pull-request budget, and the failure prints its seed.</summary>
     [Fact]
-    public void DivergentModelReplaysAsDivergence() => Assert.Null(Failed(Decoding));
+    public void ABrokenIlMappingIsCaught()
+    {
+        Exception? failure = Failed([BrokenIl], [Rules[0]]);
 
-    /// <summary>Rule 3.</summary>
-    [Fact]
-    public void PreservingMutationIsNeverDivergent() => Assert.Null(Failed(Precision));
+        Assert.NotNull(failure);
+        Assert.Contains("rule 1 under the il with != read as == lowering", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("Set seed", failure.Message, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Ticket P2-043: rule 2 at CsCheck seed <c>6rdKklVqtDVa</c>, shrunk. Spacer's derivation of the dropped
@@ -140,21 +170,26 @@ public sealed class DifferentialSoundnessTests
     {
         Case c = new(NeverReadsLengthLegacy, NeverReadsLengthModern, MutationOperator.DropFieldWrite, []);
 
-        Assert.Null(Decoding(c)?.Describe(c));
+        Assert.Null(Decoding(c, PairRuntime.Lowering.Operation)?.Describe(c));
     }
 
     /// <summary>CsCheck reports a counter-example by throwing; surfacing it as a value gives each test its assertion.</summary>
-    private static Exception? Failed(Func<Case, Failure?> rule) => Record.Exception(() => Sample(rule));
+    private static Exception? Failed(ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules) => Record.Exception(() => Sample(lowerings, rules));
 
-    private static void Sample(Func<Case, Failure?> rule) =>
-        Gen.Select(PairGen.Pair, PairGen.Input.Array[InputsPerPair], static (pair, inputs) => new Case(pair.LegacySource, pair.ModernSource, pair.Operator, inputs))
-            .Sample(c => rule(c) is not { } failure || Skipped(failure), seed: Seed, iter: Pairs, print: c => rule(c)?.Describe(c) ?? string.Empty);
+    private static void Sample(ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules) =>
+        Gen.Select(Generated, PairGen.Input.Array[InputsPerPair], static (pair, inputs) => new Case(pair.LegacySource, pair.ModernSource, pair.Operator, inputs))
+            .Sample(c => Check(c, lowerings, rules) is null, seed: Seed, iter: Pairs, print: c => Check(c, lowerings, rules)?.Describe(c) ?? string.Empty);
+
+    /// <summary>The first failure of <paramref name="c"/> that no <see cref="Skips"/> entry tolerates, lowering by lowering and rule by rule.</summary>
+    private static Failure? Check(Case c, ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules) =>
+        lowerings.SelectMany(lowering => rules.Select(rule => rule.Check(c, lowering) is { } failure ? failure with { Broken = string.Create(CultureInfo.InvariantCulture, $"rule {rule.Number} under the {lowering} lowering") } : null))
+            .FirstOrDefault(static failure => failure is not null && !Skipped(failure));
 
     private static bool Skipped(Failure failure) => Skips.Any(s => failure.Input.Contains(s.Symptom, StringComparison.Ordinal));
 
-    private static Failure? Soundness(Case c)
+    private static Failure? Soundness(Case c, PairRuntime.Lowering lowering)
     {
-        PairRuntime.Analysis analysis = PairRuntime.Analyse(c.Legacy, c.Modern);
+        PairRuntime.Analysis analysis = PairRuntime.Analyse(c.Legacy, c.Modern, lowering);
         if (analysis.Verdict is not Equivalent)
         {
             return null;
@@ -173,10 +208,16 @@ public sealed class DifferentialSoundnessTests
         return null;
     }
 
-    private static Failure? Decoding(Case c)
+    /// <summary>
+    /// Rule 2. A model whose run makes an ordinary call also chose that call's result, <c>threw</c> flag and heap writes,
+    /// which ADR 0026 leaves untainted (its 2026-09-30 clarification) and which no C# argument can impose, so a replay of
+    /// such a model that does not diverge is not a decoding failure. A changing pair makes a call only through the IL
+    /// fallback's constructs (<see cref="PairGen.IlPair"/>), and this applies to either lowering alike.
+    /// </summary>
+    private static Failure? Decoding(Case c, PairRuntime.Lowering lowering)
     {
-        PairRuntime.Analysis analysis = PairRuntime.Analyse(c.Legacy, c.Modern);
-        if (analysis.Verdict is not Divergent)
+        PairRuntime.Analysis analysis = PairRuntime.Analyse(c.Legacy, c.Modern, lowering);
+        if (analysis.Verdict is not Divergent { Counterexample: var counterexample })
         {
             return null;
         }
@@ -188,17 +229,18 @@ public sealed class DifferentialSoundnessTests
 
         using PairRuntime.Loaded loaded = new(analysis);
         (string legacy, string modern) = loaded.Observe(model);
-        return string.Equals(legacy, modern, StringComparison.Ordinal) ? new Failure(model.ToString(), legacy, modern) : null;
+        bool throughCall = counterexample.Old.Trace.Length > 0 || counterexample.New.Trace.Length > 0;
+        return string.Equals(legacy, modern, StringComparison.Ordinal) && !throughCall ? new Failure(model.ToString(), legacy, modern) : null;
     }
 
-    private static Failure? Precision(Case c)
+    private static Failure? Precision(Case c, PairRuntime.Lowering lowering)
     {
         if (!PairGen.IsPreserving(c.Operator))
         {
             return null;
         }
 
-        PairRuntime.Analysis analysis = PairRuntime.Analyse(c.Legacy, c.Modern);
+        PairRuntime.Analysis analysis = PairRuntime.Analyse(c.Legacy, c.Modern, lowering);
         if (analysis.Verdict is not Divergent)
         {
             return null;
@@ -219,11 +261,19 @@ public sealed class DifferentialSoundnessTests
         public override string ToString() => $"{Operator}\n{Legacy}\n{Modern}";
     }
 
-    /// <summary>What a rule saw go wrong on one input (or, for an undecodable model, why there is no input).</summary>
+    /// <summary>One of the three rules, by its number in VERIFICATION-MODEL.md section 7.</summary>
+    private sealed record Rule(int Number, Func<Case, PairRuntime.Lowering, Failure?> Check);
+
+    /// <summary>
+    /// What a rule saw go wrong on one input (or, for an undecodable model, why there is no input), and which rule under
+    /// which lowering it <see cref="Broken"/>.
+    /// </summary>
     private sealed record Failure(string Input, string LegacyObservable, string ModernObservable)
     {
-        /// <summary>Acceptance criterion 4: both methods, the operator, the input and both observables, and nothing else.</summary>
+        public string Broken { get; init; } = string.Empty;
+
+        /// <summary>M0-012's acceptance criterion 4 (both methods, the operator, the input and both observables), after the rule and lowering broken.</summary>
         public string Describe(Case c) =>
-            $"operator: {c.Operator}\ninput: {Input}\nlegacy observable: {LegacyObservable}\nmodern observable: {ModernObservable}\nlegacy:\n{c.Legacy}modern:\n{c.Modern}";
+            $"{Broken}\noperator: {c.Operator}\ninput: {Input}\nlegacy observable: {LegacyObservable}\nmodern observable: {ModernObservable}\nlegacy:\n{c.Legacy}modern:\n{c.Modern}";
     }
 }
