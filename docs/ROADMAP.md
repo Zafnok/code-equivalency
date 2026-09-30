@@ -435,7 +435,8 @@ work, P2-050, P1-019, P2-051 and P2-052.
 
 - P2-046 (S) Second full corpus run on M4-007's four pairs. Adds a "since M4-007" table, mechanical
   seeds on Git Extensions, the Preserving Equivalent share, a top-abstractions histogram and a
-  re-scored per-ticket unlock table.
+  re-scored per-ticket unlock table. Done 2026-09-30: 0 pair-level crashes (92 before), unchanged share 91.6%, lowerable share 39.1%,
+  Preserving Equivalent share 70.1%, verdict continue (`docs/runs/2026-09-30-full-verdict.md`).
 - P2-047 (M) Divergent audit: hand-adjudicate a fixed sample of EQ002 and EQ006 and report Divergent
   precision. Needs P2-046.
 - P2-048 (M) Five cleanup refactorings as Preserving seed operators, and a "cleanup proof rate" per
@@ -470,6 +471,13 @@ work, P2-050, P1-019, P2-051 and P2-052.
 - P2-058 (M) Pin three public "no functional change" PRs as `cleanup` corpus pairs (Git Extensions
   #11372 and #11284, PowerShell #19687), run them, and adjudicate every Divergent. Needs P2-055,
   P2-047.
+- P2-060 (L) `DelegateCreation` is 17.0% of Git Extensions' changed pairs on its own and has no open
+  owner: split it by cause, then lower the chosen construct. Found by P2-046.
+- P2-061 (M) Three Preserving mechanical seeds on Git Extensions turn Equivalent into Divergent; find
+  the cause of each (seeder or engine). Found by P2-046.
+- P2-062 (S) An opaque fragment in `properties.abstractions` names its reason. Found by P2-046.
+- P2-063 (S) Corpus tooling: `seeds.json` records the mutated line, `-Metrics` reads `unknownReason`,
+  and the skill warns that overlapping runs on one checkout are void. Found by P2-046.
 
 ## M5 — Agent surface (MCP)
 

@@ -1,5 +1,5 @@
 # P2-046 Second full corpus run: measure again after the M4-007 fixes
-Status: todo
+Status: done (PR #305)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-031, P2-032, P2-033, P2-034, P2-035, P2-039, P2-045 (all done)
@@ -57,3 +57,16 @@ New corpus pairs or a new migration of an agent pair. Adjudicating Divergent res
 Any threshold change (a new ADR).
 
 ## Notes
+- Decision: the `--fail-on unknown` run the skill asks for is skipped again. `--fail-on` only changes
+  the exit code, so a second full pass adds nothing (M4-007 made the same call).
+- Decision: M4-007's hand-written seed copies were not kept, so the 28 seeds were re-applied to the
+  same methods, one catalogue change each, in `modern-seeded` copies under `.corpus/`.
+- Decision: the four Git Extensions runs were started concurrently to save wall-clock. The first
+  `full` and `full --execute` collided on MSBuild files (skipped projects, exit 4) and were rerun one
+  after the other; the void pair's data is not used anywhere. See the verdict file and P2-063.
+- Decision: mechanical recall is reported as counts, not a rate, because `seeds.json` holds the
+  method's first line (P2-063). Changing seeds reported Equivalent were checked by source diff; all
+  are commutative operand swaps.
+- Observed: a `full` run on Git Extensions took 8h57m with four runs at once (2h37m alone in M4-007).
+  Timeout Unknowns are not comparable across the two runs (P2-050).
+- Result: `docs/runs/2026-09-30-full-verdict.md`, verdict continue; tickets P2-060 to P2-063.
