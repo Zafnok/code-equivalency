@@ -452,6 +452,8 @@ work, P2-050, P1-019, P2-051 and P2-052.
   emitted compilation). Needs M4-009, P1-008.
 - P2-059 (S) Soundness: rung 4 is Equivalent only when Spacer's invariant solves the clauses (Z3 5.1's
   Spacer proved a pair that rungs 1 and 3 refute, CsCheck seed `4FfExD8adOs4`). Needs P1-001.
+- P2-060 (M) A call writes only the heap its callee can reach, so `String.Concat` cannot change a
+  user field (a false Divergent P1-017's IL gate found). Needs P1-017.
 
 ### Runtimes are detected, not assumed (ADR 0040)
 
