@@ -60,11 +60,12 @@ internal static class CompareCommand
         verbosityOption.AcceptOnlyFromAmong("quiet", "normal", "debug");
         Option<string?> logOption = new("--log");
         Option<bool> ilFallbackOption = new("--il-fallback");
+        Option<int?> resourceLimitOption = new("--resource-limit");
 
         Command command = new("compare")
         {
             legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption,
-            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption, ilFallbackOption,
+            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption, ilFallbackOption, resourceLimitOption,
         };
 
         command.SetAction(parseResult => RunLogged(
@@ -85,6 +86,7 @@ internal static class CompareCommand
                 Verbosity = ToVerbosity(parseResult.GetValue(verbosityOption)),
                 LogPath = parseResult.GetValue(logOption),
                 IlFallback = parseResult.GetValue(ilFallbackOption),
+                ResourceLimit = parseResult.GetValue(resourceLimitOption),
             },
             frontends,
             backend,
@@ -157,9 +159,9 @@ internal static class CompareCommand
             return ExitCodes.UsageError;
         }
 
-        if (options.Bound is <= 0 || options.TimeoutMs is <= 0)
+        if (options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0)
         {
-            streams.Error.WriteLine("error: bound and timeoutMs must be positive integers");
+            streams.Error.WriteLine("error: bound, timeoutMs and resourceLimit must be positive integers");
             return ExitCodes.UsageError;
         }
 
@@ -180,7 +182,7 @@ internal static class CompareCommand
             return inputErrorExitCode;
         }
 
-        EquivConfig config = loaded with { Bound = options.Bound ?? loaded.Bound, TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs, IlFallback = options.IlFallback };
+        EquivConfig config = loaded with { Bound = options.Bound ?? loaded.Bound, TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs, ResourceLimit = options.ResourceLimit ?? loaded.ResourceLimit, IlFallback = options.IlFallback };
         FrontendAnalysis? analysis = Loaded(frontend, options, config, runLog, streams.Error);
         if (analysis is null)
         {
@@ -497,10 +499,11 @@ internal static class CompareCommand
         return result.Config;
     }
 
-    /// <summary>The backend's knobs for this run: the config's bound, timeout and renames, and the command line's rung options.</summary>
+    /// <summary>The backend's knobs for this run: the config's bound, timeout, resource limit and renames, and the command line's rung options.</summary>
     private static VerificationOptions Verification(EquivConfig config, CompareOptions options, IRunLog runLog) =>
         new(config.Bound, config.TimeoutMs, config.CallIdentityRenames)
         {
+            ResourceLimit = config.ResourceLimit,
             ChcIntMode = options.ChcIntMode,
             InvariantModel = options.InvariantModel,
             Log = runLog,

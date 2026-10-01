@@ -285,6 +285,38 @@ public sealed partial class SamplesEndToEndTests
             [.. log.Runs[0].Results.Select(static r => $"{r.PartialFingerprints["procedureIdentity/v1"]} {r.RuleId} {r.PartialFingerprints["resultFingerprint/v1"]}").Order(StringComparer.Ordinal)];
     }
 
+    /// <summary>
+    /// Ticket P2-050 criterion 5: with a tiny <c>--resource-limit</c> and a ten-minute <c>timeoutMs</c>, the pair of
+    /// <c>added-branch</c> that needs the solver is Unknown(timeout) on the resource limit, long before the wall-clock
+    /// backstop, and a second run writes the same bytes: nothing in the result depends on how fast the machine was.
+    /// </summary>
+    [Fact]
+    public void RepeatedRunsAreByteIdentical()
+    {
+        (string legacy, string modern) = Solutions("added-branch");
+        string configPath = Path.Combine(Path.GetTempPath(), $"equiv-P2-050-{Guid.NewGuid():N}.json");
+        string[] outPaths = [.. Enumerable.Range(0, 2).Select(static _ => Path.Combine(Path.GetTempPath(), $"equiv-P2-050-{Guid.NewGuid():N}.sarif"))];
+        try
+        {
+            File.WriteAllText(configPath, """{ "timeoutMs": 600000 }""");
+
+            int[] exitCodes = [.. outPaths.Select(outPath => RunProgramSilently(() => Program.Main(
+                ["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, "--config", configPath, "--resource-limit", "1"])))];
+
+            Assert.Equal([ExitCodes.Success, ExitCodes.Success], exitCodes);
+            Result unknown = SarifLog.Load(outPaths[0]).Runs[0].Results.Single(static r => r.Message.Text.Contains("::Double(", StringComparison.Ordinal));
+            Assert.Equal("EQ003", unknown.RuleId);
+            Assert.Equal("timeout", unknown.GetProperty<string>("unknownReason"));
+            Assert.Contains("solver returned unknown (canceled): resource limit 1 hit", unknown.Message.Text, StringComparison.Ordinal);
+            Assert.Equal(File.ReadAllBytes(outPaths[0]), File.ReadAllBytes(outPaths[1]));
+        }
+        finally
+        {
+            File.Delete(configPath);
+            Array.ForEach(outPaths, File.Delete);
+        }
+    }
+
     private static Task<string> Snapshot(string sample) =>
         File.ReadAllTextAsync(Path.Combine(SamplesRoot, sample, "expected.sarif.json"), TestContext.Current.CancellationToken);
 
