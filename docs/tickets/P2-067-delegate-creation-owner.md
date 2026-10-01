@@ -162,3 +162,9 @@ The IL fallback (P1-014 to P1-016), `TranslatedQuery` (P2-026), other opaque rea
 - A method group written two ways (`P` and `this.P`, or `new D(P)` and `P`) has two fingerprints,
   because ADR 0024's serialisation keeps each operation's syntax kind. Such a pair is
   Unknown(Abstraction), not Equivalent. Not changed here.
+- Interaction with P2-079 (filed on `main` 2026-10-01, read after this work was done). Its repro
+  starts from two methods that are Unknown(opaque: `DelegateCreation`) without `--il-fallback`. After
+  this ticket a lambda that differs is two `delegate:` functions and no opaque, so those methods
+  should be Unknown(Abstraction) and the fallback, which is tried only on an unshared opaque (ADR
+  0039), should no longer be tried on them. Not run here. The IL defect is untouched: it still shows
+  wherever another unshared opaque triggers the fallback, so P2-079's repro needs one.
