@@ -151,6 +151,37 @@ public sealed class SyntaxMutatorTests
         Assert.True(CompileCheck.StillCompiles(root.ToFullString(), mutated), mutated);
     }
 
+    [Theory]
+    [InlineData("int M(int a, int b) { return a + b; }", "returnb+a;")]
+    [InlineData("static long F; bool M(long a) { return F == a; }", "returna==F;")]
+    [InlineData("int M(int a, int b) { return (a - 1) * -b; }", "return-b*(a-1);")]
+    public void Commute_SwapsBuiltInOperandsThatMakeNoCall(string method, string expected) =>
+        Assert.Contains(expected, Applied(MutationOperator.Commute, method).Replace(" ", "", StringComparison.Ordinal), StringComparison.Ordinal);
+
+    [Theory]
+    [InlineData("string M(string a, string b) { return a + b; }")]
+    [InlineData("string S { get; } string B { get; } string M() { return S + B; }")]
+    [InlineData("string S { get; } string M(int x) { return x + S; }")]
+    [InlineData("int P { get; } int M(int a) { return a + P; }")]
+    [InlineData("int M(string s, int a) { return s.Length * a; }")]
+    [InlineData("struct V { public static V operator +(V x, V y) => x; } V M(V a, V b) { return a + b; }")]
+    [InlineData("System.Action M(System.Action f, System.Action g) { return f + g; }")]
+    [InlineData("int M(Unknown u, int a) { return u.Count + a; }")]
+    public void Commute_RefusesStringsCallsAndUnresolvedTypes(string method) =>
+        Assert.Equal(0, SyntaxMutator.Sites(MutationOperator.Commute, Declared(method)));
+
+    [Theory]
+    [InlineData(MutationOperator.IntroduceTemporary)]
+    [InlineData(MutationOperator.InlineTemporary)]
+    public void Temporary_RefusesATargetWhoseReceiverIsReadBeforeTheValue(MutationOperator op) =>
+        Assert.Equal(0, SyntaxMutator.Sites(op, Declared("Box F; Box G; void M() { F.Enabled = G.Checked; } sealed class Box { public bool Enabled { get; set; } public bool Checked { get; set; } }")));
+
+    [Theory]
+    [InlineData("int x; void M(int a) { x = a; }", "var equivSeedTemp = a;")]
+    [InlineData("int M(int a) { return a; }", "var equivSeedTemp = a;")]
+    public void Temporary_StillIntroducesOneForABareTargetOrAReturn(string method, string expected) =>
+        Assert.Contains(expected, Applied(MutationOperator.IntroduceTemporary, method), StringComparison.Ordinal);
+
     private static string Applied(MutationOperator op, string method) => SyntaxMutator.Apply(op, Declared(method), site: 0)!.ToFullString();
 
     /// <summary>The method <c>M</c> among <paramref name="members"/>, declared in a class of its own.</summary>
