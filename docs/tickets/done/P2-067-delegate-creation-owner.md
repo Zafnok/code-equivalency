@@ -1,5 +1,5 @@
 # P2-067 A lambda or method group converted to a delegate no longer keeps a changed pair opaque
-Status: in-progress
+Status: done (PR #327)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-046
