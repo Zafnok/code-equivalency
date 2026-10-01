@@ -1,5 +1,5 @@
 # P2-064 Every run ends with a short review list: flagged results grouped by cause, most certain first
-Status: in-progress
+Status: done (PR #323)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-046, P2-062
