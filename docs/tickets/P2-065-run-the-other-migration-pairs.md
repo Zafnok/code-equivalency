@@ -1,5 +1,5 @@
 # P2-065 Run the five migration pairs that have never had a full run
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-046
@@ -72,3 +72,29 @@ Adjudicating Divergent results by hand (P2-047).
 ## Notes
 - Found by the 2026-09-30 goal review: the "in-place migration" goal is judged on a single real
   migration.
+- Decision: the `--fail-on unknown` run the skill asks for is skipped. `--fail-on` only changes the
+  exit code (P2-046 and M4-007 made the same call).
+- Decision: a `--lower-only` census was added for `duplicati-3124` and `openra-17989`. Their `full`
+  and `--execute` runs crash before the first verdict and write no SARIF, so without it the verdict
+  table would have no changed-pair count for the two pairs most like Git Extensions.
+- Decision: the run-level crash's stack was captured with a .NET startup hook kept outside the
+  repository, in two extra diagnostic reruns. Nothing under `src/` changed (size guard), and P2-082
+  has a stack to start from instead of a bare message.
+- Decision: `eshop-porting-assistant`'s modern restore fails on NU1605 and was not rerun with the
+  warning suppressed. The project has syntax errors, so it is skipped either way, and a restore
+  the skill does not describe would not be the raw tool output any more.
+- Decision: P2-085 (compare a project that does not compile) is filed although criterion 5 does not
+  name load failures on tool pairs. It is the reason both tool pairs say nothing, and they are the
+  pairs closest to the product's use.
+- Decision: P2-086 to P2-088 are filed by criterion 5 as written. ADR 0039's IL fallback was the named
+  owner of `InterpolatedString` and `Binary` in P2-046; P1-018 left it off by default, so they have no
+  open owner. `AnonymousObjectCreation` is over 5% only on a 26-pair sample; the ticket says so.
+- Deviation: criterion 2's verdict figures are `n/a` for `duplicati-3124` and `openra-17989`; there are
+  no verdicts to count (P2-082). "Review list" is `n/a` everywhere: P2-064 is not done.
+- Observed: the first `--execute` pass failed on a mistake in the run script (exit 3, a usage error,
+  before any load). Those attempts were discarded and the pass rerun.
+- Observed: ticket numbers P2-076 to P2-081 were taken on `main` while this ran; the findings start
+  at P2-082.
+- Result: `docs/runs/2026-10-01-migrations-verdict.md`. None of the five runs finished clean. Git
+  Extensions is typical in census shape and is the only migration that completes. Tickets P2-082 to
+  P2-088.
