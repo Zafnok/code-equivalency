@@ -44,6 +44,7 @@ public sealed record RuntimeInterval
         ArgumentNullException.ThrowIfNull(coveredFrom);
 
         bool gap = !IsEmpty && Older.Family == TargetRuntime.RuntimeFamily.NetCore && Older < coveredFrom;
-        return gap ? new RuntimeInterval(Older, Newer < coveredFrom ? Newer : coveredFrom) : null;
+        TargetRuntime upper = Newer < coveredFrom ? Newer : coveredFrom;
+        return gap ? new RuntimeInterval(Older, upper) : null;
     }
 }
