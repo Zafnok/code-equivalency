@@ -1,5 +1,5 @@
 # P2-063 Corpus tooling: `seeds.json` records the mutated line, `-Metrics` reads `unknownReason`
-Status: todo
+Status: in-progress
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-046
@@ -41,3 +41,16 @@ The seed operators themselves, recall thresholds.
 
 ## Notes
 - Found by P2-046.
+- Deviation: there is no `tests/Equiv.Corpus.Seeder.Tests` directory. The project of that name lives at
+  `tools/corpus/seeder.Tests/`, so `SeedManifestTests` is there.
+- Decision: `line` is the line of the first character at which the mutated file's text departs from the
+  original's (`MethodSeeder.FirstChangedLine`), not a position each operator reports. It needs no change to
+  the operators (out of scope), and every line before it is identical, so the number is the same line in
+  the unseeded and the seeded file. When a removed statement is followed by an identical one the first
+  difference is later than the removed line; that is the size guard's "record the first".
+- Decision: an EQ003 result with no `unknownReason` (a SARIF older than the property) prints as `n/a`, like
+  every other absent property in `-Metrics`; the first-word-of-the-message fallback is gone.
+- `-Metrics` was checked by hand on a six-result SARIF (`corpus.ps1` has no test harness): it printed
+  `abstraction 3` with `whole 2`, `partial 1` under it, then `n/a 1` and `timeout 1`.
+- `powershell -File tools/corpus/corpus.ps1` from Git Bash fails on this box's execution policy; run it
+  from a PowerShell session instead.

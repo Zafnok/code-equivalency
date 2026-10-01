@@ -61,10 +61,29 @@ internal static class MethodSeeder
 
             File.WriteAllText(candidate.AbsolutePath, mutatedText);
             seededFiles.Add(candidate.RelativePath);
-            applied.Add(new SeedRecord($"S{(applied.Count + 1).ToString("D3", System.Globalization.CultureInfo.InvariantCulture)}", candidate.Identity, candidate.RelativePath, candidate.Line, picked.Operator));
+            applied.Add(new SeedRecord($"S{(applied.Count + 1).ToString("D3", System.Globalization.CultureInfo.InvariantCulture)}", candidate.Identity, candidate.RelativePath, FirstChangedLine(candidate.OriginalText, mutatedText), picked.Operator));
         }
 
         return new SeedResult(count, applied.Count, dropped, applied);
+    }
+
+    /// <summary>
+    /// The 1-based line of the first character at which <paramref name="mutated"/> departs from <paramref name="original"/>
+    /// (ticket P2-063). Every line before it is the same in both files, so the number names the same line on either
+    /// side; an operator that rewrites several lines reports the first.
+    /// </summary>
+    private static int FirstChangedLine(string original, string mutated)
+    {
+        int line = 1;
+        for (int i = 0; i < Math.Min(original.Length, mutated.Length) && original[i] == mutated[i]; i++)
+        {
+            if (original[i] == '\n')
+            {
+                line++;
+            }
+        }
+
+        return line;
     }
 
     private static (MutationOperator Operator, int Site)? ChooseOperator(MethodDeclarationSyntax method, IReadOnlyList<MutationOperator> order, Random random)
@@ -119,13 +138,12 @@ internal static class MethodSeeder
             string relative = Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/');
             foreach (MethodDeclarationSyntax method in fileRoot.DescendantNodes().OfType<MethodDeclarationSyntax>().Where(static m => m.Body is not null))
             {
-                int line = method.Identifier.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-                yield return new Candidate(relative, path, fileRoot, method, MethodIdentity.Of(method), line, text);
+                yield return new Candidate(relative, path, fileRoot, method, MethodIdentity.Of(method), text);
             }
         }
     }
 
-    private sealed record Candidate(string RelativePath, string AbsolutePath, SyntaxNode FileRoot, MethodDeclarationSyntax Method, string Identity, int Line, string OriginalText);
+    private sealed record Candidate(string RelativePath, string AbsolutePath, SyntaxNode FileRoot, MethodDeclarationSyntax Method, string Identity, string OriginalText);
 
     internal sealed record SeedRecord(string Id, string Identity, string File, int Line, MutationOperator Operator);
 
