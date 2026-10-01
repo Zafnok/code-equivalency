@@ -129,9 +129,66 @@ public sealed class Z3BackendTests
 
         Unknown unknown = Assert.IsType<Unknown>(verdict);
         Assert.Equal(UnknownReason.Timeout, unknown.Reason);
-        Assert.StartsWith("solver returned unknown (", unknown.Detail, StringComparison.Ordinal);
-        Assert.EndsWith(") with a 50 ms timeout", unknown.Detail, StringComparison.Ordinal);
+        Assert.Equal("solver returned unknown (timeout): wall-clock limit 50 ms hit", unknown.Detail);
     }
+
+    /// <summary>
+    /// Ticket P2-050 criterion 2: the solver <see cref="Z3Backend.Query"/> returns, which every query of the product goes
+    /// through, stops when it has spent <see cref="VerificationOptions.ResourceLimit"/>, long before the timeout.
+    /// </summary>
+    [Theory]
+    [InlineData(1_000)]
+    [InlineData(25_000)]
+    public void EveryQuerySetsTheResourceLimit(int resourceLimit)
+    {
+        Fixture fixture = Fixture.Load("hard-multiplication");
+        VerificationOptions options = Options with { TimeoutMs = 600_000, ResourceLimit = resourceLimit };
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, fixture.Old, fixture.New, options.CallIdentityMap);
+
+        using Solver solver = Z3Backend.Query(context, encoding, options, encoding.Differs);
+
+        Assert.Equal(Status.UNKNOWN, solver.Check());
+        Assert.Equal("canceled", solver.ReasonUnknown);
+        Assert.Equal((uint)resourceLimit, solver.Statistics.Entries.Single(static e => string.Equals(e.Key, "rlimit count", StringComparison.Ordinal)).UIntValue);
+    }
+
+    /// <summary>
+    /// Ticket P2-050 criteria 4 and 5: a query that exhausts the resource limit is Unknown with reason <c>timeout</c>, as a
+    /// wall-clock timeout is, and the detail names the limit. The resource limit binds before the wall-clock backstop, and
+    /// the verdict is the same on every run.
+    /// </summary>
+    [Fact]
+    public void ResourceExhaustion_IsTimeoutUnknown()
+    {
+        Fixture fixture = Fixture.Load("hard-multiplication");
+        VerificationOptions options = Options with { TimeoutMs = 600_000, ResourceLimit = 1_000 };
+
+        Verdict verdict = new Z3Backend().Verify(fixture.Old, fixture.New, options);
+
+        Unknown unknown = Assert.IsType<Unknown>(verdict);
+        Assert.Equal(UnknownReason.Timeout, unknown.Reason);
+        Assert.Equal("solver returned unknown (canceled): resource limit 1000 hit", unknown.Detail);
+        Assert.Equal(UnknownScope.Method, unknown.Scope);
+        Assert.Null(unknown.FailureRefinement);
+        Assert.Equal(verdict, new Z3Backend().Verify(fixture.Old, fixture.New, options));
+    }
+
+    /// <summary>
+    /// Ticket P2-050 criterion 4: which limit a reason for giving up names. A solver's timer leaves <c>timeout</c> and a
+    /// fixedpoint's <c>canceled</c>; an exhausted <c>rlimit</c> leaves <c>canceled</c> on a tactic solver and Z3's
+    /// resource message elsewhere; any other reason names no limit.
+    /// </summary>
+    [Theory]
+    [InlineData("timeout", "timeout", ": wall-clock limit 10000 ms hit")]
+    [InlineData("canceled", "canceled", ": wall-clock limit 10000 ms hit")]
+    [InlineData("canceled", "timeout", ": resource limit 77 hit")]
+    [InlineData("max. resource limit exceeded", "timeout", ": resource limit 77 hit")]
+    [InlineData("max. resource limit exceeded", "canceled", ": resource limit 77 hit")]
+    [InlineData("(incomplete quantifiers)", "timeout", "")]
+    [InlineData("timeout", "canceled", "")]
+    public void TheLimitHitIsReadFromZ3sReason(string reason, string timedOut, string expected) =>
+        Assert.Equal(expected, Z3Backend.LimitHit(reason, timedOut, Options with { ResourceLimit = 77 }));
 
     [Fact]
     public void TimeoutIsMethodScoped()

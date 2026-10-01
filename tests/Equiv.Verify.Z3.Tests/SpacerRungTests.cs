@@ -166,6 +166,24 @@ public sealed class SpacerRungTests
         Assert.StartsWith("a derivation over the integers reaches an opaque node", rung.Step.Detail, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-050 criterion 4 on rung 4: Spacer gives up on <c>loops/fusion</c>, which it otherwise proves, once it has
+    /// spent the resource limit, and the step says so; when its timer fires first, the step names the wall-clock limit.
+    /// </summary>
+    [Fact]
+    public void SpacerGivingUpNamesTheLimitItHit()
+    {
+        Fixture fixture = Fixture.Load("loops/fusion");
+
+        Rung starved = Prove(fixture.Old, fixture.New, Options with { TimeoutMs = 600_000, ResourceLimit = 1 });
+        Rung hurried = Prove(fixture.Old, fixture.New, Options with { TimeoutMs = 1 });
+
+        Assert.Equal(UnknownReason.ChcTimeout, Assert.IsType<Unknown>(starved.Verdict).Reason);
+        Assert.Equal("Spacer gave up over the integers: max. resource limit exceeded: resource limit 1 hit", starved.Step.Detail);
+        Assert.Equal(UnknownReason.ChcTimeout, Assert.IsType<Unknown>(hurried.Verdict).Reason);
+        Assert.Equal("Spacer gave up over the integers: canceled: wall-clock limit 1 ms hit", hurried.Step.Detail);
+    }
+
     [Fact]
     public void TheReplayOracleRefusesACall() =>
         Assert.Throws<InvalidOperationException>(static () => SpacerRung.NoCalls.Instance.Answer(new CallIdentity("T::M()"), [], resultType: null, position: 0, [], []));

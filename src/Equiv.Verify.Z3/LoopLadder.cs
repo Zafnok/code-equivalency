@@ -40,7 +40,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
 
     /// <summary>
     /// The timeout of rung 5's obligation checks, <see cref="VerificationOptions.TimeoutMs"/> unless set; a test sets it to
-    /// force rung 4 to time out while rung 5 still decides.
+    /// force rung 4 to time out while rung 5 still decides. The resource limit is the pair's on every rung.
     /// </summary>
     public int? InvariantTimeoutMs { get; init; }
 

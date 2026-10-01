@@ -18,7 +18,7 @@ namespace Equiv.Verify.Z3;
 /// model whose replay's outcomes are untainted (ADR 0026) is <see cref="RefinementOutcome.Found"/>, a tainted one
 /// <see cref="RefinementOutcome.Unknown"/>. Only when that is unsatisfiable does it ask again, letting such a side return or
 /// throw: unsatisfiable is <see cref="RefinementOutcome.NoneProved"/>, anything else Unknown. Each query gets the pair's
-/// timeout.
+/// resource limit and timeout.
 /// </summary>
 internal sealed class FailureRefinementQuery(Func<Context> createContext, VerificationOptions options)
 {

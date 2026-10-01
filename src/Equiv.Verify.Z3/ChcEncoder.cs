@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 
+using Equiv.Core;
 using Equiv.Core.Ir;
 
 using Equiv.Verify.Z3.Ladder;
@@ -35,9 +36,6 @@ namespace Equiv.Verify.Z3;
 /// </summary>
 internal sealed class ChcEncoder
 {
-    /// <summary>The Z3 parameter every query and check of rung 4 and 5 is bounded by, in milliseconds.</summary>
-    private const string Timeout = "timeout";
-
     private readonly Context context;
     private readonly SortMapper sorts;
     private readonly Dictionary<string, int> exceptionTypes = new(StringComparer.Ordinal);
@@ -86,7 +84,7 @@ internal sealed class ChcEncoder
     private BoolExpr Bad => (BoolExpr)context.MkApp(bad);
 
     /// <summary>
-    /// Asks Spacer, within <paramref name="timeoutMs"/>, whether <c>bad</c> is derivable: through the product's steps and
+    /// Asks Spacer, within <paramref name="options"/>' resource limit and timeout, whether <c>bad</c> is derivable: through the product's steps and
     /// divergence rules, or, when <paramref name="overflows"/> is set, through the same steps from states within bounds
     /// (<see cref="Premise"/>) and the overflow rules. Global guidance (Krishnan et al., CAV 2020) keeps Spacer from enumerating counter values one lemma at a time; its
     /// concretize rule is off because with it a timeout throws "unreachable" instead of cancelling. Inlining and slicing
@@ -96,12 +94,13 @@ internal sealed class ChcEncoder
     /// <see cref="Status.UNKNOWN"/>: Z3 reports it by throwing an exception, whose message says "canceled", or under global
     /// guidance sometimes "unreachable" (after printing an assertion violation); any exception Z3 throws gives up the same way.
     /// </summary>
-    public ChcAnswer Query(bool overflows, uint timeoutMs)
+    public ChcAnswer Query(bool overflows, VerificationOptions options)
     {
         using Fixedpoint fixedpoint = context.MkFixedpoint();
         using Params parameters = context.MkParams();
         parameters.Add("engine", "spacer");
-        parameters.Add(Timeout, timeoutMs);
+        parameters.Add(Z3Backend.ResourceLimitParameter, (uint)options.ResourceLimit);
+        parameters.Add(Z3Backend.TimeoutParameter, (uint)options.TimeoutMs);
         parameters.Add("spacer.global", value: true);
         parameters.Add("spacer.gg.concretize", value: false);
         parameters.Add("spacer.ground_pobs", value: false);
@@ -151,7 +150,7 @@ internal sealed class ChcEncoder
     /// <summary>
     /// Whether <paramref name="answer"/>, the definitions an unsatisfiable divergence query gave, solve this encoder's
     /// divergence query: with every relation replaced by its definition, and <c>bad</c> by false, no rule has a
-    /// counterexample within <paramref name="timeoutMs"/>. The answer comes from this encoder's own query, which a proof
+    /// counterexample within <paramref name="options"/>' limits. The answer comes from this encoder's own query, which a proof
     /// checks because Spacer can answer wrongly (ticket P2-059), or from an integer-mode encoder of the same pair and
     /// context when this one wraps (<see cref="ChcArithmetic.WrappingIntegers"/>): then no derivation reaches <c>bad</c>
     /// over the bitvectors, whether or not an integer operation can overflow, and the plain integers only found the
@@ -160,7 +159,7 @@ internal sealed class ChcEncoder
     /// premises that hold (a reachable relation), which only weakens premises, so the check stops after at most one round
     /// per relation.
     /// </summary>
-    public bool Solves(Expr answer, uint timeoutMs)
+    public bool Solves(Expr answer, VerificationOptions options)
     {
         Dictionary<FuncDecl, Definition> definitions = Definitions(answer).ToDictionary(static d => d.Relation);
         HashSet<FuncDecl> reachable = [];
@@ -168,7 +167,7 @@ internal sealed class ChcEncoder
         {
             BoolExpr[] counterexamples = [.. divergence.Rules.Select(rule => context.MkNot(Read(rule, definitions, reachable)))];
             using Solver solver = context.MkSolver();
-            solver.Set(Timeout, timeoutMs);
+            Z3Backend.Limit(solver, options);
             solver.Add(context.MkOr(counterexamples));
             Status status = solver.Check();
             if (status != Status.SATISFIABLE)
@@ -200,20 +199,20 @@ internal sealed class ChcEncoder
     /// Whether <paramref name="definitions"/>, one formula per relation over that relation's <see cref="Relation.Parameters"/>
     /// and nothing else, solve the divergence query: with every relation replaced by its definition and <c>bad</c> by false,
     /// no rule has a counterexample. The rules are checked as three obligations, each one SMT query within
-    /// <paramref name="timeoutMs"/>: init (a rule with no relation in its premise), step (a relation in its premise and one
+    /// <paramref name="options"/>' limits: init (a rule with no relation in its premise), step (a relation in its premise and one
     /// in its conclusion) and exit (a relation in its premise and <c>bad</c> in its conclusion). Null when every obligation
     /// is unsatisfiable, which is a proof of the pair in this encoder's arithmetic; else the first obligation that is not,
     /// with the rule a model breaks and that model's values of the two relations' arguments (ticket P1-002), which are
     /// also the refutation's <see cref="InvariantRequest.Rejection.Premise"/> and <see cref="InvariantRequest.Rejection.Conclusion"/>
     /// (ticket P1-009).
     /// </summary>
-    public Refutation? Refutes(IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, uint timeoutMs)
+    public Refutation? Refutes(IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, VerificationOptions options)
     {
         foreach ((string name, BoolExpr[] rules) in Obligations())
         {
             BoolExpr[] counterexamples = [.. rules.Select(rule => context.MkNot(Define(rule, definitions)))];
             using Solver solver = context.MkSolver();
-            solver.Set(Timeout, timeoutMs);
+            Z3Backend.Limit(solver, options);
             solver.Add(context.MkOr(counterexamples));
             Status status = solver.Check();
             if (status == Status.UNSATISFIABLE)
@@ -272,7 +271,7 @@ internal sealed class ChcEncoder
     /// <c>bad</c> from a rule without one, which only an entry segment reaching an opaque node has; its inputs come from a
     /// model of that (or of the two entry segments exiting apart, which Z3 would record as an <c>inv.exit.exit</c> fact).
     /// </summary>
-    public IrInputs DerivationInputs(Expr answer, uint timeoutMs)
+    public IrInputs DerivationInputs(Expr answer, VerificationOptions options)
     {
         HashSet<FuncDecl> declared = [.. divergence.Relations.Values];
         if (Applications(answer).FirstOrDefault(f => declared.Contains(f.FuncDecl)) is { } fact)
@@ -281,7 +280,7 @@ internal sealed class ChcEncoder
         }
 
         using Solver solver = context.MkSolver();
-        solver.Set(Timeout, timeoutMs);
+        Z3Backend.Limit(solver, options);
         solver.Add(context.MkOr(entryDivergence));
         solver.Check();
         Model model = solver.Model;
