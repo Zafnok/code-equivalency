@@ -8,7 +8,9 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 
 /// <summary>
 /// Expression-level opaque fragments carry their bound fingerprint and the variables they read (ADR 0024 decision 2; ticket
-/// M4-004 criterion 2), and none when a function of those reads, the heap and the position would not describe them.
+/// M4-004 criterion 2), and none when a function of those reads, the heap and the position would not describe them. A lambda
+/// converted to a delegate is no longer such a fragment (ticket P2-067; <see cref="DelegateLoweringTests"/>), so the
+/// fragments here are a method group whose receiver is evaluated, a lifted operator and a query.
 /// </summary>
 public sealed class FragmentLoweringTests
 {
@@ -17,12 +19,12 @@ public sealed class FragmentLoweringTests
     [Fact]
     public void ExpressionOpaqueCarriesFingerprintAndReads()
     {
-        IrProcedure procedure = Source(Linq + "class C { int F; int M(int[] xs, int k, int unused) { F = 1; return xs.Count(x => x > k + F); } }");
+        IrProcedure procedure = Source(Linq + "class C { int F; bool P(int x) => x > F; int M(int[] xs, C o, int unused) { F = 1; return xs.Count(o.P); } }");
 
         IrOpaque fragment = Assert.Single(Opaques(procedure));
         Assert.Equal("DelegateCreation", fragment.Reason);
         Assert.Matches("^[0-9a-f]{64}$", fragment.Fingerprint);
-        Assert.Equal(["k"], fragment.Reads.Select(static r => r.SourceName), StringComparer.Ordinal);
+        Assert.Equal(["o", "o"], fragment.Reads.Select(static r => r.SourceName), StringComparer.Ordinal);
         Assert.NotNull(fragment.Threw);
         Assert.Contains(procedure.Blocks, b => b.Terminator is IrBranch branch && branch.Cond == fragment.Threw);
         Assert.Equal(["field.C.F"], fragment.Heap.Select(static h => h.Map), StringComparer.Ordinal);
@@ -31,9 +33,9 @@ public sealed class FragmentLoweringTests
     [Fact]
     public void AReferenceReadIsFollowedByItsNullShadow()
     {
-        IrOpaque fragment = Assert.Single(Opaques(Source(Linq + "class C { int M(int[] xs, string s) => xs.Count(x => x > s.Length); }")));
+        IrOpaque fragment = Assert.Single(Opaques(Source(Linq + "class C { bool P(int x) => x > 0; int M(int[] xs, C o) => xs.Count(o.P); }")));
 
-        Assert.Equal<IrType>([new IrSort("System.String"), new IrBool()], fragment.Reads.Select(static r => r.Type));
+        Assert.Equal<IrType>([new IrSort("C"), new IrBool()], fragment.Reads.Select(static r => r.Type));
     }
 
     [Fact]
@@ -41,10 +43,10 @@ public sealed class FragmentLoweringTests
     {
         static string Fingerprint(string method) => Assert.Single(Opaques(Source(Linq + "class C { " + method + " }"))).Fingerprint!;
 
-        string original = Fingerprint("int M(int[] xs, int k) { int m = k; return xs.Count(x => x > m); }");
+        string original = Fingerprint("int? M(int? x, int? k) { int? m = k; return x + m; }");
 
-        Assert.Equal(original, Fingerprint("int M(int[] ys, int limit) { int bound = limit; return ys.Count(y => y > bound); }"));
-        Assert.NotEqual(original, Fingerprint("int M(int[] xs, int k) { int m = k; return xs.Count(x => x >= m); }"), StringComparer.Ordinal);
+        Assert.Equal(original, Fingerprint("int? M(int? y, int? limit) { int? bound = limit; return y + bound; }"));
+        Assert.NotEqual(original, Fingerprint("int? M(int? x, int? k) { int? m = k; return x - m; }"), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -65,23 +67,25 @@ public sealed class FragmentLoweringTests
     }
 
     [Theory]
-    [InlineData("int k = 1; var q = xs.Where(x => x > k); k = 2; return q.Count();")]
-    [InlineData("int k = 0; int n = 0; for (int i = 0; i < 3; i++) { n += xs.Count(x => x > k); k++; } return n;")]
-    [InlineData("int k = 1; System.Action bump = () => k++; var q = xs.Where(x => x > k); bump(); return q.Count();")]
+    [InlineData("int k = 1; var q = from x in xs where x > k select x; k = 2; return q.Count();")]
+    [InlineData("int k = 0; int n = 0; for (int i = 0; i < 3; i++) { n += (from x in xs where x > k select x).Count(); k++; } return n;")]
+    [InlineData("int k = 1; System.Action bump = () => k++; var q = from x in xs where x > k select x; bump(); return q.Count();")]
     public void LambdaCapturingALaterWrittenLocalHasNoFingerprint(string body)
     {
         IrProcedure procedure = Source(Linq + "class C { int M(int[] xs) { " + body + " } }");
 
-        Assert.All(Opaques(procedure).Where(static o => string.Equals(o.Reason, "DelegateCreation", StringComparison.Ordinal)), static o => Assert.Null(o.Fingerprint));
+        IrOpaque query = Assert.Single(Opaques(procedure), static o => string.Equals(o.Reason, "TranslatedQuery", StringComparison.Ordinal));
+        Assert.Null(query.Fingerprint);
+        Assert.Empty(query.Reads);
     }
 
     [Fact]
     public void LambdaCapturingALocalWrittenOnlyBeforeItIsFingerprinted()
     {
-        IrOpaque fragment = Assert.Single(Opaques(Source(Linq + "class C { int M(int[] xs, int a) { int k = 1; if (a > 0) { k = 2; } var q = xs.Where(x => x > k); return q.Count(); } }")));
+        IrOpaque fragment = Assert.Single(Opaques(Source(Linq + "class C { int M(int[] xs, int a) { int k = 1; if (a > 0) { k = 2; } var q = from x in xs where x > k select x; return q.Count(); } }")));
 
         Assert.NotNull(fragment.Fingerprint);
-        Assert.Equal(["k"], fragment.Reads.Select(static r => r.SourceName), StringComparer.Ordinal);
+        Assert.Equal(["xs", "xs", "k"], fragment.Reads.Select(static r => r.SourceName), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -103,8 +107,9 @@ public sealed class FragmentLoweringTests
     [Fact]
     public void ALocalFunctionDeclaredInsideTheFragmentIsPartOfIt()
     {
-        IrOpaque fragment = Assert.Single(Opaques(Source(Linq + "class C { int M(int[] xs) => xs.Sum(x => { int Twice(int y) => 2 * y; return Twice(x); }); }")));
+        IrOpaque fragment = Assert.Single(Opaques(Source(Linq + "class C { int M(int[] xs) => (from x in xs select ((System.Func<int, int>)(y => { int Twice(int z) => 2 * z; return Twice(y); }))(x)).Sum(); }")));
 
+        Assert.Equal("TranslatedQuery", fragment.Reason);
         Assert.NotNull(fragment.Fingerprint);
     }
 
@@ -130,7 +135,7 @@ public sealed class FragmentLoweringTests
     [Fact]
     public void AFragmentCallingAMethodIsFingerprinted()
     {
-        IrProcedure procedure = Source(Linq + "class C { int M(int[] xs) => xs.Sum(x => System.Math.Abs(x)) + xs.Sum(System.Math.Abs); }");
+        IrProcedure procedure = Source(Linq + "class C { int M(int[] xs) => (from x in xs select System.Math.Abs(x)).Sum() + (from x in xs select xs.Sum(System.Math.Abs)).Sum(); }");
 
         Assert.All(Opaques(procedure), static o => Assert.NotNull(o.Fingerprint));
         Assert.Equal(2, Opaques(procedure).Length);
