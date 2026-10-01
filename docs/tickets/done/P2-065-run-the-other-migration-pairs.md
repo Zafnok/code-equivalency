@@ -1,5 +1,5 @@
 # P2-065 Run the five migration pairs that have never had a full run
-Status: in-progress
+Status: done (PR #322)
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-046
