@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ticket P2-054: one-off backfill of "changedIn" on runtime-changes.json. Run by hand; not run in CI. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>RuntimeChangesBackfill</RootNamespace>
+    <AssemblyName>RuntimeChangesBackfill</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RuntimeChangesBackfill.Tests" />
+  </ItemGroup>
+
+</Project>
