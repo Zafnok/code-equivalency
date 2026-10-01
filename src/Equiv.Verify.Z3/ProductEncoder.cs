@@ -178,7 +178,8 @@ internal static class ProductEncoder
     /// decision 2; ticket M4-004): an <see cref="IrCall"/> with identity <c>opaque:&lt;fingerprint&gt;</c>
     /// (<see cref="ModelDecoder.OpaquePrefix"/>), the fragment's reads as arguments, and its <c>threw</c> flag and heap pairs,
     /// so it has the call's trace event, heap functions and position. Every other <see cref="IrOpaque"/> is left as it is and
-    /// keeps ADR 0014's meaning. <see cref="SharedFragments.Occurrences"/> gives each shared identity's source span per side.
+    /// keeps ADR 0014's meaning. <see cref="SharedFragments.Occurrences"/> gives each shared identity's source span and
+    /// opaque reason per side.
     /// </summary>
     public static SharedFragments ShareFragments(IrProcedure old, IrProcedure @new)
     {
@@ -199,10 +200,10 @@ internal static class ProductEncoder
         static IrCall Call(IrOpaque fragment) =>
             new(fragment.Target, fragment.Threw, new CallIdentity(ModelDecoder.OpaquePrefix + fragment.Fingerprint), fragment.Reads) { Heap = fragment.Heap };
 
-        static IEnumerable<(Codebase, CallIdentity, SourceSpan)> Occurrences(Codebase side, IrProcedure procedure, HashSet<string> shared) =>
+        static IEnumerable<(Codebase, CallIdentity, SourceSpan, string)> Occurrences(Codebase side, IrProcedure procedure, HashSet<string> shared) =>
             Fragments(procedure)
                 .Where(o => shared.Contains(o.Fingerprint!))
-                .Select(o => (side, new CallIdentity(ModelDecoder.OpaquePrefix + o.Fingerprint), o.Span));
+                .Select(o => (side, new CallIdentity(ModelDecoder.OpaquePrefix + o.Fingerprint), o.Span, o.Reason));
     }
 
     /// <summary>
@@ -248,16 +249,20 @@ internal static class ProductEncoder
     }
 
     /// <summary>
-    /// A pair after <see cref="ShareFragments"/>, and the source span of each shared fragment's identity on each side, the
-    /// first one when a side has it more than once.
+    /// A pair after <see cref="ShareFragments"/>, and the source span and opaque reason of each shared fragment's identity on
+    /// each side, the first one when a side has it more than once.
     /// </summary>
-    public sealed record SharedFragments(IrProcedure Old, IrProcedure New, ImmutableArray<(Codebase Side, CallIdentity Identity, SourceSpan Span)> Occurrences)
+    public sealed record SharedFragments(IrProcedure Old, IrProcedure New, ImmutableArray<(Codebase Side, CallIdentity Identity, SourceSpan Span, string Reason)> Occurrences)
     {
-        /// <summary><paramref name="abstraction"/> with the span of its shared fragment on its side, when it is one and has none.</summary>
-        public Abstraction Locate(Abstraction abstraction) =>
-            abstraction.Span is null && Occurrences.FirstOrDefault(o => o.Side == abstraction.Side && o.Identity == abstraction.Identity).Span is { } span
-                ? abstraction with { Span = span }
-                : abstraction;
+        /// <summary>
+        /// <paramref name="abstraction"/> with the opaque reason of its shared fragment on its side (ticket P2-062), and that
+        /// fragment's span when it has none, when it is one.
+        /// </summary>
+        public Abstraction Locate(Abstraction abstraction)
+        {
+            (_, _, SourceSpan? span, string? reason) = Occurrences.FirstOrDefault(o => o.Side == abstraction.Side && o.Identity == abstraction.Identity);
+            return reason is null ? abstraction : abstraction with { Span = abstraction.Span ?? span, Reason = reason };
+        }
     }
 
     /// <summary>Which procedure of a pair a term belongs to.</summary>

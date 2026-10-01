@@ -237,8 +237,10 @@ Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | ownin
 - Unknown by scope: line <n>, method <n>. Line-scoped Unknown share: <%>
 - Top Unknown reasons: ...
 - Top abstractions: the entries of `properties.abstractions` over every `abstraction` Unknown, grouped by
-  kind (an `IrPure` operator name, or `opaque` with its fragment reason once P2-062 lands), top 15, with
-  counts. Identities and kinds only, never `candidateCounterexample` values.
+  kind, top 15, with counts. An entry with a `reason` is an opaque fragment and its kind is
+  `opaque <reason>` (for example `opaque DelegateCreation`), never its `opaque:<fingerprint>` identity; any
+  other entry's kind is its `identity`, an `IrPure` operator name. Kinds only, never
+  `candidateCounterexample` values.
 
 ## Tests (full only)
 - legacy <pass/fail/skip>, modern <pass/fail/skip>
