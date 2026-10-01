@@ -36,7 +36,8 @@ public sealed class SarifReportWriterTests
     public Task Removed() => VerifyJson(Serialize(Fixtures.Result(new Removed())));
 
     [Fact]
-    public Task RuntimeChangedDivergent() => VerifyJson(Serialize(Fixtures.Result(new Divergent(RuntimeChangedCounterexample()))));
+    public Task RuntimeChangedDivergent() =>
+        VerifyJson(Serialize(Fixtures.Result(new Divergent(RuntimeChangedCounterexample())) with { Runtimes = Interval("net48", "net10.0") }));
 
     [Fact]
     public void WithoutNotificationsOrUnverifiedTheRunHasNoInvocationOrProperties()
@@ -345,6 +346,43 @@ public sealed class SarifReportWriterTests
         Assert.Equal("https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0", result.GetProperty<string>("helpUri"));
         Assert.Contains("https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0", result.Message.Text, StringComparison.Ordinal);
         Assert.Contains("randomized", result.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-055 criterion 6: the EQ006 rule speaks of the two sides' runtimes, and the message names both, whichever
+    /// side is the older; a result with no known runtimes names the ends of the table's coverage (ADR 0040).
+    /// </summary>
+    [Theory]
+    [InlineData("net48", "net8.0", "diverges via a runtime-changed API between net48 and net8.0 (")]
+    [InlineData("net10.0", "net8.0", "diverges via a runtime-changed API between net8.0 and net10.0 (")]
+    [InlineData(null, null, "diverges via a runtime-changed API between net40 and net10.0 (")]
+    public void AnEQ006MessageNamesBothRuntimes(string? legacy, string? modern, string expected)
+    {
+        VerificationResult divergent = Fixtures.Result(new Divergent(RuntimeChangedCounterexample())) with
+        {
+            Runtimes = legacy is null ? null : Interval(legacy, modern!),
+        };
+
+        Run run = SarifReportWriter.Write([divergent]).Runs[0];
+
+        Assert.Equal("EQ006", run.Results[0].RuleId);
+        Assert.Contains(expected, run.Results[0].Message.Text, StringComparison.Ordinal);
+        Assert.Equal(
+            "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes.",
+            run.Tool.Driver.Rules.Single(static r => string.Equals(r.Id, "EQ006", StringComparison.Ordinal)).ShortDescription.Text);
+    }
+
+    /// <summary>Ticket P2-055: on a same-runtime pair no row applies, so a flagged call in the trace is a plain EQ002 with no help link.</summary>
+    [Fact]
+    public void AFlaggedCallOnASameRuntimePairIsEQ002()
+    {
+        VerificationResult divergent = Fixtures.Result(new Divergent(RuntimeChangedCounterexample())) with { Runtimes = Interval("net10.0", "net10.0") };
+
+        Result result = SarifReportWriter.Write([divergent]).Runs[0].Results[0];
+
+        Assert.Equal("EQ002", result.RuleId);
+        Assert.False(result.TryGetProperty("helpUri", out string? _));
+        Assert.DoesNotContain("runtime-changed", result.Message.Text, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -726,6 +764,8 @@ public sealed class SarifReportWriterTests
         Assert.Equal(ResultFingerprint.Compute(plain), ResultFingerprint.Compute(assuming));
         Assert.Equal(BaselineState.Unchanged, result.BaselineState);
     }
+
+    private static RuntimeInterval Interval(string first, string second) => new(TargetRuntime.Parse(first)!, TargetRuntime.Parse(second)!);
 
     private static Counterexample RuntimeChangedCounterexample()
     {

@@ -108,7 +108,10 @@ public static class SarifReportWriter
     private static Result ToResult(VerificationResult result, SarifLog? baseline)
     {
         string fingerprint = ResultFingerprint.Compute(result);
-        (string ruleId, FailureLevel level, ResultKind kind, RuntimeChange? runtimeChange) = VerdictRule.Describe(result.Verdict);
+
+        // ADR 0040: a result whose pair's runtimes are not known crosses every change the table covers.
+        RuntimeInterval runtimes = result.Runtimes ?? RuntimeChangeTable.Load().Coverage;
+        (string ruleId, FailureLevel level, ResultKind kind, RuntimeChange? runtimeChange) = VerdictRule.Describe(result.Verdict, runtimes);
 
         // SARIF 2.1.0 (search "kind" property, ss3.27.9): a result's `level` is only meaningful
         // when `kind` is "fail" ("If kind has any value other than fail, then level SHALL be
@@ -121,7 +124,7 @@ public static class SarifReportWriter
             RuleId = ruleId,
             Level = kind == ResultKind.Fail ? level : FailureLevel.None,
             Kind = kind,
-            Message = new Message { Text = MessageText(result, runtimeChange) },
+            Message = new Message { Text = MessageText(result, runtimeChange, runtimes) },
             BaselineState = BaselineComputer.StateFor(result.Identity.Value, ruleId, fingerprint, baseline),
             PartialFingerprints = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -520,11 +523,12 @@ public static class SarifReportWriter
     /// <summary>
     /// <see cref="Verdict"/> is a closed hierarchy (private protected constructor) with five
     /// members; the final arm covers <see cref="Removed"/>, mirroring <see cref="VerdictRule.Describe"/>.
-    /// <paramref name="runtimeChange"/> is non-null only for an EQ006 <see cref="Divergent"/>. An Equivalent that assumed a
+    /// <paramref name="runtimeChange"/> is non-null only for an EQ006 <see cref="Divergent"/>, whose message names both ends of
+    /// <paramref name="runtimes"/> (ADR 0040; ticket P2-055). An Equivalent that assumed a
     /// callee pair this run did not prove says so in one more sentence (ADR 0019).
     /// </summary>
-    private static string MessageText(VerificationResult result, RuntimeChange? runtimeChange) =>
-        result.Testing is { NotConstructible: null } testing ? WithTestedSentence(VerdictText(result, runtimeChange), testing) : VerdictText(result, runtimeChange);
+    private static string MessageText(VerificationResult result, RuntimeChange? runtimeChange, RuntimeInterval runtimes) =>
+        result.Testing is { NotConstructible: null } testing ? WithTestedSentence(VerdictText(result, runtimeChange, runtimes), testing) : VerdictText(result, runtimeChange, runtimes);
 
     /// <summary>
     /// Ticket P1-008 criterion 3: a tested Unknown's message ends with one sentence stating the input count and the
@@ -535,14 +539,14 @@ public static class SarifReportWriter
             CultureInfo.InvariantCulture,
             $"{text}{(text.EndsWith('.') ? string.Empty : ".")} Tested on {testing.Inputs} inputs; estimated chance the next input shows new behaviour: {testing.DiscoveryProbability:0.######} (equiv generators, not a proof).");
 
-    private static string VerdictText(VerificationResult result, RuntimeChange? runtimeChange) => result.Verdict switch
+    private static string VerdictText(VerificationResult result, RuntimeChange? runtimeChange, RuntimeInterval runtimes) => result.Verdict switch
     {
         Equivalent when !result.UnprovenAssumptions.IsEmpty =>
             $"{result.Identity.Value} is equivalent. Assumes callees equivalent; not proved for: {string.Join(", ", result.UnprovenAssumptions)}.",
         Equivalent => $"{result.Identity.Value} is equivalent.",
         Divergent { Observed: { } observed } => $"{result.Identity.Value} diverges on the real runtimes: {ObservationText.Dump(observed)}",
         Divergent divergent when runtimeChange is not null =>
-            $"{result.Identity.Value} diverges via a runtime-changed API ({runtimeChange.Reason} {runtimeChange.Url.OriginalString}): {CounterexampleText.Dump(divergent.Counterexample)}",
+            $"{result.Identity.Value} diverges via a runtime-changed API between {runtimes.Older} and {runtimes.Newer} ({runtimeChange.Reason} {runtimeChange.Url.OriginalString}): {CounterexampleText.Dump(divergent.Counterexample)}",
         Divergent divergent => $"{result.Identity.Value} diverges: {CounterexampleText.Dump(divergent.Counterexample)}",
         Unknown { Scope: UnknownScope.Line } unknown =>
             $"{result.Identity.Value} is unknown ({unknown.Reason}): {unknown.Detail}. It is equivalent on every input that reaches none of the related locations.",
@@ -561,7 +565,7 @@ public static class SarifReportWriter
             Rule("EQ003", "Unknown", "Equivalence could not be decided for this procedure pair.", FailureLevel.Warning),
             Rule("EQ004", "Added", "The procedure is present on the modern side only.", FailureLevel.Note),
             Rule("EQ005", "Removed", "The procedure is present on the legacy side only.", FailureLevel.Note),
-            Rule("EQ006", "RuntimeChangedDivergence", "The two procedures disagree because a call uses a BCL member whose behaviour differs between .NET Framework and .NET.", FailureLevel.Error),
+            Rule("EQ006", "RuntimeChangedDivergence", "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes.", FailureLevel.Error),
         ],
     };
 

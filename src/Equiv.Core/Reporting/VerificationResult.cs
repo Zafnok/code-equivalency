@@ -19,7 +19,8 @@ namespace Equiv.Core.Reporting;
 /// <see cref="Testing"/> is an Unknown's run on generated inputs under <c>--execute</c> (ADR 0035 decision 3; ticket
 /// P1-008), null otherwise, and is not part of the fingerprint. <see cref="Lowering"/> is the pair's
 /// <see cref="Matching.ProcedurePair.Lowering"/> (ADR 0039; ticket P1-016), null when the run did not use <c>--il-fallback</c>;
-/// it is not part of the fingerprint.
+/// it is not part of the fingerprint. <see cref="Runtimes"/> is the pair's <see cref="Matching.ProcedurePair.Runtimes"/> (ADR 0040;
+/// ticket P2-055), which an EQ006 result's row is looked up in and its message names; it is not part of the fingerprint.
 /// </summary>
 public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
 {
@@ -34,4 +35,6 @@ public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verd
     public DifferentialTesting? Testing { get; init; }
 
     public string? Lowering { get; init; }
+
+    public RuntimeInterval? Runtimes { get; init; }
 }
