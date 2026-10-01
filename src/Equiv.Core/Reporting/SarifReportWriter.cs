@@ -15,7 +15,8 @@ namespace Equiv.Core.Reporting;
 /// ARCHITECTURE.md's data-flow diagram: "SARIF writer &lt;- baseline diff &lt;- verdicts"). One
 /// <see cref="Result"/> per <see cref="VerificationResult"/>, plus any
 /// <see cref="BaselineState.Absent"/> carry-overs from <paramref name="baseline"/>
-/// (see <see cref="Write"/>). <see cref="Equiv.Core.IReportSink"/> persists the returned log.
+/// (see <see cref="Write"/>). Every flagged result carries its <see cref="ReviewList"/> group and rank (ticket P2-064).
+/// <see cref="Equiv.Core.IReportSink"/> persists the returned log.
 /// </summary>
 public static class SarifReportWriter
 {
@@ -31,7 +32,7 @@ public static class SarifReportWriter
     private const string ContractSuffix = "+contract";
 
     /// <summary>The <c>proofMethod</c> of a Divergent the real runtimes showed (ADR 0035 decision 3); never an Equivalent's.</summary>
-    private const string ObservedProofMethod = "observed";
+    internal const string ObservedProofMethod = "observed";
 
     /// <param name="results">One SARIF result each, in order, ahead of any baseline carry-overs.</param>
     /// <param name="baseline">The previous log <c>baselineState</c> is computed against.</param>
@@ -48,12 +49,17 @@ public static class SarifReportWriter
     /// Identities the run could not verify, listed in <c>run.properties.unverified</c>. A baseline result for one of
     /// them is carried as <c>unchanged</c> with <c>properties.unverified: true</c>, never <c>absent</c> (ADRs 0023, 0029).
     /// </param>
+    /// <param name="reviewList">
+    /// Whether the run lists its review groups in <c>run.properties.reviewList</c> (ticket P2-064). The CLI asks for it on
+    /// every run but <c>--lower-only</c>, which reaches no verdict. The results carry <c>reviewGroup</c> and <c>rank</c> either way.
+    /// </param>
     public static SarifLog Write(
         IReadOnlyList<VerificationResult> results,
         SarifLog? baseline = null,
         IReadOnlyDictionary<string, object>? runProperties = null,
         IReadOnlyList<Notification>? notifications = null,
-        IReadOnlyList<ProcedureIdentity>? unverified = null)
+        IReadOnlyList<ProcedureIdentity>? unverified = null,
+        bool reviewList = false)
     {
         ArgumentNullException.ThrowIfNull(results);
         notifications ??= [];
@@ -68,6 +74,7 @@ public static class SarifReportWriter
         }
 
         sarifResults.AddRange(BaselineComputer.AbsentResults(currentIdentities, baseline, new HashSet<string>(unverifiedIdentities, StringComparer.Ordinal)));
+        List<Dictionary<string, object>> reviewGroups = ReviewList.Apply(sarifResults);
 
         Run run = new()
         {
@@ -78,6 +85,11 @@ public static class SarifReportWriter
         foreach ((string name, object value) in runProperties ?? new Dictionary<string, object>(StringComparer.Ordinal))
         {
             run.SetProperty(name, value);
+        }
+
+        if (reviewList)
+        {
+            run.SetProperty(ReviewList.ListProperty, reviewGroups);
         }
 
         if (notifications.Count > 0)
@@ -151,6 +163,12 @@ public static class SarifReportWriter
         if (result.Lowering is { } lowering)
         {
             sarifResult.SetProperty("lowering", lowering);
+        }
+
+        // Ticket P2-064: a flagged result says which cause it shares with others; ReviewList.Apply ranks the groups.
+        if (ReviewList.Key(result.Verdict, runtimeChange) is { } reviewGroup)
+        {
+            sarifResult.SetProperty(ReviewList.GroupProperty, reviewGroup);
         }
 
         SetLocations(sarifResult, result);
