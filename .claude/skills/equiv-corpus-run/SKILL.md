@@ -143,6 +143,11 @@ $t = Measure-Command {
 Every `equiv compare` here, in every mode, passes `--verbosity debug --log "$run/progress.log"`
 (ADR 0038): corpus runs are the long ones, and the log is the only way to see inside one.
 
+Two runs on the same pair must not overlap their load phase (they collide on MSBuild's
+`obj/**/*.AssemblyReference.cache`, "being used by another process"), so start the second only
+after the first's `progress.log` has its `load-modern` line, and treat a run that exits 4 with
+skipped projects as void: discard it and run it again.
+
 **Watching a run.** From a second terminal, without touching the `equiv` process:
 `./tools/corpus/corpus.ps1 -Progress $run` prints the current phase, done/total, the last ETA and
 worst-case bound, the item in flight and how long it has run (`slow` once that is ten times the
@@ -160,7 +165,7 @@ naming the same item with a growing time.
   report it to the user first.
 - `seeded` also runs the mechanical copy (ticket M4-010; needs M0-012): `./tools/corpus/corpus.ps1
   -SeedMechanical <slug> -Count 300` writes `.corpus/pairs/<slug>/seeded-mech/` and its
-  `seeds.json` (method identity, operator, line; a `Changing`-family operator can be an equivalent
+  `seeds.json` (method identity, operator, first line the mutation changed; a `Changing`-family operator can be an equivalent
   mutant, so it is not assumed to differ). Run `full` against `seeded-mech` the same way as
   `modern-seeded`, and for each seed in its manifest find the result at the seed's identity or line:
   - **Divergent, or Unknown with a `relatedLocation` on the seeded line**: a hit, same as a

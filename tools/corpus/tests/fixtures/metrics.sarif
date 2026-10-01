@@ -1,0 +1,16 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "equiv" } },
+      "results": [
+        { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Gear.Spin(int)" }, "properties": { "unknownReason": "abstraction", "scope": "whole" } },
+        { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Gear.Stop()" }, "properties": { "unknownReason": "abstraction", "scope": "whole" } },
+        { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Sprocket.Turn(int)" }, "properties": { "unknownReason": "abstraction", "scope": "partial" } },
+        { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Sprocket.Rest()" }, "properties": { "unknownReason": "timeout", "scope": "whole" } },
+        { "ruleId": "EQ003", "message": { "text": "Timeout: Contoso.Widgets.Cog.Mesh()" } },
+        { "ruleId": "EQ001", "message": { "text": "Equivalent: Contoso.Widgets.Cog.Slip()" }, "properties": { "scope": "whole" } }
+      ]
+    }
+  ]
+}

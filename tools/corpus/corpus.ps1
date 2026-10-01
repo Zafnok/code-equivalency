@@ -731,12 +731,18 @@ switch ($PSCmdlet.ParameterSetName) {
                 if ($null -eq $value) { 'n/a' } else { [string]$value }
             } | Group-Object | Sort-Object Name | ForEach-Object { Show-Step ("  {0} {1}" -f $_.Name, $_.Count) }
         }
-        Show-Step "== Unknown (EQ003) by reason (first word of the message until a reason property exists)"
+        Show-Step "== Unknown (EQ003) by unknownReason, and by scope within it"
         $results | Where-Object { $_.ruleId -eq 'EQ003' } | ForEach-Object {
-            $reason = Get-Bag (Get-Bag $_ 'properties') 'reason'
-            if ($null -eq $reason) { $reason = ($_.message.text -split '[\s:(]')[0] }
-            [string]$reason
-        } | Group-Object | Sort-Object Count -Descending | ForEach-Object { Show-Step ("  {0} {1}" -f $_.Name, $_.Count) }
+            $row = [ordered]@{}
+            foreach ($prop in 'unknownReason', 'scope') {
+                $value = Get-Bag (Get-Bag $_ 'properties') $prop
+                $row[$prop] = if ($null -eq $value) { 'n/a' } else { [string]$value }
+            }
+            [pscustomobject]$row
+        } | Group-Object unknownReason | Sort-Object Count -Descending | ForEach-Object {
+            Show-Step ("  {0} {1}" -f $_.Name, $_.Count)
+            $_.Group | Group-Object scope | Sort-Object Count -Descending | ForEach-Object { Show-Step ("    {0} {1}" -f $_.Name, $_.Count) }
+        }
     }
 
     'RuntimeDiff' {
