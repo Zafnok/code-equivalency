@@ -183,11 +183,12 @@ changed pairs). What ADR 0039 warned of also held: lowerable is not proved. Of t
 pairs that were Unknown(opaque), 31 are still Unknown.
 
 ## Noise between the two measured runs
-Seven pairs the fallback did not lower changed verdict between the runs, each to or from a timeout:
-Unknown(abstraction) to Unknown(timeout) 2, and one each of Unknown(timeout) to
-Unknown(abstraction), Unknown(timeout) to Divergent, Unknown(timeout) to Unknown(unaligned-loop),
-Unknown(unaligned-loop) to Unknown(timeout), and Divergent to Unknown(unaligned-loop). This is the
-wall-clock budget under shared load (P2-050). None is counted above.
+Seven pairs the fallback did not lower changed verdict between the runs. Six moved to or from a
+timeout: Unknown(abstraction) to Unknown(timeout) 2, and one each of Unknown(timeout) to
+Unknown(abstraction), Unknown(timeout) to Divergent, Unknown(timeout) to Unknown(unaligned-loop) and
+Unknown(unaligned-loop) to Unknown(timeout). The seventh moved from Divergent to
+Unknown(unaligned-loop). This fits a wall-clock budget under shared load (P2-050), but no pair's
+cause was checked. None is counted above.
 
 ## Findings
 - The gain is 1.6%, under the 5% bar: the fallback stays off by default (this ticket).
@@ -196,5 +197,6 @@ wall-clock budget under shared load (P2-050). None is counted above.
 - Six pairs that end Unknown take 5.4 of the 6.8 verify hours, and about two more hours follow in a
   pass that no phase logs: P2-076, P2-077 (filed during this run from the 2026-09-29 log; this
   run's phase times repeat the pattern).
-- Wall-clock noise moves seven pairs between two runs of one commit: P2-050 (existing).
+- Seven pairs the fallback did not lower change verdict between two runs of one commit, six of them
+  to or from a timeout: P2-050 (existing).
 - No `not-reproduced` replay, so no ticket from criterion 2.

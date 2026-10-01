@@ -71,8 +71,9 @@ already decides.
   the encoder throw a Z3 sort mismatch. Filed as P2-078. It is outside criterion 3's wording (the
   pair was not Equivalent), and the default stays off anyway.
 - One IL-lowered pair goes from Divergent to Unknown(timeout). Recorded in P2-078's Notes.
-- Seven pairs the fallback never lowered changed verdict between the two measured runs, all to or
-  from a timeout: wall-clock budgets under shared load (P2-050). They are reported apart from the gain.
+- Seven pairs the fallback never lowered changed verdict between the two measured runs, six of them
+  to or from a timeout. That fits wall-clock budgets under shared load (P2-050), but no pair's cause
+  was checked. They are reported apart from the gain.
 - The corpus checkout was reused from the `corpus-runs-debug-progress` worktree's `.corpus/` through a
   directory junction, so nothing was fetched or restored again. Run directories:
   `.corpus/pairs/gitextensions-8522/runs/20260930-p1018-{full,il,il-execute}`.
