@@ -61,3 +61,23 @@ already decides.
   pairsCongruent`). The 19 `unmatched-overload` results are not matched pairs. The numerator counts
   IL-lowered pairs that move out of Unknown(opaque), which is ADR 0039's wording. Moves out of any
   other Unknown reason are reported next to it but do not count.
+- Result: 21 of 1,294 changed pairs (1.6%) move from Unknown(opaque) to Equivalent. 21 more move to
+  Divergent, and replay reproduces none of them (27 `not-constructible`, 1 `not-applicable` over the
+  28 Divergents only the IL run has), so none counts. The gain is under 5%: the default stays off
+  and ROADMAP's Post-MVP list has the line. Criterion 3 holds.
+- Changed pairs are 1,294 at 1d4569a, not the 1,143 of the 2026-09-30 run at bd8e379. The 5% bar is
+  therefore 65 pairs.
+- The `--il-fallback` runs exit 5: one IL-lowered pair, Unknown(timeout) without the fallback, makes
+  the encoder throw a Z3 sort mismatch. Filed as P2-078. It is outside criterion 3's wording (the
+  pair was not Equivalent), and the default stays off anyway.
+- One IL-lowered pair goes from Divergent to Unknown(timeout). Recorded in P2-078's Notes.
+- Seven pairs the fallback never lowered changed verdict between the two measured runs, all to or
+  from a timeout: wall-clock budgets under shared load (P2-050). They are reported apart from the gain.
+- The corpus checkout was reused from the `corpus-runs-debug-progress` worktree's `.corpus/` through a
+  directory junction, so nothing was fetched or restored again. Run directories:
+  `.corpus/pairs/gitextensions-8522/runs/20260930-p1018-{full,il,il-execute}`.
+- Each run took about 8h15m. Six pairs that end Unknown take most of the verify phase, and about two
+  hours follow in a pass no phase logs. Filed as P2-076 and P2-077 in this PR, at the user's request
+  to speed up migration runs without ending any pair early.
+- Decision: the report is dated 2026-10-01, the day the runs finished and it was written. The runs
+  started 2026-09-30, and their directories carry that date.
