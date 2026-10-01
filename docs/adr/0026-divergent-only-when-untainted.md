@@ -72,4 +72,4 @@ untainted observables agree while the solver said they differ remains an encoder
   heap. Even so, the gate's nightly budget found a model in which `Nullable<int>.GetValueOrDefault()`
   threw on one side before a statement the other side runs first. No real call throws there. So rule
   2 keeps excusing a model whose run records any call, closed or open. Rules 1 and 3 are unchanged.
-  A Divergent that rests on an answer the real member cannot give is P2-068.
+  A Divergent that rests on an answer the real member cannot give is P2-081.

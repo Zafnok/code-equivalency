@@ -76,7 +76,7 @@ model's run records a call, closed or open.
   accepts this ADR. ADR 0026 gains a second 2026-09-30 clarification: a Divergent can rest on a call's
   result or `threw` flag too, not only on its heap writes.
 - A Divergent that rests on a BCL call's `threw` flag or result, which the real member cannot give,
-  is still reported as EQ002. Ticket P2-068 owns that.
+  is still reported as EQ002. Ticket P2-081 owns that.
 - Ticket P2-060 implements it and pins the gate's pair. `tools/corpus/seeder/SyntaxMutator.cs` treats an
   interpolated string as a call when reordering statements (P1-017). It stays as it is: an
   interpolated string with a non-string hole is still an open call.
