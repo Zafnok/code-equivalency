@@ -153,6 +153,16 @@ public static class SarifReportWriter
             sarifResult.SetProperty("lowering", lowering);
         }
 
+        // ADR 0042: the callee pairs a call site with the same text binds to, which the pair treats as possibly the same.
+        if (!result.ReboundCalls.IsEmpty)
+        {
+            sarifResult.SetProperty("reboundCalls", result.ReboundCalls.Select(static r => new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["legacy"] = r.Legacy,
+                ["modern"] = r.Modern,
+            }).ToList());
+        }
+
         SetLocations(sarifResult, result);
         return sarifResult;
     }
