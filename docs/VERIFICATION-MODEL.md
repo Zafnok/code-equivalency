@@ -37,7 +37,8 @@ No single algorithm decides equivalence for every program pair, but this sub-pro
 (regression verification: same language family, mostly identical code) is tractable in
 practice. Loops are handled by the ladder in section 5.1; a procedure gets **Unknown**
 only when every rung fails, the solver times out, some input reaches an `IrOpaque` node
-that is not shared by both sides (ADRs 0014 and 0024), every divergence found depends on
+that is not shared by both sides (ADRs 0014 and 0024; a call site the two sides bind to different
+callees is one, ADR 0042), every divergence found depends on
 an abstraction (ADR 0026), or the method's bound body is erroneous (`Unbound`, ADR 0029). Every
 Unknown states its scope. A `line` Unknown is still a proof about every input that reaches none
 of the lines it lists; a `method` Unknown claims nothing (ADR 0029). A pair whose bound bodies fingerprint equal and are not
@@ -287,7 +288,8 @@ Migration-specific normalisations (applied to both sides before matching):
   Divergent unless the user maps it.
 - Namespace and type rename maps come from `equiv.config.json`.
 - BCL API changes are NOT auto-equated (`WebClient` vs `HttpClient` calls are different
-  identities and therefore Divergent unless the user maps them). False alarms are
+  identities and therefore Divergent unless the user maps them, or Unknown when the call site's
+  text is the same on both sides, as the rebound call sites below). False alarms are
   cheaper than false proofs. The one exception is a shipped, cited catalogue
   (`api-equivalences.json`, ADR 0020, ticket M3-009) of member and type pairs that are
   exactly equivalent whenever both are invoked: overload drift such as
@@ -295,6 +297,19 @@ Migration-specific normalisations (applied to both sides before matching):
   ASP.NET Core result helpers and result types. The frontend rewrites a legacy call while
   lowering it, with an argument adapter, and every entry applied to a pair is listed in
   `properties.equivalencesApplied`. Users can suppress entries in `equiv.config.json`.
+- Rebound call sites (ADR 0042, ticket P2-069). A call site is a call the lowering emits for a member
+  at a syntax node: an invocation, an object creation, a property, indexer or event accessor, an
+  `await`. Its key is the node's source tokens and the member's name. When a key occurs on both sides
+  of a matched pair and binds to identity L on the legacy side and M on the modern side, and L
+  differs from M after the rename map, the catalogue above and the config's call-identity map have
+  been applied, (L, M) is a rebound pair: possibly the same function, neither equated nor told
+  apart. A key bound to several identities on a side pairs each legacy-only identity with each
+  modern-only one, and a callee in the runtime-changes table is never in a rebound pair. Every call
+  to L in the legacy body and to M in the modern body is an `IrOpaque` with reason `rebound-call` and
+  no fingerprint, emitted where the call would be, after its receiver and arguments are evaluated and
+  the receiver is null-checked. An input that reaches one has an unknown outcome (ADR 0014). The pair
+  lists its rebound pairs in `properties.reboundCalls`. A call to a member with another name, or at a
+  site with other text, is an ordinary call. The IL lowering (section 3.1) marks the same identities.
 - Runtime-changed APIs: a shipped data table (`runtime-changes.json`, sourced from
   Microsoft's .NET Core 3.0 to .NET 10 breaking-changes list) names BCL members whose
   behaviour differs between .NET Framework and .NET even when the call is textually
@@ -476,8 +491,10 @@ caller then runs through the whole ladder as usual.
 | Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link in `message`) |
 
 Every verdict on a matched pair with bodies also carries `properties.assumedCallees` and
-`properties.unprovenAssumptions` (ADR 0019), and `properties.equivalencesApplied` when a
-catalogue entry fired (ADR 0020). A result whose ladder reached rung 4 carries `properties.chcMode`, and an
+`properties.unprovenAssumptions` (ADR 0019), `properties.equivalencesApplied` when a
+catalogue entry fired (ADR 0020), and `properties.reboundCalls` when a call site was rebound (ADR
+0042): one `{ legacy, modern }` per rebound pair of callee identities, sorted by legacy and then
+modern identity. It is not part of the fingerprint. A result whose ladder reached rung 4 carries `properties.chcMode`, and an
 Equivalent by `chc` carries Spacer's coupling invariant in `properties.invariant` (section 5.1). An Equivalent by
 `llm-invariant` or `trace-invariant` carries the admitted invariant there too, and what proposed it in
 `properties.proposedBy`: the model id, or `trace` (ADR 0036). An Equivalent whose proof used callee
