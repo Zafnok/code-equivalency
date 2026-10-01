@@ -1,5 +1,5 @@
 # P2-062 An opaque fragment in `properties.abstractions` names its reason
-Status: todo
+Status: done (PR #317)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-046
@@ -40,3 +40,14 @@ Changing what counts as an abstraction, or the fingerprint.
 
 ## Notes
 - Found by P2-046.
+- Size guard did not trip. The replay only knows the call identity (`ModelDecoder.Abstractions`), but
+  `ProductEncoder.ShareFragments` still holds the `IrOpaque` it rewrote into the `opaque:` call, and
+  `SharedFragments.Locate` already attaches that fragment's span there. The reason travels the same way.
+- Decision: `Abstraction` gets an optional `Reason` (null for an `IrPure` operator) and
+  `SharedFragments.Occurrences` carries the fragment's reason beside its span. Reason: `Locate` is the one
+  place that has both the abstraction and its `IrOpaque`, so no new plumbing is needed.
+- Decision: `Locate` now sets the reason even when the abstraction already has a span (it used to return
+  such an abstraction untouched). Reason: criterion 1 says every `opaque:` entry carries `reason`.
+- Decision: when a side has the same fingerprint more than once, the reason is the first occurrence's, as
+  the span already is. Reason: one entry per identity and side; the fingerprint is out of scope.
+- `reason` is an additive SARIF property, so the commit carries `Release: minor`.

@@ -71,17 +71,24 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   caller-sufficient contract in place of the shared function (ADR 0036 decision 2;
   VERIFICATION-MODEL.md section 5.2).
 
-`Equiv.Execute` runs code on the two real runtimes, the second oracle of ADR 0035. It references
+`Equiv.Execute` runs code on the two real runtimes, the second oracle of ADR 0035: each side on its
+detected runtime (ADR 0040 decision 3; P2-056). It references
 `Equiv.Core` only (an architecture test enforces it):
 
 - `Equiv.Core.Execution` holds the contract: `ExecutionRequest`, `ExecutionOutcome` and
   `IExecutionDriverFactory`. They are records and one interface, with no process code.
-- `Equiv.Frontend.CSharp` implements `IExecutionDriverFactory` (`DriverFactory`). It resolves a
-  member against the .NET Framework 4.8 targeting pack and the .NET 10 reference pack, and emits one
-  driver program per runtime with Roslyn.
+- `Equiv.Frontend.CSharp` implements `IExecutionDriverFactory` (`DriverFactory`) for a pair of
+  runtimes, .NET Framework 4.8 and .NET 10 by default. `DriverReferences` finds any runtime's
+  installed pieces: the .NET Framework targeting pack `v<version>`, or .NET's shared framework and
+  `packs/Microsoft.NETCore.App.Ref/<major.minor>.*`. `DriverFactory` resolves a member against each
+  side's reference assemblies and emits one driver program per side with Roslyn (`DriverRuntime`):
+  an `.exe` with an `app.config` for .NET Framework, a `.dll` with a `runtimeconfig.json` and
+  `rollForward: Disable` for .NET. A runtime that is not installed makes its side not constructible;
+  another is never used in its place.
 - `Equiv.Execute` generates inputs and runs each driver as a child process, twice per side. It
   compares the canonical outcomes. `tools/runtime-diff` (M3-032) is a thin console over it and
-  `DriverFactory`. It is Windows-only, because the legacy side needs .NET Framework 4.8.
+  `DriverFactory`, with `--from` and `--to` naming the runtimes. `WindowsRequirement` is the one
+  check every execution surface asks: Windows is needed only when a side runs on .NET Framework.
 
 `Equiv.Cli`:
 
@@ -107,9 +114,12 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   M4-009). It prints a note on stderr that code from both solutions runs on this machine, in a
   temporary working directory, and is not sandboxed. Every driver process starts in a fresh
   `cwd-*` folder under the run's `equiv-execute-*` temporary folder, so a relative write is
-  deleted with it (P2-040); absolute paths, the registry and the network stay reachable. On an OS other than Windows it exits 3, because the legacy side needs .NET Framework 4.8.
+  deleted with it (P2-040); absolute paths, the registry and the network stay reachable. Once both
+  solutions are loaded, a project on .NET Framework off Windows stops the run with exit 3, naming the
+  project and its runtime (ADR 0040 decision 3; P2-056); a pair whose sides are all .NET runs on any OS.
   The frontend's analysis carries an `IReplayDriverFactory` (`Equiv.Core.Execution`) over the
-  projects it loaded; the C# one emits them and compiles a driver per side, and `Equiv.Execute`'s
+  projects it loaded; the C# one emits them and compiles a driver per side for that side's project's
+  detected runtime, so a same-runtime pair runs both sides on one runtime, and `Equiv.Execute`'s
   `Replayer` runs them. The result gains `properties.replay` (VERIFICATION-MODEL.md section 6);
   the verdict, rule id, fingerprint and exit code never change. It also tests every Unknown pair on
   generated inputs (decision 3; ticket P1-008): the factory's `Plan` builds the same two drivers,
@@ -128,14 +138,15 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   is a tool error (`isError: true`) with the message `equiv compare` prints on stderr. stdout carries
   protocol messages only: `CompareCommand.Run` writes its own lines through the `Streams` on
   `CompareOptions` (the console's for `compare`, stderr for `mcp`). `equiv mcp --execute` prints the same
-  stderr note as `compare --execute`, exits 3 with the same message on a non-Windows OS, and registers a
+  stderr note as `compare --execute` and registers a
   third tool, `probe` (ADR 0035, ADR 0036; ticket M5-002): an agent names a matched pair by its normalised
   identity (`{ legacy, modern, identity, arguments, culture? }`) and its own JSON arguments in parameter
   order (receiver excluded), and gets back `{ legacy: {kind, canonical}, modern: {kind, canonical}, equal
   }` from the same `IReplayDriverFactory`/`Replayer` path `--execute`'s replay uses, built from the pair's
   Roslyn method symbols rather than a solver model. `probe` never writes SARIF, never changes a `compare`
-  result, and is not registered at all without `--execute` or off Windows, so an agent cannot turn
-  execution on by itself.
+  result, and is not registered at all without `--execute`, so an agent cannot turn execution on by
+  itself. Off Windows it refuses a pair with a side on .NET Framework with `compare --execute`'s message
+  (P2-056).
 - Router: inspects inputs, rejects mismatched or unsupported languages (exit 3), else
   selects the frontend. One frontend in the MVP; the router exists from day one so that
   Java is a new project, not a refactor.
@@ -177,4 +188,4 @@ paths -> router -> loader(legacy) -> symbols --+
 | `IVerificationBackend` | Z3 direct encoding | Boogie IVL (SymDiff-style) when loop invariants are needed |
 | `IReportSink` | SARIF file | SARIF upload to GitHub Code Scanning / SonarQube |
 | `IRunLog` | CLI channel writer: stderr and `--log`, heartbeat, ETA (ADR 0038, M4-012) | MCP progress notifications for `equiv mcp` (M5) |
-| `IExecutionDriverFactory` | C# drivers for .NET Framework 4.8 and .NET 10 (ADR 0035) | drivers for user assemblies (M4-009) |
+| `IExecutionDriverFactory` | C# drivers for each side's detected runtime (ADR 0035, ADR 0040) | drivers for user assemblies (M4-009) |

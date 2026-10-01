@@ -66,7 +66,7 @@ public sealed class DriverWorkingDirectoryTests : IDisposable
         CSharpCompilation compilation = CSharpCompilation.Create(
             "RelativeWriter",
             [CSharpSyntaxTree.ParseText(source, cancellationToken: TestContext.Current.CancellationToken)],
-            [.. DriverReferences.Installed().Modern.Select(static r => MetadataReference.CreateFromFile(r))],
+            [.. DriverReferences.Installed().For(DriverFactory.DefaultModern)!.References.Select(static r => MetadataReference.CreateFromFile(r))],
             new CSharpCompilationOptions(OutputKind.ConsoleApplication));
         string path = Path.Combine(folder, "RelativeWriter.dll");
         EmitResult result;
@@ -76,7 +76,7 @@ public sealed class DriverWorkingDirectoryTests : IDisposable
         }
 
         Assert.True(result.Success, string.Join("; ", result.Diagnostics));
-        File.WriteAllText(Path.ChangeExtension(path, ".runtimeconfig.json"), DriverFactory.RuntimeConfig);
+        DriverReferences.Installed().For(DriverFactory.DefaultModern)!.WriteConfig(path, desktop: false);
         return path;
     }
 }

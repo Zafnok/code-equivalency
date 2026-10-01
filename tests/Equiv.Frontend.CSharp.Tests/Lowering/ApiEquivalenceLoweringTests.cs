@@ -59,6 +59,7 @@ public sealed class ApiEquivalenceLoweringTests
 
         IrCall call = Assert.Single(Calls(body));
         Assert.Equal("System.String::Split(char,System.StringSplitOptions)", call.Callee.Value);
+        Assert.False(call.Closed); // the adapter names its modern member only by string (ADR 0041)
         Assert.Equal(3, call.Args.Length);
         Assert.Equal("s", call.Args[0].SourceName);
         Assert.Equal(["bcl.string-split-one-char"], applied);

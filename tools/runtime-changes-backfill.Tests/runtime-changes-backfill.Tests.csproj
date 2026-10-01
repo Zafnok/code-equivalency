@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>RuntimeChangesBackfill.Tests</RootNamespace>
+    <AssemblyName>RuntimeChangesBackfill.Tests</AssemblyName>
+    <TestingPlatformCommandLineArguments>--coverlet-file-prefix $(MSBuildProjectName)</TestingPlatformCommandLineArguments>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="coverlet.MTP" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\runtime-changes-backfill\runtime-changes-backfill.csproj" />
+  </ItemGroup>
+
+</Project>

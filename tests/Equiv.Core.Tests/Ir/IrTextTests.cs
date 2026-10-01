@@ -29,6 +29,7 @@ public sealed class IrTextTests
           opaque body "lock" at "src/a.cs" 5:6-7:8
           %t15: bv32 = pure "f64.add"(%a, %t0)
           %t16: sort "System.Decimal" = pure "dec.div"!(%s, %s) throws(%t17: bool "System.DivideByZeroException", %t18 "q": bool "System.OverflowException")
+          %t19: bv32 = call closed "System.Math::Abs(int)"(%a) threw %t20: bool
           switch %a [bv32 1 -> B1, bv32 2 -> B2] default B3
         B1:
           goto B3

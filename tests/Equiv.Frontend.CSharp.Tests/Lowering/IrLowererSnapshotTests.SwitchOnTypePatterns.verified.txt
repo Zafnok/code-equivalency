@@ -53,7 +53,7 @@ B13:
 B15:
   throw "System.NullReferenceException"
 B16:
-  %$12: bv32 = call "System.String::get_Length()"(%s.46) threw %$13: bool
+  %$12: bv32 = call closed "System.String::get_Length()"(%s.46) threw %$13: bool
   br %$13, B17, B18
 B17:
   throw "System.Exception"

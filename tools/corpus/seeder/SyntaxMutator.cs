@@ -84,7 +84,7 @@ public static class SyntaxMutator
             MutationOperator.RenameLocals => RenameLocalsCandidates(method),
             MutationOperator.ReorderIndependentStatements => AdjacentPairCandidates(method, IsIndependentAssignmentPair, Swap),
             MutationOperator.InvertIf => [.. Nodes<IfStatementSyntax>(method, static _ => true).Select(branch => (Func<MethodDeclarationSyntax>)(() => InvertIf(method, branch)))],
-            MutationOperator.Commute => BinaryCandidates(method, IsCommutable, static b => b.WithLeft(b.Right).WithRight(b.Left)),
+            MutationOperator.Commute => CommuteCandidates(method),
             MutationOperator.IntroduceTemporary or MutationOperator.InlineTemporary => TemporaryCandidates(method),
             MutationOperator.IfToConditional => IfToConditionalCandidates(method),
             MutationOperator.CoalesceNullCheck => CoalesceCandidates(method),
@@ -182,7 +182,37 @@ public static class SyntaxMutator
 
     // -- Commute / FlipComparison / ChangeConstant / SwapArguments: single BinaryExpressionSyntax rewrites. --
 
-    private static bool IsCommutable(BinaryExpressionSyntax binary) => CommutativeKinds.Contains(binary.Kind()) && IsSimple(binary.Left) && IsSimple(binary.Right);
+    /// <summary>
+    /// The operator must be a built-in one on a type where it commutes, never <c>string</c>'s <c>+</c> (concatenation)
+    /// or a delegate's (combination), and never a user-defined one. Neither operand may make a call, since swapping
+    /// them reorders the call trace (ADR 0018): every name is a local, parameter or field (never a property, whose
+    /// getter is a call) and every nested operator is built-in and not on <c>string</c> (ticket P2-061). A type the
+    /// BCL-only model cannot resolve binds no built-in operator, so it offers no site.
+    /// </summary>
+    private static List<Func<MethodDeclarationSyntax>> CommuteCandidates(MethodDeclarationSyntax method)
+    {
+        BinaryExpressionSyntax[] shapes = [.. Nodes<BinaryExpressionSyntax>(method, static b => CommutativeKinds.Contains(b.Kind()) && IsSimple(b.Left) && IsSimple(b.Right))];
+        if (shapes.Length == 0)
+        {
+            return [];
+        }
+
+        SemanticModel model = Model(method);
+        return [.. shapes
+            .Where(b => IsBuiltInNonString(model, b) && MakesNoCall(model, b.Left) && MakesNoCall(model, b.Right))
+            .Select(b => (Func<MethodDeclarationSyntax>)(() => method.ReplaceNode(b, b.WithLeft(b.Right).WithRight(b.Left).WithTriviaFrom(b))))];
+    }
+
+    private static bool IsBuiltInNonString(SemanticModel model, ExpressionSyntax op) =>
+        model.GetSymbolInfo(op).Symbol is IMethodSymbol { MethodKind: MethodKind.BuiltinOperator, ContainingType: { SpecialType: not SpecialType.System_String, TypeKind: not TypeKind.Delegate } };
+
+    private static bool MakesNoCall(SemanticModel model, ExpressionSyntax operand) => operand.DescendantNodesAndSelf().All(n => n switch
+    {
+        MemberAccessExpressionSyntax => false,
+        IdentifierNameSyntax id => model.GetSymbolInfo(id).Symbol is ILocalSymbol or IParameterSymbol or IFieldSymbol,
+        BinaryExpressionSyntax or PrefixUnaryExpressionSyntax => IsBuiltInNonString(model, (ExpressionSyntax)n),
+        _ => true,
+    });
 
     private static BinaryExpressionSyntax FlipComparison(BinaryExpressionSyntax binary)
     {
@@ -220,6 +250,8 @@ public static class SyntaxMutator
     private static LiteralExpressionSyntax Literal(ulong value) => SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(value));
 
     // -- IntroduceTemporary / InlineTemporary: t = e; then use t. Both operators apply the same rewrite (M0-012 Notes). --
+    // An assignment's target must be a bare name: in r.P = e, r is read before e and the temporary moves that read
+    // after it, where a getter call in e could have written r (ticket P2-061).
 
     private static List<Func<MethodDeclarationSyntax>> TemporaryCandidates(MethodDeclarationSyntax method)
     {
@@ -234,7 +266,7 @@ public static class SyntaxMutator
                 ReturnStatementSyntax { Expression: { } result } ret => (result, replacement => ret.WithExpression(replacement)),
                 _ => (null, null),
             };
-            if (value is null || !IsSimple(value) || !IsListElement(statement))
+            if (value is null || !IsSimple(value) || !IsListElement(statement) || statement is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax { Left: not IdentifierNameSyntax } })
             {
                 continue;
             }

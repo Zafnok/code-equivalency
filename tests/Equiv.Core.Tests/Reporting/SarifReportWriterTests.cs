@@ -476,14 +476,41 @@ public sealed class SarifReportWriterTests
         Unknown unknown = Core.Verdicts.Unknown.DependingOn(
             candidate,
             [
-                new Abstraction(Codebase.Legacy, new CallIdentity("opaque:a"), Span: null),
-                new Abstraction(Codebase.Modern, new CallIdentity("opaque:b"), new SourceSpan("New.cs", 4, 9, 4, 20)),
+                new Abstraction(Codebase.Legacy, new CallIdentity("opaque:a"), Span: null) { Reason = "SwitchExpression" },
+                new Abstraction(Codebase.Modern, new CallIdentity("opaque:b"), new SourceSpan("New.cs", 4, 9, 4, 20)) { Reason = "DelegateCreation" },
             ]);
         VerificationResult result = Fixtures.Result(unknown);
 
         Assert.Equal(CounterexampleText.Dump(candidate), SarifReportWriter.Write([result]).Runs[0].Results[0].GetProperty<string>("candidateCounterexample"));
         return VerifyJson(Serialize(result));
     }
+
+    /// <summary>Ticket P2-062 criterion 1: an opaque fragment's entry names the fragment's <c>IrOpaque</c> reason.</summary>
+    [Fact]
+    public void AnOpaqueAbstractionCarriesItsReason()
+    {
+        Dictionary<string, object> entry = Assert.Single(Abstractions(new Abstraction(Codebase.Legacy, new CallIdentity("opaque:a"), Span: null) { Reason = "DelegateCreation" }));
+
+        Assert.Equal("opaque:a", entry["identity"]);
+        Assert.Equal("DelegateCreation", entry["reason"]);
+    }
+
+    /// <summary>Ticket P2-062 criterion 1: an <c>IrPure</c> operator is not a fragment, so its entry has no <c>reason</c>.</summary>
+    [Fact]
+    public void APureAbstractionCarriesNoReason()
+    {
+        Dictionary<string, object> entry = Assert.Single(Abstractions(new Abstraction(Codebase.Legacy, new CallIdentity("f32.mul"), Span: null)));
+
+        Assert.Equal("f32.mul", entry["identity"]);
+        Assert.False(entry.ContainsKey("reason"));
+    }
+
+    private static List<Dictionary<string, object>> Abstractions(Abstraction abstraction) =>
+        SarifReportWriter
+            .Write([Fixtures.Result(Core.Verdicts.Unknown.DependingOn(Fixtures.Counterexample(), [abstraction]))])
+            .Runs[0]
+            .Results[0]
+            .GetProperty<List<Dictionary<string, object>>>("abstractions");
 
     /// <summary>
     /// Tickets M4-009 and P2-038: a replayed Divergent carries <c>replay</c>, with both canonical outcomes when it did not
@@ -745,6 +772,11 @@ public sealed class SarifReportWriterTests
             Fixtures.Result(new Unknown(UnknownReason.Opaque, "detail"), "C"),
             Fixtures.Result(new Added(), "D"),
             Fixtures.Result(new Removed(), "E"),
+            Fixtures.Result(
+                Core.Verdicts.Unknown.DependingOn(
+                    Fixtures.Counterexample(),
+                    [new Abstraction(Codebase.Modern, new CallIdentity("opaque:a"), new SourceSpan("New.cs", 4, 9, 4, 20)) { Reason = "DelegateCreation" }]),
+                "F"),
         ]);
 
         Assert.Equal(SarifVersion.Current, log.Version);

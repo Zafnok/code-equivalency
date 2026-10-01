@@ -15,7 +15,7 @@ B4:
   %$9: bool = mapread %null.System.Nullable_1, %$c1.19
   br %$9, B6, B5
 B5:
-  %$c2.20: bv32 = call "System.Nullable`1::GetValueOrDefault()<int>"(%$c1.19) threw %$12: bool
+  %$c2.20: bv32 = call closed "System.Nullable`1::GetValueOrDefault()<int>"(%$c1.19) threw %$12: bool
   br %$12, B9, B11
 B6:
   %$c2.21: bv32 = const bv32 0

@@ -37,14 +37,35 @@ internal static class ReplayCompilations
     public static IMethodSymbol Method(Compilation compilation, string type, string name) =>
         compilation.GetTypeByMetadataName(type)!.GetMembers(name).OfType<IMethodSymbol>().Single();
 
-    /// <summary>A factory over one method per side, and the pair of <paramref name="oldIr"/> and <paramref name="newIr"/> it replays.</summary>
+    public static readonly TargetRuntime Net48 = TargetRuntime.Parse("net48")!;
+
+    public static readonly TargetRuntime Net10 = TargetRuntime.Parse("net10.0")!;
+
+    /// <summary>
+    /// A factory over one method per side, the legacy one's project on .NET Framework 4.8 and the modern one's on .NET 10,
+    /// both installed, and the pair of <paramref name="oldIr"/> and <paramref name="newIr"/> it replays.
+    /// </summary>
     public static (ReplayDriverFactory Factory, ProcedurePair Pair) Factory(
-        Compilation legacy, IMethodSymbol legacyMethod, string oldIr, Compilation modern, IMethodSymbol modernMethod, string newIr)
+        Compilation legacy, IMethodSymbol legacyMethod, string oldIr, Compilation modern, IMethodSymbol modernMethod, string newIr) =>
+        Factory(Net48, Net10, static target => new DriverRuntime(target, "10.0.1"), legacy, legacyMethod, oldIr, modern, modernMethod, newIr);
+
+    /// <summary>A factory whose projects run on <paramref name="legacyRuntime"/> and <paramref name="modernRuntime"/>, found by <paramref name="hosts"/> (ticket P2-056).</summary>
+    public static (ReplayDriverFactory Factory, ProcedurePair Pair) Factory(
+        TargetRuntime? legacyRuntime,
+        TargetRuntime? modernRuntime,
+        Func<TargetRuntime, DriverRuntime?> hosts,
+        Compilation legacy,
+        IMethodSymbol legacyMethod,
+        string oldIr,
+        Compilation modern,
+        IMethodSymbol modernMethod,
+        string newIr)
     {
         ProcedureIdentity identity = new("N.C::M()");
         ReplayDriverFactory factory = new(
-            new Dictionary<ProcedureIdentity, ReplayTarget> { [identity] = new(legacyMethod, legacy) },
-            new Dictionary<ProcedureIdentity, ReplayTarget> { [identity] = new(modernMethod, modern) });
+            new Dictionary<ProcedureIdentity, ReplayTarget> { [identity] = new(legacyMethod, legacy, legacyRuntime) },
+            new Dictionary<ProcedureIdentity, ReplayTarget> { [identity] = new(modernMethod, modern, modernRuntime) },
+            hosts);
         return (factory, new ProcedurePair(identity, identity, IrText.Parse(oldIr), IrText.Parse(newIr)));
     }
 

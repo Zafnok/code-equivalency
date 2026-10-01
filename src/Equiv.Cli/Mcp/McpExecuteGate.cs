@@ -4,9 +4,10 @@ namespace Equiv.Cli.Mcp;
 
 /// <summary>
 /// ADR 0035's consequences for the <c>probe</c> tool, at <c>equiv mcp</c>'s server startup rather than per call (ticket
-/// M5-002): without <c>--execute</c> nothing changes and <c>probe</c> is not registered (criterion 1); with it, a
-/// non-Windows OS stops the server before it serves anything, with the same message <c>compare --execute</c> gives, and
-/// Windows prints the same note on stderr and registers <c>probe</c> too.
+/// M5-002): without <c>--execute</c> nothing changes and <c>probe</c> is not registered (criterion 1); with it, the server
+/// prints the same note on stderr <c>compare --execute</c> gives and registers <c>probe</c> too. Whether this OS can run a
+/// pair depends on its solutions' runtimes, so <c>probe</c> asks <see cref="ExecutionEnvironment.Refusal"/> per call, as
+/// <c>compare --execute</c> does once it has loaded them (ADR 0040 decision 3; ticket P2-056).
 /// </summary>
 internal static class McpExecuteGate
 {
@@ -18,26 +19,17 @@ internal static class McpExecuteGate
         bool execute,
         ExecutionEnvironment? execution,
         CancellationToken cancellationToken) =>
-        Tools(frontends, backend, execute, execution) is { } tools
-            ? McpCommand.ServeAsync(input, output, tools, cancellationToken)
-            : Task.FromResult(ExitCodes.UsageError);
+        McpCommand.ServeAsync(input, output, Tools(frontends, backend, execute, execution), cancellationToken);
 
-    /// <summary>The tools to serve, or null when <c>--execute</c> was asked for off Windows.</summary>
-    private static EquivTools? Tools(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, bool execute, ExecutionEnvironment? execution)
+    /// <summary>The tools to serve: <c>probe</c> among them only under <c>--execute</c>.</summary>
+    private static EquivTools Tools(IReadOnlyList<ILanguageFrontend> frontends, IVerificationBackend backend, bool execute, ExecutionEnvironment? execution)
     {
         if (!execute)
         {
             return new EquivTools(frontends, backend);
         }
 
-        ExecutionEnvironment executing = execution ?? ExecutionEnvironment.Current;
-        if (!executing.IsWindows)
-        {
-            Console.Error.WriteLine(ExecutionEnvironment.NeedsWindows);
-            return null;
-        }
-
         Console.Error.WriteLine(ExecutionEnvironment.Note);
-        return new EquivTools(frontends, backend, executing);
+        return new EquivTools(frontends, backend, execution ?? ExecutionEnvironment.Current);
     }
 }

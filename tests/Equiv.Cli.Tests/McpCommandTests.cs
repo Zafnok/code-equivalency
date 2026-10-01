@@ -394,7 +394,7 @@ public sealed class McpCommandTests
         Assert.DoesNotContain(tools, static t => string.Equals(t.Name, "probe", StringComparison.Ordinal));
     }
 
-    /// <summary>With no environment given, <c>--execute</c> runs on this machine: on Windows it prints the note, elsewhere it refuses.</summary>
+    /// <summary>With no environment given, <c>--execute</c> runs on this machine and prints the note on any OS (ticket P2-056).</summary>
     [Fact]
     public void Probe_WithoutAnEnvironment_UsesThisMachine()
     {
@@ -403,22 +403,41 @@ public sealed class McpCommandTests
         string stderr = CaptureStdErr(() =>
             exitCode = command.Parse(["mcp", "--execute"]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken).GetAwaiter().GetResult());
 
-        Assert.Equal(OperatingSystem.IsWindows() ? ExitCodes.Success : ExitCodes.UsageError, exitCode);
-        Assert.StartsWith(OperatingSystem.IsWindows() ? ExecutionEnvironment.Note : ExecutionEnvironment.NeedsWindows, stderr, StringComparison.Ordinal);
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.StartsWith(ExecutionEnvironment.Note, stderr, StringComparison.Ordinal);
     }
 
-    /// <summary>Ticket M5-002 criterion 1: <c>equiv mcp --execute</c> off Windows exits 3 with ADR 0035's message and serves nothing.</summary>
+    /// <summary>
+    /// Ticket P2-056 criterion 3: off Windows <c>probe</c> is registered, refuses a pair with a side on .NET Framework, naming
+    /// the project and its runtime, and runs a pair whose sides are both .NET.
+    /// </summary>
     [Fact]
-    public async Task Probe_NotRegisteredOffWindows()
+    public async Task Probe_OffWindows_RefusesOnlyAFrameworkPair()
     {
-        ExecutionEnvironment nonWindows = new(IsWindows: false, new FakeReplay(string.Empty, string.Empty));
-        Command command = McpCommand.Create([], new FakeBackend(NoVerdicts), nonWindows, () => (Stream.Null, Stream.Null));
-        int exitCode = ExitCodes.Success;
-        string stderr = CaptureStdErr(() =>
-            exitCode = command.Parse(["mcp", "--execute"]).InvokeAsync(cancellationToken: TestContext.Current.CancellationToken).GetAwaiter().GetResult());
+        FakeReplay replay = new("[\"Returned\",1]", "[\"Returned\",1]");
+        ExecutionEnvironment nonWindows = new(IsWindows: false, replay);
+        MatchResult match = new([Pair(PairIdentity)], [], [], []);
+        FakeFrontend framework = new("csharp", _ => true, match, replay: replay, legacyRuntimes: [("Legacy", "net48", "attribute")], modernRuntimes: [("Modern", "net10.0", "attribute")]);
+        FakeFrontend core = new("csharp", _ => true, match, replay: replay, legacyRuntimes: [("Legacy", "net8.0", "attribute")], modernRuntimes: [("Modern", "net8.0", "attribute")]);
+        using TempFile legacy = new();
+        using TempFile modern = new();
 
-        Assert.Equal(ExitCodes.UsageError, exitCode);
-        Assert.Contains(ExecutionEnvironment.NeedsWindows, stderr, StringComparison.Ordinal);
+        using (Session session = await Session.StartAsync(framework, new FakeBackend(NoVerdicts), nonWindows).ConfigureAwait(true))
+        {
+            CallToolResult refused = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null])).ConfigureAwait(true);
+
+            Assert.True(refused.IsError);
+            Assert.Equal("error: --execute: Legacy runs on net48, and .NET Framework needs Windows (ADR 0040)", Text(Assert.Single(refused.Content)));
+            Assert.Empty(replay.Probes);
+        }
+
+        using (Session session = await Session.StartAsync(core, new FakeBackend(NoVerdicts), nonWindows).ConfigureAwait(true))
+        {
+            CallToolResult ran = await session.CallAsync("probe", ProbeArgs(legacy.Path, modern.Path, PairIdentity.Value, [null])).ConfigureAwait(true);
+
+            Assert.NotEqual(true, ran.IsError);
+            Assert.Single(replay.Probes);
+        }
     }
 
     /// <summary>Ticket M5-002 criteria 1 and 3: with <c>--execute</c> on Windows, <c>probe</c> is registered and says it runs code on the host.</summary>

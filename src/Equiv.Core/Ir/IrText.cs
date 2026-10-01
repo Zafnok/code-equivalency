@@ -161,7 +161,7 @@ public static class IrText
             $"{Definition(instruction.Target)} = phi [{string.Join(", ", instruction.Incoming.Select(static i => $"{Block(i.From)}: {Use(i.Value)}"))}]";
 
         public string Visit(IrCall instruction) =>
-            $"{Assigned(instruction.Target)}call {Callee(instruction.Callee)}({string.Join(", ", instruction.Args.Select(Use))})"
+            $"{Assigned(instruction.Target)}call {(instruction.Closed ? "closed " : string.Empty)}{Callee(instruction.Callee)}({string.Join(", ", instruction.Args.Select(Use))})"
             + (instruction.Threw is null ? string.Empty : " threw " + Definition(instruction.Threw))
             + (instruction.RefOuts.IsEmpty ? string.Empty : $" refout({string.Join(", ", instruction.RefOuts.Select(Definition))})")
             + HeapPairs(instruction.Heap);

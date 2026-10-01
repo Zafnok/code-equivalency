@@ -292,8 +292,8 @@ public static class SarifReportWriter
 
     /// <summary>
     /// An <see cref="UnknownReason.Abstraction"/> result's candidate counterexample, rendered as a Divergent's
-    /// <c>model</c> is, and the abstractions it depends on, each with its identity, side and, when known, source span
-    /// (ADR 0026). Both are left out when absent.
+    /// <c>model</c> is, and the abstractions it depends on, each with its identity, side, for an opaque fragment its
+    /// <c>reason</c> (ticket P2-062) and, when known, source span (ADR 0026). Both are left out when absent.
     /// </summary>
     private static void SetAbstractionProperties(Result sarifResult, Unknown unknown)
     {
@@ -337,6 +337,11 @@ public static class SarifReportWriter
             ["identity"] = abstraction.Identity.Value,
             ["side"] = Name(abstraction.Side),
         };
+        if (abstraction.Reason is { } reason)
+        {
+            described["reason"] = reason;
+        }
+
         if (abstraction.Span is { } span)
         {
             described["span"] = new Dictionary<string, object>(StringComparer.Ordinal)

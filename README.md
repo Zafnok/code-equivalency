@@ -188,8 +188,9 @@ lowering census (`run.properties.loweringCensus`) and the Added and Removed resu
 runs the solver and exits 0 unless loading fails. It cannot be combined with `--baseline` or
 `--fail-on`.
 
-`--execute` runs code from both solutions on this machine, so it needs Windows with .NET Framework
-4.8 (otherwise exit 3). It replays every Divergent's counterexample on both runtimes and records
+`--execute` runs code from both solutions on this machine, each side on the runtime its projects
+target, which must be installed. It needs Windows only when a side targets .NET Framework
+(otherwise exit 3). It replays every Divergent's counterexample on both runtimes and records
 the outcome in `properties.replay`: `reproduced`, `not-reproduced`, `not-applicable` or
 `not-constructible`. It also tests every Unknown pair on generated inputs, and a divergence it
 sees twice becomes an EQ002 with `proofMethod: observed`. Testing a pair stops once the estimated
@@ -277,12 +278,13 @@ An input error `equiv compare` exits 3 or 4 on (a missing file, no frontend for 
 project that loads) comes back as a tool error with the same message.
 
 `equiv mcp --execute` also registers `probe` (ADR 0035, ADR 0036; ticket M5-002), which runs code
-from both solutions on this machine and so needs Windows, same as `compare --execute`: an agent that
+from both solutions on this machine and so needs Windows for a .NET Framework side, same as
+`compare --execute`: an agent that
 gets Unknown back from `compare` can name a matched pair by its normalised identity and supply its
 own arguments, and get back both runtimes' outcomes to test its own hunch. `probe` never writes
 SARIF and never changes a `compare` result; a mismatch it reports is a hypothesis, not a proof.
-Without `--execute`, or off Windows, `probe` is not registered at all, so an agent cannot turn
-execution on by itself.
+Without `--execute`, `probe` is not registered at all, so an agent cannot turn execution on by
+itself.
 
 - `probe`: `legacy`, `modern`, `identity` and `arguments` (the method's own arguments, in order, as
   JSON values), and optionally `culture`. The result is `{ legacy: {kind, canonical}, modern: {kind,

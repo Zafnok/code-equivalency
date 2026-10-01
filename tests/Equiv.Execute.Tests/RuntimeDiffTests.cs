@@ -1,5 +1,6 @@
 using System.Text.Json;
 
+using Equiv.Core;
 using Equiv.Core.Execution;
 
 using Xunit;
@@ -26,19 +27,46 @@ public sealed class RuntimeDiffTests : IDisposable
     }
 
     private int Run(IExecutionDriverFactory factory, IDriverHost host, params string[] args) =>
-        new RuntimeDiff(factory, host, output, error).Run(args, isWindows: true, directory);
+        new RuntimeDiff((_, _) => factory, host, output, error).Run(args, isWindows: true, directory);
 
     private static FakeHost Answering(string legacy, string modern) =>
         new((driver, _, _) => driver.EndsWith(".exe", StringComparison.Ordinal) ? legacy : modern);
 
-    [Fact]
-    public void NonWindows_ExitsThree()
+    /// <summary>Ticket P2-056 criterion 3: only a .NET Framework side needs Windows, and the error names it and its runtime.</summary>
+    [Theory]
+    [InlineData("--from runs on net48, and .NET Framework needs Windows (ADR 0040)")]
+    [InlineData("--to runs on net472, and .NET Framework needs Windows (ADR 0040)", "--from", "net8.0", "--to", "net472")]
+    public void NonWindows_AFrameworkSideExitsThree(string refusal, params string[] runtimes)
     {
-        int exit = new RuntimeDiff(new FakeFactory([]), Answering("", ""), output, error).Run(["--member", "System.String::ToUpper(", "--out", Report], isWindows: false, directory);
+        int exit = new RuntimeDiff((_, _) => new FakeFactory([]), Answering("", ""), output, error).Run(["--member", "System.String::ToUpper(", "--out", Report, .. runtimes], isWindows: false, directory);
 
         Assert.Equal(RuntimeDiff.UsageError, exit);
-        Assert.Equal("runtime-diff needs Windows and .NET Framework 4.8 (ADR 0035)", error.ToString().TrimEnd());
+        Assert.Equal("runtime-diff: " + refusal, error.ToString().TrimEnd());
         Assert.False(File.Exists(Report));
+    }
+
+    /// <summary>Ticket P2-056 criterion 5: <c>--from</c> and <c>--to</c> pick the runtimes the factory builds for, <c>net48</c> and <c>net10.0</c> by default, and two .NET runtimes run off Windows.</summary>
+    [Fact]
+    public void FromAndToSelectRuntimes()
+    {
+        List<(TargetRuntime From, TargetRuntime To)> built = [];
+        FakeFactory factory = new([Signature("System.String::ToUpper()", Parameter(ExecutionTypeKind.Text))]);
+        RuntimeDiff tool = new(
+            (from, to) =>
+            {
+                built.Add((from, to));
+                return factory;
+            },
+            Answering("[\"Returned\",\"\"]", "[\"Returned\",\"\"]"),
+            output,
+            error);
+
+        int core = tool.Run(["--member", "System.String::ToUpper()", "--from", "net8.0", "--to", ".NETCoreApp,Version=v10.0", "--cases", "1", "--out", Report], isWindows: false, directory);
+        int defaults = tool.Run(["--member", "System.String::ToUpper()", "--cases", "1", "--out", Report], isWindows: true, directory);
+
+        Assert.Equal((RuntimeDiff.NoDivergence, RuntimeDiff.NoDivergence), (core, defaults));
+        Assert.Equal([(TargetRuntime.Parse("net8.0")!, TargetRuntime.Parse("net10.0")!), (TargetRuntime.Parse("net48")!, TargetRuntime.Parse("net10.0")!)], built);
+        Assert.Empty(error.ToString());
     }
 
     [Fact]
@@ -165,6 +193,8 @@ public sealed class RuntimeDiffTests : IDisposable
     [InlineData("--member must name a type and a member, as in System.String::IndexOf(", "--member", "System.String", "--out", "r.json")]
     [InlineData("unexpected --seed -1", "--member", "System.String::ToUpper(", "--out", "r.json", "--seed", "-1")]
     [InlineData("unexpected --cases 0", "--member", "System.String::ToUpper(", "--out", "r.json", "--cases", "0")]
+    [InlineData("unexpected --from netstandard2.0", "--member", "System.String::ToUpper(", "--out", "r.json", "--from", "netstandard2.0")]
+    [InlineData("unexpected --to java17", "--member", "System.String::ToUpper(", "--out", "r.json", "--to", "java17")]
     [InlineData("unexpected --verbose yes", "--member", "System.String::ToUpper(", "--out", "r.json", "--verbose", "yes")]
     public void BadArgumentsAreAUsageError(string problem, params string[] args)
     {
@@ -179,6 +209,7 @@ public sealed class RuntimeDiffTests : IDisposable
 
         Assert.Equal(new RuntimeDiffOptions("System.String::ToUpper(", 0, RuntimeDiffOptions.DefaultCases, "r.json"), options);
         Assert.Empty(problem);
-        Assert.Throws<ArgumentNullException>(() => new RuntimeDiff(new FakeFactory([]), Answering("", ""), output, error).Run(null!, isWindows: true, directory));
+        Assert.Equal(("net48", "net10.0"), (options!.From.ToString(), options.To.ToString()));
+        Assert.Throws<ArgumentNullException>(() => new RuntimeDiff((_, _) => new FakeFactory([]), Answering("", ""), output, error).Run(null!, isWindows: true, directory));
     }
 }

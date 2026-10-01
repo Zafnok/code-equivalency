@@ -18,7 +18,9 @@ namespace Equiv.Verify.Z3;
 /// callee gets one pair per side, and so does a callee in <c>freshPerSide</c>, whose calls a callee contract relates
 /// instead (ADR 0036 decision 2; ticket P1-010). So is the new version of each heap map, one <c>heap:</c> function per callee, signature
 /// and map (ticket P1-005), and the new value of each <c>ref</c> or <c>out</c> argument, one <c>refout:</c> function per
-/// callee, signature and output index (ticket M4-003). The heap at a call is one value per <see cref="Heap"/> map, in that order. A legacy identity
+/// callee, signature and output index (ticket M4-003). The heap at a call is one value per <see cref="Heap"/> map, in that order. A callee
+/// identity every call to which is closed takes no heap, leaves every map as it was and has no heap in its event (ADR 0041;
+/// ticket P2-060). A legacy identity
 /// in the config's call-identity map is renamed to its modern counterpart first. A trace is a <c>Seq</c> of
 /// <c>event(callee, args)</c>, whose <c>args</c> are the arguments followed by the heap at the call (as long on both
 /// sides, so the concatenation is injective), boxed in a <c>Value</c> datatype with one injective constructor per IR
@@ -30,6 +32,7 @@ internal sealed class TraceEncoder
     private readonly SortMapper sorts;
     private readonly ImmutableDictionary<string, string> callIdentityMap;
     private readonly IReadOnlySet<string> freshPerSide;
+    private readonly HashSet<string> closed;
     private readonly Dictionary<string, FuncDecl> functions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> callees = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FuncDecl> boxes = new(StringComparer.Ordinal);
@@ -37,12 +40,26 @@ internal sealed class TraceEncoder
     private readonly FuncDecl eventConstructor;
     private readonly SeqSort trace;
 
+    /// <param name="sorts">The sort mapper of the encoding.</param>
+    /// <param name="argumentTypes">The type of every call argument, each of which the trace boxes.</param>
+    /// <param name="callIdentityMap">The call-identity unifications legacy calls are renamed with.</param>
+    /// <param name="heap">The maps the heap at a call ranges over.</param>
+    /// <param name="freshPerSide">The callees whose calls get one set of functions per side.</param>
+    /// <param name="sites">Every call of the product with its side, from which the closed identities are read.</param>
     public TraceEncoder(
-        SortMapper sorts, IEnumerable<IrType> argumentTypes, ImmutableDictionary<string, string> callIdentityMap, ImmutableArray<HeapMap> heap, IReadOnlySet<string>? freshPerSide = null)
+        SortMapper sorts,
+        IEnumerable<IrType> argumentTypes,
+        ImmutableDictionary<string, string> callIdentityMap,
+        ImmutableArray<HeapMap> heap,
+        IReadOnlySet<string>? freshPerSide = null,
+        IEnumerable<(Side Side, IrCall Call)>? sites = null)
     {
         this.sorts = sorts;
         this.callIdentityMap = callIdentityMap;
         this.freshPerSide = freshPerSide ?? new HashSet<string>(StringComparer.Ordinal);
+        closed = new(
+            (sites ?? []).GroupBy(s => Canonical(s.Side, s.Call.Callee), StringComparer.Ordinal).Where(static g => g.All(static s => s.Call.Closed)).Select(static g => g.Key),
+            StringComparer.Ordinal);
         Heap = heap;
         context = sorts.Context;
 
@@ -64,25 +81,34 @@ internal sealed class TraceEncoder
     public ImmutableArray<HeapMap> Heap { get; }
 
     /// <summary>
+    /// Whether <paramref name="callee"/>, called on <paramref name="side"/>, is encoded as closed: every call to its canonical
+    /// identity in the product is closed (ADR 0041).
+    /// </summary>
+    public bool IsClosed(Side side, CallIdentity callee) => closed.Contains(Canonical(side, callee));
+
+    /// <summary>
     /// The result, <c>threw</c> flag, trace event, new heap (one term per <see cref="Heap"/> map) and ref outputs (one term per
     /// <see cref="IrCall.RefOuts"/> entry, ticket M4-003) of <paramref name="call"/> on <paramref name="side"/> at
-    /// <paramref name="position"/>, given the heap <paramref name="heap"/> at the call.
+    /// <paramref name="position"/>, given the heap <paramref name="heap"/> at the call. A closed callee neither reads
+    /// <paramref name="heap"/> nor changes it, and its event has no heap.
     /// </summary>
     public (Expr? Result, BoolExpr Threw, Expr Event, ImmutableArray<Expr> Heap, ImmutableArray<Expr> RefOuts) Call(
         Side side, IrCall call, ImmutableArray<(IrType Type, Expr Term)> args, BitVecExpr position, ImmutableArray<Expr> heap)
     {
         ImmutableArray<IrType> types = [.. args.Select(static a => a.Type)];
-        Expr[] applied = [.. args.Select(static a => a.Term), position, .. heap];
+        bool closedCall = IsClosed(side, call.Callee);
+        ImmutableArray<Expr> reads = closedCall ? [] : heap;
+        Expr[] applied = [.. args.Select(static a => a.Term), position, .. reads];
         Expr? result = call.Target is null ? null : context.MkApp(ResultFunction(side, call.Callee, types, call.Target.Type), applied);
         BoolExpr threw = (BoolExpr)context.MkApp(ThrewFunction(side, call.Callee, types), applied);
-        IEnumerable<(IrType Type, Expr Term)> read = args.Concat(Heap.Zip(heap, static (m, term) => (m.Type, term)));
+        IEnumerable<(IrType Type, Expr Term)> read = args.Concat(Heap.Zip(reads, static (m, term) => (m.Type, term)));
         SeqExpr boxed = context.MkConcat([context.MkEmptySeq(values), .. read.Select(a => context.MkUnit(context.MkApp(boxes[SortMapper.Name(a.Type)], a.Term)))]);
         Expr @event = context.MkApp(eventConstructor, context.MkInt(Callee(Canonical(side, call.Callee))), boxed);
         return (
             result,
             threw,
             @event,
-            [.. Heap.Select((_, i) => context.MkApp(HeapFunction(side, call.Callee, types, i), applied))],
+            closedCall ? heap : [.. Heap.Select((_, i) => context.MkApp(HeapFunction(side, call.Callee, types, i), applied))],
             [.. call.RefOuts.Select((r, i) => context.MkApp(RefOutFunction(side, call.Callee, types, i, r.Type), applied))]);
     }
 
@@ -164,7 +190,8 @@ internal sealed class TraceEncoder
         string name = $"{kind}:{Canonical(side, callee)}({string.Join(',', argumentTypes.Select(SortMapper.Name))}){suffix}{owner}";
         if (!functions.TryGetValue(name, out FuncDecl? function))
         {
-            function = context.MkFuncDecl(name, [.. argumentTypes.Select(sorts.Sort), context.MkBitVecSort(32), .. Heap.Select(h => sorts.Sort(h.Type))], range);
+            IEnumerable<HeapMap> reads = IsClosed(side, callee) ? [] : Heap;
+            function = context.MkFuncDecl(name, [.. argumentTypes.Select(sorts.Sort), context.MkBitVecSort(32), .. reads.Select(h => sorts.Sort(h.Type))], range);
             functions.Add(name, function);
         }
 

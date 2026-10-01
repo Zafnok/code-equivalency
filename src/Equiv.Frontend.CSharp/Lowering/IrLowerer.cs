@@ -1353,12 +1353,13 @@ internal sealed class IrLowerer
 
         if (binary is { OperatorKind: BinaryOperatorKind.Add, LeftOperand.Type.SpecialType: SpecialType.System_String, RightOperand.Type.SpecialType: SpecialType.System_String })
         {
-            // Strings stay uninterpreted, so `a + b` is the call the compiler makes.
+            // Strings stay uninterpreted, so `a + b` is the call the compiler makes, which is closed (ADR 0041).
             return Call(
                 new CallIdentity(ProcedureIdentityNormalizer.Member("System", "String", "Concat", 0, ["string", "string"], renames).Value),
                 [Value(binary.LeftOperand, context), Value(binary.RightOperand, context)],
                 Map(binary.Type!),
                 [],
+                closed: true,
                 context);
         }
 
@@ -1699,7 +1700,7 @@ internal sealed class IrLowerer
     /// </summary>
     private IrVar? Create(IObjectCreationOperation creation, LoweringContext context) =>
         RefOuts(creation.Arguments) is { } written
-            ? Call(Identity(creation.Constructor!), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, context)
+            ? Call(Identity(creation.Constructor!), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, ClosedCalls.IsClosed(creation.Constructor!), context)
             : Opaque(creation, "ref-argument", context);
 
     /// <summary>
@@ -1756,10 +1757,10 @@ internal sealed class IrLowerer
         if (written.IsEmpty && catalogue.Members.TryGetValue(callee.Value, out ApiEquivalence? entry) && Adapt(entry, invocation, context) is { } adapted)
         {
             catalogue.Applied.Add(entry.Id);
-            return Call(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges), adapted, returns, [], context);
+            return Call(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges), adapted, returns, [], closed: false, context);
         }
 
-        return Dispatch(invocation.Instance, callee, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
+        return Dispatch(invocation.Instance, callee, Operands(invocation.Instance, invocation.Arguments, context), returns, written, ClosedCalls.IsClosed(invocation.TargetMethod), context);
     }
 
     /// <summary>
@@ -1815,7 +1816,7 @@ internal sealed class IrLowerer
         }
 
         IrType? result = awaited.Type!.SpecialType == SpecialType.System_Void ? null : Map(awaited.Type);
-        return Call(CallIdentityFactory.Await(awaiter, renames, suppressedRuntimeChanges), [awaitable], result, [], context);
+        return Call(CallIdentityFactory.Await(awaiter, renames, suppressedRuntimeChanges), [awaitable], result, [], closed: false, context);
     }
 
     /// <summary>
@@ -1939,7 +1940,7 @@ internal sealed class IrLowerer
         }
 
         IrType? returns = value is null ? Map(property.Type!) : null;
-        return Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], returns, [], context);
+        return Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], returns, [], ClosedCalls.IsClosed(accessor), context);
     }
 
     /// <summary>A property read or an event's <c>+=</c> or <c>-=</c>: each is, unless the property's is a field, a call to an accessor.</summary>
@@ -1955,7 +1956,7 @@ internal sealed class IrLowerer
         IEventReferenceOperation reference = (IEventReferenceOperation)assignment.EventReference;
         IMethodSymbol accessor = (assignment.Adds ? reference.Event.AddMethod : reference.Event.RemoveMethod)!;
         ImmutableArray<IrVar> operands = Operands(reference.Instance, [], context);
-        return Dispatch(reference.Instance, Identity(accessor), [.. operands, Value(assignment.HandlerValue, context)], returns: null, [], context);
+        return Dispatch(reference.Instance, Identity(accessor), [.. operands, Value(assignment.HandlerValue, context)], returns: null, [], ClosedCalls.IsClosed(accessor), context);
     }
 
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
@@ -1975,14 +1976,14 @@ internal sealed class IrLowerer
     /// <c>callvirt</c>, it null-checks a receiver of a reference type at the call, after every argument, a setter's value
     /// included (ticket P2-017).
     /// </summary>
-    private IrVar? Dispatch(IOperation? receiver, CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, LoweringContext context)
+    private IrVar? Dispatch(IOperation? receiver, CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, bool closed, LoweringContext context)
     {
         if (receiver is not null && !receiver.Type!.IsValueType)
         {
             ThrowIfNull(receiver, args[0], context);
         }
 
-        return Call(callee, args, returns, written, context);
+        return Call(callee, args, returns, written, closed, context);
     }
 
     /// <summary>
@@ -2001,13 +2002,16 @@ internal sealed class IrLowerer
         return [.. receiver, .. evaluated.OrderBy(static a => a.Ordinal).Select(a => a.Value ?? Value(a.Argument.Value, context))];
     }
 
-    /// <summary>A call's result, <c>threw</c> flag and <c>ref</c>/<c>out</c> outputs, each output stored to its variable before the call can throw.</summary>
-    private IrVar? Call(CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, LoweringContext context)
+    /// <summary>
+    /// A call's result, <c>threw</c> flag and <c>ref</c>/<c>out</c> outputs, each output stored to its variable before the call
+    /// can throw. A <paramref name="closed"/> call reaches no heap map (ADR 0041), so it gets no heap pairs.
+    /// </summary>
+    private IrVar? Call(CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, bool closed, LoweringContext context)
     {
         IrVar? target = returns is null ? null : ssa.Temp(returns);
         IrVar threw = ssa.Temp(Bool);
         ImmutableArray<IrVar> outputs = [.. written.Select(w => ssa.Temp(w.Type))];
-        ssa.Emit(context.Current, new IrCall(target, threw, callee, args) { RefOuts = outputs });
+        ssa.Emit(context.Current, new IrCall(target, threw, callee, args) { RefOuts = outputs, Closed = closed });
         foreach ((RefOut output, IrVar value) in written.Zip(outputs))
         {
             if (output.Variable is { } variable)

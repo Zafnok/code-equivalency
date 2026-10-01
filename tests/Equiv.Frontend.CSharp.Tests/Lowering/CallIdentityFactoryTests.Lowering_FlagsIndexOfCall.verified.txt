@@ -7,7 +7,7 @@ B1:
 B3:
   throw "System.NullReferenceException"
 B4:
-  %$4: bv32 = call "System.String::IndexOf(char)"!(%s, %c) threw %$5: bool
+  %$4: bv32 = call closed "System.String::IndexOf(char)"!(%s, %c) threw %$5: bool
   br %$5, B5, B6
 B5:
   throw "System.Exception"

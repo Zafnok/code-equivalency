@@ -7,8 +7,8 @@ using Equiv.Execute.Testing;
 namespace Equiv.Execute;
 
 /// <summary>
-/// Replays a Divergent's model on both real runtimes (ADR 0035 decision 2; ticket M4-009): the legacy driver on .NET
-/// Framework 4.8 and the modern driver on .NET 10, each once, under the invariant culture, and also under <c>tr-TR</c> when
+/// Replays a Divergent's model on both real runtimes (ADR 0035 decision 2; ticket M4-009): each side's driver on its
+/// project's detected runtime (ADR 0040 decision 3; ticket P2-056), each once, under the invariant culture, and also under <c>tr-TR</c> when
 /// either body calls a member of the runtime-changes table, as differential testing does (ticket P2-038). Differing
 /// canonical outcomes under any culture reproduce the divergence. Equal ones do not, and make the replay not constructible
 /// when the plan's <see cref="ReplayPlan.AlikeReason"/> says they are no evidence (ticket P2-037), or when both sides threw

@@ -76,7 +76,7 @@ public sealed class SharedFragmentTests
 
         Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
         Assert.Equal([(Codebase.Legacy, OldSpan), (Codebase.Modern, NewSpan)], unknown.Causes.Select(static c => (c.Side, c.Span)));
-        Assert.All(unknown.Abstractions, static a => Assert.Equal("opaque:f1", a.Identity.Value));
+        Assert.All(unknown.Abstractions, static a => Assert.Equal(("opaque:f1", "DelegateCreation"), (a.Identity.Value, a.Reason)));
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed class SharedFragmentTests
     }
 
     [Fact]
-    public void LocateGivesEachSideItsSpanAndLeavesAnythingElseAlone()
+    public void LocateGivesEachSideItsSpanAndReasonAndLeavesAnythingElseAlone()
     {
         (IrProcedure old, IrProcedure @new) = Pair(Fragment("Old.cs", "f1", "slt", 1), Fragment("New.cs", "f1", "slt", 1));
         ProductEncoder.SharedFragments shared = ProductEncoder.ShareFragments(old, @new);
@@ -102,9 +102,9 @@ public sealed class SharedFragmentTests
         Abstraction spanned = legacy with { Span = NewSpan };
         Abstraction pure = new(Codebase.Legacy, new CallIdentity("dec.add"), Span: null);
 
-        Assert.Equal(OldSpan, shared.Locate(legacy).Span);
-        Assert.Equal(NewSpan, shared.Locate(legacy with { Side = Codebase.Modern }).Span);
-        Assert.Equal(spanned, shared.Locate(spanned));
+        Assert.Equal(legacy with { Span = OldSpan, Reason = "DelegateCreation" }, shared.Locate(legacy));
+        Assert.Equal(legacy with { Side = Codebase.Modern, Span = NewSpan, Reason = "DelegateCreation" }, shared.Locate(legacy with { Side = Codebase.Modern }));
+        Assert.Equal(spanned with { Reason = "DelegateCreation" }, shared.Locate(spanned));
         Assert.Equal(pure, shared.Locate(pure));
     }
 

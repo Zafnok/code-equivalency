@@ -120,11 +120,13 @@
             abstractions: [
               {
                 identity: opaque:a,
-                side: legacy
+                side: legacy,
+                reason: SwitchExpression
               },
               {
                 identity: opaque:b,
                 side: modern,
+                reason: DelegateCreation,
                 span: {
                   path: New.cs,
                   startLine: 4,
