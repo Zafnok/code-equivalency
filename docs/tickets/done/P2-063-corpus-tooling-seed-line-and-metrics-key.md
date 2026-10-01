@@ -54,11 +54,14 @@ The seed operators themselves, recall thresholds.
   `Progress.Tests.ps1`) on a six-result fixture SARIF.
 - Sonar's new-code coverage condition failed on this PR (64.3%, needs 80%; 37.5% once the Pester test was
   added): no PowerShell coverage was imported, so every new `.ps1` line counted as uncovered.
-- Deviation: two files outside this ticket's Files, to give Sonar that coverage. `sonar.yml` now runs
-  `.github/scripts/pester-coverage.ps1` after the build: it runs every `tools/**/*.Tests.ps1` with Pester
-  code coverage over `tools/corpus/corpus.ps1` and the test files, fails if a test fails, and writes
+- Deviation: `.github/workflows/sonar.yml` is outside this ticket's Files; it changed to give Sonar that
+  coverage. Its new step, after the build, runs every `tools/**/*.Tests.ps1` with Pester 5 code coverage
+  over `tools/corpus/corpus.ps1` and the test files, fails if a test fails, and writes
   `TestResults/pester-coverage.xml` in Sonar's generic coverage format (`sonar.coverageReportPaths`). This
   is the first CI run of the Pester tests. Nothing is excluded, so the rest of `corpus.ps1` now shows as
-  uncovered in Sonar's overall figure (about 30% of its commands run under the two test files).
+  uncovered in Sonar's overall figure (about a quarter of its commands run under the two test files).
+- The step is inline in the workflow, not a script: Sonar indexes every `.ps1` as source, so a 50-line
+  `.github/scripts/pester-coverage.ps1` was itself 50 new uncovered lines (14.6%). Pester 5 also leaves test
+  files out of coverage unless `CodeCoverage.ExcludeTests` is off.
 - `powershell -File tools/corpus/corpus.ps1` from Git Bash fails on this box's execution policy; run it
   from a PowerShell session instead.

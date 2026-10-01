@@ -71,11 +71,35 @@ jobs:
         shell: pwsh
         run: ./build.ps1 -SonarBuild
 
-      # PowerShell coverage (P2-063): the Pester tests under tools/, as Sonar generic coverage.
-      # After the build, whose test step clears TestResults/.
+      # PowerShell coverage (P2-063): the Pester tests under tools/, converted to Sonar's generic
+      # coverage format, the only one it imports for PowerShell. A line is covered when any command
+      # on it ran. The test files are measured too (ExcludeTests off): Sonar indexes them as source,
+      # so a line it has no report for counts as uncovered. Inline for the same reason: a script
+      # here would be source nothing covers. After the build, whose test step clears TestResults/.
       - name: Pester tests with coverage
         shell: pwsh
-        run: ./.github/scripts/pester-coverage.ps1
+        run: |
+          $tests = @((Get-ChildItem tools -Recurse -Filter *.Tests.ps1).FullName)
+          $config = New-PesterConfiguration
+          $config.Run.Path = $tests
+          $config.Run.PassThru = $true
+          $config.Run.Throw = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.CodeCoverage.Enabled = $true
+          $config.CodeCoverage.Path = @((Resolve-Path tools/corpus/corpus.ps1).Path) + $tests
+          $config.CodeCoverage.ExcludeTests = $false
+          $config.CodeCoverage.OutputPath = 'TestResults/pester-jacoco.xml'
+          $coverage = (Invoke-Pester -Configuration $config).CodeCoverage
+          $commands = @($coverage.CommandsMissed | ForEach-Object { [pscustomobject]@{ File = $_.File; Line = $_.Line; Covered = $false } }) +
+              @($coverage.CommandsExecuted | ForEach-Object { [pscustomobject]@{ File = $_.File; Line = $_.Line; Covered = $true } })
+          $files = $commands | Group-Object File | ForEach-Object {
+              $lines = $_.Group | Group-Object Line | ForEach-Object {
+                  '<lineToCover lineNumber="{0}" covered="{1}"/>' -f $_.Name, "$(@($_.Group.Covered) -contains $true)".ToLowerInvariant()
+              }
+              Write-Host ("{0}: {1} lines measured" -f $_.Name, @($lines).Count)
+              '<file path="{0}">{1}</file>' -f [IO.Path]::GetRelativePath($PWD.Path, $_.Name).Replace('\', '/'), ($lines -join '')
+          }
+          Set-Content -Path TestResults/pester-coverage.xml -Value ('<coverage version="1">{0}</coverage>' -f ($files -join ''))
 
       - name: Sonar end
         env:
