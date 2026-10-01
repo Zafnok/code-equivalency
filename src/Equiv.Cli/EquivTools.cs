@@ -106,13 +106,14 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
 
     /// <summary>
     /// The verdict counts, read from the log's rule ids (EQ001 equivalent, EQ002 and EQ006 divergent, EQ003 unknown). A skipped
-    /// project is a tool-execution notification without an exception; a pair the tool failed on carries one (ADR 0023).
+    /// project is a tool-execution notification without an exception or a descriptor; a pair the tool failed on carries an
+    /// exception (ADR 0023), and an uncovered runtime range a descriptor (ADR 0040; ticket P2-055).
     /// </summary>
     private static string Summary(SarifLog log, int exitCode)
     {
         Run run = log.Runs[0];
         int Count(params string[] ruleIds) => run.Results.Count(result => ruleIds.Contains(result.RuleId, StringComparer.Ordinal));
-        int skipped = run.Invocations?.SelectMany(static invocation => invocation.ToolExecutionNotifications).Count(static notification => notification.Exception is null) ?? 0;
+        int skipped = run.Invocations?.SelectMany(static invocation => invocation.ToolExecutionNotifications).Count(static notification => notification.Exception is null && notification.Descriptor is null) ?? 0;
         return string.Create(
             CultureInfo.InvariantCulture,
             $"Equivalent {Count("EQ001")}, Divergent {Count("EQ002", "EQ006")}, Unknown {Count("EQ003")}, skipped projects {skipped}, exit code {exitCode}");

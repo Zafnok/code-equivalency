@@ -115,7 +115,7 @@ public sealed class CallIdentityFactoryTests
         Compilation compilation = RoslynTestCompilations.Compile(source, [extraReference]);
         Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

@@ -42,7 +42,7 @@ internal sealed class IrLowerer
     private readonly ImmutableArray<string> suppressedRuntimeChanges;
     private readonly Catalogue catalogue;
     private readonly IrType? returnType;
-    private readonly bool x87;
+    private readonly SideRuntime runtime;
     private readonly Dictionary<ISymbol, SsaBuilder.Variable> variables = new(SymbolEqualityComparer.Default);
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captures = [];
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> captureTargets = [];
@@ -63,13 +63,13 @@ internal sealed class IrLowerer
     private INamedTypeSymbol receiver = null!;
     private FragmentFingerprinter fragments = null!;
 
-    private IrLowerer(RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue, IrType? returnType, bool x87)
+    private IrLowerer(RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue, IrType? returnType)
     {
         this.renames = renames;
         this.suppressedRuntimeChanges = suppressedRuntimeChanges;
         this.catalogue = catalogue;
         this.returnType = returnType;
-        this.x87 = x87;
+        runtime = catalogue.Runtime;
     }
 
     /// <summary>
@@ -77,25 +77,27 @@ internal sealed class IrLowerer
     /// field and property initializers of its kind in declaration order and then its body, its base or <c>this</c>
     /// initializer first; one that chains to <c>this(...)</c> runs no initializers, since the constructor it calls runs them
     /// (ticket M4-008). An arrow-bodied property or indexer accessor lowers its expression's graph, and an accessor with no
-    /// body reads or writes its backing field's map. A call to a member listed in <paramref name="suppressedRuntimeChanges"/>
-    /// is not flagged runtime-changed. A method whose bound code is erroneous is one whole-body <see cref="IrOpaque"/> per
+    /// body reads or writes its backing field's map. A call is flagged runtime-changed only by a row that applies inside
+    /// <paramref name="runtime"/>'s interval (ADR 0040 decision 2; ticket P2-055), and never for a member listed in
+    /// <paramref name="suppressedRuntimeChanges"/>. A method whose bound code is erroneous is one whole-body <see cref="IrOpaque"/> per
     /// cause, with reason <see cref="Unknown.UnboundOpaqueReason"/> (ADR 0029 decision 2), and is not lowered further.
     /// </summary>
-    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges) =>
-        Lower(method, compilation, renames, suppressedRuntimeChanges, []).Body;
+    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, SideRuntime runtime) =>
+        Lower(method, compilation, renames, suppressedRuntimeChanges, [], runtime).Body;
 
     /// <summary>
-    /// As the four-argument overload, applying <paramref name="equivalences"/> (the legacy side's enabled catalogue
-    /// entries, or none for the modern side), and returning the sorted ids of the entries that fired. On the
-    /// <paramref name="legacy"/> side of a project whose floating point runs on x87, every pure function that takes or
-    /// yields floating point is runtime-sensitive (ADR 0025; ticket M4-002).
+    /// As the overload without them, applying <paramref name="equivalences"/> (the legacy side's enabled catalogue
+    /// entries, or none for the modern side), and returning the sorted ids of the entries that fired. On a side whose
+    /// floating point alone runs on x87 (<see cref="SideRuntime.X87"/>), every pure function that takes or yields floating
+    /// point is runtime-sensitive (ADR 0025; ticket M4-002).
     /// </summary>
     public static (IrProcedure Body, ImmutableArray<string> EquivalencesApplied) Lower(
-        IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences, bool legacy = false)
+        IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
-        Catalogue entries = new(equivalences) { X87 = legacy && PureCatalogue.IsX87(compilation), Legacy = legacy };
+        ArgumentNullException.ThrowIfNull(runtime);
+        Catalogue entries = new(equivalences, runtime);
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
@@ -123,14 +125,15 @@ internal sealed class IrLowerer
     /// check for erroneous code; the symbol overload does, and is the one the frontend uses. Erroneous constructs reaching
     /// here lower to named opaques (<c>Invalid</c>, <c>rethrow</c>).
     /// </summary>
-    public static IrProcedure Lower(IMethodBodyBaseOperation body, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
+    public static IrProcedure Lower(IMethodBodyBaseOperation body, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, SideRuntime runtime)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(runtime);
         IMethodSymbol method = (IMethodSymbol)model.GetDeclaredSymbol(body.Syntax)!;
         // A constructor's graph starts with its initializer: a call to the base or `this` constructor on `this`.
         ControlFlowGraph graph = body is IConstructorBodyOperation constructor ? ControlFlowGraph.Create(constructor) : ControlFlowGraph.Create((IMethodBodyOperation)body);
-        return Lower(method, body, [graph], model, renames, suppressedRuntimeChanges, new Catalogue([]));
+        return Lower(method, body, [graph], model, renames, suppressedRuntimeChanges, new Catalogue([], runtime));
     }
 
     /// <summary>
@@ -163,7 +166,7 @@ internal sealed class IrLowerer
         }
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
-        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, catalogue, returnType, catalogue.X87) { compilation = (CSharpCompilation)model.Compilation };
+        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, catalogue, returnType) { compilation = (CSharpCompilation)model.Compilation };
         return lowerer.Procedure(method, parameters, lowerer.LowerBlocks(method, parameters, span, graphs));
     }
 
@@ -175,7 +178,7 @@ internal sealed class IrLowerer
         IMethodSymbol method, IFieldSymbol field, SemanticModel model, SourceSpan span, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue)
     {
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
-        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, catalogue, returnType, catalogue.X87) { compilation = (CSharpCompilation)model.Compilation };
+        IrLowerer lowerer = new(renames, suppressedRuntimeChanges, catalogue, returnType) { compilation = (CSharpCompilation)model.Compilation };
         return lowerer.Procedure(method, parameters, lowerer.LowerAccessor(field, parameters, span));
     }
 
@@ -304,7 +307,7 @@ internal sealed class IrLowerer
     {
         bodySpan = span;
         receiver = method.ContainingType;
-        fragments = new FragmentFingerprinter(method, compilation, renames, suppressedRuntimeChanges, catalogue.Entries, catalogue.Legacy);
+        fragments = new FragmentFingerprinter(method, compilation, renames, suppressedRuntimeChanges, catalogue.Entries, runtime);
         heap = NewHeap();
         IrBlockId start = ssa.NewBlock();
         LoweringContext entry = new([], [], handlerExit: null) { Current = start };
@@ -1667,7 +1670,7 @@ internal sealed class IrLowerer
 
     /// <summary>A catalogued function (ticket M4-002), with the exceptions it raises in this context, on this side.</summary>
     private IrVar Apply(PureCatalogue.Entry entry, bool isChecked, ImmutableArray<IrVar> args, IrType result, LoweringContext context) =>
-        Pure(entry.Function, entry.Raises(isChecked), entry.RuntimeSensitive(x87), args, result, context);
+        Pure(entry.Function, entry.Raises(isChecked), entry.RuntimeSensitive(runtime), args, result, context);
 
     /// <summary>
     /// An <see cref="IrPure"/> of <paramref name="function"/>, then, per exception it raises, a branch on its flag to where
@@ -1757,7 +1760,7 @@ internal sealed class IrLowerer
         if (written.IsEmpty && catalogue.Members.TryGetValue(callee.Value, out ApiEquivalence? entry) && Adapt(entry, invocation, context) is { } adapted)
         {
             catalogue.Applied.Add(entry.Id);
-            return Call(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges), adapted, returns, [], closed: false, context);
+            return Call(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), adapted, returns, [], closed: false, context);
         }
 
         return Dispatch(invocation.Instance, callee, Operands(invocation.Instance, invocation.Arguments, context), returns, written, ClosedCalls.IsClosed(invocation.TargetMethod), context);
@@ -1816,7 +1819,7 @@ internal sealed class IrLowerer
         }
 
         IrType? result = awaited.Type!.SpecialType == SpecialType.System_Void ? null : Map(awaited.Type);
-        return Call(CallIdentityFactory.Await(awaiter, renames, suppressedRuntimeChanges), [awaitable], result, [], closed: false, context);
+        return Call(CallIdentityFactory.Await(awaiter, renames, suppressedRuntimeChanges, runtime.Interval), [awaitable], result, [], closed: false, context);
     }
 
     /// <summary>
@@ -1962,7 +1965,7 @@ internal sealed class IrLowerer
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
     private static IMethodSymbol? Setter(IPropertySymbol property) => property.SetMethod is { IsInitOnly: false } setter ? setter : null;
 
-    private CallIdentity Identity(IMethodSymbol method) => CallIdentityFactory.Of(method, compilation, renames, suppressedRuntimeChanges);
+    private CallIdentity Identity(IMethodSymbol method) => CallIdentityFactory.Of(method, compilation, renames, suppressedRuntimeChanges, runtime.Interval);
 
     /// <summary>
     /// A member access's call operands: the receiver, then the arguments. The receiver is null-checked at the call, by
@@ -2044,16 +2047,17 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// The API-equivalence entries one body is lowered with (ADR 0020; ticket M3-009): member entries by legacy identity,
-    /// type entries as <see cref="Sorts"/>, and the ids of the entries that fired, sorted. It also carries whether the side
-    /// is a legacy one on x87, which, like the entries, only the legacy side has.
+    /// type entries as <see cref="Sorts"/>, and the ids of the entries that fired, sorted. It also carries the side's
+    /// <see cref="SideRuntime"/>, which, like the entries, is fixed for the body (ADR 0040; ticket P2-055).
     /// </summary>
     private sealed class Catalogue
     {
         private readonly ImmutableDictionary<string, ApiEquivalence> types;
 
-        public Catalogue(ImmutableArray<ApiEquivalence> entries)
+        public Catalogue(ImmutableArray<ApiEquivalence> entries, SideRuntime runtime)
         {
             Entries = entries;
+            Runtime = runtime;
             Members = entries.Where(static e => !e.IsType).ToImmutableDictionary(static e => e.Legacy, StringComparer.Ordinal);
             types = entries.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, StringComparer.Ordinal);
             Sorts = Sort;
@@ -2064,11 +2068,8 @@ internal sealed class IrLowerer
         /// <summary>The entries themselves, which a fragment's fingerprint applies as the body's does (ticket M4-004).</summary>
         public ImmutableArray<ApiEquivalence> Entries { get; }
 
-        /// <summary>Whether this is the legacy side, which alone is given entries.</summary>
-        public bool Legacy { get; init; }
-
-        /// <summary>Whether this is the legacy side of a project whose floating point runs on x87 (ticket M4-002).</summary>
-        public bool X87 { get; init; }
+        /// <summary>The pair's runtime interval and whether this side's floating point alone runs on x87 (tickets M4-002, P2-055).</summary>
+        public SideRuntime Runtime { get; }
 
         public SortedSet<string> Applied { get; } = new(StringComparer.Ordinal);
 

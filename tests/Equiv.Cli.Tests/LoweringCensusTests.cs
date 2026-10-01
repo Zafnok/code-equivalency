@@ -51,7 +51,7 @@ public sealed class LoweringCensusTests
               ret %a
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(legacy, modern, false), (Body(Clean), legacy, false)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(legacy, modern, false, null), (Body(Clean), legacy, false, null)], removed: 0, added: 0);
 
         Assert.Equal(["Binary", "PropertyReference"], census.OpaqueByReason.Keys, StringComparer.Ordinal);
         Assert.Equal(new SideCounts(Legacy: 1, Modern: 2), census.OpaqueByReason["Binary"]);
@@ -70,7 +70,7 @@ public sealed class LoweringCensusTests
               ret %$0
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(wholeBody, wholeBody, false), (Body(Clean), wholeBody, false), (wholeBody, Body(Clean), false)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(wholeBody, wholeBody, false, null), (Body(Clean), wholeBody, false, null), (wholeBody, Body(Clean), false, null)], removed: 0, added: 0);
 
         Assert.Equal(3, census.PairsWholeBodyOpaque);
         Assert.Equal(new SideCounts(Legacy: 2, Modern: 2), Assert.Single(census.OpaqueByReason).Value);
@@ -95,7 +95,7 @@ public sealed class LoweringCensusTests
               ret %$0
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(twoOpaques, twoBlocks, false)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(twoOpaques, twoBlocks, false, null)], removed: 0, added: 0);
 
         Assert.Equal(0, census.PairsWholeBodyOpaque);
         Assert.Equal(0, census.PairsWithoutOpaque);
@@ -104,7 +104,7 @@ public sealed class LoweringCensusTests
     [Fact]
     public void ProceduresCountEachSidesMatchedPlusUnmatchedAndCongruentPairsAreCounted()
     {
-        LoweringCensus census = LoweringCensus.Compute([(Body(Clean), Body(Clean), true), (Body(Clean), Body(Clean), false)], removed: 3, added: 5);
+        LoweringCensus census = LoweringCensus.Compute([(Body(Clean), Body(Clean), true, null), (Body(Clean), Body(Clean), false, null)], removed: 3, added: 5);
 
         Assert.Equal(new SideCounts(Legacy: 5, Modern: 7), census.Procedures);
         Assert.Equal(2, census.MatchedPairs);
@@ -132,12 +132,12 @@ public sealed class LoweringCensusTests
 
         LoweringCensus census = LoweringCensus.Compute(
             [
-                (Body(Clean), Body(Clean), true),
-                (opaque, opaque, true),
-                (Body(Clean), Body(Clean), false),
-                (opaque, wholeBody, false),
-                (Body(RuntimeChangeCall), Body(Clean), false),
-                (Body(Clean), Body(RuntimeChangeCall), false),
+                (Body(Clean), Body(Clean), true, null),
+                (opaque, opaque, true, null),
+                (Body(Clean), Body(Clean), false, null),
+                (opaque, wholeBody, false, null),
+                (Body(RuntimeChangeCall), Body(Clean), false, null),
+                (Body(Clean), Body(RuntimeChangeCall), false, null),
             ],
             removed: 0,
             added: 0);
@@ -167,7 +167,7 @@ public sealed class LoweringCensusTests
             """);
 
         LoweringCensus census = LoweringCensus.Compute(
-            [(twice, Body(RuntimeChangeCall), false), (Body(RuntimeChangeCall), Body(Clean), false), (Body(Clean), Body(Clean), true)],
+            [(twice, Body(RuntimeChangeCall), false, null), (Body(RuntimeChangeCall), Body(Clean), false, null), (Body(Clean), Body(Clean), true, null)],
             removed: 0,
             added: 0);
 
@@ -197,7 +197,7 @@ public sealed class LoweringCensusTests
               ret %a
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(legacy, modern, false)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(legacy, modern, false, null)], removed: 0, added: 0);
 
         Assert.Equal([new ExternalCallee("N::B", 2), new ExternalCallee("N::A", 1)], census.ExternalCallees.Legacy);
         Assert.Equal([new ExternalCallee("N::A", 1)], census.ExternalCallees.Modern);
@@ -213,7 +213,7 @@ public sealed class LoweringCensusTests
               ret %a
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(body, body, true)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(body, body, true, null)], removed: 0, added: 0);
 
         Assert.Empty(census.ExternalCallees.Legacy);
         Assert.Empty(census.ExternalCallees.Modern);

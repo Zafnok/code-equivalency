@@ -36,7 +36,7 @@ public sealed class PairGenLoweringTests
                     Compilation compilation = RoslynTestCompilations.Compile(source);
                     Assert.DoesNotContain(compilation.GetDiagnostics(TestContext.Current.CancellationToken), static d => d.Severity == DiagnosticSeverity.Error);
                     IMethodSymbol method = compilation.GetTypeByMetadataName("Oracle")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-                    IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+                    IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration);
                     Assert.Empty(IrValidator.Validate(procedure));
                     // Ticket P2-048: an interpolated string is opaque by design (IOPERATION-COVERAGE.md, InterpolatedString),
                     // so the modern side of a ConcatToInterpolation pair has that opaque and no other.
@@ -63,7 +63,7 @@ public sealed class PairGenLoweringTests
                     Compilation compilation = RoslynTestCompilations.Compile(source);
                     Assert.DoesNotContain(compilation.GetDiagnostics(TestContext.Current.CancellationToken), static d => d.Severity == DiagnosticSeverity.Error);
                     IMethodSymbol method = compilation.GetTypeByMetadataName("Oracle")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-                    Assert.Empty(IrValidator.Validate(IlLowerer.Lower(method, compilation)));
+                    Assert.Empty(IrValidator.Validate(IlLowerer.Lower(method, compilation, Runtimes.Migration)));
                 }
             },
             seed: Seed,

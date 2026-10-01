@@ -8,6 +8,7 @@ using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Progress;
 using Equiv.Frontend.CSharp.Loading;
+using Equiv.Frontend.CSharp.Lowering;
 
 using Microsoft.CodeAnalysis;
 
@@ -386,10 +387,10 @@ public sealed class CSharpFrontendTests
     }
 
     /// <summary>The production lowering, except that a method named <paramref name="name"/> throws <paramref name="fault"/>.</summary>
-    private static Func<IMethodSymbol, Compilation, EquivConfig, bool, (IrProcedure, ImmutableArray<string>)> FaultOn(string name, Exception fault) =>
-        (symbol, compilation, config, legacy) => string.Equals(symbol.Name, name, StringComparison.Ordinal)
+    private static Func<IMethodSymbol, Compilation, EquivConfig, bool, SideRuntime, (IrProcedure, ImmutableArray<string>)> FaultOn(string name, Exception fault) =>
+        (symbol, compilation, config, legacy, runtime) => string.Equals(symbol.Name, name, StringComparison.Ordinal)
             ? throw fault
-            : CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy);
+            : CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, runtime);
 
     [Fact]
     public void NullConfigThrows()
@@ -701,10 +702,10 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modern], [], []));
         List<Compilation> lowered = [];
 
-        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher(), (symbol, compilation, config, legacy) =>
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher(), (symbol, compilation, config, legacy, runtime) =>
             {
                 lowered.Add(compilation);
-                return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy);
+                return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, runtime);
             })
             .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 

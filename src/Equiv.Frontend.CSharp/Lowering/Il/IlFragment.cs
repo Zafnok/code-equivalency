@@ -5,6 +5,7 @@ using System.Reflection.Metadata;
 using System.Security.Cryptography;
 using System.Text;
 
+using Equiv.Core;
 using Equiv.Core.Configuration;
 
 using ICSharpCode.Decompiler;
@@ -23,10 +24,11 @@ namespace Equiv.Frontend.CSharp.Lowering.Il;
 /// as <see cref="Fingerprinting.FragmentFingerprinter"/> gives one of an IOperation fragment; ticket P1-014). A fragment is a
 /// function of what it reads, the heap and its position only when nothing else reaches into it, so it gets none when it
 /// writes a local, takes a local's address, reads through a <c>ref</c> or a type the IR has no sort for, branches, cannot
-/// complete, or calls a member that does not resolve or whose behaviour changed between runtimes (M3-015's rule). The text
+/// complete, or calls a member that does not resolve or whose behaviour changed between the pair's runtimes (M3-015's rule,
+/// inside the interval both sides are given; ADR 0040, ticket P2-055). The text
 /// hashed is its ILAst with every member and type spelled in full and every local numbered by first appearance.
 /// </summary>
-internal sealed class IlFragment(IlSymbols symbols, Compilation compilation)
+internal sealed class IlFragment(IlSymbols symbols, Compilation compilation, RuntimeInterval interval)
 {
     private const InstructionFlags Escapes =
         InstructionFlags.MayWriteLocals | InstructionFlags.MayBranch | InstructionFlags.EndPointUnreachable | InstructionFlags.ControlFlow;
@@ -51,9 +53,9 @@ internal sealed class IlFragment(IlSymbols symbols, Compilation compilation)
             [.. tree.OfType<LdLoc>().Select(static l => l.Variable).Distinct()]);
     }
 
-    /// <summary>Whether a call in a fragment resolves, and to a member no runtime change names.</summary>
+    /// <summary>Whether a call in a fragment resolves, and to a member no runtime change inside the interval names.</summary>
     private bool Stable(CallInstruction call) =>
-        symbols.Method(call.Method) is { } method && !CallIdentityFactory.Of(method, compilation, RenameMap.Empty, []).RuntimeChanged;
+        symbols.Method(call.Method) is { } method && !CallIdentityFactory.Of(method, compilation, RenameMap.Empty, [], interval).RuntimeChanged;
 
     /// <summary>A fragment's fingerprint and the locals it reads, in order.</summary>
     internal sealed record Fragment(string Text, ImmutableArray<ILVariable> Reads);

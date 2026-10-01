@@ -68,7 +68,7 @@ public sealed class SynthesisedInputNamingTests
             {
                 foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))
                 {
-                    IrProcedure body = IrLowerer.Lower(procedure.Symbol, compilation, RenameMap.Empty, []);
+                    IrProcedure body = IrLowerer.Lower(procedure.Symbol, compilation, RenameMap.Empty, [], Runtimes.Migration);
                     int declared = procedure.Symbol.Parameters.Length;
                     string where = $"{sample}/{side} {body.Identity.Value}: {string.Join(", ", body.Parameters.Select(static p => $"{p.Kind} {p.Var.Name}"))}";
 
@@ -96,7 +96,7 @@ public sealed class SynthesisedInputNamingTests
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

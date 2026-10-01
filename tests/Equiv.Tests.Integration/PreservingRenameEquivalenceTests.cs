@@ -89,7 +89,7 @@ public sealed class PreservingRenameEquivalenceTests
     {
         CSharpCompilation compilation = Compile("Snippet", source, [Library]);
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-        IrProcedure procedure = CSharpFrontend.LowerWithIrLowerer(method, compilation, EquivConfig.Default, isLegacy).Body;
+        IrProcedure procedure = CSharpFrontend.LowerWithIrLowerer(method, compilation, EquivConfig.Default, isLegacy, Runtimes.Migration).Body;
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

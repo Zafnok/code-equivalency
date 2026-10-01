@@ -35,7 +35,7 @@ public sealed class IlLowererTests
         {
             foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))
             {
-                ImmutableArray<IrDiagnostic> diagnostics = IrValidator.Validate(IlLowerer.Lower(procedure.Symbol, compilation));
+                ImmutableArray<IrDiagnostic> diagnostics = IrValidator.Validate(IlLowerer.Lower(procedure.Symbol, compilation, Runtimes.Migration));
                 invalid.AddRange(diagnostics.Select(d => $"{sample} {procedure.Identity.Value}: {d.Message}"));
             }
         }
@@ -59,7 +59,7 @@ public sealed class IlLowererTests
                 HashSet<ILVariable> caught = IlKeys.CaughtException(function);
                 ImmutableHashSet<string> keys = [.. function.Descendants.Select(i => IlKeys.Key(i, caught))];
                 ImmutableHashSet<string> unmapped = [.. function.Descendants.Where(i => Outermost(i, caught)).Select(i => IlKeys.Key(i, caught))];
-                ImmutableHashSet<string> reasons = [.. Opaques(IlLowerer.Lower(procedure.Symbol, compilation)).Select(static o => o.Reason)];
+                ImmutableHashSet<string> reasons = [.. Opaques(IlLowerer.Lower(procedure.Symbol, compilation, Runtimes.Migration)).Select(static o => o.Reason)];
                 wrong.AddRange(unmapped.Except(reasons).Select(k => $"{sample} {procedure.Identity.Value}: {k} is not an opaque"));
                 wrong.AddRange(reasons.Except(keys).Remove("undefined").Select(r => $"{sample} {procedure.Identity.Value}: {r} is no key of its ILAst"));
             }
@@ -82,7 +82,7 @@ public sealed class IlLowererTests
         {
             foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))
             {
-                IrProcedure operation = IrLowerer.Lower(procedure.Symbol, compilation, RenameMap.Empty, []);
+                IrProcedure operation = IrLowerer.Lower(procedure.Symbol, compilation, RenameMap.Empty, [], Runtimes.Migration);
                 ILFunction function = IlAstReader.Read(procedure.Symbol, compilation).Function!;
                 HashSet<ILVariable> caught = IlKeys.CaughtException(function);
                 if (!Opaques(operation).IsEmpty || !function.Descendants.All(i => ControlFlowAndCalls.Contains(IlKeys.Key(i, caught))))
@@ -91,7 +91,7 @@ public sealed class IlLowererTests
                 }
 
                 compared++;
-                IrProcedure il = IlLowerer.Lower(procedure.Symbol, compilation);
+                IrProcedure il = IlLowerer.Lower(procedure.Symbol, compilation, Runtimes.Migration);
                 string expected = Signature(operation);
                 string actual = Signature(il);
                 if (!string.Equals(expected, actual, StringComparison.Ordinal))
@@ -156,8 +156,8 @@ public sealed class IlLowererTests
         Compilation compilation = Compile(members);
         IMethodSymbol method = Method(compilation, "M");
 
-        IrConst il = Assert.Single(IlLowerer.Lower(method, compilation).Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>());
-        IrConst operation = Assert.Single(IrLowerer.Lower(method, compilation, RenameMap.Empty, []).Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>());
+        IrConst il = Assert.Single(IlLowerer.Lower(method, compilation, Runtimes.Migration).Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>());
+        IrConst operation = Assert.Single(IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration).Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>());
 
         Assert.Equal(operation.Value, il.Value);
     }
@@ -206,8 +206,8 @@ public sealed class IlLowererTests
             + "class C : B { public static int Q { get; set; } public static C operator +(C a, C b) => a; int M(C o) { P = 3; Q = P; o = o + o; return o.P + Q; } }\n");
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
 
-        IrProcedure il = IlLowerer.Lower(method, compilation);
-        IrProcedure operation = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+        IrProcedure il = IlLowerer.Lower(method, compilation, Runtimes.Migration);
+        IrProcedure operation = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration);
 
         Assert.Empty(Opaques(il));
         Assert.Empty(il.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>());
@@ -299,7 +299,7 @@ public sealed class IlLowererTests
         Assert.Contains(key, function.Descendants.Select(i => IlKeys.Key(i, caught)), StringComparer.Ordinal);
         if (!IlKeys.Lowered.Contains(key))
         {
-            Assert.NotEmpty(Opaques(IlLowerer.Lower(method, compilation)));
+            Assert.NotEmpty(Opaques(IlLowerer.Lower(method, compilation, Runtimes.Migration)));
         }
     }
 
@@ -360,7 +360,7 @@ public sealed class IlLowererTests
             + " static int R(string s) => ~s.IndexOf(\"x\"); static int W() { try { return Id(1); } catch (Exception e) { return ~e.HResult; } } static int T(int a) => ~Twice(ref a); static int Twice(ref int x) => x;"
             + " static int U(ref int x) => ~x;";
         Compilation compilation = Compile(Members);
-        IrOpaque Fragment(string name) => Assert.Single(Opaques(IlLowerer.Lower(Method(compilation, name), compilation)));
+        IrOpaque Fragment(string name) => Assert.Single(Opaques(IlLowerer.Lower(Method(compilation, name), compilation, Runtimes.Migration)));
 
         Assert.NotNull(Fragment("M").Fingerprint);
         Assert.Equal(Fragment("M").Fingerprint, Fragment("N").Fingerprint);
@@ -405,7 +405,7 @@ public sealed class IlLowererTests
         Compilation compilation = RoslynTestCompilations.Compile(source);
         IMethodSymbol method = compilation.GetTypeByMetadataName(type)!.GetMembers("M").OfType<IMethodSymbol>().Single();
 
-        Assert.Empty(IrValidator.Validate(IlLowerer.Lower(method, compilation)));
+        Assert.Empty(IrValidator.Validate(IlLowerer.Lower(method, compilation, Runtimes.Migration)));
     }
 
     /// <summary>
@@ -517,8 +517,8 @@ public sealed class IlLowererTests
         static ImmutableArray<IrValue> Constants(IrProcedure procedure) =>
             [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>().Select(static c => c.Value).Where(static v => v is IrSortValue).Distinct()];
 
-        IrProcedure il = IlLowerer.Lower(method, compilation);
-        IrProcedure operation = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+        IrProcedure il = IlLowerer.Lower(method, compilation, Runtimes.Migration);
+        IrProcedure operation = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration);
 
         Assert.Empty(Opaques(il));
         Assert.Equal(Functions(operation), Functions(il), StringComparer.Ordinal);
@@ -574,10 +574,10 @@ public sealed class IlLowererTests
         static ImmutableArray<string> Functions(IrProcedure procedure) =>
             [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>().Select(static p => p.Function).Order(StringComparer.Ordinal)];
 
-        IrProcedure il = IlLowerer.Lower(method, compilation);
+        IrProcedure il = IlLowerer.Lower(method, compilation, Runtimes.Migration);
 
         Assert.Empty(Opaques(il));
-        Assert.Equal(Functions(IrLowerer.Lower(method, compilation, RenameMap.Empty, [])), Functions(il), StringComparer.Ordinal);
+        Assert.Equal(Functions(IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration)), Functions(il), StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -635,7 +635,7 @@ public sealed class IlLowererTests
         Compilation compilation = Compile(members);
         IMethodSymbol method = reason is null ? compilation.GetTypeByMetadataName("C+S")!.GetMembers("Y").OfType<IMethodSymbol>().Single() : Method(compilation, "M");
 
-        IrProcedure procedure = IlLowerer.Lower(method, compilation);
+        IrProcedure procedure = IlLowerer.Lower(method, compilation, Runtimes.Migration);
 
         Assert.Empty(IrValidator.Validate(procedure));
         Assert.Contains(Opaques(procedure), o => string.Equals(o.Reason, reason ?? "LdFlda[address operand]", StringComparison.Ordinal));
@@ -651,7 +651,7 @@ public sealed class IlLowererTests
         const string Members = "int N() => 1; static int S() => 1; Func<int> M() => N; static Func<string> V(object o) => o.ToString; static Func<int> P() => new Func<int>(S);";
         Compilation compilation = Compile(Members);
         INamedTypeSymbol intPtr = compilation.GetSpecialType(SpecialType.System_IntPtr);
-        IrValue Named(string name) => TypeMapper.Constant(intPtr, CallIdentityFactory.Of(name.Contains('.', StringComparison.Ordinal) ? compilation.GetSpecialType(SpecialType.System_Object).GetMembers("ToString").OfType<IMethodSymbol>().Single() : Method(compilation, name), compilation, RenameMap.Empty, []).Value);
+        IrValue Named(string name) => TypeMapper.Constant(intPtr, CallIdentityFactory.Of(name.Contains('.', StringComparison.Ordinal) ? compilation.GetSpecialType(SpecialType.System_Object).GetMembers("ToString").OfType<IMethodSymbol>().Single() : Method(compilation, name), compilation, RenameMap.Empty, [], Runtimes.Migration.Interval).Value);
         IrProcedure instance = Lower(Members);
         IrProcedure @virtual = Lower(Members, "V");
 
@@ -751,7 +751,7 @@ public sealed class IlLowererTests
         static ImmutableArray<string> Calls(IrProcedure procedure) => [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee.Value).Order(StringComparer.Ordinal)];
         IMethodSymbol method = Method(compilation, "P");
 
-        Assert.Equal(Calls(IrLowerer.Lower(method, compilation, RenameMap.Empty, [])), Calls(IlLowerer.Lower(method, compilation)), StringComparer.Ordinal);
+        Assert.Equal(Calls(IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration)), Calls(IlLowerer.Lower(method, compilation, Runtimes.Migration)), StringComparer.Ordinal);
         Assert.Contains("System.Object::.ctor()", Calls(Lower(Members, ".ctor")), StringComparer.Ordinal);
         Assert.Contains(Opaques(Lower(Members, "T")), static o => string.Equals(o.Reason, "Throw[new]", StringComparison.Ordinal));
     }
@@ -803,7 +803,7 @@ public sealed class IlLowererTests
         Compilation compilation = RoslynTestCompilations.Compile($"using System;\nclass C\n{{\n{members}\n}}\n", [MetadataReference.CreateFromFile(path)]);
         File.Delete(path);
 
-        IrProcedure procedure = IlLowerer.Lower(Method(compilation, "M"), compilation);
+        IrProcedure procedure = IlLowerer.Lower(Method(compilation, "M"), compilation, Runtimes.Migration);
 
         Assert.Empty(IrValidator.Validate(procedure));
         Assert.Contains(Opaques(procedure), o => string.Equals(o.Reason, reason, StringComparison.Ordinal));
@@ -815,7 +815,7 @@ public sealed class IlLowererTests
     internal static void Agree(string members, string name, params object[] arguments)
     {
         Compilation compilation = Compile(members);
-        IrProcedure procedure = IlLowerer.Lower(Method(compilation, name), compilation);
+        IrProcedure procedure = IlLowerer.Lower(Method(compilation, name), compilation, Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         using MemoryStream image = new();
         Assert.True(compilation.Emit(image, cancellationToken: TestContext.Current.CancellationToken).Success);
@@ -868,7 +868,7 @@ public sealed class IlLowererTests
     {
         Compilation compilation = RoslynTestCompilations.Compile($"using System;\nclass C\n{{\n{members}\n}}\n");
         Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
-        IrProcedure procedure = IlLowerer.Lower(compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation);
+        IrProcedure procedure = IlLowerer.Lower(compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation, Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

@@ -188,7 +188,7 @@ public sealed partial class ContractSoundnessTests
             INamedTypeSymbol oracle = compilation.GetTypeByMetadataName("Oracle")!;
             return new Side(Lower("C"), Lower("M"), image.ToArray());
 
-            IrProcedure Lower(string name) => IrLowerer.Lower(oracle.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation, RenameMap.Empty, []);
+            IrProcedure Lower(string name) => IrLowerer.Lower(oracle.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation, RenameMap.Empty, [], Runtimes.Migration);
         }
 
         public Type Load(AssemblyLoadContext context)

@@ -6,6 +6,7 @@ using System.Text;
 
 using Equiv.Core.ApiEquivalences;
 using Equiv.Core.Configuration;
+using Equiv.Frontend.CSharp.Lowering;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -26,7 +27,8 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// <item>it reads a <c>ref</c> local;</item>
 /// <item>a lambda in it captures a variable that a lambda or local function anywhere in the graph writes, since that write
 /// can run after the fragment; the lowerer rejects one whose captured variable is assigned after it in the graph;</item>
-/// <item>it is runtime-sensitive, by M3-015's rule.</item>
+/// <item>it is runtime-sensitive, by M3-015's rule, inside the pair's runtime interval. Both sides are given the same
+/// interval, so a fragment both hold gets the same answer and the same fingerprint (ADR 0040; ticket P2-055).</item>
 /// </list>
 /// Its reads are the locals and parameters declared outside it that it references, a lambda's captures included, in order of
 /// first occurrence. Its text is <see cref="BoundSerialiser.SerialiseFragment"/>'s.
@@ -37,7 +39,7 @@ internal sealed class FragmentFingerprinter(
     RenameMap renames,
     ImmutableArray<string> suppressedRuntimeChanges,
     ImmutableArray<ApiEquivalence> equivalences,
-    bool legacy)
+    SideRuntime runtime)
 {
     /// <summary>The operations only a control-flow graph holds, whose values the graph computes outside the fragment.</summary>
     private static readonly FrozenSet<OperationKind> GraphOnly =
@@ -73,7 +75,7 @@ internal sealed class FragmentFingerprinter(
             return null;
         }
 
-        (string text, bool runtimeSensitive) = BoundSerialiser.SerialiseFragment(method, compilation, operation, Lambda, new(renames, suppressedRuntimeChanges, equivalences, legacy));
+        (string text, bool runtimeSensitive) = BoundSerialiser.SerialiseFragment(method, compilation, operation, Lambda, new(renames, suppressedRuntimeChanges, equivalences, runtime));
         return runtimeSensitive ? null : new Fragment(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), reads, captured);
     }
 

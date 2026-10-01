@@ -34,7 +34,7 @@ internal static class Lowered
 
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>()
             .Single(m => parameters is not { } count || m.Parameters.Length == count);
-        IrProcedure procedure = IrLowerer.Lower(method, compilation, renames ?? RenameMap.Empty, suppressedRuntimeChanges.IsDefault ? [] : suppressedRuntimeChanges);
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, renames ?? RenameMap.Empty, suppressedRuntimeChanges.IsDefault ? [] : suppressedRuntimeChanges, Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }
@@ -48,7 +48,7 @@ internal static class Lowered
         Compilation compilation = RoslynTestCompilations.Compile(source);
         Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single();
-        (IrProcedure procedure, ImmutableArray<string> applied) = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], equivalences);
+        (IrProcedure procedure, ImmutableArray<string> applied) = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], equivalences, Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         return (procedure, applied);
     }
@@ -64,7 +64,7 @@ internal static class Lowered
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax(TestContext.Current.CancellationToken);
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IMethodBodyOperation body = (IMethodBodyOperation)model.GetOperation(syntax, TestContext.Current.CancellationToken)!;
-        IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty, []);
+        IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty, [], Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

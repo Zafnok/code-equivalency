@@ -106,7 +106,7 @@ public sealed class BodyFingerprinterTests
         EquivConfig config = EquivConfig.Default with { SuppressRuntimeChanges = ["System.String::IndexOf("] };
         Compilation compilation = Compile("int M(string s) => s.IndexOf(\"x\");");
 
-        Assert.False(BodyFingerprinter.Compute(Method(compilation), compilation, config, [], legacy: true)!.RuntimeSensitive);
+        Assert.False(BodyFingerprinter.Compute(Method(compilation), compilation, config, [], Runtimes.Migration)!.RuntimeSensitive);
     }
 
     [Theory]
@@ -125,12 +125,16 @@ public sealed class BodyFingerprinterTests
         Assert.False(Fingerprint(member).RuntimeSensitive);
 
     [Theory]
-    [InlineData(Platform.X86, true, true)]
-    [InlineData(Platform.AnyCpu32BitPreferred, true, true)]
-    [InlineData(Platform.AnyCpu, true, false)]
-    [InlineData(Platform.X86, false, false)]
-    public void X87LegacyFloatIsRuntimeSensitive(Platform platform, bool legacy, bool expected) =>
-        Assert.Equal(expected, Fingerprint(Compile("double M(double d) => d * 2;", platform: platform), legacy).RuntimeSensitive);
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void FloatOnASideWhoseX87FlagIsSetIsRuntimeSensitive(bool x87, bool expected)
+    {
+        Compilation compilation = Compile("double M(double d) => d * 2;");
+
+        Assert.Equal(
+            expected,
+            BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: true, Runtimes.Between("net48", "net10.0", x87))!.RuntimeSensitive);
+    }
 
     [Fact]
     public void AnAutoAccessorIsFingerprintedAsTheBodyTheCompilerGenerates()
@@ -150,7 +154,7 @@ public sealed class BodyFingerprinterTests
     {
         Compilation compilation = Compile(member, partial: true);
 
-        Assert.Null(BodyFingerprinter.Compute(Method(compilation, name), compilation, EquivConfig.Default, legacy: false));
+        Assert.Null(BodyFingerprinter.Compute(Method(compilation, name), compilation, EquivConfig.Default, legacy: false, Runtimes.Migration));
     }
 
     [Fact]
@@ -183,8 +187,8 @@ public sealed class BodyFingerprinterTests
         Compilation modern = RoslynTestCompilations.Compile(Modern);
 
         Assert.Equal(
-            BodyFingerprinter.Compute(Method(legacy), legacy, config, [], legacy: true),
-            BodyFingerprinter.Compute(Method(modern), modern, config, [], legacy: false));
+            BodyFingerprinter.Compute(Method(legacy), legacy, config, [], Runtimes.Migration),
+            BodyFingerprinter.Compute(Method(modern), modern, config, [], Runtimes.Migration));
     }
 
     [Fact]
@@ -201,11 +205,11 @@ public sealed class BodyFingerprinterTests
         ImmutableArray<ApiEquivalence> reordering = [entries[0] with { Arguments = [new ApiArgument(0), new ApiArgument(Source: null, ConstantType: "bool", Constant: "true")] }, entries[1], entries[2]];
         Compilation legacy = RoslynTestCompilations.Compile(Legacy);
         Compilation modern = RoslynTestCompilations.Compile(Modern);
-        BodyFingerprint? modernPrint = BodyFingerprinter.Compute(Method(modern), modern, EquivConfig.Default, [], legacy: false);
+        BodyFingerprint? modernPrint = BodyFingerprinter.Compute(Method(modern), modern, EquivConfig.Default, [], Runtimes.Migration);
 
-        Assert.Equal(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, entries, legacy: true));
-        Assert.NotEqual(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, reordering, legacy: true));
-        Assert.NotEqual(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, legacy: true));
+        Assert.Equal(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, entries, Runtimes.Migration));
+        Assert.NotEqual(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, reordering, Runtimes.Migration));
+        Assert.NotEqual(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, legacy: true, Runtimes.Migration));
     }
 
     [Fact]
@@ -284,12 +288,12 @@ public sealed class BodyFingerprinterTests
     private static BodyFingerprint Fingerprint(string member, string extra = "") => Fingerprint(Compile(member, extra: extra), legacy: false);
 
     private static BodyFingerprint Fingerprint(Compilation compilation, bool legacy) =>
-        BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy)!;
+        BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy, Runtimes.Migration)!;
 
     private static string Text(Compilation compilation, string name = "M") => Text(compilation, Method(compilation, name));
 
     private static string Text(Compilation compilation, IMethodSymbol method) =>
-        BodyFingerprinter.Text(method, compilation, EquivConfig.Default, [], legacy: false).Text!;
+        BodyFingerprinter.Text(method, compilation, EquivConfig.Default, [], Runtimes.Migration).Text!;
 
     private static IMethodSymbol Method(Compilation compilation, string name = "M") =>
         compilation.GetTypeByMetadataName("N.C")!.GetMembers(name).OfType<IMethodSymbol>().First();

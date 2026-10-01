@@ -74,13 +74,13 @@ public sealed class IlLoweringParityTests
             {
                 foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))
                 {
-                    IrProcedure operation = IrLowerer.Lower(procedure.Symbol, compilation, RenameMap.Empty, []);
+                    IrProcedure operation = IrLowerer.Lower(procedure.Symbol, compilation, RenameMap.Empty, [], Runtimes.Migration);
                     if (operation.Blocks.SelectMany(static b => b.Instructions).Any(static i => i is IrOpaque))
                     {
                         continue;
                     }
 
-                    Verdict verdict = new Z3Backend().Verify(operation, IlLowerer.Lower(procedure.Symbol, compilation), Options);
+                    Verdict verdict = new Z3Backend().Verify(operation, IlLowerer.Lower(procedure.Symbol, compilation, Runtimes.Migration), Options);
                     if (verdict is Equivalent)
                     {
                         proved++;

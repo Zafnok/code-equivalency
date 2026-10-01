@@ -108,7 +108,7 @@ public sealed class LoweringOracleTests
             for (int i = 0; i < cases.Length; i++)
             {
                 IMethodBodyOperation body = (IMethodBodyOperation)model.GetOperation(declarations[i], TestContext.Current.CancellationToken)!;
-                IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty, []);
+                IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty, [], Runtimes.Migration);
                 Assert.Empty(IrValidator.Validate(procedure));
                 callees.UnionWith(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee));
                 pures.UnionWith(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>().Select(static p => p.Function));
@@ -179,7 +179,7 @@ public sealed class LoweringOracleTests
     /// <summary>An accessor lowered from its symbol, with no opaque and no call left in it.</summary>
     private static IrProcedure Accessor(INamedTypeSymbol type, CSharpCompilation compilation, string name)
     {
-        IrProcedure procedure = IrLowerer.Lower(type.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation, RenameMap.Empty, []);
+        IrProcedure procedure = IrLowerer.Lower(type.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation, RenameMap.Empty, [], Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         Assert.DoesNotContain(procedure.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque or IrCall);
         return procedure;

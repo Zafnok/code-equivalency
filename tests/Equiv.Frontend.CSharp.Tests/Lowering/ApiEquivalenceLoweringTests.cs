@@ -193,8 +193,8 @@ public sealed class ApiEquivalenceLoweringTests
 
         // The shipped table names the real legacy member, so the stand-in only matches through a crafted entry; the
         // production entry point gives the modern side no entries at all, whichever table is shipped.
-        (IrProcedure modern, ImmutableArray<string> modernApplied) = CSharpFrontend.LowerWithIrLowerer(method, compilation, config, legacy: false);
-        (IrProcedure legacy, ImmutableArray<string> legacyApplied) = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Split);
+        (IrProcedure modern, ImmutableArray<string> modernApplied) = CSharpFrontend.LowerWithIrLowerer(method, compilation, config, legacy: false, Runtimes.Migration);
+        (IrProcedure legacy, ImmutableArray<string> legacyApplied) = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Split, Runtimes.Migration);
 
         Assert.Equal("S::Split(char[])", Assert.Single(Calls(modern)).Callee.Value);
         Assert.Empty(modernApplied);
@@ -208,10 +208,10 @@ public sealed class ApiEquivalenceLoweringTests
         Compilation compilation = RoslynTestCompilations.Compile(WebApi + "class C : System.Web.Http.ApiController { System.Web.Http.IHttpActionResult M() => NotFound(); }");
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
 
-        (IrProcedure modern, ImmutableArray<string> modernApplied) = CSharpFrontend.LowerWithIrLowerer(method, compilation, EquivConfig.Default, legacy: false);
-        (IrProcedure legacy, ImmutableArray<string> legacyApplied) = CSharpFrontend.LowerWithIrLowerer(method, compilation, EquivConfig.Default, legacy: true);
+        (IrProcedure modern, ImmutableArray<string> modernApplied) = CSharpFrontend.LowerWithIrLowerer(method, compilation, EquivConfig.Default, legacy: false, Runtimes.Migration);
+        (IrProcedure legacy, ImmutableArray<string> legacyApplied) = CSharpFrontend.LowerWithIrLowerer(method, compilation, EquivConfig.Default, legacy: true, Runtimes.Migration);
         (_, ImmutableArray<string> suppressedApplied) = CSharpFrontend.LowerWithIrLowerer(
-            method, compilation, EquivConfig.Default with { SuppressApiEquivalences = ["webapi."] }, legacy: true);
+            method, compilation, EquivConfig.Default with { SuppressApiEquivalences = ["webapi."] }, legacy: true, Runtimes.Migration);
 
         Assert.Equal(new IrSort("System.Web.Http.IHttpActionResult"), modern.ReturnType);
         Assert.Equal("System.Web.Http.ApiController::NotFound()", Assert.Single(Calls(modern)).Callee.Value);

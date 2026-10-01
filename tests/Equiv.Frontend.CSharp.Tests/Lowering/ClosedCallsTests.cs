@@ -48,7 +48,7 @@ public sealed class ClosedCallsTests
         Compilation compilation = RoslynTestCompilations.Compile($"using System;\nclass C\n{{\nstatic int f;\n{method}\n}}\n");
         IMethodSymbol symbol = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
 
-        foreach (IrProcedure procedure in new[] { IrLowerer.Lower(symbol, compilation, RenameMap.Empty, []), IlLowerer.Lower(symbol, compilation) })
+        foreach (IrProcedure procedure in new[] { IrLowerer.Lower(symbol, compilation, RenameMap.Empty, [], Runtimes.Migration), IlLowerer.Lower(symbol, compilation, Runtimes.Migration) })
         {
             Assert.Empty(IrValidator.Validate(procedure));
             IrCall call = Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>());

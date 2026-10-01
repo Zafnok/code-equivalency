@@ -101,7 +101,7 @@ public sealed class IlLoweringOracleTests
             for (int i = 0; i < cases.Length; i++)
             {
                 string name = string.Create(CultureInfo.InvariantCulture, $"M{i}");
-                IrProcedure procedure = IlLowerer.Lower(type.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation);
+                IrProcedure procedure = IlLowerer.Lower(type.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation, Runtimes.Migration);
                 Assert.Empty(IrValidator.Validate(procedure));
                 Assert.True(IlLowererTests.Opaques(procedure).IsEmpty, $"{cases[i].Body}\n{IrText.Dump(procedure)}");
                 MethodInfo method = oracle.GetMethod(name)!;

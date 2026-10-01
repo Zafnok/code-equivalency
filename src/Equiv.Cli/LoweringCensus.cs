@@ -17,7 +17,8 @@ namespace Equiv.Cli;
 /// (ADR 0029; ticket M3-024). A matched pair the frontend could not lower (ticket P2-011) counts in
 /// <see cref="Procedures"/> and <see cref="MatchedPairs"/>, but has no body for any per-body count.
 /// <see cref="Changed"/> and <see cref="RuntimeChangeCalls"/> are per matched pair (ADR 0034; ticket M3-030). A pair is
-/// changed unless it is congruent. <see cref="ExternalCallees"/> is every BCL member a lowered body calls, not only the
+/// changed unless it is congruent, and a call counts as a runtime-change call when a row applies to it inside the pair's
+/// runtime interval (ADR 0040; ticket P2-055), or inside the table's whole coverage when the pair has none. <see cref="ExternalCallees"/> is every BCL member a lowered body calls, not only the
 /// ones <see cref="RuntimeChangeTable"/> already lists (ADR 0035; ticket M3-033). <see cref="UnknownByScope"/> is set
 /// only by a run that produced verdicts (ADR 0029 decision 4; ticket M3-025), and so is <see cref="FailureRefinement"/>
 /// (ADR 0037; ticket P1-013). <see cref="IlFallback"/> is set only by a run with <c>--il-fallback</c>: the pairs lowered again from IL,
@@ -43,14 +44,15 @@ internal sealed record LoweringCensus(
     /// <summary><c>pairsIlFallbackTried</c> and <c>pairsLoweredFromIl</c> (ticket P1-016); written only under <c>--il-fallback</c>.</summary>
     public (int Tried, int LoweredFromIl)? IlFallback { get; init; }
 
-    public static LoweringCensus Compute(IReadOnlyList<(IrProcedure Old, IrProcedure New, bool Congruent)> pairs, int removed, int added, SideCounts? projectsSkipped = null, int unlowered = 0)
+    public static LoweringCensus Compute(
+        IReadOnlyList<(IrProcedure Old, IrProcedure New, bool Congruent, RuntimeInterval? Runtimes)> pairs, int removed, int added, SideCounts? projectsSkipped = null, int unlowered = 0)
     {
         ArgumentNullException.ThrowIfNull(pairs);
 
         Accumulator accumulator = new();
-        foreach ((IrProcedure old, IrProcedure @new, bool isCongruent) in pairs)
+        foreach ((IrProcedure old, IrProcedure @new, bool isCongruent, RuntimeInterval? runtimes) in pairs)
         {
-            accumulator.Add(old, @new, isCongruent);
+            accumulator.Add(old, @new, isCongruent, runtimes);
         }
 
         return accumulator.Build(pairs.Count, removed, added, projectsSkipped ?? new SideCounts(0, 0), unlowered);
@@ -150,8 +152,9 @@ internal sealed record LoweringCensus(
         private int changedWholeBodyOpaque;
         private int congruent;
 
-        public void Add(IrProcedure old, IrProcedure @new, bool isCongruent)
+        public void Add(IrProcedure old, IrProcedure @new, bool isCongruent, RuntimeInterval? runtimes)
         {
+            RuntimeInterval interval = runtimes ?? table.Coverage;
             ImmutableHashSet<string> oldReasons = Reasons(old);
             ImmutableHashSet<string> newReasons = Reasons(@new);
             int noOpaque = oldReasons.IsEmpty && newReasons.IsEmpty ? 1 : 0;
@@ -167,8 +170,8 @@ internal sealed record LoweringCensus(
                     counts.Modern + (newReasons.Contains(reason) ? 1 : 0));
             }
 
-            legacyCalls.Add(old, table);
-            modernCalls.Add(@new, table);
+            legacyCalls.Add(old, table, interval);
+            modernCalls.Add(@new, table, interval);
             legacyExternal.Add(old);
             modernExternal.Add(@new);
 
@@ -210,13 +213,13 @@ internal sealed record LoweringCensus(
 
         public int Pairs { get; private set; }
 
-        /// <summary>Counts <paramref name="body"/>'s calls that <paramref name="table"/> matches.</summary>
-        public void Add(IrProcedure body, RuntimeChangeTable table)
+        /// <summary>Counts <paramref name="body"/>'s calls that <paramref name="table"/> matches inside <paramref name="interval"/>.</summary>
+        public void Add(IrProcedure body, RuntimeChangeTable table, RuntimeInterval interval)
         {
             string[] matched = [.. body.Blocks
                 .SelectMany(static b => b.Instructions)
                 .OfType<IrCall>()
-                .Where(call => table.TryMatch(call.Callee, out _))
+                .Where(call => table.TryMatch(call.Callee, interval, out _))
                 .Select(static call => call.Callee.Value)];
             CallSites += matched.Length;
             Members.UnionWith(matched);

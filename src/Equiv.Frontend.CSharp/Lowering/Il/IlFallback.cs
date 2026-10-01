@@ -33,13 +33,13 @@ internal static class IlFallback
 
     /// <summary>The bodies <paramref name="legacy"/> and <paramref name="modern"/> keep, read with the production <see cref="IlLowerer"/>.</summary>
     public static Choice Choose(Side legacy, Side modern, bool congruent, IRunLog log) =>
-        Choose(legacy, modern, congruent, log, static (method, compilation, x87) => IlLowerer.Lower(method, compilation, x87));
+        Choose(legacy, modern, congruent, log, static (method, compilation, runtime) => IlLowerer.Lower(method, compilation, runtime));
 
     /// <summary>
-    /// Seam for unit tests: <paramref name="lower"/> reads a method from IL, given whether its floating point is x87's. A
+    /// Seam for unit tests: <paramref name="lower"/> reads a method from IL, given its side's <see cref="SideRuntime"/>. A
     /// <paramref name="congruent"/> pair is never lowered again (ADR 0024 decides first).
     /// </summary>
-    internal static Choice Choose(Side legacy, Side modern, bool congruent, IRunLog log, Func<IMethodSymbol, Compilation, bool, IrProcedure> lower)
+    internal static Choice Choose(Side legacy, Side modern, bool congruent, IRunLog log, Func<IMethodSymbol, Compilation, SideRuntime, IrProcedure> lower)
     {
         ArgumentNullException.ThrowIfNull(legacy);
         ArgumentNullException.ThrowIfNull(modern);
@@ -53,8 +53,8 @@ internal static class IlFallback
         }
 
         // Both sides are read, whatever the first gives, so every unreadable method has its line.
-        IrProcedure? old = Relowered("legacy", legacy, PureCatalogue.IsX87(legacy.Compilation), log, lower);
-        IrProcedure? @new = Relowered("modern", modern, x87: false, log, lower);
+        IrProcedure? old = Relowered("legacy", legacy, log, lower);
+        IrProcedure? @new = Relowered("modern", modern, log, lower);
         return old is not null && @new is not null && Unshared(old, @new) < unshared
             ? new Choice(old, @new, Tried: true, Il)
             : operation with { Tried = true };
@@ -73,9 +73,9 @@ internal static class IlFallback
         return Lacking(oldOpaques, Fingerprints(newOpaques)) + Lacking(newOpaques, Fingerprints(oldOpaques));
     }
 
-    private static IrProcedure? Relowered(string side, Side procedure, bool x87, IRunLog log, Func<IMethodSymbol, Compilation, bool, IrProcedure> lower)
+    private static IrProcedure? Relowered(string side, Side procedure, IRunLog log, Func<IMethodSymbol, Compilation, SideRuntime, IrProcedure> lower)
     {
-        IrProcedure? body = procedure.Symbol.IsAsync || procedure.Symbol.IsIterator ? null : lower(procedure.Symbol, procedure.Compilation, x87);
+        IrProcedure? body = procedure.Symbol.IsAsync || procedure.Symbol.IsIterator ? null : lower(procedure.Symbol, procedure.Compilation, procedure.Runtime);
         string? reason = body is null ? StateMachine : ReadFailure(body);
         if (reason is null)
         {
@@ -101,8 +101,8 @@ internal static class IlFallback
     private static int Lacking(ImmutableArray<IrOpaque> opaques, HashSet<string> other) =>
         opaques.Count(o => o.Fingerprint is not { } fingerprint || !other.Contains(fingerprint));
 
-    /// <summary>One side of a matched pair: its method, the compilation it is read from, and its IOperation lowering.</summary>
-    internal sealed record Side(IMethodSymbol Symbol, Compilation Compilation, IrProcedure Body);
+    /// <summary>One side of a matched pair: its method, the compilation it is read from, its IOperation lowering, and the runtime facts both lowerings use.</summary>
+    internal sealed record Side(IMethodSymbol Symbol, Compilation Compilation, IrProcedure Body, SideRuntime Runtime);
 
     /// <summary>
     /// The bodies a pair keeps, both from one <see cref="Lowering"/>, and whether it was <see cref="Tried"/>: lowered again
