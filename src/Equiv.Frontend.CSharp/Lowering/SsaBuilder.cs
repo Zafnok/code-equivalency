@@ -72,8 +72,8 @@ internal sealed class SsaBuilder
 
     /// <summary>
     /// Pass 2. Blocks unreachable from <paramref name="entry"/> are dropped. Every exit's outs name the
-    /// value of each <paramref name="outs"/> variable live there. Every <see cref="IrCall"/> reads and writes each
-    /// <paramref name="heap"/> variable, in order (ticket P1-005): it gets a heap pair of the version live at the call and a
+    /// value of each <paramref name="outs"/> variable live there. Every <see cref="IrCall"/> but a closed one (ADR 0041)
+    /// reads and writes each <paramref name="heap"/> variable, in order (ticket P1-005): it gets a heap pair of the version live at the call and a
     /// fresh one that the call defines. The heap is only known once the whole body is lowered, which is why the pairs are
     /// added here and not when the call is emitted. A read with no reaching definition becomes an
     /// <see cref="IrOpaque"/> with reason <c>undefined</c> at <paramref name="bodySpan"/>.
@@ -142,7 +142,7 @@ internal sealed class SsaBuilder
                 case StoreStep store:
                     WriteVariable(store.Variable, draft.Id, Name(store.Variable, Resolve(store.Value)));
                     break;
-                case Instruction { Value: IrCall call }:
+                case Instruction { Value: IrCall { Closed: false } call }:
                     draft.Steps[i] = new Instruction(call with { Heap = HeapPairs(heap, draft.Id) });
                     break;
                 case Instruction { Value: IrOpaque { Fingerprint: not null } fragment } step:

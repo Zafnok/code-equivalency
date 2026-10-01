@@ -28,6 +28,7 @@ public sealed class AwaitLoweringTests
         Assert.Equal(new IrBitVec(32), procedure.ReturnType);
         IrCall call = Assert.Single(Calls(procedure));
         Assert.Equal("await:System.Runtime.CompilerServices.TaskAwaiter`1<int>", call.Callee.Value);
+        Assert.False(call.Closed); // other code runs while the task is suspended (ADR 0041)
         Assert.Equal("t", Assert.Single(call.Args).Name);
         Assert.Equal(new IrBitVec(32), call.Target!.Type);
         Assert.NotNull(call.Threw);

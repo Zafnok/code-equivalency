@@ -1,0 +1,13 @@
+# Divergent
+# ADR 0041, P2-060: one side's call to an identity is closed and the other side's is not, so the encoder keeps the identity open: the call may write the field the new side reads after it.
+proc "C::M()" (ref %field.C.f: map<sort "C", bv32>, %this: sort "C") -> bv32 entry B0
+B0:
+  %x: bv32 = mapread %field.C.f, %this
+  call closed "C::Foo()"(%this)
+  ret %x outs(%field.C.f = %field.C.f)
+---
+proc "C::M()" (ref %field.C.f: map<sort "C", bv32>, %this: sort "C") -> bv32 entry B0
+B0:
+  call "C::Foo()"(%this) heap("field.C.f" %field.C.f -> %f1: map<sort "C", bv32>)
+  %x: bv32 = mapread %f1, %this
+  ret %x outs(%field.C.f = %f1)

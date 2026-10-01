@@ -173,6 +173,48 @@ public sealed class DifferentialSoundnessTests
         Assert.Null(Decoding(c, PairRuntime.Lowering.Operation)?.Describe(c));
     }
 
+    /// <summary>
+    /// Ticket P2-060 (ADR 0041). The IL mode of the gate lowered <c>$"{s}t"</c> to <c>String.Concat(string, string)</c>, and
+    /// the heap model let that call write <c>F</c> and <c>u</c>, so a loop reading both after it diverged on a heap no real
+    /// <c>Concat</c> leaves, and the model did not replay. <c>Concat</c> is closed, so reading <c>F</c> before or after it
+    /// is one behaviour, from IL and, written <c>s + "t"</c>, from IOperation.
+    /// </summary>
+    [Fact]
+    public void ABclCallCannotWriteAUserField()
+    {
+        Assert.IsType<Equivalent>(PairRuntime.Analyse(ReadAcrossConcat(readFirst: true, "$\"{s}t\""), ReadAcrossConcat(readFirst: false, "$\"{s}t\""), PairRuntime.Lowering.Il).Verdict);
+        Assert.IsType<Equivalent>(PairRuntime.Analyse(ReadAcrossConcat(readFirst: true, "s + \"t\""), ReadAcrossConcat(readFirst: false, "s + \"t\""), PairRuntime.Lowering.Operation).Verdict);
+    }
+
+    /// <summary>
+    /// A method that reads <c>F</c> before or after it compares <paramref name="concat"/> with null, then adds <c>u[0]</c>
+    /// to what it read in a loop.
+    /// </summary>
+    private static string ReadAcrossConcat(bool readFirst, string concat)
+    {
+        const string read = "long x = F;";
+        string call = $"bool z = ({concat} == null);";
+        return $$"""
+            public static class Oracle
+            {
+                public static int F;
+
+                public static long M(int a, int b, long c, long d, bool e, string s, int[] u)
+                {
+                    {{(readFirst ? read : call)}}
+                    {{(readFirst ? call : read)}}
+                    for (int i0 = 0; i0 < 2; i0++)
+                    {
+                        x = unchecked(x + u[0]);
+                    }
+
+                    return (z ? c : x);
+                }
+            }
+
+            """;
+    }
+
     /// <summary>CsCheck reports a counter-example by throwing; surfacing it as a value gives each test its assertion.</summary>
     private static Exception? Failed(ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules) => Record.Exception(() => Sample(lowerings, rules));
 
@@ -210,9 +252,11 @@ public sealed class DifferentialSoundnessTests
 
     /// <summary>
     /// Rule 2. A model whose run makes an ordinary call also chose that call's result, <c>threw</c> flag and heap writes,
-    /// which ADR 0026 leaves untainted (its 2026-09-30 clarification) and which no C# argument can impose, so a replay of
-    /// such a model that does not diverge is not a decoding failure. A changing pair makes a call only through the IL
-    /// fallback's constructs (<see cref="PairGen.IlPair"/>), and this applies to either lowering alike.
+    /// which ADR 0026 leaves untainted (its 2026-09-30 clarifications) and which no C# argument can impose, so a replay of
+    /// such a model that does not diverge is not a decoding failure. A closed call (ADR 0041) writes no heap, but the
+    /// model still chooses its result and <c>threw</c> flag, so this holds for it too (ticket P2-060). A changing pair
+    /// makes a call only through the IL fallback's constructs (<see cref="PairGen.IlPair"/>), and this applies to either
+    /// lowering alike.
     /// </summary>
     private static Failure? Decoding(Case c, PairRuntime.Lowering lowering)
     {

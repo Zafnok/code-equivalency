@@ -432,6 +432,7 @@ internal sealed class IrTextParser
 
     private IrCall ParseCall(IrVar? target)
     {
+        bool closed = AcceptWord("closed");
         string calleeValue = ExpectString();
         CallIdentity callee = new(calleeValue, AcceptSymbol("!"), AcceptSymbol("@"));
         ImmutableArray<IrVar> args = ParseList("(", ")", ParseUse);
@@ -440,6 +441,7 @@ internal sealed class IrTextParser
         {
             RefOuts = AcceptWord("refout") ? ParseList("(", ")", ParseDefinition) : [],
             Heap = AcceptWord("heap") ? ParseList("(", ")", ParseHeapPair) : [],
+            Closed = closed,
         };
     }
 

@@ -23,6 +23,7 @@ public sealed class FixtureTests
         "array-alias",
         "call-heap-order", "call-heap-order-array", "call-heap-same", "call-reads-heap", "call-heap-one-sided",
         "call-refout-same", "call-refout-index",
+        "call-closed-heap-order", "call-closed-reads-no-heap", "call-closed-mixed", "call-closed-divergent",
     ];
 
     [Theory]

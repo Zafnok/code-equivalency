@@ -194,7 +194,8 @@ public static class IrValidator
 
         /// <summary>
         /// A call's heap pairs, and a shareable opaque fragment's (ticket M4-004), each name a different map, and each map is a
-        /// by-ref parameter of map type whose type the pair's before and after share (ticket P1-005).
+        /// by-ref parameter of map type whose type the pair's before and after share (ticket P1-005). A closed call has none
+        /// (ADR 0041).
         /// </summary>
         private void CheckHeapPairs()
         {
@@ -205,6 +206,11 @@ public static class IrValidator
             {
                 foreach ((IrInstruction instruction, ImmutableArray<IrHeapPair> heap) in block.Instructions.Select(static i => (i, HeapPairs(i))))
                 {
+                    if (instruction is IrCall { Closed: true } && !heap.IsEmpty)
+                    {
+                        Report(IrDiagnosticIds.ClosedCallHeap, block.Id, $"a closed call has heap pairs: {IrText.Line(instruction)}");
+                    }
+
                     if (heap.Select(static h => h.Map).Distinct(StringComparer.Ordinal).Take(heap.Length + 1).Count() != heap.Length)
                     {
                         Report(IrDiagnosticIds.HeapPairRepeated, block.Id, $"heap pairs name a map more than once: {IrText.Line(instruction)}");

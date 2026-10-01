@@ -938,7 +938,7 @@ internal sealed partial class IlLowerer
         ImmutableArray<IrVar> operands = receiver is { } self ? [self.Var, .. arguments] : arguments;
         return isOperator
             ? new(Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType)
-            : Invoke(identity, operands, written, Result(call, target));
+            : Invoke(identity, operands, written, Result(call, target), ClosedCalls.IsClosed(target));
     }
 
     /// <summary>What a call yields: a <c>new</c> its type's new object, else the callee's result, if any.</summary>
@@ -951,14 +951,15 @@ internal sealed partial class IlLowerer
 
     /// <summary>
     /// The <see cref="IrCall"/> itself: its result, if any, of <paramref name="result"/>, each <c>ref</c> or <c>out</c>
-    /// variable in <paramref name="written"/> stored from its output, and then its <c>threw</c> branch.
+    /// variable in <paramref name="written"/> stored from its output, and then its <c>threw</c> branch. A
+    /// <paramref name="closed"/> call reaches no heap map (ADR 0041), so it gets no heap pairs.
     /// </summary>
-    private Val? Invoke(CallIdentity identity, ImmutableArray<IrVar> operands, ImmutableArray<Place> written, ITypeSymbol? result)
+    private Val? Invoke(CallIdentity identity, ImmutableArray<IrVar> operands, ImmutableArray<Place> written, ITypeSymbol? result, bool closed)
     {
         IrVar? value = result is null ? null : ssa.Temp(Map(result));
         IrVar threw = ssa.Temp(Bool);
         ImmutableArray<IrVar> outputs = [.. written.Select(p => ssa.Temp(Map(p.Type)))];
-        ssa.Emit(context.Current, new IrCall(value, threw, identity, operands) { RefOuts = outputs });
+        ssa.Emit(context.Current, new IrCall(value, threw, identity, operands) { RefOuts = outputs, Closed = closed });
         foreach ((Place place, IrVar output) in written.Zip(outputs))
         {
             WriteUnknown((VariablePlace)place, output);
