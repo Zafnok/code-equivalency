@@ -1,5 +1,5 @@
 # P2-064 Every run ends with a short review list: flagged results grouped by cause, most certain first
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-046, P2-062
@@ -104,3 +104,29 @@ group is a true or false alarm (P2-047). Suppressing groups in `equiv.config.jso
 ## Notes
 - Found by the 2026-09-30 goal review: on Git Extensions the tool leaves about 1,085 flagged results
   in no order, so the "narrow the lens for a human" goal is not met however good the verdicts get.
+- Decision: `equiv-adr` bar test (criterion 1) -> first row: a clarification on ADR 0006, no new ADR.
+  `reviewGroup` and `reviewList` are extra data in `properties` bags, which ADR 0006 already decides,
+  and `rank` is SARIF 2.1.0's own result property (section 3.27.25), so no result schema is invented and
+  no verdict, rule id, level, fingerprint or exit code changes. Alternatives: a new ADR (row 4, "the
+  SARIF shape"), ticket Notes only. Rule: the bar test's "take the first row that fits".
+- Decision: key encoding -> `runtime-change:<row member>` (EQ006), `calls:<a>|<b>` (EQ002, the sorted
+  identities that only one side's trace calls), else `proofMethod:observed` or `proofMethod:none` (a
+  solver's Divergent carries no `proofMethod`), and `<unknownReason>[:<r1>+<r2>]` (EQ003, as
+  `changedReasonSets` joins reasons). Alternatives: a hash, a JSON object. Rule: 3 (a snapshot pins it).
+- Decision: an `opaque` Unknown's reasons are its causes' reasons, an `abstraction` Unknown's are its
+  opaque fragments' `reason` (P2-062); an `IrPure` abstraction adds nothing to the key. Rule: 1.
+- Decision: a group is (rule id, key), and it takes the best tier any of its results is in, because
+  every result in a group has one rank while `replay` and `scope` are per result. Alternatives: put
+  the tier in the key, which would split one cause into two groups. Rule: 4.
+- Decision: `rank = 20 x (5 - tier) + min(count, 9999) / 500`, so tier 1 is 80 to 99.998 and tier 5 is
+  0.002 to 19.998. It depends only on the group's tier and size, never on the other groups, so it is
+  the same across runs. Alternatives: position in the run's list, `count / (count + 1)`. Rule: 3.
+- Decision: grouping and ranking read the SARIF results, after the baseline's carry-overs are added,
+  so an `absent` or unverified carry-over is counted like any other result (criterion 3's sum). It
+  keeps the `reviewGroup` it was written with; one from a baseline older than this ticket gets
+  `ungrouped`, since its key cannot be derived from the SARIF alone. Rule: 4.
+- Decision: `SarifReportWriter.Write` takes `reviewList` (default false, so the writer's other tests
+  keep their run as it was) and the CLI passes `!LowerOnly`; `ReviewList.Lines` reads the lines back from the run, for stdout and for the MCP
+  summary, and gives none without the run property. Alternatives: the CLI builds the list. Rule: 4.
+- Decision: a group line is `  <ruleId> count=<n> rank=<rank> <group>`, the group last because it is
+  the long part. Rule: 5.
