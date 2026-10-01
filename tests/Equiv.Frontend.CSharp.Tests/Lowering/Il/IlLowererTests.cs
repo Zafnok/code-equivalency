@@ -374,6 +374,43 @@ public sealed class IlLowererTests
 
     private static readonly string[] Unfingerprinted = ["R", "W", "T", "U"];
 
+    /// <summary>
+    /// Ticket P2-055 (ADR 0040 decision 2): the IL lowering applies a runtime-change row only inside the pair's interval, as
+    /// the IOperation lowering does. <c>String.IndexOf</c> changed in .NET 5, so on a .NET 8 to .NET 10 pair its call is not
+    /// flagged and a fragment that calls it has a fingerprint, the same on both sides.
+    /// </summary>
+    [Theory]
+    [InlineData("net48", "net10.0", true)]
+    [InlineData("net8.0", "net10.0", false)]
+    [InlineData("net10.0", "net10.0", false)]
+    public void ARuntimeChangeAppliesOnlyInsideTheInterval(string legacy, string modern, bool changed)
+    {
+        Compilation compilation = Compile("static int R(string s) => ~s.IndexOf(\"x\"); static int Q(string s) => s.IndexOf(\"x\");");
+        SideRuntime runtime = Runtimes.Between(legacy, modern);
+
+        IrOpaque fragment = Assert.Single(Opaques(IlLowerer.Lower(Method(compilation, "R"), compilation, runtime)));
+        IrCall call = Assert.Single(IlLowerer.Lower(Method(compilation, "Q"), compilation, runtime).Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>());
+
+        Assert.Equal(changed, fragment.Fingerprint is null);
+        Assert.Equal(changed, call.Callee.RuntimeChanged);
+    }
+
+    /// <summary>Ticket P2-055: the IL lowering marks a catalogued function runtime-sensitive as the side's runtime makes it.</summary>
+    [Theory]
+    [InlineData("net48", "net10.0", false, true, false)]
+    [InlineData("net48", "net8.0", false, false, false)]
+    [InlineData("net10.0", "net10.0", false, false, false)]
+    [InlineData("net48", "net8.0", true, true, true)]
+    public void APureFunctionIsRuntimeSensitiveAsTheSidesRuntimeMakesIt(string legacy, string modern, bool x87, bool conversion, bool arithmetic)
+    {
+        Compilation compilation = Compile("static int M(double a) => (int)a; static double N(double a) => a + a;");
+        SideRuntime runtime = Runtimes.Between(legacy, modern, x87);
+        IrPure Pure(string name) => Assert.Single(IlLowerer.Lower(Method(compilation, name), compilation, runtime).Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>());
+
+        Assert.Equal(conversion, Pure("M").RuntimeSensitive);
+        Assert.Equal(arithmetic, Pure("N").RuntimeSensitive);
+    }
+
     /// <summary>The fingerprint's output writes what ILAst text never asks of an expression as plain markers.</summary>
     [Fact]
     public void TheFingerprintOutputWritesEveryPart()

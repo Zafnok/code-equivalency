@@ -173,6 +173,25 @@ public sealed class McpCommandTests
         Assert.Contains("MCP server", help, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-055: an uncovered runtime range is a notification without an exception, as a skipped project's is, but it
+    /// carries a descriptor and is not counted as a skipped project.
+    /// </summary>
+    [Fact]
+    public async Task Compare_AnUncoveredRuntimeRangeIsNotASkippedProject()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedurePair pair = Pair(PairIdentity) with { Runtimes = new RuntimeInterval(TargetRuntime.Parse("netcoreapp2.1")!, TargetRuntime.Parse("net8.0")!) };
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([pair], [], [], []));
+        using Session session = await Session.StartAsync(frontend, EquivalentBackend()).ConfigureAwait(true);
+
+        CallToolResult result = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
+
+        Assert.Equal("Equivalent 1, Divergent 0, Unknown 0, skipped projects 0, exit code 0", Text(result.Content[0]));
+        Assert.Contains("uncovered-runtime-range", Text(result.Content[1]), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Compare_ReturnsSummaryThenSarif()
     {

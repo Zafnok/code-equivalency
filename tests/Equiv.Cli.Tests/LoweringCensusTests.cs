@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 
+using Equiv.Core;
 using Equiv.Core.Ir;
 
 using Xunit;
@@ -175,6 +176,30 @@ public sealed class LoweringCensusTests
         Assert.Equal(new SideCounts(Legacy: 2, Modern: 1), census.RuntimeChangeCalls.DistinctMembers);
         Assert.Equal(new SideCounts(Legacy: 2, Modern: 1), census.RuntimeChangeCalls.PairsWithAny);
         Assert.Equal(2, census.Changed.Pairs);
+    }
+
+    /// <summary>
+    /// Ticket P2-055 (ADR 0040 decision 2): a call counts only where a row applies inside its pair's runtimes.
+    /// <c>String.StartsWith</c> changed in .NET 5, so a .NET 8 to .NET 10 pair and a same-runtime pair have no such call; a pair
+    /// with no known runtimes counts as one that crosses every row.
+    /// </summary>
+    [Fact]
+    public void RuntimeChangeCallsCountOnlyRowsInsideThePairsRuntimes()
+    {
+        static RuntimeInterval Interval(string first, string second) => new(TargetRuntime.Parse(first)!, TargetRuntime.Parse(second)!);
+
+        LoweringCensus census = LoweringCensus.Compute(
+            [
+                (Body(RuntimeChangeCall), Body(RuntimeChangeCall), false, Interval("net8.0", "net10.0")),
+                (Body(RuntimeChangeCall), Body(Clean), false, Interval("net10.0", "net10.0")),
+                (Body(RuntimeChangeCall), Body(RuntimeChangeCall), false, Interval("netcoreapp3.1", "net5.0")),
+                (Body(Clean), Body(RuntimeChangeCall), false, null),
+            ],
+            removed: 0,
+            added: 0);
+
+        Assert.Equal(new SideCounts(Legacy: 1, Modern: 2), census.RuntimeChangeCalls.CallSites);
+        Assert.Equal(new SideCounts(Legacy: 1, Modern: 2), census.RuntimeChangeCalls.PairsWithAny);
     }
 
     [Fact]
