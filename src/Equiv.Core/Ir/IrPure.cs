@@ -6,7 +6,7 @@ namespace Equiv.Core.Ir;
 /// Applies the catalogued pure function <paramref name="Function"/> (<c>f64.add</c>, <c>dec.mul</c>, <c>op:&lt;identity&gt;</c>)
 /// to <paramref name="Args"/> (ADR 0025; ticket M4-002). It adds no trace event and depends on neither the heap nor its
 /// position, so both sides share it: equal arguments give equal results. Each of <paramref name="Throws"/> is a Bool
-/// output. <see cref="RuntimeSensitive"/> marks a function whose behaviour differs between .NET Framework and .NET, which
+/// output. <see cref="RuntimeSensitive"/> marks a function whose behaviour differs between the two sides' runtimes (ADR 0040), which
 /// the backend never shares between the sides.
 /// </summary>
 public sealed record IrPure(IrVar Target, ImmutableArray<IrPureThrow> Throws, string Function, ImmutableArray<IrVar> Args) : IrInstruction

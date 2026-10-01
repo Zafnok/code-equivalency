@@ -96,7 +96,6 @@ internal sealed class IrLowerer
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
-        ArgumentNullException.ThrowIfNull(runtime);
         Catalogue entries = new(equivalences, runtime);
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
@@ -129,7 +128,6 @@ internal sealed class IrLowerer
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(model);
-        ArgumentNullException.ThrowIfNull(runtime);
         IMethodSymbol method = (IMethodSymbol)model.GetDeclaredSymbol(body.Syntax)!;
         // A constructor's graph starts with its initializer: a call to the base or `this` constructor on `this`.
         ControlFlowGraph graph = body is IConstructorBodyOperation constructor ? ControlFlowGraph.Create(constructor) : ControlFlowGraph.Create((IMethodBodyOperation)body);

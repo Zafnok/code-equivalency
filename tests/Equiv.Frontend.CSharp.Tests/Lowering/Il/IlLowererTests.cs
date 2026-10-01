@@ -94,7 +94,7 @@ public sealed class IlLowererTests
                 IrProcedure il = IlLowerer.Lower(procedure.Symbol, compilation, Runtimes.Migration);
                 string expected = Signature(operation);
                 string actual = Signature(il);
-                if (!string.Equals(expected, actual, StringComparison.Ordinal))
+                if (!string.Equals(expected, actual, StringComparison.Ordinal) && !UnreachableNoMatchArm.Contains($"{sample} {procedure.Identity.Value}"))
                 {
                     different.Add($"{sample} {procedure.Identity.Value}:\n  operation {expected}\n  il        {actual}\n{IrText.Dump(il)}");
                 }
@@ -104,6 +104,14 @@ public sealed class IlLowererTests
         Assert.True(different.Count == 0, string.Join('\n', different));
         Assert.True(compared > 10, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"only {compared} sample methods compared"));
     }
+
+    /// <summary>
+    /// Sample methods whose two lowerings name different callees for a reason that is not a mapping difference: a
+    /// <c>switch</c> expression that ends in a discard arm. Roslyn's control-flow graph keeps the no-match block, which
+    /// constructs a <c>SwitchExpressionException</c>, behind a branch that is never taken; the compiler emits no IL for it.
+    /// The two are Equivalent under Z3 (<c>IlLoweringParityTests</c>).
+    /// </summary>
+    private static readonly string[] UnreachableNoMatchArm = ["same-runtime-cleanup/modern Equiv.Samples.SameRuntimeCleanup.Report::Rank(int)"];
 
     /// <summary>The Design's pitfall: the instruction's sign decides the division, not its operands' C# types.</summary>
     [Fact]

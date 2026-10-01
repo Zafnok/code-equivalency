@@ -157,7 +157,6 @@ internal sealed partial class IlLowerer
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
-        ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(mapped);
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = IrLowerer.Signature(method, TypeMapper.Unmapped);
         SourceSpan span = CSharpFrontend.ToSourceSpan(method.DeclaringSyntaxReferences is [var syntax, ..] ? syntax.GetSyntax().GetLocation() : method.Locations[0]);

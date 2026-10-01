@@ -20,7 +20,8 @@ namespace Equiv.Tests.Integration;
 /// Ticket P1-015 acceptance criterion 3 (ADR 0039): each <c>samples/</c> method, loaded as a run loads it, whose IOperation
 /// lowering holds no <see cref="IrOpaque"/>, lowered again from its IL, is Equivalent to its IOperation lowering when
 /// <see cref="Z3Backend"/> verifies the two as a pair. The methods that are not are <see cref="Known"/>, each with the
-/// representational difference that keeps it from being proved, and nothing else may join them.
+/// representational difference that keeps it from being proved, and nothing else may join them. Both lowerings are of one
+/// body on one runtime, so they are lowered as a same-runtime pair is (ADR 0040; ticket P2-055): no runtime rule applies.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class IlLoweringParityTests
@@ -74,13 +75,13 @@ public sealed class IlLoweringParityTests
             {
                 foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))
                 {
-                    IrProcedure operation = IrLowerer.Lower(procedure.Symbol, compilation, RenameMap.Empty, [], Runtimes.Migration);
+                    IrProcedure operation = IrLowerer.Lower(procedure.Symbol, compilation, RenameMap.Empty, [], Runtimes.SameRuntime);
                     if (operation.Blocks.SelectMany(static b => b.Instructions).Any(static i => i is IrOpaque))
                     {
                         continue;
                     }
 
-                    Verdict verdict = new Z3Backend().Verify(operation, IlLowerer.Lower(procedure.Symbol, compilation, Runtimes.Migration), Options);
+                    Verdict verdict = new Z3Backend().Verify(operation, IlLowerer.Lower(procedure.Symbol, compilation, Runtimes.SameRuntime), Options);
                     if (verdict is Equivalent)
                     {
                         proved++;

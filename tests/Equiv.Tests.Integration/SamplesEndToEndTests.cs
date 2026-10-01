@@ -175,6 +175,47 @@ public sealed partial class SamplesEndToEndTests
         Assert.Contains("System.NullReferenceException", hasX.Message.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-055 criterion 2 (ADR 0040 decision 2): both sides run on .NET 10, so no runtime rule applies. The
+    /// byte-identical method that calls <c>double.ToString()</c> and <c>string.StartsWith(string)</c> and casts a
+    /// <c>double</c> to <c>int</c> is Equivalent by congruence, and the <c>if</c> chain made a <c>switch</c> expression is
+    /// Equivalent by the solver. No call counts as a runtime-change call.
+    /// </summary>
+    [Fact]
+    public void SameRuntimeCleanup_NoRuntimeRuleApplies()
+    {
+        Run run = RunSample("same-runtime-cleanup").Log.Runs[0];
+        Result describe = Single("same-runtime-cleanup", "::Describe(");
+        Result rank = Single("same-runtime-cleanup", "::Rank(");
+
+        Assert.Equal("EQ001", describe.RuleId);
+        Assert.Equal("congruence", describe.GetProperty<string>("proofMethod"));
+        Assert.Equal("EQ001", rank.RuleId);
+        Assert.Equal("bounded", rank.GetProperty<string>("proofMethod"));
+        Assert.Equal(2, run.Results.Count);
+        Assert.Null(run.Invocations);
+        Assert.Contains("\"callSites\":{\"legacy\":0,\"modern\":0}", Newtonsoft.Json.JsonConvert.SerializeObject(run.GetProperty<Dictionary<string, object>>("loweringCensus")["runtimeChangeCalls"]), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-055 criterion 3: .NET 8 against .NET 10 crosses only the rows changed in .NET 9 or .NET 10. The
+    /// byte-identical method that calls <c>BinaryReader.ReadString</c> (changed in .NET 9) is not congruent and is EQ006,
+    /// its message naming both runtimes; the one that calls <c>double.ToString()</c> (changed in .NET Core 3.0) is
+    /// Equivalent by congruence.
+    /// </summary>
+    [Fact]
+    public void VersionBump_OnlyRowsInsideTheIntervalApply()
+    {
+        Result name = Single("version-bump", "::Name(");
+        Result format = Single("version-bump", "::Format(");
+
+        Assert.Equal("EQ006", name.RuleId);
+        Assert.Contains("diverges via a runtime-changed API between net8.0 and net10.0 (", name.Message.Text, StringComparison.Ordinal);
+        Assert.Contains("/compatibility/core-libraries/9.0/", name.GetProperty<string>("helpUri"), StringComparison.Ordinal);
+        Assert.Equal("EQ001", format.RuleId);
+        Assert.Equal("congruence", format.GetProperty<string>("proofMethod"));
+    }
+
     [Fact]
     public void AddedRemoved_HasAnEQ004AndAnEQ005()
     {

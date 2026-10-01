@@ -7,7 +7,8 @@ Running the published binary, not the build output, is what this job is for: it 
 users get from the release, and PublishSingleFile has its own failure modes (see Equiv.Cli.csproj's
 IncludeAllContentForSelfExtract comment) that `dotnet run` never exercises.
 
-Windows restores the legacy (non-SDK) sides with VS Build Tools' MSBuild.exe, as build.ps1 -Integration does.
+Windows restores the legacy sides that are non-SDK projects with VS Build Tools' MSBuild.exe, as build.ps1 -Integration
+does; an SDK-style legacy side (P2-055's same-runtime and version-bump samples) restores with `dotnet restore`.
 Elsewhere every side is restored with `dotnet restore`: for a non-SDK project that writes the project.assets.json the
 bare loader reads, and packages.config packages are restored by equiv itself (ADR 0031, M3-029).
 #>
@@ -28,7 +29,7 @@ if ($IsWindows) {
 }
 
 Get-ChildItem -Path $samples -Filter '*.csproj' -Recurse | ForEach-Object {
-    if ($msbuild -and $_.FullName -match '[\\/]legacy[\\/]') {
+    if ($msbuild -and $_.FullName -match '[\\/]legacy[\\/]' -and -not (Select-String -Path $_.FullName -Pattern '<Project Sdk=' -Quiet)) {
         & $msbuild $_.FullName -t:Restore -v:minimal -nologo
     } else {
         dotnet restore $_.FullName

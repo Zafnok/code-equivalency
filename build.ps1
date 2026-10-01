@@ -47,7 +47,8 @@ if ($Integration) {
     # the modern (SDK-style) side restores fine with `dotnet restore`, but the legacy
     # (non-SDK) side's PackageReference support needs full MSBuild.exe (VS Build Tools) --
     # `dotnet restore`/`dotnet build` writes an empty obj/*.nuget.g.targets for a non-SDK
-    # project and silently never resolves the package into a <Reference>.
+    # project and silently never resolves the package into a <Reference>. A legacy side that is itself
+    # SDK-style (the same-runtime and version-bump samples, P2-055) restores with `dotnet restore` like a modern one.
     Invoke-Step "restore samples" {
         $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
         $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
@@ -57,7 +58,7 @@ if ($Integration) {
         }
 
         Get-ChildItem -Path (Join-Path $repoRoot "samples") -Filter "*.csproj" -Recurse | ForEach-Object {
-            if ($_.FullName -match '[\\/]legacy[\\/]') {
+            if ($_.FullName -match '[\\/]legacy[\\/]' -and -not (Select-String -Path $_.FullName -Pattern '<Project Sdk=' -Quiet)) {
                 & $msbuild $_.FullName -t:Restore -v:minimal -nologo
             } else {
                 dotnet restore $_.FullName

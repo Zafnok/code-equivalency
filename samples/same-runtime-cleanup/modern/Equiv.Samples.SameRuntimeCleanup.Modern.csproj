@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Equiv.Samples.SameRuntimeCleanup</RootNamespace>
+    <AssemblyName>Equiv.Samples.SameRuntimeCleanup</AssemblyName>
+  </PropertyGroup>
+
+</Project>

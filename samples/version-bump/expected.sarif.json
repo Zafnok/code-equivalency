@@ -1,0 +1,231 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.VersionBump.Codec::Name(System.IO.BinaryReader) diverges via a runtime-changed API between net8.0 and net10.0 (Malformed encoded bytes decode to U+FFFD on .NET. https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader): inputs(sort \"System.IO.BinaryReader\" 0, map<sort \"System.IO.BinaryReader\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0))) new(returned sort \"System.String\" 1 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Codec.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 19,
+                  "endLine": 7,
+                  "endColumn": 23
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.VersionBump.Codec::Name(System.IO.BinaryReader)",
+            "resultFingerprint/v1": "1e0c0422e70ae4e346971a57d7566f882dfbeea15f6c3feb9bfadd8052740a3c"
+          },
+          "baselineState": "new",
+          "properties": {
+            "model": "inputs(sort \"System.IO.BinaryReader\" 0, map<sort \"System.IO.BinaryReader\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0))) new(returned sort \"System.String\" 1 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.VersionBump.Codec::Format(double) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Codec.cs"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 19,
+                  "endLine": 12,
+                  "endColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.VersionBump.Codec::Format(double)",
+            "resultFingerprint/v1": "3fb85d3520ed2502a4421b0f1cd0e6b04dd30c80f730ebea4f8f843478192519"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 2,
+            "modern": 2
+          },
+          "matchedPairs": 2,
+          "pairsWithoutOpaque": 2,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 1,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 1,
+          "changedPairsWithoutOpaque": 1,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 1
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 1,
+              "modern": 1
+            },
+            "distinctMembers": {
+              "legacy": 1,
+              "modern": 1
+            },
+            "pairsWithAny": {
+              "legacy": 1,
+              "modern": 1
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.Double::ToString()",
+                "callSites": 1
+              },
+              {
+                "member": "System.IO.BinaryReader::ReadString()",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.Double::ToString()",
+                "callSites": 1
+              },
+              {
+                "member": "System.IO.BinaryReader::ReadString()",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 25,
+          "modern": 25
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.VersionBump",
+              "runtime": "net8.0",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.VersionBump",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

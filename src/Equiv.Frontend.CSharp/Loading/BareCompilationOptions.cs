@@ -8,7 +8,7 @@ namespace Equiv.Frontend.CSharp.Loading;
 /// <summary>
 /// A non-SDK project's parse and compilation options (M3-029): what MSBuild's <c>Csc</c> task passes, with MSBuild's
 /// defaults for .NET Framework. LangVersion is 7.3 unless set. The platform is applied exactly, since
-/// <c>BoundSerialiser</c> reads it for x87: <c>Prefer32Bit</c> defaults to true for an executable on .NET Framework 4.5
+/// <c>SideRuntime</c> reads it for x87: <c>Prefer32Bit</c> defaults to true for an executable on .NET Framework 4.5
 /// or later, and turns <c>AnyCPU</c> into <c>AnyCPU32BitPreferred</c> for an executable only, as <c>Csc</c> does.
 /// </summary>
 internal static class BareCompilationOptions
