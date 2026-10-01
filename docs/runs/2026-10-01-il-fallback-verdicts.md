@@ -246,7 +246,58 @@ the other 18 the member's source is the same on both sides. Why each of those is
 not traced. So 20 verdicts are unproved, not shown wrong, and one is a proof. The check read source only. It did not run the code or compare how calls bind on each side.
 
 **What this does to the gain.** Counting sound proofs only, the gain is 1 pair (0.1%). The 21
-Divergents were not hand-checked.
+Divergents are checked in the next section.
+
+## Hand check of the 21 new Divergents
+Added after the measurement, at the user's request. These are the 21 pairs the fallback moved from
+Unknown(opaque) to Divergent. Each was read on both sides, with the tool's stated cause and, for a
+`runtime-changes.json` row, the row's `changedIn` (P2-054, on `main` since the run). The pair goes
+from .NET Framework 4.8 to .NET 5, and the run assumed the default pair of runtimes (4.8 and 10).
+
+| judgement | pairs |
+|---|---|
+| real: a documented runtime difference the method can reach | 4 |
+| false: the row's change is in a .NET later than the pair's modern side (P2-055 will scope rows to the pair's interval) | 11 |
+| false: a constant or explicit argument rules the change out (P2-073's kind) | 1 |
+| false: a forwarder replaced by its target (P2-068) | 2 |
+| false: a renamed static field with the same initialiser | 1 |
+| undetermined: a package upgrade changed the callee (P2-069's kind) | 2 |
+
+So 4 of 21 are real (19%), 15 are false and 2 are undetermined. Of the 19 that could be judged,
+4 are real (21%). P2-047's audit of the whole run found 3.8%. None of the four was reproduced by
+running the code: replay could not construct any of them. Two of the four differ only for
+particular inputs. The source of the member differs between the sides in 4 of the 21 (the two
+forwarder pairs, the renamed field and the changed property). In the other 17 it is the same, and
+the verdict comes from a row or from how a call binds.
+
+The IL lowering is not what makes the 15 wrong. It exposes calls the IOperation lowering left
+behind an opaque, and rows and callee identities that are already known to over-report then fire
+on them. Every cause has an owner except the renamed field, which a `renames` entry in
+`equiv.json` would map.
+
+| procedure | rule | the tool's cause | judgement |
+|---|---|---|---|
+| `GitCommands.DiffMergeTools.DiffMergeToolConfigurationManager::GetToolSetting(string,GitCommands.DiffMergeTools.DiffMergeToolType,string)` | EQ002 | two callees: forwarder and its target | false: `GitExtUtils.Strings` forwarder replaced by the `System.String` method it calls (P2-068) |
+| `GitCommands.Git.GitItemStatusNameEqualityComparer::GetHashCode(GitCommands.GitItemStatus)` | EQ006 | `System.String::GetHashCode` (every .NET) | **real**: the method returns a string's hash code, which differs between the runtimes |
+| `GitCommands.PathUtil::ResolveRelativePath(string,string)` | EQ006 | `System.Uri` length limit (`changedIn` net10.0) | false: the row's change is later than the pair's modern side (.NET 5) |
+| `GitExtensions.Plugins.GitHub3.GitHub3Plugin::OpenLink(string)` | EQ006 | `UseShellExecute` default (`changedIn` netcoreapp1.0) | false: both sides set `UseShellExecute` explicitly, so the default is never read (P2-073's kind) |
+| `GitExtensions.UITests.Script.ScriptRunnerTests::Setup()` | EQ002 | two fields: a static field was renamed | false: the renamed field has the same initialiser on both sides |
+| `GitUI.Avatars.InitialsAvatarProvider::GetInitialsAndHashCode(string,string)` | EQ006 | `System.String::GetHashCode` (every .NET) | **real**: the method returns a string's hash code, which differs between the runtimes |
+| `GitUI.CommandsDialogs.FormReflog::.ctor()` | EQ006 | regex engine (`changedIn` net7.0) | false: the row's change is later than the pair's modern side (.NET 5); the pattern is also a constant with no case-insensitive range (P2-073) |
+| `GitUI.CommandsDialogs.SettingsDialog.SettingsTreeViewUserControl::GotoPage(GitUI.CommandsDialogs.SettingsDialog.SettingsPageReference)` | EQ006 | Windows Forms null argument (`changedIn` net7.0) | false: the row's change is later than the pair's modern side (.NET 5); the argument is also guarded against null |
+| `GitUI.FileStatusList::FormatListViewItem(System.Windows.Forms.ListViewItem,GitUI.PathFormatter,int)` | EQ006 | GDI+ exception type (`changedIn` net10.0) | false: the row's change is later than the pair's modern side (.NET 5) |
+| `GitUI.FindAndReplaceForm::UpdateTitleBar()` | EQ006 | `System.IO.Path::GetFileName(string)` (`changedIn` netcoreapp1.0) | **real** for a path that holds an invalid path character: .NET Framework throws, .NET returns |
+| `GitUI.Shells.ConEmuControlExtensions::ChangeFolder(ConEmu.WinForms.ConEmuControl,GitUI.Shells.IShellDescriptor,string)` | EQ002 | two callees: forwarder and its target | false: `GitExtUtils.Strings` forwarder replaced by the `System.String` method it calls (P2-068) |
+| `GitUI.Theming.ComboBoxRenderer::RenderBorder(GitUI.Theming.ThemeRenderer.Context,int,System.Drawing.Rectangle)` | EQ006 | GDI+ exception type (`changedIn` net10.0) | false: the row's change is later than the pair's modern side (.NET 5) |
+| `GitUI.Theming.ComboBoxRenderer::RenderReadonlyDropDown(GitUI.Theming.ThemeRenderer.Context,int,System.Drawing.Rectangle)` | EQ006 | GDI+ exception type (`changedIn` net10.0) | false: the row's change is later than the pair's modern side (.NET 5) |
+| `GitUI.Theming.EditRenderer::RenderEditBorderNoScroll(GitUI.Theming.ThemeRenderer.Context,int,System.Drawing.Rectangle)` | EQ006 | GDI+ exception type (`changedIn` net10.0) | false: the row's change is later than the pair's modern side (.NET 5) |
+| `GitUI.Theming.EditRenderer::RenderEditText(GitUI.Theming.ThemeRenderer.Context,int,System.Drawing.Rectangle)` | EQ006 | GDI+ exception type (`changedIn` net10.0) | false: the row's change is later than the pair's modern side (.NET 5) |
+| `GitUI.Theming.HeaderRenderer::RenderBackground(System.IntPtr,int,int,System.Drawing.Rectangle,System.NativeMethods.RECTCLS)` | EQ006 | GDI+ exception type (`changedIn` net10.0) | false: the row's change is later than the pair's modern side (.NET 5) |
+| `GitUI.Theming.ThemeLoader::StyleRuleThemeException(ExCSS.StyleRule,string)` | EQ002 | two callees: the source now reads another `ExCSS.StyleRule` property, after the package upgrade | undetermined: whether the two properties return the same text needs both package versions |
+| `GitUI.Theming.TooltipRenderer::RenderBackground(System.IntPtr,int,int,System.Drawing.Rectangle,System.NativeMethods.RECTCLS)` | EQ006 | GDI+ exception type (`changedIn` net10.0) | false: the row's change is later than the pair's modern side (.NET 5) |
+| `GitUIPluginInterfaces.BuildServerIntegration.BuildServerSettingsHelper::IsUrlValid(string)` | EQ006 | `System.Uri` length limit (`changedIn` net10.0) | false: the row's change is later than the pair's modern side (.NET 5) |
+| `GitUIPluginInterfaces.CredentialsManager.AdysTechCredentialManagerWrapper::RemoveCredentials(string)` | EQ002 | two callees: unchanged source rebinds after a package upgrade moved a parameter's type | undetermined: P2-069's cause, which should be Unknown, not Divergent |
+| `NetSpell.SpellChecker.Dictionary.Affix.AffixUtility::RemoveSuffix(string,NetSpell.SpellChecker.Dictionary.Affix.AffixEntry)` | EQ006 | culture-sensitive `System.String::EndsWith(string)`, ICU (`changedIn` net5.0) | **real** for some strings: the call is the culture-sensitive overload |
 
 ## Noise between the two measured runs
 Seven pairs the fallback did not lower changed verdict between the runs. Six moved to or from a
@@ -263,6 +314,9 @@ cause was checked. None is counted above.
   runtime-changed method group without its body, so two different lambdas prove Equivalent. 20 of
   the 21 new Equivalents rest on it: P2-079. P1-017's gate did not catch it, because its generated
   pairs hold no lambda.
+- Of the 21 new Divergents, a hand check finds 4 real, 15 false and 2 undetermined. Eleven of the
+  false ones cite a row whose change is later than the pair's modern runtime (P2-055); the rest are
+  P2-068, P2-069 and P2-073's causes and one unmapped field rename.
 - An IL-lowered pair crashes the encoder with a sort mismatch, and one IL-lowered Divergent becomes
   Unknown(timeout): P2-078.
 - Six pairs that end Unknown take 5.4 of the 6.8 verify hours, and about two more hours follow in a

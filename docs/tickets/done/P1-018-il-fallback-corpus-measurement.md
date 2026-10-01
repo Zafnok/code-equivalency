@@ -88,3 +88,7 @@ already decides.
   two of them the unread code differs between the sides. No behavioural difference was found in any
   of the 21. The sound gain is 1 pair (0.1%). The report has the per-pair table. The decision does not
   change: the default stays off.
+- The user then asked for a hand check of the 21 new Divergents: 4 real (two return a string's hash
+  code, one calls `Path.GetFileName`, one the culture-sensitive `EndsWith`), 15 false (11 cite a row
+  changed in a .NET later than the pair's .NET 5, which P2-055 will scope) and 2 undetermined. None was
+  reproduced by execution. The report has the per-pair table.
