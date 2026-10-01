@@ -1,5 +1,5 @@
 # P1-018 Measure the IL fallback's decided-verdict gain on the corpus, and turn it on by default only if it clears 5%
-Status: in-progress
+Status: done (PR #319)
 Effort: S
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-016, P1-017
