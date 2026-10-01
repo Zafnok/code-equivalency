@@ -518,11 +518,13 @@ give one call two identities. Three (P2-073 to P2-075) are EQ006 rows that match
 
 Run time (found 2026-09-30 during P1-018). A Git Extensions `full` run takes 8h57m. That is over a
 hosted GitHub runner's 6-hour job limit, and six pairs that all end Unknown spend 5.4 of its 6.8 verify
-hours. Neither ticket may change a decided verdict.
-- P2-076 (M) A rung that reports a timeout returns within its budget: one "5000 ms" bounded query took
-  126.5 minutes. The contracts pass (2h07m, unlogged) becomes a phase.
-- P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time.
-  Needs P2-050, P2-076.
+hours. Neither ticket may end a pair early or change a decided verdict, and neither adds a cap on a
+rung, a pair or a run.
+- P2-076 (M) Measure and remove the time a pair spends outside its solver budget: one rung reported a
+  5000 ms timeout after 126.5 minutes. Non-solver work is made cheaper, never skipped. The contracts
+  pass (2h07m, unlogged) becomes a phase. Two full runs must agree on every decided result.
+- P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
+  and no query ended sooner by contention. Needs P2-050, P2-076.
 
 ## M5 — Agent surface (MCP)
 
