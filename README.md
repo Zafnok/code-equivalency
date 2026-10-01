@@ -179,8 +179,11 @@ equiv mcp [--execute]
 ```
 
 Both paths must be solution files (`.sln` or `.slnx`); anything else is exit 3. Stdout carries
-two lines at most: `analysed lines of code: legacy=<n> modern=<n>`, and a `route:` line with
-`--dry-run`. Results go only to the SARIF file.
+`analysed lines of code: legacy=<n> modern=<n>`, a `route:` line with `--dry-run`, and after a run
+that verifies, the review list: `review list: <G> groups for <R> flagged results` and its ten
+highest-ranked groups, one line each (the Divergent and Unknown results grouped by cause, most
+certain first; `docs/VERIFICATION-MODEL.md` section 6). Results go only to the SARIF file, which
+holds the whole list in `run.properties.reviewList`.
 
 `--dry-run` routes and loads both sides, prints the analysed line counts, and stops without
 writing SARIF. `--lower-only` loads, matches and lowers, then writes a SARIF log with the
@@ -270,8 +273,8 @@ server over stdio (ADR 0033), so a coding agent can ask "is my port equivalent?"
 has two read-only tools that write no file:
 
 - `compare`: `legacy` and `modern` (solution paths, required), and optionally `config`, `baseline`,
-  `bound`, `timeoutMs` and `ilFallback` (`--il-fallback`). The result is a one-line summary (`Equivalent n, Divergent n, Unknown n,
-  skipped projects n, exit code k`), then the SARIF log `equiv compare` would write, as JSON text.
+  `bound`, `timeoutMs` and `ilFallback` (`--il-fallback`). The result is a short summary (`Equivalent n, Divergent n, Unknown n,
+  skipped projects n, exit code k`, then the review list's lines), then the SARIF log `equiv compare` would write, as JSON text.
 - `lower_only`: `legacy`, `modern` and optionally `config` and `ilFallback`; the same as `equiv compare --lower-only`.
 
 An input error `equiv compare` exits 3 or 4 on (a missing file, no frontend for the paths, no C#

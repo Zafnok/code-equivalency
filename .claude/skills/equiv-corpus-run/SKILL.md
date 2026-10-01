@@ -246,6 +246,9 @@ Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | ownin
   `opaque <reason>` (for example `opaque DelegateCreation`), never its `opaque:<fingerprint>` identity; any
   other entry's kind is its `identity`, an `IrPure` operator name. Kinds only, never
   `candidateCounterexample` values.
+- Review list: <groups> groups for <flagged> flagged results (EQ002 + EQ003 + EQ006), from
+  `run.properties.reviewList`; flagged results as a share of matched pairs: <%>. Then the top five
+  groups by `count`, each as `<ruleId> <group>: <count>` (ticket P2-064).
 
 ## Tests (full only)
 - legacy <pass/fail/skip>, modern <pass/fail/skip>
