@@ -12,9 +12,9 @@ namespace Equiv.Core.Configuration;
 public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, string> CallIdentityRenames, int Bound, int TimeoutMs)
 {
     /// <summary>The default <see cref="ResourceLimit"/> (ticket P2-050; chosen from <c>docs/runs/2026-10-01-timeout-budget.md</c>).</summary>
-    public const int DefaultResourceLimit = 20_000_000;
+    public const int DefaultResourceLimit = 5_000_000;
 
-    public static EquivConfig Default { get; } = new(RenameMap.Empty, [], Bound: 3, TimeoutMs: 5000);
+    public static EquivConfig Default { get; } = new(RenameMap.Empty, [], Bound: 3, TimeoutMs: 60_000);
 
     /// <summary>
     /// <c>resourceLimit</c> (ticket P2-050): Z3's <c>rlimit</c> for each solver query, a count of the solver's own steps, so

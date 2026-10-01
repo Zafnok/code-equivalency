@@ -572,6 +572,19 @@ Every Unknown carries `properties.scope` (ADR 0029):
   on the unrolled pair, which proves nothing past the bound. An `abstraction` Unknown is `method`
   too, since the first query found its candidate, so that query was satisfiable (ticket M3-025).
 
+Every solver query has two budgets, both set in `equiv.config.json` as positive integers (ticket P2-050):
+- `resourceLimit` (default 5000000; `compare --resource-limit <n>` overrides it) is Z3's `rlimit`, a count of
+  the solver's own steps. It is the budget that ends a query. It does not depend on how fast or how loaded the
+  machine is, so the same inputs give the same results on every run, and a baseline comparison shows no `new`
+  result that nothing caused.
+- `timeoutMs` (default 60000) is the wall-clock backstop behind it, for a query that spends long in work Z3
+  does not count. A result that ran into it can differ between runs.
+
+A query that exhausts either is Unknown with reason `timeout` (`chc-timeout` on rung 4), and the detail ends
+with the limit that was hit: `resource limit <n> hit` or `wall-clock limit <n> ms hit`. The budgets are per
+query, and a pair asks several (section 5.1), so neither bounds the time a pair takes. The defaults come from
+`docs/runs/2026-10-01-timeout-budget.md`.
+
 Every Unknown other than `unbound` and `timeout` also carries `properties.failureRefinement` (ADR 0037;
 ticket P1-013): `{ newFailures, removedFailures }`, each `{ outcome, model? }`. The backend asks two more
 queries over rung 1's product (the pair with its shared fragments as calls, unrolled `k` times), comparing
@@ -582,7 +595,7 @@ swapped. A side that reaches an unshared `IrOpaque`, or the bound of a looping p
 untainted outcome on both sides (ADR 0026) is `found`, carrying the model rendered as a Divergent's is; a
 tainted one is `unknown`. Only when that query is unsatisfiable does it ask again, letting such a side
 return or throw: unsatisfiable is `none-proved`, anything else `unknown`. A query the solver gives up on is
-`unknown`, and so is every answer for a pair rung 1 could not encode. Each query gets the pair's timeout.
+`unknown`, and so is every answer for a pair rung 1 could not encode. Each query gets the pair's resource limit and timeout.
 A `found` answer needs an input that reaches no unshared opaque node, so on an Unknown it occurs only where
 rung 1's model of the same divergence replayed tainted. The verdict stays EQ003, and neither the rule id, the
 exit code nor the fingerprint depends on `failureRefinement`. The census reports the Unknown pairs queried

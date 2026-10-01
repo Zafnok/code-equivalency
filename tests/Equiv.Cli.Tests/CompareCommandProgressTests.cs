@@ -135,7 +135,7 @@ public sealed partial class CompareCommandProgressTests
         long loop = PairWeight.Of(LoopBody(Loops), LoopBody(Loops), solver: true);
         Assert.Equal(
             [
-                Invariant($"phase verify 8 {3 + (4 * size) + loop} (5, 5000, 5)"),
+                Invariant($"phase verify 8 {3 + (4 * size) + loop} (5, 60000, 5)"),
                 "item T::Congruent() 1", "done congruent",
                 "item T::Unbound() 1", "done unbound",
                 "item T::Mismatch() 1", "done async-mismatch",
@@ -161,7 +161,7 @@ public sealed partial class CompareCommandProgressTests
         _ = CaptureStdOut(() => CompareCommand.Run(
             Options(legacy.Path, modern.Path), [new FakeFrontend("csharp", _ => true, new MatchResult([CongruentPair()], [], [], []))], Backend(), new InMemoryReportSink(), log));
 
-        Assert.Contains("phase verify 1 1 (0, 5000, 1)", log.Events, StringComparer.Ordinal);
+        Assert.Contains("phase verify 1 1 (0, 60000, 1)", log.Events, StringComparer.Ordinal);
     }
 
     [Fact]
