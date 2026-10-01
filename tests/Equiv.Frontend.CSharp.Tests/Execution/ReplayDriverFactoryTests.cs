@@ -1,5 +1,6 @@
 using System.Text.Json;
 
+using Equiv.Core;
 using Equiv.Core.Execution;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
@@ -84,6 +85,51 @@ public sealed class ReplayDriverFactoryTests : IDisposable
             "global::N.Greeter self = new global::N.Greeter();",
             File.ReadAllText(Path.Combine(modernProject, "EquivReplay1.cs")),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket P2-056 criterion 4: a same-runtime pair builds both drivers for that one runtime.</summary>
+    [Fact]
+    public void SameRuntimePair_BuildsBothDriversForThatRuntime()
+    {
+        CSharpCompilation legacy = Compile(Greeter, "Greeter");
+        CSharpCompilation modern = Compile(Greeter, "Greeter");
+        TargetRuntime net8 = TargetRuntime.Parse("net8.0")!;
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(
+            net8, net8, static target => new DriverRuntime(target, "8.0.5"), legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
+
+        ExecutionDrivers drivers = factory.Create(pair, NullName(), directory).Drivers!;
+
+        Assert.Equal(Path.Combine(directory, "legacy", "Greeter", "EquivReplay1.dll"), drivers.Legacy);
+        Assert.Equal(Path.Combine(directory, "modern", "Greeter", "EquivReplay1.dll"), drivers.Modern);
+        Assert.All(
+            [drivers.Legacy, drivers.Modern],
+            static driver => Assert.Contains("\"tfm\": \"net8.0\"", File.ReadAllText(Path.ChangeExtension(driver, ".runtimeconfig.json")), StringComparison.Ordinal));
+    }
+
+    /// <summary>Ticket P2-056 criterion 2: a side whose runtime is not installed, or that has none, is not constructible, and no other runtime stands in.</summary>
+    [Theory]
+    [InlineData(true, true, "runtime net48 not installed")]
+    [InlineData(false, true, "runtime net10.0 not installed")]
+    [InlineData(true, false, "the legacy project Greeter has no detected runtime")]
+    [InlineData(false, false, "the modern project Greeter has no detected runtime")]
+    public void Replay_RuntimeNotInstalled_IsNotConstructible(bool legacyMissing, bool detected, string reason)
+    {
+        CSharpCompilation project = Compile(Greeter, "Greeter");
+        IMethodSymbol greet = Method(project, "N.Greeter", "Greet");
+        TargetRuntime missing = legacyMissing ? Net48 : Net10;
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(
+            legacyMissing && !detected ? null : Net48,
+            !legacyMissing && !detected ? null : Net10,
+            target => target == missing ? null : new DriverRuntime(target, "10.0.1"),
+            project,
+            greet,
+            GreetIr,
+            project,
+            greet,
+            GreetIr);
+
+        Assert.Equal(reason, factory.Create(pair, NullName(), directory).Reason);
+        Assert.Equal(reason, factory.Plan(pair, candidate: null, directory).Reason);
     }
 
     [Fact]

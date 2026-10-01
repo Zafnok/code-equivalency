@@ -1,17 +1,22 @@
 # runtime-diff
 
-Calls a BCL, Windows Forms or `System.Drawing` member on .NET Framework 4.8 and on .NET 10 with generated arguments, and reports
-every case whose outcome differs (ADR 0035, the second oracle; ticket M3-032). It is a thin
+Calls a BCL, Windows Forms or `System.Drawing` member on two runtimes (`--from` and `--to`, .NET Framework 4.8 and .NET 10
+by default) with generated arguments, and reports every case whose outcome differs (ADR 0035, the second oracle; ADR 0040
+decision 3; tickets M3-032, P2-056). It is a thin
 console over `Equiv.Execute` and the C# frontend's `DriverFactory`.
 
-It needs Windows with the .NET Framework 4.8 targeting pack (it ships with Visual Studio and its
-Build Tools) and the .NET 10 SDK. On any other OS it exits 3 with
-`runtime-diff needs Windows and .NET Framework 4.8 (ADR 0035)`.
+Each runtime must be installed with its reference assemblies: a .NET Framework 4.x runtime needs its targeting pack
+(`Reference Assemblies/Microsoft/Framework/.NETFramework/v<version>`, shipped with Visual Studio and its Build Tools), and a
+.NET runtime needs its shared framework `shared/Microsoft.NETCore.App/<major.minor>.*` and reference pack
+`packs/Microsoft.NETCore.App.Ref/<major.minor>.*` in the `dotnet` install the tool runs on. A missing one makes every
+overload not constructible, with the reason `runtime <tfm> not installed`; no other runtime is used in its place. Windows
+is needed only when a side is .NET Framework; otherwise it exits 3 with
+`runtime-diff: --from runs on net48, and .NET Framework needs Windows (ADR 0040)`.
 
 ## Command line
 
 ```
-runtime-diff --member "<CallIdentity prefix or exact>" [--seed n] [--cases n] --out report.json
+runtime-diff --member "<CallIdentity prefix or exact>" [--from tfm] [--to tfm] [--seed n] [--cases n] --out report.json
 ```
 
 - `--member`: a `CallIdentity`, as the frontend spells one and as `runtime-changes.json` rows
@@ -20,6 +25,8 @@ runtime-diff --member "<CallIdentity prefix or exact>" [--seed n] [--cases n] --
   (`System.String::IndexOf(`), and one ending right after `::` selects every member of the
   type. Only public members present on both runtimes are run. A property getter is `get_Name`,
   and a constructor is `.ctor`.
+- `--from`, `--to`: the runtimes the legacy and modern drivers run on, as a short name (`net48`, `net472`,
+  `netcoreapp3.1`, `net8.0`) or a moniker (`.NETCoreApp,Version=v8.0`). Default `net48` and `net10.0`.
 - `--seed`: the generator seed (default 0). The same seed gives the same inputs.
 - `--cases`: the inputs per overload (default 64). Each runs under every culture.
 - `--out`: where to write the report.
@@ -31,13 +38,16 @@ dotnet run --project tools/runtime-diff -- --member "System.String::IndexOf(" --
 ```
 
 Exit codes: 0 when no overload diverges, 1 when one does, 3 on a usage error (a bad argument,
-no matching member, or a non-Windows OS). Nondeterminism and not-constructible overloads do not
+no matching member, or a .NET Framework runtime off Windows). Nondeterminism and not-constructible overloads do not
 change the exit code.
 
 ## What runs
 
-For each overload, the frontend compiles two drivers. One is a .NET Framework 4.8 executable
-with an `app.config`. The other is a .NET 10 assembly run through `dotnet`, on `Microsoft.WindowsDesktop.App` (`net10.0-windows`) when it uses a Windows Forms or `System.Drawing` assembly. Each driver's C#
+For each overload, the frontend compiles one driver per side for that side's runtime. On .NET Framework it is an
+executable with an `app.config` whose `supportedRuntime` sku names the version, compiled at C# 7.3. On .NET it is an
+assembly run through `dotnet`, with a `runtimeconfig.json` naming its own `net<v>`, the installed framework version and
+`rollForward: Disable`, compiled at the C# version that runtime ships with; it runs on `Microsoft.WindowsDesktop.App`
+(`net<v>-windows`) when it uses a Windows Forms or `System.Drawing` assembly. Each driver's C#
 source is written beside it as `EquivDriver.cs`. Both read one JSON line per case on stdin:
 `[culture,arg0,arg1,...]`, with an instance member's receiver as `arg0`. They set the current
 culture and UI culture, call the member, and write `["Kind",canonical]` on stdout.

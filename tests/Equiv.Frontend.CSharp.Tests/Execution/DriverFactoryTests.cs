@@ -2,6 +2,7 @@ using Equiv.Core;
 using Equiv.Core.Execution;
 using Equiv.Frontend.CSharp.Execution;
 
+using Microsoft.CodeAnalysis.CSharp;
 
 using Xunit;
 
@@ -215,8 +216,8 @@ public sealed class DriverFactoryTests
 
     [Theory]
     [InlineData("Odd.Members::Gone()", "does not compile: ")]
-    [InlineData("Odd.Members::OnlyModern()", "Odd.Members::OnlyModern() is not a public member on .NET Framework 4.8")]
-    [InlineData("Odd.Members::OnlyLegacy()", "Odd.Members::OnlyLegacy() is not a public member on .NET 10")]
+    [InlineData("Odd.Members::OnlyModern()", "Odd.Members::OnlyModern() is not a public member on net48")]
+    [InlineData("Odd.Members::OnlyLegacy()", "Odd.Members::OnlyLegacy() is not a public member on net10.0")]
     [InlineData("System.DateTime::AddDays(double)", "no input can be built for System.DateTime")]
     public void ADriverThatCannotBeBuiltThrows(string member, string message)
     {
@@ -233,20 +234,95 @@ public sealed class DriverFactoryTests
         }
     }
 
+    /// <summary>Ticket P2-056 criterion 2: a side whose runtime is not installed makes every member not constructible, and nothing is built for it.</summary>
     [Fact]
-    public void ARuntimeWithoutReferenceAssembliesCannotResolve()
+    public void ARuntimeThatIsNotInstalledIsNotConstructible()
     {
-        DriverFactory factory = new(static () => new DriverReferences([], ["unused.dll"]));
+        TargetRuntime net8 = TargetRuntime.Parse("net8.0")!;
+        DriverFactory noLegacy = new(DriverFactory.DefaultLegacy, net8, target => target == net8 ? HostRuntime(target) : null);
+        DriverFactory noModern = new(net8, DriverFactory.DefaultModern, target => target == net8 ? HostRuntime(target) : null);
 
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => factory.Resolve("System.String::ToUpper("));
-
-        Assert.Equal("no .NET Framework 4.8 reference assemblies are installed", exception.Message);
-        string[] runtime = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
-        DriverFactory noModern = new(() => new DriverReferences(runtime, []));
-        Assert.Equal("no .NET 10 reference assemblies are installed", Assert.Throws<InvalidOperationException>(() => noModern.Resolve("System.String::ToUpper(")).Message);
-        Assert.Throws<ArgumentNullException>(() => factory.Resolve(null!));
-        Assert.Throws<ArgumentNullException>(() => factory.Create(null!, "."));
+        ExecutionSignature legacyMissing = Assert.Single(noLegacy.Resolve("System.String::ToUpper("));
+        Assert.Equal(("System.String::ToUpper(", "runtime net48 not installed"), (legacyMissing.Member.Value, Assert.Single(legacyMissing.NotConstructible)));
+        Assert.Equal("runtime net10.0 not installed", Assert.Single(Assert.Single(noModern.Resolve("System.String::ToUpper()")).NotConstructible));
+        ExecutionRequest request = new(new CallIdentity("System.String::ToUpper()"), [], []);
+        Assert.Equal("runtime net48 not installed", Assert.Throws<InvalidOperationException>(() => noLegacy.Create(request, ".")).Message);
+        Assert.Throws<ArgumentNullException>(() => noLegacy.Resolve(null!));
+        Assert.Throws<ArgumentNullException>(() => noLegacy.Create(null!, "."));
+        Assert.Throws<ArgumentNullException>(() => new DriverFactory(null!, net8));
+        Assert.Throws<ArgumentNullException>(() => new DriverFactory(net8, null!));
     }
+
+    /// <summary>Ticket P2-056 criterion 1: a .NET Framework side is an <c>.exe</c> whose <c>app.config</c> names its own version, compiled at C# 7.3.</summary>
+    [Fact]
+    public void FrameworkSideGetsAnExeForItsVersion()
+    {
+        TargetRuntime net472 = TargetRuntime.Parse("net472")!;
+        TargetRuntime net8 = TargetRuntime.Parse("net8.0")!;
+        string directory = Directory.CreateTempSubdirectory("driver-factory-").FullName;
+        try
+        {
+            ExecutionDrivers drivers = new DriverFactory(net472, net8, HostRuntime).Create(new ExecutionRequest(new CallIdentity("System.String::ToUpper()"), [], []), directory);
+
+            Assert.Equal(Path.Combine(directory, "legacy", "EquivDriver.exe"), drivers.Legacy);
+            Assert.Contains("<supportedRuntime version=\"v4.0\" sku=\".NETFramework,Version=v4.7.2\" />", File.ReadAllText(drivers.Legacy + ".config"), StringComparison.Ordinal);
+            Assert.Equal(LanguageVersion.CSharp7_3, new DriverRuntime(net472, string.Empty).Language);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>Ticket P2-056 criterion 1: a .NET side is a <c>.dll</c> whose <c>runtimeconfig.json</c> names its own runtime and installed version, with no roll-forward.</summary>
+    [Fact]
+    public void CoreSideGetsItsOwnRuntimeConfig()
+    {
+        TargetRuntime net8 = TargetRuntime.Parse("net8.0")!;
+        string directory = Directory.CreateTempSubdirectory("driver-factory-").FullName;
+        try
+        {
+            ExecutionDrivers drivers = new DriverFactory(net8, net8, HostRuntime).Create(new ExecutionRequest(new CallIdentity("System.String::ToUpper()"), [], []), directory);
+
+            Assert.Equal(Path.Combine(directory, "modern", "EquivDriver.dll"), drivers.Modern);
+            Assert.Equal(Path.Combine(directory, "legacy", "EquivDriver.dll"), drivers.Legacy);
+            string config = File.ReadAllText(Path.Combine(directory, "modern", "EquivDriver.runtimeconfig.json"));
+            Assert.Equal(
+                """
+                {
+                  "runtimeOptions": {
+                    "tfm": "net8.0",
+                    "rollForward": "Disable",
+                    "framework": { "name": "Microsoft.NETCore.App", "version": "8.0.5" }
+                  }
+                }
+                """.ReplaceLineEndings(),
+                config.ReplaceLineEndings());
+            Assert.Equal(config, File.ReadAllText(Path.Combine(directory, "legacy", "EquivDriver.runtimeconfig.json")));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>Ticket P2-056 criterion 1: each .NET driver compiles at the C# version its runtime ships with.</summary>
+    [Theory]
+    [InlineData("netcoreapp2.1", LanguageVersion.CSharp7_3)]
+    [InlineData("netcoreapp3.1", LanguageVersion.CSharp8)]
+    [InlineData("net5.0", LanguageVersion.CSharp9)]
+    [InlineData("net6.0", LanguageVersion.CSharp10)]
+    [InlineData("net7.0", LanguageVersion.CSharp11)]
+    [InlineData("net8.0", LanguageVersion.CSharp12)]
+    [InlineData("net9.0", LanguageVersion.CSharp13)]
+    [InlineData("net10.0", LanguageVersion.CSharp14)]
+    [InlineData("net11.0", LanguageVersion.Latest)]
+    public void EachCoreRuntimeCompilesAtItsOwnLanguageVersion(string runtime, LanguageVersion language) =>
+        Assert.Equal(language, new DriverRuntime(TargetRuntime.Parse(runtime)!, "1.0.0").Language);
+
+    /// <summary>The test host's own reference assemblies, as <paramref name="target"/> at version <c>8.0.5</c>.</summary>
+    private static DriverRuntime HostRuntime(TargetRuntime target) =>
+        new(target, "8.0.5") { References = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator) };
 
     /// <summary>Ticket P2-051: a Windows Forms member resolves, and its .NET 10 driver runs on the Windows Desktop runtime.</summary>
     [Fact]
@@ -322,4 +398,13 @@ public sealed class DriverFactoryTests
 
     [Fact]
     public void TheInstalledFactoryLocatesItsReferencesLazily() => Assert.NotNull(new DriverFactory());
+
+    /// <summary>The installed factory for the test host's own runtime on both sides resolves against that runtime's reference pack, on any OS.</summary>
+    [Fact]
+    public void TheInstalledFactoryResolvesOnThisRuntime()
+    {
+        TargetRuntime self = new(TargetRuntime.RuntimeFamily.NetCore, new Version(Environment.Version.Major, Environment.Version.Minor));
+
+        Assert.Empty(Assert.Single(new DriverFactory(self, self).Resolve("System.String::ToUpper()")).NotConstructible);
+    }
 }

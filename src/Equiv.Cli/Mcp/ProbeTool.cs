@@ -17,8 +17,9 @@ namespace Equiv.Cli.Mcp;
 /// The <c>probe</c> tool (ADR 0035, ADR 0036; ticket M5-002): an agent names a matched pair by its normalised identity and
 /// supplies its own arguments, and gets back both runtimes' outcomes, using the same driver-building path <c>--execute</c>'s
 /// replay does (<see cref="IReplayDriverFactory.Probe"/>; ticket M4-009). It never writes SARIF and never changes a
-/// verdict. <see cref="McpCommand"/> registers it only when <c>equiv mcp</c> was started with <c>--execute</c> on Windows
-/// (ADR 0035: opt-in on every surface, so an agent cannot turn execution on by itself).
+/// verdict. <see cref="McpCommand"/> registers it only when <c>equiv mcp</c> was started with <c>--execute</c> (ADR 0035:
+/// opt-in on every surface, so an agent cannot turn execution on by itself). A pair with a side on .NET Framework is refused
+/// off Windows, as <c>compare --execute</c> refuses it (ADR 0040 decision 3; ticket P2-056).
 /// </summary>
 internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, ExecutionEnvironment execution)
 {
@@ -66,6 +67,11 @@ internal sealed class ProbeTool(IReadOnlyList<ILanguageFrontend> frontends, Exec
         if (analysis.Replay is not { } factory)
         {
             return Failure("error: this frontend cannot run code");
+        }
+
+        if (execution.Refusal(analysis) is { } refusal)
+        {
+            return Failure(refusal);
         }
 
         ProcedurePair? pair = analysis.Match.Pairs.FirstOrDefault(p => string.Equals(p.New.Value, identity, StringComparison.Ordinal));

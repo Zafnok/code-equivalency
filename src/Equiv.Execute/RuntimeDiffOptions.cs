@@ -1,11 +1,25 @@
 using System.Globalization;
 
+using Equiv.Core;
+
 namespace Equiv.Execute;
 
-/// <summary><c>runtime-diff --member "&lt;CallIdentity prefix or exact&gt;" [--seed n] [--cases n] --out report.json</c> (ticket M3-032).</summary>
+/// <summary>
+/// <c>runtime-diff --member "&lt;CallIdentity prefix or exact&gt;" [--from tfm] [--to tfm] [--seed n] [--cases n] --out report.json</c>
+/// (tickets M3-032, P2-056). <see cref="From"/> and <see cref="To"/> are the runtimes the legacy and modern sides run on,
+/// <c>net48</c> and <c>net10.0</c> unless given.
+/// </summary>
 internal sealed record RuntimeDiffOptions(string Member, ulong Seed, int Cases, string Out)
 {
-    public const string Usage = "usage: runtime-diff --member \"<CallIdentity prefix or exact>\" [--seed n] [--cases n] --out report.json";
+    public const string Usage = "usage: runtime-diff --member \"<CallIdentity prefix or exact>\" [--from tfm] [--to tfm] [--seed n] [--cases n] --out report.json";
+
+    private static readonly TargetRuntime DefaultFrom = TargetRuntime.Parse("net48")!;
+
+    private static readonly TargetRuntime DefaultTo = TargetRuntime.Parse("net10.0")!;
+
+    public TargetRuntime From { get; init; } = DefaultFrom;
+
+    public TargetRuntime To { get; init; } = DefaultTo;
 
     public const int DefaultCases = 64;
 
@@ -13,6 +27,7 @@ internal sealed record RuntimeDiffOptions(string Member, ulong Seed, int Cases, 
     public static RuntimeDiffOptions? Parse(IReadOnlyList<string> args, out string error)
     {
         string? member = null, @out = null;
+        TargetRuntime from = DefaultFrom, to = DefaultTo;
         ulong seed = 0;
         int cases = DefaultCases;
         for (int i = 0; i < args.Count; i += 2)
@@ -31,6 +46,12 @@ internal sealed record RuntimeDiffOptions(string Member, ulong Seed, int Cases, 
                     break;
                 case "--out":
                     @out = value;
+                    break;
+                case "--from" when TargetRuntime.Parse(value) is { } parsedFrom:
+                    from = parsedFrom;
+                    break;
+                case "--to" when TargetRuntime.Parse(value) is { } parsedTo:
+                    to = parsedTo;
                     break;
                 case "--seed" when ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out ulong parsedSeed):
                     seed = parsedSeed;
@@ -57,6 +78,6 @@ internal sealed record RuntimeDiffOptions(string Member, ulong Seed, int Cases, 
         }
 
         error = string.Empty;
-        return new RuntimeDiffOptions(member, seed, cases, @out);
+        return new RuntimeDiffOptions(member, seed, cases, @out) { From = from, To = to };
     }
 }

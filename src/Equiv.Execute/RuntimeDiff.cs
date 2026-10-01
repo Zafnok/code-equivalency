@@ -1,24 +1,25 @@
 using System.Globalization;
 
+using Equiv.Core;
 using Equiv.Core.Execution;
 using Equiv.Execute.Inputs;
 
 namespace Equiv.Execute;
 
 /// <summary>
-/// <c>runtime-diff</c> (ADR 0035, ticket M3-032): runs every overload matching <c>--member</c> on .NET Framework 4.8 and
-/// on .NET 10 under a fixed culture set, and writes a report of the cases whose canonical outcomes differ. Exits
-/// <see cref="NoDivergence"/>, <see cref="Divergence"/>, or <see cref="UsageError"/>; a non-Windows OS is a usage error.
+/// <c>runtime-diff</c> (ADR 0035, ADR 0040 decision 3; tickets M3-032, P2-056): runs every overload matching <c>--member</c>
+/// on the <c>--from</c> runtime and on the <c>--to</c> runtime (.NET Framework 4.8 and .NET 10 by default), each driver built
+/// by <paramref name="factories"/> for that pair, under a fixed culture set, and writes a report of the cases whose
+/// canonical outcomes differ. Exits <see cref="NoDivergence"/>, <see cref="Divergence"/>, or <see cref="UsageError"/>; a
+/// .NET Framework runtime off Windows is a usage error (<see cref="WindowsRequirement"/>).
 /// </summary>
-public sealed class RuntimeDiff(IExecutionDriverFactory factory, IDriverHost host, TextWriter output, TextWriter error)
+public sealed class RuntimeDiff(Func<TargetRuntime, TargetRuntime, IExecutionDriverFactory> factories, IDriverHost host, TextWriter output, TextWriter error)
 {
     public const int NoDivergence = 0;
 
     public const int Divergence = 1;
 
     public const int UsageError = 3;
-
-    public const string NeedsWindows = "runtime-diff needs Windows and .NET Framework 4.8 (ADR 0035)";
 
     /// <summary>The invariant culture, then en-US, tr-TR, de-DE and ja-JP.</summary>
     public static IReadOnlyList<string> Cultures => ["invariant", "en-US", "tr-TR", "de-DE", "ja-JP"];
@@ -30,12 +31,6 @@ public sealed class RuntimeDiff(IExecutionDriverFactory factory, IDriverHost hos
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        if (!isWindows)
-        {
-            error.WriteLine(NeedsWindows);
-            return UsageError;
-        }
-
         if (RuntimeDiffOptions.Parse(args, out string problem) is not { } options)
         {
             error.WriteLine(problem);
@@ -43,6 +38,13 @@ public sealed class RuntimeDiff(IExecutionDriverFactory factory, IDriverHost hos
             return UsageError;
         }
 
+        if (WindowsRequirement.Refusal(isWindows, [("--from", options.From.ToString()), ("--to", options.To.ToString())]) is { } refusal)
+        {
+            error.WriteLine("runtime-diff: " + refusal);
+            return UsageError;
+        }
+
+        IExecutionDriverFactory factory = factories(options.From, options.To);
         IReadOnlyList<ExecutionSignature> signatures = factory.Resolve(options.Member);
         if (signatures.Count == 0)
         {
@@ -54,7 +56,7 @@ public sealed class RuntimeDiff(IExecutionDriverFactory factory, IDriverHost hos
         List<OverloadReport> overloads = [];
         foreach ((ExecutionSignature signature, int index) in signatures.Select(static (s, i) => (s, i)))
         {
-            OverloadReport overload = Overload(signature, options, runner, Path.Combine(workDirectory, index.ToString(CultureInfo.InvariantCulture)));
+            OverloadReport overload = Overload(factory, signature, options, runner, Path.Combine(workDirectory, index.ToString(CultureInfo.InvariantCulture)));
             output.WriteLine(Summary(overload));
             overloads.Add(overload);
         }
@@ -68,7 +70,7 @@ public sealed class RuntimeDiff(IExecutionDriverFactory factory, IDriverHost hos
         return overloads.Exists(static o => o.Divergent > 0) ? Divergence : NoDivergence;
     }
 
-    private OverloadReport Overload(ExecutionSignature signature, RuntimeDiffOptions options, DriverRunner runner, string directory)
+    private static OverloadReport Overload(IExecutionDriverFactory factory, ExecutionSignature signature, RuntimeDiffOptions options, DriverRunner runner, string directory)
     {
         if (signature.NotConstructible.Count > 0)
         {

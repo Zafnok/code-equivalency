@@ -481,8 +481,8 @@ sort element, `null` where the model's `null.<Sort>` map holds it and otherwise 
 equal elements are equal strings; a `float`, `double` or `decimal` as the number `id`; any other
 reference type only as `null`. A static method is called directly, and an instance method on
 `new T()`, which needs a public parameterless constructor. Each side's project is emitted with its
-references beside it, and a driver calls the legacy method once on .NET Framework 4.8 and the
-modern method once on .NET 10, under the invariant culture, and also under `tr-TR` when either body
+references beside it, and a driver calls each side's method once on that side's project's detected
+runtime (`run.properties.runtimes`; ADR 0040 decision 3, P2-056), under the invariant culture, and also under `tr-TR` when either body
 calls a member of the runtime-changes table, as differential testing does (P2-038). The result carries
 `properties.replay`:
 - `reproduced`: the two canonical outcomes (M3-032's canonical form) differ under some culture;
@@ -506,6 +506,18 @@ calls a member of the runtime-changes table, as differential testing does (P2-03
   so the driver's `new T()` or an argument is not the model's (P2-038); or a side gives no
   comparable outcome. These come before `not-applicable`, so `not-reproduced` always means the
   model was wrong.
+
+Each driver is built for its side's runtime: on .NET Framework an `.exe` with an `app.config` whose
+`supportedRuntime` sku names that version, compiled at C# 7.3; on .NET a `.dll` with a
+`runtimeconfig.json` naming its own `net<v>` and the installed framework version with
+`rollForward: Disable`, compiled at the C# version that runtime ships with. A same-runtime pair runs
+both sides on that one runtime. A project hosted on several runtimes runs on the first in
+`runtimes` order. A runtime that is not installed makes that side `not-constructible` with
+`replayReason` `runtime <tfm> not installed`, as does a project with no detected runtime (an unhosted
+`netstandard` one); another runtime is never used in its place. `--execute` needs Windows only when
+some loaded project runs on .NET Framework; otherwise it exits 3 naming the project and its runtime
+(`error: --execute: <project> runs on <tfm>, and .NET Framework needs Windows (ADR 0040)`), and
+`equiv mcp`'s `probe` refuses such a pair with the same message.
 
 Replay never changes the verdict, the rule id, the fingerprint or the exit code, and a run without
 `--execute` runs no code and writes no `replay`.

@@ -12,11 +12,13 @@ using Microsoft.CodeAnalysis.Emit;
 namespace Equiv.Frontend.CSharp.Execution;
 
 /// <summary>
-/// Resolves a BCL member against each runtime's reference assemblies and compiles its driver twice (ADR 0035, ticket
-/// M3-032): a .NET Framework 4.8 console executable with an <c>app.config</c> naming <c>supportedRuntime v4.0</c>, and
-/// a .NET 10 console assembly with a <c>runtimeconfig.json</c>, run through <c>dotnet</c>. The Windows Desktop assemblies
-/// (<c>System.Windows.Forms</c>, <c>System.Drawing</c>) count as the runtime on both sides (ticket P2-051): a .NET 10
-/// driver that uses one targets <c>net10.0-windows</c> and runs on <c>Microsoft.WindowsDesktop.App</c>. Members are named by their
+/// Resolves a BCL member against each side's runtime's reference assemblies and compiles its driver for that runtime (ADR
+/// 0035, ADR 0040 decision 3; tickets M3-032, P2-056): an <c>.exe</c> with an <c>app.config</c> for .NET Framework, a
+/// <c>.dll</c> with a <c>runtimeconfig.json</c> for .NET, run through <c>dotnet</c> (<see cref="DriverRuntime"/>). The
+/// defaults are .NET Framework 4.8 against .NET 10. A runtime that is not installed makes every member not constructible,
+/// with the reason <c>runtime &lt;tfm&gt; not installed</c>. The Windows Desktop assemblies (<c>System.Windows.Forms</c>,
+/// <c>System.Drawing</c>) count as the runtime on both sides (ticket P2-051): a .NET driver that uses one targets
+/// <c>net&lt;v&gt;-windows</c> and runs on <c>Microsoft.WindowsDesktop.App</c>. Members are named by their
 /// <see cref="CallIdentity"/> (<see cref="RoslynIdentity"/>), so a runtime-changes row's prefix selects them directly. Each
 /// driver's source is written beside it as <c>EquivDriver.cs</c>, for whoever reads a witness.
 /// </summary>
@@ -24,59 +26,57 @@ public sealed class DriverFactory : IExecutionDriverFactory
 {
     private const string AssemblyName = "EquivDriver";
 
-    internal const string AppConfig = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <configuration>
-          <startup>
-            <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" />
-          </startup>
-        </configuration>
-        """;
-
-    internal const string RuntimeConfig = """
-        {
-          "runtimeOptions": {
-            "tfm": "net10.0",
-            "framework": { "name": "Microsoft.NETCore.App", "version": "10.0.0" }
-          }
-        }
-        """;
-
-    internal const string DesktopRuntimeConfig = """
-        {
-          "runtimeOptions": {
-            "tfm": "net10.0-windows",
-            "framework": { "name": "Microsoft.WindowsDesktop.App", "version": "10.0.0" }
-          }
-        }
-        """;
-
     /// <summary>Why a member whose receiver or parameter is a window, or that drives the desktop session, is not run.</summary>
     internal const string NeedsWindow = "needs a live window handle or a message loop";
 
-    private readonly Lazy<Runtime> legacy;
+    private readonly Lazy<Runtime?> legacy;
 
-    private readonly Lazy<Runtime> modern;
+    private readonly Lazy<Runtime?> modern;
 
-    /// <summary>A factory over the installed reference assemblies, located on first use.</summary>
+    private readonly TargetRuntime legacyTarget;
+
+    private readonly TargetRuntime modernTarget;
+
+    /// <summary>A factory for .NET Framework 4.8 against .NET 10 over the installed runtimes, located on first use.</summary>
     public DriverFactory()
-        : this(DriverReferences.Installed)
+        : this(DefaultLegacy, DefaultModern)
     {
     }
 
-    internal DriverFactory(Func<DriverReferences> references)
+    /// <summary>A factory for <paramref name="legacy"/> against <paramref name="modern"/> over the installed runtimes, located on first use.</summary>
+    public DriverFactory(TargetRuntime legacy, TargetRuntime modern)
+        : this(legacy, modern, static target => DriverReferences.Installed().For(target))
     {
-        Lazy<DriverReferences> located = new(references);
-        legacy = new(() => new Runtime(".NET Framework 4.8", located.Value.Legacy, [], LanguageVersion.CSharp7_3));
-        modern = new(() => new Runtime(".NET 10", located.Value.Modern, located.Value.Desktop, LanguageVersion.Latest));
     }
+
+    internal DriverFactory(TargetRuntime legacy, TargetRuntime modern, Func<TargetRuntime, DriverRuntime?> locate)
+    {
+        ArgumentNullException.ThrowIfNull(legacy);
+        ArgumentNullException.ThrowIfNull(modern);
+
+        legacyTarget = legacy;
+        modernTarget = modern;
+        this.legacy = new(() => locate(legacy) is { } runtime ? new Runtime(runtime) : null);
+        this.modern = new(() => locate(modern) is { } runtime ? new Runtime(runtime) : null);
+    }
+
+    /// <summary>The runtime <c>runtime-diff</c> runs its legacy side on without <c>--from</c>.</summary>
+    public static TargetRuntime DefaultLegacy { get; } = new(TargetRuntime.RuntimeFamily.NetFramework, new Version(4, 8));
+
+    /// <summary>The runtime <c>runtime-diff</c> runs its modern side on without <c>--to</c>.</summary>
+    public static TargetRuntime DefaultModern { get; } = new(TargetRuntime.RuntimeFamily.NetCore, new Version(10, 0));
 
     public IReadOnlyList<ExecutionSignature> Resolve(string member)
     {
         ArgumentNullException.ThrowIfNull(member);
 
-        Dictionary<string, IMethodSymbol> old = Members(legacy.Value, member);
-        Dictionary<string, IMethodSymbol> @new = Members(modern.Value, member);
+        if (Missing() is { } missing)
+        {
+            return [new ExecutionSignature(new CallIdentity(member), [], [missing])];
+        }
+
+        Dictionary<string, IMethodSymbol> old = Members(legacy.Value!, member);
+        Dictionary<string, IMethodSymbol> @new = Members(modern.Value!, member);
         return [.. @new.Keys.Where(old.ContainsKey).Order(StringComparer.Ordinal).Select(id => Describe(id, @new[id], old[id]))];
     }
 
@@ -84,13 +84,30 @@ public sealed class DriverFactory : IExecutionDriverFactory
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        string legacyDriver = Path.Combine(directory, "legacy", AssemblyName + ".exe");
-        Emit(legacy.Value, request.Member.Value, legacyDriver);
-        File.WriteAllText(legacyDriver + ".config", AppConfig);
-        string modernDriver = Path.Combine(directory, "modern", AssemblyName + ".dll");
-        bool desktop = Emit(modern.Value, request.Member.Value, modernDriver);
-        File.WriteAllText(Path.ChangeExtension(modernDriver, ".runtimeconfig.json"), desktop ? DesktopRuntimeConfig : RuntimeConfig);
-        return new ExecutionDrivers(legacyDriver, modernDriver);
+        return Missing() is { } missing
+            ? throw new InvalidOperationException(missing)
+            : new ExecutionDrivers(
+                Driver(legacy.Value!, request.Member.Value, Path.Combine(directory, "legacy")),
+                Driver(modern.Value!, request.Member.Value, Path.Combine(directory, "modern")));
+    }
+
+    /// <summary>The not-constructible reason for a runtime that is not installed (ADR 0040 decision 3).</summary>
+    internal static string NotInstalled(TargetRuntime runtime) => $"runtime {runtime} not installed";
+
+    /// <summary>The reason no driver can be built, when a side's runtime or its reference assemblies are not installed.</summary>
+    private string? Missing() => (legacy.Value, modern.Value) switch
+    {
+        (null, _) => NotInstalled(legacyTarget),
+        (_, null) => NotInstalled(modernTarget),
+        _ => null,
+    };
+
+    /// <summary>Compiles the driver for <paramref name="identity"/> into <paramref name="directory"/>, with its runtime's configuration beside it.</summary>
+    private static string Driver(Runtime runtime, string identity, string directory)
+    {
+        string path = Path.Combine(directory, AssemblyName + runtime.Host.Extension);
+        runtime.Host.WriteConfig(path, Emit(runtime, identity, path));
+        return path;
     }
 
     /// <summary>What the input generators can build for <paramref name="type"/>.</summary>
@@ -236,7 +253,7 @@ public sealed class DriverFactory : IExecutionDriverFactory
     {
         if (!Members(runtime, identity).TryGetValue(identity, out IMethodSymbol? method))
         {
-            throw new InvalidOperationException($"{identity} is not a public member on {runtime.Name}");
+            throw new InvalidOperationException($"{identity} is not a public member on {runtime.Host.Target}");
         }
 
         string source = DriverSource.Generate(method);
@@ -252,7 +269,7 @@ public sealed class DriverFactory : IExecutionDriverFactory
         if (!result.Success)
         {
             IEnumerable<Diagnostic> errors = result.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error);
-            throw new InvalidOperationException($"the {runtime.Name} driver for {identity} does not compile: {string.Join("; ", errors)}");
+            throw new InvalidOperationException($"the {runtime.Host.Target} driver for {identity} does not compile: {string.Join("; ", errors)}");
         }
 
         return compilation.GetUsedAssemblyReferences().OfType<PortableExecutableReference>().Any(r => runtime.Desktop.Contains(r.FilePath!));
@@ -261,29 +278,24 @@ public sealed class DriverFactory : IExecutionDriverFactory
     /// <summary>
     /// One runtime's reference assemblies, as an empty compilation that driver source is added to. A Windows Desktop
     /// assembly replaces the base pack's one of the same file name (<c>System.Drawing.dll</c>, <c>WindowsBase.dll</c>),
-    /// as the SDK's conflict resolution does for a <c>net10.0-windows</c> project.
+    /// as the SDK's conflict resolution does for a <c>net&lt;v&gt;-windows</c> project.
     /// </summary>
     private sealed class Runtime
     {
-        public Runtime(string name, IReadOnlyList<string> references, IReadOnlyList<string> desktop, LanguageVersion languageVersion)
+        public Runtime(DriverRuntime host)
         {
-            if (references.Count == 0)
-            {
-                throw new InvalidOperationException($"no {name} reference assemblies are installed");
-            }
-
-            Name = name;
-            Desktop = new HashSet<string>(desktop, StringComparer.OrdinalIgnoreCase);
-            HashSet<string> replaced = new(desktop.Select(static d => Path.GetFileName(d)), StringComparer.OrdinalIgnoreCase);
-            Parse = new CSharpParseOptions(languageVersion);
+            Host = host;
+            Desktop = new HashSet<string>(host.Desktop, StringComparer.OrdinalIgnoreCase);
+            HashSet<string> replaced = new(host.Desktop.Select(static d => Path.GetFileName(d)), StringComparer.OrdinalIgnoreCase);
+            Parse = new CSharpParseOptions(host.Language);
             Probe = CSharpCompilation.Create(
                 AssemblyName,
                 [],
-                [.. references.Where(r => !replaced.Contains(Path.GetFileName(r))).Concat(desktop).Select(static r => MetadataReference.CreateFromFile(r))],
+                [.. host.References.Where(r => !replaced.Contains(Path.GetFileName(r))).Concat(host.Desktop).Select(static r => MetadataReference.CreateFromFile(r))],
                 new CSharpCompilationOptions(OutputKind.ConsoleApplication, optimizationLevel: OptimizationLevel.Release, deterministic: true));
         }
 
-        public string Name { get; }
+        public DriverRuntime Host { get; }
 
         /// <summary>The Windows Desktop reference assemblies' paths.</summary>
         public HashSet<string> Desktop { get; }

@@ -52,21 +52,25 @@ public sealed class CompareExecuteTests
         Assert.All(log!.Runs[0].Results, static r => Assert.False(r.TryGetProperty("replay", out string? _)));
     }
 
+    /// <summary>Ticket P2-056 criterion 3: off Windows, a side on .NET Framework stops the run once loaded, naming the project and its runtime.</summary>
     [Fact]
-    public void Execute_NonWindows_ExitsThree()
+    public void Execute_NonWindows_AFrameworkSideExitsThree()
     {
         FakeReplay replay = new(Threw, OtherThrew);
-        FakeFrontend frontend = new("csharp", _ => true, Match(), replay: replay);
+        FakeFrontend frontend = new(
+            "csharp", _ => true, Match(), replay: replay, legacyRuntimes: [("App", "net8.0", "attribute"), ("Old", "net472", "attribute")], modernRuntimes: [("App", "net8.0", "attribute")]);
+        InMemoryReportSink sink = new();
         using TempFile legacy = new();
         using TempFile modern = new();
         int exitCode = 0;
 
         string error = CaptureStdErr(() => exitCode = CompareCommand.Run(
-            Options(legacy.Path, modern.Path, execute: true), [frontend], Backend(), new InMemoryReportSink(), NullRunLog.Instance, new ExecutionEnvironment(IsWindows: false, replay)));
+            Options(legacy.Path, modern.Path, execute: true), [frontend], Backend(), sink, NullRunLog.Instance, new ExecutionEnvironment(IsWindows: false, replay)));
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
-        Assert.Equal("error: --execute needs Windows and .NET Framework 4.8 (ADR 0035)" + Environment.NewLine, error);
-        Assert.Equal(0, frontend.AnalyzeCallCount);
+        Assert.Equal("error: --execute: Old runs on net472, and .NET Framework needs Windows (ADR 0040)" + Environment.NewLine, error);
+        Assert.Null(sink.Log);
+        Assert.Empty(replay.Creates);
     }
 
     [Fact]
@@ -84,14 +88,14 @@ public sealed class CompareExecuteTests
         Assert.All(log!.Runs[0].Results, static r => Assert.False(r.TryGetProperty("replay", out string? _)));
     }
 
-    /// <summary>With no environment given, <c>--execute</c> runs on this machine: on Windows it prints the note, elsewhere it refuses.</summary>
+    /// <summary>With no environment given, <c>--execute</c> runs on this machine; with no side on .NET Framework it prints the note on any OS.</summary>
     [Fact]
     public void Execute_WithoutAnEnvironment_UsesThisMachine()
     {
         (int exitCode, string error, _) = Compare(execute: true, replay: null, execution: null);
 
-        Assert.Equal(OperatingSystem.IsWindows() ? ExitCodes.Divergent : ExitCodes.UsageError, exitCode);
-        Assert.StartsWith(OperatingSystem.IsWindows() ? ExecutionEnvironment.Note : ExecutionEnvironment.NeedsWindows, error, StringComparison.Ordinal);
+        Assert.Equal(ExitCodes.Divergent, exitCode);
+        Assert.StartsWith(ExecutionEnvironment.Note, error, StringComparison.Ordinal);
     }
 
     /// <summary>Both sides throwing where the model's runs return means the driver's inputs are not the model's (ticket P2-038).</summary>

@@ -18,7 +18,7 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// arrays and <c>List&lt;T&gt;</c> of those element-wise, a <c>System.Drawing</c> point, size or rectangle as the array of
 /// its components (ticket P2-051), and an exception as its type's full name. The expression that
 /// canonicalises the result is chosen from the member's static return type, so there is no reflection. The source is
-/// C# 7.3, the newest the .NET Framework 4.8 side compiles by default.
+/// C# 7.3, the newest a .NET Framework side compiles by default, so one template serves every runtime (ticket P2-056).
 /// </summary>
 internal static class DriverSource
 {
