@@ -1,5 +1,5 @@
 # P2-062 An opaque fragment in `properties.abstractions` names its reason
-Status: in-progress
+Status: done (PR #317)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-046
