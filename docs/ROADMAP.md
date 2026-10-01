@@ -457,7 +457,7 @@ work, P2-050, P1-019, P2-051 and P2-052.
   Spacer proved a pair that rungs 1 and 3 refute, CsCheck seed `4FfExD8adOs4`). Needs P1-001.
 - P2-060 (M) A call writes only the heap its callee can reach, so `String.Concat` cannot change a
   user field (a false Divergent P1-017's IL gate found). Needs P1-017.
-- P2-068 (M) A Divergent that rests on a closed BCL call's `threw` flag or result, one the real member
+- P2-081 (M) A Divergent that rests on a closed BCL call's `threw` flag or result, one the real member
   cannot give, is not EQ002 (the gate's nightly budget, found by P2-060). Needs P2-060.
 
 ### Runtimes are detected, not assumed (ADR 0040)
