@@ -1,5 +1,5 @@
 # P2-069 An unchanged call site that a dependency upgrade rebinds is still the same call
-Status: in-progress
+Status: done (PR #326)
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-047
