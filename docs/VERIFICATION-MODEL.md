@@ -471,7 +471,9 @@ and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace even
 fragment's calls. Taint follows data, and a branch on a tainted value taints the rest of that side. The result is Divergent only when a compared observable differs and is
 untainted on both sides. Otherwise it is Unknown with reason `Abstraction`, carrying the model
 as `properties.candidateCounterexample` and the abstractions it depends on as
-`properties.abstractions`.
+`properties.abstractions`. Each entry has an `identity` (an `IrPure` operator name, or
+`opaque:<fingerprint>`), a `side` and, when known, a `span`; an `opaque:` entry also has `reason`, the
+fragment's `IrOpaque` reason, for example `DelegateCreation` (ticket P2-062).
 
 With `equiv compare --execute`, every Divergent is also replayed on the two real runtimes, the
 second oracle of ADR 0035 (decision 2; ticket M4-009). Its model's inputs are bound back to each
