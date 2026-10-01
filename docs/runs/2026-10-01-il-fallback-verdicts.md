@@ -3,11 +3,17 @@
 Question: how many changed pairs does `--il-fallback` (ADR 0039) move from Unknown(opaque) to a
 decided verdict, and is that at least 5% of changed pairs?
 
-**Answer: 21 of 1,294 changed pairs (1.6%). The fallback stays off by default.** It moves 21 pairs
-from Unknown(opaque) to Equivalent and 21 to Divergent. None of those Divergents is reproduced by
-replay, so none counts. Even if all 21 counted, the gain would be 42 pairs (3.2%), under the bar
-of 65. No pair that is Equivalent without the fallback is Divergent or crashes with it. One pair
-lowered from IL crashes the solver (P2-078), and one Divergent becomes Unknown(timeout).
+**Answer: 21 of 1,294 changed pairs (1.6%) by the tool's count, and 1 (0.1%) that is a sound proof.
+The fallback stays off by default.** It moves 21 pairs from Unknown(opaque) to Equivalent and 21 to
+Divergent. None of those Divergents is reproduced by replay, so none counts. Even if all 21 counted,
+the gain would be 42 pairs (3.2%), under the bar of 65. No pair that is Equivalent without the
+fallback is Divergent or crashes with it. One pair lowered from IL crashes the solver (P2-078), and
+one Divergent becomes Unknown(timeout).
+
+**A hand check of the 21 new Equivalents found a soundness bug (P2-079).** 20 of the 21 rest on an
+opaque fragment that names a lambda, a local function or a runtime-changed method group without
+looking at what it does. A repro confirms that two different lambdas prove Equivalent. See "Hand
+check of the 21 new Equivalents" below.
 
 ## Setup
 - Pair: human, gitextensions/gitextensions PR #8522, legacy 3f4ed21998af, modern 5190ba5c1a5f
@@ -182,6 +188,66 @@ numbers. The spike's lowerability estimate held: changed pairs without opaque ri
 changed pairs). What ADR 0039 warned of also held: lowerable is not proved. Of the 73 IL-lowered
 pairs that were Unknown(opaque), 31 are still Unknown.
 
+## Hand check of the 21 new Equivalents
+Added after the measurement, at the user's request. Each of the 21 pairs was read on both sides
+(`.corpus/`, not committed) and its member diffed.
+
+**What the IL lowering does.** `IlFragment` fingerprints an opaque ILAst instruction by its text. A
+lambda or local function appears there by its compiler-generated name, an ordinal, and its body is
+not part of the text. So both sides get one fingerprint whatever the two bodies do, ADR 0024 shares
+the fragment as one call, and the pair proves. The runtime-change check covers the calls in the
+fragment itself, not those in the lambda's body. `ldftn` of a named method becomes a constant from
+its call identity, and its `RuntimeChanged` flag is ignored. The IOperation fingerprint serialises
+lambda bodies and refuses runtime-sensitive ones, which is why these pairs were Unknown(opaque:
+`DelegateCreation`) without the fallback. No result in the SARIF names a lambda or a local function,
+so their bodies are verified nowhere else.
+
+**Repro.** Two .NET Framework 4.8 projects written for the check, identical except that a
+`this`-capturing lambda computes `_x + 1` on one side and `_x + 2` on the other. Without the
+fallback the two methods that create it are Unknown(opaque). With it both are `EQ001`,
+`proofMethod: bounded`, `lowering: il`. That is a false Equivalent. P2-079 has the code.
+
+| what the proof rests on | pairs |
+|---|---|
+| a lambda or local function whose body was never read | 19 |
+| of those: the unread code differs between the sides | 2 |
+| of those: the unread code calls a member that `runtime-changes.json` names (by member name; overloads not checked) | at least 9 |
+| a method group for `System.Char::IsLetter`, a `runtime-changes.json` row, lowered as a plain constant | 1 |
+| no delegate at all: a sound proof | 1 |
+
+| procedure | construct | source of the member differs? |
+|---|---|---|
+| `CommonTestUtils.GitModuleTestHelper::GetSubmodulesRecursive()` | lambda | no |
+| `GitCommands.ExternalLinks.ExternalLinkDefinition::set_NestedSearchPattern(string)` | lambda (constructs a `Regex`) | no |
+| `GitCommands.ExternalLinks.ExternalLinkDefinition::set_RemoteSearchPattern(string)` | lambda (constructs a `Regex`) | no |
+| `GitCommands.ExternalLinks.ExternalLinkDefinition::set_SearchPattern(string)` | lambda (constructs a `Regex`) | no |
+| `GitCommands.ExternalLinks.ExternalLinkDefinition::set_UseRemotesPattern(string)` | lambda (constructs a `Regex`) | no |
+| `GitCommands.Settings.RepoDistSettings::SetValue<T>(string,T,System.Func<T, string>)` | none (was `switch-pattern`) | no |
+| `GitExtensions.Plugins.GitStatistics.FormGitStatistics::InitializeLinesOfCode()` | lambda and local functions | no |
+| `GitExtensions.UITests.CommandsDialogs.FormBrowse_LeftPanel_ReorderNodesTest::RepoObjectTree_moving_first_up_and_last_down_does_nothing()` | lambda | no |
+| `GitExtensions.UITests.CommandsDialogs.FormBrowse_LeftPanel_ReorderNodesTest::RepoObjectTree_moving_node_across_hidden_trees_skips_them()` | lambda | no |
+| `GitExtensions.UITests.CommandsDialogs.FormBrowse_LeftPanel_ReorderNodesTest::RepoObjectTree_moving_node_legally_moves_it()` | lambda | no |
+| `GitExtensions.UITests.CommandsDialogs.FormBrowse_LeftPanel_SubmodulesTests::RepoObjectTree_should_show_all_submodules()` | `async` lambda | no |
+| `GitExtensions.UITests.Script.ScriptRunnerTests::RunScript_with_arguments_with_s_option_with_RevisionGrid_without_selection_shall_display_error_and_return_false()` | lambda | no |
+| `GitExtensions.UITests.UserControls.CommitInfo.CommitInfoTests::GetSortedTags_should_throw_on_git_warning()` | lambda | no |
+| `GitUI.CommandsDialogs.BrowseDialog.FormUpdates::btnUpdateNow_Click(object,System.EventArgs)` | `async` lambda | no |
+| `GitUI.CommandsDialogs.FormBrowse::FillTerminalTab()` | event-handler lambda | no |
+| `GitUI.CommandsDialogs.FormFileHistory::LoadFileHistory()` | lambdas and a local function | **yes**, in the local function |
+| `GitUI.CommandsDialogs.FormReflog::Branches_SelectedIndexChanged(object,System.EventArgs)` | `async` local function as a method group | no |
+| `GitUI.CommandsDialogs.RepoHosting.ForkAndCloneForm::Init()` | `async` lambda | **yes**, in the lambda |
+| `GitUI.FindAndReplaceForm::btnReplace_Click(object,System.EventArgs)` | `async` lambda | no |
+| `GitUI.UserControls.RevisionGrid.Columns.MessageColumnProvider::SortRefs(System.Collections.Generic.IEnumerable<global::GitUIPluginInterfaces.IGitRef>)` | local function as a method group | no |
+| `ResourceManager.Xliff.TranslationUtil::AllowTranslateProperty(string)` | method group for `System.Char::IsLetter` | no |
+
+**What was and was not found.** No behavioural difference was found in any of the 21. In the two
+pairs whose unread code differs, the change replaces `GitExtUtils.Strings::IsNullOrEmpty(string)`,
+a one-line forwarder, with `System.String::IsNullOrEmpty(string)`, so the two sides do the same. In
+the other 18 the member's source is the same on both sides. Why each of those is a changed pair was
+not traced. So 20 verdicts are unproved, not shown wrong, and one is a proof. The check read source only. It did not run the code or compare how calls bind on each side.
+
+**What this does to the gain.** Counting sound proofs only, the gain is 1 pair (0.1%). The 21
+Divergents were not hand-checked.
+
 ## Noise between the two measured runs
 Seven pairs the fallback did not lower changed verdict between the runs. Six moved to or from a
 timeout: Unknown(abstraction) to Unknown(timeout) 2, and one each of Unknown(timeout) to
@@ -191,7 +257,12 @@ Unknown(unaligned-loop). This fits a wall-clock budget under shared load (P2-050
 cause was checked. None is counted above.
 
 ## Findings
-- The gain is 1.6%, under the 5% bar: the fallback stays off by default (this ticket).
+- The gain is 1.6% by the tool's count and 0.1% in sound proofs, under the 5% bar either way: the
+  fallback stays off by default (this ticket).
+- Soundness: the IL lowering shares an opaque that names a lambda, a local function or a
+  runtime-changed method group without its body, so two different lambdas prove Equivalent. 20 of
+  the 21 new Equivalents rest on it: P2-079. P1-017's gate did not catch it, because its generated
+  pairs hold no lambda.
 - An IL-lowered pair crashes the encoder with a sort mismatch, and one IL-lowered Divergent becomes
   Unknown(timeout): P2-078.
 - Six pairs that end Unknown take 5.4 of the 6.8 verify hours, and about two more hours follow in a

@@ -82,3 +82,9 @@ already decides.
   to speed up migration runs without ending any pair early.
 - Decision: the report is dated 2026-10-01, the day the runs finished and it was written. The runs
   started 2026-09-30, and their directories carry that date.
+- After the PR opened, the user asked for a hand check of the 21 new Equivalents. It found a soundness
+  bug in the IL lowering: an opaque that names a lambda or local function is shared without its
+  body, so two different lambdas prove Equivalent (repro in P2-079). 20 of the 21 rest on it, and in
+  two of them the unread code differs between the sides. No behavioural difference was found in any
+  of the 21. The sound gain is 1 pair (0.1%). The report has the per-pair table. The decision does not
+  change: the default stays off.

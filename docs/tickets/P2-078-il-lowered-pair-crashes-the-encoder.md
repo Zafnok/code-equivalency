@@ -54,7 +54,7 @@ More than one ILAst shape changed means the ticket has been misread. Other ill-s
 criterion 4 now catches are findings: list them in `## Notes`.
 
 ## Out of scope
-Turning `--il-fallback` on by default. The Divergents the fallback adds (P2-073 to P2-075 own the
+Turning `--il-fallback` on by default. The soundness bug in the IL fragment fingerprint (P2-079, which goes first). The Divergents the fallback adds (P2-073 to P2-075 own the
 runtime rows they cite). Timeouts on IL-lowered pairs (P2-050).
 
 ## Notes
