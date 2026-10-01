@@ -72,19 +72,8 @@ internal static class MethodSeeder
     /// (ticket P2-063). Every line before it is the same in both files, so the number names the same line on either
     /// side; an operator that rewrites several lines reports the first.
     /// </summary>
-    private static int FirstChangedLine(string original, string mutated)
-    {
-        int line = 1;
-        for (int i = 0; i < Math.Min(original.Length, mutated.Length) && original[i] == mutated[i]; i++)
-        {
-            if (original[i] == '\n')
-            {
-                line++;
-            }
-        }
-
-        return line;
-    }
+    private static int FirstChangedLine(string original, string mutated) =>
+        1 + original.AsSpan(0, original.AsSpan().CommonPrefixLength(mutated)).Count('\n');
 
     private static (MutationOperator Operator, int Site)? ChooseOperator(MethodDeclarationSyntax method, IReadOnlyList<MutationOperator> order, Random random)
     {

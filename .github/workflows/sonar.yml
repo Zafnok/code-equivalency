@@ -60,6 +60,7 @@ jobs:
           /d:sonar.exclusions="samples/**,**/bin/**,**/obj/**"
           /d:sonar.coverage.exclusions="samples/**"
           /d:sonar.cs.opencover.reportsPaths="TestResults/**/*.opencover.*.xml"
+          /d:sonar.coverageReportPaths="TestResults/pester-coverage.xml"
 
       # -SonarBuild: the analyzer injected by `begin` would otherwise turn its own
       # findings into compiler errors (-warnaserror) and formatting diffs
@@ -69,6 +70,12 @@ jobs:
       - name: Build and test
         shell: pwsh
         run: ./build.ps1 -SonarBuild
+
+      # PowerShell coverage (P2-063): the Pester tests under tools/, as Sonar generic coverage.
+      # After the build, whose test step clears TestResults/.
+      - name: Pester tests with coverage
+        shell: pwsh
+        run: ./.github/scripts/pester-coverage.ps1
 
       - name: Sonar end
         env:

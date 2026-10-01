@@ -51,10 +51,14 @@ The seed operators themselves, recall thresholds.
 - Decision: an EQ003 result with no `unknownReason` (a SARIF older than the property) prints as `n/a`, like
   every other absent property in `-Metrics`; the first-word-of-the-message fallback is gone.
 - `-Metrics` is tested by `tools/corpus/tests/Metrics.Tests.ps1` (Pester, next to M4-015's
-  `Progress.Tests.ps1`) on a six-result fixture SARIF. Neither Pester file runs in CI.
-- Sonar's new-code coverage condition failed on this PR (64.3%, needs 80%): it counts the 9 new lines of
-  `corpus.ps1` as uncovered, because no PowerShell coverage is imported (`sonar.yml` excludes only
-  `samples/**` from coverage). Sonar is informational (QUALITY-GATES.md), and its configuration was left
-  alone. Any PR that is mostly `.ps1` will fail the same way.
+  `Progress.Tests.ps1`) on a six-result fixture SARIF.
+- Sonar's new-code coverage condition failed on this PR (64.3%, needs 80%; 37.5% once the Pester test was
+  added): no PowerShell coverage was imported, so every new `.ps1` line counted as uncovered.
+- Deviation: two files outside this ticket's Files, to give Sonar that coverage. `sonar.yml` now runs
+  `.github/scripts/pester-coverage.ps1` after the build: it runs every `tools/**/*.Tests.ps1` with Pester
+  code coverage over `tools/corpus/corpus.ps1` and the test files, fails if a test fails, and writes
+  `TestResults/pester-coverage.xml` in Sonar's generic coverage format (`sonar.coverageReportPaths`). This
+  is the first CI run of the Pester tests. Nothing is excluded, so the rest of `corpus.ps1` now shows as
+  uncovered in Sonar's overall figure (about 30% of its commands run under the two test files).
 - `powershell -File tools/corpus/corpus.ps1` from Git Bash fails on this box's execution policy; run it
   from a PowerShell session instead.
