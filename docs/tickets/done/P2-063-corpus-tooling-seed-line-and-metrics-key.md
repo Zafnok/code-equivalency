@@ -50,7 +50,11 @@ The seed operators themselves, recall thresholds.
   difference is later than the removed line; that is the size guard's "record the first".
 - Decision: an EQ003 result with no `unknownReason` (a SARIF older than the property) prints as `n/a`, like
   every other absent property in `-Metrics`; the first-word-of-the-message fallback is gone.
-- `-Metrics` was checked by hand on a six-result SARIF (`corpus.ps1` has no test harness): it printed
-  `abstraction 3` with `whole 2`, `partial 1` under it, then `n/a 1` and `timeout 1`.
+- `-Metrics` is tested by `tools/corpus/tests/Metrics.Tests.ps1` (Pester, next to M4-015's
+  `Progress.Tests.ps1`) on a six-result fixture SARIF. Neither Pester file runs in CI.
+- Sonar's new-code coverage condition failed on this PR (64.3%, needs 80%): it counts the 9 new lines of
+  `corpus.ps1` as uncovered, because no PowerShell coverage is imported (`sonar.yml` excludes only
+  `samples/**` from coverage). Sonar is informational (QUALITY-GATES.md), and its configuration was left
+  alone. Any PR that is mostly `.ps1` will fail the same way.
 - `powershell -File tools/corpus/corpus.ps1` from Git Bash fails on this box's execution policy; run it
   from a PowerShell session instead.
