@@ -135,6 +135,7 @@
             "resultFingerprint/v1": "abef246bad2517d8d4dfe9581bb196daee2635833c121b11111ed2789f59385a"
           },
           "baselineState": "new",
+          "rank": 60.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())",
             "ladderTrace": [
@@ -146,7 +147,8 @@
             ],
             "equivalencesApplied": [
               "bcl.string-contains-char"
-            ]
+            ],
+            "reviewGroup": "calls:System.String::Contains(char)"
           }
         }
       ],
@@ -227,7 +229,18 @@
               "source": "attribute"
             }
           ]
-        }
+        },
+        "reviewList": [
+          {
+            "group": "calls:System.String::Contains(char)",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.ApiDrift.Text::HasX(string)"
+            ]
+          }
+        ]
       }
     }
   ]
