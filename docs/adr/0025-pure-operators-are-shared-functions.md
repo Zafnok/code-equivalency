@@ -56,3 +56,12 @@ the heap or on position.
   CsCheck generators gain one instruction (the `equiv-extend-ir` skill).
 - VERIFICATION-MODEL section 2 (instruction table, types paragraph) and section 5 changed in the PR that accepted this ADR.
 - Ticket: M4-002. It depends on M3-016.
+
+## Clarifications
+- 2026-10-01 (P2-067). **The catalogue gains `delegate:<fingerprint>`.** A lambda, a static method
+  or a method of `this` converted to a delegate is a deterministic function of the variables the
+  conversion reads, raises nothing and reads no heap, which is what the Decision asks of an `IrPure`.
+  Its name is ADR 0024's fingerprint of the conversion (see that ADR's clarification of the same
+  date), so both sides share it exactly when their bound trees are equal, and two different lambdas
+  are Unknown(Abstraction) under ADR 0026, as rewritten arithmetic is. It is never side-specific: a
+  runtime-sensitive lambda has no fingerprint and stays opaque.
