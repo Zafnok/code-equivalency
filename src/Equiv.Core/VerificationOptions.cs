@@ -10,7 +10,9 @@ namespace Equiv.Core;
 /// call-identity unifications from <c>equiv.config.json</c>. <see cref="ChcIntMode"/> (<c>--chc-int-mode</c>, ticket
 /// P1-001) lets rung 4 of the loop ladder encode bitvectors as integers once it has proved that sound; it is on unless
 /// turned off. <see cref="InvariantModel"/> (<c>--invariant-model</c>, ticket P1-002) is the model rung 5 asks for a
-/// coupling invariant when rung 4 times out; rung 5 is skipped when it is null, the default. <see cref="Log"/> is where the
+/// coupling invariant when rung 4 times out; rung 5 is skipped when it is null, the default. <see cref="ResourceLimit"/>
+/// (<c>--resource-limit</c>, ticket P2-050) is Z3's deterministic <c>rlimit</c> for each query, which is what bounds a
+/// query on any machine; <see cref="TimeoutMs"/> is the wall-clock backstop behind it. <see cref="Log"/> is where the
 /// backend reports its progress (ADR 0038); it is not part of equality, since it never changes a verdict.
 /// </summary>
 public sealed record VerificationOptions(int Bound, int TimeoutMs, ImmutableDictionary<string, string> CallIdentityMap)
@@ -18,6 +20,8 @@ public sealed record VerificationOptions(int Bound, int TimeoutMs, ImmutableDict
     public bool ChcIntMode { get; init; } = true;
 
     public string? InvariantModel { get; init; }
+
+    public int ResourceLimit { get; init; } = EquivConfig.DefaultResourceLimit;
 
     public IRunLog Log { get; init; } = NullRunLog.Instance;
 
@@ -28,7 +32,8 @@ public sealed record VerificationOptions(int Bound, int TimeoutMs, ImmutableDict
             & (TimeoutMs == other.TimeoutMs) // NOSONAR
             & ConfigEquality.DictionaryEqual(CallIdentityMap, other.CallIdentityMap) // NOSONAR
             & (ChcIntMode == other.ChcIntMode) // NOSONAR
-            & string.Equals(InvariantModel, other.InvariantModel, StringComparison.Ordinal); // NOSONAR
+            & string.Equals(InvariantModel, other.InvariantModel, StringComparison.Ordinal) // NOSONAR
+            & (ResourceLimit == other.ResourceLimit); // NOSONAR
 
-    public override int GetHashCode() => HashCode.Combine(Bound, TimeoutMs, ConfigEquality.Hash(CallIdentityMap), ChcIntMode, InvariantModel);
+    public override int GetHashCode() => HashCode.Combine(Bound, TimeoutMs, ConfigEquality.Hash(CallIdentityMap), ChcIntMode, InvariantModel, ResourceLimit);
 }

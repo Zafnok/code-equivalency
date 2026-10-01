@@ -14,7 +14,7 @@ namespace Equiv.Core.Configuration;
 public static class EquivConfigLoader
 {
     private static readonly FrozenSet<string> KnownProperties =
-        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "suppressRuntimeChanges", "suppressApiEquivalences", "runtimes" }.ToFrozenSet(StringComparer.Ordinal);
+        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "resourceLimit", "suppressRuntimeChanges", "suppressApiEquivalences", "runtimes" }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Parses <paramref name="json"/> and validates it against the schema. Throws <see cref="EquivConfigParseException"/>
@@ -43,6 +43,7 @@ public static class EquivConfigLoader
         ImmutableDictionary<string, string> callIdentityRenames = ReadRenameMap(root, "callIdentityRenames", diagnostics);
         int bound = ReadPositiveInt(root, "bound", EquivConfig.Default.Bound, EquivConfigDiagnosticIds.InvalidBound, diagnostics);
         int timeoutMs = ReadPositiveInt(root, "timeoutMs", EquivConfig.Default.TimeoutMs, EquivConfigDiagnosticIds.InvalidTimeout, diagnostics);
+        int resourceLimit = ReadPositiveInt(root, "resourceLimit", EquivConfig.DefaultResourceLimit, EquivConfigDiagnosticIds.InvalidResourceLimit, diagnostics);
         ImmutableArray<string> suppressRuntimeChanges = ReadStringArray(root, "suppressRuntimeChanges", EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry, diagnostics);
         ImmutableArray<string> suppressApiEquivalences = ReadStringArray(root, "suppressApiEquivalences", EquivConfigDiagnosticIds.InvalidSuppressApiEquivalencesEntry, diagnostics);
         (TargetRuntime? legacyRuntime, TargetRuntime? modernRuntime) = ReadRuntimes(root, diagnostics);
@@ -53,6 +54,7 @@ public static class EquivConfigLoader
             SuppressApiEquivalences = suppressApiEquivalences,
             LegacyRuntime = legacyRuntime,
             ModernRuntime = modernRuntime,
+            ResourceLimit = resourceLimit,
         };
         return new EquivConfigResult(config, diagnostics.ToImmutable());
     }

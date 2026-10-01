@@ -11,7 +11,16 @@ namespace Equiv.Core.Configuration;
 /// </summary>
 public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, string> CallIdentityRenames, int Bound, int TimeoutMs)
 {
+    /// <summary>The default <see cref="ResourceLimit"/> (ticket P2-050; chosen from <c>docs/runs/2026-10-01-timeout-budget.md</c>).</summary>
+    public const int DefaultResourceLimit = 20_000_000;
+
     public static EquivConfig Default { get; } = new(RenameMap.Empty, [], Bound: 3, TimeoutMs: 5000);
+
+    /// <summary>
+    /// <c>resourceLimit</c> (ticket P2-050): Z3's <c>rlimit</c> for each solver query, a count of the solver's own steps, so
+    /// the same query gives up at the same point on every machine. <see cref="TimeoutMs"/> is the wall-clock backstop.
+    /// </summary>
+    public int ResourceLimit { get; init; } = DefaultResourceLimit;
 
     /// <summary>
     /// Runtime-changed-API member prefixes (ticket M2-006) whose
@@ -54,8 +63,9 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
             & IrEquality.SequenceEqual(SuppressApiEquivalences, other.SuppressApiEquivalences) // NOSONAR
             & (LegacyRuntime == other.LegacyRuntime) // NOSONAR
             & (ModernRuntime == other.ModernRuntime) // NOSONAR
-            & (IlFallback == other.IlFallback); // NOSONAR
+            & (IlFallback == other.IlFallback) // NOSONAR
+            & (ResourceLimit == other.ResourceLimit); // NOSONAR
 
     public override int GetHashCode() =>
-        HashCode.Combine(HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime), IlFallback);
+        HashCode.Combine(HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime), IlFallback, ResourceLimit);
 }

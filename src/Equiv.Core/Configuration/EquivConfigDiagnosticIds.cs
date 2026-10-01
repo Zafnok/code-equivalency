@@ -29,4 +29,7 @@ public static class EquivConfigDiagnosticIds
 
     /// <summary>"runtimes" is present but not an object whose only keys, "legacy" and "modern", name a .NET Framework or .NET (Core) target framework.</summary>
     public const string InvalidRuntimes = "CFG009";
+
+    /// <summary>"resourceLimit" is present but not a positive integer.</summary>
+    public const string InvalidResourceLimit = "CFG010";
 }
