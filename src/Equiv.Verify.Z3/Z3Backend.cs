@@ -45,8 +45,8 @@ public sealed class Z3Backend : IVerificationBackend
 
     /// <summary>
     /// How many times <see cref="VerificationOptions.TimeoutMs"/> a query may run before it is interrupted (ticket P2-076
-    /// criterion 3). Four is the least the ticket allows, and more than twice the longest any query of the
-    /// <c>gitextensions-8522</c> run took to answer sat or unsat (<c>docs/runs/2026-10-03-pair-time.md</c>).
+    /// criterion 3). Four is the least the ticket allows. At the default timeout it is 240 s, and the longest any query of
+    /// the <c>gitextensions-8522</c> run took to answer sat or unsat was 13.5 s (<c>docs/runs/2026-10-02-pair-time.md</c>).
     /// </summary>
     internal const int InterruptAfterTimeouts = 4;
 
