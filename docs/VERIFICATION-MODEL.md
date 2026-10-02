@@ -687,8 +687,10 @@ by `, `. Nothing uses the runtime yet.
 Counts in the census are per lowered body of a matched pair. `procedures` counts, per side, the
 matched pairs plus the removed (legacy) or added (modern) procedures. `opaqueByReason` counts the
 bodies on each side that hold at least one `IrOpaque` with that reason, sorted by reason. A body is
-whole-body opaque when it is one block whose only instruction is an `IrOpaque`, and a pair counts
-under `pairsWholeBodyOpaque` when either side is (ticket M3-014). A matched pair whose lowering threw has
+whole-body opaque when it is one block that holds nothing but `IrOpaque`s flagged `WholeBody`, at
+least one: one per cause, so an unbound body with several errors is one whole-body opaque body. A
+body whose only instruction is an expression-level `IrOpaque` is not. A pair counts
+under `pairsWholeBodyOpaque` when either side is (tickets M3-014 and P2-092). A matched pair whose lowering threw has
 no lowered body, so it counts in `procedures` and `matchedPairs` but in neither
 `pairsWithoutOpaque` nor `pairsWholeBodyOpaque`, nor in `opaqueByReason` (ticket P2-011).
 
