@@ -1425,7 +1425,13 @@ internal sealed class IrLowerer
                 context);
         }
 
-        if (!binary.IsLifted && PureCatalogue.Binary(binary.OperatorKind, binary.LeftOperand.Type!, binary.RightOperand.Type!) is { } entry)
+        if (binary.LeftOperand.Type is not { } leftType || binary.RightOperand.Type is not { } rightType)
+        {
+            // `x == null` on a nullable value type: the `null` literal has no type, and Roslyn does not report the operator as lifted (ticket P2-083).
+            return Opaque(binary, binary.Kind.ToString(), context);
+        }
+
+        if (!binary.IsLifted && PureCatalogue.Binary(binary.OperatorKind, leftType, rightType) is { } entry)
         {
             return Apply(entry, binary.IsChecked, [Value(binary.LeftOperand, context), Value(binary.RightOperand, context)], Map(binary.Type!), context);
         }
@@ -1435,7 +1441,7 @@ internal sealed class IrLowerer
             return UserDefined(binary, method, [binary.LeftOperand, binary.RightOperand], context);
         }
 
-        bool signed = TypeMapper.IsSigned(binary.LeftOperand.Type!);
+        bool signed = TypeMapper.IsSigned(leftType);
         IrVar left = Value(binary.LeftOperand, context);
         IrVar right = Value(binary.RightOperand, context);
         return OperatorMapper.Binary(binary.OperatorKind, signed, left.Type, right.Type) switch
