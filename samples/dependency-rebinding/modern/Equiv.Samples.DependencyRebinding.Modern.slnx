@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="App/Equiv.Samples.DependencyRebinding.Modern.csproj" />
+  <Project Path="Files/Equiv.Samples.DependencyRebinding.Files.Modern.csproj" />
+</Solution>

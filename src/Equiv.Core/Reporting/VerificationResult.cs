@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 
 using Equiv.Core.Execution;
+using Equiv.Core.Matching;
 using Equiv.Core.Verdicts;
 
 namespace Equiv.Core.Reporting;
@@ -19,7 +20,8 @@ namespace Equiv.Core.Reporting;
 /// <see cref="Testing"/> is an Unknown's run on generated inputs under <c>--execute</c> (ADR 0035 decision 3; ticket
 /// P1-008), null otherwise, and is not part of the fingerprint. <see cref="Lowering"/> is the pair's
 /// <see cref="Matching.ProcedurePair.Lowering"/> (ADR 0039; ticket P1-016), null when the run did not use <c>--il-fallback</c>;
-/// it is not part of the fingerprint.
+/// it is not part of the fingerprint. <see cref="ReboundCalls"/> is the pair's
+/// <see cref="ProcedurePair.ReboundCalls"/> (ADR 0042; ticket P2-069), and is not part of the fingerprint either.
 /// </summary>
 public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
 {
@@ -34,4 +36,6 @@ public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verd
     public DifferentialTesting? Testing { get; init; }
 
     public string? Lowering { get; init; }
+
+    public ImmutableArray<ReboundCall> ReboundCalls { get; init; } = [];
 }

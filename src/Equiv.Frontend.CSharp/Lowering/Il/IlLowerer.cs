@@ -7,6 +7,7 @@ using System.Reflection.Metadata;
 using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
+using Equiv.Core.Matching;
 
 using ICSharpCode.Decompiler.IL;
 using ICSharpCode.Decompiler.TypeSystem;
@@ -135,6 +136,9 @@ internal sealed partial class IlLowerer
         exceptions = new ExceptionLowerer(ssa, compilation: null!, cfg: null!, chains: null!, loops: null!, bodySpan, fill: null!);
     }
 
+    /// <summary>The callee identities whose calls are rebound, each lowered as an opaque (ADR 0042; ticket P2-069).</summary>
+    private ImmutableHashSet<string> Rebounds { get; init; } = [];
+
     private ITypeSymbol Boolean => compilation.GetSpecialType(SpecialType.System_Boolean);
 
     private ITypeSymbol Int32 => compilation.GetSpecialType(SpecialType.System_Int32);
@@ -144,16 +148,18 @@ internal sealed partial class IlLowerer
     /// <summary>
     /// <paramref name="method"/>'s body, read from <paramref name="compilation"/>'s IL. A method with no ILAst is one
     /// whole-body opaque whose reason is <see cref="IlAstReader"/>'s. <paramref name="x87"/> marks floating point runtime-sensitive,
-    /// as <see cref="IrLowerer"/> does on the legacy side of a project that runs on x87 (ticket M4-002).
+    /// as <see cref="IrLowerer"/> does on the legacy side of a project that runs on x87 (ticket M4-002). A call to an identity
+    /// in <paramref name="rebound"/> is an opaque, as <see cref="IrLowerer"/> makes a rebound call (ADR 0042; ticket P2-069).
     /// </summary>
-    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, bool x87 = false) => Lower(method, compilation, x87, static op => op);
+    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, bool x87 = false, ImmutableHashSet<string>? rebound = null) =>
+        Lower(method, compilation, x87, static op => op, rebound);
 
     /// <summary>
     /// Seam for the differential soundness gate (ticket P1-017): <paramref name="mapped"/> rewrites the IR operator each
     /// integral arithmetic or comparison instruction maps to, so a test can break a mapping on purpose and show the gate
     /// catches it. The product maps every operator to itself.
     /// </summary>
-    internal static IrProcedure Lower(IMethodSymbol method, Compilation compilation, bool x87, Func<IrBinaryOp, IrBinaryOp> mapped)
+    internal static IrProcedure Lower(IMethodSymbol method, Compilation compilation, bool x87, Func<IrBinaryOp, IrBinaryOp> mapped, ImmutableHashSet<string>? rebound = null)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
@@ -163,7 +169,7 @@ internal sealed partial class IlLowerer
         IlAstReader.Body body = IlAstReader.Read(method, compilation);
         return body.Failure is { } failure
             ? IrLowerer.Opaque(RoslynIdentity.Of(method, RenameMap.Empty), parameters, returnType, failure, [span])
-            : new IlLowerer(method, compilation, body, span, returnType, x87, mapped).Procedure(parameters, body.Function!);
+            : new IlLowerer(method, compilation, body, span, returnType, x87, mapped) { Rebounds = rebound ?? [] }.Procedure(parameters, body.Function!);
     }
 
     /// <summary>The procedure: the C# parameters, then the heap inputs the lowering used, as <see cref="IrLowerer"/> orders them.</summary>
@@ -901,6 +907,7 @@ internal sealed partial class IlLowerer
     /// auto-property's accessor reads or writes its backing field's map (ticket M4-008), each as <see cref="IrLowerer"/>
     /// lowers it. A struct's constructor is only ever a <c>newobj</c> here: ILSpy reads one called on a local's address as
     /// the local's store of a <c>newobj</c>, and Roslyn stores one into a field or element. Null for a call with no result.
+    /// A call to an identity the pair's other side binds differently at the same source text is <see cref="Rebound"/> (ADR 0042).
     /// </summary>
     private Val? Call(CallInstruction call)
     {
@@ -936,9 +943,28 @@ internal sealed partial class IlLowerer
 
         CallIdentity identity = CallIdentityFactory.Of(target, compilation, RenameMap.Empty, []);
         ImmutableArray<IrVar> operands = receiver is { } self ? [self.Var, .. arguments] : arguments;
-        return isOperator
-            ? new(Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType)
-            : Invoke(identity, operands, written, Result(call, target), ClosedCalls.IsClosed(target));
+        return (isOperator, Rebounds.Contains(identity.Value)) switch
+        {
+            (true, _) => new(Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType),
+            (_, true) => Rebound(call, written, Result(call, target)),
+            _ => Invoke(identity, operands, written, Result(call, target), ClosedCalls.IsClosed(target)),
+        };
+    }
+
+    /// <summary>
+    /// A rebound call (ADR 0042; ticket P2-069), as <see cref="IrLowerer"/> makes one: its result, if any, and each
+    /// <c>ref</c> or <c>out</c> variable in <paramref name="written"/> an opaque with reason
+    /// <see cref="ReboundCall.OpaqueReason"/> and no fingerprint, and no <c>threw</c> branch.
+    /// </summary>
+    private Val? Rebound(CallInstruction call, ImmutableArray<Place> written, ITypeSymbol? result)
+    {
+        IrVar? value = Opaque(call, ReboundCall.OpaqueReason, result is null ? null : Map(result), fingerprint: false);
+        foreach (Place place in written)
+        {
+            WriteUnknown((VariablePlace)place, Opaque(call, ReboundCall.OpaqueReason, Map(place.Type), fingerprint: false)!);
+        }
+
+        return value is null ? null : new(value, result!);
     }
 
     /// <summary>What a call yields: a <c>new</c> its type's new object, else the callee's result, if any.</summary>

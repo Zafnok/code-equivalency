@@ -165,6 +165,8 @@ public static class SarifReportWriter
             sarifResult.SetProperty("lowering", lowering);
         }
 
+        SetReboundCalls(sarifResult, result.ReboundCalls);
+
         // Ticket P2-064: a flagged result says which cause it shares with others; ReviewList.Apply ranks the groups.
         if (ReviewList.KeyOf(result.Verdict, runtimeChange) is { } reviewGroup)
         {
@@ -209,6 +211,22 @@ public static class SarifReportWriter
     /// </summary>
     private static SourceSpan? PrimaryLocation(VerificationResult result) =>
         (result.Verdict as Unknown)?.Causes.FirstOrDefault(static c => c.Side == Codebase.Modern)?.Span ?? result.Identity.Location;
+
+    /// <summary>
+    /// ADR 0042: the callee pairs a call site with the same text binds to, which the pair treats as possibly the same, as
+    /// <c>reboundCalls</c>; left out when there is none.
+    /// </summary>
+    private static void SetReboundCalls(Result sarifResult, ImmutableArray<ReboundCall> rebound)
+    {
+        if (!rebound.IsEmpty)
+        {
+            sarifResult.SetProperty("reboundCalls", rebound.Select(static r => new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["legacy"] = r.Legacy,
+                ["modern"] = r.Modern,
+            }).ToList());
+        }
+    }
 
     /// <summary>A string-array result property, left out when <paramref name="values"/> is empty.</summary>
     private static void SetListProperty(Result sarifResult, string name, ImmutableArray<string> values)

@@ -8,6 +8,8 @@ using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Progress;
 using Equiv.Frontend.CSharp.Loading;
+using Equiv.Frontend.CSharp.Lowering;
+using Equiv.Frontend.CSharp.Lowering.Il;
 
 using Microsoft.CodeAnalysis;
 
@@ -233,19 +235,33 @@ public sealed class CSharpFrontendTests
         Assert.Empty(analysis.ModernNotBuilt);
     }
 
-    /// <summary>Ticket M3-009 acceptance criterion 4: only the legacy body is rewritten, and the pair lists what fired.</summary>
+    /// <summary>
+    /// Ticket M3-009 acceptance criterion 4: only the legacy body is rewritten, and the pair lists what fired. The modern
+    /// body is given no entry, so its call to the legacy member stays that member's (<c>Kept</c>).
+    /// </summary>
     [Fact]
     public void RecordsTheEquivalencesAppliedToTheLegacyBody()
     {
-        Compilation compilation = RoslynTestCompilations.Compile("namespace N { public class C { public bool M(string s, char c) => System.Linq.Enumerable.Contains(s, c); } }");
-        StubLoader loader = new(_ => new LoadedSolution(null!, [compilation], [], []));
+        const string Kept = "public bool Kept(string s, char c) { return System.Linq.Enumerable.Contains(s, c); }";
+        Compilation legacyCompilation = RoslynTestCompilations.Compile($"namespace N {{ public class C {{ public bool M(string s, char c) => System.Linq.Enumerable.Contains(s, c); {Kept} }} }}");
+        Compilation modernCompilation = RoslynTestCompilations.Compile($"namespace N {{ public class C {{ public bool M(string s, char c) => s.Contains(c); {Kept} }} }}");
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
-        ProcedurePair pair = Assert.Single(result.Pairs);
+        ProcedurePair pair = result.Pairs.Single(static p => p.New.Value.Contains("::M(", StringComparison.Ordinal));
         Assert.Equal(["bcl.string-contains-char"], pair.EquivalencesApplied);
         Assert.Contains("System.String::Contains(char)", IrText.Dump(pair.OldBody!), StringComparison.Ordinal);
-        Assert.DoesNotContain("System.String::Contains(char)", IrText.Dump(pair.NewBody!), StringComparison.Ordinal);
+        Assert.Empty(pair.ReboundCalls);
+
+        // ADR 0042: the catalogue is applied before call sites are compared. A modern side that still calls the legacy
+        // member binds the same text to another identity than the rewritten legacy call, so that site is rebound.
+        ProcedurePair kept = result.Pairs.Single(static p => p.New.Value.Contains("::Kept(", StringComparison.Ordinal));
+        Assert.Equal(["bcl.string-contains-char"], kept.EquivalencesApplied);
+        Assert.Equal("System.String::Contains(char)", Assert.Single(kept.ReboundCalls).Legacy);
+        Assert.StartsWith("System.Linq.Enumerable::Contains", Assert.Single(kept.ReboundCalls).Modern, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -275,6 +291,103 @@ public sealed class CSharpFrontendTests
         Assert.Equal(("operation", false), (has.Lowering, has.IlFallbackTried));
         Assert.Equal(["bcl.string-contains-char"], has.EquivalencesApplied);
         Assert.All(plain.Pairs, static p => Assert.Equal((null, false), (p.Lowering, p.IlFallbackTried)));
+    }
+
+    /// <summary>
+    /// ADR 0042 (ticket P2-069 criteria 2 and 3): a call site with the same text that binds to another callee is listed as a
+    /// rebound pair and is an opaque in both bodies, each lowered a second time for it. A call to another member is an
+    /// ordinary call in a pair lowered once.
+    /// </summary>
+    [Fact]
+    public void AReboundCallSiteIsListedAndOpaqueInBothBodies()
+    {
+        Dictionary<string, int> lowerings = new(StringComparer.Ordinal);
+        CSharpFrontend frontend = new(ReboundLoader(), new StableIdentityMatcher(), (symbol, compilation, config, legacy, sites) =>
+        {
+            lowerings[symbol.Name] = lowerings.GetValueOrDefault(symbol.Name) + 1;
+            return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, sites);
+        });
+
+        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
+
+        ProcedurePair has = result.Pairs.Single(static p => p.New.Value.Contains("::Has(", StringComparison.Ordinal));
+        Assert.Equal([new ReboundCall(LegacyExists, ModernExists)], has.ReboundCalls);
+        foreach (IrProcedure body in (IrProcedure[])[has.OldBody!, has.NewBody!])
+        {
+            Assert.Equal(ReboundCall.OpaqueReason, Assert.Single(body.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>()).Reason);
+            Assert.Equal(["Lib.IFs::get_File()"], body.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        }
+
+        ProcedurePair clear = result.Pairs.Single(static p => p.New.Value.Contains("::Clear(", StringComparison.Ordinal));
+        Assert.Empty(clear.ReboundCalls);
+        Assert.Contains(LegacyExists, IrText.Dump(clear.OldBody!), StringComparison.Ordinal);
+        Assert.Contains("Lib.IFile::Delete(string)", IrText.Dump(clear.NewBody!), StringComparison.Ordinal);
+        Assert.DoesNotContain(clear.NewBody!.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
+        Assert.Equal(4, lowerings["Has"]);
+        Assert.Equal(2, lowerings["Clear"]);
+    }
+
+    /// <summary>ADR 0042: a legacy identity the config's call-identity map renames to the modern one is the same call, so it stays a call.</summary>
+    [Fact]
+    public void ACallIdentityRenameKeepsAReboundSiteACall()
+    {
+        EquivConfig config = EquivConfig.Default with { CallIdentityRenames = EquivConfig.Default.CallIdentityRenames.Add(LegacyExists, ModernExists) };
+
+        MatchResult result = new CSharpFrontend(ReboundLoader(), new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", config, NullRunLog.Instance, CancellationToken.None).Match;
+
+        ProcedurePair has = result.Pairs.Single(static p => p.New.Value.Contains("::Has(", StringComparison.Ordinal));
+        Assert.Empty(has.ReboundCalls);
+        Assert.Contains(LegacyExists, IrText.Dump(has.OldBody!), StringComparison.Ordinal);
+        Assert.Contains(ModernExists, IrText.Dump(has.NewBody!), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// ADR 0042: under <c>--il-fallback</c> the IL lowering is given each side's rebound identities, so it holds the same
+    /// opaques and the pair keeps its IOperation bodies. Read without them, the IL bodies would hold none and be preferred.
+    /// </summary>
+    [Fact]
+    public void UnderTheIlFallbackAReboundCallIsOpaqueInTheIlBodiesToo()
+    {
+        StubLoader loader = ReboundLoader(out Compilation legacy, out Compilation modern);
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = true }, NullRunLog.Instance, CancellationToken.None).Match;
+
+        ProcedurePair has = result.Pairs.Single(static p => p.New.Value.Contains("::Has(", StringComparison.Ordinal));
+        Assert.Equal(("operation", true), (has.Lowering, has.IlFallbackTried));
+        Assert.Equal([new ReboundCall(LegacyExists, ModernExists)], has.ReboundCalls);
+        foreach ((Compilation compilation, string identity) in new[] { (legacy, LegacyExists), (modern, ModernExists) })
+        {
+            IMethodSymbol method = compilation.GetTypeByMetadataName("N.Probe")!.GetMembers("Has").OfType<IMethodSymbol>().Single();
+            Assert.DoesNotContain(IlLowerer.Lower(method, compilation).Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
+            Assert.Equal(
+                ReboundCall.OpaqueReason,
+                Assert.Single(IlLowerer.Lower(method, compilation, rebound: [identity]).Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>()).Reason);
+        }
+    }
+
+    private const string LegacyExists = "Lib.FileBase::Exists(string)";
+
+    private const string ModernExists = "Lib.IFile::Exists(string)";
+
+    private static StubLoader ReboundLoader() => ReboundLoader(out _, out _);
+
+    /// <summary>
+    /// P2-069's pair: a library whose <c>IFs.File</c> is a class on the legacy side and an interface on the modern side, <c>Has</c>
+    /// with the same source on both sides, and <c>Clear</c>, which calls another member on the modern side.
+    /// </summary>
+    private static StubLoader ReboundLoader(out Compilation legacy, out Compilation modern)
+    {
+        const string Has = "public static bool Has(Lib.IFs fs, string p) => fs.File.Exists(p);";
+        Compilation legacyCompilation = legacy = RoslynTestCompilations.Compile(
+            "namespace Lib { public abstract class FileBase { public abstract bool Exists(string p); public abstract bool Delete(string p); } public interface IFs { FileBase File { get; } } }"
+            + $"namespace N {{ public static class Probe {{ {Has} public static bool Clear(Lib.IFs fs, string p) => fs.File.Exists(p); }} }}");
+        Compilation modernCompilation = modern = RoslynTestCompilations.Compile(
+            "namespace Lib { public interface IFile { bool Exists(string p); bool Delete(string p); } public interface IFs { IFile File { get; } } }"
+            + $"namespace N {{ public static class Probe {{ {Has} public static bool Clear(Lib.IFs fs, string p) => fs.File.Delete(p); }} }}");
+        return new StubLoader(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
     }
 
     /// <summary>Ticket M3-015 acceptance criterion 1: every lowered pair carries both bodies' fingerprints.</summary>
@@ -427,10 +540,10 @@ public sealed class CSharpFrontendTests
     }
 
     /// <summary>The production lowering, except that a method named <paramref name="name"/> throws <paramref name="fault"/>.</summary>
-    private static Func<IMethodSymbol, Compilation, EquivConfig, bool, (IrProcedure, ImmutableArray<string>)> FaultOn(string name, Exception fault) =>
-        (symbol, compilation, config, legacy) => string.Equals(symbol.Name, name, StringComparison.Ordinal)
+    private static Func<IMethodSymbol, Compilation, EquivConfig, bool, CallSites, (IrProcedure, ImmutableArray<string>)> FaultOn(string name, Exception fault) =>
+        (symbol, compilation, config, legacy, sites) => string.Equals(symbol.Name, name, StringComparison.Ordinal)
             ? throw fault
-            : CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy);
+            : CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, sites);
 
     [Fact]
     public void NullConfigThrows()
@@ -742,10 +855,10 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modern], [], []));
         List<Compilation> lowered = [];
 
-        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher(), (symbol, compilation, config, legacy) =>
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher(), (symbol, compilation, config, legacy, sites) =>
             {
                 lowered.Add(compilation);
-                return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy);
+                return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, sites);
             })
             .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
