@@ -515,19 +515,23 @@ internal sealed class IrLowerer
     /// block (ticket P2-010); <c>if (c) return; throw;</c> is one block whose conditional successor is the rethrow
     /// (ticket P2-034). Either way the rethrow gets a block of its own and is opaque as it is anywhere else. A <c>when</c>
     /// filter's last block falls through, when the filter is false, to its copy's structured-exception-handling exit
-    /// (ticket M4-008).
+    /// (ticket M4-008). A condition that is a compile-time constant is a jump along its live edge: Roslyn follows only
+    /// that edge when it marks blocks reachable, so the block the other edge names may never have been lowered, and a
+    /// branch to it would name a block with no terminator (ticket P2-090).
     /// </summary>
     private void Branch(BasicBlock block, ControlFlowBranch conditional, ControlFlowBranch fallThrough, LoweringContext context)
     {
-        IrVar condition = Value(block.BranchValue!, context);
+        bool? constant = block.BranchValue!.ConstantValue is { HasValue: true, Value: bool known } ? known : null;
+        IrVar? condition = constant is null ? Value(block.BranchValue, context) : null;
         IrBlockId? jumpRethrow = RethrowBlock(conditional, declined: null);
         IrBlockId jump = jumpRethrow ?? exceptions.Destination(conditional, context);
         IrBlockId? declined = fallThrough.Semantics == ControlFlowBranchSemantics.StructuredExceptionHandling ? context.HandlerExit : null;
         IrBlockId? rethrow = RethrowBlock(fallThrough, declined);
         IrBlockId next = rethrow ?? declined ?? exceptions.Destination(fallThrough, context);
-        ssa.Terminate(context.Current, block.ConditionKind == ControlFlowConditionKind.WhenTrue
-            ? new IrBranch(condition, jump, next)
-            : new IrBranch(condition, next, jump));
+        bool whenTrue = block.ConditionKind == ControlFlowConditionKind.WhenTrue;
+        (IrBlockId then, IrBlockId otherwise) = whenTrue ? (jump, next) : (next, jump);
+        IrBlockId live = constant == whenTrue ? jump : next; // read only when the condition is constant
+        ssa.Terminate(context.Current, condition is null ? new IrGoto(live) : new IrBranch(condition, then, otherwise));
         foreach (IrBlockId opaque in ((IrBlockId?[])[jumpRethrow, rethrow]).OfType<IrBlockId>())
         {
             context.Current = opaque;

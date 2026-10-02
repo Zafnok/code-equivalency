@@ -46,7 +46,10 @@ internal sealed class SwitchChains
 
     private static Test? Read(BasicBlock block)
     {
+        // A test the compiler decides is no case: Roslyn follows only its live edge, so the blocks behind the other one
+        // may never be lowered and a switch must not name them (ticket P2-090).
         if (block.ConditionKind != ControlFlowConditionKind.WhenFalse
+            || block.BranchValue is { ConstantValue.HasValue: true }
             || block.FallThroughSuccessor is not { Semantics: ControlFlowBranchSemantics.Regular, Destination: not null } match
             || block.ConditionalSuccessor is not { Semantics: ControlFlowBranchSemantics.Regular, Destination: not null } otherwise)
         {
