@@ -579,7 +579,11 @@ sort element, `null` where the model's `null.<Sort>` map holds it and otherwise 
 equal elements are equal strings; a `float`, `double` or `decimal` as the number `id`; any other
 reference type only as `null`. A static method is called directly, and an instance method on
 `new T()`, which needs a public parameterless constructor. Each side's project is emitted with its
-references beside it, and a driver calls each side's method once on that side's project's detected
+references beside it, and with one `InternalsVisibleTo` naming the driver's assembly (`EquivReplay`)
+added to its compilation as a syntax tree of its own, so the driver calls `internal` and
+`protected internal` members directly, with no reflection; no source file changes. A strong-named
+project may name a friend only by public key, so its driver is signed with a key generated for the
+run and the attribute carries that key (P2-052). A driver calls each side's method once on that side's project's detected
 runtime (`run.properties.runtimes`; ADR 0040 decision 3, P2-056), under the invariant culture, and also under `tr-TR` when either body
 calls a member of the runtime-changes table, as differential testing does (P2-038). The result carries
 `properties.replay`:
@@ -591,7 +595,9 @@ calls a member of the runtime-changes table, as differential testing does (P2-03
   call trace holds a runtime-changed callee). EQ006 claims the member differs between runtimes, and
   its side-specific functions are free in the model, so one call with the model's inputs need not
   show it (a hash seed, a default encoding, an ICU detail). Not a soundness finding (P2-038);
-- `not-constructible`, with `properties.replayReason`: the method is not public, generic, an
+- `not-constructible`, with `properties.replayReason`: the method, or a type that contains it, is
+  `private`, `protected` or `private protected` (`not public (<accessibility>)`, so `not public (private)`
+  counts what only reflection could reach; P2-052); the method is generic, an
   accessor other than a getter, or takes a parameter by reference; the receiver has no public
   parameterless constructor or the model makes it null; a parameter's type has no generator; the
   model has a synthesised input other than `this` and `null.*` (a heap map, a cast or type-test

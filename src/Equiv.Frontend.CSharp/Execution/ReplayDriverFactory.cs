@@ -16,8 +16,10 @@ namespace Equiv.Frontend.CSharp.Execution;
 /// <summary>
 /// <see cref="IReplayDriverFactory"/> over the projects one <see cref="CSharpFrontend.Analyze"/> loaded (ADR 0035 decision
 /// 2; ticket M4-009). Each project a replay needs is emitted once, into <c>&lt;directory&gt;/&lt;side&gt;/&lt;assembly&gt;</c>
-/// (<see cref="ProjectEmitter"/>), and each replay's driver is compiled against that project's own references into the same
-/// folder, for that project's detected runtime (<see cref="ReplayTarget.Runtime"/>; ADR 0040 decision 3, ticket P2-056):
+/// (<see cref="ProjectEmitter"/>), with the driver as its friend, so that the driver calls <c>internal</c> members too
+/// (ticket P2-052). Every driver's assembly is named <see cref="ProjectEmitter.DriverAssembly"/>, whatever its file is called,
+/// and a strong-named project's driver is signed with a key generated for this factory (<see cref="DriverKey"/>). Each
+/// replay's driver is compiled against that project's own references into the same folder, for that project's detected runtime (<see cref="ReplayTarget.Runtime"/>; ADR 0040 decision 3, ticket P2-056):
 /// <c>EquivReplay&lt;n&gt;.exe</c> with an <c>app.config</c> on .NET Framework, <c>EquivReplay&lt;n&gt;.dll</c> with a
 /// <c>runtimeconfig.json</c> on .NET (<see cref="DriverRuntime"/>). A same-runtime pair runs both sides on that one runtime.
 /// A runtime <paramref name="hosts"/> does not find installed makes the plan not constructible, and none is used in its
@@ -33,7 +35,9 @@ internal sealed class ReplayDriverFactory(
     private const string EmitFailed = "emit-failed";
     private const string ModernSide = "modern";
 
-    private readonly Dictionary<(Compilation, string), string?> emitted = [];
+    private readonly Dictionary<(Compilation, string), (Compilation Granted, string? Error)> emitted = [];
+
+    private readonly DriverKey key = new();
 
     private int drivers;
 
@@ -188,26 +192,27 @@ internal sealed class ReplayDriverFactory(
         }
 
         string project = Path.Combine(sideDirectory, target.Compilation.AssemblyName!);
-        if (!emitted.TryGetValue((target.Compilation, sideDirectory), out string? failure))
+        if (!emitted.TryGetValue((target.Compilation, sideDirectory), out (Compilation Granted, string? Error) friend))
         {
-            failure = ProjectEmitter.Emit(target.Compilation, project);
-            emitted[(target.Compilation, sideDirectory)] = failure;
+            friend = ProjectEmitter.Emit(target.Compilation, project, key);
+            emitted[(target.Compilation, sideDirectory)] = friend;
         }
 
-        if (failure is not null)
+        if (friend.Error is not null)
         {
-            return (null, $"{EmitFailed}: {side} project {failure}");
+            return (null, $"{EmitFailed}: {side} project {friend.Error}");
         }
 
         string name = "EquivReplay" + number.ToString(CultureInfo.InvariantCulture);
         string path = Path.Combine(project, name + host.Extension);
         string source = DriverSource.Generate(target.Method, constructReceiver: true);
         File.WriteAllText(Path.ChangeExtension(path, ".cs"), source);
+        CSharpCompilationOptions options = new(OutputKind.ConsoleApplication, optimizationLevel: OptimizationLevel.Release, deterministic: true);
         CSharpCompilation driver = CSharpCompilation.Create(
-            name,
+            ProjectEmitter.DriverAssembly,
             [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(host.Language))],
-            [.. target.Compilation.References, target.Compilation.ToMetadataReference()],
-            new CSharpCompilationOptions(OutputKind.ConsoleApplication, optimizationLevel: OptimizationLevel.Release, deterministic: true));
+            [.. target.Compilation.References, friend.Granted.ToMetadataReference()],
+            friend.Granted.Assembly.Identity.HasPublicKey ? options.WithCryptoKeyFile(key.Write(project)).WithStrongNameProvider(new DesktopStrongNameProvider()) : options);
         EmitResult result = driver.Emit(path);
         if (!result.Success)
         {

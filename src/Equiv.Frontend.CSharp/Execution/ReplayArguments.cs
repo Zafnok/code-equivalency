@@ -4,6 +4,7 @@ using Equiv.Core.Execution;
 using Equiv.Core.Ir;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace Equiv.Frontend.CSharp.Execution;
 
@@ -111,13 +112,16 @@ internal static class ReplayArguments
 
     /// <summary>
     /// Why generated source cannot call <paramref name="method"/> on <c>new T()</c> at all, whatever its arguments, or null
-    /// (tickets M4-009, P1-008).
+    /// (tickets M4-009, P1-008). The driver is a friend of the emitted project (<see cref="ProjectEmitter"/>; ticket
+    /// P2-052), so an <c>internal</c> or <c>protected internal</c> member is called like a public one. A <c>private</c>,
+    /// <c>protected</c> or <c>private protected</c> member, or a member of such a type, is <c>not public</c>, with the
+    /// accessibility that hides it in brackets.
     /// </summary>
     public static string? CallObstacle(IMethodSymbol method)
     {
-        if (!IsPublic(method))
+        if (Hidden(method) is { } accessibility)
         {
-            return "not public";
+            return $"not public ({accessibility})";
         }
 
         if (method.MethodKind is not (MethodKind.Ordinary or MethodKind.PropertyGet))
@@ -159,8 +163,16 @@ internal static class ReplayArguments
     private static bool Constructible(INamedTypeSymbol type) =>
         !type.IsAbstract && (type.IsValueType || type.InstanceConstructors.Any(static c => c.Parameters.IsEmpty && c.DeclaredAccessibility == Accessibility.Public));
 
-    private static bool IsPublic(ISymbol symbol) =>
-        symbol.DeclaredAccessibility == Accessibility.Public && (symbol.ContainingType is null || IsPublic(symbol.ContainingType));
+    /// <summary>The accessibility that hides <paramref name="symbol"/>, or the outermost type that hides it, from a friend assembly; null when it is visible.</summary>
+    private static string? Hidden(ISymbol symbol)
+    {
+        string? outer = symbol.ContainingType is null ? null : Hidden(symbol.ContainingType);
+        return outer ?? symbol.DeclaredAccessibility switch
+        {
+            Accessibility.Public or Accessibility.Internal or Accessibility.ProtectedOrInternal => null,
+            var accessibility => SyntaxFacts.GetText(accessibility),
+        };
+    }
 
     /// <summary><paramref name="value"/> as a wire argument of <paramref name="type"/>, or null when none can be built from it.</summary>
     private static string? Wire(ITypeSymbol type, IrValue value, IReadOnlyDictionary<string, IrValue> nullness)

@@ -23,6 +23,10 @@ public sealed class ReplayArgumentsTests
                 public static int All(bool b, char c, sbyte s8, byte u8, short s16, ushort u16, int s32, uint u32, long s64, ulong u64, float f, double d, decimal m, string s, string t, object o, E e, U u) => 0;
                 public int Instance(int x) => x;
                 internal static int Hidden() => 0;
+                protected internal int Shared() => 0;
+                private static int Secret() => 0;
+                protected int Derived() => 0;
+                private protected int Narrow() => 0;
                 public int Settable { set { } }
                 public int Size => 2;
                 public static int Flag(bool b) => 0;
@@ -32,7 +36,13 @@ public sealed class ReplayArgumentsTests
             }
 
             public class G<T> { public static int M() => 0; }
-            internal class Inner { public static int M() => 0; }
+            internal class Inner { public static int M() => 0; internal int I() => 0; }
+            public class Outer
+            {
+                protected internal class Open { internal static int M() => 0; }
+                private class Locked { public class Deep { public static int M() => 0; } }
+                protected class Derived { public static int M() => 0; }
+            }
             public abstract class A { public int M() => 0; }
             public class P { private P() { } public int M() => 0; }
             public class Q { public Q(int x) { } public int M() => 0; }
@@ -97,8 +107,6 @@ public sealed class ReplayArgumentsTests
     }
 
     [Theory]
-    [InlineData("N.C", "Hidden", Empty, "not public")]
-    [InlineData("N.Inner", "M", Empty, "not public")]
     [InlineData("N.C", "set_Settable", "proc \"X\" (%value: bv32, %this: sort \"N.C\") entry B0 B0: ret", "not a method or a property getter")]
     [InlineData("N.C", "Generic", "proc \"X\" (%x: sort \"T\") entry B0 B0: ret", "generic")]
     [InlineData("N.G`1", "M", Empty, "generic")]
@@ -117,6 +125,29 @@ public sealed class ReplayArgumentsTests
 
         Assert.Null(built.Input);
         Assert.Equal(reason, built.Reason);
+    }
+
+    /// <summary>Ticket P2-052 criterion 2: the driver is the emitted project's friend, so what a friend sees is callable.</summary>
+    [Theory]
+    [InlineData("N.C", "Hidden")]
+    [InlineData("N.C", "Shared")]
+    [InlineData("N.Inner", "M")]
+    [InlineData("N.Inner", "I")]
+    [InlineData("N.Outer+Open", "M")]
+    public void InternalMethod_HasNoCallObstacle(string type, string method) =>
+        Assert.Null(ReplayArguments.CallObstacle(Method(Project, type, method)));
+
+    /// <summary>Ticket P2-052 criteria 2 and 4: what a friend cannot see is not public, and the reason says which accessibility hides it.</summary>
+    [Theory]
+    [InlineData("N.C", "Secret", "not public (private)")]
+    [InlineData("N.C", "Derived", "not public (protected)")]
+    [InlineData("N.C", "Narrow", "not public (private protected)")]
+    [InlineData("N.Outer+Locked+Deep", "M", "not public (private)")]
+    [InlineData("N.Outer+Derived", "M", "not public (protected)")]
+    public void PrivateMethod_IsNotPublic(string type, string method, string reason)
+    {
+        Assert.Equal(reason, ReplayArguments.CallObstacle(Method(Project, type, method)));
+        Assert.Equal(reason, Case(type, method, Empty, NoValues).Reason);
     }
 
     [Fact]

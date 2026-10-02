@@ -23,7 +23,7 @@ public sealed class ProbeArgumentsTests
             {
                 public static int All(bool b, char c, sbyte s8, byte u8, short s16, ushort u16, int s32, uint u32, long s64, ulong u64, float f, double d, decimal m, string s, object o, E e, U u) => 0;
                 public static int Flag(bool b) => 0;
-                internal static int Hidden() => 0;
+                private static int Hidden() => 0;
                 public static T Generic<T>(T x) => x;
                 public static int ByRef(ref int x) => x;
                 public static int TwoArgs(int a, int b) => 0;
@@ -225,7 +225,7 @@ public sealed class ProbeArgumentsTests
     {
         ProbeArguments.SideCase result = ProbeArguments.Case(Method(Project, "N.C", "Hidden"), []);
 
-        Assert.Equal("not public", result.Reason);
+        Assert.Equal("not public (private)", result.Reason);
     }
 
     [Fact]
