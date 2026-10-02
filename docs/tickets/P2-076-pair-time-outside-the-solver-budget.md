@@ -1,5 +1,5 @@
 # P2-076 The time a pair spends outside its solver budget is measured and removed, and no pair is ended early
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: none
@@ -90,3 +90,23 @@ budget: all P2-050 (its criterion 1 reruns them at 1x, 4x and 20x). Verifying pa
   Divergent, where `bounded` timed out after 72.2 s and 55.5 s and `lockstep-induction` then
   answered; 27.7 s and 16.1 s Equivalent).
 - Pairs over 120 s: 11, none decided. That is an observation about one run, not a licence for a cap.
+- Decision: how a pair's time is logged -> one `stage=<name> took=<s>s` line per piece of work, none overlapping
+  (`share`, `shape`, `unroll`, `encode`, `assert`, `inline`, `check:<query>` with `result=`, `replay`, `dispose`,
+  `couple`, `encode-chc`, `propose`), and one `step=<name> took=<s>s` line for each step that is not a rung
+  (`reachable-opaques`, `failure-refinement`, `contract-search`). A pair's time less its stages is bookkeeping.
+  Alternatives: one summary line per pair, more fields on the rung line. Rule: 3.
+- Decision: when the `contracts` phase exists -> only in a run that re-verifies at least one pair, as `execute`
+  exists only under `--execute`. Alternatives: an empty phase in every run. Rule: 4.
+- Decision: the weight of a `contracts` item -> the pair's `PairWeight`, as in `verify`. Alternatives: 1. Rule: 1.
+- Decision: how `Inline` is made cheaper -> it hands Z3 the definitions whose constant the term holds, found by
+  walking the term, and Z3's own substitution still builds the result. Alternatives: a substitution written here
+  over the whole encoding; the inlined definitions cached per encoding. Rule: 1 (the same Z3 call on fewer pairs
+  gives the same term, which `InlineTests` checks against the old substitution on every fixture).
+- Decision: how context disposal is made cheaper -> `Inline` releases every Z3 object it made before it returns.
+  Alternatives: forcing a garbage collection before the context is disposed; disposing contexts on another
+  thread. Rule: 4.
+- Decision: how a test reaches the interrupt -> `LoopLadder.InterruptAfterMs`, an init property that only a test
+  sets, as `InvariantTimeoutMs` is. Alternatives: a public option; the test interrupting through the context
+  factory. Rule: 4.
+- Decision: the detail of an interrupted solver query -> Z3's own reason, `solver returned unknown (interrupted)`,
+  with no limit named after it. Alternatives: a new suffix naming the slack. Rule: 1.
