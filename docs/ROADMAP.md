@@ -568,6 +568,11 @@ Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
   exits the `--il-fallback` run with code 5. `IlFallback` keeps the IOperation bodies when the IL
   bodies do not validate. Needs P1-016, P1-017.
 
+Documentation:
+- P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list
+  `--bound` and `--timeout-ms`, which the command never had (`bound` and `timeoutMs` come from the
+  config file and the MCP tool). No option is added. Needs P2-050.
+
 ## M5 — Agent surface (MCP)
 
 Coding agents do migrations; M5 lets them check their own work while they do it (ADR 0033). It
