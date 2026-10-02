@@ -550,6 +550,19 @@ public sealed class IrLowererTests
         Assert.Equal(new IrReturned(new IrBoolValue(expected)), Run(procedure, Reference(0), Nulls("System.String", 0, isNull)));
     }
 
+    /// <summary>
+    /// Ticket P2-083: a nullable value compared with <c>null</c> in a branch condition (found by the P2-065 runs on
+    /// `eshop-manual`, `openra-17989` and `duplicati-3124`). The <c>null</c> literal has no type and the operator is not
+    /// reported as lifted, so it lowered to a bare NullReferenceException; now it is opaque as a lifted operator is.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(int? x) { if (x == null) return 0; return 1; }")]
+    [InlineData("static int M(int? x, bool b) { if (b && null != x) return 0; return 1; }")]
+    [InlineData("enum E { A } static int M(E? x) { if (x == null) return 0; return 1; }")]
+    [InlineData("static int M(string s) { if (s?.Length != null) return 0; return 1; }")]
+    public void AComparisonOfANullableValueWithNullStaysOpaque(string members) =>
+        Assert.Contains(Opaques(Method(members)), static o => o.Reason is "Binary");
+
     [Theory]
     [InlineData(true, true)]
     [InlineData(false, false)]
