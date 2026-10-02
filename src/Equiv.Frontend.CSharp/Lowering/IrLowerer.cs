@@ -103,6 +103,11 @@ internal sealed class IrLowerer
         ImmutableArray<Initializer> initializers = operation is IConstructorBodyOperation ? Initializers(method, syntax, compilation) : [];
         ImmutableArray<SourceSpan> unbound =
             [.. UnboundCauses(syntax, model, operation), .. initializers.SelectMany(static i => UnboundCauses(i.Syntax, i.Model, i.Operation))];
+        if (unbound.IsEmpty && LeavesAnErrorTypeOut(method))
+        {
+            unbound = [Span(syntax)];
+        }
+
         IrProcedure procedure = (unbound.IsEmpty, operation) switch
         {
             (false, _) => Opaque(method, renames, entries, Unknown.UnboundOpaqueReason, unbound),
@@ -245,15 +250,23 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// Where <paramref name="syntax"/>'s bound code is erroneous (ADR 0029 decision 2): the span of every compiler error
-    /// in it or, when there is none, of every <see cref="IInvalidOperation"/> and every operation of an error type in
-    /// <paramref name="operation"/>, such as a reference to a field whose type did not resolve. Empty when it binds.
+    /// in it, in source order, or, when there is none, of every <see cref="IInvalidOperation"/> and every operation of an
+    /// error type in <paramref name="operation"/>, such as a reference to a field whose type did not resolve. Empty when it
+    /// binds. A syntax error anywhere in its file comes first and is the only cause: where each declaration of that file
+    /// begins and ends is the parser's recovery, so no method in it is taken as bound (ticket P2-085).
     /// </summary>
     private static ImmutableArray<SourceSpan> UnboundCauses(SyntaxNode syntax, SemanticModel model, IOperation? operation)
     {
+        if (syntax.SyntaxTree.GetDiagnostics().Where(static d => d.Severity == DiagnosticSeverity.Error).MinBy(static d => d.Location.SourceSpan.Start) is { } syntaxError)
+        {
+            return [CSharpFrontend.ToSourceSpan(syntaxError.Location)];
+        }
+
         ImmutableArray<SourceSpan> errors =
         [
             .. model.GetDiagnostics(syntax.Span)
                 .Where(static d => d.Severity == DiagnosticSeverity.Error)
+                .OrderBy(static d => d.Location.SourceSpan.Start)
                 .Select(static d => CSharpFrontend.ToSourceSpan(d.Location))
                 .Distinct(),
         ];
@@ -266,6 +279,25 @@ internal sealed class IrLowerer
         ];
         return errors.IsEmpty ? operations : errors;
     }
+
+    /// <summary>
+    /// The two methods that reference an error-type symbol with no diagnostic in their own declaration and no operation of
+    /// an error type (ADR 0029 decision 2 as clarified by ticket P2-085). An instance constructor of a type whose base type
+    /// did not resolve: its bound body leaves the base constructor call out. And a method with an error type in its
+    /// signature that is declared elsewhere: an accessor of a property or indexer whose type or parameter did not resolve.
+    /// </summary>
+    private static bool LeavesAnErrorTypeOut(IMethodSymbol method) =>
+        method is { MethodKind: MethodKind.Constructor, ContainingType.BaseType.TypeKind: TypeKind.Error }
+        || method.Parameters.Select(static p => p.Type).Append(method.ReturnType).Any(HoldsAnErrorType);
+
+    /// <summary>Whether <paramref name="type"/> is an error type, or an array or a constructed generic type over one.</summary>
+    private static bool HoldsAnErrorType(ITypeSymbol type) => type switch
+    {
+        { TypeKind: TypeKind.Error } => true,
+        IArrayTypeSymbol array => HoldsAnErrorType(array.ElementType),
+        INamedTypeSymbol named => named.TypeArguments.Any(HoldsAnErrorType),
+        _ => false,
+    };
 
     /// <summary>
     /// One block: an opaque value (reason <paramref name="reason"/>) returned, by-ref parameters unchanged. There is one
