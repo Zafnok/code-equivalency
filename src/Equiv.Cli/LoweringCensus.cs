@@ -129,9 +129,6 @@ internal sealed record LoweringCensus(
     private static List<Dictionary<string, object>> ExternalCalleeList(ImmutableArray<ExternalCallee> callees) =>
         [.. callees.Select(static c => new Dictionary<string, object>(StringComparer.Ordinal) { ["member"] = c.Member, ["callSites"] = c.CallSites })];
 
-    private static ImmutableHashSet<string> Reasons(IrProcedure body) =>
-        [.. body.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>().Select(static o => o.Reason)];
-
     /// <summary>The running state <see cref="Compute"/> folds each pair into, kept off that method to stay under MA0051.</summary>
     private sealed class Accumulator
     {
@@ -199,6 +196,9 @@ internal sealed record LoweringCensus(
                 new SideCounts(legacyCalls.Members.Count, modernCalls.Members.Count),
                 new SideCounts(legacyCalls.Pairs, modernCalls.Pairs)),
             new ExternalCallees(legacyExternal.ToImmutableArray(), modernExternal.ToImmutableArray()));
+
+        private static ImmutableHashSet<string> Reasons(IrProcedure body) =>
+            [.. body.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>().Select(static o => o.Reason)];
 
         /// <summary>
         /// What a frontend gives a body it could not lower at all: one block that holds nothing but <see cref="IrOpaque"/>s
