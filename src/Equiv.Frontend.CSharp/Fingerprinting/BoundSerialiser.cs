@@ -57,14 +57,13 @@ internal sealed class BoundSerialiser : OperationWalker
 
     private BoundSerialiser(IMethodSymbol method, Compilation compilation, Settings settings, Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas = null)
     {
-        (RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime) = settings;
         this.method = method;
         this.lambdas = lambdas;
-        this.renames = renames;
-        this.suppressedRuntimeChanges = suppressedRuntimeChanges;
-        types = equivalences.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
-        members = equivalences.Where(static e => !e.IsType && PassesArgumentsThrough(e)).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
-        this.runtime = runtime;
+        renames = settings.Renames;
+        suppressedRuntimeChanges = settings.SuppressedRuntimeChanges;
+        runtime = settings.Runtime;
+        types = settings.Equivalences.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
+        members = settings.Equivalences.Where(static e => !e.IsType && PassesArgumentsThrough(e)).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
         interpolation = ((CSharpCompilation)compilation).LanguageVersion >= LanguageVersion.CSharp10
             && compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.DefaultInterpolatedStringHandler") is not null
                 ? "DefaultInterpolatedStringHandler"
