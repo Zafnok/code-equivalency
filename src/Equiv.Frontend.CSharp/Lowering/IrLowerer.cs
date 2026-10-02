@@ -529,9 +529,9 @@ internal sealed class IrLowerer
         IrBlockId? rethrow = RethrowBlock(fallThrough, declined);
         IrBlockId next = rethrow ?? declined ?? exceptions.Destination(fallThrough, context);
         bool whenTrue = block.ConditionKind == ControlFlowConditionKind.WhenTrue;
-        ssa.Terminate(context.Current, condition is null
-            ? new IrGoto(constant == whenTrue ? jump : next)
-            : new IrBranch(condition, whenTrue ? jump : next, whenTrue ? next : jump));
+        (IrBlockId then, IrBlockId otherwise) = whenTrue ? (jump, next) : (next, jump);
+        IrBlockId live = constant == whenTrue ? jump : next; // read only when the condition is constant
+        ssa.Terminate(context.Current, condition is null ? new IrGoto(live) : new IrBranch(condition, then, otherwise));
         foreach (IrBlockId opaque in ((IrBlockId?[])[jumpRethrow, rethrow]).OfType<IrBlockId>())
         {
             context.Current = opaque;
