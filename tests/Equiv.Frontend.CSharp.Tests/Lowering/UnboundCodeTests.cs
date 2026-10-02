@@ -68,10 +68,10 @@ public sealed class UnboundCodeTests
         Assert.Contains(compilation.GetDiagnostics(TestContext.Current.CancellationToken), static d => d.Id is "CS0012");
         INamedTypeSymbol type = compilation.GetTypeByMetadataName("C")!;
 
-        IrOpaque opaque = Assert.Single(Opaques(IrLowerer.Lower(type.GetMembers("M").OfType<IMethodSymbol>().Single(), compilation, RenameMap.Empty, [])));
+        IrOpaque opaque = Assert.Single(Opaques(IrLowerer.Lower(type.GetMembers("M").OfType<IMethodSymbol>().Single(), compilation, RenameMap.Empty, [], Runtimes.Migration)));
 
         Assert.Equal("unbound", opaque.Reason);
-        Assert.Empty(Opaques(IrLowerer.Lower(type.GetMembers("Clean").OfType<IMethodSymbol>().Single(), compilation, RenameMap.Empty, [])));
+        Assert.Empty(Opaques(IrLowerer.Lower(type.GetMembers("Clean").OfType<IMethodSymbol>().Single(), compilation, RenameMap.Empty, [], Runtimes.Migration)));
     }
 
     [Theory]
@@ -112,7 +112,7 @@ public sealed class UnboundCodeTests
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         IMethodSymbol constructor = compilation.GetTypeByMetadataName("C")!.InstanceConstructors.Single();
 
-        IrOpaque opaque = Assert.Single(Opaques(IrLowerer.Lower(constructor, compilation, RenameMap.Empty, [])));
+        IrOpaque opaque = Assert.Single(Opaques(IrLowerer.Lower(constructor, compilation, RenameMap.Empty, [], Runtimes.Migration)));
 
         Assert.Equal("unbound", opaque.Reason);
         Assert.Equal(3, opaque.Span.StartLine);
