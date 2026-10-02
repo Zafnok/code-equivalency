@@ -92,3 +92,8 @@ exist:
   configuration builds (a `Build.0` entry for `Debug|Any CPU`, else the first configuration
   listed). A project the solution does not build is not part of the product: it is neither loaded
   nor skipped, and is listed in `run.properties.projectsNotBuilt` instead (VERIFICATION-MODEL.md).
+- 2026-10-01 (P2-085). A modern project that is compared method by method (ADR 0029's
+  clarification of the same date) counts as loaded in the project load rate. So that the row keeps
+  its meaning, on a pair whose modern side compiles (a human or an agent pair) an `unbound` Unknown
+  is a ticket, as a skipped project is: there it can only come from how `equiv` loaded the code.
+  On a tool pair it is the migration tool's unfinished work, and is reported, not ticketed.
