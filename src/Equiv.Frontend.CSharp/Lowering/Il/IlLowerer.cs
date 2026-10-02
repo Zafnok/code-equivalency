@@ -110,19 +110,16 @@ internal sealed partial class IlLowerer
     private readonly IrType? returnType;
     private readonly bool x87;
     private readonly Func<IrBinaryOp, IrBinaryOp> mapped;
-    private readonly ImmutableHashSet<string> rebound;
 
     /// <summary>The statement being lowered, whose enclosing regions decide where an exception raised in it goes.</summary>
     private ILInstruction position;
     private int selects;
 
-    private IlLowerer(
-        IMethodSymbol method, Compilation compilation, IlAstReader.Body body, SourceSpan bodySpan, IrType? returnType, bool x87, Func<IrBinaryOp, IrBinaryOp> mapped, ImmutableHashSet<string> rebound)
+    private IlLowerer(IMethodSymbol method, Compilation compilation, IlAstReader.Body body, SourceSpan bodySpan, IrType? returnType, bool x87, Func<IrBinaryOp, IrBinaryOp> mapped)
     {
         this.method = method;
         this.x87 = x87;
         this.mapped = mapped;
-        this.rebound = rebound;
         this.compilation = compilation;
         this.bodySpan = bodySpan;
         this.returnType = returnType;
@@ -138,6 +135,9 @@ internal sealed partial class IlLowerer
         heap = new HeapLowerer(ssa, lower: null!, typeOf: null!, throwIfNull: null!, resolveTarget: null!, (_, condition, exceptionType) => ThrowIf(condition, exceptionType), TypeMapper.Unmapped);
         exceptions = new ExceptionLowerer(ssa, compilation: null!, cfg: null!, chains: null!, loops: null!, bodySpan, fill: null!);
     }
+
+    /// <summary>The callee identities whose calls are rebound, each lowered as an opaque (ADR 0042; ticket P2-069).</summary>
+    private ImmutableHashSet<string> Rebounds { get; init; } = [];
 
     private ITypeSymbol Boolean => compilation.GetSpecialType(SpecialType.System_Boolean);
 
@@ -169,7 +169,7 @@ internal sealed partial class IlLowerer
         IlAstReader.Body body = IlAstReader.Read(method, compilation);
         return body.Failure is { } failure
             ? IrLowerer.Opaque(RoslynIdentity.Of(method, RenameMap.Empty), parameters, returnType, failure, [span])
-            : new IlLowerer(method, compilation, body, span, returnType, x87, mapped, rebound ?? []).Procedure(parameters, body.Function!);
+            : new IlLowerer(method, compilation, body, span, returnType, x87, mapped) { Rebounds = rebound ?? [] }.Procedure(parameters, body.Function!);
     }
 
     /// <summary>The procedure: the C# parameters, then the heap inputs the lowering used, as <see cref="IrLowerer"/> orders them.</summary>
@@ -943,7 +943,7 @@ internal sealed partial class IlLowerer
 
         CallIdentity identity = CallIdentityFactory.Of(target, compilation, RenameMap.Empty, []);
         ImmutableArray<IrVar> operands = receiver is { } self ? [self.Var, .. arguments] : arguments;
-        return (isOperator, rebound.Contains(identity.Value)) switch
+        return (isOperator, Rebounds.Contains(identity.Value)) switch
         {
             (true, _) => new(Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType),
             (_, true) => Rebound(call, written, Result(call, target)),
