@@ -1,5 +1,5 @@
 # P2-066 Version-upgrade pairs in the corpus: pin two public .NET-to-.NET upgrades and run them
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-055, P2-056, P2-047 (the adjudication method)

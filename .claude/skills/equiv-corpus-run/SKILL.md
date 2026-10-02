@@ -98,8 +98,9 @@ work already done.
 ```
 
 `-Fetch` sets `core.longpaths` on the checkout, runs `git submodule update --init` and, if a
-checkout's own `global.json` pins an SDK with no `rollForward`, patches that copy to
-`latestMajor` (never this repo's `global.json`). It refuses to reuse a checkout whose `HEAD` does
+checkout's own `global.json` pins an SDK with no `rollForward` or one that stays inside the pinned major
+(`latestMinor`, `feature`), patches that copy to `latestMajor` (never this repo's `global.json`).
+The box has one SDK, so a narrower pin on an older major finds none. It refuses to reuse a checkout whose `HEAD` does
 not resolve or whose `git status --porcelain` is not empty — delete the directory and run `-Fetch`
 again rather than trusting a half-fetched checkout.
 
