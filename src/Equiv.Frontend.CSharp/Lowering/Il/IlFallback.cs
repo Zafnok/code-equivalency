@@ -15,7 +15,8 @@ namespace Equiv.Frontend.CSharp.Lowering.Il;
 /// opaques, and never one side alone. A method whose IL cannot be read keeps its IOperation lowering, and so does the pair:
 /// the emit failed, the method was not found or has no body (<see cref="IlAstReader"/>'s reasons), or it is an
 /// <c>async</c> or iterator method, whose IL is only the kickoff of a state machine the IL lowering does not follow. Each
-/// such method is one debug detail line.
+/// such method is one debug detail line. Each side is read with its rebound callee identities, so a rebound call is the
+/// same opaque in both lowerings and never a reason to prefer the IL bodies (ADR 0042; ticket P2-069).
 /// </summary>
 internal static class IlFallback
 {
@@ -33,13 +34,13 @@ internal static class IlFallback
 
     /// <summary>The bodies <paramref name="legacy"/> and <paramref name="modern"/> keep, read with the production <see cref="IlLowerer"/>.</summary>
     public static Choice Choose(Side legacy, Side modern, bool congruent, IRunLog log) =>
-        Choose(legacy, modern, congruent, log, static (method, compilation, x87) => IlLowerer.Lower(method, compilation, x87));
+        Choose(legacy, modern, congruent, log, static (method, compilation, x87, rebound) => IlLowerer.Lower(method, compilation, x87, rebound));
 
     /// <summary>
-    /// Seam for unit tests: <paramref name="lower"/> reads a method from IL, given whether its floating point is x87's. A
-    /// <paramref name="congruent"/> pair is never lowered again (ADR 0024 decides first).
+    /// Seam for unit tests: <paramref name="lower"/> reads a method from IL, given whether its floating point is x87's and
+    /// its side's rebound callee identities. A <paramref name="congruent"/> pair is never lowered again (ADR 0024 decides first).
     /// </summary>
-    internal static Choice Choose(Side legacy, Side modern, bool congruent, IRunLog log, Func<IMethodSymbol, Compilation, bool, IrProcedure> lower)
+    internal static Choice Choose(Side legacy, Side modern, bool congruent, IRunLog log, Func<IMethodSymbol, Compilation, bool, ImmutableHashSet<string>, IrProcedure> lower)
     {
         ArgumentNullException.ThrowIfNull(legacy);
         ArgumentNullException.ThrowIfNull(modern);
@@ -73,9 +74,9 @@ internal static class IlFallback
         return Lacking(oldOpaques, Fingerprints(newOpaques)) + Lacking(newOpaques, Fingerprints(oldOpaques));
     }
 
-    private static IrProcedure? Relowered(string side, Side procedure, bool x87, IRunLog log, Func<IMethodSymbol, Compilation, bool, IrProcedure> lower)
+    private static IrProcedure? Relowered(string side, Side procedure, bool x87, IRunLog log, Func<IMethodSymbol, Compilation, bool, ImmutableHashSet<string>, IrProcedure> lower)
     {
-        IrProcedure? body = procedure.Symbol.IsAsync || procedure.Symbol.IsIterator ? null : lower(procedure.Symbol, procedure.Compilation, x87);
+        IrProcedure? body = procedure.Symbol.IsAsync || procedure.Symbol.IsIterator ? null : lower(procedure.Symbol, procedure.Compilation, x87, procedure.Rebound);
         string? reason = body is null ? StateMachine : ReadFailure(body);
         if (reason is null)
         {
@@ -101,8 +102,14 @@ internal static class IlFallback
     private static int Lacking(ImmutableArray<IrOpaque> opaques, HashSet<string> other) =>
         opaques.Count(o => o.Fingerprint is not { } fingerprint || !other.Contains(fingerprint));
 
-    /// <summary>One side of a matched pair: its method, the compilation it is read from, and its IOperation lowering.</summary>
-    internal sealed record Side(IMethodSymbol Symbol, Compilation Compilation, IrProcedure Body);
+    /// <summary>
+    /// One side of a matched pair: its method, the compilation it is read from, its IOperation lowering, and the callee
+    /// identities whose calls that lowering made opaque as rebound (ADR 0042).
+    /// </summary>
+    internal sealed record Side(IMethodSymbol Symbol, Compilation Compilation, IrProcedure Body)
+    {
+        public ImmutableHashSet<string> Rebound { get; init; } = [];
+    }
 
     /// <summary>
     /// The bodies a pair keeps, both from one <see cref="Lowering"/>, and whether it was <see cref="Tried"/>: lowered again

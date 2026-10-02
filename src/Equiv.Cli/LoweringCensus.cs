@@ -130,9 +130,6 @@ internal sealed record LoweringCensus(
     private static ImmutableHashSet<string> Reasons(IrProcedure body) =>
         [.. body.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>().Select(static o => o.Reason)];
 
-    /// <summary>The shape a frontend gives a body it could not lower at all: one block whose only instruction is an <see cref="IrOpaque"/>.</summary>
-    private static bool IsWholeBodyOpaque(IrProcedure body) => body.Blocks is [{ Instructions: [IrOpaque] }];
-
     /// <summary>The running state <see cref="Compute"/> folds each pair into, kept off that method to stay under MA0051.</summary>
     private sealed class Accumulator
     {
@@ -199,6 +196,13 @@ internal sealed record LoweringCensus(
                 new SideCounts(legacyCalls.Members.Count, modernCalls.Members.Count),
                 new SideCounts(legacyCalls.Pairs, modernCalls.Pairs)),
             new ExternalCallees(legacyExternal.ToImmutableArray(), modernExternal.ToImmutableArray()));
+
+        /// <summary>
+        /// What a frontend gives a body it could not lower at all: one block that holds nothing but <see cref="IrOpaque"/>s
+        /// flagged <see cref="IrOpaque.WholeBody"/>, one per cause (an unbound body has one per error; ticket P2-092).
+        /// </summary>
+        private static bool IsWholeBodyOpaque(IrProcedure body) =>
+            body.Blocks is [{ Instructions: { IsEmpty: false } instructions }] && instructions.All(static i => i is IrOpaque { WholeBody: true });
     }
 
     /// <summary>One side's running <see cref="RuntimeChangeCalls"/> counts.</summary>

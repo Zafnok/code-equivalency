@@ -289,6 +289,31 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-069 criteria 2 and 3 (ADR 0042): <c>Has</c> is the same source on both sides, and the library upgrade rebinds
+    /// its call from <c>FileBase::Exists</c> to <c>IFile::Exists</c>. It is Unknown, not Divergent: line-scoped, pointing at the
+    /// call site on each side, and naming the two callees it treated as possibly the same. <c>Clear</c> calls <c>Delete</c>
+    /// on the modern side, another member, and stays Divergent with no rebound pair.
+    /// </summary>
+    [Fact]
+    public async Task DependencyRebinding_TheReboundCallIsUnknownAndNamedAndAnotherMemberStaysDivergent()
+    {
+        SampleRun run = RunSample("dependency-rebinding");
+        Result has = Single("dependency-rebinding", "::Has(");
+        Result clear = Single("dependency-rebinding", "::Clear(");
+
+        Assert.Equal(await Snapshot("dependency-rebinding"), run.NormalizedSarif);
+        Assert.Equal("EQ003", has.RuleId);
+        Assert.Equal("opaque", has.GetProperty<string>("unknownReason"));
+        Assert.Equal("line", has.GetProperty<string>("scope"));
+        Dictionary<string, string> rebound = Assert.Single(has.GetProperty<List<Dictionary<string, string>>>("reboundCalls"));
+        Assert.Equal("Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)", rebound["legacy"]);
+        Assert.Equal("Equiv.Samples.DependencyRebinding.Files.IFile::Exists(string)", rebound["modern"]);
+        Assert.Equal(["rebound-call", "rebound-call"], has.RelatedLocations.Select(static l => l.Message.Text), StringComparer.Ordinal);
+        Assert.Equal("EQ002", clear.RuleId);
+        Assert.False(clear.TryGetProperty("reboundCalls", out List<Dictionary<string, string>>? _));
+    }
+
+    /// <summary>
     /// Ticket P2-064 criterion 5: the three methods the same API swap was made in share one review group, which ranks above
     /// the group of the method that changed on its own. The checked-in snapshot is the whole run.
     /// </summary>

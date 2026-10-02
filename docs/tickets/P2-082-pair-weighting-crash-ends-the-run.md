@@ -62,3 +62,7 @@ P2-083's lowering crashes on the same pairs. Changing how a pair is weighed.
   `docs/runs/2026-10-01-full-duplicati-3124/SUMMARY.md`), at equiv ef79ff6.
 - Git Extensions finished `full` runs at bd8e379 (P2-046) and 1d4569a (P1-018). Whether it still does
   at ef79ff6 was not checked.
+- P2-090 fixed one way the frontend built a block with no terminator: a branch on a compile-time constant
+  (`const bool` flag) whose dead edge named a block that was never lowered. A Release build does not validate, so
+  that procedure reaches `IrLoopAnalysis.Search` and throws at this ticket's line 102. Rerun with P2-090 in before
+  hunting for the construct; criterion 1 still has to name the pair, and criteria 3 (the validator check) and 4 stand.

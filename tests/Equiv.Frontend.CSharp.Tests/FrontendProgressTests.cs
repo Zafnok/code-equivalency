@@ -170,7 +170,7 @@ public sealed class FrontendProgressTests
         CSharpFrontend frontend = new(
             new StubLoader(_ => new LoadedSolution(null!, [RoslynTestCompilations.Compile("namespace N { public class C { public int A() => 1; } }", "App")], [], [])),
             new StableIdentityMatcher(),
-            static (_, _, _, _) => throw new InvalidOperationException("boom"));
+            static (_, _, _, _, _) => throw new InvalidOperationException("boom"));
 
         _ = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, log, CancellationToken.None);
 

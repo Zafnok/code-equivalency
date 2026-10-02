@@ -14,7 +14,8 @@ namespace Equiv.Core.Matching;
 /// distinct ids of the API-equivalence catalogue entries that fired while either body was lowered (ADR 0020; ticket M3-009).
 /// <see cref="Lowering"/> is the lowering both bodies came from under <c>--il-fallback</c>, <c>operation</c> or <c>il</c>, and
 /// <see cref="IlFallbackTried"/> whether the pair was lowered again from IL to choose it (ADR 0039; ticket P1-016); without the
-/// flag they are null and false.
+/// flag they are null and false. <see cref="ReboundCalls"/> are the callee pairs the bodies treat as possibly the same
+/// function, sorted by legacy and then modern identity (ADR 0042; ticket P2-069).
 /// </summary>
 public sealed record ProcedurePair(
     ProcedureIdentity Old,
@@ -31,4 +32,6 @@ public sealed record ProcedurePair(
     public string? Lowering { get; init; }
 
     public bool IlFallbackTried { get; init; }
+
+    public ImmutableArray<ReboundCall> ReboundCalls { get; init; } = [];
 }

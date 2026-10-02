@@ -1133,6 +1133,32 @@ public sealed class CompareCommandTests
         Assert.Equal(["webapi.ok"], results.Single(static r => string.Equals(r.RuleId, "EQ003", StringComparison.Ordinal)).GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
     }
 
+    /// <summary>ADR 0042 (ticket P2-069 criterion 2): a pair's rebound callee pairs reach its SARIF result, decided by the solver or without it.</summary>
+    [Fact]
+    public void ThePairsReboundCallsReachTheResult()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity unbound = new("N.C::U()");
+        ProcedurePair verified = Pair(PairIdentity) with { ReboundCalls = [new ReboundCall("Lib.FileBase::Exists(string)", "Lib.IFile::Exists(string)")] };
+        ProcedurePair unboundPair = Pair(unbound) with { NewBody = UnboundBody(unbound), ReboundCalls = [new ReboundCall("Lib.Old::F()", "Lib.New::F()")] };
+        FakeBackend backend = new(ImmutableDictionary<string, Verdict>.Empty.Add(PairIdentity.Value, new Unknown(UnknownReason.Opaque, "old: rebound-call; new: rebound-call")));
+        InMemoryReportSink sink = new();
+
+        CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([verified, unboundPair], [], [], []))], backend, sink, NullRunLog.Instance);
+
+        Dictionary<string, string>[] listed =
+        [
+            .. sink.Log!.Runs[0].Results
+                .OrderBy(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal)
+                .Select(static r => Assert.Single(r.GetProperty<List<Dictionary<string, string>>>("reboundCalls"))),
+        ];
+        Assert.Equal(["Lib.Old::F()", "Lib.FileBase::Exists(string)"], listed.Select(static r => r["legacy"]), StringComparer.Ordinal);
+        Assert.Equal(["Lib.New::F()", "Lib.IFile::Exists(string)"], listed.Select(static r => r["modern"]), StringComparer.Ordinal);
+    }
+
     [Fact]
     public void AnUnboundLegacyBodyIsUnknownUnbound()
     {
