@@ -89,8 +89,8 @@ internal sealed class ModelDecoder
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
         ModelOracle oldOracle = decoder.Oracle(Side.Old);
         ModelOracle newOracle = decoder.Oracle(Side.New);
-        IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, Budget(old));
-        IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, Budget(@new));
+        IrRun oldRun = Interpret(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, Budget(old));
+        IrRun newRun = Interpret(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, Budget(@new));
         return (new Counterexample(inputs, oldRun, newRun), oldOracle, newOracle);
     }
 
@@ -110,8 +110,8 @@ internal sealed class ModelDecoder
         ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
         ModelOracle oldOracle = decoder.Oracle(Side.Old);
         ModelOracle newOracle = decoder.Oracle(Side.New);
-        IrRun oldRun = Run(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, stepBudget);
-        IrRun newRun = Run(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, stepBudget);
+        IrRun oldRun = Interpret(old, Bind(old, shared, inputs, static s => s.Old), oldOracle, stepBudget);
+        IrRun newRun = Interpret(@new, Bind(@new, shared, inputs, static s => s.New), newOracle, stepBudget);
         bool complete = new[] { oldRun, newRun }.All(static r => r.Outcome is IrReturned or IrThrew);
         return complete && Diverges(new(old, oldRun, oldOracle.Threaded), new(@new, newRun, newOracle.Threaded), shared, inputs, encoding.Calls) ? new Counterexample(inputs, oldRun, newRun) : null;
     }
@@ -216,7 +216,7 @@ internal sealed class ModelDecoder
     /// Replays <paramref name="procedure"/> with <paramref name="oracle"/> answering its calls and pure functions, with taint
     /// (ADR 0026), and completes each call event with the heap the call read (ticket P1-005).
     /// </summary>
-    private static IrRun Run(IrProcedure procedure, IrInputs inputs, ModelOracle oracle, int stepBudget) =>
+    private static IrRun Interpret(IrProcedure procedure, IrInputs inputs, ModelOracle oracle, int stepBudget) =>
         oracle.Complete(IrInterpreter.Run(procedure, inputs, oracle, stepBudget, IsAbstraction, oracle));
 
     /// <summary><paramref name="lengths"/> with every negative length replaced by 0.</summary>
@@ -242,12 +242,6 @@ internal sealed class ModelDecoder
             .ToDictionary(static s => s.Parameter!.Var.Name, static s => s.Value, StringComparer.Ordinal);
         return new IrInputs([.. procedure.Parameters.Select(p => byName[p.Var.Name])]);
     }
-
-    private static int OutIndex(IrProcedure procedure, IrParameter? parameter) =>
-        procedure.Parameters
-            .Where(static p => p.Kind != IrParameterKind.In)
-            .ToList()
-            .FindIndex(p => p == parameter);
 
     private static string Describe(IrRun run) =>
         $"{run.Outcome} outs [{string.Join(", ", run.Outs)}] trace [{string.Join(", ", run.Trace.Select(static c => $"{c.Callee.Value}({string.Join(", ", c.Arguments)})"))}]";
@@ -435,15 +429,21 @@ internal sealed class ModelDecoder
         /// </summary>
         public IrValue Final(IrParameter? parameter, IrVar shared, IrValue input)
         {
-            int index = OutIndex(Procedure, parameter);
+            int index = OutIndex(parameter);
             return index >= 0 ? Run.Outs[index] : Threaded.GetValueOrDefault(new HeapMap(shared.Name, shared.Type), input);
         }
 
         /// <summary>Whether that final value is tainted; the unchanged input of a side without it never is.</summary>
         public bool FinalTainted(IrParameter? parameter, IrVar shared)
         {
-            int index = OutIndex(Procedure, parameter);
+            int index = OutIndex(parameter);
             return index >= 0 ? Run.OutTainted(index) : Threaded.ContainsKey(new HeapMap(shared.Name, shared.Type)) && ThreadsTaint(Run);
         }
+
+        private int OutIndex(IrParameter? parameter) =>
+            Procedure.Parameters
+                .Where(static p => p.Kind != IrParameterKind.In)
+                .ToList()
+                .FindIndex(p => p == parameter);
     }
 }
