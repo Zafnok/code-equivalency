@@ -44,8 +44,8 @@ internal static class CompareCommand
         ArgumentNullException.ThrowIfNull(frontends);
         ArgumentNullException.ThrowIfNull(backend);
 
-        Option<string> legacyOption = new("--legacy") { Required = true };
-        Option<string> modernOption = new("--modern") { Required = true };
+        Option<string> legacyOption = new("--legacy", "--before") { Required = true };
+        Option<string> modernOption = new("--modern", "--after") { Required = true };
         Option<string> outOption = new("--out") { DefaultValueFactory = _ => "equiv.sarif" };
         Option<string?> baselineOption = new("--baseline");
         Option<string?> configOption = new("--config");

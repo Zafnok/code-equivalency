@@ -54,6 +54,53 @@ public sealed class CompareCommandTests
         Assert.Contains(parseResult.Errors, e => e.Message.Contains("--modern", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// ADR 0040 decision 4 (ticket P2-057): <c>--before</c> and <c>--after</c> are other spellings of <c>--legacy</c> and
+    /// <c>--modern</c>, and <c>--help</c> lists them.
+    /// </summary>
+    [Fact]
+    public void BeforeAfterAreAliases()
+    {
+        ParseResult parseResult = CompareCommand.Create([], new FakeBackend(NoVerdicts)).Parse(["--before", "a.sln", "--after", "b.sln"]);
+        int exitCode = ExitCodes.UsageError;
+
+        string help = CaptureStdOut(() => exitCode = Program.Run(["compare", "--help"], [], new FakeBackend(NoVerdicts)));
+
+        Assert.Empty(parseResult.Errors);
+        Assert.Equal("a.sln", parseResult.GetValue<string>("--legacy"));
+        Assert.Equal("b.sln", parseResult.GetValue<string>("--modern"));
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Contains("--before", help, StringComparison.Ordinal);
+        Assert.Contains("--after", help, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-057 criterion 1: one option given under both of its spellings is exit 3, in either order. The parser takes
+    /// one value per option whatever the spelling, so its own message is the usage error.
+    /// </summary>
+    [Theory]
+    [InlineData("--legacy", "--before", "--modern")]
+    [InlineData("--before", "--legacy", "--after")]
+    [InlineData("--modern", "--after", "--legacy")]
+    [InlineData("--after", "--modern", "--before")]
+    public void BothSpellingsIsAUsageError(string first, string second, string other)
+    {
+        using TempFile given = new();
+        using TempFile otherSide = new();
+        string[] oneSpelling = ["compare", first, given.Path, other, otherSide.Path, "--dry-run"];
+        string[] bothSpellings = [.. oneSpelling, second, given.Path];
+        FakeFrontend frontend = new("csharp", _ => true);
+        int exitCode = ExitCodes.Success;
+        int oneSpellingExitCode = ExitCodes.UsageError;
+
+        string error = CaptureStdErr(() => exitCode = Program.Run(bothSpellings, [frontend], new FakeBackend(NoVerdicts)));
+        _ = CaptureStdOut(() => oneSpellingExitCode = Program.Run(oneSpelling, [frontend], new FakeBackend(NoVerdicts)));
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Equal($"Option '{first}' expects a single argument but 2 were provided.{Environment.NewLine}", error, StringComparer.Ordinal);
+        Assert.Equal(ExitCodes.Success, oneSpellingExitCode);
+    }
+
     /// <summary><c>--fail-on</c> has no parsed default, so <c>--lower-only</c> can tell an explicit one apart; unset means divergent.</summary>
     [Fact]
     public void Create_DefaultsOutAndLeavesFailOnAndLowerOnlyUnset()
