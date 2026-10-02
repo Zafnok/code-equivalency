@@ -46,3 +46,12 @@ version to nuget.org, the feed is deleted and this ADR is superseded.
   `libgomp` despite the nuspec description (checked from the ELF `NEEDED` entries: libstdc++,
   libm, libgcc_s, libc).
 - Ticket M3-027.
+
+## Clarifications
+- 2026-10-01. "Dependabot still updates the other packages" holds only for projects that do not
+  reach `Microsoft.Z3`. Dependabot restores project by project, cannot restore `Equiv.Verify.Z3`
+  or anything that references it, and leaves those `packages.lock.json` files (and
+  `THIRD-PARTY-NOTICES.md`) stale, so every NuGet PR it opened failed `--locked-mode` until
+  someone pushed the missing files by hand. `dependabot-fixup.yml` now does that on the PR
+  itself: it fills the feed, restores, regenerates the notices and pushes one
+  `[dependabot skip]` commit. The feed and the `ignore` entry are unchanged.

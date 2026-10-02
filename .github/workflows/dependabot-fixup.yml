@@ -1,0 +1,155 @@
+name: Dependabot fix-up
+
+# Dependabot cannot run tools/z3-feed/fetch.ps1, so it cannot restore any project that reaches
+# Microsoft.Z3 (ADR 0030). It bumps Directory.Packages.props and the lock files of the projects
+# it can restore, and leaves the rest (Equiv.Verify.Z3 and everything that references it) and
+# THIRD-PARTY-NOTICES.md stale, so `dotnet restore --locked-mode` fails with NU1004 on every
+# NuGet PR it opens. This workflow finishes the job: it regenerates what Dependabot could not
+# and pushes that as one commit to the PR branch.
+on:
+  pull_request:
+
+concurrency:
+  group: dependabot-fixup-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Restoring and building runs code from the packages being bumped (analyzers, MSBuild targets),
+  # so this job has a read-only token and leaves no credentials in the clone. It hands the result
+  # to `push` as a patch.
+  regenerate:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && startsWith(github.head_ref, 'dependabot/nuget/')
+    runs-on: windows-latest
+    outputs:
+      changed: ${{ steps.patch.outputs.changed }}
+    steps:
+      # The branch head, not the merge ref: the commit goes on top of Dependabot's.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .z3-feed
+          key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
+
+      - name: Fetch Microsoft.Z3 (ADR 0030)
+        shell: pwsh
+        run: ./tools/z3-feed/fetch.ps1
+
+      # Not --locked-mode: an unlocked restore rewrites exactly the lock files that no longer
+      # match Directory.Packages.props and leaves the ones Dependabot already updated alone.
+      - name: Update the stale lock files
+        run: dotnet restore
+
+      # THIRD-PARTY-NOTICES.md lists every package version, so a bump always changes it.
+      # licence-check only regenerates it once samples/ is restored, which needs MSBuild.exe;
+      # that is why this job runs on Windows. A package whose licence is not on the allowlist
+      # fails here, and that needs a person (ADR 0017).
+      - run: dotnet tool restore
+      # The same commands as build.ps1's "restore samples" step (which says why legacy needs
+      # MSBuild.exe); keep the two in step. Inline rather than a shared script because Sonar
+      # counts a .ps1 no Pester test runs as uncovered new code (see sonar.yml).
+      - name: Restore samples
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+          if (-not $msbuild) {
+              Write-Error "MSBuild.exe not found via vswhere; cannot restore samples/**/legacy"
+              exit 1
+          }
+
+          Get-ChildItem -Path samples -Filter "*.csproj" -Recurse | ForEach-Object {
+              if ($_.FullName -match '[\\/]legacy[\\/]') {
+                  & $msbuild $_.FullName -t:Restore -v:minimal -nologo
+              } else {
+                  dotnet restore $_.FullName
+              }
+              if ($LASTEXITCODE -ne 0) {
+                  exit $LASTEXITCODE
+              }
+          }
+      - name: Regenerate THIRD-PARTY-NOTICES.md
+        run: dotnet run --no-restore --project tools/licence-check -- --repo-root . --fix
+
+      - name: Build the patch
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- '*packages.lock.json' THIRD-PARTY-NOTICES.md
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Nothing to fix up: the lock files and THIRD-PARTY-NOTICES.md already match."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            mkdir -p "$RUNNER_TEMP/fixup"
+            git diff --cached --binary --output="$RUNNER_TEMP/fixup/fixup.patch"
+            git diff --cached --stat
+          fi
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.patch.outputs.changed == 'true'
+        with:
+          name: dependabot-fixup
+          path: ${{ runner.temp }}/fixup/fixup.patch
+          if-no-files-found: error
+
+  # The only job with a write token. It runs no package code: it applies the patch, checks the
+  # patch touches nothing but lock files and the notices, and pushes.
+  push:
+    needs: regenerate
+    if: needs.regenerate.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    env:
+      HEAD_REF: ${{ github.head_ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dependabot-fixup
+          path: ${{ runner.temp }}/fixup
+
+      # "[dependabot skip]" tells Dependabot it may discard this commit when it rebases or
+      # updates the PR; without it, Dependabot treats the PR as edited by hand and stops
+      # maintaining it. The push fails if the branch moved since this run started, and the run
+      # for the newer head does the work instead.
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git apply --index "$RUNNER_TEMP/fixup/fixup.patch"
+          if git diff --cached --name-only | grep -Ev '(^|/)packages\.lock\.json$|^THIRD-PARTY-NOTICES\.md$'; then
+            echo "::error::The fix-up patch touches the files listed above; only packages.lock.json and THIRD-PARTY-NOTICES.md are allowed."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(deps): sync the lock files and third-party notices Dependabot could not" -m "[dependabot skip]"
+          git push origin "HEAD:refs/heads/$HEAD_REF"
+
+      # A push made with GITHUB_TOKEN starts no pull_request run, so the new head commit would
+      # have no checks at all. workflow_dispatch is the one event GITHUB_TOKEN may raise; the
+      # check runs attach to the branch's head commit, which is the PR's head.
+      - name: Run the required checks on the new commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh workflow run ci.yml --ref "$HEAD_REF"
+          gh workflow run mutation.yml --ref "$HEAD_REF"
