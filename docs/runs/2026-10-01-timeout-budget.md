@@ -62,6 +62,7 @@ the nine). Over all 206 the picture is the same:
 | 1x | 206 | 0 | 1 | 194 | 11 (abstraction 4, unaligned-loop 4, opaque 3) | 24,731 | 11,415 s on four threads |
 | 4x | 206 | 0 | 17 | 153 | 36 (abstraction 19, unaligned-loop 10, opaque 7) | 27,555 | 10,083 s on four threads |
 | 20x | 206 | 0 | 21 | 117 | 68 (abstraction 39, unaligned-loop 18, opaque 11) | 80,563 | 16,558 s on eight threads |
+| 20x, run again | 206 | 0 | 23 | 104 | 79 (abstraction 46, unaligned-loop 20, opaque 13) | 52,444 | 13,351 s on four threads |
 
 ## Larger wall-clock budgets (criterion 1)
 
@@ -122,8 +123,8 @@ four threads:
 - 1 pair: Unknown(abstraction) in one run, and timeout on the resource limit in the other.
 
 For comparison, the wall-clock budget repeats far worse. The 4x budget was run twice on the same 184
-pairs, in two processes under different load, and 14 pairs ended with a different outcome. At the
-resource limit one did.
+pairs, in two processes under different load, and 14 pairs ended with a different outcome. The 20x
+budget run twice on all 206 differed on 19. At the resource limit one of 184 did.
 
 The same query took very different times to exhaust the same limit in the two runs (4.7 s and
 36.1 s, 9.0 s and 45.8 s), so the solver did not do the same work. Checked on 35 pairs (those five,
