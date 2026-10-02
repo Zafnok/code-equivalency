@@ -1,5 +1,5 @@
 # P2-050 Solver budgets are deterministic, and the timeout Unknowns are measured against a larger budget
-Status: in-progress
+Status: done (PR #328)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-046
