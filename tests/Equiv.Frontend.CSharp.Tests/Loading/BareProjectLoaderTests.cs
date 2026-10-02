@@ -1,5 +1,6 @@
 using System.Text.Json;
 
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 
 using Microsoft.CodeAnalysis;
@@ -146,6 +147,20 @@ public sealed class BareProjectLoaderTests : IDisposable
         Assert.Equal(("Unresolved", "Unresolved", true), (skipped.Name, skipped.AssemblyName, skipped.IsCSharp));
         Assert.NotNull(skipped.Compilation);
         Assert.Contains(skipped.Diagnostics, static d => d is { Kind: LoadDiagnosticKind.UnresolvedReference, Id: "CS0246" });
+    }
+
+    /// <summary>Ticket P2-085: on the modern side a non-SDK project that names a missing type is kept, like an SDK-style one.</summary>
+    [Fact]
+    public async Task OnTheModernSideAProjectThatNamesAMissingTypeIsKept()
+    {
+        string unresolved = Legacy("Unresolved", """<ItemGroup><Compile Include="Code.cs" /></ItemGroup>""", code: "public class Unresolved : Missing.Type { }");
+
+        LoadedSolution loaded = await Load(Solution(unresolved), Codebase.Modern);
+
+        Assert.Equal("Unresolved", Assert.Single(loaded.Compilations).AssemblyName);
+        Assert.Empty(loaded.Skipped);
+        LoadDiagnostic error = Assert.Single(loaded.Diagnostics);
+        Assert.Equal((LoadDiagnosticKind.CompilerError, "CS0246", "Unresolved"), (error.Kind, error.Id, error.Project));
     }
 
     public static TheoryData<string, string> Constructs => new()
@@ -352,7 +367,7 @@ public sealed class BareProjectLoaderTests : IDisposable
     private string Solution(params string[] projects) =>
         _fixture.Write(Path.Combine("sln", "side.sln"), BareFixture.Solution([.. projects.Select(Relative)]));
 
-    private Task<LoadedSolution> Load(string solution) => _fixture.Loader().LoadAsync(solution, TestContext.Current.CancellationToken);
+    private Task<LoadedSolution> Load(string solution, Codebase side = Codebase.Legacy) => _fixture.Loader().LoadAsync(solution, side, TestContext.Current.CancellationToken);
 
     private void WriteAssets(string path, string library, string libraryPath, string asset, string[] frameworkAssemblies) =>
         _fixture.Write(path, JsonSerializer.Serialize(new Dictionary<string, object>(StringComparer.Ordinal)

@@ -63,7 +63,7 @@ public sealed class SynthesisedInputNamingTests
         foreach (string side in (string[])["legacy", "modern"])
         {
             string solution = Directory.GetFiles(Path.Combine(SamplesRoot, sample, side), side is "legacy" ? "*.sln" : "*.slnx").Single();
-            LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(solution, TestContext.Current.CancellationToken);
+            LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(solution, side is "legacy" ? Codebase.Legacy : Codebase.Modern, TestContext.Current.CancellationToken);
             foreach (Compilation compilation in loaded.Compilations)
             {
                 foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))

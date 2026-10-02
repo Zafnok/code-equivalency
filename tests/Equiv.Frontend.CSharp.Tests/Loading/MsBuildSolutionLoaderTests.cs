@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 
 using Microsoft.CodeAnalysis;
@@ -41,7 +42,7 @@ public sealed class MsBuildSolutionLoaderTests
                 return Task.FromResult(ws.CurrentSolution);
             });
 
-        LoadedSolution loaded = await loader.LoadAsync(SolutionPath, TestContext.Current.CancellationToken);
+        LoadedSolution loaded = await loader.LoadAsync(SolutionPath, Codebase.Legacy, TestContext.Current.CancellationToken);
 
         Assert.True(created!.IsDisposed);
 
@@ -57,7 +58,7 @@ public sealed class MsBuildSolutionLoaderTests
             () => created = new TestWorkspace(),
             (ws, _, _) => Task.FromResult(ws.CurrentSolution));
 
-        SolutionLoadException exception = await Assert.ThrowsAsync<SolutionLoadException>(() => loader.LoadAsync(SolutionPath, TestContext.Current.CancellationToken));
+        SolutionLoadException exception = await Assert.ThrowsAsync<SolutionLoadException>(() => loader.LoadAsync(SolutionPath, Codebase.Legacy, TestContext.Current.CancellationToken));
 
         Assert.True(created!.IsDisposed);
         LoadDiagnostic diagnostic = Assert.Single(exception.Diagnostics);
@@ -244,6 +245,41 @@ public sealed class MsBuildSolutionLoaderTests
         Assert.Contains("Missing", diagnostic.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-085 (ADR 0029 as clarified): on the modern side a project whose source names a type no reference provides
+    /// is loaded, even when it is the only one, and the error is kept with the side's diagnostics.
+    /// </summary>
+    [Fact]
+    public async Task AModernProjectThatDoesNotCompileIsLoaded()
+    {
+        LoadedSolution loaded = await LoadAsync(
+            ws => ws.AddCSharpProject("A", "class C { Missing.Thing field; int M() { return 1; } }"),
+            Codebase.Modern);
+
+        Assert.Equal(["A"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
+        Assert.Empty(loaded.Skipped);
+        LoadDiagnostic diagnostic = Assert.Single(loaded.Diagnostics);
+        Assert.Equal((LoadDiagnosticKind.CompilerError, "CS0246", "A"), (diagnostic.Kind, diagnostic.Id, diagnostic.Project));
+    }
+
+    /// <summary>A modern project with no core library is still skipped: nearly nothing in it binds (ticket P2-085).</summary>
+    [Fact]
+    public async Task AModernProjectWithoutACoreLibraryIsStillSkipped()
+    {
+        LoadedSolution loaded = await LoadAsync(
+            ws =>
+            {
+                ws.AddCSharpProject("A", ValidSource, referenceCoreLibrary: false);
+                ws.AddCSharpProject("B", ValidSource);
+            },
+            Codebase.Modern);
+
+        Assert.Equal(["B"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
+        SkippedProject skipped = Assert.Single(loaded.Skipped);
+        Assert.Equal("A", skipped.Name);
+        Assert.Contains(skipped.Diagnostics, static d => d is { Id: "CS0518", Kind: LoadDiagnosticKind.UnresolvedReference });
+    }
+
     [Fact]
     public async Task ZeroLoadableProjectsIsStillALoadFailure()
     {
@@ -341,7 +377,7 @@ public sealed class MsBuildSolutionLoaderTests
         Assert.IsType<MsBuildSolutionLoader>(loader);
     }
 
-    private static Task<LoadedSolution> LoadAsync(Action<TestWorkspace> open)
+    private static Task<LoadedSolution> LoadAsync(Action<TestWorkspace> open, Codebase side = Codebase.Legacy)
     {
         MsBuildSolutionLoader loader = new(
             static () => new TestWorkspace(),
@@ -352,7 +388,7 @@ public sealed class MsBuildSolutionLoaderTests
                 return Task.FromResult(ws.CurrentSolution);
             });
 
-        return loader.LoadAsync(SolutionPath, TestContext.Current.CancellationToken);
+        return loader.LoadAsync(SolutionPath, side, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -371,7 +407,7 @@ public sealed class MsBuildSolutionLoaderTests
             },
             _ => SolutionBuildConfigurationTests.Solution(built: ["Lib"], notBuilt: ["Site"]));
 
-        LoadedSolution loaded = await loader.LoadAsync(SolutionPath, TestContext.Current.CancellationToken);
+        LoadedSolution loaded = await loader.LoadAsync(SolutionPath, Codebase.Legacy, TestContext.Current.CancellationToken);
 
         Assert.EndsWith(".slnf", openedPath, StringComparison.Ordinal);
         Assert.False(File.Exists(openedPath));
@@ -395,7 +431,7 @@ public sealed class MsBuildSolutionLoaderTests
             },
             _ => SolutionBuildConfigurationTests.Solution(built: ["Lib"], notBuilt: []));
 
-        LoadedSolution loaded = await loader.LoadAsync(SolutionPath, TestContext.Current.CancellationToken);
+        LoadedSolution loaded = await loader.LoadAsync(SolutionPath, Codebase.Legacy, TestContext.Current.CancellationToken);
 
         Assert.Equal(SolutionPath, openedPath);
         Assert.Empty(loaded.NotBuilt);

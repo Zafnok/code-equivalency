@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 
 using Microsoft.CodeAnalysis;
@@ -28,7 +29,7 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
         List<string> opened = [];
 
         LoadedSolution loaded = await _fixture.Loader(SdkLoader(opened, (ws, _) => ws.AddCSharpProject("Modern", "public class M { }", filePath: modern)))
-            .LoadAsync(solution, TestContext.Current.CancellationToken);
+            .LoadAsync(solution, Codebase.Legacy, TestContext.Current.CancellationToken);
 
         Assert.Equal([solution], opened, StringComparer.Ordinal);
         Assert.Equal("Modern", Assert.Single(loaded.Compilations).AssemblyName);
@@ -49,7 +50,7 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
                 filtered.AddRange(JsonDocument.Parse(File.ReadAllText(path)).RootElement.GetProperty("solution").GetProperty("projects").EnumerateArray().Select(static p => p.GetString()!));
                 AddProject(ws, "Modern", modern, "public class M { }", []);
             }))
-            .LoadAsync(solution, TestContext.Current.CancellationToken);
+            .LoadAsync(solution, Codebase.Legacy, TestContext.Current.CancellationToken);
 
         Assert.Equal([modern], filtered, StringComparer.Ordinal);
         Assert.EndsWith(".slnf", Assert.Single(opened), StringComparison.Ordinal);
@@ -66,7 +67,7 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
         Legacy("Legacy", """<ItemGroup><Compile Include="Code.cs" /></ItemGroup>""", "public class L { }");
         string solution = _fixture.Write(Path.Combine("sln", "side.sln"), BareFixture.Solution(@"LEGACY\legacy.csproj"));
 
-        LoadedSolution loaded = await _fixture.Loader().LoadAsync(solution, TestContext.Current.CancellationToken);
+        LoadedSolution loaded = await _fixture.Loader().LoadAsync(solution, Codebase.Legacy, TestContext.Current.CancellationToken);
 
         // The assembly name is the project file's name: as written where the file system ignores case, as on disk elsewhere.
         Assert.Equal("Legacy", Assert.Single(loaded.Compilations).AssemblyName, ignoreCase: true);
@@ -85,7 +86,7 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
                 AddProject(ws, "Modern", modern, "public class M { public Missing.Type Value; }", []);
                 AddProject(ws, "Other", other, "public class O { }", []);
             }))
-            .LoadAsync(solution, TestContext.Current.CancellationToken);
+            .LoadAsync(solution, Codebase.Legacy, TestContext.Current.CancellationToken);
 
         SkippedProject skipped = Assert.Single(loaded.Skipped);
         Assert.Equal("Modern", skipped.Name);
@@ -124,6 +125,37 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
         Assert.Same(loaded.Compilations[0], skipped.Compilation!.References.OfType<CompilationReference>().Single().Compilation);
     }
 
+    /// <summary>
+    /// Ticket P2-085: on the modern side the rebound project whose reference no longer provides a type is kept, with the
+    /// error as a compiler error, for its methods to be decided one by one.
+    /// </summary>
+    [Fact]
+    public async Task OnTheModernSideASdkProjectWhoseBareReferenceNoLongerProvidesATypeIsKept()
+    {
+        (string modern, string legacy) = ModernReferencingLegacy(bareHelper: "public class Other { }");
+
+        LoadedSolution loaded = await LoadWithMsBuildCopy(modern, legacy, copyHelper: "public class Helper { public static int Value() { return 1; } }", side: Codebase.Modern);
+
+        Assert.Equal(["Modern", "Legacy"], loaded.Compilations.Select(static c => c.AssemblyName!), StringComparer.Ordinal);
+        Assert.Empty(loaded.Skipped);
+        Assert.Contains(loaded.Diagnostics, static d => d is { Kind: LoadDiagnosticKind.CompilerError, Id: "CS0246", Project: "Modern" });
+        Assert.DoesNotContain(loaded.Diagnostics, static d => d.Kind == LoadDiagnosticKind.UnresolvedReference);
+    }
+
+    /// <summary>Ticket P2-085: the side reaches the SDK-style loader, which keeps a modern project that names a missing type.</summary>
+    [Fact]
+    public async Task OnTheModernSideAnSdkProjectThatDoesNotCompileIsLoaded()
+    {
+        string modern = _fixture.Write(Path.Combine("sln", "Modern", "Modern.csproj"), SdkProject);
+        string solution = _fixture.Write(Path.Combine("sln", "side.slnx"), """<Solution><Project Path="Modern\Modern.csproj" /></Solution>""");
+
+        LoadedSolution loaded = await _fixture.Loader(SdkLoader([], (ws, _) => AddProject(ws, "Modern", modern, "public class M { public Missing.Type Value; }", [])))
+            .LoadAsync(solution, Codebase.Modern, TestContext.Current.CancellationToken);
+
+        Assert.Equal("Modern", Assert.Single(loaded.Compilations).AssemblyName);
+        Assert.Empty(loaded.Skipped);
+    }
+
     [Fact]
     public async Task ASdkProjectThatGainsACompilerErrorFromTheBareReferenceKeepsLoadingWithIt()
     {
@@ -152,7 +184,7 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
                 ProjectId innerId = AddProject(ws, "Inner", inner, "public class I { public Helper H; }", [MetadataReference.CreateFromFile(builtLegacy)]);
                 AddProject(ws, "Outer", outer, "public class O { public I Value; }", [MetadataReference.CreateFromFile(unrelated)], innerId);
             }))
-            .LoadAsync(solution, TestContext.Current.CancellationToken);
+            .LoadAsync(solution, Codebase.Legacy, TestContext.Current.CancellationToken);
 
         Compilation bare = loaded.Compilations.Single(static c => c.AssemblyName is "Legacy");
         Compilation rebuiltInner = loaded.Compilations.Single(static c => c.AssemblyName is "Inner");
@@ -179,7 +211,7 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
                 new LoadDiagnostic(LoadDiagnosticKind.WorkspaceFailure, string.Empty, "Tool", "and it failed too"),
             ]);
 
-        LoadedSolution loaded = await _fixture.Loader(sdk).LoadAsync(solution, TestContext.Current.CancellationToken);
+        LoadedSolution loaded = await _fixture.Loader(sdk).LoadAsync(solution, Codebase.Legacy, TestContext.Current.CancellationToken);
 
         Assert.Equal("Legacy", Assert.Single(loaded.Compilations).AssemblyName);
         Assert.Equal(
@@ -225,7 +257,7 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
     }
 
     /// <summary>Loads a solution of <paramref name="modern"/> alone, whose MSBuildWorkspace copy of <paramref name="legacy"/> holds <paramref name="copyHelper"/>.</summary>
-    private Task<LoadedSolution> LoadWithMsBuildCopy(string modern, string legacy, string copyHelper, bool withNeighbour = false)
+    private Task<LoadedSolution> LoadWithMsBuildCopy(string modern, string legacy, string copyHelper, bool withNeighbour = false, Codebase side = Codebase.Legacy)
     {
         string other = _fixture.Write(Path.Combine("sln", "Other", "Other.csproj"), SdkProject);
         string solution = _fixture.Write(Path.Combine("sln", "side.sln"), BareFixture.Solution([@"Modern\Modern.csproj", .. withNeighbour ? [@"Other\Other.csproj"] : Array.Empty<string>()]));
@@ -238,7 +270,7 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
                     AddProject(ws, "Other", other, "public class O { int X() { return \"s\"; } }", []);
                 }
             }))
-            .LoadAsync(solution, TestContext.Current.CancellationToken);
+            .LoadAsync(solution, side, TestContext.Current.CancellationToken);
     }
 
     private string Legacy(string name, string body, string code)
@@ -249,6 +281,6 @@ public sealed class CompositeSolutionLoaderTests : IDisposable
 
     private sealed class FailingLoader(ImmutableArray<LoadDiagnostic> diagnostics) : ISolutionLoader
     {
-        public Task<LoadedSolution> LoadAsync(string solutionPath, CancellationToken ct) => throw new SolutionLoadException(solutionPath, diagnostics);
+        public Task<LoadedSolution> LoadAsync(string solutionPath, Codebase side, CancellationToken ct) => throw new SolutionLoadException(solutionPath, diagnostics);
     }
 }

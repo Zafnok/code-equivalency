@@ -1,25 +1,36 @@
 using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 
+using Equiv.Core.Verdicts;
+
 namespace Equiv.Frontend.CSharp.Loading;
 
 /// <summary>
 /// Sorts compiler errors into "references did not resolve" (skip the project) and everything else (keep), and
 /// workspace failures into real failures and MSBuild, NuGet or SDK warnings that the workspace reports as failures
-/// (<see cref="MsBuildWarningCodes"/> and <see cref="ClassifyWorkspaceFailure"/>).
+/// (<see cref="MsBuildWarningCodes"/> and <see cref="ClassifyWorkspaceFailure"/>). A name the source uses that no
+/// reference provides (<see cref="UnboundNameIds"/>) skips a legacy project and not a modern one, whose methods that do
+/// not bind are Unknown(Unbound) one by one (ADR 0029 as clarified by ticket P2-085).
 /// </summary>
 internal static partial class CompilationDiagnosticClassifier
 {
     private static readonly FrozenSet<string> UnresolvedReferenceIds = FrozenSet.Create(
         StringComparer.Ordinal,
         "CS0006", // metadata file could not be found
-        "CS0012", // type defined in an assembly that is not referenced
-        "CS0234", // type or namespace does not exist in the namespace
-        "CS0246", // type or namespace could not be found
-        "CS0400", // type or namespace could not be found in the global namespace
         "CS0518", // predefined type is not defined (missing targeting pack)
         "CS1705", // referenced assembly has a higher version
         "CS8032"); // analyzer instance could not be created
+
+    /// <summary>
+    /// Errors that say the source names something the references, all of which resolved, do not provide. The raw output
+    /// of a migration tool is full of them; the legacy application has none unless it was loaded wrongly.
+    /// </summary>
+    private static readonly FrozenSet<string> UnboundNameIds = FrozenSet.Create(
+        StringComparer.Ordinal,
+        "CS0012", // type defined in an assembly that is not referenced
+        "CS0234", // type or namespace does not exist in the namespace
+        "CS0246", // type or namespace could not be found
+        "CS0400"); // type or namespace could not be found in the global namespace
 
     /// <summary>
     /// MSBuild warning codes that MSBuildWorkspace has been seen to report as a <c>WorkspaceDiagnosticKind.Failure</c>.
@@ -29,8 +40,10 @@ internal static partial class CompilationDiagnosticClassifier
         StringComparer.Ordinal,
         "MSB3270"); // processor-architecture mismatch between the project and a reference
 
-    public static LoadDiagnosticKind Classify(string errorId) =>
-        UnresolvedReferenceIds.Contains(errorId) ? LoadDiagnosticKind.UnresolvedReference : LoadDiagnosticKind.CompilerError;
+    public static LoadDiagnosticKind Classify(string errorId, Codebase side) =>
+        UnresolvedReferenceIds.Contains(errorId) || (side == Codebase.Legacy && UnboundNameIds.Contains(errorId))
+            ? LoadDiagnosticKind.UnresolvedReference
+            : LoadDiagnosticKind.CompilerError;
 
     /// <summary>
     /// A failure event is a warning when its message carries a code from <see cref="MsBuildWarningCodes"/>, or

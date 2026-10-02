@@ -6,6 +6,7 @@ using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Matching;
 using Equiv.Core.Progress;
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 
 using Microsoft.CodeAnalysis;
@@ -56,7 +57,7 @@ public sealed class CodeLinesTests
 
     private sealed class StubLoader(LoadedSolution legacy, LoadedSolution modern) : ISolutionLoader
     {
-        public Task<LoadedSolution> LoadAsync(string solutionPath, CancellationToken ct) =>
+        public Task<LoadedSolution> LoadAsync(string solutionPath, Codebase side, CancellationToken ct) =>
             Task.FromResult(string.Equals(solutionPath, "legacy.sln", StringComparison.Ordinal) ? legacy : modern);
     }
 

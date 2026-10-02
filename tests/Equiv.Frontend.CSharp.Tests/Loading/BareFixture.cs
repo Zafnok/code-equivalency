@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 
 using Microsoft.CodeAnalysis;
@@ -213,7 +214,7 @@ internal sealed class BareFixture : IDisposable
 
     private sealed class UnreachableLoader : ISolutionLoader
     {
-        public Task<LoadedSolution> LoadAsync(string solutionPath, CancellationToken ct) =>
+        public Task<LoadedSolution> LoadAsync(string solutionPath, Codebase side, CancellationToken ct) =>
             throw new InvalidOperationException($"the SDK-style loader was asked to open '{solutionPath}'");
     }
 }
