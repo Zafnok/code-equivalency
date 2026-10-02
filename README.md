@@ -456,6 +456,38 @@ inputs `legacy`, `modern`, `config`, `baseline`, `fail-on` and output `sarif`. F
 SonarQube can also consume the same SARIF file via `sonar.sarifReportPaths` (not integrated here;
 see Out of scope in ticket M3-004).
 
+## Hosted (preview)
+
+`deploy/aca/` (M6-001, ADR 0032) is a **test deployment, not the hosted tier**: there is no API,
+queue, authentication, key or quota, and you start every run by hand. It proves that the released
+image runs as an Azure Container Apps Job for about $0. One Bicep deployment (`main.bicep`) creates,
+in one resource group:
+
+- a Container Apps environment with only the Consumption workload profile (no VNet, no Dedicated
+  profile, no Log Analytics);
+- a Standard LRS storage account with an Azure Files share, mounted into the environment at `/mnt/work`;
+- a manual-trigger job that runs `ghcr.io/zafnok/equiv:<version>` with 1 vCPU, 2 GiB, a 30-minute
+  replica timeout and no retries (no Azure Container Registry: the image is pulled from public GHCR,
+  so the package must be public);
+- a $5/month budget on the resource group that emails you at 50% and 100% of actual spend.
+
+The Consumption plan's monthly free grant is 180,000 vCPU-seconds and 360,000 GiB-seconds per
+subscription (Microsoft Learn, "Billing in Azure Container Apps"). At 1 vCPU and 2 GiB a job execution
+uses 1 vCPU-second and 2 GiB-seconds per second, so both limits give the same answer: 180,000 seconds,
+50 hours of execution a month, free. Storage is a few MB of samples, cents a month.
+
+Three scripts, run from `deploy/aca/` with the Azure CLI signed in (`az login`):
+
+```powershell
+./deploy.ps1 -Subscription <id> -Location <region> -Version <tag, no leading v>   # deploy, upload samples/, print the job name
+./run.ps1 -Sample <name>                                                          # one execution, then download the SARIF
+./teardown.ps1                                                                    # delete the resource group and everything in it
+```
+
+`run.ps1` writes `<name>.sarif`, `<name>.log` and `<name>.exit` (the `equiv` exit code) to its `-OutDir`.
+To compare a set of runs with the Linux CI parity leg for the same version, download that run's
+`parity-Linux` artifact and run `.github/scripts/sarif-parity.ps1 -Left <OutDir> -Right <parity-Linux dir>`.
+
 <!--
 Star history chart, hidden until the repo has stars. With 0 stars star-history.com has no data
 points, so its time axis collapses to a single instant and renders a sub-second tick (".473")
