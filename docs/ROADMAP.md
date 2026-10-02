@@ -18,7 +18,7 @@ S ≤ 2h, M ≤ half day, L ≤ 1 day. Nothing is larger than L; split it if it 
 | M3 Z3 backend and shipping | days 5–7 | M3-001 PR #78 | next: M3-014 and M3-024, in parallel with M3-002 |
 | M4 Precision and first corpus run | after M3 | | order set by M3-022's corpus census |
 | M5 Agent surface (MCP) | after M3-004, parallel with M4 | | M5-001 written |
-| M6 Hosted tier on Container Apps | after M3-004, parallel with M4 and M5 | | M6-001 written |
+| M6 Hosted tier on Container Apps | after M3-004, parallel with M4 and M5 | M6-001 PR #248 | next tickets unwritten |
 
 M0 and M1 landed in one calendar day and M2 in three, still ahead of the five days planned.
 `main` is green in CI on Windows and Ubuntu with 100% line and branch coverage on every `src/`
@@ -487,7 +487,7 @@ The hosted tier runs the release image as Azure Container Apps Jobs (ADR 0032). 
 shape on a real subscription inside the Consumption plan's monthly free grant, before any API,
 keys or quotas exist. It can run alongside M4 and M5.
 
-- M6-001 (M) Bicep deployment of a Container Apps environment and a manually started job that
+- M6-001 (M, done: PR #248) Bicep deployment of a Container Apps environment and a manually started job that
   runs `equiv compare` on the samples from an Azure Files share, a $5 budget alert, and a teardown
   script. Needs M3-004 (which needs M3-029, so the Linux image can load solutions).
 - Later, unwritten until M6-001 lands: queue-triggered executions, blob inputs, an HTTP API with

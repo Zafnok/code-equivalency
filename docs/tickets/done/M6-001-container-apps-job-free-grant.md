@@ -1,5 +1,5 @@
 # M6-001 Run the release image as a Container Apps Job, inside the free grant
-Status: in-progress
+Status: done (PR #248)
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-004
