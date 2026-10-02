@@ -528,6 +528,9 @@ OpenRA are rerun once they land:
   same text binds differently on the two runtimes.
 - P2-088 (S) `AnonymousObjectCreation` alone is 7.7% of eshop-manual's changed pairs (2 of 26): decide
   whether it stays opaque.
+- P2-090 (S) A branch on a compile-time constant lowers to a jump along its live edge, not to a
+  branch into a block with no terminator. Seen while probing for P2-083; a likely cause of P2-082's
+  `IrLoopAnalysis` crash, to be confirmed there.
 
 P2-047's audit found Divergent precision of 3.8% (2 of 53 adjudicated). Each false-positive cause is
 one ticket, in order of how many false positives it accounts for. Four causes (P2-068 to P2-071)
