@@ -72,6 +72,17 @@ branch and the legacy commit is its first parent, so the pair's diff is exactly 
 | `gitextensions-11284` | <https://github.com/gitextensions/gitextensions/pull/11284>, squash commit `89962d9f88b7` | Applies IDE0008, an explicit type in place of `var`, plus manual touch-ups (type aliases, indentation, casing, a few target-typed `new`). The author states the only check was that it compiles and starts, which is a claim that nothing else changed. 468 files. |
 | `powershell-19687` | <https://github.com/PowerShell/PowerShell/pull/19687>, squash commit `1c55e02df443` | Applies IDE0019 in the `Microsoft.Management` folder: `as` followed by a null check becomes an `is` pattern, and in places the pattern is merged into the enclosing condition. The pull request ticks "Breaking changes: None" and "User-facing changes: Not Applicable". 9 files. |
 
+`powershell-19687` needs three steps that `corpus.ps1` does not do. None edits a tracked file, and
+`git status --porcelain` stays empty on both checkouts:
+1. Set `$env:UseRidGraph = 'true'` after `-Env`, for the restore and for the run. The projects name
+   `win7-x86` and `win7-x64`, which SDK 10's runtime-identifier graph no longer has (NETSDK1083).
+2. Give each checkout a local annotated tag, `git -C <checkout> tag -a v7.4.0-preview.3 -m local`.
+   PowerShell's build runs `git describe`, which fails in a depth-1 checkout that has no tag.
+3. Run the repository's resource generator once per side: `dotnet run` in `<checkout>/src/ResGen`,
+   with `$env:DOTNET_ROLL_FORWARD = 'Major'` because it targets net8.0. It writes the git-ignored
+   `gen/` folders. Without them `System.Management.Automation` has about 4,000 unresolved names and
+   the legacy side skips it.
+
 `-Unchanged` matches files by relative path. A migration that renames folders (`eshop-manual`
 renames `eShopLegacyMVC` to `eShop.MVC`) therefore scores 0% even where contents match. Read
 the unchanged share for such pairs with that in mind, and prefer the census's `pairsCongruent`

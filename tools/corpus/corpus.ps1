@@ -144,7 +144,10 @@ function Test-CleanCheckout([string]$Dir) {
 }
 
 # Git Extensions' modern global.json pins an SDK with no roll-forward, so the box's actual SDK
-# is never resolved. Patches only a checkout's own copy, never this repo's global.json, and marks
+# is never resolved. Its later commits (the cleanup pairs, P2-058) pin one with rollForward
+# "feature", which stays inside the pinned major and fails the same way on a box that has only a
+# newer major. Either way the policy becomes latestMajor; one that already crosses majors (major,
+# latestMajor) is left alone. Patches only a checkout's own copy, never this repo's global.json, and marks
 # it skip-worktree so the patch (a tracked file diverging from the index) does not itself make
 # "-Fetch leaves both checkouts clean" false: acceptance criterion 1 checks git status --porcelain.
 function Set-RollForwardLatestMajor([string]$Dir) {
@@ -152,9 +155,9 @@ function Set-RollForwardLatestMajor([string]$Dir) {
     if (-not (Test-Path -LiteralPath $path)) { return }
     $json = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
     if (-not $json.PSObject.Properties['sdk']) { return }
-    if ($json.sdk.PSObject.Properties['rollForward']) { return }
+    if ($json.sdk.PSObject.Properties['rollForward'] -and $json.sdk.rollForward -in 'major', 'latestMajor') { return }
     Show-Step "patch   $path (sdk.rollForward = latestMajor)"
-    $json.sdk | Add-Member -NotePropertyName 'rollForward' -NotePropertyValue 'latestMajor'
+    $json.sdk | Add-Member -NotePropertyName 'rollForward' -NotePropertyValue 'latestMajor' -Force
     [IO.File]::WriteAllText($path, ($json | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding $false))
     Invoke-Git @('-C', $Dir, 'update-index', '--skip-worktree', 'global.json')
 }
