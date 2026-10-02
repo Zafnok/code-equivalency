@@ -6,7 +6,7 @@ namespace Equiv.Samples.UnknownNewThrow
     {
         public static int Width(int count)
         {
-            string digits = $"{count}";
+            string digits = $"{count:D}";
             if (count < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
