@@ -48,6 +48,9 @@ jobs:
 
       # SonarScanner for .NET does not read sonar-project.properties (it errors out if
       # one exists in the repo root); every setting is a scanner CLI arg instead.
+      # Coverage is a src/ measure (QUALITY-GATES.md, Coverage row): PowerShell scripts and
+      # Bicep have no test harness, so they are left out of coverage only. Sonar still
+      # analyses them for bugs and vulnerabilities (M6-001: its .ps1 files tripped new-code coverage).
       - name: Sonar begin
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -58,7 +61,7 @@ jobs:
           /d:sonar.host.url="https://sonarcloud.io"
           /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
           /d:sonar.exclusions="samples/**,**/bin/**,**/obj/**"
-          /d:sonar.coverage.exclusions="samples/**"
+          /d:sonar.coverage.exclusions="samples/**,**/*.ps1,**/*.bicep"
           /d:sonar.cs.opencover.reportsPaths="TestResults/**/*.opencover.*.xml"
 
       # -SonarBuild: the analyzer injected by `begin` would otherwise turn its own

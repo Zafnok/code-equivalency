@@ -142,3 +142,8 @@ Dedicated workload profiles, `equiv mcp` over HTTP, multi-region.
 - Teardown (2026-09-28): `teardown.ps1 -Confirm:$false` deleted `equiv-aca` (environment, job, storage
   account and budget) in about 12 minutes; `az group exists --name equiv-aca` then printed `false`.
   Cost Management keeps the usage after deletion, so criterion 5's figures are read from it later.
+- Deviation (2026-10-02, Files list): `.github/workflows/sonar.yml` adds `**/*.ps1,**/*.bicep` to
+  `sonar.coverage.exclusions`. SonarCloud began counting PowerShell lines as coverable, and this ticket's
+  three scripts (108 lines, no test harness) failed the new-code coverage condition at 0%. The repo's
+  coverage policy is per `src/` project (QUALITY-GATES.md); the scripts stay in Sonar's bug and
+  vulnerability analysis.
