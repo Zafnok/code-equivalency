@@ -533,6 +533,9 @@ OpenRA are rerun once they land:
   current culture. Starts with `equiv-adr`'s bar test. Needs P2-086.
 - P2-088 (S) `AnonymousObjectCreation` alone is 7.7% of eshop-manual's changed pairs (2 of 26): decide
   whether it stays opaque.
+- P2-092 (S) The census counts a body that is whole-body opaque for several causes. Found by P2-085's
+  run: an unbound body has one opaque per error, so `pairsWholeBodyOpaque` held 6 of
+  eshop-upgrade-assistant's 17 unbound pairs, the ones with a single error.
 
 P2-047's audit found Divergent precision of 3.8% (2 of 53 adjudicated). Each false-positive cause is
 one ticket, in order of how many false positives it accounts for. Four causes (P2-068 to P2-071)
