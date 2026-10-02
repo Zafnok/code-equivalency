@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # dependabot-fixup.yml pushes its commit with GITHUB_TOKEN, and such a push starts no
+  # pull_request run; it dispatches this workflow on the PR branch instead, so the required
+  # checks land on the new head commit.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

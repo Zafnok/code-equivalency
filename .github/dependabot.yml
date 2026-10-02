@@ -13,6 +13,8 @@ updates:
     # Microsoft.Z3 comes from a hash-pinned local feed, not nuget.org (ADR 0030). Dependabot
     # cannot run tools/z3-feed/fetch.ps1, so it never restores the package and would only ever
     # open a PR it cannot itself validate; bumps are done by hand against the Z3 releases page.
+    # For the same reason it leaves stale the lock files of every project that reaches
+    # Microsoft.Z3; .github/workflows/dependabot-fixup.yml regenerates those on each PR.
     ignore:
       - dependency-name: "Microsoft.Z3"
     groups:
