@@ -68,4 +68,4 @@ Tainting ordinary call results (ADR 0026 rejects it). Callee summaries beyond re
   this change with the exemption narrowed to open calls, 6 of the 19 still fail rule 2. In 5 of
   them the model made a `Nullable` member throw `System.Exception`. So the exemption stays for any
   call. ADR 0041 and a second ADR
-  0026 clarification say why, and criterion 4's text is corrected. Filed P2-068 for that channel.
+  0026 clarification say why, and criterion 4's text is corrected. Filed P2-081 for that channel.

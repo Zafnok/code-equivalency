@@ -457,8 +457,10 @@ work, P2-050, P1-019, P2-051 and P2-052.
   Spacer proved a pair that rungs 1 and 3 refute, CsCheck seed `4FfExD8adOs4`). Needs P1-001.
 - P2-060 (M) A call writes only the heap its callee can reach, so `String.Concat` cannot change a
   user field (a false Divergent P1-017's IL gate found). Needs P1-017.
-- P2-068 (M) A Divergent that rests on a closed BCL call's `threw` flag or result, one the real member
+- P2-081 (M) A Divergent that rests on a closed BCL call's `threw` flag or result, one the real member
   cannot give, is not EQ002 (the gate's nightly budget, found by P2-060). Needs P2-060.
+- P2-080 (S) The differential gate draws the same pairs on every pull request: CsCheck's `seed` fixes
+  the first pair only, so 199 of the 200 are random and `ABrokenIlMappingIsCaught` failed on `main`. Needs P1-017.
 
 ### Runtimes are detected, not assumed (ADR 0040)
 
@@ -478,7 +480,11 @@ work, P2-050, P1-019, P2-051 and P2-052.
   #11372 and #11284, PowerShell #19687), run them, and adjudicate every Divergent. Needs P2-055,
   P2-047.
 - P2-067 (L) `DelegateCreation` is 17.0% of Git Extensions' changed pairs on its own and has no open
-  owner: split it by cause, then lower the chosen construct. Found by P2-046.
+  owner: split it by cause, then lower the chosen construct. Found by P2-046. Done 2026-10-01: in
+  134 of the 213 such pairs the lambda was unchanged and already shared; a lambda or method group
+  whose conversion runs no code is now the pure function `delegate:<fingerprint>`, the reason alone
+  fell to 68 changed pairs and the lowerable share rose from 40.3% to 51.5%. Verdicts are not
+  expected to move until a delegate both sides apply stops being tainted (ADR 0026).
 - P2-061 (M) Three Preserving mechanical seeds on Git Extensions turn Equivalent into Divergent; find
   the cause of each (seeder or engine). Found by P2-046.
 - P2-062 (S) An opaque fragment in `properties.abstractions` names its reason. Found by P2-046.
@@ -495,9 +501,33 @@ prove or refute a small cleanup. It found three gaps that no ticket owned:
 - P2-064 (L) Every run ends with a short review list: flagged results grouped by cause and ranked
   (SARIF `rank`, `run.properties.reviewList`, stdout). Needs P2-062.
 - P2-065 (M) Full runs of the five migration pairs never run (Duplicati, OpenRA, and the three eShop
-  pairs, two of them migration-tool output), reported against Git Extensions.
+  pairs, two of them migration-tool output), reported against Git Extensions. Done 2026-10-01: none
+  of the five finished clean. Duplicati and OpenRA crash with no SARIF, eshop-manual completes with 3
+  crashed pairs and proves 0 of 26 changed pairs, and each tool pair compares 2 procedures because
+  the tool's output does not compile (`docs/runs/2026-10-01-migrations-verdict.md`). Filed as P2-082
+  to P2-088.
 - P2-066 (M) Pin two public .NET-to-.NET version upgrades (a pure bump, and a bump with fixes) and run
   them; every EQ006 must cite a row inside the pair's interval. Needs P2-055, P2-056, P2-047.
+
+Found by P2-065's runs (`docs/runs/2026-10-01-migrations-verdict.md`). Git Extensions is the only
+real migration `equiv` gets through, so the first two come before any rate work, and Duplicati and
+OpenRA are rerun once they land:
+- P2-082 (S) First: weighing a pair for the progress log can no longer end the run. One lowered
+  procedure makes `IrLoopAnalysis` throw outside the per-pair `try`, so Duplicati and OpenRA exit 5
+  with no SARIF.
+- P2-083 (S) Lowering a binary operator in a branch condition no longer throws a bare
+  `NullReferenceException`: 19 pairs over eshop-manual, OpenRA and Duplicati.
+- P2-085 (L) A modern project that does not compile is still compared, method by method, with each
+  erroneous method Unknown(unbound). Raw output of Upgrade Assistant and of Porting Assistant is
+  skipped whole today. Starts with `equiv-adr`'s bar test.
+- P2-084 (S) A project whose only types are empty is not a load failure (Duplicati's placeholder
+  project; load rate 98.1% on a human pair).
+- P2-087 (M) `Binary` (lifted operators and the rest) alone is 6.2% of OpenRA's changed pairs and has
+  no open owner since P1-018 left the IL fallback off. Needs P2-083.
+- P2-086 (M) `InterpolatedString` alone is 19.2% of eshop-manual's changed pairs, same reason: the
+  same text binds differently on the two runtimes.
+- P2-088 (S) `AnonymousObjectCreation` alone is 7.7% of eshop-manual's changed pairs (2 of 26): decide
+  whether it stays opaque.
 
 P2-047's audit found Divergent precision of 3.8% (2 of 53 adjudicated). Each false-positive cause is
 one ticket, in order of how many false positives it accounts for. Four causes (P2-068 to P2-071)
@@ -517,6 +547,26 @@ give one call two identities. Three (P2-073 to P2-075) are EQ006 rows that match
 - P2-075 (S) The ICU and `ListViewGroup` rows match only the members their change affects. 2.
 - P2-072 (M) Two identical bodies with a rethrowing catch lower to different call traces. 1, but
   it is a lowering bug on identical source.
+
+Run time (found 2026-09-30 during P1-018). A Git Extensions `full` run takes 8h57m. That is over a
+hosted GitHub runner's 6-hour job limit, and six pairs that all end Unknown spend 5.4 of its 6.8 verify
+hours. Neither ticket may end a pair early or change a decided verdict, and neither adds a cap on a
+rung, a pair or a run.
+- P2-076 (M) Measure and remove the time a pair spends outside its solver budget: one rung reported a
+  5000 ms timeout after 126.5 minutes. Non-solver work is made cheaper, never skipped. The contracts
+  pass (2h07m, unlogged) becomes a phase. Two full runs must agree on every decided result.
+- P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
+  and no query ended sooner by contention. Needs P2-050, P2-076.
+
+Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
+- P2-079 (M) Soundness, first: the IL lowering shares an opaque that names a lambda or local function
+  without its body, and lowers a runtime-changed method group as a plain constant, so two different
+  lambdas prove Equivalent (repro in the ticket). 20 of P1-018's 21 new Equivalents rest on it.
+  Until it lands, no `--il-fallback` verdict on a method that holds a lambda is to be relied on.
+  Needs P1-016, P1-017.
+- P2-078 (M) Ill-sorted IR from the IL lowering no longer crashes the encoder: one Git Extensions pair
+  exits the `--il-fallback` run with code 5. `IlFallback` keeps the IOperation bodies when the IL
+  bodies do not validate. Needs P1-016, P1-017.
 
 ## M5 — Agent surface (MCP)
 
@@ -596,7 +646,9 @@ clears the 5% bar. The fallback ships off by default until P1-018 measures verdi
 - P1-017 (M) M0-012's differential gate also verifies every pair through the IL lowering. Needs P1-016.
 - P1-018 (S) Git Extensions with and without the fallback. On by default only if the pairs it moves
   to a decided verdict are at least 5% of changed pairs and no Equivalent regresses. Needs P1-016,
-  P1-017.
+  P1-017. Done 2026-10-01: 21 of 1,294 changed pairs (1.6%), so the default stays off
+  (`docs/runs/2026-10-01-il-fallback-verdicts.md`); one IL-lowered pair crashes the encoder (P2-078).
+  A hand check found 20 of the 21 new Equivalents unproved, from a soundness bug (P2-079).
 
 Order after M4-007: P1-008 first. Then P1-013 and the two spikes (cheap, and they decide their
 own futures). Then P1-001 → P1-002 → P1-009, and P1-010. P1-012 wrote ADR 0039, so P1-014 →
@@ -628,6 +680,7 @@ are unchanged; a later census that shows more changed pairs can move any of thes
 - Java frontend (Eclipse JDT sidecar) reusing Core, Verify, Cli unchanged.
 - Web UI: SARIF viewer + CFG split pane (React Flow). Only after users ask.
 - SonarQube: confirm `sonar.sarifReportPaths` ingestion of EQ* rules; GitHub Code Scanning upload step in `action.yml`.
+- `--il-fallback` on by default (ADR 0039, P1-018): measured on Git Extensions 2026-10-01. Of 1,294 changed pairs it lowers 116 from IL and moves 21 (1.6%) from Unknown(opaque) to Equivalent and 21 to Divergent, none reproduced by replay; below ADR 0028's 5% bar, with no Equivalent regressed, one crash (P2-078) and one Divergent turned Unknown(timeout). A hand check found 20 of the 21 Equivalents unproved: the IL lowering never reads a lambda's body (soundness, P2-079), so the sound gain is 1 pair (0.1%). The option stays, off by default (`docs/runs/2026-10-01-il-fallback-verdicts.md`).
 - Congruence modulo verified rewrites (equality saturation, P1-011): measured on Git Extensions 2026-09-28, 0 of 1,195 changed pairs (0.0%) close under the rule set, below ADR 0028's 5% bar; not scheduled (`docs/runs/2026-09-28-egraph-spike.md`).
 
 From the 2026-09-24 second-oracle review, unticketed until a result above asks for them:
