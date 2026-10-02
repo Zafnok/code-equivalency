@@ -127,10 +127,18 @@ Dedicated workload profiles, `equiv mcp` over HTTP, multi-region.
   start to end, most of it `dotnet restore` of the two sample projects; `equiv` itself finishes in about
   7 s. Peak memory stays under 350 MiB against the 2 GiB replica, so the samples leave a lot of headroom
   (real solutions are the M4-007 question).
-- Criterion 5, usage so far: 24 executions totalling 953 s of execution time (473 s first pass, 480 s
-  second), which is about 953 vCPU-seconds and 1,906 GiB-seconds at 1 vCPU / 2 GiB. That is 0.53% of the
-  monthly grant on each meter. Cost Management lags usage by a day or more; the metered figures and the
-  actual charge get recorded here once they appear.
+- Criterion 5 evidence (2026-10-02). Usage, from the executions' own start and end times: 24 executions
+  totalling 953 s (473 s first pass, 480 s second), so about 953 vCPU-seconds and 1,906 GiB-seconds at
+  1 vCPU / 2 GiB, 0.53% of the monthly grant on each meter. Charge: $0.00. The Cost Management query API
+  (`Microsoft.CostManagement/query`, Usage, 2026-09-01 to 2026-10-02, daily, grouped by resource group and
+  meter) returns zero rows for the whole subscription, and `Microsoft.Consumption/usageDetails` for
+  2026-09-27 to 2026-09-30 returns none. The same was true on every daily check from 2026-09-28 to
+  2026-10-02. Deviation: the ticket expected Cost Management to show the metered vCPU-seconds and
+  GiB-seconds; it shows nothing, so the usage figures above are the execution times, not Azure's meters.
+  The subscription is a Free Trial offer (`quotaId FreeTrial_2014-09-01`, `spendingLimit On`): its usage
+  is drawn from the trial credit and nothing can be billed to a card, so the actual charge is $0.00
+  either way. The ~1 hour of a Standard LRS account with a few MB is far below a cent. Someone running
+  M6-001 on a pay-as-you-go subscription should see the Container Apps meters in Cost analysis instead.
 - Teardown (2026-09-28): `teardown.ps1 -Confirm:$false` deleted `equiv-aca` (environment, job, storage
   account and budget) in about 12 minutes; `az group exists --name equiv-aca` then printed `false`.
   Cost Management keeps the usage after deletion, so criterion 5's figures are read from it later.
