@@ -60,6 +60,7 @@ the nine). Over all 206 the picture is the same:
 | budget | pairs | Equivalent | Divergent | still timeout | other Unknown | sum of pair seconds | wall-clock |
 |---|---|---|---|---|---|---|---|
 | 1x | 206 | 0 | 1 | 194 | 11 (abstraction 4, unaligned-loop 4, opaque 3) | 24,731 | 11,415 s on four threads |
+| 4x | 206 | 0 | 17 | 153 | 36 (abstraction 19, unaligned-loop 10, opaque 7) | 27,555 | 10,083 s on four threads |
 | 20x | 206 | 0 | 21 | 117 | 68 (abstraction 39, unaligned-loop 18, opaque 11) | 80,563 | 16,558 s on eight threads |
 
 ## Larger wall-clock budgets (criterion 1)
@@ -99,10 +100,12 @@ is the time one query takes to exhaust the limit.
 | 5,000,000 (first run) | 60 s | 1 | 173 | 10 | 4,438 | 7.1 / 50.9 / 61.2 / 113.3 | 10 of 173 |
 | 5,000,000 (second run) | 60 s | 1 | 174 | 9 | 4,377 | 6.1 / 47.1 / 60.0 / 104.2 | 8 of 174 |
 | 10,000,000 | 600 s | 3 | 163 | 18 | 12,549 | 13.8 / 101.8 / 203.4 / 606.2 | 1 of 163 |
+| 30,000,000 | 600 s | 13 | 136 | 35 | 28,459 | 32.9 / 272.0 / 501.8 / 707.8 | 4 of 136 |
 | 1x wall-clock, for comparison | | 1 | 172 | 11 | 1,881 | 5.3 / 7.4 / 10.1 / 83.6 | all |
 
-- 2,000,000 decides 6 pairs fewer than today's budget, 5,000,000 one or two fewer, and 10,000,000
-  nine more.
+- 2,000,000 decides 6 pairs fewer than today's budget, 5,000,000 one or two fewer, 10,000,000
+  nine more and 30,000,000 36 more, about what 4x decides, at 15 times the solver time of 1x. None of
+  them decides a pair Equivalent.
 - A resource limit costs more time than the wall-clock budget of the same strength: 2.3 times at
   5,000,000. A minority of queries spend a long time on each unit, and a wall-clock budget cuts
   exactly those short.
@@ -117,6 +120,10 @@ four threads:
 - 179 pairs: the same outcome, ladder and detail in both.
 - 4 pairs: timeout in both, on the resource limit in one run and on the backstop in the other.
 - 1 pair: Unknown(abstraction) in one run, and timeout on the resource limit in the other.
+
+For comparison, the wall-clock budget repeats far worse. The 4x budget was run twice on the same 184
+pairs, in two processes under different load, and 14 pairs ended with a different outcome. At the
+resource limit one did.
 
 The same query took very different times to exhaust the same limit in the two runs (4.7 s and
 36.1 s, 9.0 s and 45.8 s), so the solver did not do the same work. Checked on 35 pairs (those five,
