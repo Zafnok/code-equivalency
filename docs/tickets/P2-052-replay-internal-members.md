@@ -1,5 +1,5 @@
 # P2-052 Replay and differential testing reach `internal` methods
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-009, P1-008
@@ -54,3 +54,28 @@ The 125 results whose divergence is in the call trace, which replay does not obs
 Non-parameterless constructors.
 
 ## Notes
+- Decision: every replay driver's assembly is named `EquivReplay`, whatever its file is called (`EquivReplay<n>.exe`/`.dll`).
+  A project is emitted once and serves every driver built beside it, and criterion 1 asks for one attribute, so the friend
+  has to be one name. Both runtimes load an entry assembly whose name differs from its file's
+  (`ReplayIntegrationTests.InternalDivergentMethod_Reproduces` runs them).
+- Decision: the driver compiles against the compilation that was emitted (the one with the attribute), which
+  `ProjectEmitter.Emit` now returns beside the error. The loaded compilation grants nothing, so a driver compiled
+  against it would get CS0122.
+- Decision: the reason is `not public (<accessibility>)`: `private`, `protected` or `private protected`, taken from the
+  member, or from the outermost containing type that hides it. That satisfies criteria 2 and 4 with one string, and the
+  next corpus run counts `not public (private)` directly.
+- Decision: the key is in a new file, `Execution/DriverKey.cs`, generated on first use, so a run with no strong-named
+  project generates none. Roslyn signs only from a key file or a key container, so the pair is written beside the
+  driver as `EquivReplay.snk`. It is a `PRIVATEKEYBLOB`, built by hand from `RSAParameters`:
+  `RSACryptoServiceProvider.ExportCspBlob` is Windows-only (CA1416). `DesktopStrongNameProvider` signs from a key file on
+  Linux too.
+- `DriverSource.cs` needed no change: `new T()` and the direct call already compile for a friend.
+- An unsigned or wrongly signed driver against a strong-named project fails with CS0281, not CS0122.
+- Not done, outside the criteria: an `internal` method whose parameter or return type is `internal` to another project
+  (visible to the method's project through that project's own `InternalsVisibleTo`). Every emitted project names the
+  driver as a friend, so it would run, but the driver compiles against the referenced projects as loaded, without the
+  attribute, and reports `the <side> driver does not compile`. An `internal` parameterless constructor is still
+  `no public parameterless constructor` (Out of scope names constructors).
+- The integration fixture is in-memory compilations in `Equiv.Frontend.CSharp.Tests` (`ReplayIntegrationTests`), not a
+  new `samples/` folder. On Windows the legacy side is compiled against the .NET Framework 4.8 reference assemblies and
+  runs on .NET Framework; on Linux both sides run on the host's .NET, so the test is not skipped there.

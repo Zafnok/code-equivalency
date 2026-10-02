@@ -87,6 +87,59 @@ public sealed class ReplayDriverFactoryTests : IDisposable
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-052 criterion 1: every driver is the one assembly the emitted project names as its friend, whatever its
+    /// file is called, and an unsigned project's driver is unsigned.
+    /// </summary>
+    [Fact]
+    public void Create_AnInternalMethod_IsCalledByTheProjectsFriend()
+    {
+        CSharpCompilation project = Compile(Greeter.Replace("public string Greet", "internal string Greet", StringComparison.Ordinal), "Greeter");
+        IMethodSymbol greet = Method(project, "N.Greeter", "Greet");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, greet, GreetIr, project, greet, GreetIr);
+
+        ReplayPlan plan = factory.Create(pair, NullName(), directory);
+
+        Assert.Empty(plan.Reason);
+        Assert.All(
+            [plan.Drivers!.Legacy, plan.Drivers.Modern],
+            static driver =>
+            {
+                System.Reflection.AssemblyName name = System.Reflection.AssemblyName.GetAssemblyName(driver);
+                Assert.Equal("EquivReplay", name.Name);
+                Assert.Empty(name.GetPublicKey() ?? []);
+                Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(driver)!, DriverKey.FileName)));
+            });
+    }
+
+    /// <summary>Ticket P2-052 criterion 1: a strong-named project's driver is signed with the run's key, written beside it.</summary>
+    [Fact]
+    public void Create_AStrongNamedProject_SignsItsDriver()
+    {
+        string snk = new DriverKey().Write(directory);
+        CSharpCompilation project = Compile(Greeter.Replace("public string Greet", "internal string Greet", StringComparison.Ordinal), "Greeter");
+        project = project.WithOptions(project.Options.WithCryptoKeyFile(snk).WithStrongNameProvider(new DesktopStrongNameProvider()));
+        IMethodSymbol greet = Method(project, "N.Greeter", "Greet");
+        (ReplayDriverFactory factory, ProcedurePair pair) = Factory(project, greet, GreetIr, project, greet, GreetIr);
+
+        ReplayPlan first = factory.Create(pair, NullName(), directory);
+        ReplayPlan second = factory.Create(pair, NullName(), directory);
+
+        Assert.Empty(first.Reason);
+        Assert.Empty(second.Reason);
+        byte[][] keys =
+        [
+            .. new[] { first.Drivers!.Legacy, first.Drivers.Modern, second.Drivers!.Legacy, second.Drivers.Modern }
+                .Select(static driver => System.Reflection.AssemblyName.GetAssemblyName(driver).GetPublicKey()!),
+        ];
+        Assert.NotEmpty(keys[0]);
+        Assert.All(keys, key => Assert.Equal(keys[0], key));
+        byte[] projectKey = [.. project.Assembly.Identity.PublicKey];
+        Assert.NotEqual(projectKey, keys[0]);
+        Assert.True(File.Exists(Path.Combine(directory, "legacy", "Greeter", DriverKey.FileName)));
+        Assert.True(File.Exists(Path.Combine(directory, "modern", "Greeter", DriverKey.FileName)));
+    }
+
     /// <summary>Ticket P2-056 criterion 4: a same-runtime pair builds both drivers for that one runtime.</summary>
     [Fact]
     public void SameRuntimePair_BuildsBothDriversForThatRuntime()
@@ -187,10 +240,10 @@ public sealed class ReplayDriverFactoryTests : IDisposable
     public void AModernSideItCannotCall_IsNotConstructible()
     {
         CSharpCompilation legacy = Compile(Greeter, "Greeter");
-        CSharpCompilation modern = Compile(Greeter.Replace("public string Greet", "internal string Greet", StringComparison.Ordinal), "Greeter");
+        CSharpCompilation modern = Compile(Greeter.Replace("public string Greet", "private string Greet", StringComparison.Ordinal), "Greeter");
         (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
 
-        Assert.Equal("modern: not public", factory.Create(pair, NullName(), directory).Reason);
+        Assert.Equal("modern: not public (private)", factory.Create(pair, NullName(), directory).Reason);
     }
 
     [Fact]
@@ -325,12 +378,12 @@ public sealed class ReplayDriverFactoryTests : IDisposable
     }
 
     [Theory]
-    [InlineData(true, "legacy: not public")]
-    [InlineData(false, "modern: not public")]
+    [InlineData(true, "legacy: not public (private)")]
+    [InlineData(false, "modern: not public (private)")]
     public void Plan_ASideItCannotCall_IsNotConstructible(bool legacyHidden, string reason)
     {
         CSharpCompilation open = Compile(Greeter, "Greeter");
-        CSharpCompilation hidden = Compile(Greeter.Replace("public string Greet", "internal string Greet", StringComparison.Ordinal), "Greeter");
+        CSharpCompilation hidden = Compile(Greeter.Replace("public string Greet", "private string Greet", StringComparison.Ordinal), "Greeter");
         CSharpCompilation legacy = legacyHidden ? hidden : open;
         CSharpCompilation modern = legacyHidden ? open : hidden;
         (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
@@ -374,12 +427,12 @@ public sealed class ReplayDriverFactoryTests : IDisposable
     public void Probe_AModernSideItCannotCall_IsNotConstructible()
     {
         CSharpCompilation legacy = Compile(Greeter, "Greeter");
-        CSharpCompilation modern = Compile(Greeter.Replace("public string Greet", "internal string Greet", StringComparison.Ordinal), "Greeter");
+        CSharpCompilation modern = Compile(Greeter.Replace("public string Greet", "private string Greet", StringComparison.Ordinal), "Greeter");
         (ReplayDriverFactory factory, ProcedurePair pair) = Factory(legacy, Method(legacy, "N.Greeter", "Greet"), GreetIr, modern, Method(modern, "N.Greeter", "Greet"), GreetIr);
 
         ReplayPlan plan = factory.Probe(pair, [JsonDocument.Parse("\"Ada\"").RootElement], directory);
 
-        Assert.Equal("modern: not public", plan.Reason);
+        Assert.Equal("modern: not public (private)", plan.Reason);
     }
 
     [Fact]
