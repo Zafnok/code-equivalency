@@ -117,7 +117,7 @@ internal static class MethodSeeder
     {
         foreach (string path in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
         {
-            if (path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(static segment => segment is "bin" or "obj"))
+            if (path.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]).Any(static segment => segment is "bin" or "obj"))
             {
                 continue;
             }
