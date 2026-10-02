@@ -214,6 +214,22 @@ outside it, a struct's `this`) stays one that is not shared. A delegate creation
 tainted (section 6): two sides whose lambdas differ apply two functions, and a divergence that depends on them is
 Unknown(Abstraction) naming both, not Unknown(Opaque).
 
+An interpolated string (P2-086) binds `string.Format` on .NET Framework and `DefaultInterpolatedStringHandler` on
+.NET 6 and later, so the same text is two different bound trees (ADR 0024) and reaches the solver. It is lowered as
+the concatenation of its parts, which is what both bindings compute, when every hole is a `string` or an 8- to 64-bit
+integer with no format or alignment clause: each part in order is joined to the ones before it by the closed call
+`System.String::Concat(string,string)` (ADR 0041), exactly as the `+` chain of the parts lowers, a text part being its
+constant and a `string` hole its value, null included. An integer hole is first the closed call to its type's
+parameterless `ToString()`, as a written `i.ToString()` is: both bindings format an integer with the current culture,
+and a closed call's result already depends on its position, so no assumption about the culture is added. A lone hole
+is joined to `""`, since `$"{s}"` is never null. The two bindings differ in one thing this lowering cannot hide:
+`string.Format` formats after every hole is evaluated, the handler formats each hole before the next one is
+evaluated. So every hole after the first integer hole must only read a local, a parameter, a constant or a field of
+`this`; with no call and no throw there, the two orders are one. Any other interpolated string (a clause, a hole of
+another type, whose formatting goes through `IFormattable` or `ISpanFormattable` members the bindings do not share,
+or a call after the first integer hole) stays an `IrOpaque` with reason `InterpolatedString`, fingerprinted per
+binding.
+
 The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
 locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
 each field's receiver, then every element of the literal (each already converted to its target's
@@ -735,6 +751,55 @@ EQ001-EQ005): a rule-id change for an identity already in the baseline — e.g. 
 on a procedure that was already Divergent); that distinction is not exit-code-significant, so
 it does not depend on the "model hash" half of the fingerprint being identical across runs of
 the same underlying divergence.
+
+Every flagged result, one whose rule id is EQ002, EQ003 or EQ006, belongs to a review group, and
+the groups are ranked, so that a reviewer reads a short list of causes and not every method (ticket
+P2-064; ADR 0006's 2026-10-01 clarification). The result carries its group's key in
+`properties.reviewGroup` and its group's `rank`, SARIF's own result property (0 to 100, higher is
+looked at first). No EQ001, EQ004 or EQ005 result carries either. The key is derived from what the
+result already carries and reads every list as a set, so it is the same on every run of the same
+inputs:
+- EQ006: `runtime-change:` and the `member` of the runtime-changes row the message cites, for
+  example `runtime-change:System.String::GetHashCode(`;
+- EQ002: `calls:` and the call identities that only one side's trace in the counterexample holds,
+  sorted and joined by `|`. Where the migration swapped one member for another, that is the two
+  members: `calls:System.Convert::ToInt32(string)|System.Int32::Parse(string)`. When both traces
+  call the same members it is `proofMethod:observed`, or `proofMethod:none` for a solver's
+  counterexample, which carries no `proofMethod`;
+- EQ003: the `unknownReason`, and for `opaque` and `abstraction` a `:` and the opaque reasons behind
+  it, sorted and joined by `+`: the reasons of an `opaque` Unknown's causes, and the `reason` of each
+  opaque fragment among an `abstraction` Unknown's `abstractions` (an `IrPure` operator adds
+  nothing). For example `abstraction:DelegateCreation`, `opaque:Await+Lambda`, `timeout`.
+
+A group is a rule id and a key, and every result in it has the same rank, which comes from the
+group's tier and size. The tiers, highest first:
+1. a Divergent the real runtimes showed, EQ002 or EQ006: `proofMethod: observed`, or `replay: reproduced`;
+2. any other EQ002;
+3. any other EQ006;
+4. EQ003 with `scope: line`;
+5. EQ003 with `scope: method`.
+
+`replay` and `scope` are per result, so a group takes the best tier any of its results is in. The
+rank is `20 x (5 - tier) + min(count, 9999) / 500`: tier 1 is 80.002 to 99.998, tier 5 is 0.002 to
+19.998, and inside a tier a larger group ranks higher. It depends on the group alone, never on the
+run's other groups.
+
+Every run that is not `--lower-only` writes `run.properties.reviewList`: one entry per group,
+highest rank first and equal ranks by `group`, then `ruleId`. An entry has `group`, `ruleId`, `rank`,
+`count` and `identities`, the procedure identities of its first five results in result order. The
+counts sum to the number of EQ002, EQ003 and EQ006 results in the log. That includes a baseline's
+carry-overs (`absent`, or `unchanged` with `unverified: true`), which keep the `reviewGroup` they
+were written with; one from a log written before this property has the group `ungrouped`. A
+`--lower-only` run writes no list, and its results (an `unmatched-overload` Unknown) still carry
+`reviewGroup` and `rank`.
+
+`equiv compare` prints the list on stdout after the analysed line counts: `review list: <G> groups
+for <R> flagged results`, then the ten highest-ranked groups, one line each, as
+`  <ruleId> count=<n> rank=<rank> <group>`. These lines count only `new` and `updated` results, so
+against a baseline they list what the run changed, and a group with no such result has no line.
+`equiv mcp`'s `compare` returns the same lines in its summary, after the verdict counts, and never
+on stdout (ADR 0033). No verdict, rule id, level, fingerprint, `baselineState` or exit code depends
+on a group or a rank.
 
 `level` is only meaningful on a result when `kind` is `fail` (SARIF 2.1.0 s3.27.9), so
 EQ003-EQ005 results carry `level: none`; the parenthesised value is the rule's

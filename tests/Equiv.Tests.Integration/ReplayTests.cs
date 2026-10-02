@@ -10,7 +10,8 @@ namespace Equiv.Tests.Integration;
 /// Ticket M4-009 criterion 6: <c>equiv compare --execute</c> on <c>samples/removed-null-check</c>, end to end on both real
 /// runtimes. The model's <c>name = null</c> makes the legacy method throw <c>ArgumentNullException</c> on .NET Framework 4.8
 /// and the modern one <c>NullReferenceException</c> on .NET 10, so the Divergent is reproduced. Its SARIF, which differs from
-/// <c>expected.sarif.json</c> only by <c>replay</c>, is checked in as <c>removed-null-check.execute.sarif</c>. Windows only,
+/// <c>expected.sarif.json</c> only by <c>replay</c> and the rank a reproduced Divergent's review group gets (ticket P2-064),
+/// is checked in as <c>removed-null-check.execute.sarif</c>. Windows only,
 /// like the rest of this project.
 /// </summary>
 [Trait("Category", "Integration")]

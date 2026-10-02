@@ -78,7 +78,8 @@ public static class PairGen
     /// <summary>
     /// A generated method with one more statement somewhere before its last (ticket P1-017) that assigns a local one of the
     /// constructs ADR 0039's IL fallback exists for, which the IOperation lowering leaves opaque: a lifted <c>int?</c>
-    /// operator, a lifted conversion to <c>long?</c>, an interpolated string, or a <c>switch</c> expression on a tuple with
+    /// operator, a lifted conversion to <c>long?</c>, an interpolated string (one with only <c>string</c> holes, as here,
+    /// the IOperation lowering has lowered too since ticket P2-086), or a <c>switch</c> expression on a tuple with
     /// positional patterns. The value branches, so it is never written to <c>F</c> or <c>u</c>, and it holds no cast
     /// outside a nullable one, so the temporary operators never move it.
     /// </summary>
