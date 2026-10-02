@@ -1,5 +1,5 @@
 # P2-052 Replay and differential testing reach `internal` methods
-Status: in-progress
+Status: done (PR #342)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M4-009, P1-008
