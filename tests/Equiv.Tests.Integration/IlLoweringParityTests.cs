@@ -39,6 +39,9 @@ public sealed class IlLoweringParityTests
         [$"business-layer/modern {SkusOver}"] = Lambda,
         [$"business-layer/legacy {CappedLineCount}"] = Lambda,
         [$"business-layer/modern {CappedLineCount}"] = Lambda,
+        [$"cleanup-modern-syntax/legacy {Positives}"] = NullTestOfAConversion,
+        [$"cleanup-modern-syntax/modern {Positives}"] = Lambda,
+        [$"cleanup-modern-syntax/modern {Join}"] = InterpolatedString,
     }.ToImmutableDictionary(StringComparer.Ordinal);
 
     private const string ConfirmAsync = "Equiv.Samples.BusinessLayer.OrderService::ConfirmAsync(System.Threading.Tasks.Task<global::Equiv.Samples.BusinessLayer.Order>)";
@@ -51,6 +54,10 @@ public sealed class IlLoweringParityTests
 
     private const string CappedLineCount = "Equiv.Samples.BusinessLayer.OrderService::CappedLineCount(Equiv.Samples.BusinessLayer.Order,int)";
 
+    private const string Positives = "Equiv.Samples.CleanupModernSyntax.Tidy::Positives(System.Collections.Generic.List<int>)";
+
+    private const string Join = "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)";
+
     /// <summary>An <c>async</c> method's IL is its state machine's kickoff, whose ILAst is opaque (out of scope; P1-012).</summary>
     private const string StateMachine = "the IL of an async method is its state machine's kickoff, which is opaque";
 
@@ -62,10 +69,11 @@ public sealed class IlLoweringParityTests
     private const string UsingResource = "IOperation null-checks the using resource's IDisposable conversion through null.System.IDisposable";
 
     /// <summary>
-    /// The IOperation lowering reads <c>order != null</c> as the nullness of <c>order</c> converted to <c>object</c>, from
-    /// <c>null.System.Object</c> (M3-010); the IL, which compares the reference itself, reads <c>order</c>'s null shadow.
+    /// The IOperation lowering reads <c>order != null</c> (and <c>values == null</c>) as the nullness of the reference
+    /// converted to <c>object</c>, from <c>null.System.Object</c> (M3-010); the IL, which compares the reference itself,
+    /// reads the reference's own null shadow.
     /// </summary>
-    private const string NullTestOfAConversion = "IOperation reads order != null through null.System.Object of the conversion to object";
+    private const string NullTestOfAConversion = "IOperation reads a null test of a reference through null.System.Object of the conversion to object";
 
     /// <summary>
     /// The IOperation lowering makes a lambda the pure function <c>delegate:&lt;fingerprint&gt;</c> of its bound body
@@ -73,6 +81,13 @@ public sealed class IlLoweringParityTests
     /// <c>LdFtn[lambda]</c> and its closure class opaque (ADR 0039).
     /// </summary>
     private const string Lambda = "IOperation lowers a lambda as delegate:<fingerprint>; the IL leaves LdFtn[lambda] opaque";
+
+    /// <summary>
+    /// The IOperation lowering joins an interpolated string's parts with the two-argument <c>String.Concat</c>, one call
+    /// for each part after the first (ticket P2-086); the compiler emits one call of the three-argument overload, which
+    /// the IL lowering names as it is.
+    /// </summary>
+    private const string InterpolatedString = "IOperation lowers an interpolated string as a chain of Concat(string,string); the IL calls Concat(string,string,string)";
 
     private static readonly VerificationOptions Options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, []);
 

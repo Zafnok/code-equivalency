@@ -84,9 +84,17 @@ Making any of these verdicts Equivalent. Refactorings the seeder can apply (P2-0
 - `SamplesEndToEndTests.cs` is unchanged: its theories enumerate `samples/` by directory, so both
   samples get the snapshot, baseline round-trip and refinement rows without an edit.
 - No change under `src/`. 7 procedures in one sample and 4 in the other.
-- Local run: the six theory rows for the two samples pass. `version-bump` and `webapi-basic` fail
-  locally because their packages are not restored here. `partly-compiling-modern` fails on `main` as
-  it stands: P2-085's snapshot has the EQ006 rule text "between .NET Framework and .NET", which
-  P2-055 reworded to "between the two sides' runtimes", and the two PRs only met on `main`. `main`
-  also does not compile at 46e6636 (`UnboundCodeTests.cs`, PR #340, which does not touch that
-  snapshot). Neither is this ticket's to fix, and this PR's gates stay red until both are.
+- Deviation: `IlLowererTests.cs` and `IlLoweringParityTests.cs` are not in Files. Both compare the
+  IOperation lowering with the IL lowering of every opaque-free sample method, and each keeps a list
+  of the known differences that nothing else may join. Three of the new methods differ, so they are
+  listed, with the cause:
+  - modern `Tidy.Join`: the IOperation lowering joins an interpolated string with a chain of
+    `String::Concat(string,string)` (P2-086), and the compiler emits one
+    `String::Concat(string,string,string)`. New in both lists. A `+` chain of three strings has the
+    same gap, and no sample had one. It only matters under `--il-fallback`, which is off by default
+    (ADR 0039, P1-018), so no ticket is filed.
+  - modern `Tidy.Positives`: the lambda, the cause `business-layer` already has.
+  - legacy `Tidy.Positives`: `values == null` read through `null.System.Object`, the cause
+    `business-layer`'s `Reserve` already has.
+- The first CI run failed on `main` not compiling at 46e6636 (`UnboundCodeTests.cs`, fixed by PR
+  #340); `main` was merged in. The second failed on the first of the two parity tests above.
