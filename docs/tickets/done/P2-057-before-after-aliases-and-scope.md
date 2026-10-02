@@ -1,5 +1,5 @@
 # P2-057 `--before`/`--after` aliases, and the docs say any runtime pair
-Status: todo
+Status: done (PR #341)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-055, P2-056
@@ -41,3 +41,15 @@ alternative: stop.
 The corpus (P2-058).
 
 ## Notes
+- Decision: `--before` and `--after` are System.CommandLine aliases on the existing options, so `--help` lists them
+  and every lookup by `--legacy`/`--modern` keeps working. The parser already takes one value per option whichever
+  spelling is used, so both spellings give its own error (`Option '--legacy' expects a single argument but 2 were
+  provided.`, exit 3), the same one a repeated spelling always gave. No validator was added.
+- Decision: the `probe` tool's `legacy` and `modern` descriptions (`src/Equiv.Cli/Mcp/ProbeTool.cs`) are left as they
+  are. Criterion 2 names `EquivTools.cs` and the Files list does not hold `ProbeTool.cs`.
+- Decision: README's "Next: detecting each side's runtime" sentence is removed with the scope line, since P2-053 to
+  P2-056 did it. The usage sections of README and ARCHITECTURE.md name the aliases.
+- The `4.8` hits that stay: VERIFICATION-MODEL.md's worked example of a pair that crosses every row and its example
+  of a target framework moniker; ARCHITECTURE.md's `DriverFactory` defaults (`DefaultLegacy`, `DefaultModern`, still
+  4.8 and 10); README's description of `samples/` (they are 4.8 and 10), of Git Extensions' migration, and the
+  targeting-pack install steps.

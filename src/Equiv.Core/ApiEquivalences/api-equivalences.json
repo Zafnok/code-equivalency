@@ -1,6 +1,8 @@
 // Known-equivalent API pairs (VERIFICATION-MODEL.md section 3; ADR 0020; ticket M3-009): a member or type the legacy
-// (.NET Framework 4.8) side uses and its modern (.NET 10) counterpart. The frontend applies an entry while lowering the
-// legacy side only, and every result lists the ids applied to it in properties.equivalencesApplied.
+// side (the solution before the change) uses and the counterpart the modern side (the solution after it) uses. An entry
+// equates the two on any runtime that has both, whatever runtimes the pair is on (ADR 0040). The frontend applies an
+// entry while lowering the before side only, and every result lists the ids applied to it in
+// properties.equivalencesApplied.
 //
 // A member entry names both members as exact CallIdentity values and gives the modern argument list in terms of the
 // legacy call's source arguments: {"arg": n} (the receiver of an instance or extension call is argument 0, and a

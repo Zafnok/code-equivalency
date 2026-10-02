@@ -27,6 +27,12 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
     /// <summary>The report path a tool run passes; never read, since the log goes to <see cref="LogSink"/> and no tool sets DryRun.</summary>
     private const string NoOutPath = "";
 
+    /// <summary>The <c>legacy</c> path both tools take: the names stay, and mean before and after (ADR 0040 decision 4; ticket P2-057).</summary>
+    private const string LegacyDescription = "Path to the solution before the change (.sln or .slnx).";
+
+    /// <summary>The <c>modern</c> path both tools take.</summary>
+    private const string ModernDescription = "Path to the solution after it (.sln or .slnx).";
+
     /// <summary>The <c>ilFallback</c> flag both tools take (<c>--il-fallback</c>; ADR 0039, ticket P1-016).</summary>
     private const string IlFallbackDescription = "Lower a pair that is not congruent and holds an opaque the other side lacks again from IL on both sides, keeping the IL bodies when they hold fewer (--il-fallback). Off by default.";
 
@@ -63,8 +69,8 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
     }
 
     public CallToolResult Compare(
-        [Description("Path to the legacy solution (.sln or .slnx).")] string legacy,
-        [Description("Path to the modern solution (.sln or .slnx).")] string modern,
+        [Description(LegacyDescription)] string legacy,
+        [Description(ModernDescription)] string modern,
         [Description("Path to an equiv.config.json.")] string? config = null,
         [Description("Path to a previous SARIF log; results already in it are reported as unchanged.")] string? baseline = null,
         [Description("Loop unrolling bound; overrides the config's, must be positive.")] int? bound = null,
@@ -73,8 +79,8 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
         Run(new CompareOptions(legacy, modern, NoOutPath, baseline, config, FailOn: null, DryRun: false) { Bound = bound, TimeoutMs = timeoutMs, IlFallback = ilFallback });
 
     public CallToolResult LowerOnly(
-        [Description("Path to the legacy solution (.sln or .slnx).")] string legacy,
-        [Description("Path to the modern solution (.sln or .slnx).")] string modern,
+        [Description(LegacyDescription)] string legacy,
+        [Description(ModernDescription)] string modern,
         [Description("Path to an equiv.config.json.")] string? config = null,
         [Description(IlFallbackDescription)] bool ilFallback = false) =>
         Run(new CompareOptions(legacy, modern, NoOutPath, BaselinePath: null, config, FailOn: null, DryRun: false, LowerOnly: true) { IlFallback = ilFallback });

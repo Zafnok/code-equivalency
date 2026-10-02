@@ -37,7 +37,7 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 1. `ISolutionLoader` -> Roslyn `MSBuildWorkspace`. Since Roslyn 4.9 the workspace runs
    MSBuild in an out-of-process build host; for legacy (non-SDK) csproj it picks the
    .NET Framework host backed by VS Build Tools' MSBuild, so a .NET 10 engine can load a
-   4.8 solution. Fail loudly on any workspace diagnostic; a silent partial load is a bug.
+   .NET Framework solution. Fail loudly on any workspace diagnostic; a silent partial load is a bug.
 2. Symbol enumeration -> `ProcedureIdentity` per method, constructor, property accessor.
 3. Endpoint discovery -> maps ASP.NET Web API 2 / MVC 5 attribute routes and ASP.NET Core
    attribute routes to a common `HTTP VERB /template` identity.
@@ -96,6 +96,8 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
   [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
   [--dry-run] [--lower-only] [--execute] [--test-target 0.001] [--test-budget 10000[,60]]
   [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback] [--resource-limit <n>]`.
+- `--legacy` and `--modern` mean before and after the change, on any runtime pair; `--before` and
+  `--after` are aliases, and both spellings of one option are a usage error (ADR 0040 decision 4).
 - `--chc-int-mode` (default true) lets loop-ladder rung 4 ask Z3 Spacer over the integers first
   (VERIFICATION-MODEL.md section 5.1); `false` keeps it to the bitvectors.
 - `--invariant-model <id>` (off by default) turns on rung 5: when rung 4 times out, the Claude model `<id>` is asked
