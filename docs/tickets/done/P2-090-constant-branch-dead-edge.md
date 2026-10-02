@@ -1,5 +1,5 @@
 # P2-090 A branch on a compile-time constant lowers to a procedure the validator can read
-Status: in-progress
+Status: done (PR #333)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
