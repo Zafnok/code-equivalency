@@ -75,7 +75,7 @@ public sealed class PreservingSeedDivergenceTests
     {
         CSharpCompilation compilation = Compile("Snippet", "class C { private Box F = new(); private Box G = new(); private bool H; " + method + " }", [Library]);
         IMethodSymbol symbol = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-        IrProcedure procedure = CSharpFrontend.LowerWithIrLowerer(symbol, compilation, EquivConfig.Default, isLegacy).Body;
+        IrProcedure procedure = CSharpFrontend.LowerWithIrLowerer(symbol, compilation, EquivConfig.Default, isLegacy, Runtimes.Migration).Body;
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

@@ -7,6 +7,7 @@ using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Progress;
+using Equiv.Core.RuntimeChanges;
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Endpoints;
 using Equiv.Frontend.CSharp.Execution;
@@ -30,7 +31,9 @@ namespace Equiv.Frontend.CSharp;
 /// <see cref="LoweringFailure"/>, not the end of the run (P2-011). The legacy body is lowered with the enabled
 /// API-equivalence entries and the modern body with none; the pair lists the entries that fired (ADR 0020; M3-009). The
 /// analysis carries a <see cref="ReplayDriverFactory"/> over the loaded projects, which emits nothing until a replay asks
-/// (ticket M4-009). Each loaded project gets its runtime (<see cref="RuntimeDetection"/>, ADR 0040; P2-053). Under
+/// (ticket M4-009). Each loaded project gets its runtime (<see cref="RuntimeDetection"/>, ADR 0040; P2-053), and each pair is
+/// lowered and fingerprinted with the interval between its two projects' runtimes (<see cref="SideRuntime"/>; P2-055), which
+/// the pair carries as <see cref="ProcedurePair.Runtimes"/>. Under
 /// <c>--il-fallback</c> a pair may keep bodies lowered from IL instead (<see cref="IlFallback"/>, ADR 0039; P1-016). A pair
 /// with a call site that has the same text on both sides and binds to a different callee is lowered again with each such
 /// call an opaque, and lists the callee pairs (<see cref="CallSites"/>, ADR 0042; P2-069).
@@ -39,7 +42,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
 {
     private readonly ISolutionLoader _loader;
     private readonly IProcedureMatcher _matcher;
-    private readonly Func<IMethodSymbol, Compilation, EquivConfig, bool, CallSites, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> _lower;
+    private readonly Func<IMethodSymbol, Compilation, EquivConfig, bool, SideRuntime, CallSites, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> _lower;
 
     public CSharpFrontend()
         : this(CreateLoader(OperatingSystem.IsWindows()), new StableIdentityMatcher())
@@ -56,7 +59,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
     internal CSharpFrontend(
         ISolutionLoader loader,
         IProcedureMatcher matcher,
-        Func<IMethodSymbol, Compilation, EquivConfig, bool, CallSites, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> lower)
+        Func<IMethodSymbol, Compilation, EquivConfig, bool, SideRuntime, CallSites, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> lower)
     {
         _loader = loader;
         _matcher = matcher;
@@ -108,7 +111,8 @@ public sealed class CSharpFrontend : ILanguageFrontend
         (ImmutableArray<ProcedureIdentity> added, ImmutableArray<UnverifiedProject> legacySkipped) = Unverified(legacy.Skipped, match.Added, modernByIdentity, config.Renames);
         (ImmutableArray<ProcedureIdentity> removed, ImmutableArray<UnverifiedProject> modernSkipped) = Unverified(modern.Skipped, match.Removed, legacyByIdentity, config.Renames);
 
-        (ImmutableArray<ProcedurePair> pairs, ImmutableArray<LoweringFailure> loweringFailures) = Lowered(match.Pairs, legacyByIdentity, modernByIdentity, config, log);
+        Sides sides = new(legacyByIdentity, ByProject(legacy.Runtimes), modernByIdentity, ByProject(modern.Runtimes));
+        (ImmutableArray<ProcedurePair> pairs, ImmutableArray<LoweringFailure> loweringFailures) = Lowered(match.Pairs, sides, config, log);
         MatchResult lowered = match with
         {
             Pairs = pairs,
@@ -151,38 +155,43 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// Both bodies of every pair in <paramref name="pairs"/>, lowered. A pair whose lowering throws is left out and
     /// returned as a <see cref="LoweringFailure"/> instead, so one bad body costs one pair (P2-011, ADR 0029's method
     /// level). <see cref="OperationCanceledException"/> and <see cref="OutOfMemoryException"/> propagate unchanged,
-    /// as they do for verification (ADR 0023).
+    /// as they do for verification (ADR 0023). Both bodies are lowered and fingerprinted with the one interval between the
+    /// runtimes of the two projects they come from (ADR 0040 decision 2; P2-055), so a runtime rule the pair does not cross
+    /// applies to neither.
     /// </summary>
     private (ImmutableArray<ProcedurePair> Pairs, ImmutableArray<LoweringFailure> Failures) Lowered(
         ImmutableArray<ProcedurePair> pairs,
-        Dictionary<ProcedureIdentity, SideProcedure> legacyByIdentity,
-        Dictionary<ProcedureIdentity, SideProcedure> modernByIdentity,
+        Sides sides,
         EquivConfig config,
         IRunLog log)
     {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
         log.Phase("lower", pairs.Length, pairs.Length);
         ImmutableArray<ProcedurePair>.Builder lowered = ImmutableArray.CreateBuilder<ProcedurePair>(pairs.Length);
         ImmutableArray<LoweringFailure>.Builder failures = ImmutableArray.CreateBuilder<LoweringFailure>();
         foreach (ProcedurePair pair in pairs)
         {
-            SideProcedure legacy = legacyByIdentity[pair.Old];
-            SideProcedure modern = modernByIdentity[pair.New];
+            SideProcedure legacy = sides.Legacy[pair.Old];
+            SideProcedure modern = sides.Modern[pair.New];
+            (SideRuntime legacyRuntime, SideRuntime modernRuntime) = SideRuntime.Of(
+                sides.LegacyRuntimes[legacy.Compilation.AssemblyName!], legacy.Compilation, sides.ModernRuntimes[modern.Compilation.AssemblyName!], modern.Compilation, table);
             log.Item(pair.New.Value, 1);
             try
             {
-                (IrProcedure oldBody, IrProcedure newBody, ImmutableArray<string> applied, ImmutableArray<ReboundCall> rebound) = Bodies(legacy, modern, config);
+                (IrProcedure oldBody, IrProcedure newBody, ImmutableArray<string> applied, ImmutableArray<ReboundCall> rebound) = Bodies((legacy, legacyRuntime), (modern, modernRuntime), config);
                 lowered.Add(Relowered(
                     pair with
                     {
                         OldBody = oldBody,
                         NewBody = newBody,
-                        OldFingerprint = BodyFingerprinter.Compute(legacy.Symbol, legacy.Compilation, config, legacy: true),
-                        NewFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false),
+                        OldFingerprint = BodyFingerprinter.Compute(legacy.Symbol, legacy.Compilation, config, legacy: true, legacyRuntime),
+                        NewFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false, modernRuntime),
                         EquivalencesApplied = applied,
                         ReboundCalls = rebound,
+                        Runtimes = legacyRuntime.Interval,
                     },
-                    legacy,
-                    modern,
+                    (legacy, legacyRuntime),
+                    (modern, modernRuntime),
                     config,
                     log));
                 log.ItemDone("lowered");
@@ -201,19 +210,23 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// <summary>
     /// Both bodies of a pair, the catalogue entries that fired in either, sorted, and the pair's rebound calls (ADR 0042;
     /// ticket P2-069). The bodies are lowered once to record their call sites. When a site with the same text binds to a
-    /// different callee on each side, both are lowered again with every call to such a callee an opaque.
+    /// different callee on each side, both are lowered again with every call to such a callee an opaque. Every lowering of a
+    /// side uses that side's runtime facts (ADR 0040; ticket P2-055).
     /// </summary>
-    private (IrProcedure Old, IrProcedure New, ImmutableArray<string> Applied, ImmutableArray<ReboundCall> Rebound) Bodies(SideProcedure legacy, SideProcedure modern, EquivConfig config)
+    private (IrProcedure Old, IrProcedure New, ImmutableArray<string> Applied, ImmutableArray<ReboundCall> Rebound) Bodies(
+        (SideProcedure Procedure, SideRuntime Runtime) legacySide, (SideProcedure Procedure, SideRuntime Runtime) modernSide, EquivConfig config)
     {
+        (SideProcedure legacy, SideRuntime legacyRuntime) = legacySide;
+        (SideProcedure modern, SideRuntime modernRuntime) = modernSide;
         CallSites oldSites = new();
         CallSites newSites = new();
-        (IrProcedure oldBody, ImmutableArray<string> oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, oldSites);
-        (IrProcedure newBody, ImmutableArray<string> newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, newSites);
+        (IrProcedure oldBody, ImmutableArray<string> oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, legacyRuntime, oldSites);
+        (IrProcedure newBody, ImmutableArray<string> newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, modernRuntime, newSites);
         ImmutableArray<ReboundCall> rebound = CallSites.Rebound(oldSites, newSites, config.CallIdentityRenames);
         if (!rebound.IsEmpty)
         {
-            (oldBody, oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, new CallSites(rebound.Select(static r => r.Legacy)));
-            (newBody, newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, new CallSites(rebound.Select(static r => r.Modern)));
+            (oldBody, oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, legacyRuntime, new CallSites(rebound.Select(static r => r.Legacy)));
+            (newBody, newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, modernRuntime, new CallSites(rebound.Select(static r => r.Modern)));
         }
 
         return (oldBody, newBody, [.. oldApplied.Union(newApplied, StringComparer.Ordinal).Order(StringComparer.Ordinal)], rebound);
@@ -225,14 +238,17 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// ticket P1-016); IL-lowered bodies applied no API equivalence. Then, when exactly one side is <c>async</c>, both bodies
     /// are one opaque, whichever lowering they came from (ticket M4-006).
     /// </summary>
-    private static ProcedurePair Relowered(ProcedurePair pair, SideProcedure legacy, SideProcedure modern, EquivConfig config, IRunLog log)
+    private static ProcedurePair Relowered(
+        ProcedurePair pair, (SideProcedure Procedure, SideRuntime Runtime) legacySide, (SideProcedure Procedure, SideRuntime Runtime) modernSide, EquivConfig config, IRunLog log)
     {
+        SideProcedure legacy = legacySide.Procedure;
+        SideProcedure modern = modernSide.Procedure;
         if (config.IlFallback)
         {
             bool congruent = pair.OldFingerprint is { RuntimeSensitive: false } fingerprint && fingerprint == pair.NewFingerprint;
             (IrProcedure old, IrProcedure @new, bool tried, string lowering) = IlFallback.Choose(
-                new IlFallback.Side(legacy.Symbol, legacy.Compilation, pair.OldBody!) { Rebound = pair.ReboundCalls.Select(static r => r.Legacy).ToImmutableHashSet(StringComparer.Ordinal) },
-                new IlFallback.Side(modern.Symbol, modern.Compilation, pair.NewBody!) { Rebound = pair.ReboundCalls.Select(static r => r.Modern).ToImmutableHashSet(StringComparer.Ordinal) },
+                new IlFallback.Side(legacy.Symbol, legacy.Compilation, pair.OldBody!, legacySide.Runtime) { Rebound = pair.ReboundCalls.Select(static r => r.Legacy).ToImmutableHashSet(StringComparer.Ordinal) },
+                new IlFallback.Side(modern.Symbol, modern.Compilation, pair.NewBody!, modernSide.Runtime) { Rebound = pair.ReboundCalls.Select(static r => r.Modern).ToImmutableHashSet(StringComparer.Ordinal) },
                 congruent,
                 log);
             pair = pair with
@@ -258,18 +274,19 @@ public sealed class CSharpFrontend : ILanguageFrontend
 
     /// <summary>
     /// The production lowering (M2-003): the legacy side with the API-equivalence entries <c>equiv.config.json</c> does not
-    /// suppress, the modern side with none (ADR 0020; ticket M3-009), and the legacy side's floating point marked
-    /// runtime-sensitive when its project runs on x87 (ADR 0025; ticket M4-002). <paramref name="sites"/> records the body's
+    /// suppress, the modern side with none (ADR 0020; ticket M3-009), and each side with the runtime rules that apply
+    /// inside the pair's interval (ADRs 0025, 0040; tickets M4-002, P2-055). <paramref name="sites"/> records the body's
     /// call sites and holds the identities whose calls are rebound (ADR 0042; ticket P2-069).
     /// </summary>
-    internal static (IrProcedure Body, ImmutableArray<string> EquivalencesApplied) LowerWithIrLowerer(IMethodSymbol symbol, Compilation compilation, EquivConfig config, bool legacy, CallSites? sites = null) =>
+    internal static (IrProcedure Body, ImmutableArray<string> EquivalencesApplied) LowerWithIrLowerer(
+        IMethodSymbol symbol, Compilation compilation, EquivConfig config, bool legacy, SideRuntime runtime, CallSites? sites = null) =>
         IrLowerer.Lower(
             symbol,
             compilation,
             config.Renames,
             config.SuppressRuntimeChanges,
             legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [],
-            legacy,
+            runtime,
             sites);
 
     /// <summary>
@@ -574,5 +591,16 @@ public sealed class CSharpFrontend : ILanguageFrontend
             span.EndLinePosition.Character + 1);
     }
 
+    /// <summary>Each side's project runtimes by assembly name, as <see cref="RuntimeDetection"/> keys them: one entry per loaded project.</summary>
+    private static Dictionary<string, ProjectRuntime> ByProject(ImmutableArray<ProjectRuntime> runtimes) =>
+        runtimes.ToDictionary(static r => r.Project, StringComparer.Ordinal);
+
     private sealed record SideProcedure(ProcedureIdentity Identity, IMethodSymbol Symbol, Compilation Compilation);
+
+    /// <summary>Both sides' procedures by identity and project runtimes by assembly name, which lowering a pair reads.</summary>
+    private sealed record Sides(
+        Dictionary<ProcedureIdentity, SideProcedure> Legacy,
+        Dictionary<string, ProjectRuntime> LegacyRuntimes,
+        Dictionary<ProcedureIdentity, SideProcedure> Modern,
+        Dictionary<string, ProjectRuntime> ModernRuntimes);
 }

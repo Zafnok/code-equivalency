@@ -58,7 +58,7 @@ public sealed class IlAstReaderTests
 
         Assert.Equal(IlAstReader.MethodNotFound, IlAstReader.Read(metadata, compilation).Failure);
         Assert.Equal(IlAstReader.MethodNotFound, IlAstReader.Read(lambda, compilation).Failure);
-        IrOpaque opaque = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(metadata, compilation)));
+        IrOpaque opaque = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(metadata, compilation, Runtimes.Migration)));
         Assert.Equal((IlAstReader.MethodNotFound, true), (opaque.Reason, opaque.WholeBody));
     }
 
@@ -77,7 +77,7 @@ public sealed class IlAstReaderTests
     {
         Compilation compilation = Compile("class C { int M() => undefined; }");
 
-        IrOpaque opaque = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation)));
+        IrOpaque opaque = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation, Runtimes.Migration)));
 
         Assert.Equal(IlAstReader.EmitFailed, opaque.Reason);
     }
@@ -99,7 +99,7 @@ public sealed class IlAstReaderTests
         Compilation compilation = Compile("class C\n{\n    int f;\n    int M(int a)\n    {\n        int total = a + 1;\n        return total + ~f;\n    }\n}\n");
 
         IlAstReader.Body body = IlAstReader.Read(Method(compilation, "C", "M"), compilation);
-        IrOpaque field = IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation)).First(static o => string.Equals(o.Reason, "BitNot", StringComparison.Ordinal));
+        IrOpaque field = IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation, Runtimes.Migration)).First(static o => string.Equals(o.Reason, "BitNot", StringComparison.Ordinal));
 
         Assert.Contains(body.Function!.Variables, static v => v is { Name: "total", HasGeneratedName: false });
         Assert.Equal(("Snippet.cs", 7, 9), (field.Span.Path, field.Span.StartLine, field.Span.StartColumn));
@@ -118,7 +118,7 @@ public sealed class IlAstReaderTests
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                 .WithSourceReferenceResolver(new SourceFileResolver([], directory, [KeyValuePair.Create(directory + Path.DirectorySeparatorChar, "/_/")])));
 
-        IrOpaque field = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation)));
+        IrOpaque field = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation, Runtimes.Migration)));
 
         Assert.Equal(path, field.Span.Path);
     }
@@ -130,7 +130,7 @@ public sealed class IlAstReaderTests
         Compilation compilation = Compile("class C { int f; int M() => ~f; }").WithOptions(
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary).WithSourceReferenceResolver(new SourceFileResolver([], baseDirectory: null)));
 
-        IrOpaque field = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation)));
+        IrOpaque field = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation, Runtimes.Migration)));
 
         Assert.Equal("Snippet.cs", field.Span.Path);
     }
@@ -141,7 +141,7 @@ public sealed class IlAstReaderTests
     {
         Compilation compilation = Compile("class C\n{\n    int f;\n#line hidden\n    int M() => ~f;\n#line default\n}\n");
 
-        IrOpaque field = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation)));
+        IrOpaque field = Assert.Single(IlLowererTests.Opaques(IlLowerer.Lower(Method(compilation, "C", "M"), compilation, Runtimes.Migration)));
 
         Assert.Equal(5, field.Span.StartLine);
     }
@@ -220,7 +220,7 @@ public sealed class IlAstReaderTests
             "class C { int M(int a) { object b = new Box<int>(); object l = new System.Collections.Generic.List<Item>(); bool f = L.B() & a > 0; return L.F(a) + L.G + L.S().Length; } }",
             [reference]);
 
-        IrProcedure procedure = IlLowerer.Lower(Method(compilation, "C", "M"), compilation);
+        IrProcedure procedure = IlLowerer.Lower(Method(compilation, "C", "M"), compilation, Runtimes.Migration);
 
         Assert.Empty(IrValidator.Validate(procedure));
     }

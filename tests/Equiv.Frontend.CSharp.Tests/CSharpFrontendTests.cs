@@ -329,10 +329,10 @@ public sealed class CSharpFrontendTests
     public void AReboundCallSiteIsListedAndOpaqueInBothBodies()
     {
         Dictionary<string, int> lowerings = new(StringComparer.Ordinal);
-        CSharpFrontend frontend = new(ReboundLoader(), new StableIdentityMatcher(), (symbol, compilation, config, legacy, sites) =>
+        CSharpFrontend frontend = new(ReboundLoader(), new StableIdentityMatcher(), (symbol, compilation, config, legacy, runtime, sites) =>
         {
             lowerings[symbol.Name] = lowerings.GetValueOrDefault(symbol.Name) + 1;
-            return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, sites);
+            return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, runtime, sites);
         });
 
         MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
@@ -386,10 +386,10 @@ public sealed class CSharpFrontendTests
         foreach ((Compilation compilation, string identity) in new[] { (legacy, LegacyExists), (modern, ModernExists) })
         {
             IMethodSymbol method = compilation.GetTypeByMetadataName("N.Probe")!.GetMembers("Has").OfType<IMethodSymbol>().Single();
-            Assert.DoesNotContain(IlLowerer.Lower(method, compilation).Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
+            Assert.DoesNotContain(IlLowerer.Lower(method, compilation, Runtimes.Migration).Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
             Assert.Equal(
                 ReboundCall.OpaqueReason,
-                Assert.Single(IlLowerer.Lower(method, compilation, rebound: [identity]).Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>()).Reason);
+                Assert.Single(IlLowerer.Lower(method, compilation, Runtimes.Migration, rebound: [identity]).Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>()).Reason);
         }
     }
 
@@ -567,10 +567,65 @@ public sealed class CSharpFrontendTests
     }
 
     /// <summary>The production lowering, except that a method named <paramref name="name"/> throws <paramref name="fault"/>.</summary>
-    private static Func<IMethodSymbol, Compilation, EquivConfig, bool, CallSites, (IrProcedure, ImmutableArray<string>)> FaultOn(string name, Exception fault) =>
-        (symbol, compilation, config, legacy, sites) => string.Equals(symbol.Name, name, StringComparison.Ordinal)
+    private static Func<IMethodSymbol, Compilation, EquivConfig, bool, SideRuntime, CallSites, (IrProcedure, ImmutableArray<string>)> FaultOn(string name, Exception fault) =>
+        (symbol, compilation, config, legacy, runtime, sites) => string.Equals(symbol.Name, name, StringComparison.Ordinal)
             ? throw fault
-            : CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, sites);
+            : CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, runtime, sites);
+
+    /// <summary>
+    /// Ticket P2-055 (ADR 0040 decision 2): each pair is lowered and fingerprinted with the interval between the runtimes of
+    /// the two projects its bodies come from, which it carries. <c>String.IndexOf</c> changed in .NET 5, so only a pair that
+    /// crosses .NET 5 has a runtime-changed callee and a runtime-sensitive body; on any other its bodies are congruent.
+    /// </summary>
+    [Theory]
+    [InlineData(".NETFramework,Version=v4.8", ".NETCoreApp,Version=v10.0", "net48", "net10.0", true)]
+    [InlineData(".NETCoreApp,Version=v10.0", ".NETFramework,Version=v4.8", "net48", "net10.0", true)]
+    [InlineData(".NETCoreApp,Version=v8.0", ".NETCoreApp,Version=v10.0", "net8.0", "net10.0", false)]
+    [InlineData(".NETCoreApp,Version=v10.0", ".NETCoreApp,Version=v10.0", "net10.0", "net10.0", false)]
+    public void Analyze_AppliesRuntimeRulesInsideEachPairsInterval(string legacyMoniker, string modernMoniker, string older, string newer, bool changed)
+    {
+        StubLoader loader = new(path => new LoadedSolution(
+            null!, [RuntimeProject("Lib", string.Equals(path, "legacy.sln", StringComparison.Ordinal) ? legacyMoniker : modernMoniker)], [], []));
+
+        ProcedurePair pair = Assert.Single(new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match.Pairs);
+
+        Assert.Equal(new RuntimeInterval(TargetRuntime.Parse(older)!, TargetRuntime.Parse(newer)!), pair.Runtimes);
+        Assert.Equal(changed, pair.OldFingerprint!.RuntimeSensitive);
+        Assert.Equal(pair.OldFingerprint, pair.NewFingerprint);
+        Assert.All(
+            pair.OldBody!.Blocks.Concat(pair.NewBody!.Blocks).SelectMany(static b => b.Instructions).OfType<IrCall>(),
+            call => Assert.Equal(changed, call.Callee.RuntimeChanged));
+    }
+
+    /// <summary>
+    /// Ticket P2-055: the interval is the pair's own. Two pairs of one run whose projects target different runtimes get
+    /// different intervals, each from the two projects that hold its bodies, whatever those projects are called; and a
+    /// project with no target framework crosses every change the table covers.
+    /// </summary>
+    [Fact]
+    public void Analyze_EachPairTakesTheIntervalOfItsOwnTwoProjects()
+    {
+        static Compilation Named(string assembly, string type, string? moniker) => RoslynTestCompilations.Compile(
+            (moniker is null ? string.Empty : $"[assembly: System.Runtime.Versioning.TargetFramework(\"{moniker}\")]\n")
+            + $"namespace N {{ public class {type} {{ public int M(string s) => s.IndexOf(\"x\"); }} }}",
+            assembly);
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [Named("Old.A", "A", ".NETFramework,Version=v4.8"), Named("Old.B", "B", ".NETCoreApp,Version=v8.0"), Named("Old.C", "C", moniker: null)], [], [])
+            : new LoadedSolution(null!, [Named("New.A", "A", ".NETCoreApp,Version=v10.0"), Named("New.B", "B", ".NETCoreApp,Version=v8.0"), Named("New.C", "C", ".NETCoreApp,Version=v10.0")], [], []));
+
+        Dictionary<string, RuntimeInterval?> runtimes = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match.Pairs
+            .ToDictionary(static p => p.New.Value, static p => p.Runtimes, StringComparer.Ordinal);
+
+        Assert.Equal(new RuntimeInterval(TargetRuntime.Parse("net48")!, TargetRuntime.Parse("net10.0")!), runtimes["N.A::M(string)"]);
+        Assert.True(runtimes["N.B::M(string)"]!.IsEmpty);
+        Assert.Equal(Equiv.Core.RuntimeChanges.RuntimeChangeTable.Load().Coverage, runtimes["N.C::M(string)"]);
+    }
+
+    private static Compilation RuntimeProject(string assembly, string moniker) => RoslynTestCompilations.Compile(
+        $"[assembly: System.Runtime.Versioning.TargetFramework(\"{moniker}\")]\nnamespace N {{ public class C {{ public int M(string s) => s.IndexOf(\"x\"); }} }}",
+        assembly);
 
     [Fact]
     public void NullConfigThrows()
@@ -882,10 +937,10 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modern], [], []));
         List<Compilation> lowered = [];
 
-        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher(), (symbol, compilation, config, legacy, sites) =>
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher(), (symbol, compilation, config, legacy, runtime, sites) =>
             {
                 lowered.Add(compilation);
-                return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, sites);
+                return CSharpFrontend.LowerWithIrLowerer(symbol, compilation, config, legacy, runtime, sites);
             })
             .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 

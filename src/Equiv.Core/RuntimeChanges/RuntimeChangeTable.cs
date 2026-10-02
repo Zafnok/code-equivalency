@@ -7,12 +7,11 @@ namespace Equiv.Core.RuntimeChanges;
 
 /// <summary>
 /// The runtime-changes table (VERIFICATION-MODEL.md section 3; ADR 0008), loaded once from the
-/// embedded <c>runtime-changes.json</c> resource. <see cref="TryMatch(CallIdentity, out RuntimeChange)"/>
-/// matches a call's <see cref="CallIdentity.Value"/> by prefix against <see cref="Rows"/>; a member
+/// embedded <c>runtime-changes.json</c> resource. <see cref="TryMatch(CallIdentity, RuntimeInterval, out RuntimeChange)"/>
+/// matches a call's <see cref="CallIdentity.Value"/> by prefix against the <see cref="Rows"/> whose
+/// <see cref="RuntimeChange.ChangedIn"/> the pair's runtimes cross (ADR 0040 decision 2; tickets P2-054, P2-055); a member
 /// listed in <c>equiv.config.json</c>'s <c>suppressRuntimeChanges</c> is excluded by the suppressing
 /// overload, which the frontend's flagging uses (ticket M3-001), so a suppressed call is never flagged.
-/// The <see cref="RuntimeInterval"/> overloads also skip a row whose <see cref="RuntimeChange.ChangedIn"/> the pair's
-/// runtimes do not cross (ADR 0040 decision 2; ticket P2-054).
 /// </summary>
 public sealed class RuntimeChangeTable
 {
@@ -20,14 +19,24 @@ public sealed class RuntimeChangeTable
 
     private static readonly Lazy<RuntimeChangeTable> Cached = new(LoadFromResource);
 
+    /// <summary>The oldest runtime a compared project can target (ADR 0040): .NET Framework 4.0, older than every change point.</summary>
+    private static readonly TargetRuntime Oldest = new(TargetRuntime.RuntimeFamily.NetFramework, new Version(4, 0));
+
     private RuntimeChangeTable(TargetRuntime coveredFrom, ImmutableArray<RuntimeChange> rows)
     {
         CoveredFrom = coveredFrom;
         Rows = rows;
+        Coverage = new RuntimeInterval(Oldest, rows.Select(static row => row.ChangedIn).OfType<TargetRuntime>().Append(coveredFrom).Max()!);
     }
 
     /// <summary>The oldest .NET version whose changes the table lists; see <see cref="RuntimeInterval.UncoveredRange(TargetRuntime)"/>.</summary>
     public TargetRuntime CoveredFrom { get; }
+
+    /// <summary>
+    /// The interval that crosses every row: from .NET Framework to the newest runtime a row names. It stands for a pair
+    /// whose runtimes are not known (ADR 0040 decision 1: such a pair crosses every change the table covers).
+    /// </summary>
+    public RuntimeInterval Coverage { get; }
 
     /// <summary>Every row, in file order.</summary>
     public ImmutableArray<RuntimeChange> Rows { get; }
@@ -35,27 +44,15 @@ public sealed class RuntimeChangeTable
     /// <summary>Reads and parses the embedded resource on first use; later calls return the same instance.</summary>
     public static RuntimeChangeTable Load() => Cached.Value;
 
-    /// <summary>Matches <paramref name="identity"/>'s <see cref="CallIdentity.Value"/> by prefix against every row.</summary>
-    public bool TryMatch(CallIdentity identity, out RuntimeChange match) => TryMatch(identity, [], out match);
-
-    /// <summary>As the two-argument overload, but a row whose <see cref="RuntimeChange.Member"/> is in <paramref name="suppressed"/> never matches.</summary>
-    public bool TryMatch(CallIdentity identity, ImmutableArray<string> suppressed, out RuntimeChange match)
-    {
-        ArgumentNullException.ThrowIfNull(identity);
-
-        match = Rows.FirstOrDefault(row =>
-            identity.Value.StartsWith(row.Member, StringComparison.Ordinal) && !suppressed.Contains(row.Member, StringComparer.Ordinal))!;
-        return match is not null;
-    }
-
     /// <summary>
-    /// As <see cref="TryMatch(CallIdentity, out RuntimeChange)"/>, but only a row that applies inside <paramref name="interval"/>:
-    /// one whose <see cref="RuntimeChange.ChangedIn"/> the interval crosses, or, when that is unknown, any row once the runtimes differ.
+    /// Matches <paramref name="identity"/>'s <see cref="CallIdentity.Value"/> by prefix against the rows that apply inside
+    /// <paramref name="interval"/>: one whose <see cref="RuntimeChange.ChangedIn"/> the interval crosses, or, when that is
+    /// unknown, any row once the runtimes differ.
     /// </summary>
     public bool TryMatch(CallIdentity identity, RuntimeInterval interval, out RuntimeChange match) =>
         TryMatch(identity, interval, [], out match);
 
-    /// <summary>As the three-argument <see cref="RuntimeInterval"/> overload, but a row whose <see cref="RuntimeChange.Member"/> is in <paramref name="suppressed"/> never matches.</summary>
+    /// <summary>As the three-argument overload, but a row whose <see cref="RuntimeChange.Member"/> is in <paramref name="suppressed"/> never matches.</summary>
     public bool TryMatch(CallIdentity identity, RuntimeInterval interval, ImmutableArray<string> suppressed, out RuntimeChange match)
     {
         ArgumentNullException.ThrowIfNull(identity);

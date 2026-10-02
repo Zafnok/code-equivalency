@@ -53,7 +53,8 @@ public sealed class RuntimeChangeTableTests
     [InlineData("System.Double::Parse(string)")]
     public void Table_MatchesByPrefix(string identityValue)
     {
-        Assert.True(RuntimeChangeTable.Load().TryMatch(new CallIdentity(identityValue), out RuntimeChange match));
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        Assert.True(table.TryMatch(new CallIdentity(identityValue), table.Coverage, out RuntimeChange match));
         Assert.StartsWith(match.Member, identityValue, StringComparison.Ordinal);
     }
 
@@ -63,7 +64,8 @@ public sealed class RuntimeChangeTableTests
     [InlineData("System.Int32::Parse(string)")]
     public void UnrelatedMembersDoNotMatch(string identityValue)
     {
-        Assert.False(RuntimeChangeTable.Load().TryMatch(new CallIdentity(identityValue), out _));
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        Assert.False(table.TryMatch(new CallIdentity(identityValue), table.Coverage, out _));
     }
 
     [Fact]
@@ -71,10 +73,10 @@ public sealed class RuntimeChangeTableTests
     {
         CallIdentity identity = new("System.String::IndexOf(char)");
         RuntimeChangeTable table = RuntimeChangeTable.Load();
-        Assert.True(table.TryMatch(identity, out RuntimeChange unsuppressed));
+        Assert.True(table.TryMatch(identity, table.Coverage, out RuntimeChange unsuppressed));
 
         ImmutableArray<string> suppressed = [unsuppressed.Member];
-        Assert.False(table.TryMatch(identity, suppressed, out _));
+        Assert.False(table.TryMatch(identity, table.Coverage, suppressed, out _));
     }
 
     [Fact]
@@ -83,13 +85,39 @@ public sealed class RuntimeChangeTableTests
         CallIdentity identity = new("System.String::IndexOf(char)");
         ImmutableArray<string> suppressed = ["System.String::GetHashCode("];
 
-        Assert.True(RuntimeChangeTable.Load().TryMatch(identity, suppressed, out _));
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        Assert.True(table.TryMatch(identity, table.Coverage, suppressed, out _));
     }
 
+    /// <summary>
+    /// Ticket P2-055: the coverage interval crosses every row, so a pair whose runtimes are not known is flagged as a
+    /// .NET Framework to .NET pair is (ADR 0040 decision 1). It runs from .NET Framework 4.0 to the newest change point.
+    /// </summary>
     [Fact]
-    public void NullIdentityThrows()
+    public void CoverageCrossesEveryRow()
     {
-        Assert.Throws<ArgumentNullException>(static () => RuntimeChangeTable.Load().TryMatch(null!, out _));
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+
+        Assert.Equal(Interval("net40", "net10.0"), table.Coverage);
+        Assert.All(table.Rows, row => Assert.True(table.TryMatch(new CallIdentity(row.Member + "x()"), table.Coverage, out _), row.Member));
+    }
+
+    /// <summary>A table with no dated row still has a non-empty coverage, up to <c>coveredFrom</c>; an older row does not shorten it.</summary>
+    [Fact]
+    public void CoverageEndsAtTheNewestOfTheRowsAndCoveredFrom()
+    {
+        RuntimeChangeTable undated = Parse("""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "measured" }]""");
+        RuntimeChangeTable older = Parse("""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": "netcoreapp1.0", "source": "curated" }]""");
+        RuntimeChangeTable newer = Parse("""
+            [
+              { "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": "net9.0", "source": "curated" },
+              { "member": "C::D(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": "net6.0", "source": "curated" }
+            ]
+            """);
+
+        Assert.Equal(Interval("net40", "netcoreapp3.0"), undated.Coverage);
+        Assert.Equal(Interval("net40", "netcoreapp3.0"), older.Coverage);
+        Assert.Equal(Interval("net40", "net9.0"), newer.Coverage);
     }
 
     [Fact]

@@ -10,6 +10,7 @@ using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Progress;
 using Equiv.Core.Reporting;
+using Equiv.Core.RuntimeChanges;
 using Equiv.Core.Verdicts;
 using Equiv.Execute;
 using Equiv.Execute.Testing;
@@ -30,6 +31,9 @@ internal static class CompareCommand
 {
     private const string LegacySide = "legacy";
     private const string ModernSide = "modern";
+
+    /// <summary>The descriptor id of the notification <see cref="UncoveredRuntimes"/> writes (ADR 0040; ticket P2-055).</summary>
+    internal const string UncoveredRuntimeRange = "uncovered-runtime-range";
 
     /// <summary>How many times <see cref="DeleteTemporary"/> tries before it leaves the folder behind.</summary>
     internal const int DeleteAttempts = 5;
@@ -224,7 +228,7 @@ internal static class CompareCommand
         MatchResult matchResult = analysis.Match;
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered = Lowered(matchResult);
         LoweringCensus census = LoweringCensus.Compute(
-            [.. lowered.Select(static p => (p.Old, p.New, IsCongruent(p.Pair, p.Old, p.New)))],
+            [.. lowered.Select(static p => (p.Old, p.New, IsCongruent(p.Pair, p.Old, p.New), p.Pair.Runtimes))],
             removed: matchResult.Removed.Length,
             added: matchResult.Added.Length,
             projectsSkipped: new SideCounts(matchResult.LegacySkipped.Length, matchResult.ModernSkipped.Length),
@@ -252,7 +256,7 @@ internal static class CompareCommand
         results.AddRange(matchResult.Ambiguous.Select(static identity => new VerificationResult(identity, new Unknown(UnknownReason.UnmatchedOverload, AmbiguousDetail(identity)))));
 
         (List<Notification> skippedProjectNotifications, List<ProcedureIdentity> skippedProjectProcedures) = SkippedProjects(matchResult, error);
-        List<Notification> notifications = [.. pairFailures, .. skippedProjectNotifications];
+        List<Notification> notifications = [.. pairFailures, .. skippedProjectNotifications, .. UncoveredRuntimes(matchResult, error)];
         List<ProcedureIdentity> unverified = [.. unverifiedPairs, .. skippedProjectProcedures];
         SarifLog log = SarifReportWriter.Write(
             results,
@@ -297,6 +301,28 @@ internal static class CompareCommand
                 [ModernSide] = SarifReportWriter.RuntimesProperty(analysis.ModernRuntimes),
             },
         };
+
+    /// <summary>
+    /// ADR 0040 decision 2: when any matched pair's runtimes reach below the oldest .NET version <c>runtime-changes.json</c>
+    /// covers, one <c>warning</c> notification, on stderr as well as in the SARIF, naming the widest range no row covers
+    /// (ticket P2-055). A behaviour that changed inside it is not flagged, so a verdict there rests on the two runtimes
+    /// agreeing. It carries the descriptor <see cref="UncoveredRuntimeRange"/>, which tells it from a skipped project's.
+    /// </summary>
+    private static List<Notification> UncoveredRuntimes(MatchResult matchResult, TextWriter error)
+    {
+        TargetRuntime coveredFrom = RuntimeChangeTable.Load().CoveredFrom;
+        List<RuntimeInterval> gaps = [.. matchResult.Pairs.Select(pair => pair.Runtimes?.UncoveredRange(coveredFrom)).OfType<RuntimeInterval>()];
+        if (gaps.Count == 0)
+        {
+            return [];
+        }
+
+        string text = string.Create(
+            CultureInfo.InvariantCulture,
+            $"runtime-changes.json lists no runtime changes between {gaps.Min(static g => g.Older)} and {gaps.Max(static g => g.Newer)}, which {gaps.Count} matched pair(s) cross; a behaviour that changed in that range is not flagged");
+        error.WriteLine($"warning: {text}");
+        return [new Notification { Level = FailureLevel.Warning, Message = new Message { Text = text }, Descriptor = new ReportingDescriptorReference { Id = UncoveredRuntimeRange } }];
+    }
 
     /// <summary>The <c>write</c> phase (ADR 0038): one item, the SARIF log.</summary>
     private static void Written(IReportSink sink, SarifLog log, string outPath, IRunLog runLog)
@@ -554,7 +580,7 @@ internal static class CompareCommand
             runLog.Item(pair.New.Value, weight);
             if (decided is not null)
             {
-                results.Add(decided.Result with { Lowering = pair.Lowering, ReboundCalls = pair.ReboundCalls });
+                results.Add(decided.Result with { Lowering = pair.Lowering, Runtimes = pair.Runtimes, ReboundCalls = pair.ReboundCalls });
                 runLog.ItemDone(decided.Outcome);
                 continue;
             }
@@ -562,7 +588,7 @@ internal static class CompareCommand
             try
             {
                 Verdict verdict = backend.Verify(old, @new, options);
-                results.Add(new VerificationResult(pair.New, verdict) { EquivalencesApplied = pair.EquivalencesApplied, Lowering = pair.Lowering, ReboundCalls = pair.ReboundCalls });
+                results.Add(new VerificationResult(pair.New, verdict) { EquivalencesApplied = pair.EquivalencesApplied, Lowering = pair.Lowering, Runtimes = pair.Runtimes, ReboundCalls = pair.ReboundCalls });
                 runLog.ItemDone(verdict switch
                 {
                     Equivalent => "equivalent",

@@ -25,7 +25,8 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// labels, lambdas, local functions and their parameters are numbered by first occurrence, and the method's own parameters
 /// by position (ADR 0021). So trivia, comments, local names and parameter names cannot change the text, and a different
 /// overload, operator, conversion, constant or <c>checked</c> context does. The walk also decides whether the body is
-/// runtime-sensitive. Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
+/// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
+/// P2-055). Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
 /// <see cref="OperationKind.None"/>) carry their source tokens instead, which costs congruence on a rename there but never
 /// equates two different operations.
 /// </summary>
@@ -47,7 +48,7 @@ internal sealed class BoundSerialiser : OperationWalker
     private readonly ImmutableArray<string> suppressedRuntimeChanges;
     private readonly ImmutableDictionary<string, string> types;
     private readonly ImmutableDictionary<string, string> members;
-    private readonly bool x87;
+    private readonly SideRuntime runtime;
     private readonly string interpolation;
     private readonly Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas;
     private int depth;
@@ -56,14 +57,13 @@ internal sealed class BoundSerialiser : OperationWalker
 
     private BoundSerialiser(IMethodSymbol method, Compilation compilation, Settings settings, Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas = null)
     {
-        (RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences, bool legacy) = settings;
         this.method = method;
         this.lambdas = lambdas;
-        this.renames = renames;
-        this.suppressedRuntimeChanges = suppressedRuntimeChanges;
-        types = equivalences.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
-        members = equivalences.Where(static e => !e.IsType && PassesArgumentsThrough(e)).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
-        x87 = legacy && compilation.Options.Platform is Platform.X86 or Platform.AnyCpu32BitPreferred;
+        renames = settings.Renames;
+        suppressedRuntimeChanges = settings.SuppressedRuntimeChanges;
+        runtime = settings.Runtime;
+        types = settings.Equivalences.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
+        members = settings.Equivalences.Where(static e => !e.IsType && PassesArgumentsThrough(e)).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
         interpolation = ((CSharpCompilation)compilation).LanguageVersion >= LanguageVersion.CSharp10
             && compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.DefaultInterpolatedStringHandler") is not null
                 ? "DefaultInterpolatedStringHandler"
@@ -71,16 +71,18 @@ internal sealed class BoundSerialiser : OperationWalker
     }
 
     /// <summary>
-    /// How a side's symbols are spelled and which runtime changes it suppresses: its rename map, the
-    /// <c>runtime-changes.json</c> members not to flag, its API equivalences, and whether it is the legacy side.
+    /// How a side's symbols are spelled and which runtime rules apply to it: its rename map, the
+    /// <c>runtime-changes.json</c> members not to flag, its API equivalences (the legacy side's; the modern side has none),
+    /// and the pair's runtime interval with this side's x87 flag.
     /// </summary>
-    public sealed record Settings(RenameMap Renames, ImmutableArray<string> SuppressedRuntimeChanges, ImmutableArray<ApiEquivalence> Equivalences, bool Legacy);
+    public sealed record Settings(RenameMap Renames, ImmutableArray<string> SuppressedRuntimeChanges, ImmutableArray<ApiEquivalence> Equivalences, SideRuntime Runtime);
 
     /// <summary>
     /// The serialisation of <paramref name="method"/>'s <paramref name="operations"/> (its body, after a constructor's field and
     /// property initializers), or of an auto-accessor when there are none, and whether it is runtime-sensitive: it references
-    /// a <c>runtime-changes.json</c> member not in <paramref name="settings"/>' suppressed runtime changes, converts a floating-point value
-    /// to an integer, or, on a legacy project whose effective platform is x86, handles a floating-point value at all.
+    /// a <c>runtime-changes.json</c> member whose row applies inside the pair's interval and is not in <paramref name="settings"/>'
+    /// suppressed runtime changes, converts a floating-point value to an integer on a pair that crosses .NET 9, or, on a side
+    /// whose floating point alone runs on x87, handles a floating-point value at all. A same-runtime pair's body never is.
     /// </summary>
     public static (string Text, bool RuntimeSensitive) Serialise(
         IMethodSymbol method,
@@ -145,8 +147,8 @@ internal sealed class BoundSerialiser : OperationWalker
         Append("context", Context(operation));
         text.Append('\n');
 
-        RuntimeSensitive |= (x87 && IsFloatingPoint(operation.Type))
-            || (operation is IConversionOperation { Operand.Type: { } from } conversion && IsFloatingPoint(from) && IsIntegral(conversion.Type!));
+        RuntimeSensitive |= (runtime.X87 && IsFloatingPoint(operation.Type))
+            || (runtime.FloatToIntegerChanged && operation is IConversionOperation { Operand.Type: { } from } conversion && IsFloatingPoint(from) && IsIntegral(conversion.Type!));
 
         depth++;
         foreach (IOperation child in operation.ChildOperations)
@@ -242,24 +244,24 @@ internal sealed class BoundSerialiser : OperationWalker
         return name;
     }
 
-    /// <summary>A callee as the IR's <c>IrCall</c> names it, rewritten by a pass-through API-equivalence entry; flags the body when the table lists it.</summary>
+    /// <summary>A callee as the IR's <c>IrCall</c> names it, rewritten by a pass-through API-equivalence entry; flags the body when a table row applies to it.</summary>
     private string Method(IMethodSymbol callee)
     {
-        CallIdentity identity = CallIdentityFactory.Of(callee, renames, suppressedRuntimeChanges);
+        CallIdentity identity = CallIdentityFactory.Of(callee, renames, suppressedRuntimeChanges, runtime.Interval);
         if (members.TryGetValue(identity.Value, out string? modern))
         {
-            identity = CallIdentityFactory.Of(modern, suppressedRuntimeChanges);
+            identity = CallIdentityFactory.Of(modern, suppressedRuntimeChanges, runtime.Interval);
         }
 
         RuntimeSensitive |= identity.RuntimeChanged;
         return identity.Value;
     }
 
-    /// <summary>A field or event as <c>Type::Name</c>; flags the body when the runtime-changes table lists it.</summary>
+    /// <summary>A field or event as <c>Type::Name</c>; flags the body when a runtime-changes row applies to it.</summary>
     private string Member(ISymbol member)
     {
         string identity = $"{Type(member.ContainingType)}::{member.Name}";
-        RuntimeSensitive |= CallIdentityFactory.Of(identity, suppressedRuntimeChanges).RuntimeChanged;
+        RuntimeSensitive |= CallIdentityFactory.Of(identity, suppressedRuntimeChanges, runtime.Interval).RuntimeChanged;
         return identity;
     }
 

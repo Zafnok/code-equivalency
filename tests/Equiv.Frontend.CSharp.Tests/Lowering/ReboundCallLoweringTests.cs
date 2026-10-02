@@ -114,8 +114,8 @@ public sealed class ReboundCallLoweringTests
     {
         (IMethodSymbol method, Compilation compilation) = Method("Old", name);
 
-        IrProcedure rebound = IlLowerer.Lower(method, compilation, rebound: [identity]);
-        IrProcedure plain = IlLowerer.Lower(method, compilation);
+        IrProcedure rebound = IlLowerer.Lower(method, compilation, Runtimes.Migration, rebound: [identity]);
+        IrProcedure plain = IlLowerer.Lower(method, compilation, Runtimes.Migration);
 
         Assert.Empty(IrValidator.Validate(rebound));
         Assert.Equal(opaques, Lowered.Opaques(rebound).Length);
@@ -134,7 +134,7 @@ public sealed class ReboundCallLoweringTests
     private static IrProcedure Lower(string library, string name, CallSites? sites)
     {
         (IMethodSymbol method, Compilation compilation) = Method(library, name);
-        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], [], legacy: false, sites).Body;
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], [], Runtimes.Migration, sites).Body;
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

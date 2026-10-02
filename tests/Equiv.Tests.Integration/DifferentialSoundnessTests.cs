@@ -70,7 +70,7 @@ public sealed class DifferentialSoundnessTests
     /// every input that reaches it runs differently, which rule 1 must catch.
     /// </summary>
     private static readonly PairRuntime.Lowering BrokenIl = new("il with != read as ==", static (method, compilation) =>
-        IlLowerer.Lower(method, compilation, x87: false, static op => op switch
+        IlLowerer.Lower(method, compilation, Runtimes.Migration, static op => op switch
         {
             IrBinaryOp.Ne => IrBinaryOp.Eq,
             _ => op,

@@ -6,6 +6,7 @@ using System.Text;
 using Equiv.Core.ApiEquivalences;
 using Equiv.Core.Configuration;
 using Equiv.Core.Matching;
+using Equiv.Frontend.CSharp.Lowering;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -24,19 +25,20 @@ internal static class BodyFingerprinter
 {
     /// <summary>
     /// <paramref name="method"/>'s fingerprint with <paramref name="config"/>'s rename map and runtime-change suppressions,
-    /// and, on the <paramref name="legacy"/> side, its enabled API-equivalence entries (ADR 0020), as lowering uses them.
+    /// and, on the <paramref name="legacy"/> side, its enabled API-equivalence entries (ADR 0020), as lowering uses them. It is
+    /// runtime-sensitive by the rules that apply inside <paramref name="runtime"/>'s interval (ADR 0040; ticket P2-055).
     /// </summary>
-    public static BodyFingerprint? Compute(IMethodSymbol method, Compilation compilation, EquivConfig config, bool legacy) =>
-        Compute(method, compilation, config, legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [], legacy);
+    public static BodyFingerprint? Compute(IMethodSymbol method, Compilation compilation, EquivConfig config, bool legacy, SideRuntime runtime) =>
+        Compute(method, compilation, config, legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [], runtime);
 
-    /// <summary>As the four-argument overload, applying <paramref name="equivalences"/> on the legacy side.</summary>
-    public static BodyFingerprint? Compute(IMethodSymbol method, Compilation compilation, EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, bool legacy) =>
-        Text(method, compilation, config, equivalences, legacy) is ({ } text, bool runtimeSensitive)
+    /// <summary>As the overload that takes the side, applying <paramref name="equivalences"/>, which only the legacy side has.</summary>
+    public static BodyFingerprint? Compute(IMethodSymbol method, Compilation compilation, EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime) =>
+        Text(method, compilation, config, equivalences, runtime) is ({ } text, bool runtimeSensitive)
             ? new BodyFingerprint(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), runtimeSensitive)
             : null;
 
     /// <summary>The canonical serialisation the fingerprint hashes, readable for tests and review; a null text when there is no body.</summary>
-    public static (string? Text, bool RuntimeSensitive) Text(IMethodSymbol method, Compilation compilation, EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, bool legacy)
+    public static (string? Text, bool RuntimeSensitive) Text(IMethodSymbol method, Compilation compilation, EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
@@ -46,12 +48,12 @@ internal static class BodyFingerprinter
         if (compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax) is not { } body)
         {
             return IsAutoAccessor(method)
-                ? BoundSerialiser.Serialise(method, compilation, [], new(config.Renames, config.SuppressRuntimeChanges, equivalences, legacy))
+                ? BoundSerialiser.Serialise(method, compilation, [], new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime))
                 : (null, false);
         }
 
         ImmutableArray<IOperation> operations = [.. Initializers(method, syntax).Select(node => compilation.GetSemanticModel(node.SyntaxTree).GetOperation(node)!), body];
-        return BoundSerialiser.Serialise(method, compilation, operations, new(config.Renames, config.SuppressRuntimeChanges, equivalences, legacy));
+        return BoundSerialiser.Serialise(method, compilation, operations, new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime));
     }
 
     /// <summary>An accessor of a property that has a compiler-generated backing field.</summary>

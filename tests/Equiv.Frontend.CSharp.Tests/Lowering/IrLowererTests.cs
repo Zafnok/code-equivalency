@@ -700,7 +700,7 @@ public sealed class IrLowererTests
         Compilation compilation = RoslynTestCompilations.Compile("using System;\nclass D { public event Action? E; public class C { static Action? M(D d) => d.E; } }\n");
         IMethodSymbol method = compilation.GetTypeByMetadataName("D+C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
 
-        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration);
 
         Assert.Equal("EventReference", Assert.Single(Opaques(procedure)).Reason);
     }

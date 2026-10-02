@@ -14,37 +14,38 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// The <see cref="CallIdentity"/> of an opaque callee: the M2-002 <see cref="RoslynIdentity"/> string
 /// (rename map applied), plus <c>&lt;typeArgs&gt;</c> when the method or a containing type is a
 /// constructed generic, so <c>F&lt;int&gt;()</c> and <c>F&lt;long&gt;()</c> are different functions.
-/// <see cref="CallIdentity.RuntimeChanged"/> is set when the identity matches
-/// <see cref="RuntimeChangeTable"/> (ticket M2-006) and is not listed in <c>equiv.config.json</c>'s
-/// <c>suppressRuntimeChanges</c>; the flag is the backend's only input about it (ticket M3-001). A legacy call an
+/// <see cref="CallIdentity.RuntimeChanged"/> is set when the identity matches a <see cref="RuntimeChangeTable"/> row
+/// (ticket M2-006) that applies inside the pair's <see cref="RuntimeInterval"/> (ADR 0040 decision 2; ticket P2-055) and
+/// is not listed in <c>equiv.config.json</c>'s <c>suppressRuntimeChanges</c>, so on a same-runtime pair no callee is
+/// flagged; the flag is the backend's only input about it (ticket M3-001). A legacy call an
 /// API-equivalence entry rewrites (ticket M3-009) is checked against the table as the modern member it becomes.
 /// </summary>
 internal static class CallIdentityFactory
 {
-    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
+    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval)
     {
         ArgumentNullException.ThrowIfNull(method);
-        return Of(Constructed(RoslynIdentity.Of(method, renames).Value, [.. TypeArguments(method.ContainingType), .. method.TypeArguments]), suppressedRuntimeChanges);
+        return Of(Constructed(RoslynIdentity.Of(method, renames).Value, [.. TypeArguments(method.ContainingType), .. method.TypeArguments]), suppressedRuntimeChanges, interval);
     }
 
     /// <summary>
-    /// As the three-argument overload, but also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
+    /// As the overload without a compilation, but also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
     /// <paramref name="method"/>'s containing assembly is one of <paramref name="compilation"/>'s reference assemblies
     /// (<see cref="ReferenceAssemblies.IsReferenceAssembly(IAssemblySymbol)"/>): the framework or .NET reference pack the
     /// project compiled against, never the solution's own code (a <see cref="CompilationReference"/>, or the compilation's
     /// own assembly) or a NuGet package (a <see cref="PortableExecutableReference"/> without the attribute).
     /// </summary>
-    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges)
+    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval)
     {
         ArgumentNullException.ThrowIfNull(compilation);
-        return Of(method, renames, suppressedRuntimeChanges) with { External = IsExternal(method.ContainingAssembly, compilation) };
+        return Of(method, renames, suppressedRuntimeChanges, interval) with { External = IsExternal(method.ContainingAssembly, compilation) };
     }
 
-    /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be.</summary>
-    public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges)
+    /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be inside <paramref name="interval"/>.</summary>
+    public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval)
     {
         CallIdentity callee = new(value);
-        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, suppressedRuntimeChanges, out _) };
+        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, interval, suppressedRuntimeChanges, out _) };
     }
 
     private static bool IsExternal(IAssemblySymbol assembly, Compilation compilation) =>
@@ -54,8 +55,8 @@ internal static class CallIdentityFactory
     /// The identity of an <c>await</c> whose awaiter is of type <paramref name="awaiter"/> (ticket M4-006): <c>await:</c> and
     /// the awaiter's name as a member identity spells its declaring type, with its type arguments as a generic callee's.
     /// </summary>
-    public static CallIdentity Await(INamedTypeSymbol awaiter, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges) =>
-        Of(Constructed("await:" + RoslynIdentity.TypeName(awaiter, renames), [.. TypeArguments(awaiter)]), suppressedRuntimeChanges);
+    public static CallIdentity Await(INamedTypeSymbol awaiter, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval) =>
+        Of(Constructed("await:" + RoslynIdentity.TypeName(awaiter, renames), [.. TypeArguments(awaiter)]), suppressedRuntimeChanges, interval);
 
     /// <summary>
     /// A call's source arguments as an API-equivalence adapter addresses them (ADR 0020; ticket M3-009), in evaluation

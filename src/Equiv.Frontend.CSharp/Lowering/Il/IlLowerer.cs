@@ -108,17 +108,17 @@ internal sealed partial class IlLowerer
     private readonly HashSet<ILVariable> caught;
     private readonly SourceSpan bodySpan;
     private readonly IrType? returnType;
-    private readonly bool x87;
+    private readonly SideRuntime runtime;
     private readonly Func<IrBinaryOp, IrBinaryOp> mapped;
 
     /// <summary>The statement being lowered, whose enclosing regions decide where an exception raised in it goes.</summary>
     private ILInstruction position;
     private int selects;
 
-    private IlLowerer(IMethodSymbol method, Compilation compilation, IlAstReader.Body body, SourceSpan bodySpan, IrType? returnType, bool x87, Func<IrBinaryOp, IrBinaryOp> mapped)
+    private IlLowerer(IMethodSymbol method, Compilation compilation, IlAstReader.Body body, SourceSpan bodySpan, IrType? returnType, SideRuntime runtime, Func<IrBinaryOp, IrBinaryOp> mapped)
     {
         this.method = method;
-        this.x87 = x87;
+        this.runtime = runtime;
         this.mapped = mapped;
         this.compilation = compilation;
         this.bodySpan = bodySpan;
@@ -128,7 +128,7 @@ internal sealed partial class IlLowerer
         handle = (MethodDefinitionHandle)body.Function!.Method!.MetadataToken;
         caught = IlKeys.CaughtException(body.Function);
         symbols = new IlSymbols(compilation, method);
-        fragments = new IlFragment(symbols, compilation);
+        fragments = new IlFragment(symbols, compilation, runtime.Interval);
         // The IL lowering reaches only the members of HeapLowerer keyed by a lowered value, never those that lower an
         // IOperation, so it gives none of the callbacks those need; and only the members of ExceptionLowerer that take
         // regions of any type, never those that read a CFG.
@@ -147,19 +147,19 @@ internal sealed partial class IlLowerer
 
     /// <summary>
     /// <paramref name="method"/>'s body, read from <paramref name="compilation"/>'s IL. A method with no ILAst is one
-    /// whole-body opaque whose reason is <see cref="IlAstReader"/>'s. <paramref name="x87"/> marks floating point runtime-sensitive,
-    /// as <see cref="IrLowerer"/> does on the legacy side of a project that runs on x87 (ticket M4-002). A call to an identity
+    /// whole-body opaque whose reason is <see cref="IlAstReader"/>'s. <paramref name="runtime"/> decides which calls and pure
+    /// functions are runtime-sensitive, as it does for <see cref="IrLowerer"/> (ADR 0040; tickets M4-002, P2-055). A call to an identity
     /// in <paramref name="rebound"/> is an opaque, as <see cref="IrLowerer"/> makes a rebound call (ADR 0042; ticket P2-069).
     /// </summary>
-    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, bool x87 = false, ImmutableHashSet<string>? rebound = null) =>
-        Lower(method, compilation, x87, static op => op, rebound);
+    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, SideRuntime runtime, ImmutableHashSet<string>? rebound = null) =>
+        Lower(method, compilation, runtime, static op => op, rebound);
 
     /// <summary>
     /// Seam for the differential soundness gate (ticket P1-017): <paramref name="mapped"/> rewrites the IR operator each
     /// integral arithmetic or comparison instruction maps to, so a test can break a mapping on purpose and show the gate
     /// catches it. The product maps every operator to itself.
     /// </summary>
-    internal static IrProcedure Lower(IMethodSymbol method, Compilation compilation, bool x87, Func<IrBinaryOp, IrBinaryOp> mapped, ImmutableHashSet<string>? rebound = null)
+    internal static IrProcedure Lower(IMethodSymbol method, Compilation compilation, SideRuntime runtime, Func<IrBinaryOp, IrBinaryOp> mapped, ImmutableHashSet<string>? rebound = null)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
@@ -169,7 +169,7 @@ internal sealed partial class IlLowerer
         IlAstReader.Body body = IlAstReader.Read(method, compilation);
         return body.Failure is { } failure
             ? IrLowerer.Opaque(RoslynIdentity.Of(method, RenameMap.Empty), parameters, returnType, failure, [span])
-            : new IlLowerer(method, compilation, body, span, returnType, x87, mapped) { Rebounds = rebound ?? [] }.Procedure(parameters, body.Function!);
+            : new IlLowerer(method, compilation, body, span, returnType, runtime, mapped) { Rebounds = rebound ?? [] }.Procedure(parameters, body.Function!);
     }
 
     /// <summary>The procedure: the C# parameters, then the heap inputs the lowering used, as <see cref="IrLowerer"/> orders them.</summary>
@@ -941,7 +941,7 @@ internal sealed partial class IlLowerer
             ThrowIfNull(call.Arguments[0], receiver.Value.Var);
         }
 
-        CallIdentity identity = CallIdentityFactory.Of(target, compilation, RenameMap.Empty, []);
+        CallIdentity identity = CallIdentityFactory.Of(target, compilation, RenameMap.Empty, [], runtime.Interval);
         ImmutableArray<IrVar> operands = receiver is { } self ? [self.Var, .. arguments] : arguments;
         return (isOperator, Rebounds.Contains(identity.Value)) switch
         {
@@ -1174,9 +1174,9 @@ internal sealed partial class IlLowerer
         return new(Apply(entry, operands, target.ReturnType), target.ReturnType);
     }
 
-    /// <summary>A catalogued function (ticket M4-002), with the exceptions it raises in this context, runtime-sensitive as on the x87 legacy side.</summary>
+    /// <summary>A catalogued function (ticket M4-002), with the exceptions it raises in this context, runtime-sensitive as this side's runtime makes it.</summary>
     private IrVar Apply(PureCatalogue.Entry entry, ImmutableArray<IrVar> args, ITypeSymbol result, bool isChecked = false) =>
-        Pure(entry.Function, entry.Raises(isChecked), entry.RuntimeSensitive(x87), args, Map(result));
+        Pure(entry.Function, entry.Raises(isChecked), entry.RuntimeSensitive(runtime), args, Map(result));
 
     /// <summary>
     /// An <see cref="IrPure"/> of <paramref name="function"/>, then, per exception it raises, a branch on its flag to where

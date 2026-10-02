@@ -22,9 +22,11 @@ internal static class Lowered
 
     /// <summary>
     /// Lowers the method named <paramref name="name"/> (metadata name: <c>.ctor</c>, <c>get_P</c>) of class <c>C</c> in a whole
-    /// compilation unit; the overload with <paramref name="parameters"/> parameters when it is given.
+    /// compilation unit; the overload with <paramref name="parameters"/> parameters when it is given. It is lowered as a side of
+    /// a .NET Framework 4.8 to .NET 10 pair unless <paramref name="runtime"/> says otherwise.
     /// </summary>
-    public static IrProcedure Source(string source, string name = "M", bool allowErrors = false, RenameMap? renames = null, ImmutableArray<string> suppressedRuntimeChanges = default, int? parameters = null)
+    public static IrProcedure Source(
+        string source, string name = "M", bool allowErrors = false, RenameMap? renames = null, ImmutableArray<string> suppressedRuntimeChanges = default, int? parameters = null, SideRuntime? runtime = null)
     {
         Compilation compilation = RoslynTestCompilations.Compile(source);
         if (!allowErrors)
@@ -34,7 +36,7 @@ internal static class Lowered
 
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>()
             .Single(m => parameters is not { } count || m.Parameters.Length == count);
-        IrProcedure procedure = IrLowerer.Lower(method, compilation, renames ?? RenameMap.Empty, suppressedRuntimeChanges.IsDefault ? [] : suppressedRuntimeChanges);
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, renames ?? RenameMap.Empty, suppressedRuntimeChanges.IsDefault ? [] : suppressedRuntimeChanges, runtime ?? Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }
@@ -48,7 +50,7 @@ internal static class Lowered
         Compilation compilation = RoslynTestCompilations.Compile(source);
         Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single();
-        (IrProcedure procedure, ImmutableArray<string> applied) = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], equivalences);
+        (IrProcedure procedure, ImmutableArray<string> applied) = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], equivalences, Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         return (procedure, applied);
     }
@@ -64,7 +66,7 @@ internal static class Lowered
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax(TestContext.Current.CancellationToken);
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IMethodBodyOperation body = (IMethodBodyOperation)model.GetOperation(syntax, TestContext.Current.CancellationToken)!;
-        IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty, []);
+        IrProcedure procedure = IrLowerer.Lower(body, model, RenameMap.Empty, [], Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

@@ -130,10 +130,10 @@ internal static class PairRuntime
     internal sealed class Lowering(string name, Func<IMethodSymbol, Compilation, IrProcedure> lower)
     {
         /// <summary>The primary lowering, from IOperation (ADR 0003).</summary>
-        public static Lowering Operation { get; } = new(IlFallback.Operation, static (method, compilation) => IrLowerer.Lower(method, compilation, RenameMap.Empty, []));
+        public static Lowering Operation { get; } = new(IlFallback.Operation, static (method, compilation) => IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration));
 
         /// <summary>The fallback lowering, from ILAst (ADR 0039), forced on both sides whether or not the pair has an opaque.</summary>
-        public static Lowering Il { get; } = new(IlFallback.Il, static (method, compilation) => IlLowerer.Lower(method, compilation));
+        public static Lowering Il { get; } = new(IlFallback.Il, static (method, compilation) => IlLowerer.Lower(method, compilation, Runtimes.Migration));
 
         public IrProcedure Lower(IMethodSymbol method, Compilation compilation) => lower(method, compilation);
 

@@ -1,5 +1,9 @@
+using System.Collections.Immutable;
+
+using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
+using Equiv.Core.RuntimeChanges;
 using Equiv.Frontend.CSharp.Lowering;
 using Equiv.TestSupport;
 
@@ -65,6 +69,54 @@ public sealed class CallIdentityFactoryTests
         Assert.False(Assert.Single(Calls(Lowered.Source(Source, suppressedRuntimeChanges: ["System.String::IndexOf("]))).Callee.RuntimeChanged);
     }
 
+    /// <summary>Ticket P2-055 (ADR 0040 decision 2): on a same-runtime pair no row applies, so no callee is runtime-changed.</summary>
+    [Fact]
+    public void SameRuntime_NothingIsRuntimeChanged()
+    {
+        const string Source = "class C { static int M(string s, char c) => s.IndexOf(c); }";
+        RuntimeInterval same = Runtimes.Interval("net10.0", "net10.0");
+
+        Assert.True(Assert.Single(Calls(Lowered.Source(Source))).Callee.RuntimeChanged);
+        Assert.False(Assert.Single(Calls(Lowered.Source(Source, runtime: Runtimes.Between("net10.0", "net10.0")))).Callee.RuntimeChanged);
+        Assert.All(RuntimeChangeTable.Load().Rows, row => Assert.False(CallIdentityFactory.Of(row.Member + "x()", [], same).RuntimeChanged, row.Member));
+    }
+
+    /// <summary>
+    /// Ticket P2-055: a row applies only where the pair crosses its change point. <c>String.IndexOf</c> changed in .NET 5,
+    /// <c>Double.ToString</c> in .NET Core 3.0 and <c>BinaryReader.ReadString</c> in .NET 9.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(string s, char c) => s.IndexOf(c);", "net48", "net10.0", true)]
+    [InlineData("static int M(string s, char c) => s.IndexOf(c);", "netcoreapp3.1", "net5.0", true)]
+    [InlineData("static int M(string s, char c) => s.IndexOf(c);", "net8.0", "net10.0", false)]
+    [InlineData("static int M(string s, char c) => s.IndexOf(c);", "net48", "netcoreapp3.1", false)]
+    [InlineData("static string M(double d) => d.ToString();", "net48", "net10.0", true)]
+    [InlineData("static string M(double d) => d.ToString();", "net8.0", "net10.0", false)]
+    [InlineData("static string M(System.IO.BinaryReader r) => r.ReadString();", "net8.0", "net10.0", true)]
+    [InlineData("static string M(System.IO.BinaryReader r) => r.ReadString();", "net10.0", "net8.0", true)]
+    [InlineData("static string M(System.IO.BinaryReader r) => r.ReadString();", "net9.0", "net10.0", false)]
+    public void RowOutsideTheInterval_DoesNotApply(string member, string legacy, string modern, bool expected)
+    {
+        IrProcedure procedure = Lowered.Source($"class C {{ {member} }}", runtime: Runtimes.Between(legacy, modern));
+
+        Assert.Equal(expected, Assert.Single(Calls(procedure)).Callee.RuntimeChanged);
+    }
+
+    /// <summary>An <c>await</c>'s identity and an API equivalence's modern member are flagged inside the same interval as any callee.</summary>
+    [Fact]
+    public void EveryIdentityIsFlaggedInsideTheInterval()
+    {
+        Compilation compilation = RoslynTestCompilations.Compile("class C { }");
+        INamedTypeSymbol awaiter = compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.TaskAwaiter")!;
+        ImmutableArray<string> suppressed = ["await:System.Runtime.CompilerServices.TaskAwaiter"];
+
+        Assert.False(CallIdentityFactory.Await(awaiter, RenameMap.Empty, [], Runtimes.Interval("net48", "net10.0")).RuntimeChanged);
+        Assert.Equal("await:System.Runtime.CompilerServices.TaskAwaiter", CallIdentityFactory.Await(awaiter, RenameMap.Empty, suppressed, Runtimes.Interval("net48", "net10.0")).Value);
+        Assert.True(CallIdentityFactory.Of("System.String::IndexOf(char)", [], Runtimes.Interval("net48", "net10.0")).RuntimeChanged);
+        Assert.False(CallIdentityFactory.Of("System.String::IndexOf(char)", ["System.String::IndexOf("], Runtimes.Interval("net48", "net10.0")).RuntimeChanged);
+        Assert.False(CallIdentityFactory.Of("System.String::IndexOf(char)", [], Runtimes.Interval("net6.0", "net10.0")).RuntimeChanged);
+    }
+
     [Fact]
     public void AnUnflaggedCallIsNotMarkedRuntimeChanged()
     {
@@ -115,7 +167,7 @@ public sealed class CallIdentityFactoryTests
         Compilation compilation = RoslynTestCompilations.Compile(source, [extraReference]);
         Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
         return procedure;
     }

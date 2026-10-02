@@ -134,9 +134,6 @@ internal static class PureCatalogue
     public static string Delegate(string fingerprint, int? lambdaSite) =>
         lambdaSite is { } site ? $"{DelegatePrefix}{fingerprint}#{site.ToString(CultureInfo.InvariantCulture)}" : DelegatePrefix + fingerprint;
 
-    /// <summary>Whether the legacy compilation's floating-point arithmetic runs on the 32-bit x87 JIT (ticket M3-015's rule).</summary>
-    public static bool IsX87(Compilation compilation) => compilation.Options.Platform is Platform.X86 or Platform.AnyCpu32BitPreferred;
-
     /// <summary>
     /// One catalogued function. <see cref="Throws"/> are the exceptions it can raise in an unchecked context, and
     /// <see cref="CheckedThrows"/> those in a <c>checked</c> one, the same unless set.
@@ -149,14 +146,14 @@ internal static class PureCatalogue
         public ImmutableArray<string> Raises(bool isChecked) => isChecked ? CheckedThrows : Throws;
 
         /// <summary>
-        /// Whether its behaviour differs between .NET Framework and .NET, so the sides never share it (ADR 0025): a
-        /// floating-point to integer conversion (saturating since .NET 9), and, on a legacy side whose floating point
-        /// runs on x87, anything that takes or yields floating point.
+        /// Whether its behaviour differs between the two sides' runtimes, so the sides never share it (ADRs 0025, 0040;
+        /// ticket P2-055): a floating-point to integer conversion when the pair crosses .NET 9, where it began to
+        /// saturate, and, on a side whose floating point alone runs on x87, anything that takes or yields floating point.
         /// </summary>
-        public bool RuntimeSensitive(bool x87)
+        public bool RuntimeSensitive(SideRuntime runtime)
         {
             bool fromFloat = Arguments.Any(IsFloatingPoint);
-            return (fromFloat && Integral.Any(i => i.Type == Result)) || (x87 && (fromFloat || IsFloatingPoint(Result)));
+            return (runtime.FloatToIntegerChanged && fromFloat && Integral.Any(i => i.Type == Result)) || (runtime.X87 && (fromFloat || IsFloatingPoint(Result)));
         }
 
         private static bool IsFloatingPoint(SpecialType type) => type is SpecialType.System_Single or SpecialType.System_Double;

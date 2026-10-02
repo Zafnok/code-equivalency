@@ -160,8 +160,8 @@ public sealed class InterpolatedStringLoweringTests
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         Assert.DoesNotContain(compilation.GetDiagnostics(TestContext.Current.CancellationToken), static d => d.Severity == DiagnosticSeverity.Error);
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+        IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration);
         Assert.Empty(IrValidator.Validate(procedure));
-        return (procedure, BodyFingerprinter.Compute(method, compilation, EquivConfig.Default, legacy)!);
+        return (procedure, BodyFingerprinter.Compute(method, compilation, EquivConfig.Default, legacy, Runtimes.Migration)!);
     }
 }

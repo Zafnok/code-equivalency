@@ -14,7 +14,9 @@ namespace Equiv.Core.Matching;
 /// distinct ids of the API-equivalence catalogue entries that fired while either body was lowered (ADR 0020; ticket M3-009).
 /// <see cref="Lowering"/> is the lowering both bodies came from under <c>--il-fallback</c>, <c>operation</c> or <c>il</c>, and
 /// <see cref="IlFallbackTried"/> whether the pair was lowered again from IL to choose it (ADR 0039; ticket P1-016); without the
-/// flag they are null and false. <see cref="ReboundCalls"/> are the callee pairs the bodies treat as possibly the same
+/// flag they are null and false. <see cref="Runtimes"/> is the interval between the runtimes of the two projects the bodies come
+/// from, which every runtime rule was applied by (ADR 0040 decision 2; ticket P2-055); null when the frontend knows no runtimes.
+/// <see cref="ReboundCalls"/> are the callee pairs the bodies treat as possibly the same
 /// function, sorted by legacy and then modern identity (ADR 0042; ticket P2-069).
 /// </summary>
 public sealed record ProcedurePair(
@@ -32,6 +34,8 @@ public sealed record ProcedurePair(
     public string? Lowering { get; init; }
 
     public bool IlFallbackTried { get; init; }
+
+    public RuntimeInterval? Runtimes { get; init; }
 
     public ImmutableArray<ReboundCall> ReboundCalls { get; init; } = [];
 }

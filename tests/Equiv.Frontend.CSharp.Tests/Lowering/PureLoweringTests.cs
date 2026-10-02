@@ -350,17 +350,36 @@ public sealed class PureLoweringTests
         Assert.DoesNotContain(Pures(procedure), static p => p.Function.StartsWith(PureCatalogue.OperatorPrefix, StringComparison.Ordinal) || p.Function.Contains(".add", StringComparison.Ordinal) || p.Function.Contains(".sub", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public void X87LegacyFloatIsSideSpecific()
+    /// <summary>
+    /// ADR 0025 with ADR 0040 decision 2 (ticket P2-055): floating point is side-specific on the side whose x87 flag is set,
+    /// a floating-point to integer conversion wherever the pair crosses .NET 9, and nothing on a same-runtime pair.
+    /// </summary>
+    [Theory]
+    [InlineData("net48", "net10.0", true, "f64.lt:True", "f64.add:True", "conv.f64.i32:True")]
+    [InlineData("net48", "net10.0", false, "f64.lt:False", "f64.add:False", "conv.f64.i32:True")]
+    [InlineData("net8.0", "net10.0", false, "f64.lt:False", "f64.add:False", "conv.f64.i32:True")]
+    [InlineData("net48", "net8.0", false, "f64.lt:False", "f64.add:False", "conv.f64.i32:False")]
+    [InlineData("net48", "net8.0", true, "f64.lt:True", "f64.add:True", "conv.f64.i32:True")]
+    [InlineData("net10.0", "net10.0", false, "f64.lt:False", "f64.add:False", "conv.f64.i32:False")]
+    [InlineData("net48", "net48", true, "f64.lt:True", "f64.add:True", "conv.f64.i32:True")]
+    public void FloatingPointIsSideSpecificOnlyWhereARuntimeRuleApplies(string legacy, string modern, bool x87, string less, string add, string convert)
     {
         const string Source = "class C { static int M(double a, double b, decimal m) => a < b ? (int)(a + b) : (int)m; }";
-        Compilation x86 = Compilation(Source).WithOptions(Compilation(Source).Options.WithPlatform(Platform.X86));
-        Compilation preferred = Compilation(Source).WithOptions(Compilation(Source).Options.WithPlatform(Platform.AnyCpu32BitPreferred));
 
-        Assert.Equal(["f64.lt:True", "f64.add:True", "conv.f64.i32:True", "conv.dec.i32:False"], Sensitivity(Lower(x86, legacy: true)));
-        Assert.Equal(["f64.lt:True", "f64.add:True", "conv.f64.i32:True", "conv.dec.i32:False"], Sensitivity(Lower(preferred, legacy: true)));
-        Assert.Equal(["f64.lt:False", "f64.add:False", "conv.f64.i32:True", "conv.dec.i32:False"], Sensitivity(Lower(x86, legacy: false)));
-        Assert.Equal(["f64.lt:False", "f64.add:False", "conv.f64.i32:True", "conv.dec.i32:False"], Sensitivity(Lower(Compilation(Source), legacy: true)));
+        Assert.Equal([less, add, convert, "conv.dec.i32:False"], Sensitivity(Lower(Compilation(Source), Runtimes.Between(legacy, modern, x87))));
+    }
+
+    /// <summary>A conversion to floating point, and one between floating-point types, are sensitive on x87 alone, never by the .NET 9 rule.</summary>
+    [Theory]
+    [InlineData("static double M(int a) => a;", "conv.i32.f64:False", "conv.i32.f64:True")]
+    [InlineData("static float M(double a) => (float)a;", "conv.f64.f32:False", "conv.f64.f32:True")]
+    [InlineData("static decimal M(int a) => a;", "conv.i32.dec:False", "conv.i32.dec:False")]
+    public void OnlyAFloatToIntegerConversionCrossesNet9(string member, string migration, string x87)
+    {
+        string source = $"class C {{ {member} }}";
+
+        Assert.Equal([migration], Sensitivity(Lower(Compilation(source), Runtimes.Migration)));
+        Assert.Equal([x87], Sensitivity(Lower(Compilation(source), Runtimes.Between("net10.0", "net10.0", x87: true))));
     }
 
     [Fact]
@@ -401,17 +420,13 @@ public sealed class PureLoweringTests
 
     private static Compilation Compilation(string source = "class C { }") => RoslynTestCompilations.Compile(source);
 
-    private static IrProcedure Lower(Compilation compilation, bool legacy)
+    private static IrProcedure Lower(Compilation compilation, SideRuntime runtime)
     {
         IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-        return IrLowerer.Lower(method, compilation, RenameMap.Empty, [], [], legacy).Body;
+        return IrLowerer.Lower(method, compilation, RenameMap.Empty, [], [], runtime).Body;
     }
 
-    private static IrProcedure X87Legacy(string source)
-    {
-        Compilation compilation = Compilation(source);
-        return Lower(compilation.WithOptions(compilation.Options.WithPlatform(Platform.X86)), legacy: true);
-    }
+    private static IrProcedure X87Legacy(string source) => Lower(Compilation(source), Runtimes.Between("net48", "net10.0", x87: true));
 
     private static IrValue ConstantOf(IrProcedure procedure, IrVar var) =>
         procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>().Single(c => c.Target == var).Value;

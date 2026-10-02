@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 
+using Equiv.Core;
 using Equiv.Core.Ir;
 
 using Xunit;
@@ -51,7 +52,7 @@ public sealed class LoweringCensusTests
               ret %a
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(legacy, modern, false), (Body(Clean), legacy, false)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(legacy, modern, false, null), (Body(Clean), legacy, false, null)], removed: 0, added: 0);
 
         Assert.Equal(["Binary", "PropertyReference"], census.OpaqueByReason.Keys, StringComparer.Ordinal);
         Assert.Equal(new SideCounts(Legacy: 1, Modern: 2), census.OpaqueByReason["Binary"]);
@@ -70,7 +71,7 @@ public sealed class LoweringCensusTests
               ret %$0
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(wholeBody, wholeBody, false), (Body(Clean), wholeBody, false), (wholeBody, Body(Clean), false)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(wholeBody, wholeBody, false, null), (Body(Clean), wholeBody, false, null), (wholeBody, Body(Clean), false, null)], removed: 0, added: 0);
 
         Assert.Equal(3, census.PairsWholeBodyOpaque);
         Assert.Equal(new SideCounts(Legacy: 2, Modern: 2), Assert.Single(census.OpaqueByReason).Value);
@@ -91,7 +92,7 @@ public sealed class LoweringCensusTests
               ret %$0
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(Body(Clean), unbound, false), (unbound, Body(Clean), true)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(Body(Clean), unbound, false, null), (unbound, Body(Clean), true, null)], removed: 0, added: 0);
 
         Assert.Equal(2, census.PairsWholeBodyOpaque);
         Assert.Equal(1, census.Changed.WholeBodyOpaque);
@@ -141,7 +142,7 @@ public sealed class LoweringCensusTests
             {blocks}
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(body, Body(Clean), false), (Body(Clean), body, false), (Body(Clean), Body(Clean), false)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(body, Body(Clean), false, null), (Body(Clean), body, false, null), (Body(Clean), Body(Clean), false, null)], removed: 0, added: 0);
 
         Assert.Equal(0, census.PairsWholeBodyOpaque);
         Assert.Equal(0, census.Changed.WholeBodyOpaque);
@@ -151,7 +152,7 @@ public sealed class LoweringCensusTests
     [Fact]
     public void ProceduresCountEachSidesMatchedPlusUnmatchedAndCongruentPairsAreCounted()
     {
-        LoweringCensus census = LoweringCensus.Compute([(Body(Clean), Body(Clean), true), (Body(Clean), Body(Clean), false)], removed: 3, added: 5);
+        LoweringCensus census = LoweringCensus.Compute([(Body(Clean), Body(Clean), true, null), (Body(Clean), Body(Clean), false, null)], removed: 3, added: 5);
 
         Assert.Equal(new SideCounts(Legacy: 5, Modern: 7), census.Procedures);
         Assert.Equal(2, census.MatchedPairs);
@@ -179,12 +180,12 @@ public sealed class LoweringCensusTests
 
         LoweringCensus census = LoweringCensus.Compute(
             [
-                (Body(Clean), Body(Clean), true),
-                (opaque, opaque, true),
-                (Body(Clean), Body(Clean), false),
-                (opaque, wholeBody, false),
-                (Body(RuntimeChangeCall), Body(Clean), false),
-                (Body(Clean), Body(RuntimeChangeCall), false),
+                (Body(Clean), Body(Clean), true, null),
+                (opaque, opaque, true, null),
+                (Body(Clean), Body(Clean), false, null),
+                (opaque, wholeBody, false, null),
+                (Body(RuntimeChangeCall), Body(Clean), false, null),
+                (Body(Clean), Body(RuntimeChangeCall), false, null),
             ],
             removed: 0,
             added: 0);
@@ -214,7 +215,7 @@ public sealed class LoweringCensusTests
             """);
 
         LoweringCensus census = LoweringCensus.Compute(
-            [(twice, Body(RuntimeChangeCall), false), (Body(RuntimeChangeCall), Body(Clean), false), (Body(Clean), Body(Clean), true)],
+            [(twice, Body(RuntimeChangeCall), false, null), (Body(RuntimeChangeCall), Body(Clean), false, null), (Body(Clean), Body(Clean), true, null)],
             removed: 0,
             added: 0);
 
@@ -222,6 +223,30 @@ public sealed class LoweringCensusTests
         Assert.Equal(new SideCounts(Legacy: 2, Modern: 1), census.RuntimeChangeCalls.DistinctMembers);
         Assert.Equal(new SideCounts(Legacy: 2, Modern: 1), census.RuntimeChangeCalls.PairsWithAny);
         Assert.Equal(2, census.Changed.Pairs);
+    }
+
+    /// <summary>
+    /// Ticket P2-055 (ADR 0040 decision 2): a call counts only where a row applies inside its pair's runtimes.
+    /// <c>String.StartsWith</c> changed in .NET 5, so a .NET 8 to .NET 10 pair and a same-runtime pair have no such call; a pair
+    /// with no known runtimes counts as one that crosses every row.
+    /// </summary>
+    [Fact]
+    public void RuntimeChangeCallsCountOnlyRowsInsideThePairsRuntimes()
+    {
+        static RuntimeInterval Interval(string first, string second) => new(TargetRuntime.Parse(first)!, TargetRuntime.Parse(second)!);
+
+        LoweringCensus census = LoweringCensus.Compute(
+            [
+                (Body(RuntimeChangeCall), Body(RuntimeChangeCall), false, Interval("net8.0", "net10.0")),
+                (Body(RuntimeChangeCall), Body(Clean), false, Interval("net10.0", "net10.0")),
+                (Body(RuntimeChangeCall), Body(RuntimeChangeCall), false, Interval("netcoreapp3.1", "net5.0")),
+                (Body(Clean), Body(RuntimeChangeCall), false, null),
+            ],
+            removed: 0,
+            added: 0);
+
+        Assert.Equal(new SideCounts(Legacy: 1, Modern: 2), census.RuntimeChangeCalls.CallSites);
+        Assert.Equal(new SideCounts(Legacy: 1, Modern: 2), census.RuntimeChangeCalls.PairsWithAny);
     }
 
     [Fact]
@@ -244,7 +269,7 @@ public sealed class LoweringCensusTests
               ret %a
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(legacy, modern, false)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(legacy, modern, false, null)], removed: 0, added: 0);
 
         Assert.Equal([new ExternalCallee("N::B", 2), new ExternalCallee("N::A", 1)], census.ExternalCallees.Legacy);
         Assert.Equal([new ExternalCallee("N::A", 1)], census.ExternalCallees.Modern);
@@ -260,7 +285,7 @@ public sealed class LoweringCensusTests
               ret %a
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(body, body, true)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(body, body, true, null)], removed: 0, added: 0);
 
         Assert.Empty(census.ExternalCallees.Legacy);
         Assert.Empty(census.ExternalCallees.Modern);

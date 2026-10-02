@@ -36,7 +36,7 @@ public sealed class PairGenLoweringTests
                     Compilation compilation = RoslynTestCompilations.Compile(source);
                     Assert.DoesNotContain(compilation.GetDiagnostics(TestContext.Current.CancellationToken), static d => d.Severity == DiagnosticSeverity.Error);
                     IMethodSymbol method = compilation.GetTypeByMetadataName("Oracle")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-                    IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
+                    IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration);
                     Assert.Empty(IrValidator.Validate(procedure));
                     // Ticket P2-086: the interpolated string of a ConcatToInterpolation pair (ticket P2-048) holds only
                     // string holes, so it lowers as the concatenation it replaced.
@@ -61,7 +61,7 @@ public sealed class PairGenLoweringTests
                     Compilation compilation = RoslynTestCompilations.Compile(source);
                     Assert.DoesNotContain(compilation.GetDiagnostics(TestContext.Current.CancellationToken), static d => d.Severity == DiagnosticSeverity.Error);
                     IMethodSymbol method = compilation.GetTypeByMetadataName("Oracle")!.GetMembers("M").OfType<IMethodSymbol>().Single();
-                    Assert.Empty(IrValidator.Validate(IlLowerer.Lower(method, compilation)));
+                    Assert.Empty(IrValidator.Validate(IlLowerer.Lower(method, compilation, Runtimes.Migration)));
                 }
             },
             seed: Seed,

@@ -79,11 +79,11 @@ public sealed class CongruenceSoundnessTests
         return new ProcedurePair(
             identity,
             identity,
-            CSharpFrontend.LowerWithIrLowerer(legacy, legacyCompilation, EquivConfig.Default, legacy: true).Body,
-            CSharpFrontend.LowerWithIrLowerer(modern, modernCompilation, EquivConfig.Default, legacy: false).Body)
+            CSharpFrontend.LowerWithIrLowerer(legacy, legacyCompilation, EquivConfig.Default, legacy: true, Runtimes.Migration).Body,
+            CSharpFrontend.LowerWithIrLowerer(modern, modernCompilation, EquivConfig.Default, legacy: false, Runtimes.Migration).Body)
         {
-            OldFingerprint = BodyFingerprinter.Compute(legacy, legacyCompilation, EquivConfig.Default, legacy: true),
-            NewFingerprint = BodyFingerprinter.Compute(modern, modernCompilation, EquivConfig.Default, legacy: false),
+            OldFingerprint = BodyFingerprinter.Compute(legacy, legacyCompilation, EquivConfig.Default, legacy: true, Runtimes.Migration),
+            NewFingerprint = BodyFingerprinter.Compute(modern, modernCompilation, EquivConfig.Default, legacy: false, Runtimes.Migration),
         };
     }
 

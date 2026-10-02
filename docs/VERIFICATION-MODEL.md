@@ -43,7 +43,9 @@ an abstraction (ADR 0026), or the method's bound body is erroneous (`Unbound`, A
 Unknown states its scope. A `line` Unknown is still a proof about every input that reaches none
 of the lines it lists; a `method` Unknown claims nothing (ADR 0029). A pair whose bound bodies fingerprint equal and are not
 runtime-sensitive is Equivalent by congruence, without the solver (`proofMethod:
-congruence`, ADR 0024): identical bound code makes the same claim a shared call does. Every result carries `properties.proofMethod` (which rung proved it),
+congruence`, ADR 0024): identical bound code makes the same claim a shared call does. A body is
+runtime-sensitive only by a runtime rule that applies inside the pair's runtime interval (section 3,
+ADR 0040), so on a same-runtime pair no body is. Every result carries `properties.proofMethod` (which rung proved it),
 `properties.boundedBy` when the claim is bounded, and `properties.opaqueNodes`, so a
 reader can see exactly how strong the claim is. Never report Equivalent without saying how.
 
@@ -255,7 +257,8 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   caught exception of the graph, or a struct's `this`; writes a local or parameter declared outside
   it; calls a local function declared outside it; reads a `ref` local; holds a lambda capturing a
   variable that is stored after it in the IR or that any lambda or local function writes; or is
-  runtime-sensitive. A whole-body opaque has none.
+  runtime-sensitive inside the pair's runtime interval, which both sides are given alike, so a
+  fragment both hold gets the same answer on each (ADR 0040; P2-055). A whole-body opaque has none.
 - An opaque call's `threw` flag branches to `IrThrow("System.Exception")`. `throw new T(...)`
   records the constructor call and then lowers to `IrThrow("T")` on T's static type (M2-004).
   Throwing any other expression is `IrOpaque` with reason `Throw`, because the thrown object's
@@ -289,10 +292,12 @@ to `decimal`, for `decimal` to an integral type, and for floating point to an in
 checked). Unary `+` is its operand. A user-defined operator or conversion, including `string ==`, is
 `op:<call identity>`, which may throw any exception, as an opaque call may. Each exception flag
 branches to where that exact type goes, so `catch (OverflowException)` catches `dec.mul`'s overflow
-and `catch (DivideByZeroException)` does not. A floating-point to integer conversion, and on a legacy
-project whose floating point runs on x87 every function taking or yielding floating point, is
-runtime-sensitive. Lifted (nullable) operators, compound assignment and `++`/`--` on these types stay
-`IrOpaque`.
+and `catch (DivideByZeroException)` does not. A floating-point to integer conversion is
+runtime-sensitive when the pair's runtime interval crosses .NET 9, where it began to saturate. Every
+function taking or yielding floating point is runtime-sensitive on the side whose floating point alone
+runs on x87: its project is on .NET Framework with a 32-bit platform and the other side's is not (ADR
+0040 decision 2; P2-055). A .NET (Core) project is never x87, and two x87 sides agree. Lifted (nullable)
+operators, compound assignment and `++`/`--` on these types stay `IrOpaque`.
 
 Migration-specific normalisations (applied to both sides before matching):
 
@@ -328,12 +333,38 @@ Migration-specific normalisations (applied to both sides before matching):
   site with other text, is an ordinary call. The IL lowering (section 3.1) marks the same identities.
 - Runtime-changed APIs: a shipped data table (`runtime-changes.json`, sourced from
   Microsoft's .NET Core 3.0 to .NET 10 breaking-changes list) names BCL members whose
-  behaviour differs between .NET Framework and .NET even when the call is textually
+  behaviour differs between two runtimes even when the call is textually
   identical (ICU vs NLS string comparison and `IndexOf`, x87 vs SSE floating point on
-  x86, `GetHashCode` randomisation, serialization defaults). A matched pair of calls to
-  such a member is never treated as the same uninterpreted function; it produces
-  Divergent with ruleId EQ006 and a link to the breaking-change entry. Users may
-  suppress per member in `equiv.config.json`.
+  x86, `GetHashCode` randomisation, serialization defaults), each row with the runtime
+  that changed it (`changedIn`). A matched pair of calls to such a member is never
+  treated as the same uninterpreted function; it produces Divergent with ruleId EQ006
+  and a link to the breaking-change entry. Users may suppress per member in
+  `equiv.config.json`.
+
+Every runtime rule applies only inside the pair's runtime interval (ADR 0040 decision 2; ticket
+P2-055). A matched pair's interval runs between the runtimes of the two projects its bodies come
+from (`run.properties.runtimes`, section 6), in either order, older end excluded and newer end
+included. .NET Framework orders before every .NET (Core) version. A project hosted on several
+runtimes contributes them all, and the interval runs from the oldest to the newest of both
+projects'. Two unhosted projects with the same `netstandard` target framework are one runtime; a
+pair with any other unhosted project crosses every change the table covers. Both bodies of a pair
+are lowered and fingerprinted with that one interval. The rules are:
+
+- a `runtime-changes.json` row, when the interval crosses its `changedIn`; a row whose `changedIn` is
+  `null` applies whenever the two runtimes differ;
+- floating-point to integer conversion, when the interval crosses `net9.0`;
+- x87 floating point, on the side whose project alone runs on the 32-bit .NET Framework JIT. This is
+  the one rule that depends on the platform too, so it can apply between two projects on the same
+  .NET Framework version.
+
+On a same-runtime pair the interval is empty: no callee is runtime-changed, no pure function is
+side-specific by a runtime rule, runtime sensitivity never blocks congruence, and EQ006 cannot be
+reported. A .NET 8 to .NET 10 pair gets only the rows changed in .NET 9 or .NET 10. A .NET Framework
+4.8 to .NET 10 pair crosses every row, as before. When a pair's interval reaches below the oldest
+.NET version the table covers (`coveredFrom`, `netcoreapp3.0`), the run carries one `warning`
+tool-execution notification with descriptor id `uncovered-runtime-range` naming the widest
+uncovered range and the number of matched pairs that cross it; a behaviour that changed there is
+not flagged.
 
 ### 3.1 IL fallback (ADR 0039)
 
@@ -369,8 +400,8 @@ effect are uninterpreted functions of (identity, arguments, heap at the call, po
 where the position is the number of calls the same side made before it (ADR 0018). Calls
 at the same position with the same identity, arguments and heap therefore agree across
 sides. Two calls on one side are never forced to agree, because a real callee may be
-stateful. The exception is an identity in the runtime-changes table, which gets
-side-specific functions. An `IrOpaque` whose fingerprint occurs on both sides is encoded as
+stateful. The exception is an identity a runtime-changes row applies to inside the pair's runtime
+interval (section 3), which gets side-specific functions. An `IrOpaque` whose fingerprint occurs on both sides is encoded as
 exactly such a call, with identity `opaque:<fingerprint>`, its reads as arguments, and its `threw`
 flag and heap pairs (ADR 0024; M4-004): the backend rewrites it into that `IrCall` before the
 ladder runs, so the encoder, the replay oracle and the taint predicate treat it as any call. Every
@@ -504,7 +535,7 @@ caller then runs through the whole ladder as usual.
 | Unknown | none (rule default `warning`) | `open` | EQ003 (reason in `properties.unknownReason`: timeout, opaque, unmatched-overload, unaligned-loop, recursion, abstraction, unbound, chc-timeout, chc-spurious, no-invariant) |
 | Added | none (rule default `note`) | `informational` | EQ004 |
 | Removed | none (rule default `note`) | `informational` | EQ005 |
-| Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link in `message`) |
+| Divergent (runtime-changed API) | `error` | `fail` | EQ006 (breaking-change link and both ends of the pair's runtime interval in `message`: `... diverges via a runtime-changed API between net8.0 and net10.0 (...)`; only for a row that applies inside that interval, ADR 0040) |
 
 Every verdict on a matched pair with bodies also carries `properties.assumedCallees` and
 `properties.unprovenAssumptions` (ADR 0019), `properties.equivalencesApplied` when a
@@ -692,7 +723,8 @@ anything else is `CFG009`. Otherwise it is unhosted and keeps its own target fra
 `run.properties.runtimes` (`legacy`, `modern`): one `{ project, runtime, source }` per loaded
 project, by assembly name, where `source` is `attribute`, `host`, `config` or `unhosted`. A project
 with several hosts on different runtimes lists them all in `runtime`, in runtime order, separated
-by `, `. Nothing uses the runtime yet.
+by `, `. The runtimes decide which runtime rules apply to each matched pair (section 3; P2-055) and
+which runtime each side is executed on (P2-056).
 
 Counts in the census are per lowered body of a matched pair. `procedures` counts, per side, the
 matched pairs plus the removed (legacy) or added (modern) procedures. `opaqueByReason` counts the
@@ -705,17 +737,17 @@ no lowered body, so it counts in `procedures` and `matchedPairs` but in neither
 `pairsWithoutOpaque` nor `pairsWholeBodyOpaque`, nor in `opaqueByReason` (ticket P2-011).
 
 The census also counts what the solver will see (ADR 0034; ticket M3-030). A lowered matched pair
-is *changed* unless it is congruent: both bound fingerprints are equal, neither is runtime-sensitive,
-and neither body is unbound (ADRs 0024 and 0029; ticket M3-015). `pairsCongruent` counts the
+is *changed* unless it is congruent: both bound fingerprints are equal, neither is runtime-sensitive
+inside the pair's runtime interval, and neither body is unbound (ADRs 0024 and 0029; ticket M3-015). `pairsCongruent` counts the
 congruent pairs. `changedPairs`, `changedPairsWithoutOpaque` and
 `changedPairsWholeBodyOpaque` are `matchedPairs`, `pairsWithoutOpaque` and `pairsWholeBodyOpaque`
 restricted to changed pairs; lowerable share is `changedPairsWithoutOpaque / changedPairs`.
 `changedReasonSets` maps the sorted, `+`-joined union of both sides' opaque reasons to its number
 of changed pairs, with `""` for a pair without opaque, so its counts sum to `changedPairs`.
 `runtimeChangeCalls` has `callSites`, `distinctMembers` and `pairsWithAny`, each per side and over
-every lowered matched pair, congruent ones included: the `IrCall`s whose callee identity the table
-matches, the distinct callee identities among them, and the pairs whose body on that side has at
-least one. Package version changes are not in the census; `tools/corpus/corpus.ps1 -Packages`
+every lowered matched pair, congruent ones included: the `IrCall`s whose callee identity a table row
+matches inside the pair's runtime interval (ADR 0040; P2-055), the distinct callee identities among
+them, and the pairs whose body on that side has at least one. Package version changes are not in the census; `tools/corpus/corpus.ps1 -Packages`
 computes them from each side's restore output.
 
 `externalCallees` (ADR 0035; ticket M3-033) is every BCL member a lowered body calls, not only the

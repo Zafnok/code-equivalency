@@ -13,7 +13,8 @@ namespace Equiv.Core.Reporting;
 /// <see cref="FailureLevel"/> and <see cref="ResultKind"/>. A <see cref="Divergent"/> whose
 /// counterexample's call trace contains a call flagged by <see cref="RuntimeChangeTable"/> (ticket
 /// M2-006) is EQ006 instead of EQ002, and <see cref="RuntimeChange"/> carries the reason and url
-/// the SARIF writer renders; every other kind's <see cref="RuntimeChange"/> is null.
+/// the SARIF writer renders; every other kind's <see cref="RuntimeChange"/> is null. The row is one that applies inside
+/// the pair's runtime interval, as the frontend's flag was (ADR 0040 decision 2; ticket P2-055).
 /// </summary>
 internal static class VerdictRule
 {
@@ -22,36 +23,36 @@ internal static class VerdictRule
     /// members; the final arm covers <see cref="Removed"/>, the only one not named above,
     /// mirroring the pattern <c>Equiv.Core.Ir.IrText.Type</c> uses for the same reason.
     /// </summary>
-    public static (string RuleId, FailureLevel Level, ResultKind Kind, RuntimeChange? RuntimeChange) Describe(Verdict verdict) => verdict switch
+    public static (string RuleId, FailureLevel Level, ResultKind Kind, RuntimeChange? RuntimeChange) Describe(Verdict verdict, RuntimeInterval runtimes) => verdict switch
     {
         Equivalent => ("EQ001", FailureLevel.None, ResultKind.Pass, null),
-        Divergent divergent => DescribeDivergent(divergent),
+        Divergent divergent => DescribeDivergent(divergent, runtimes),
         Unknown => ("EQ003", FailureLevel.Warning, ResultKind.Open, null),
         Added => ("EQ004", FailureLevel.Note, ResultKind.Informational, null),
         _ => ("EQ005", FailureLevel.Note, ResultKind.Informational, null),
     };
 
-    private static (string, FailureLevel, ResultKind, RuntimeChange?) DescribeDivergent(Divergent divergent)
+    private static (string, FailureLevel, ResultKind, RuntimeChange?) DescribeDivergent(Divergent divergent, RuntimeInterval runtimes)
     {
-        RuntimeChange? runtimeChange = FindRuntimeChange(divergent.Counterexample);
+        RuntimeChange? runtimeChange = FindRuntimeChange(divergent.Counterexample, runtimes);
         return runtimeChange is null
             ? ("EQ002", FailureLevel.Error, ResultKind.Fail, null)
             : ("EQ006", FailureLevel.Error, ResultKind.Fail, runtimeChange);
     }
 
     /// <summary>
-    /// The first flagged call's table row across both sides' traces, or null when the divergence
+    /// The first flagged call's table row inside <paramref name="runtimes"/> across both sides' traces, or null when the divergence
     /// does not involve a runtime-changed callee (VERIFICATION-MODEL.md section 3: "any pair
     /// containing a flagged call that reaches an observable reports Divergent with ruleId EQ006").
     /// </summary>
-    private static RuntimeChange? FindRuntimeChange(Counterexample counterexample)
+    private static RuntimeChange? FindRuntimeChange(Counterexample counterexample, RuntimeInterval runtimes)
     {
         RuntimeChangeTable table = RuntimeChangeTable.Load();
         foreach (CallIdentity callee in counterexample.Old.Trace.Concat(counterexample.New.Trace)
             .Select(static record => record.Callee)
             .Where(static callee => callee.RuntimeChanged))
         {
-            if (table.TryMatch(callee, out RuntimeChange match))
+            if (table.TryMatch(callee, runtimes, out RuntimeChange match))
             {
                 return match;
             }

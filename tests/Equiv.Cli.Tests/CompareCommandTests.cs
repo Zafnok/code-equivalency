@@ -1823,6 +1823,102 @@ public sealed class CompareCommandTests
         Assert.Equal(ExitCodes.Success, exitCode);
     }
 
+    /// <summary>
+    /// Ticket P2-055 criterion 5 (ADR 0040 decision 2): pairs whose runtimes reach below the oldest .NET version
+    /// <c>runtime-changes.json</c> covers get one run-level warning naming the widest uncovered range, on stderr too. It does
+    /// not make the run unsuccessful or change the exit code. A .NET Framework pair and a pair with no known runtimes add nothing.
+    /// </summary>
+    [Fact]
+    public void UncoveredRuntimeRangeIsNotified()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity[] identities = [new("T::A()"), new("T::B()"), new("T::C()"), new("T::D()")];
+        MatchResult matchResult = new(
+            [
+                Pair(identities[0]) with { Runtimes = Interval("netcoreapp2.1", "net8.0") },
+                Pair(identities[1]) with { Runtimes = Interval("netcoreapp2.2", "netcoreapp2.0") },
+                Pair(identities[2]) with { Runtimes = Interval("net48", "net10.0") },
+                Pair(identities[3]),
+            ],
+            [],
+            [],
+            []);
+        FakeBackend backend = new(identities.ToDictionary(static i => i.Value, static _ => (Verdict)new Equivalent(ProofMethod.Bounded), StringComparer.Ordinal));
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.InternalError;
+
+        string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, matchResult)], backend, sink, NullRunLog.Instance));
+
+        const string Text = "runtime-changes.json lists no runtime changes between netcoreapp2.0 and netcoreapp3.0, which 2 matched pair(s) cross; a behaviour that changed in that range is not flagged";
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Invocation invocation = Assert.Single(sink.Log!.Runs[0].Invocations);
+        Assert.True(invocation.ExecutionSuccessful);
+        Notification notification = Assert.Single(invocation.ToolExecutionNotifications);
+        Assert.Equal(FailureLevel.Warning, notification.Level);
+        Assert.Equal(Text, notification.Message.Text);
+        Assert.Equal(CompareCommand.UncoveredRuntimeRange, notification.Descriptor.Id);
+        Assert.Equal("uncovered-runtime-range", CompareCommand.UncoveredRuntimeRange);
+        Assert.Null(notification.Exception);
+        Assert.Contains($"warning: {Text}", errorOutput, StringComparison.Ordinal);
+    }
+
+    /// <summary>ADR 0040: a run whose pairs all lie inside the table's coverage has no notification, and so no invocation.</summary>
+    [Fact]
+    public void CoveredRuntimesAreNotNotified()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        MatchResult matchResult = new([Pair(PairIdentity) with { Runtimes = Interval("netcoreapp3.0", "net10.0") }], [], [], []);
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.InternalError;
+
+        string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, matchResult)],
+            new FakeBackend(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) }),
+            sink,
+            NullRunLog.Instance));
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Null(sink.Log!.Runs[0].Invocations);
+        Assert.DoesNotContain("runtime-changes.json", errorOutput, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-055: a result carries its pair's runtimes into the report, so a flagged call in a Divergent's trace is EQ006,
+    /// naming both runtimes, only where its row applies between them. <c>String.IndexOf</c> changed in .NET 5.
+    /// </summary>
+    [Theory]
+    [InlineData("net48", "net10.0", "EQ006", "diverges via a runtime-changed API between net48 and net10.0 (")]
+    [InlineData("net8.0", "net10.0", "EQ002", "T::Pair() diverges: ")]
+    [InlineData("net10.0", "net10.0", "EQ002", "T::Pair() diverges: ")]
+    public void ADivergentIsRuntimeChangedOnlyInsideItsPairsRuntimes(string legacyRuntime, string modernRuntime, string ruleId, string message)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        IrCallRecord record = new(new CallIdentity("System.String::IndexOf(char)", RuntimeChanged: true), [new IrBitVecValue(16, 'a')]);
+        Counterexample counterexample = Counterexample() with { Old = Run(1) with { Trace = [record] } };
+        MatchResult matchResult = new([Pair(PairIdentity) with { Runtimes = Interval(legacyRuntime, modernRuntime) }], [], [], []);
+        InMemoryReportSink sink = new();
+
+        int exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, matchResult)],
+            new FakeBackend(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Divergent(counterexample) }),
+            sink,
+            NullRunLog.Instance);
+
+        Assert.Equal(ExitCodes.Divergent, exitCode);
+        Result result = Assert.Single(sink.Log!.Runs[0].Results);
+        Assert.Equal(ruleId, result.RuleId);
+        Assert.Contains(message, result.Message.Text, StringComparison.Ordinal);
+    }
+
+    private static RuntimeInterval Interval(string first, string second) => new(TargetRuntime.Parse(first)!, TargetRuntime.Parse(second)!);
+
     private static ProcedurePair Pair(ProcedureIdentity identity)
     {
         IrProcedure body = IrText.Parse($"proc \"{identity.Value}\" () entry B0 B0: ret");

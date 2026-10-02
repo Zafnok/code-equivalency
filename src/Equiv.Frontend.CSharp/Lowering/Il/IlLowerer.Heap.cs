@@ -330,7 +330,7 @@ internal sealed partial class IlLowerer
 
     /// <summary>A named method's pointer, as a delegate constructor takes it: the element of <paramref name="hint"/>'s sort that its call identity designates.</summary>
     private Val Function(IMethod target, ITypeSymbol hint) =>
-        new(Const(TypeMapper.Constant(hint, CallIdentityFactory.Of(symbols.Method(target)!, compilation, RenameMap.Empty, []).Value)), hint);
+        new(Const(TypeMapper.Constant(hint, CallIdentityFactory.Of(symbols.Method(target)!, compilation, RenameMap.Empty, [], runtime.Interval).Value)), hint);
 
     /// <summary>A place an address names, with the C# type of what it holds.</summary>
     private abstract record Place(ITypeSymbol Type);
