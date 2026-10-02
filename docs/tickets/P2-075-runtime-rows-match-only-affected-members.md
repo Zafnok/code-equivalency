@@ -36,3 +36,9 @@ An audit of every other row's member list.
 
 ## Notes
 - Found by P2-047: 2 on Git Extensions.
+- P2-066 found 2 more on `gitextensions-9860` (net5.0 to net6.0): `GitUI.FileStatusList::SelectNextVisibleItem()`
+  enumerates `ListView.Groups` under the same `ListViewGroupCollection::` row, and
+  `GitUI.CommandsDialogs.RevisionFileTreeController::Find(System.Windows.Forms.TreeNodeCollection,string)` reads the
+  getter `TreeNodeCollection::get_Item(int)` under the `net6.0` row about null arguments. The page lists
+  `TreeNodeCollection.Item[Int32]`; an `int` index cannot be null, so only assigning a null node through the setter
+  reaches the change, and the row names `get_Item(` instead of `set_Item(`.
