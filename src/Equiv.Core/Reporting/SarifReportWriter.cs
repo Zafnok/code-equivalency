@@ -166,7 +166,7 @@ public static class SarifReportWriter
         }
 
         // Ticket P2-064: a flagged result says which cause it shares with others; ReviewList.Apply ranks the groups.
-        if (ReviewList.Key(result.Verdict, runtimeChange) is { } reviewGroup)
+        if (ReviewList.KeyOf(result.Verdict, runtimeChange) is { } reviewGroup)
         {
             sarifResult.SetProperty(ReviewList.GroupProperty, reviewGroup);
         }

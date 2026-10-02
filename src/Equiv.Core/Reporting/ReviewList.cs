@@ -10,7 +10,7 @@ namespace Equiv.Core.Reporting;
 
 /// <summary>
 /// The review list (ticket P2-064; VERIFICATION-MODEL.md section 6): every flagged result, EQ002, EQ003 or EQ006, is put
-/// in a group by its cause (<see cref="Key"/>, SARIF <c>properties.reviewGroup</c>), and each group gets one SARIF
+/// in a group by its cause (<see cref="KeyOf"/>, SARIF <c>properties.reviewGroup</c>), and each group gets one SARIF
 /// <c>rank</c>, so that a reviewer reads tens of groups, most certain first, instead of every method. A group is a rule
 /// id and a key. It takes the best tier any of its results is in: a Divergent the real runtimes showed
 /// (<c>proofMethod: observed</c> or <c>replay: reproduced</c>), any other EQ002, EQ006, a line-scoped EQ003, a
@@ -83,7 +83,7 @@ public static class ReviewList
     /// behind it, sorted and joined by <c>+</c>: an opaque Unknown's causes, an abstraction Unknown's opaque fragments.</item>
     /// </list>
     /// </summary>
-    internal static string? Key(Verdict verdict, RuntimeChange? runtimeChange) => verdict switch
+    internal static string? KeyOf(Verdict verdict, RuntimeChange? runtimeChange) => verdict switch
     {
         Divergent when runtimeChange is not null => $"runtime-change:{runtimeChange.Member}",
         Divergent divergent => DivergentKey(divergent),
@@ -125,9 +125,10 @@ public static class ReviewList
     {
         HashSet<string> differing = Callees(divergent.Counterexample.Old);
         differing.SymmetricExceptWith(Callees(divergent.Counterexample.New));
+        string proofMethod = divergent.Observed is null ? "none" : SarifReportWriter.ObservedProofMethod;
         return differing.Count > 0
             ? $"calls:{string.Join('|', differing.Order(StringComparer.Ordinal))}"
-            : $"proofMethod:{(divergent.Observed is null ? "none" : SarifReportWriter.ObservedProofMethod)}";
+            : $"proofMethod:{proofMethod}";
     }
 
     private static HashSet<string> Callees(IrRun run) => new(run.Trace.Select(static c => c.Callee.Value), StringComparer.Ordinal);
