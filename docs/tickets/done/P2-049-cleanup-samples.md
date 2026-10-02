@@ -1,5 +1,5 @@
 # P2-049 Samples for cleanup refactorings: modern syntax and extract method
-Status: in-progress
+Status: done (PR #343)
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-003, P2-055 (same-runtime pairs, ADR 0040)
