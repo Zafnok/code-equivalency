@@ -198,7 +198,7 @@ internal static class CompareCommand
 
         // Two numbers, never a total: the licence measures each codebase on its own (ticket M3-014).
         streams.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"analysed lines of code: legacy={analysis.Lines.Legacy} modern={analysis.Lines.Modern}"));
-        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, new Output(sink, runLog, streams.Error), executing);
+        return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, new Output(sink, runLog, streams), executing);
     }
 
     /// <summary>The frontend's analysis, or null, with the message on stderr, when it cannot load (the frontend reports its own phases; ADR 0038, ticket M4-013).</summary>
@@ -218,12 +218,13 @@ internal static class CompareCommand
     /// <summary>
     /// The lowering census, the analysed line counts, the projects each solution does not build and each project's runtime go
     /// into the run's property bag on every run (ADR 0027; tickets M3-014, P2-013, P2-053), and every skipped project is a notification (ADR 0029). <c>--lower-only</c> stops there: the
-    /// Added and Removed results, no backend call, exit 0 unless a C# project was skipped.
+    /// Added and Removed results, no backend call, exit 0 unless a C# project was skipped. Every other run also lists its
+    /// review groups in the run and prints them after the line counts (ticket P2-064).
     /// </summary>
     private static int Report(
         CompareOptions options, FrontendAnalysis analysis, EquivConfig config, IVerificationBackend backend, SarifLog? baseline, Output output, ExecutionEnvironment? execution)
     {
-        (IReportSink sink, IRunLog runLog, TextWriter error) = output;
+        (IReportSink sink, IRunLog runLog, (TextWriter stdout, TextWriter error)) = output;
         MatchResult matchResult = analysis.Match;
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered = Lowered(matchResult);
         LoweringCensus census = LoweringCensus.Compute(
@@ -262,8 +263,13 @@ internal static class CompareCommand
             baseline,
             RunProperties(analysis, census),
             notifications,
-            unverified);
+            unverified,
+            reviewList: !options.LowerOnly);
         Written(sink, log, options.OutPath, runLog);
+        foreach (string line in ReviewList.Lines(log.Runs[0]))
+        {
+            stdout.WriteLine(line);
+        }
 
         // ADR 0023: a pair that failed to verify outranks a skipped project, which outranks a verdict, because each
         // makes the result set more incomplete than the last (ARCHITECTURE.md's exit-code precedence).
@@ -815,6 +821,6 @@ internal static class CompareCommand
     /// <summary>A pair's result decided without the solver, and the outcome the verify phase logs for it.</summary>
     private sealed record Decision(VerificationResult Result, string Outcome);
 
-    /// <summary>Where <see cref="Report"/> writes: the SARIF sink, the run log and the stderr stream (sonar(src): csharpsquid:S107).</summary>
-    private sealed record Output(IReportSink Sink, IRunLog Log, TextWriter Error);
+    /// <summary>Where <see cref="Report"/> writes: the SARIF sink, the run log and the run's two text streams (sonar(src): csharpsquid:S107).</summary>
+    private sealed record Output(IReportSink Sink, IRunLog Log, Streams Streams);
 }

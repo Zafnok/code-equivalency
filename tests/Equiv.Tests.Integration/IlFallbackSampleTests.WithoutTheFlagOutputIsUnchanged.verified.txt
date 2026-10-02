@@ -1,1 +1,4 @@
 ﻿analysed lines of code: legacy=148 modern=144
+review list: 2 groups for 2 flagged results
+  EQ002 count=1 rank=60.002 calls:System.Math::Round(decimal,int)|System.Math::Round(decimal,int,System.MidpointRounding)
+  EQ003 count=1 rank=20.002 opaque:InterpolatedString

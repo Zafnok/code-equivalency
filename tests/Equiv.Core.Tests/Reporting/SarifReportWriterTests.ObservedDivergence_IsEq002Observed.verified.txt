@@ -79,9 +79,11 @@
             resultFingerprint/v1: 7f8bc38c226fe9b7cd898efbb0affff82838e1a1e3c64b09767b315e759a452d
           },
           baselineState: new,
+          rank: 80.002,
           properties: {
             proofMethod: observed,
-            model: inputs(null, "i") culture(tr-TR)
+            model: inputs(null, "i") culture(tr-TR),
+            reviewGroup: proofMethod:observed
           }
         }
       ],

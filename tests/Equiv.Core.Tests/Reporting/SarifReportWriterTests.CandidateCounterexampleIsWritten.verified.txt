@@ -113,6 +113,7 @@
             }
           ],
           baselineState: new,
+          rank: 0.002,
           properties: {
             unknownReason: abstraction,
             scope: method,
@@ -135,7 +136,8 @@
                   endColumn: 20
                 }
               }
-            ]
+            ],
+            reviewGroup: abstraction:DelegateCreation+SwitchExpression
           }
         }
       ],

@@ -749,6 +749,7 @@
             }
           ],
           "baselineState": "new",
+          "rank": 20.002,
           "properties": {
             "unknownReason": "opaque",
             "scope": "line",
@@ -776,7 +777,8 @@
               "speciesDefinition": "outcome+equal+irPrefix",
               "stoppedBy": "target",
               "distribution": "equiv generators v1"
-            }
+            },
+            "reviewGroup": "opaque:InterpolatedString"
           }
         },
         {
@@ -1005,6 +1007,7 @@
             "resultFingerprint/v1": "51967f2e7dc5d254d54bd5c225b5d9d47911205e60d235553dbb1cdd7ebd4b2e"
           },
           "baselineState": "new",
+          "rank": 60.002,
           "properties": {
             "model": "inputs(sort \"System.Decimal\" 0) old(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int)\"(sort \"System.Decimal\" 0, bv32 2))) new(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int,System.MidpointRounding)\"(sort \"System.Decimal\" 0, bv32 2, sort \"System.MidpointRounding\" 873244445)))",
             "ladderTrace": [
@@ -1015,7 +1018,8 @@
               }
             ],
             "replay": "not-constructible",
-            "replayReason": "the divergence is in the call trace, which replay does not observe"
+            "replayReason": "the divergence is in the call trace, which replay does not observe",
+            "reviewGroup": "calls:System.Math::Round(decimal,int)|System.Math::Round(decimal,int,System.MidpointRounding)"
           }
         },
         {
@@ -1303,7 +1307,27 @@
               "source": "attribute"
             }
           ]
-        }
+        },
+        "reviewList": [
+          {
+            "group": "calls:System.Math::Round(decimal,int)|System.Math::Round(decimal,int,System.MidpointRounding)",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.BusinessLayer.OrderService::RoundTotal(decimal)"
+            ]
+          },
+          {
+            "group": "opaque:InterpolatedString",
+            "ruleId": "EQ003",
+            "rank": 20.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.BusinessLayer.OrderService::Describe(Equiv.Samples.BusinessLayer.Order)"
+            ]
+          }
+        ]
       }
     }
   ]

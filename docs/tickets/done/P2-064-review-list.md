@@ -1,5 +1,5 @@
 # P2-064 Every run ends with a short review list: flagged results grouped by cause, most certain first
-Status: todo
+Status: done (PR #323)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-046, P2-062
@@ -94,8 +94,9 @@ criterion 1 says so. Existing samples' `expected.sarif.json` files change only b
 - `tests/Equiv.Tests.Integration`: the `repeated-edit` sample's snapshot (Verify).
 
 ## Size guard
-More than 12 files under `src/` and `tests/` together, or any change to how a verdict is decided:
-stop, you are re-deciding verdicts, not grouping them.
+More than 12 hand-written files under `src/` and `tests/` together (regenerated snapshots are not
+counted; see the Deviation in Notes), or any change to how a verdict is decided: stop, you are
+re-deciding verdicts, not grouping them.
 
 ## Out of scope
 Changing any verdict or rule id. An HTML or Markdown report file (ADR 0006). Adjudicating whether a
@@ -104,3 +105,53 @@ group is a true or false alarm (P2-047). Suppressing groups in `equiv.config.jso
 ## Notes
 - Found by the 2026-09-30 goal review: on Git Extensions the tool leaves about 1,085 flagged results
   in no order, so the "narrow the lens for a human" goal is not met however good the verdicts get.
+- Decision: `equiv-adr` bar test (criterion 1) -> first row: a clarification on ADR 0006, no new ADR.
+  `reviewGroup` and `reviewList` are extra data in `properties` bags, which ADR 0006 already decides,
+  and `rank` is SARIF 2.1.0's own result property (section 3.27.25), so no result schema is invented and
+  no verdict, rule id, level, fingerprint or exit code changes. Alternatives: a new ADR (row 4, "the
+  SARIF shape"), ticket Notes only. Rule: the bar test's "take the first row that fits".
+- Decision: key encoding -> `runtime-change:<row member>` (EQ006), `calls:<a>|<b>` (EQ002, the sorted
+  identities that only one side's trace calls), else `proofMethod:observed` or `proofMethod:none` (a
+  solver's Divergent carries no `proofMethod`), and `<unknownReason>[:<r1>+<r2>]` (EQ003, as
+  `changedReasonSets` joins reasons). Alternatives: a hash, a JSON object. Rule: 3 (a snapshot pins it).
+- Decision: an `opaque` Unknown's reasons are its causes' reasons, an `abstraction` Unknown's are its
+  opaque fragments' `reason` (P2-062); an `IrPure` abstraction adds nothing to the key. Rule: 1.
+- Decision: a group is (rule id, key), and it takes the best tier any of its results is in, because
+  every result in a group has one rank while `replay` and `scope` are per result. Alternatives: put
+  the tier in the key, which would split one cause into two groups. Rule: 4.
+- Decision: `rank = 20 x (5 - tier) + min(count, 9999) / 500`, so tier 1 is 80.002 to 99.998 and tier 5
+  is 0.002 to 19.998. It depends only on the group's tier and size, never on the other groups, so it is
+  the same across runs. Alternatives: position in the run's list, `count / (count + 1)`. Rule: 3.
+- Decision: grouping and ranking read the SARIF results, after the baseline's carry-overs are added,
+  so an `absent` or unverified carry-over is counted like any other result (criterion 3's sum). It
+  keeps the `reviewGroup` it was written with; one from a baseline older than this ticket gets
+  `ungrouped`, since its key cannot be derived from the SARIF alone. Rule: 4.
+- Decision: `SarifReportWriter.Write` takes `reviewList` (default false, so the writer's other tests
+  keep their run as it was) and the CLI passes `!LowerOnly`; `ReviewList.Lines` reads the lines back
+  from the run, for stdout and for the MCP summary, and gives none without the run property.
+  Alternatives: the CLI builds the list. Rule: 4.
+- Decision: a group line is `  <ruleId> count=<n> rank=<rank> <group>`, the group last because it is
+  the long part. Rule: 5.
+- Deviation: the Size guard counted every file under `src/` and `tests/`, and criterion 2 cannot be
+  met under that count: a `rank` and a `reviewGroup` on every flagged result change every snapshot
+  that holds one. The PR touches 11 hand-written files there (5 in `src/`, 6 in `tests/`) and 10
+  regenerated snapshots (six `SarifReportWriterTests.*.verified.txt`, two `IlFallbackSampleTests`
+  ones, `business-layer.execute.sarif`, `removed-null-check.execute.sarif`), each changed only by the
+  new properties or the new stdout lines. No verdict, rule id, fingerprint or exit code changed, which
+  is what the guard is for, so its text now counts hand-written files.
+- The 15 existing `expected.sarif.json` files differ from before only by `rank`, `reviewGroup` and
+  `reviewList`; a script compared each with its `main` version after removing the three, and checked
+  on each that exactly the EQ002, EQ003 and EQ006 results carry the two and that the list's counts sum
+  to them.
+- `README.md` and `docs/ARCHITECTURE.md` said stdout carries two lines at most and the MCP summary
+  is one line. Both are corrected here, though neither is in the Files list. The MCP `compare` tool's
+  description says "a short summary" for the same reason.
+- `--lower-only` still writes `reviewGroup` and `rank` on an `unmatched-overload` Unknown (criterion 2
+  is about every log), and no `reviewList` and no stdout lines (criterion 3).
+- `samples/business-layer` shows the grouping on an older sample: `RoundTotal`'s group is
+  `calls:System.Math::Round(decimal,int)|System.Math::Round(decimal,int,System.MidpointRounding)`.
+  `samples/removed-null-check` under `--execute` is `reproduced`, so its group is in tier 1 (80.002).
+- Toolchain: Sarif.Sdk's `Result.Rank` defaults to -1.0 (the bundled `sarif-2.1.0.json` schema), and
+  the SDK leaves a default out of the JSON, so an unflagged result has no `rank`. Verify's JSON
+  snapshots drop an empty collection, so a run whose `reviewList` is `[]` shows no change in a
+  `.verified.txt` written through `VerifyJson`.

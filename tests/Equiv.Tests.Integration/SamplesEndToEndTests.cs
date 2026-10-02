@@ -293,6 +293,33 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-064 criterion 5: the three methods the same API swap was made in share one review group, which ranks above
+    /// the group of the method that changed on its own. The checked-in snapshot is the whole run.
+    /// </summary>
+    [Fact]
+    public async Task RepeatedEdit_TheThreeSwapsAreOneGroupRankedAboveTheOther()
+    {
+        const string Swap = "calls:System.Convert::ToInt32(string)|System.Int32::Parse(string)";
+        SampleRun run = RunSample("repeated-edit");
+        Result[] results = [.. run.Log.Runs[0].Results];
+        Result discount = Single("repeated-edit", "::Discount(int) diverges");
+
+        Assert.Equal(await Snapshot("repeated-edit"), run.NormalizedSarif);
+        Assert.Equal(4, results.Length);
+        Assert.All(results, static r => Assert.Equal("EQ002", r.RuleId));
+        Assert.Equal("proofMethod:none", discount.GetProperty<string>("reviewGroup"));
+        Assert.Equal(60.002, discount.Rank);
+        Assert.All(results.Except([discount]), static r =>
+        {
+            Assert.Equal(Swap, r.GetProperty<string>("reviewGroup"));
+            Assert.Equal(60.006, r.Rank);
+        });
+        List<Dictionary<string, object>> list = run.Log.Runs[0].GetProperty<List<Dictionary<string, object>>>("reviewList");
+        Assert.Equal([Swap, "proofMethod:none"], list.Select(static e => (string)e["group"]), StringComparer.Ordinal);
+        Assert.Equal([3L, 1L], list.Select(static e => (long)e["count"]));
+    }
+
+    /// <summary>
     /// Ticket P1-013 criterion 4 (ADR 0037): on every sample, a run whose backend drops the failure refinement has the same
     /// exit code, and every result the same rule id and result fingerprint, as the real run.
     /// </summary>

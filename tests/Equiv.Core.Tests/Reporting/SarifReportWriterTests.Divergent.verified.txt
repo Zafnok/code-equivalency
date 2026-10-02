@@ -79,8 +79,10 @@
             resultFingerprint/v1: bfec9f07822f6cf3c83288c9ab3f8b51a5908581b45da15a704dd5e6dd50f7b2
           },
           baselineState: new,
+          rank: 60.002,
           properties: {
-            model: inputs(bv32 0) old(returned bv32 1 outs() trace()) new(returned bv32 2 outs() trace())
+            model: inputs(bv32 0) old(returned bv32 1 outs() trace()) new(returned bv32 2 outs() trace()),
+            reviewGroup: proofMethod:none
           }
         }
       ],

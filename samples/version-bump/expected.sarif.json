@@ -94,6 +94,7 @@
             "resultFingerprint/v1": "1e0c0422e70ae4e346971a57d7566f882dfbeea15f6c3feb9bfadd8052740a3c"
           },
           "baselineState": "new",
+          "rank": 40.002,
           "properties": {
             "model": "inputs(sort \"System.IO.BinaryReader\" 0, map<sort \"System.IO.BinaryReader\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0))) new(returned sort \"System.String\" 1 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0)))",
             "ladderTrace": [
@@ -103,7 +104,8 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
-            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader"
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader",
+            "reviewGroup": "runtime-change:System.IO.BinaryReader::ReadString("
           }
         },
         {
@@ -224,7 +226,18 @@
               "source": "attribute"
             }
           ]
-        }
+        },
+        "reviewList": [
+          {
+            "group": "runtime-change:System.IO.BinaryReader::ReadString(",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.VersionBump.Codec::Name(System.IO.BinaryReader)"
+            ]
+          }
+        ]
       }
     }
   ]

@@ -236,7 +236,8 @@
               "source": "attribute"
             }
           ]
-        }
+        },
+        "reviewList": []
       }
     }
   ]

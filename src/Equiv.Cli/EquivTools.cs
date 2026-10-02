@@ -16,7 +16,8 @@ namespace Equiv.Cli;
 /// <summary>
 /// The tools <c>equiv mcp</c> serves (ADR 0033; ticket M5-001): <c>compare</c> and <c>lower_only</c>. Each runs
 /// <see cref="CompareCommand.Run"/>, the pipeline <c>equiv compare</c> runs, with an in-memory sink so nothing is written to
-/// disk, and returns a one-line summary followed by the SARIF log as JSON text. An input error the CLI maps to exit 3 or 4 has
+/// disk, and returns a short summary, the verdict counts and then <c>compare</c>'s review list (ticket P2-064), followed by
+/// the SARIF log as JSON text. An input error the CLI maps to exit 3 or 4 has
 /// no log; it comes back as a tool error (<c>isError: true</c>) carrying the message the CLI prints on stderr.
 /// <paramref name="execution"/> also registers <see cref="ProbeTool"/>'s <c>probe</c> tool, only when <c>equiv mcp</c> was
 /// started with <c>--execute</c> (ADR 0035; tickets M5-002, P2-056); null leaves it unregistered.
@@ -40,7 +41,7 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
                 {
                     Name = "compare",
                     Title = "Compare two solutions",
-                    Description = "Checks whether a legacy and a modern solution behave the same. Returns a one-line verdict summary, then the SARIF 2.1.0 log `equiv compare` writes.",
+                    Description = "Checks whether a legacy and a modern solution behave the same. Returns a short summary (the verdict counts, then the review list: flagged results grouped by cause, most certain first), then the SARIF 2.1.0 log `equiv compare` writes.",
                     ReadOnly = true,
                 }),
             McpServerTool.Create(
@@ -108,15 +109,17 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
     /// The verdict counts, read from the log's rule ids (EQ001 equivalent, EQ002 and EQ006 divergent, EQ003 unknown). A skipped
     /// project is a tool-execution notification without an exception or a descriptor; a pair the tool failed on carries an
     /// exception (ADR 0023), and an uncovered runtime range a descriptor (ADR 0040; ticket P2-055).
+    /// The review list's lines follow, the ones <c>equiv compare</c> prints on stdout (ticket P2-064); <c>lower_only</c> has none.
     /// </summary>
     private static string Summary(SarifLog log, int exitCode)
     {
         Run run = log.Runs[0];
         int Count(params string[] ruleIds) => run.Results.Count(result => ruleIds.Contains(result.RuleId, StringComparer.Ordinal));
         int skipped = run.Invocations?.SelectMany(static invocation => invocation.ToolExecutionNotifications).Count(static notification => notification.Exception is null && notification.Descriptor is null) ?? 0;
-        return string.Create(
+        string verdicts = string.Create(
             CultureInfo.InvariantCulture,
             $"Equivalent {Count("EQ001")}, Divergent {Count("EQ002", "EQ006")}, Unknown {Count("EQ003")}, skipped projects {skipped}, exit code {exitCode}");
+        return string.Join('\n', [verdicts, .. ReviewList.Lines(run)]);
     }
 
     private static string Json(SarifLog log)

@@ -113,6 +113,7 @@
             }
           ],
           "baselineState": "new",
+          "rank": 20.002,
           "properties": {
             "unknownReason": "opaque",
             "scope": "line",
@@ -131,7 +132,8 @@
                 "outcome": "inconclusive",
                 "detail": "an input reaches an opaque node: new: InterpolatedString"
               }
-            ]
+            ],
+            "reviewGroup": "opaque:InterpolatedString"
           }
         }
       ],
@@ -221,7 +223,18 @@
               "source": "attribute"
             }
           ]
-        }
+        },
+        "reviewList": [
+          {
+            "group": "opaque:InterpolatedString",
+            "ruleId": "EQ003",
+            "rank": 20.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.UnknownNewThrow.Report::Width(int)"
+            ]
+          }
+        ]
       }
     }
   ]

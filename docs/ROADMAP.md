@@ -459,6 +459,8 @@ work, P2-050, P1-019, P2-051 and P2-052.
   user field (a false Divergent P1-017's IL gate found). Needs P1-017.
 - P2-081 (M) A Divergent that rests on a closed BCL call's `threw` flag or result, one the real member
   cannot give, is not EQ002 (the gate's nightly budget, found by P2-060). Needs P2-060.
+- P2-080 (S) The differential gate draws the same pairs on every pull request: CsCheck's `seed` fixes
+  the first pair only, so 199 of the 200 are random and `ABrokenIlMappingIsCaught` failed on `main`. Needs P1-017.
 
 ### Runtimes are detected, not assumed (ADR 0040)
 
@@ -499,9 +501,33 @@ prove or refute a small cleanup. It found three gaps that no ticket owned:
 - P2-064 (L) Every run ends with a short review list: flagged results grouped by cause and ranked
   (SARIF `rank`, `run.properties.reviewList`, stdout). Needs P2-062.
 - P2-065 (M) Full runs of the five migration pairs never run (Duplicati, OpenRA, and the three eShop
-  pairs, two of them migration-tool output), reported against Git Extensions.
+  pairs, two of them migration-tool output), reported against Git Extensions. Done 2026-10-01: none
+  of the five finished clean. Duplicati and OpenRA crash with no SARIF, eshop-manual completes with 3
+  crashed pairs and proves 0 of 26 changed pairs, and each tool pair compares 2 procedures because
+  the tool's output does not compile (`docs/runs/2026-10-01-migrations-verdict.md`). Filed as P2-082
+  to P2-088.
 - P2-066 (M) Pin two public .NET-to-.NET version upgrades (a pure bump, and a bump with fixes) and run
   them; every EQ006 must cite a row inside the pair's interval. Needs P2-055, P2-056, P2-047.
+
+Found by P2-065's runs (`docs/runs/2026-10-01-migrations-verdict.md`). Git Extensions is the only
+real migration `equiv` gets through, so the first two come before any rate work, and Duplicati and
+OpenRA are rerun once they land:
+- P2-082 (S) First: weighing a pair for the progress log can no longer end the run. One lowered
+  procedure makes `IrLoopAnalysis` throw outside the per-pair `try`, so Duplicati and OpenRA exit 5
+  with no SARIF.
+- P2-083 (S) Lowering a binary operator in a branch condition no longer throws a bare
+  `NullReferenceException`: 19 pairs over eshop-manual, OpenRA and Duplicati.
+- P2-085 (L) A modern project that does not compile is still compared, method by method, with each
+  erroneous method Unknown(unbound). Raw output of Upgrade Assistant and of Porting Assistant is
+  skipped whole today. Starts with `equiv-adr`'s bar test.
+- P2-084 (S) A project whose only types are empty is not a load failure (Duplicati's placeholder
+  project; load rate 98.1% on a human pair).
+- P2-087 (M) `Binary` (lifted operators and the rest) alone is 6.2% of OpenRA's changed pairs and has
+  no open owner since P1-018 left the IL fallback off. Needs P2-083.
+- P2-086 (M) `InterpolatedString` alone is 19.2% of eshop-manual's changed pairs, same reason: the
+  same text binds differently on the two runtimes.
+- P2-088 (S) `AnonymousObjectCreation` alone is 7.7% of eshop-manual's changed pairs (2 of 26): decide
+  whether it stays opaque.
 
 P2-047's audit found Divergent precision of 3.8% (2 of 53 adjudicated). Each false-positive cause is
 one ticket, in order of how many false positives it accounts for. Four causes (P2-068 to P2-071)
@@ -541,6 +567,11 @@ Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
 - P2-078 (M) Ill-sorted IR from the IL lowering no longer crashes the encoder: one Git Extensions pair
   exits the `--il-fallback` run with code 5. `IlFallback` keeps the IOperation bodies when the IL
   bodies do not validate. Needs P1-016, P1-017.
+
+Documentation:
+- P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list
+  `--bound` and `--timeout-ms`, which the command never had (`bound` and `timeoutMs` come from the
+  config file and the MCP tool). No option is added. Needs P2-050.
 
 ## M5 — Agent surface (MCP)
 

@@ -299,7 +299,8 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// zero procedures is treated as a project the loader skipped, with reason
     /// <see cref="LoadDiagnosticKind.NoProcedures"/> ("a loaded project with source files that yields no procedures
     /// is a load failure, not an empty project"). A project with no type declaration at all (only assembly
-    /// attributes, say) is unaffected: it was never going to yield procedures.
+    /// attributes, say) is unaffected: it was never going to yield procedures. So is one whose types declare no
+    /// member with a body (P2-084: a placeholder class, fields, an enum): no method was there to lose.
     /// </summary>
     private static LoadedSolution SkipVacuousProjects(LoadedSolution loaded)
     {
@@ -307,7 +308,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
         ImmutableArray<SkippedProject>.Builder vacuous = ImmutableArray.CreateBuilder<SkippedProject>();
         foreach (Compilation compilation in loaded.Compilations)
         {
-            if (!ProcedureEnumerator.Enumerate(compilation).IsEmpty || !DeclaresAType(compilation))
+            if (!ProcedureEnumerator.Enumerate(compilation).IsEmpty || !DeclaresABody(compilation))
             {
                 kept.Add(compilation);
                 continue;
@@ -328,9 +329,16 @@ public sealed class CSharpFrontend : ILanguageFrontend
             : loaded with { Compilations = kept.ToImmutable(), Skipped = [.. loaded.Skipped, .. vacuous] };
     }
 
-    /// <summary>Whether any of the compilation's syntax trees declares a class, struct, interface, record or enum.</summary>
-    private static bool DeclaresAType(Compilation compilation) =>
-        compilation.SyntaxTrees.Any(static tree => tree.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Any());
+    /// <summary>
+    /// Whether any class, struct, interface, record or enum in the compilation's syntax trees declares a member with
+    /// a body, an expression body or an accessor (P2-084).
+    /// </summary>
+    private static bool DeclaresABody(Compilation compilation) =>
+        compilation.SyntaxTrees.Any(static tree => tree.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>()
+            .Any(static type => type.DescendantNodes().Any(IsBody)));
+
+    private static bool IsBody(SyntaxNode node) =>
+        node is AccessorDeclarationSyntax or ArrowExpressionClauseSyntax or BaseMethodDeclarationSyntax { Body: not null };
 
     /// <summary>The reasons a project was skipped, as an <see cref="UnverifiedProject"/> and the debug log word them.</summary>
     private static ImmutableArray<string> Reasons(SkippedProject project) =>

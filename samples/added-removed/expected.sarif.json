@@ -222,7 +222,8 @@
               "source": "attribute"
             }
           ]
-        }
+        },
+        "reviewList": []
       }
     }
   ]

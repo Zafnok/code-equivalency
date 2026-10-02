@@ -80,9 +80,11 @@
             resultFingerprint/v1: 5b0ab88112ba696ff46de6b588f72bcc9aa91c7987fc09a6f99892adc050b823
           },
           baselineState: new,
+          rank: 0.002,
           properties: {
             unknownReason: timeout,
-            scope: method
+            scope: method,
+            reviewGroup: timeout
           }
         }
       ],

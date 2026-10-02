@@ -247,6 +247,9 @@ Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | ownin
   entry whose `identity` starts `delegate:` is a lambda or method group (ticket P2-067) and its kind is
   `delegate`, never its fingerprint; any other entry's kind is its `identity`, an `IrPure` operator name.
   Kinds only, never `candidateCounterexample` values.
+- Review list: <groups> groups for <flagged> flagged results (EQ002 + EQ003 + EQ006), from
+  `run.properties.reviewList`; flagged results as a share of matched pairs: <%>. Then the top five
+  groups by `count`, each as `<ruleId> <group>: <count>` (ticket P2-064).
 
 ## Tests (full only)
 - legacy <pass/fail/skip>, modern <pass/fail/skip>
