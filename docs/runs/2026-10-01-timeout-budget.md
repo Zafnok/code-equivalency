@@ -37,25 +37,30 @@ collector: with collections made rare, the same pairs gave the same outcome thre
 
 ## Nine pairs take their time outside any budget
 At 1x the 206 pairs took 24,731 pair seconds, and nine pairs took 22,750 of them. Each of the nine
-ends Unknown(timeout) at every budget tried, after far longer than its budget allows. That time is
-not the solver using its budget, and neither limit ends it (P2-076 owns it).
+is Unknown(timeout) at 1x after far longer than its budget allows, and eight still are at 20x
+(`ImpactControl::UpdatePathsAndLabels()` becomes Unknown(opaque) after 5,817 s). That time is not
+the solver using its budget, and neither limit ends it (P2-076 owns it).
 
-| pair | seconds at 1x (5 s budget) | seconds at `resourceLimit` 10,000,000 |
-|---|---|---|
-| `GitUI.CommandsDialogs.FormRemotes::InitializeComponent()` | 11,414 | 10,549 |
-| `ICSharpCode.TextEditor.TextView::PaintLinePart(System.Drawing.Graphics,int,int,int,System.Drawing.Rectangle,int)` | 6,210 | 5,100 |
-| `GitUI.CommandsDialogs.FormBrowse::.ctor(GitUI.GitUICommands,string,GitUIPluginInterfaces.ObjectId,GitUIPluginInterfaces.ObjectId)` | 3,133 | 2,574 |
-| `ICSharpCode.TextEditor.Document.DefaultHighlightingStrategy::ParseLine(ICSharpCode.TextEditor.Document.IDocument)` | 758 | 827 |
-| `GitUI.CommandsDialogs.FormPush::PushChanges(System.Windows.Forms.IWin32Window)` | 451 | 1,275 |
-| `GitUI.CommandsDialogs.BrowseDialog.DashboardControl.UserRepositoriesList::InitializeComponent()` | 323 | 757 |
-| `GitExtensions.Plugins.GitImpact.ImpactControl::UpdatePathsAndLabels()` | 203 | 244 |
-| `GitUI.CommandsDialogs.FormBrowse::InternalInitialize(bool)` | 131 | 184 |
-| `GitUI.FileStatusList::UpdateFileStatusListView(bool)` | 127 | 95 |
+| pair | seconds at 1x (5 s budget) | seconds at 20x | seconds at `resourceLimit` 10,000,000 |
+|---|---|---|---|
+| `GitUI.CommandsDialogs.FormRemotes::InitializeComponent()` | 11,414 | 15,661 | 10,549 |
+| `ICSharpCode.TextEditor.TextView::PaintLinePart(System.Drawing.Graphics,int,int,int,System.Drawing.Rectangle,int)` | 6,210 | 8,696 | 5,100 |
+| `GitUI.CommandsDialogs.FormBrowse::.ctor(GitUI.GitUICommands,string,GitUIPluginInterfaces.ObjectId,GitUIPluginInterfaces.ObjectId)` | 3,133 | 7,415 | 2,574 |
+| `ICSharpCode.TextEditor.Document.DefaultHighlightingStrategy::ParseLine(ICSharpCode.TextEditor.Document.IDocument)` | 758 | 3,301 | 827 |
+| `GitUI.CommandsDialogs.FormPush::PushChanges(System.Windows.Forms.IWin32Window)` | 451 | 740 | 1,275 |
+| `GitUI.CommandsDialogs.BrowseDialog.DashboardControl.UserRepositoriesList::InitializeComponent()` | 323 | 770 | 757 |
+| `GitExtensions.Plugins.GitImpact.ImpactControl::UpdatePathsAndLabels()` | 203 | 5,817 | 244 |
+| `GitUI.CommandsDialogs.FormBrowse::InternalInitialize(bool)` | 131 | 269 | 184 |
+| `GitUI.FileStatusList::UpdateFileStatusListView(bool)` | 127 | 528 | 95 |
 
 The budget comparison below is over 184 pairs. The 22 left out are seven of these nine, known when
 the 4x run started, and 15 pairs the 1x run had not reached by then (two of them the other two of
-the nine). All 206 at 1x: Equivalent 0, Divergent 1, timeout 194, other Unknown 11, wall-clock
-11,415 s on four threads.
+the nine). Over all 206 the picture is the same:
+
+| budget | pairs | Equivalent | Divergent | still timeout | other Unknown | sum of pair seconds | wall-clock |
+|---|---|---|---|---|---|---|---|
+| 1x | 206 | 0 | 1 | 194 | 11 (abstraction 4, unaligned-loop 4, opaque 3) | 24,731 | 11,415 s on four threads |
+| 20x | 206 | 0 | 21 | 117 | 68 (abstraction 39, unaligned-loop 18, opaque 11) | 80,563 | 16,558 s on eight threads |
 
 ## Larger wall-clock budgets (criterion 1)
 
@@ -63,7 +68,7 @@ the nine). All 206 at 1x: Equivalent 0, Divergent 1, timeout 194, other Unknown 
 |---|---|---|---|---|---|---|---|
 | 1x (5,000 ms) | 184 | 0 | 1 | 172 | 11 (abstraction 4, unaligned-loop 4, opaque 3) | 1,881 | part of the 206-pair run |
 | 4x (20,000 ms) | 184 | 0 | 16 | 135 | 33 (abstraction 16, unaligned-loop 11, opaque 6) | 5,528 | 1,452 s on four threads |
-| 20x (100,000 ms) | 184 | 0 | 21 | 99 | 64 (abstraction 36, unaligned-loop 18, opaque 10) | 35,209 | over 3 h on eight threads, with the nine slow pairs in the same run |
+| 20x (100,000 ms) | 184 | 0 | 21 | 99 | 64 (abstraction 36, unaligned-loop 18, opaque 10) | 35,209 | part of the 206-pair run |
 
 - 12 of the 184 were no longer timeouts at 1x: `main` has moved since P2-046's run, and that run
   shared its machine with three others.
