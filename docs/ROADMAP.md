@@ -480,7 +480,28 @@ work, P2-050, P1-019, P2-051 and P2-052.
 - P2-057 (S) `--before`/`--after` aliases, and scope wording in README and specs. Needs P2-055, P2-056.
 - P2-058 (M) Pin three public "no functional change" PRs as `cleanup` corpus pairs (Git Extensions
   #11372 and #11284, PowerShell #19687), run them, and adjudicate every Divergent. Needs P2-055,
-  P2-047.
+  P2-047. Done 2026-10-02: no cleanup changed behaviour. Of 575 changed pairs (counting
+  PowerShell's 12 edited pairs, not its 128 identical opaque ones), the solver proved 57 (9.9%),
+  52 are Divergent and 466 Unknown. 51 of the 52 Divergent are
+  false positives and 1 is a commit-hash constant that differs between any two commits
+  (`docs/runs/2026-10-02-cleanup-verdict.md`). Filed as P2-093 to P2-099.
+
+Found by P2-058's cleanup runs (`docs/runs/2026-10-02-cleanup-verdict.md`). A cleanup pair keeps
+the runtime, so every one of these is about the engine and none is about a runtime rule. In order
+of how much of the cleanup result each explains:
+- P2-098 (M) A constant that only says where or from which commit the code was built
+  (`[CallerFilePath]`, a generated commit hash) is not a divergence. 45 of the 52 Divergent, and it
+  keeps unedited bodies from being congruent. Starts with `equiv-adr`.
+- P2-099 (L) A collection expression equals the `new` and initializer it replaces. It is an opaque
+  `Conversion` in 308 of gitextensions-11372's 351 changed pairs, and behind 2 false Divergent.
+- P2-093 (M) `x as T` followed by a null check equals `x is T t`. All 5 of powershell-19687's
+  Divergent, and none of its 12 edited pairs is proved.
+- P2-094 (S) `x is not T t` lowers as the negation of its inner pattern, not as an opaque.
+- P2-095 (M) Five procedures make the lowerer throw a null reference, so all three runs exit 5.
+- P2-096 (M) A body whose only diagnostics are warnings promoted to errors is not `unbound`. 82
+  pairs on powershell-19687. Starts with `equiv-adr`. Needs P2-085.
+- P2-097 (M) On a same-runtime pair, a whole-body opaque pair with identical source is not
+  "changed": 128 of powershell-19687's 140 changed pairs. Starts with `equiv-adr`.
 - P2-067 (L) `DelegateCreation` is 17.0% of Git Extensions' changed pairs on its own and has no open
   owner: split it by cause, then lower the chosen construct. Found by P2-046. Done 2026-10-01: in
   134 of the 213 such pairs the lambda was unchanged and already shared; a lambda or method group

@@ -56,3 +56,31 @@ further pair is its own PR.
 Changing ADR 0028's thresholds. Agent-made cleanups (a new migration prompt is a separate decision).
 
 ## Notes
+- Decision: `-List` and `-Fetch` needed no change for the `cleanup` kind. Both read `pairs.csv` rows
+  without looking at `kind`, and all three rows fetched as written. `tools/corpus/tests` covers only
+  `-Metrics` and `-Progress`, with no `human` row case, so the ticket's Tests section adds none.
+- `corpus.ps1` did change, for a reason the ticket did not foresee: Git Extensions' later commits
+  pin an SDK in `global.json` with `rollForward: feature` (8.0.0 and 6.0.401). `-Fetch` patched only
+  a `global.json` with no `rollForward`, so both runs died in one second with "A compatible .NET SDK
+  was not found". It now patches any policy that cannot cross a major.
+- Decision: `powershell-19687` was kept, not replaced. Its first run skipped
+  `System.Management.Automation` on the legacy side (exit 4), which the ticket would count as "does
+  not load". Any other PowerShell pull request would hit the same three obstacles, so the fix was to
+  clear them: `UseRidGraph=true`, a local tag for the build's `git describe`, and one run of the
+  repository's `src/ResGen`. None edits a tracked file. They are written up in
+  `tools/corpus/README.md`.
+- Decision: a cleanup pair gets one plain `full` run. The `--fail-on unknown` run changes only the
+  exit code, and nothing in a cleanup report uses it.
+- Decision: a fourth adjudication class, "real by construction, not the cleanup", for the one
+  Divergent that rests on a generated commit hash. Criterion 4's "confirmed" means the cleanup
+  changed behaviour, which it did not, and the two builds do differ, so it is not a false positive.
+- Decision: PowerShell's per-pair figures use the 12 pairs the pull request edited, with the 140
+  the census counts stated beside them. The other 128 have identical source (P2-097).
+- `--execute`: net8.0 is not installed here (only 6.0.36, 10.0.9 and 10.0.12), so the two net8.0
+  pairs have no execution run. `gitextensions-11284` is net6.0 and was run with `--execute`.
+- The `gitextensions-11372` run took 4h43m, of which two pairs took 2h19m. Another session's corpus
+  run shared the box throughout. `gitextensions-11284` took 44 minutes.
+- Git Bash mangles backslashes inside a quoted heredoc, so analysis scripts with `'\'` went into
+  files instead.
+- No confirmed behaviour change, so criterion 5's report to the user before the PR had nothing to
+  carry.
