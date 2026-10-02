@@ -34,7 +34,11 @@ public sealed class McpIntegrationTests
         (string summary, string mcpJson) = await CompareOverMcp(legacy, modern).ConfigureAwait(true);
 
         Assert.Equal(SarifNormalizer.Normalize(cliJson, sampleDir), SarifNormalizer.Normalize(mcpJson, sampleDir));
-        Assert.Matches(@"^Equivalent \d+, Divergent \d+, Unknown \d+, skipped projects \d+, exit code \d+$", summary);
+
+        // The verdict counts, then the review list's lines as `equiv compare` prints them (ticket P2-064).
+        Assert.Matches(
+            @"^Equivalent \d+, Divergent \d+, Unknown \d+, skipped projects \d+, exit code \d+\nreview list: \d+ groups for \d+ flagged results(\n  EQ00[236] count=\d+ rank=\d+\.\d+ \S[^\n]*)*$",
+            summary);
     }
 
     private static string RunCli(string legacy, string modern)

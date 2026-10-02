@@ -1,5 +1,5 @@
 # P2-083 Lowering a binary operator in a branch condition crashes with a bare `NullReferenceException`
-Status: todo
+Status: done (PR #332)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -48,3 +48,24 @@ Lowering lifted operators in general (P2-087). The run-level crash on the same p
 
 ## Notes
 - Found by P2-065, at equiv ef79ff6. Git Extensions had no lowering crash at bd8e379 (P2-046).
+- Shape (both stack ends): a `Binary` with `OperatorKind` `Equals` or `NotEquals`, `IsLifted` false and no `OperatorMethod`,
+  where one operand is a `Literal` whose constant is `null` and whose `Type` is null, and the other is of type
+  `System.Nullable<T>` with a predefined-equality `T` (`int?`, an enum's `E?`, a `ConditionalAccess` of type `int?`), as a
+  block's `BranchValue`. `NullTest` declines it because the other operand is not a reference type, and
+  `PureCatalogue.Binary` then reads `SpecialType` of the literal's null type. A `Nullable<T>` whose `T` has a user-defined
+  `==` (`DateTime?`) is reported as lifted and was already opaque.
+- The two stack ends are one cause, so the size guard did not trip. In each run the first crash has the un-inlined stack
+  (`PureCatalogue.Binary` from `IrLowerer.Binary`, with `Value` and `Lower` frames); every later one has the tiered-up
+  stack, where the JIT has inlined `PureCatalogue.Binary`, `Value` and `Lower` and attributes the fault to `Binary`'s
+  first line. A Debug build throws at `PureCatalogue.Binary` for every shape tried, the `!= null` ones at the "line 1349"
+  sites included.
+- Decision: opaque with reason `Binary`, not lowered. `Nullable<T>` has no IR type yet and the row already says a lifted
+  operator is opaque; lowering it is P2-087.
+- Deviation: `PureCatalogue.cs` is unchanged. The guard is in `IrLowerer.Binary`, before its two uses of an operand type.
+- Criterion 1: `IrLowererTests.AComparisonOfANullableValueWithNullStaysOpaque` (literal on the right and on the left, an
+  enum, a conditional access).
+- Criterion 3, `--lower-only` at 0a28c44: `eshop-manual` exit 0, no `properties.unverified`, 0 notifications (was 3).
+  `openra-17989` exit 0, 0 lowering notifications (was 8). `duplicati-3124` exit 4, 0 lowering notifications (was 8); the 2
+  notifications left are the `Duplicati.Tools` skipped-project ones the P2-065 run also had. Nothing remains to ticket.
+- Seen while probing, not in any run and not fixed here: `if (null == null)` lowers, and `IrValidator.IrChecker.CheckTargets`
+  then throws a bare `NullReferenceException` on the result.

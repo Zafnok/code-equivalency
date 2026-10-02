@@ -23,3 +23,9 @@ React Flow suggestions were premature and are parked.
 - 2026-09-23 (ADRs 0032, 0033). The parked hosted tier targets Azure Container Apps Jobs, not AKS
   (ADR 0032). `equiv mcp` is a headless transport whose tool results are the same SARIF log, so it
   is within this ADR (ADR 0033).
+- 2026-10-01 (P2-064). The review list is within this ADR. A flagged result's group is extra data in
+  its `properties` bag (`reviewGroup`), the ordered list of groups is extra data in the run's
+  (`reviewList`), and the order is SARIF's own `rank` on each result (SARIF 2.1.0 section 3.27.25),
+  written through Sarif.Sdk's `Result.Rank` and never into a property bag. The stdout lines and the
+  MCP summary are read back from that log; they are not a second report format. A rank never changes
+  a verdict, a rule id, a level, a fingerprint or an exit code.

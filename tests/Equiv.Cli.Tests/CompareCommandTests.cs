@@ -251,7 +251,10 @@ public sealed class CompareCommandTests
             [frontend], new FakeBackend(NoVerdicts), sink, NullRunLog.Instance));
 
         Assert.Equal(ExitCodes.Success, exitCode);
-        Assert.Equal($"analysed lines of code: legacy=49000 modern=52000{Environment.NewLine}", output, StringComparer.Ordinal);
+        Assert.Equal(
+            $"analysed lines of code: legacy=49000 modern=52000{Environment.NewLine}review list: 0 groups for 0 flagged results{Environment.NewLine}",
+            output,
+            StringComparer.Ordinal);
         Assert.DoesNotContain("101000", output, StringComparison.Ordinal);
         Run run = sink.Log!.Runs[0];
         Assert.Empty(run.Results);
@@ -307,6 +310,65 @@ public sealed class CompareCommandTests
             """{"procedures":{"legacy":2,"modern":2},"matchedPairs":1,"pairsWithoutOpaque":1,"pairsWholeBodyOpaque":0,"pairsCongruent":0,"projectsSkipped":{"legacy":0,"modern":0},"opaqueByReason":{},"changedPairs":1,"changedPairsWithoutOpaque":1,"changedPairsWholeBodyOpaque":0,"changedReasonSets":{"":1},"runtimeChangeCalls":{"callSites":{"legacy":0,"modern":0},"distinctMembers":{"legacy":0,"modern":0},"pairsWithAny":{"legacy":0,"modern":0}},"externalCallees":{"legacy":[],"modern":[]}}""",
             census);
         Assert.True(run.TryGetSerializedPropertyValue("analysedLinesOfCode", out string? _));
+
+        // Ticket P2-064 criterion 3: --lower-only reaches no verdict, so it lists no review groups and prints none.
+        Assert.False(run.TryGetSerializedPropertyValue("reviewList", out string? _));
+    }
+
+    /// <summary>
+    /// Ticket P2-064 criteria 3 and 4: after the line counts, one line with the group and flagged-result counts and one
+    /// line per group, highest rank first, and the same groups in <c>run.properties.reviewList</c>.
+    /// </summary>
+    [Fact]
+    public void Prints_review_list_after_line_counts()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity[] swapped = [new("T::A()"), new("T::B()"), new("T::C()")];
+        ProcedureIdentity slow = new("T::Slow()");
+        Counterexample swap = Counterexample() with
+        {
+            Old = Run(1) with { Trace = [new IrCallRecord(new CallIdentity("N::Old()"), [])] },
+            New = Run(2) with { Trace = [new IrCallRecord(new CallIdentity("N::New()"), [])] },
+        };
+        Dictionary<string, Verdict> verdicts = new(StringComparer.Ordinal)
+        {
+            [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded),
+            [slow.Value] = new Unknown(UnknownReason.Timeout, "slow"),
+        };
+        foreach (ProcedureIdentity identity in swapped)
+        {
+            verdicts[identity.Value] = new Divergent(swap);
+        }
+
+        FakeFrontend frontend = new(
+            "csharp", _ => true, new MatchResult([Pair(PairIdentity), Pair(slow), .. swapped.Select(Pair)], [new ProcedureIdentity("T::Added()")], [], []), lines: new AnalysedLines(10, 20));
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.Success;
+
+        string output = CaptureStdOut(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [frontend], new FakeBackend(verdicts), sink, NullRunLog.Instance));
+
+        Assert.Equal(ExitCodes.Divergent, exitCode);
+        Assert.Equal(
+            [
+                "analysed lines of code: legacy=10 modern=20",
+                "review list: 2 groups for 4 flagged results",
+                "  EQ002 count=3 rank=60.006 calls:N::New()|N::Old()",
+                "  EQ003 count=1 rank=0.002 timeout",
+                string.Empty,
+            ],
+            output.Split(Environment.NewLine),
+            StringComparer.Ordinal);
+        Run run = sink.Log!.Runs[0];
+        Assert.True(run.TryGetSerializedPropertyValue("reviewList", out string? list));
+        Assert.Equal(
+            """[{"group":"calls:N::New()|N::Old()","ruleId":"EQ002","rank":60.006,"count":3,"identities":["T::A()","T::B()","T::C()"]},{"group":"timeout","ruleId":"EQ003","rank":0.002,"count":1,"identities":["T::Slow()"]}]""",
+            list);
+        Assert.Equal(
+            [-1.0, 0.002, 60.006, 60.006, 60.006, -1.0],
+            run.Results.Select(static r => r.Rank));
     }
 
     [Fact]

@@ -531,7 +531,12 @@ OpenRA are rerun once they land:
 - P2-087 (M) `Binary` (lifted operators and the rest) alone is 6.2% of OpenRA's changed pairs and has
   no open owner since P1-018 left the IL fallback off. Needs P2-083.
 - P2-086 (M) `InterpolatedString` alone is 19.2% of eshop-manual's changed pairs, same reason: the
-  same text binds differently on the two runtimes.
+  same text binds differently on the two runtimes. Done 2026-10-01: a string of `string` and integer
+  holes lowers as the concatenation of its parts under both bindings; the reason alone fell from 5 to
+  2 pairs on eshop-manual (7.7%), 25 to 2 on Duplicati and 45 to 7 on Git Extensions.
+- P2-089 (S) The 2 eshop-manual pairs left: an integer hole followed by a hole that runs code, which
+  the two bindings format in a different order. Covering it assumes a hole does not change the
+  current culture. Starts with `equiv-adr`'s bar test. Needs P2-086.
 - P2-088 (S) `AnonymousObjectCreation` alone is 7.7% of eshop-manual's changed pairs (2 of 26): decide
   whether it stays opaque.
 
@@ -573,6 +578,11 @@ Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
 - P2-078 (M) Ill-sorted IR from the IL lowering no longer crashes the encoder: one Git Extensions pair
   exits the `--il-fallback` run with code 5. `IlFallback` keeps the IOperation bodies when the IL
   bodies do not validate. Needs P1-016, P1-017.
+
+Documentation:
+- P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list
+  `--bound` and `--timeout-ms`, which the command never had (`bound` and `timeoutMs` come from the
+  config file and the MCP tool). No option is added. Needs P2-050.
 
 ## M5 — Agent surface (MCP)
 

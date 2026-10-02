@@ -1,0 +1,32 @@
+﻿proc "C::M(string,int,long)" (%s "s": sort "System.String", %i "i": bv32, %n "n": bv64, %null.System.String: map<sort "System.String", bool>) -> sort "System.String" entry B0
+B0:
+  %s.isNull.22 "s": bool = mapread %null.System.String, %s
+  goto B1
+B1:
+  %$1: sort "System.String" = const sort "System.String" 1678518573
+  %$3: sort "System.String" = call closed "System.String::Concat(string,string)"(%$1, %s) threw %$4: bool
+  br %$4, B3, B4
+B3:
+  throw "System.Exception"
+B4:
+  %$5: sort "System.String" = const sort "System.String" 1728851429
+  %$6: sort "System.String" = call closed "System.String::Concat(string,string)"(%$3, %$5) threw %$7: bool
+  br %$7, B3, B5
+B5:
+  %$9: sort "System.String" = call closed "System.Int32::ToString()"(%i) threw %$10: bool
+  br %$10, B3, B6
+B6:
+  %$11: sort "System.String" = call closed "System.String::Concat(string,string)"(%$6, %$9) threw %$12: bool
+  br %$12, B3, B7
+B7:
+  %$13: sort "System.String" = const sort "System.String" 1712073811
+  %$14: sort "System.String" = call closed "System.String::Concat(string,string)"(%$11, %$13) threw %$15: bool
+  br %$15, B3, B8
+B8:
+  %$17: sort "System.String" = call closed "System.Int64::ToString()"(%n) threw %$18: bool
+  br %$18, B3, B9
+B9:
+  %$19: sort "System.String" = call closed "System.String::Concat(string,string)"(%$14, %$17) threw %$20: bool
+  br %$20, B3, B10
+B10:
+  ret %$19

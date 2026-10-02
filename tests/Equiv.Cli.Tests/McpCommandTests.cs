@@ -44,7 +44,7 @@ public sealed class McpCommandTests
         McpClientTool compare = tools.Single(static t => string.Equals(t.Name, "compare", StringComparison.Ordinal));
         Assert.Equal("Compare two solutions", compare.ProtocolTool.Title);
         Assert.Equal(
-            "Checks whether a legacy and a modern solution behave the same. Returns a one-line verdict summary, then the SARIF 2.1.0 log `equiv compare` writes.",
+            "Checks whether a legacy and a modern solution behave the same. Returns a short summary (the verdict counts, then the review list: flagged results grouped by cause, most certain first), then the SARIF 2.1.0 log `equiv compare` writes.",
             compare.ProtocolTool.Description);
         Assert.Equal(
             ["legacy", "modern"],
@@ -77,7 +77,58 @@ public sealed class McpCommandTests
 
         CallToolResult result = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
 
-        Assert.Equal("Equivalent 0, Divergent 1, Unknown 0, skipped projects 0, exit code 1", Text(result.Content[0]));
+        Assert.Equal(
+            "Equivalent 0, Divergent 1, Unknown 0, skipped projects 0, exit code 1\nreview list: 1 groups for 1 flagged results\n  EQ006 count=1 rank=40.002 runtime-change:System.String::IndexOf(",
+            Text(result.Content[0]));
+    }
+
+    /// <summary>
+    /// Ticket P2-064 criterion 4: the summary holds the lines <c>equiv compare</c> prints for the review list, after the
+    /// verdict counts, and nothing reaches stdout, the protocol channel.
+    /// </summary>
+    [Fact]
+    public async Task Compare_SummaryHoldsTheReviewListAndStdoutDoesNot()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity unknown = new("T::Unknown()");
+        ProcedureIdentity divergent = new("T::Divergent()");
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+        {
+            [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded),
+            [unknown.Value] = new Unknown(UnknownReason.Timeout, "slow"),
+            [divergent.Value] = new Divergent(Counterexample()),
+        });
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity), Pair(unknown), Pair(divergent)], [], [], []));
+        using Session session = await Session.StartAsync(frontend, backend).ConfigureAwait(true);
+        TextWriter originalOut = Console.Out;
+        TextWriter originalError = Console.Error;
+        using StringWriter stdout = new();
+        using StringWriter stderr = new();
+        Console.SetOut(stdout);
+        Console.SetError(stderr);
+        CallToolResult result;
+        try
+        {
+            result = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
+
+        Assert.Equal(
+            [
+                "Equivalent 1, Divergent 1, Unknown 1, skipped projects 0, exit code 1",
+                "review list: 2 groups for 2 flagged results",
+                "  EQ002 count=1 rank=60.002 proofMethod:none",
+                "  EQ003 count=1 rank=0.002 timeout",
+            ],
+            Text(result.Content[0]).Split('\n'),
+            StringComparer.Ordinal);
+        Assert.Empty(stdout.ToString());
+        Assert.True(Parse(Text(result.Content[1])).Runs[0].TryGetSerializedPropertyValue("reviewList", out string? _));
     }
 
     [Fact]
@@ -195,7 +246,7 @@ public sealed class McpCommandTests
 
         Assert.NotEqual(true, result.IsError);
         Assert.Equal(2, result.Content.Count);
-        Assert.Equal("Equivalent 2, Divergent 1, Unknown 1, skipped projects 0, exit code 1", Text(result.Content[0]));
+        Assert.Equal("Equivalent 2, Divergent 1, Unknown 1, skipped projects 0, exit code 1", VerdictLine(result));
         SarifLog log = Parse(Text(result.Content[1]));
         Assert.Equal(5, log.Runs[0].Results.Count);
         Assert.Single(backend.Calls.Select(static o => o.Bound).Distinct());
@@ -254,7 +305,8 @@ public sealed class McpCommandTests
 
         CallToolResult second = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path, baseline: baseline.Path)).ConfigureAwait(true);
 
-        Assert.Equal("Equivalent 0, Divergent 1, Unknown 0, skipped projects 0, exit code 0", Text(second.Content[0]));
+        // The unchanged Divergent is in the run's list and not in the summary's, which counts new and updated results (ticket P2-064).
+        Assert.Equal("Equivalent 0, Divergent 1, Unknown 0, skipped projects 0, exit code 0\nreview list: 0 groups for 0 flagged results", Text(second.Content[0]));
         Assert.All(Parse(Text(second.Content[1])).Runs[0].Results, static r => Assert.Equal(BaselineState.Unchanged, r.BaselineState));
     }
 
@@ -272,7 +324,7 @@ public sealed class McpCommandTests
         CallToolResult result = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
 
         Assert.NotEqual(true, result.IsError);
-        Assert.Equal("Equivalent 1, Divergent 0, Unknown 0, skipped projects 1, exit code 4", Text(result.Content[0]));
+        Assert.Equal("Equivalent 1, Divergent 0, Unknown 0, skipped projects 1, exit code 4", VerdictLine(result));
     }
 
     [Fact]
@@ -804,6 +856,9 @@ public sealed class McpCommandTests
     private static IrRun Run(int returned) => new(new IrReturned(new IrBitVecValue(32, (ulong)returned)), [], []);
 
     private static string Text(ContentBlock block) => Assert.IsType<TextContentBlock>(block).Text;
+
+    /// <summary>The summary's first line, the verdict counts; the review list's lines follow it (ticket P2-064).</summary>
+    private static string VerdictLine(CallToolResult result) => Text(result.Content[0]).Split('\n')[0];
 
     private static SarifLog Parse(string json)
     {

@@ -185,9 +185,11 @@
             }
           ],
           "baselineState": "new",
+          "rank": 0.002,
           "properties": {
             "unknownReason": "unbound",
-            "scope": "method"
+            "scope": "method",
+            "reviewGroup": "unbound"
           }
         },
         {
@@ -330,7 +332,18 @@
               "source": "attribute"
             }
           ]
-        }
+        },
+        "reviewList": [
+          {
+            "group": "unbound",
+            "ruleId": "EQ003",
+            "rank": 0.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.PartlyCompilingModern.Pricing::Currency()"
+            ]
+          }
+        ]
       }
     }
   ]
