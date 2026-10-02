@@ -73,7 +73,7 @@ public sealed class CSharpFrontendTests
         // P2-018: a loaded project that declares a type but whose enumeration finds no procedures is a load
         // failure, not an empty project (ADR 0029). Its would-be counterpart on the other side becomes unverified
         // instead of Added, exactly as a project the loader itself skipped does.
-        Compilation legacyVacuous = RoslynTestCompilations.Compile("namespace N { public class Empty { public int X; } }", "Vacuous");
+        Compilation legacyVacuous = RoslynTestCompilations.Compile("namespace N { public class Empty { public int X; ~Empty() { } } }", "Vacuous");
         Compilation modernVacuous = RoslynTestCompilations.Compile("namespace N { public class Empty { public int X; public void M() {} } }", "Vacuous");
         StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
             ? new LoadedSolution(null!, [legacyVacuous], [], [])
@@ -97,7 +97,7 @@ public sealed class CSharpFrontendTests
     {
         // A vacuous project needs only one tree with a type declaration; an attributes-only tree beside it changes
         // nothing. A project with procedures in the same side is kept.
-        Compilation vacuous = RoslynTestCompilations.Compile("namespace N { public class Empty { public int X; } }", "Vacuous")
+        Compilation vacuous = RoslynTestCompilations.Compile("namespace N { public class Empty { public int X; ~Empty() { } } }", "Vacuous")
             .AddSyntaxTrees(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText("[assembly: System.Reflection.AssemblyTitle(\"X\")]", cancellationToken: TestContext.Current.CancellationToken));
         Compilation real = RoslynTestCompilations.Compile("namespace R { public class C { public int M() { return 1; } } }", "Real");
         StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
@@ -133,12 +133,53 @@ public sealed class CSharpFrontendTests
     }
 
     [Fact]
+    public void ProjectWhoseOnlyTypeIsEmpty_IsNotSkipped()
+    {
+        // P2-084 acceptance criterion 1: a placeholder project (one empty class, there so the build accepts the
+        // project's content files) has no method to lose, so it loads and nothing is reported.
+        Compilation placeholder = RoslynTestCompilations.Compile("namespace N { public class Placeholder { } }", "Placeholder");
+        StubLoader loader = new(_ => new LoadedSolution(null!, [placeholder], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
+
+        Assert.Empty(result.LegacySkipped);
+        Assert.Empty(result.ModernSkipped);
+        Assert.Empty(result.Added);
+        Assert.Empty(result.Removed);
+    }
+
+    [Theory]
+    [InlineData("public class C { public int X; }", false)]
+    [InlineData("public enum E { A }", false)]
+    [InlineData("public interface I { void M(); }", false)]
+    [InlineData("public abstract class C { public abstract void M(); }", false)]
+    [InlineData("int F() => 1; System.Console.Write(F());", false)]
+    [InlineData("public class C { ~C() { } }", true)]
+    [InlineData("public class C { ~C() => System.Console.Write(1); }", true)]
+    [InlineData("public class C { public event System.Action E { add { } remove { } } }", true)]
+    [InlineData("public interface I { int P { get; } }", true)]
+    public void AProjectIsVacuousOnlyWhenATypeDeclaresABodyAndNoProcedureIsFound(string source, bool vacuous)
+    {
+        // P2-084: with zero procedures enumerated, the project is a load failure only when a type's syntax holds a
+        // member with a body, an expression body or an accessor. A body outside any type (top-level statements)
+        // does not count, as before.
+        Compilation compilation = RoslynTestCompilations.Compile(source, "Candidate");
+        StubLoader loader = new(_ => new LoadedSolution(null!, [compilation], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
+
+        Assert.Equal(vacuous ? ["Candidate"] : [], result.LegacySkipped.Select(static p => p.Name), StringComparer.Ordinal);
+    }
+
+    [Fact]
     public void NoProcedures_ExitsFour()
     {
         // CompareCommand exits 4 for any UnverifiedProject with IsCSharp: true (ExitCodePrecedenceIsFourThenVerdicts,
         // LowerOnlyExits4WhenACSharpProjectWasSkipped, Equiv.Cli.Tests). This proves the frontend's contribution to
         // that contract: a vacuous project is reported with IsCSharp: true, not merely as a warning.
-        Compilation legacyVacuous = RoslynTestCompilations.Compile("namespace N { public class Empty { public int X; } }", "Vacuous");
+        Compilation legacyVacuous = RoslynTestCompilations.Compile("namespace N { public class Empty { public int X; ~Empty() { } } }", "Vacuous");
         StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
             ? new LoadedSolution(null!, [legacyVacuous], [], [])
             : new LoadedSolution(null!, [], [], []));
