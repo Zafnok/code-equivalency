@@ -1,8 +1,17 @@
-﻿using Equiv.Core;
+﻿using System.Security.Cryptography;
+using System.Text;
+
+using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
+using Microsoft.Z3;
+
+using VerifyXunit;
+
 using Xunit;
+
+using ProductEncoding = Equiv.Verify.Z3.ProductEncoder.ProductEncoding;
 
 namespace Equiv.Verify.Z3.Tests;
 
@@ -145,6 +154,29 @@ public sealed class LadderFixtureTests
             unknown.Ladder.Select(static s => s.Outcome));
     }
 
+    /// <summary>
+    /// Ticket P2-076 criterion 3. Neither limit ends a query here (a resource limit and a timeout far out of reach), so
+    /// each hard query of <c>loop-hard</c> runs until it is interrupted, a second in. Each is then what a timeout is: the
+    /// rung's step is <see cref="RungOutcome.Timeout"/>, the ladder goes on to the next rung, and the pair is
+    /// Unknown(Timeout) with the same ladder <see cref="TimeoutsOnEveryRungAreUnknownTimeout"/> gets from the limits.
+    /// </summary>
+    [Fact]
+    public void InterruptedQueryIsATimeoutAndTheLadderContinues()
+    {
+        Fixture fixture = Fixture.Load("loops/loop-hard");
+        VerificationOptions unlimited = new(3, 3_600_000, []) { ResourceLimit = int.MaxValue };
+
+        Verdict verdict = new LoopLadder(static () => new Context(), unlimited) { InterruptAfterMs = 1_000 }.Verify(fixture.Old, fixture.New);
+
+        Unknown unknown = Assert.IsType<Unknown>(verdict);
+        Assert.Equal(UnknownReason.Timeout, unknown.Reason);
+        Assert.Equal("the step obligation of loop 1: solver returned unknown (interrupted)", unknown.Detail);
+        Assert.Equal(
+            [(ProofMethod.Bounded, RungOutcome.Timeout), (ProofMethod.LockstepInduction, RungOutcome.Timeout), (ProofMethod.KInduction, RungOutcome.NotApplicable)],
+            unknown.Ladder.Select(static s => (s.Rung, s.Outcome)));
+        Assert.Equal("solver returned unknown (interrupted)", unknown.Ladder[0].Detail);
+    }
+
     [Fact]
     public void ABoundOnlyAHardConditionReachesTimesOutInRungOnesLastQuery()
     {
@@ -168,6 +200,67 @@ public sealed class LadderFixtureTests
         Verdict verdict = new Z3Backend().Verify(procedure, procedure, new VerificationOptions(3, 50, []));
 
         Assert.Equal((ProofMethod.Bounded, RungOutcome.Timeout), (verdict.Ladder[0].Rung, verdict.Ladder[0].Outcome));
+    }
+
+    /// <summary>
+    /// Ticket P2-076 criterion 2: what rung 1 hands to Z3 for every fixture of this project (the plain ones, one per
+    /// instruction kind, and the loops) is what it handed before <see cref="Z3Backend.Inline"/> and the disposal of a
+    /// query's context were made cheaper. The snapshot holds, per fixture, the SHA-256 of the assertions of the three
+    /// solvers rung 1 makes (a divergence reaching no opaque, any opaque, any input past the bound), each rendered with
+    /// <c>Expr.ToString()</c>; it was written at the commit the ticket branched from. A fixture rung 1 does not apply to
+    /// says so. To see what changed in a digest that differs, print <c>Handed</c>'s text at both commits.
+    /// </summary>
+    [Fact]
+    public Task AssertionsAreUnchanged()
+    {
+        IEnumerable<string> names =
+        [
+            .. FixtureTests.Names.Select(static row => row.Data),
+            .. EncoderSnapshotTests.Kinds.Select(static row => "kinds/" + row.Data),
+            .. Names.Select(static row => "loops/" + row.Data),
+        ];
+        StringBuilder digests = new();
+        foreach (string name in names)
+        {
+            digests.Append(name).Append(' ').Append(Handed(Fixture.Load(name)) is { } text ? Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))) : "not-applicable").Append('\n');
+        }
+
+        return Verifier.Verify(digests.ToString());
+    }
+
+    /// <summary>
+    /// The assertions of rung 1's three solvers on <paramref name="fixture"/>, one per line, or null when rung 1 does not
+    /// apply to it (irreducible control flow, or a self-call it does not inline).
+    /// </summary>
+    private static string? Handed(Fixture fixture)
+    {
+        (IrProcedure old, IrProcedure @new, _) = ProductEncoder.ShareFragments(fixture.Old, fixture.New);
+        if (!IrLoopAnalysis.Of(old).IsReducible || !IrLoopAnalysis.Of(@new).IsReducible || (IrUnroller.InliningObstacle(old) ?? IrUnroller.InliningObstacle(@new)) is not null)
+        {
+            return null;
+        }
+
+        VerificationOptions options = new(3, 60_000, []);
+        using Context context = new();
+        ProductEncoding encoding = ProductEncoder.Encode(context, IrUnroller.Unroll(old, options.Bound), IrUnroller.Unroll(@new, options.Bound), options.CallIdentityMap);
+        BoolExpr[] reachable = [context.MkNot(encoding.Old.Unreachable), context.MkNot(encoding.New.Unreachable)];
+        BoolExpr[][] queries =
+        [
+            [encoding.Differs, context.MkNot(encoding.OpaqueOld), context.MkNot(encoding.OpaqueNew), .. reachable],
+            [context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew), .. reachable],
+            [context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable)],
+        ];
+        StringBuilder text = new();
+        foreach (BoolExpr[] query in queries)
+        {
+            using Solver solver = Z3Backend.Query(context, encoding, options, query);
+            foreach (BoolExpr assertion in solver.Assertions)
+            {
+                text.Append(assertion).Append('\n');
+            }
+        }
+
+        return text.Replace("\r", string.Empty).ToString();
     }
 
     /// <summary>

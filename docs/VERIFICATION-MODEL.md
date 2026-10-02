@@ -691,6 +691,10 @@ with the limit that was hit: `resource limit <n> hit` or `wall-clock limit <n> m
 query, and a pair asks several (section 5.1), so neither bounds the time a pair takes. The defaults come from
 `docs/runs/2026-10-01-timeout-budget.md`.
 
+A query that neither budget has ended once it has run four times `timeoutMs` is interrupted (ticket P2-076). It is
+Unknown with reason `timeout` like the others, the ladder goes on to the next rung as it does after a timeout, and
+the detail says `interrupted` in place of a limit. Only the one query is ended: nothing caps a rung, a pair or a run.
+
 Every Unknown other than `unbound` and `timeout` also carries `properties.failureRefinement` (ADR 0037;
 ticket P1-013): `{ newFailures, removedFailures }`, each `{ outcome, model? }`. The backend asks two more
 queries over rung 1's product (the pair with its shared fragments as calls, unrolled `k` times), comparing

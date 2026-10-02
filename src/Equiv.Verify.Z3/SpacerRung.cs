@@ -37,20 +37,20 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
     /// <summary>Steps each side's replay of a derivation may take; a replay that runs out does not diverge.</summary>
     public const int ReplayBudget = 1_000_000;
 
-    public Rung Prove(IrProcedure old, IrProcedure @new)
-    {
-        if ((Obstacle("old", old) ?? Obstacle("new", @new)) is { } obstacle)
-        {
-            return LoopLadder.NotApplicable(ProofMethod.Chc, $"rung 4 does not model calls: {obstacle}", cause: null);
-        }
+    public Rung Prove(IrProcedure old, IrProcedure @new) =>
+        (Obstacle("old", old) ?? Obstacle("new", @new)) is { } obstacle
+            ? LoopLadder.NotApplicable(ProofMethod.Chc, $"rung 4 does not model calls: {obstacle}", cause: null)
+            : Stages.WithContext(options, createContext, context => Decide(context, old, @new));
 
-        using Context context = createContext();
+    /// <summary>Rung 4 on a pair it applies to: over the integers when integer mode is on, and failing that over the bitvectors.</summary>
+    private Rung Decide(Context context, IrProcedure old, IrProcedure @new)
+    {
         string bitVectors = "integer mode is off";
         if (options.ChcIntMode)
         {
-            ChcEncoder integers = new(context, old, @new, ChcArithmetic.Integers, options.CallIdentityMap);
+            ChcEncoder integers = Encoded(context, old, @new, ChcArithmetic.Integers);
             ChcAnswer found = integers.Query(overflows: false, options);
-            if (found.Status == Status.UNSATISFIABLE && new ChcEncoder(context, old, @new, ChcArithmetic.WrappingIntegers, options.CallIdentityMap).Solves(found.Answer, options))
+            if (found.Status == Status.UNSATISFIABLE && Encoded(context, old, @new, ChcArithmetic.WrappingIntegers).Solves(found.Answer, options))
             {
                 return InMode(Proved(integers, found, "over the integers that holds with wrap-around arithmetic too"), ChcMode.BitVectors);
             }
@@ -72,9 +72,13 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
                 : $"the overflow query gave up ({overflow.Reason})";
         }
 
-        ChcEncoder bits = new(context, old, @new, ChcArithmetic.BitVectors, options.CallIdentityMap);
+        ChcEncoder bits = Encoded(context, old, @new, ChcArithmetic.BitVectors);
         return InMode(Conclude(bits, bits.Query(overflows: false, options), old, @new, $"over the bitvectors, since {bitVectors}"), ChcMode.BitVectors);
     }
+
+    /// <summary>The pair's clauses in <paramref name="arithmetic"/>, as the stage <see cref="Stages.EncodeChc"/>.</summary>
+    private ChcEncoder Encoded(Context context, IrProcedure old, IrProcedure @new, ChcArithmetic arithmetic) =>
+        Stages.Timed(options, Stages.EncodeChc, () => new ChcEncoder(context, old, @new, arithmetic, options.CallIdentityMap));
 
     /// <summary>Why rung 4 does not apply to <paramref name="procedure"/>: the first call or pure function a reachable block holds.</summary>
     private static string? Obstacle(string side, IrProcedure procedure) =>

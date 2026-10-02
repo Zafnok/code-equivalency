@@ -226,7 +226,8 @@ in `properties.lowering` (`operation` or `il`), and the census counts `pairsIlFa
 
 Progress goes to stderr, never stdout (ADR 0038). `normal` prints each phase's start and end, a
 line at most every 5%, and a heartbeat every 60 s that names the pair being worked on. `debug`
-adds one line per item and the solver's rung timings. `quiet` prints nothing. `--log <path>`
+adds one line per item, the solver's rung timings, and each pair's time by stage (encoding,
+inlining, every solver query with its answer, disposal). `quiet` prints nothing. `--log <path>`
 copies the same lines to a file that is flushed line by line. The grammar is fixed, so scripts
 can parse it:
 
