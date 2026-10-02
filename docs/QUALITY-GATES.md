@@ -57,7 +57,7 @@ path, add it to the script's keep list in the same PR.
 Dependabot cannot fill the `Microsoft.Z3` feed (ADR 0030), so it leaves the lock files of
 `Equiv.Verify.Z3` and every project that references it, and `THIRD-PARTY-NOTICES.md`, stale.
 `dependabot-fixup.yml` runs on each of its NuGet PRs: a read-only Windows job fills the feed,
-restores, restores `samples/` (`tools/restore-samples.ps1`) and runs `tools/licence-check --fix`;
+restores, restores `samples/` (the same commands as `build.ps1 -Integration`) and runs `tools/licence-check --fix`;
 a second job applies the resulting patch, refuses it if it touches anything but
 `packages.lock.json` files and the notices, and pushes it as one `[dependabot skip]` commit, so
 Dependabot can still rebase the PR. A push made with `GITHUB_TOKEN` starts no `pull_request`

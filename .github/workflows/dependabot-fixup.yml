@@ -55,9 +55,29 @@ jobs:
       # that is why this job runs on Windows. A package whose licence is not on the allowlist
       # fails here, and that needs a person (ADR 0017).
       - run: dotnet tool restore
+      # The same commands as build.ps1's "restore samples" step (which says why legacy needs
+      # MSBuild.exe); keep the two in step. Inline rather than a shared script because Sonar
+      # counts a .ps1 no Pester test runs as uncovered new code (see sonar.yml).
       - name: Restore samples
         shell: pwsh
-        run: ./tools/restore-samples.ps1
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+          if (-not $msbuild) {
+              Write-Error "MSBuild.exe not found via vswhere; cannot restore samples/**/legacy"
+              exit 1
+          }
+
+          Get-ChildItem -Path samples -Filter "*.csproj" -Recurse | ForEach-Object {
+              if ($_.FullName -match '[\\/]legacy[\\/]') {
+                  & $msbuild $_.FullName -t:Restore -v:minimal -nologo
+              } else {
+                  dotnet restore $_.FullName
+              }
+              if ($LASTEXITCODE -ne 0) {
+                  exit $LASTEXITCODE
+              }
+          }
       - name: Regenerate THIRD-PARTY-NOTICES.md
         run: dotnet run --no-restore --project tools/licence-check -- --repo-root . --fix
 
