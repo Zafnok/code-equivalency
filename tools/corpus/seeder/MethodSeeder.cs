@@ -14,6 +14,8 @@ namespace Equiv.Corpus.Seeder;
 /// </summary>
 internal static class MethodSeeder
 {
+    private static readonly char[] DirectorySeparators = [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
+
     public static SeedResult Seed(string root, int count, int seed, IReadOnlySet<string> changedIdentities)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -117,7 +119,7 @@ internal static class MethodSeeder
     {
         foreach (string path in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
         {
-            if (path.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]).Any(static segment => segment is "bin" or "obj"))
+            if (path.Split(DirectorySeparators).Any(static segment => segment is "bin" or "obj"))
             {
                 continue;
             }
