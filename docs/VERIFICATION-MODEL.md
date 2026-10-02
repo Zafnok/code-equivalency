@@ -29,7 +29,9 @@ A call is closed when its callee's containing type, every parameter type and eve
 are inert: `bool`, `char`, the 8- to 64-bit integers, `float`, `double`, `decimal`, `string`, an enum, or
 `Nullable<T>` of an inert `T` (ADR 0041). A closed call reads and writes no heap map. This assumes that
 an inert type's members run no user code installed as ambient state (a `CultureInfo` subclass set as
-the current culture whose getters write the program's fields).
+the current culture whose getters write the program's fields). The constructor of an anonymous type is
+closed too, whatever its property types are: the compiler writes it, and it only stores its arguments
+(ADR 0041, clarified 2026-10-02).
 
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
@@ -231,6 +233,14 @@ evaluated. So every hole after the first integer hole must only read a local, a 
 another type, whose formatting goes through `IFormattable` or `ISpanFormattable` members the bindings do not share,
 or a call after the first integer hole) stays an `IrOpaque` with reason `InterpolatedString`, fingerprinted per
 binding.
+
+An anonymous object that is itself an argument of a call (P2-088), through the conversion to the parameter's type
+if there is one, is the closed call `{X,Y}::.ctor(<types>)` of its property values, each evaluated in declaration
+order first: the constructor's identity with the type spelled by its property names in declaration order, since an
+anonymous type has no name. So two sides that build the same object from equal values agree, and other names,
+another order or other property types are another callee. Like any closed call it has a trace event and a `threw`
+edge. An anonymous object that goes anywhere else (returned, stored in a local, nested in another one, a receiver)
+stays an `IrOpaque` with reason `AnonymousObjectCreation`, and a read of a property stays a getter call on the value.
 
 The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
 locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:

@@ -80,3 +80,14 @@ model's run records a call, closed or open.
 - Ticket P2-060 implements it and pins the gate's pair. `tools/corpus/seeder/SyntaxMutator.cs` treats an
   interpolated string as a call when reordering statements (P1-017). It stays as it is: an
   interpolated string with a non-string hole is still an open call.
+
+## Clarifications
+- 2026-10-02 (P2-088). **An anonymous type's constructor.** `new { X = x, ... }` calls a constructor
+  the compiler writes: it stores each argument in a field of the new object and runs nothing else.
+  The Why's first bullet covers it. A callee reaches a heap map only through a reference it follows
+  or user code it runs, and this constructor follows none of its arguments and runs none. So the call
+  is closed whatever the property types are, a reference to a mutable object included. The inert-type
+  rule stays the only rule for a callee whose body is not known. Lowered only where the object is itself
+  an argument of a call. A read of a property is a getter call on the value and stays open. The IL
+  lowering does not mark the constructor closed: it sees an ordinary `newobj`, so the two lowerings
+  differ here, as they do for every construct only one of them lowers.

@@ -844,7 +844,7 @@ internal sealed class IrLowerer
                 return Invoke(invocation, context);
             case IAwaitOperation awaited:
                 return Await(awaited, context);
-            case IObjectCreationOperation or IArrayCreationOperation or IDelegateCreationOperation:
+            case IObjectCreationOperation or IArrayCreationOperation or IDelegateCreationOperation or IAnonymousObjectCreationOperation:
                 return Creation(operation, context);
             case IIsPatternOperation pattern:
                 return Match(pattern, context);
@@ -1849,11 +1849,12 @@ internal sealed class IrLowerer
         return target;
     }
 
-    /// <summary>A new object, array or delegate.</summary>
+    /// <summary>A new object, anonymous object, array or delegate.</summary>
     private IrVar? Creation(IOperation operation, LoweringContext context) => operation switch
     {
         IObjectCreationOperation creation => Create(creation, context),
         IArrayCreationOperation creation => CreateArray(creation, context),
+        IAnonymousObjectCreationOperation creation => CreateAnonymous(creation, context),
         _ => Delegate((IDelegateCreationOperation)operation, context),
     };
 
@@ -1865,6 +1866,41 @@ internal sealed class IrLowerer
         RefOuts(creation.Arguments) is { } written
             ? Call(Called(creation.Constructor!, creation), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, context)
             : Opaque(creation, "ref-argument", context);
+
+    /// <summary>Whether <paramref name="creation"/> is itself an argument of a call, through the conversion to the parameter's type if there is one.</summary>
+    private static bool IsArgument(IAnonymousObjectCreationOperation creation)
+    {
+        IOperation? parent = creation.Parent;
+        while (parent is IConversionOperation)
+        {
+            parent = parent.Parent;
+        }
+
+        return parent is IArgumentOperation;
+    }
+
+    /// <summary>
+    /// <c>new { X = x, ... }</c> passed to a call (ticket P2-088): a closed call (ADR 0041, clarified 2026-10-02) of the
+    /// property values in declaration order, each evaluated in that order first. The anonymous type's constructor is the
+    /// compiler's: it stores each value and runs no other code, so it reaches no heap map whatever the values' types are.
+    /// Its identity is the constructor's with the type spelled <c>{X,...}</c>, the property names in declaration order,
+    /// since an anonymous type has no name of its own; so two sides that build the same object from equal values agree.
+    /// An object that goes anywhere else (returned, kept in a local, nested in another one) stays opaque with reason
+    /// <c>AnonymousObjectCreation</c>.
+    /// </summary>
+    private IrVar? CreateAnonymous(IAnonymousObjectCreationOperation creation, LoweringContext context)
+    {
+        if (!IsArgument(creation))
+        {
+            return Opaque(creation, creation.Kind.ToString(), context);
+        }
+
+        IMethodSymbol constructor = ((INamedTypeSymbol)creation.Type!).InstanceConstructors[0];
+        string shape = string.Join(',', constructor.Parameters.Select(static p => p.Name));
+        Callee callee = new(new CallIdentity($"{{{shape}}}{RoslynIdentity.Of(constructor, renames).Value}"), Closed: true, creation, constructor.Name);
+        ImmutableArray<IrVar> values = [.. creation.Initializers.Select(i => Value(((ISimpleAssignmentOperation)i).Value, context))];
+        return Call(callee, values, Map(creation.Type), [], context);
+    }
 
     /// <summary>
     /// <c>new T[n]</c> or <c>new T[] { ... }</c> with one <c>int</c> dimension (ticket P2-001): a negative length throws
