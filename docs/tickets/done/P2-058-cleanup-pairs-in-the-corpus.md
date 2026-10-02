@@ -1,5 +1,5 @@
 # P2-058 Cleanup pairs in the corpus: pin three public "no functional change" PRs and run them
-Status: in-progress
+Status: done (PR #352)
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-055, P2-047 (the adjudication method)
