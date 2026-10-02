@@ -94,6 +94,7 @@
             "resultFingerprint/v1": "407c0fd2c8981e7690d53a06a3096cb6fbaea40b5b252e90ba98aefa617c6042"
           },
           "baselineState": "new",
+          "rank": 80.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 221887975, map<sort \"System.String\", bool> [] default bool true) old(threw \"System.Exception\" outs() trace(\"System.ArgumentNullException::.ctor(string)\"(sort \"System.String\" 221887975))) new(threw \"System.NullReferenceException\" outs() trace())",
             "ladderTrace": [
@@ -103,7 +104,8 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
-            "replay": "reproduced"
+            "replay": "reproduced",
+            "reviewGroup": "calls:System.ArgumentNullException::.ctor(string)"
           }
         }
       ],
@@ -189,7 +191,18 @@
               "source": "attribute"
             }
           ]
-        }
+        },
+        "reviewList": [
+          {
+            "group": "calls:System.ArgumentNullException::.ctor(string)",
+            "ruleId": "EQ002",
+            "rank": 80.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.RemovedNullCheck.Greeter::Greet(string)"
+            ]
+          }
+        ]
       }
     }
   ]

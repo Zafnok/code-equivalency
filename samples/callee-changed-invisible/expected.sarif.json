@@ -142,6 +142,7 @@
             "resultFingerprint/v1": "313f8508bfb356f46612ce6affc782b3e536476305e62a033fa8c9d4ba469505"
           },
           "baselineState": "new",
+          "rank": 60.002,
           "properties": {
             "model": "inputs(bv32 11) old(returned bv32 11 outs() trace()) new(returned bv32 10 outs() trace())",
             "ladderTrace": [
@@ -150,7 +151,8 @@
                 "outcome": "refuted",
                 "detail": "a divergence within 3 iterations"
               }
-            ]
+            ],
+            "reviewGroup": "proofMethod:none"
           }
         }
       ],
@@ -222,7 +224,18 @@
               "source": "attribute"
             }
           ]
-        }
+        },
+        "reviewList": [
+          {
+            "group": "proofMethod:none",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.CalleeChangedInvisible.Grading::Score(int)"
+            ]
+          }
+        ]
       }
     }
   ]
