@@ -723,14 +723,21 @@ public sealed class IrLowererTests
         Assert.Equal(new IrThrew("System.NullReferenceException"), Run(procedure, [.. procedure.Parameters.Select(p => NullTarget(p.Var, 0))]));
     }
 
-    /// <summary>Ticket P2-005 acceptance criterion 2: a lambda handler keeps its own <c>DelegateCreation</c> reason; the call is still lowered.</summary>
+    /// <summary>
+    /// Ticket P2-005 acceptance criterion 2, as ticket P2-067 left it: a lambda handler is its own pure <c>delegate:</c>
+    /// function, no longer a <c>DelegateCreation</c> opaque, and is the accessor call's argument.
+    /// </summary>
     [Fact]
-    public void ALambdaHandlerKeepsItsOwnReason()
+    public void ALambdaHandlerIsAPureDelegate()
     {
         IrProcedure procedure = Method("event Action? E; void M() { E += () => { }; }");
 
-        Assert.Equal("DelegateCreation", Assert.Single(Opaques(procedure)).Reason);
-        Assert.Equal("C::add_E(System.Action)", Assert.Single(Calls(procedure)).Callee.Value);
+        Assert.Empty(Opaques(procedure));
+        IrPure handler = Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>());
+        Assert.StartsWith("delegate:", handler.Function, StringComparison.Ordinal);
+        IrCall add = Assert.Single(Calls(procedure));
+        Assert.Equal("C::add_E(System.Action)", add.Callee.Value);
+        Assert.Contains(handler.Target, add.Args);
     }
 
     /// <summary>Ticket M2-004 acceptance criterion 6: a field is one SSA map keyed by its receiver.</summary>

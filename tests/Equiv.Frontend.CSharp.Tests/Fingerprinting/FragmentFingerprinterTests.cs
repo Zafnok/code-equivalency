@@ -15,8 +15,11 @@ namespace Equiv.Frontend.CSharp.Tests.Fingerprinting;
 /// </summary>
 public sealed class FragmentFingerprinterTests
 {
-    /// <summary>A lambda the lowerer leaves opaque, calling <c>String.IndexOf</c>, whose behaviour changed in .NET 5.</summary>
-    private const string Source = "using System.Linq;\nclass C { int M(int[] xs, string s) => xs.Count(x => x > s.IndexOf(\"a\")); }";
+    /// <summary>
+    /// A method group on an evaluated receiver, which the lowerer leaves an opaque fragment (ticket P2-067), of
+    /// <c>String.IndexOf</c>, whose behaviour changed in .NET 5.
+    /// </summary>
+    private const string Source = "using System;\nclass C { Func<char, int> M(string s) => s.IndexOf; }";
 
     [Theory]
     [InlineData("net8.0", "net10.0", true)]

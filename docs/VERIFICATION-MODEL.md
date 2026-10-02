@@ -93,7 +93,7 @@ Instructions:
 | `IrPhi(var, [(block, var)])` | SSA merge |
 | `IrCall(var?, threw?, callee identity, args, refouts, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `refouts` are the new versions of the call's `ref` and `out` arguments, in parameter order, each a definition; a `ref` argument's value at the call is also one of `args`, an `out` one's is not (M4-003). `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005), except at a `closed` call (section 1), which has no heap pairs (ADR 0041; P2-060). Result, `threw`, each ref output (one function per output index) and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018); a closed call's are functions of callee, arguments and position |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
-| `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025) |
+| `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`, `delegate:<fingerprint>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025) |
 | `IrOpaque(var?, reason, sourceSpan, fingerprint?, reads, threw?, heap)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024). A fingerprinted fragment has what that call needs: a `threw` flag the frontend branches on and the heap pairs an `IrCall` has; `reads` and each pair's `before` are uses, `threw` and each `after` definitions (M4-004) |
 
 Terminators: `IrGoto`, `IrBranch(cond, then, else)`, `IrSwitch`, `IrReturn(var?, outs)`,
@@ -193,6 +193,27 @@ setter, and the capture has no null shadow of its own.
 a static event) and `h`, lowered as a setter call is: no result, `e` null-checked at the call after
 `h` is evaluated, and a `threw` edge (P2-005). A field-like event is no exception, since the compiler
 calls its accessor too.
+
+A lambda, anonymous method or method group converted to a delegate (P2-067; ADR 0024 and ADR 0025 clarifications)
+is an `IrPure` of the function `delegate:<fingerprint>` when the conversion runs no code and has a bound fingerprint.
+It runs no code when its operand is a lambda or anonymous method, a static method, or a method of `this` or `base` in
+a class: nothing is evaluated, nothing can throw, and the heap is not read, so the delegate is no trace event, has no
+heap pair and no `threw` edge. The fingerprint is the conversion's, by the rule for an opaque expression below (the
+delegate type, and the lambda's bound body or the method's identity), and it is refused in the same cases; the
+arguments are the same reads. A lambda's function is `delegate:<fingerprint>#<n>`, where `n` is the position of its
+site among the body's lambda sites with that fingerprint in lowering order (a site copied onto several paths, as a
+`finally`'s is, stays one site): two lambdas compile to two methods, so their delegates are never equal, and
+`e += a; e -= b` over two lambdas with one body removes nothing. A method group's function has no site, since two
+conversions of one method with one receiver are equal delegates. Equal functions of equal reads are one value on both
+sides, so a callee handed the delegate is the same call; two evaluations of one site are also one value, which
+matches `Delegate.Equals` and conflates only reference identity, as a boxing `cast.<From>.<To>` does. A lambda whose
+capture is stored at a point reachable after the conversion is opaque again, with reason `DelegateCreation` and no
+fingerprint. A method group whose receiver is evaluated (`o.M`, which null-checks `o` and may itself run code) stays
+an `IrOpaque` with reason `DelegateCreation`, shared as any fingerprinted fragment is, and a conversion with no
+fingerprint (a runtime-sensitive body, a capture some lambda or local function writes, a local function declared
+outside it, a struct's `this`) stays one that is not shared. A delegate creation's null shadow is false, as a `new`'s is. Like every `IrPure` result the delegate is
+tainted (section 6): two sides whose lambdas differ apply two functions, and a divergence that depends on them is
+Unknown(Abstraction) naming both, not Unknown(Opaque).
 
 The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
 locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
@@ -330,7 +351,8 @@ parameter naming are identical between the two lowerings. An instruction the IL 
 (`docs/tickets/IL-COVERAGE.md`) is an `IrOpaque` whose reason is its ILAst key (`LdFtn[lambda]`,
 `UnboxAny`, ...), with the source span of the nearest sequence point. The table declines what the
 IOperation rules decline for a semantic reason: unboxing, reading a caught exception, `ref` locals,
-`throw` of anything but a `new`, `default` of a type parameter, lambdas and local functions.
+`throw` of anything but a `new`, `default` of a type parameter, and local functions. It also declines lambdas, which
+the IOperation rules lower from a bound fingerprint (P2-067) that the IL does not have.
 
 ## 4. Matching
 
@@ -502,8 +524,8 @@ and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace even
 fragment's calls. Taint follows data, and a branch on a tainted value taints the rest of that side. The result is Divergent only when a compared observable differs and is
 untainted on both sides. Otherwise it is Unknown with reason `Abstraction`, carrying the model
 as `properties.candidateCounterexample` and the abstractions it depends on as
-`properties.abstractions`. Each entry has an `identity` (an `IrPure` operator name, or
-`opaque:<fingerprint>`), a `side` and, when known, a `span`; an `opaque:` entry also has `reason`, the
+`properties.abstractions`. Each entry has an `identity` (an `IrPure` function name, such as `f64.add` or
+`delegate:<fingerprint>#0`, or `opaque:<fingerprint>`), a `side` and, when known, a `span`; an `opaque:` entry also has `reason`, the
 fragment's `IrOpaque` reason, for example `DelegateCreation` (ticket P2-062).
 
 With `equiv compare --execute`, every Divergent is also replayed on the two real runtimes, the

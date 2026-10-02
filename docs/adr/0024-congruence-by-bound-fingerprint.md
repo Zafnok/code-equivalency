@@ -78,3 +78,21 @@ the tree is **runtime-sensitive**, meaning it contains any of:
   normaliser change can invalidate many congruences at once. The sample snapshots pin this.
 - VERIFICATION-MODEL sections 1, 2 and 5 gain the congruence rule and the fragment encoding in the PR that accepted this ADR, and ADR 0014 gains "superseded in part by 0024".
 - Tickets: M3-015 (fingerprints and congruence), M4-004 (shared fragments).
+
+## Clarifications
+- 2026-10-01 (P2-067). **A delegate creation that runs no code is not a fragment.** Decision 2 makes
+  a shared fragment a call event, and "a fragment as a pure uninterpreted function with no trace
+  event" was rejected because it is "unsound when the fragment contains calls whose order is
+  observable". Converting a lambda, a static method or a method of `this` to a delegate evaluates
+  nothing: the lambda's calls run when a callee invokes the delegate, and that callee is its own call
+  event with the heap at that point. The reason for the rejection does not apply, so such a conversion
+  is lowered as ADR 0025's shared pure function, named `delegate:<fingerprint>` by this ADR's
+  fingerprint of the conversion and applied to the fragment's reads. Everything else in decision 2
+  holds as written: the cases with no fingerprint (a capture written later or by a function, a
+  runtime-sensitive body, an outer local function, a struct's `this`) stay opaque and unshared, and
+  a method group whose receiver is evaluated stays a shared fragment, because evaluating the
+  receiver can run code and throws on null. A lambda's function also carries its site's position
+  among the body's lambdas with that fingerprint, because two lambdas are two methods and their
+  delegates are never equal. Measured on Git Extensions (the ticket's Notes): in 134 of the 213
+  changed pairs whose only opaque reason was `DelegateCreation`, every such fragment was already
+  shared, and 84 of those were Unknown(Abstraction) on the fragment's tainted `threw` edge.

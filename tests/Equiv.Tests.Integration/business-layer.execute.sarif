@@ -1103,7 +1103,7 @@
             "modern": 30
           },
           "matchedPairs": 30,
-          "pairsWithoutOpaque": 27,
+          "pairsWithoutOpaque": 29,
           "pairsWholeBodyOpaque": 0,
           "pairsCongruent": 24,
           "projectsSkipped": {
@@ -1111,21 +1111,16 @@
             "modern": 0
           },
           "opaqueByReason": {
-            "DelegateCreation": {
-              "legacy": 2,
-              "modern": 2
-            },
             "InterpolatedString": {
               "legacy": 1,
               "modern": 1
             }
           },
           "changedPairs": 6,
-          "changedPairsWithoutOpaque": 4,
+          "changedPairsWithoutOpaque": 5,
           "changedPairsWholeBodyOpaque": 0,
           "changedReasonSets": {
-            "": 4,
-            "DelegateCreation": 1,
+            "": 5,
             "InterpolatedString": 1
           },
           "runtimeChangeCalls": {

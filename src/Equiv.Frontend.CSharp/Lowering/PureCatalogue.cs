@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
+using System.Globalization;
 
 using Equiv.Core;
 
@@ -23,7 +24,8 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// <c>checked</c> context.</item>
 /// </list>
 /// Type codes are <c>i8 u8 i16 u16 char i32 u32 i64 u64 f32 f64 dec</c>. A user-defined operator or conversion is the
-/// function <c>op:&lt;identity&gt;</c> (<see cref="UserDefined"/>). Anything else is not in the catalogue and stays opaque.
+/// function <c>op:&lt;identity&gt;</c> (<see cref="UserDefined"/>), and a lambda or method group converted to a delegate the
+/// function <c>delegate:&lt;fingerprint&gt;</c> (<see cref="Delegate"/>). Anything else is not in the catalogue and stays opaque.
 /// </summary>
 internal static class PureCatalogue
 {
@@ -118,6 +120,19 @@ internal static class PureCatalogue
     /// type, as an opaque call can.
     /// </summary>
     public static string UserDefined(CallIdentity identity) => OperatorPrefix + identity.Value;
+
+    /// <summary>The name prefix of a delegate's function.</summary>
+    public const string DelegatePrefix = "delegate:";
+
+    /// <summary>
+    /// The function of a lambda, a static method or a method of <c>this</c> converted to a delegate (ticket P2-067):
+    /// <c>delegate:</c> followed by the conversion's bound fingerprint (ADR 0024), which holds the delegate type and the
+    /// lambda's bound body or the method's identity, and for a lambda <c>#</c> and <paramref name="lambdaSite"/>, since two
+    /// lambdas are two methods even when their bodies are one. Its arguments are the variables the conversion reads, and it
+    /// raises nothing.
+    /// </summary>
+    public static string Delegate(string fingerprint, int? lambdaSite) =>
+        lambdaSite is { } site ? $"{DelegatePrefix}{fingerprint}#{site.ToString(CultureInfo.InvariantCulture)}" : DelegatePrefix + fingerprint;
 
     /// <summary>
     /// One catalogued function. <see cref="Throws"/> are the exceptions it can raise in an unchecked context, and

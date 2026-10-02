@@ -35,6 +35,10 @@ public sealed class IlLoweringParityTests
         [$"business-layer/modern {Export}"] = UsingResource,
         [$"business-layer/legacy {Reserve}"] = NullTestOfAConversion,
         [$"business-layer/modern {Reserve}"] = NullTestOfAConversion,
+        [$"business-layer/legacy {SkusOver}"] = Lambda,
+        [$"business-layer/modern {SkusOver}"] = Lambda,
+        [$"business-layer/legacy {CappedLineCount}"] = Lambda,
+        [$"business-layer/modern {CappedLineCount}"] = Lambda,
     }.ToImmutableDictionary(StringComparer.Ordinal);
 
     private const string ConfirmAsync = "Equiv.Samples.BusinessLayer.OrderService::ConfirmAsync(System.Threading.Tasks.Task<global::Equiv.Samples.BusinessLayer.Order>)";
@@ -42,6 +46,10 @@ public sealed class IlLoweringParityTests
     private const string Export = "Equiv.Samples.BusinessLayer.OrderService::Export(Equiv.Samples.BusinessLayer.Order)";
 
     private const string Reserve = "Equiv.Samples.BusinessLayer.OrderService::Reserve(Equiv.Samples.BusinessLayer.Order,int)";
+
+    private const string SkusOver = "Equiv.Samples.BusinessLayer.OrderService::SkusOver(Equiv.Samples.BusinessLayer.Order,int)";
+
+    private const string CappedLineCount = "Equiv.Samples.BusinessLayer.OrderService::CappedLineCount(Equiv.Samples.BusinessLayer.Order,int)";
 
     /// <summary>An <c>async</c> method's IL is its state machine's kickoff, whose ILAst is opaque (out of scope; P1-012).</summary>
     private const string StateMachine = "the IL of an async method is its state machine's kickoff, which is opaque";
@@ -58,6 +66,13 @@ public sealed class IlLoweringParityTests
     /// <c>null.System.Object</c> (M3-010); the IL, which compares the reference itself, reads <c>order</c>'s null shadow.
     /// </summary>
     private const string NullTestOfAConversion = "IOperation reads order != null through null.System.Object of the conversion to object";
+
+    /// <summary>
+    /// The IOperation lowering makes a lambda the pure function <c>delegate:&lt;fingerprint&gt;</c> of its bound body
+    /// (ticket P2-067), so the method holds no opaque; the IL has no bound body to fingerprint, and leaves the lambda's
+    /// <c>LdFtn[lambda]</c> and its closure class opaque (ADR 0039).
+    /// </summary>
+    private const string Lambda = "IOperation lowers a lambda as delegate:<fingerprint>; the IL leaves LdFtn[lambda] opaque";
 
     private static readonly VerificationOptions Options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, []);
 

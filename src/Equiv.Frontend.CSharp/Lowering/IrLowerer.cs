@@ -52,6 +52,7 @@ internal sealed class IrLowerer
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
     private readonly Dictionary<IOperation, IrVar> tryCastNulls = [];
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> indices = [];
+    private readonly Dictionary<string, List<SyntaxNode>> lambdaSites = new(StringComparer.Ordinal);
     private int selects;
     private HeapLowerer heap = null!;
     private ExceptionLowerer exceptions = null!;
@@ -805,10 +806,8 @@ internal sealed class IrLowerer
                 return Invoke(invocation, context);
             case IAwaitOperation awaited:
                 return Await(awaited, context);
-            case IObjectCreationOperation creation:
-                return Create(creation, context);
-            case IArrayCreationOperation creation:
-                return CreateArray(creation, context);
+            case IObjectCreationOperation or IArrayCreationOperation or IDelegateCreationOperation:
+                return Creation(operation, context);
             case IIsPatternOperation pattern:
                 return Match(pattern, context);
             case IIsTypeOperation isType:
@@ -962,7 +961,7 @@ internal sealed class IrLowerer
         return unwrapped switch
         {
             _ when tryCastNulls.TryGetValue(unwrapped, out IrVar? failed) => failed,
-            IObjectCreationOperation or IArrayCreationOperation or IInstanceReferenceOperation or ITypeOfOperation => null,
+            IObjectCreationOperation or IArrayCreationOperation or IDelegateCreationOperation or IInstanceReferenceOperation or ITypeOfOperation => null,
             _ when ShadowOf(unwrapped) is { } shadow => ssa.Load(context.Current, shadow),
             { ConstantValue.HasValue: true, ConstantValue.Value: null } => Const(new IrBoolValue(Value: true), context),
             _ => heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context),
@@ -1008,20 +1007,17 @@ internal sealed class IrLowerer
     /// values it reads, each reference's null shadow after it, and a <c>threw</c> edge to <c>System.Exception</c>, as a call
     /// has (ADR 0024 decision 2; ticket M4-004); <see cref="SsaBuilder.Build"/> adds its heap pairs.
     /// </summary>
-    private IrVar? Opaque(IOperation operation, string reason, LoweringContext context)
+    private IrVar? Opaque(IOperation operation, string reason, LoweringContext context) => Opaque(operation, reason, Fragment(operation), context);
+
+    /// <summary><see cref="Opaque(IOperation, string, LoweringContext)"/> of an operation whose <paramref name="shared"/> fragment is already known.</summary>
+    private IrVar? Opaque(IOperation operation, string reason, FragmentOf? shared, LoweringContext context)
     {
         IrVar? target = operation.Type is { SpecialType: not SpecialType.System_Void } type ? ssa.Temp(Map(type)) : null;
         SourceSpan span = Span(operation.Syntax);
-        if (Fragment(operation) is var (fingerprint, reads, captured))
+        if (shared is { } fragment)
         {
             IrVar threw = ssa.Temp(Bool);
-            IrOpaque fragment = new(target, reason, span)
-            {
-                Fingerprint = fingerprint,
-                Reads = [.. reads.SelectMany(v => Shadow(v) is { } shadow ? [v, shadow] : new[] { v }).Select(v => ssa.Load(context.Current, v))],
-                Threw = threw,
-            };
-            ssa.EmitFragment(context.Current, fragment, captured);
+            ssa.EmitFragment(context.Current, new IrOpaque(target, reason, span) { Fingerprint = fragment.Fingerprint, Reads = Loaded(fragment.Reads, context), Threw = threw }, fragment.Captured);
             ThrowIf(threw, "System.Exception", context, known: false);
             return target;
         }
@@ -1035,6 +1031,69 @@ internal sealed class IrLowerer
         }
 
         return target;
+    }
+
+    /// <summary>The values of <paramref name="reads"/> at this point, each reference's null shadow after it.</summary>
+    private ImmutableArray<IrVar> Loaded(ImmutableArray<SsaBuilder.Variable> reads, LoweringContext context) =>
+        [.. reads.SelectMany(v => Shadow(v) is { } shadow ? [v, shadow] : new[] { v }).Select(v => ssa.Load(context.Current, v))];
+
+    /// <summary>
+    /// A lambda, anonymous method or method group converted to a delegate (ticket P2-067). Converting a lambda, a static
+    /// method or a method of <c>this</c> runs no code, cannot throw and reads no heap, so where the conversion has a bound
+    /// fingerprint (ADR 0024) the delegate is the pure function <see cref="PureCatalogue.Delegate"/> of the variables it
+    /// reads (ADR 0025): no trace event, no heap pair, no <c>threw</c> edge. Two lambdas compile to two methods, so their
+    /// delegates are never equal: a lambda's function also names its site, by position among the body's lambdas with that
+    /// fingerprint, and a site copied onto several paths, as a <c>finally</c>'s is, stays one site. Two conversions of one
+    /// method group with one receiver are equal, so a method group's function has no site. A capture stored after the
+    /// conversion makes it opaque again (<see cref="SsaBuilder.EmitDelegate"/>). A method group whose receiver is evaluated
+    /// (which is null-checked, and may itself run code) stays opaque with reason <c>DelegateCreation</c>, shared as any
+    /// fingerprinted fragment is, and a conversion with no fingerprint stays opaque and unshared. Either way the delegate
+    /// is never null.
+    /// </summary>
+    private IrVar? Delegate(IDelegateCreationOperation creation, LoweringContext context)
+    {
+        string reason = creation.Kind.ToString();
+        if (Fragment(creation) is not { } fragment)
+        {
+            return Opaque(creation, reason, shared: null, context);
+        }
+
+        if (creation.Target is not (IFlowAnonymousFunctionOperation or IMethodReferenceOperation { Instance: null or IInstanceReferenceOperation }))
+        {
+            return Opaque(creation, reason, fragment, context);
+        }
+
+        IrVar target = ssa.Temp(Map(creation.Type!));
+        IrPure value = new(target, [], PureCatalogue.Delegate(fragment.Fingerprint, LambdaSite(creation, fragment.Fingerprint)), Loaded(fragment.Reads, context));
+        ssa.EmitDelegate(context.Current, value, new IrOpaque(target, reason, Span(creation.Syntax)), fragment.Captured);
+        return target;
+    }
+
+    /// <summary>
+    /// The position of a lambda's site among the body's lambda sites with <paramref name="fingerprint"/>, in the order the
+    /// lowering first reaches them; null for a method group.
+    /// </summary>
+    private int? LambdaSite(IDelegateCreationOperation creation, string fingerprint)
+    {
+        if (creation.Target is not IFlowAnonymousFunctionOperation)
+        {
+            return null;
+        }
+
+        if (!lambdaSites.TryGetValue(fingerprint, out List<SyntaxNode>? sites))
+        {
+            sites = [];
+            lambdaSites[fingerprint] = sites;
+        }
+
+        int site = sites.IndexOf(creation.Syntax);
+        if (site < 0)
+        {
+            site = sites.Count;
+            sites.Add(creation.Syntax);
+        }
+
+        return site;
     }
 
     /// <summary>Stores a value nothing is known about into <paramref name="variable"/>; its shadow, if any, asks the <c>null.&lt;Sort&gt;</c> map.</summary>
@@ -1051,7 +1110,7 @@ internal sealed class IrLowerer
     /// <paramref name="operation"/>'s fingerprint, the variables it reads and those a lambda in it captures, when it writes no
     /// variable and every variable it reads or captures is one the lowering tracks; otherwise null.
     /// </summary>
-    private (string Fingerprint, ImmutableArray<SsaBuilder.Variable> Reads, ImmutableArray<SsaBuilder.Variable> Captured)? Fragment(IOperation operation)
+    private FragmentOf? Fragment(IOperation operation)
     {
         if (Written(operation).Any() || fragments.Of(operation, cfg) is not { } fragment)
         {
@@ -1062,8 +1121,11 @@ internal sealed class IrLowerer
         SsaBuilder.Variable?[] captured = [.. fragment.Captured.Select(variables.GetValueOrDefault)];
         return reads.Concat(captured).Any(static v => v is null)
             ? null
-            : (fragment.Fingerprint, [.. reads.OfType<SsaBuilder.Variable>()], [.. captured.OfType<SsaBuilder.Variable>()]);
+            : new FragmentOf(fragment.Fingerprint, [.. reads.OfType<SsaBuilder.Variable>()], [.. captured.OfType<SsaBuilder.Variable>()]);
     }
+
+    /// <summary>A fragment's fingerprint, the tracked variables it reads and those a lambda in it captures.</summary>
+    private readonly record struct FragmentOf(string Fingerprint, ImmutableArray<SsaBuilder.Variable> Reads, ImmutableArray<SsaBuilder.Variable> Captured);
 
     /// <summary>The variables an operation writes as a side effect: its <c>ref</c>/<c>out</c> arguments, deconstruction targets and pattern-declared locals.</summary>
     private IEnumerable<SsaBuilder.Variable> Written(IOperation operation) =>
@@ -1694,6 +1756,14 @@ internal sealed class IrLowerer
         ssa.Emit(context.Current, new IrUnary(target, op, operand));
         return target;
     }
+
+    /// <summary>A new object, array or delegate.</summary>
+    private IrVar? Creation(IOperation operation, LoweringContext context) => operation switch
+    {
+        IObjectCreationOperation creation => Create(creation, context),
+        IArrayCreationOperation creation => CreateArray(creation, context),
+        _ => Delegate((IDelegateCreationOperation)operation, context),
+    };
 
     /// <summary>
     /// <c>new T(...)</c>: an opaque call to the constructor yielding the new object, which writes its <c>ref</c> and
