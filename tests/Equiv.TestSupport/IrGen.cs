@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Text;
 
 using CsCheck;
 
@@ -37,6 +38,11 @@ public static class IrGen
     private static readonly IrBinaryOp[] Commutative =
     [
         IrBinaryOp.Add, IrBinaryOp.Mul, IrBinaryOp.And, IrBinaryOp.Or, IrBinaryOp.Xor, IrBinaryOp.Eq, IrBinaryOp.Ne,
+    ];
+
+    private static readonly ImmutableArray<string>[] PureThrows =
+    [
+        [], ["System.OverflowException"], ["System.DivideByZeroException", "System.OverflowException"],
     ];
 
     private static readonly Gen<uint> Word = Gen.Frequency(
@@ -241,12 +247,13 @@ public static class IrGen
     private static string Fresh(IrProcedure procedure, string suffix)
     {
         string text = IrText.Dump(procedure);
-        while (text.Contains(suffix, StringComparison.Ordinal))
+        StringBuilder fresh = new(suffix);
+        while (text.Contains(fresh.ToString(), StringComparison.Ordinal))
         {
-            suffix += "m";
+            fresh.Append('m');
         }
 
-        return suffix;
+        return fresh.ToString();
     }
 
     /// <summary>A copy of <paramref name="call"/> that defines fresh names; its heap versions and ref outputs are left unused.</summary>
@@ -368,7 +375,7 @@ public static class IrGen
             slot,
             Gen.OneOfConst("gen.f", "gen.g"),
             Expression(1).Array[1, 2],
-            Gen.OneOfConst<ImmutableArray<string>>([], ["System.OverflowException"], ["System.DivideByZeroException", "System.OverflowException"]),
+            Gen.OneOfConst(PureThrows),
             static (s, function, args, throws) => (IStmt)new Pure(s, function, [.. args], throws));
         Gen<IStmt> fragment = Gen.Select(
             Gen.Frequency((3, slot.Select(static s => (int?)s)), (1, Gen.Const((int?)null))),
