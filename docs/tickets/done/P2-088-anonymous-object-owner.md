@@ -1,5 +1,5 @@
 # P2-088 Decide whether an anonymous object stays opaque
-Status: in-progress
+Status: done (PR #344)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
