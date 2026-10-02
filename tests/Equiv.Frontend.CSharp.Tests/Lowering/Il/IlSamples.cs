@@ -12,7 +12,8 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering.Il;
 /// <summary>
 /// Each side of each <c>samples/</c> pair as one compilation of its sources, read from disk with their encoding as a loaded
 /// project's are, against this test run's own framework (ticket P1-014). A project's package references are not restored
-/// here, so the few web types <c>webapi-basic</c> uses come from a stub compilation it references.
+/// here, so the few web types <c>webapi-basic</c> uses come from a stub compilation it references. A side that does not
+/// compile by design (<see cref="DoesNotCompile"/>) is left out: it emits no IL.
 /// </summary>
 internal static class IlSamples
 {
@@ -49,6 +50,9 @@ internal static class IlSamples
 
     private static readonly string[] Sides = ["legacy", "modern"];
 
+    /// <summary>The sides whose sources hold compiler errors on purpose (ticket P2-085); every other side must compile.</summary>
+    private static readonly string[] DoesNotCompile = ["partly-compiling-modern/modern"];
+
     private static readonly Lazy<ImmutableArray<(string Name, Compilation Compilation)>> Loaded = new(Load);
 
     public static ImmutableArray<(string Name, Compilation Compilation)> All => Loaded.Value;
@@ -78,8 +82,9 @@ internal static class IlSamples
         [
             .. Directory.GetDirectories(Path.Combine(RepoRoot, "samples"))
                 .Order(StringComparer.Ordinal)
-                .SelectMany(static sample => Sides.Select(side => Path.Combine(sample, side)))
-                .Select(side => ($"{Path.GetFileName(Path.GetDirectoryName(side))}/{Path.GetFileName(side)}", Compile(side, stubs))),
+                .SelectMany(static sample => Sides.Select(side => (Name: $"{Path.GetFileName(sample)}/{side}", Directory: Path.Combine(sample, side))))
+                .Where(static side => !DoesNotCompile.Contains(side.Name, StringComparer.Ordinal))
+                .Select(side => (side.Name, Compile(side.Directory, stubs))),
         ];
     }
 

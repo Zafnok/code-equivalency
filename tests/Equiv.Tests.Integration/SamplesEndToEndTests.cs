@@ -252,6 +252,43 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-085 criterion 2 (ADR 0029 as clarified): the modern project does not compile, and it is still loaded. The
+    /// method that does not bind is Unknown(unbound) and points at its first error, the other three are verified, the one
+    /// that calls it with that callee as an unproven assumption, the method of the file the tool did not carry over is
+    /// Removed, and no project is skipped. The checked-in snapshot is the whole run.
+    /// </summary>
+    [Fact]
+    public async Task PartlyCompilingModern_TheMethodThatDoesNotBindIsUnknownAndTheRestAreVerified()
+    {
+        SampleRun run = RunSample("partly-compiling-modern");
+        Result currency = Single("partly-compiling-modern", "Pricing::Currency() is unknown");
+
+        Assert.Equal(await Snapshot("partly-compiling-modern"), run.NormalizedSarif);
+        Assert.Equal(ExitCodes.Success, run.ExitCode);
+        Assert.Equal("EQ003", currency.RuleId);
+        Assert.Equal("unbound", currency.GetProperty<string>("unknownReason"));
+        Assert.Equal("method", currency.GetProperty<string>("scope"));
+        Assert.EndsWith("Pricing::Currency() is unknown (Unbound): the modern body does not bind", currency.Message.Text, StringComparison.Ordinal);
+        PhysicalLocation error = Assert.Single(currency.RelatedLocations).PhysicalLocation;
+        Assert.EndsWith("modern/Pricing.cs", error.ArtifactLocation.Uri.OriginalString, StringComparison.Ordinal);
+        Assert.Equal((16, 20), (error.Region.StartLine, error.Region.StartColumn));
+        Assert.Equal((16, 20), (currency.Locations[0].PhysicalLocation.Region.StartLine, currency.Locations[0].PhysicalLocation.Region.StartColumn));
+
+        Assert.Equal("congruence", Single("partly-compiling-modern", "::Net(int) is equivalent").GetProperty<string>("proofMethod"));
+        Assert.Equal("bounded", Single("partly-compiling-modern", "::Discount(int) is equivalent").GetProperty<string>("proofMethod"));
+        Result caller = Single("partly-compiling-modern", "::HasCurrency() is equivalent");
+        Assert.Equal("EQ001", caller.RuleId);
+        Assert.Equal(["Equiv.Samples.PartlyCompilingModern.Pricing::Currency()"], caller.GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+        Assert.Equal("EQ005", Single("partly-compiling-modern", "Regional::Currency()").RuleId);
+
+        Run sarif = run.Log.Runs[0];
+        Assert.Equal(5, sarif.Results.Count);
+        Assert.Null(sarif.Invocations);
+        Assert.True(sarif.TryGetSerializedPropertyValue("loweringCensus", out string? census));
+        Assert.Contains("\"projectsSkipped\":{\"legacy\":0,\"modern\":0}", census, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ticket P1-013 criterion 4 (ADR 0037): on every sample, a run whose backend drops the failure refinement has the same
     /// exit code, and every result the same rule id and result fingerprint, as the real run.
     /// </summary>
