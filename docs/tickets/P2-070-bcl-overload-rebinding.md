@@ -38,3 +38,6 @@ Rebinding in user or third-party libraries (P2-069). Overloads that change behav
 
 ## Notes
 - Found by P2-047: 2 on Git Extensions, 1 on the Tomas pair.
+- ADR 0042 (P2-069): once P2-069 lands, the Goal's pair is EQ003 with `properties.reboundCalls`
+  naming each overload pair, not EQ002. A catalogue entry rewrites the legacy call before call sites
+  are compared, so each entry this ticket adds takes its site out of the rebound pairs.
