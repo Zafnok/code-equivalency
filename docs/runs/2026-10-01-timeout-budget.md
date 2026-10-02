@@ -146,8 +146,13 @@ P2-082.
 
 ## Decisions
 - `resourceLimit` defaults to 5,000,000. A larger budget proves nothing more, so the default keeps
-  today's strength, and 5,000,000 is where the outcomes match the 5,000 ms budget. It leaves rung
-  4's fixture proofs a margin of at least 1.7 times.
+  today's strength, and 5,000,000 is where the outcomes match the 5,000 ms budget.
+- A rung 4 Spacer query gets ten times the limit. The corpus pairs above hardly reach rung 4 (it
+  does not apply to a pair that calls), so they say nothing about it, and the samples do: the
+  `loop-fusion` sample is proved at 5,000,000 and not at 3,000,000 in twelve runs each here, and on
+  CI one run at 5,000,000 lost the proof. Spacer spends those units in under two seconds, where a
+  product query takes a median 7 s for the same count. Ten times leaves that proof a margin of ten
+  and gives Spacer about 20 s, against 5 s before.
 - `timeoutMs` defaults to 60,000, up from 5,000. It is now only the backstop. At 5,000 it would end
   most queries before the resource limit and nothing would be gained.
 - Cost on this pair: about 2,500 more solver seconds for the timeout pairs than today, on a `full`

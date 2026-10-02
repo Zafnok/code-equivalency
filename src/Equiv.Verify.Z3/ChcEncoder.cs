@@ -36,6 +36,15 @@ namespace Equiv.Verify.Z3;
 /// </summary>
 internal sealed class ChcEncoder
 {
+    /// <summary>
+    /// How many times <see cref="VerificationOptions.ResourceLimit"/> a Spacer query gets (ticket P2-050). Z3 counts a
+    /// Spacer step far cheaper than a step of the bit-level product queries the limit is sized for: the
+    /// <c>loop-fusion</c> sample's proof spends 3 to 5 million units in under two seconds, and the count moves from run
+    /// to run, so at the plain limit the proof was lost on some runs. The checks of an answer are ordinary solver
+    /// queries and get the plain limit.
+    /// </summary>
+    internal const int SpacerResourceScale = 10;
+
     private readonly Context context;
     private readonly SortMapper sorts;
     private readonly Dictionary<string, int> exceptionTypes = new(StringComparer.Ordinal);
@@ -84,7 +93,7 @@ internal sealed class ChcEncoder
     private BoolExpr Bad => (BoolExpr)context.MkApp(bad);
 
     /// <summary>
-    /// Asks Spacer, within <paramref name="options"/>' resource limit and timeout, whether <c>bad</c> is derivable: through the product's steps and
+    /// Asks Spacer, within <see cref="SpacerResourceLimit"/> and <paramref name="options"/>' timeout, whether <c>bad</c> is derivable: through the product's steps and
     /// divergence rules, or, when <paramref name="overflows"/> is set, through the same steps from states within bounds
     /// (<see cref="Premise"/>) and the overflow rules. Global guidance (Krishnan et al., CAV 2020) keeps Spacer from enumerating counter values one lemma at a time; its
     /// concretize rule is off because with it a timeout throws "unreachable" instead of cancelling. Inlining and slicing
@@ -99,7 +108,7 @@ internal sealed class ChcEncoder
         using Fixedpoint fixedpoint = context.MkFixedpoint();
         using Params parameters = context.MkParams();
         parameters.Add("engine", "spacer");
-        parameters.Add(Z3Backend.ResourceLimitParameter, (uint)options.ResourceLimit);
+        parameters.Add(Z3Backend.ResourceLimitParameter, SpacerResourceLimit(options));
         parameters.Add(Z3Backend.TimeoutParameter, (uint)options.TimeoutMs);
         parameters.Add("spacer.global", value: true);
         parameters.Add("spacer.gg.concretize", value: false);
@@ -130,6 +139,9 @@ internal sealed class ChcEncoder
             return new ChcAnswer(Status.UNKNOWN, context.MkTrue(), exception.Message);
         }
     }
+
+    /// <summary>The <c>rlimit</c> of a Spacer query: <see cref="SpacerResourceScale"/> times the resource limit, as far as Z3's parameter goes.</summary>
+    internal static uint SpacerResourceLimit(VerificationOptions options) => (uint)Math.Min(uint.MaxValue, (long)options.ResourceLimit * SpacerResourceScale);
 
     /// <summary>
     /// The coupling invariant of an unsatisfiable divergence query's answer: each relation Spacer defines as something other

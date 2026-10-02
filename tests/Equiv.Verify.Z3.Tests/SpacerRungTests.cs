@@ -168,7 +168,8 @@ public sealed class SpacerRungTests
 
     /// <summary>
     /// Ticket P2-050 criterion 4 on rung 4: Spacer gives up on <c>loops/fusion</c>, which it otherwise proves, once it has
-    /// spent the resource limit, and the step says so; when its timer fires first, the step names the wall-clock limit.
+    /// spent its resource limit, ten times the option's, and the step says so; when its timer fires first, the step names
+    /// the wall-clock limit.
     /// </summary>
     [Fact]
     public void SpacerGivingUpNamesTheLimitItHit()
@@ -179,7 +180,7 @@ public sealed class SpacerRungTests
         Rung hurried = Prove(fixture.Old, fixture.New, Options with { TimeoutMs = 1 });
 
         Assert.Equal(UnknownReason.ChcTimeout, Assert.IsType<Unknown>(starved.Verdict).Reason);
-        Assert.Equal("Spacer gave up over the integers: max. resource limit exceeded: resource limit 1 hit", starved.Step.Detail);
+        Assert.Equal("Spacer gave up over the integers: max. resource limit exceeded: resource limit 10 hit", starved.Step.Detail);
         Assert.Equal(UnknownReason.ChcTimeout, Assert.IsType<Unknown>(hurried.Verdict).Reason);
         Assert.Equal("Spacer gave up over the integers: canceled: wall-clock limit 1 ms hit", hurried.Step.Detail);
     }

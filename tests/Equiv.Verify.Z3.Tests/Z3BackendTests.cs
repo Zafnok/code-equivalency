@@ -188,7 +188,7 @@ public sealed class Z3BackendTests
     [InlineData("(incomplete quantifiers)", "timeout", "")]
     [InlineData("timeout", "canceled", "")]
     public void TheLimitHitIsReadFromZ3sReason(string reason, string timedOut, string expected) =>
-        Assert.Equal(expected, Z3Backend.LimitHit(reason, timedOut, Options with { ResourceLimit = 77 }));
+        Assert.Equal(expected, Z3Backend.LimitHit(reason, timedOut, resourceLimit: 77, Options.TimeoutMs));
 
     [Fact]
     public void TimeoutIsMethodScoped()

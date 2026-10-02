@@ -184,19 +184,20 @@ public sealed class Z3Backend : IVerificationBackend
     }
 
     internal static string Timeout(Solver solver, VerificationOptions options) =>
-        $"solver returned unknown ({solver.ReasonUnknown}){LimitHit(solver.ReasonUnknown, SolverTimedOut, options)}";
+        $"solver returned unknown ({solver.ReasonUnknown}){LimitHit(solver.ReasonUnknown, SolverTimedOut, (uint)options.ResourceLimit, options.TimeoutMs)}";
 
     /// <summary>
     /// Which limit Z3's <paramref name="reason"/> for giving up says was hit (ticket P2-050 criterion 4), as a suffix of a
     /// detail: <c>wall-clock</c> when it is <paramref name="timedOut"/>, the reason the timer leaves
     /// (<see cref="SolverTimedOut"/> on a solver; a fixedpoint is cancelled instead); <c>resource</c> when it is one of the
     /// two an exhausted <c>rlimit</c> leaves, the same on every run; and nothing for any other reason, such as an
-    /// incomplete theory.
+    /// incomplete theory. <paramref name="resourceLimit"/> is the <c>rlimit</c> the query had, which for a Spacer query is
+    /// <see cref="ChcEncoder.SpacerResourceLimit"/>.
     /// </summary>
-    internal static string LimitHit(string reason, string timedOut, VerificationOptions options) => reason switch
+    internal static string LimitHit(string reason, string timedOut, uint resourceLimit, int timeoutMs) => reason switch
     {
-        _ when string.Equals(reason, timedOut, StringComparison.Ordinal) => $": wall-clock limit {options.TimeoutMs.ToString(CultureInfo.InvariantCulture)} ms hit",
-        Canceled or "max. resource limit exceeded" => $": resource limit {options.ResourceLimit.ToString(CultureInfo.InvariantCulture)} hit",
+        _ when string.Equals(reason, timedOut, StringComparison.Ordinal) => $": wall-clock limit {timeoutMs.ToString(CultureInfo.InvariantCulture)} ms hit",
+        Canceled or "max. resource limit exceeded" => $": resource limit {resourceLimit.ToString(CultureInfo.InvariantCulture)} hit",
         _ => string.Empty,
     };
 

@@ -101,7 +101,7 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
         Status.UNSATISFIABLE when chc.Solves(answer.Answer, options) => Proved(chc, answer, how),
         Status.UNSATISFIABLE => Spurious($"Spacer found a coupling invariant {how}, but it does not solve the clauses"),
         Status.SATISFIABLE => Replay(chc, old, @new, chc.DerivationInputs(answer.Answer, options), how),
-        _ => TimedOut($"Spacer gave up {how}: {answer.Reason}{Z3Backend.LimitHit(answer.Reason, Z3Backend.Canceled, options)}"),
+        _ => TimedOut($"Spacer gave up {how}: {answer.Reason}{Z3Backend.LimitHit(answer.Reason, Z3Backend.Canceled, ChcEncoder.SpacerResourceLimit(options), options.TimeoutMs)}"),
     };
 
     /// <summary>A derivation's inputs replayed through both original procedures.</summary>

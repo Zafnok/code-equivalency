@@ -64,6 +64,14 @@ budget does not help, write that up as a P2 ticket with the data.
   172), and a 60 s backstop leaves the resource limit ending about 95% of the timeouts.
   Alternatives: 2,000,000 (6 pairs weaker, and within the 1,000,000 to 3,000,000 that rung 4 needs
   for `loops/fusion`), 10,000,000 (9 pairs stronger at 6.7 times the solver time). Rule: 3.
+- Decision: a Spacer query gets ten times `ResourceLimit` (`ChcEncoder.SpacerResourceScale`) -> one
+  number cannot fit both engines. The `loop-fusion` sample's rung 4 proof needs 3 to 5 million units
+  (proved 12 of 12 times at 5,000,000 here, 0 of 12 at 3,000,000, and lost once on CI at 5,000,000,
+  which failed `Refinement_NeverChangesVerdictOrFingerprint`), and spends them in under 2 s; a
+  product query takes a median 7 s for 5,000,000. Alternatives: a default of 50,000,000 for
+  everything (about 20 times the solver time on timeout pairs), a second config key (not in the
+  ticket). Rule: 4. The answer checks (`Solves`, `Refutes`, `DerivationInputs`) need under 100,000
+  and keep the plain limit.
 - Decision: how criterion 1 reran only the timeout pairs -> a throwaway harness outside the repo that
   loads both solutions through `CSharpFrontend` and calls `Z3Backend.Verify` per pair, as P1-019's
   spike did. `compare` cannot verify a subset and has no `--timeout-ms` (only `equiv mcp` and the

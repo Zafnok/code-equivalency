@@ -111,4 +111,22 @@ public sealed class ChcEncoderTests
         Assert.NotNull(entry.DerivationInputs(context.MkTrue(), Options));
         Assert.Throws<Z3Exception>(() => entry.DerivationInputs(context.MkTrue(), starved));
     }
+
+    /// <summary>
+    /// Ticket P2-050: a Spacer query gets ten times the resource limit, since Z3 counts its steps far cheaper than a
+    /// product query's, and no more than Z3's parameter holds. <c>loops/fusion</c> needs between 2,000,000 and
+    /// 3,000,000 units, so it is proved at a limit of 1,000,000 and not at 10,000.
+    /// </summary>
+    [Fact]
+    public void ASpacerQueryGetsTenTimesTheResourceLimit()
+    {
+        Fixture fusion = Fixture.Load("loops/fusion");
+        using Context context = new();
+        ChcEncoder integers = new(context, fusion.Old, fusion.New, ChcArithmetic.Integers, []);
+
+        Assert.Equal(50_000_000u, ChcEncoder.SpacerResourceLimit(Options with { ResourceLimit = 5_000_000 }));
+        Assert.Equal(uint.MaxValue, ChcEncoder.SpacerResourceLimit(Options with { ResourceLimit = int.MaxValue }));
+        Assert.Equal(Status.UNKNOWN, integers.Query(overflows: false, Options with { TimeoutMs = 600_000, ResourceLimit = 10_000 }).Status);
+        Assert.Equal(Status.UNSATISFIABLE, integers.Query(overflows: false, Options with { TimeoutMs = 600_000, ResourceLimit = 1_000_000 }).Status);
+    }
 }

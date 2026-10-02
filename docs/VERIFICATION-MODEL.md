@@ -580,6 +580,10 @@ Every solver query has two budgets, both set in `equiv.config.json` as positive 
 - `timeoutMs` (default 60000) is the wall-clock backstop behind it, for a query that spends long in work Z3
   does not count. A result that ran into it can differ between runs.
 
+A rung 4 Spacer query gets ten times `resourceLimit`. Z3 counts a Spacer step far cheaper than a step
+of the product queries the limit is sized for: the `loop-fusion` sample's proof spends 3 to 5 million
+units in under two seconds, and the count moves from run to run.
+
 A query that exhausts either is Unknown with reason `timeout` (`chc-timeout` on rung 4), and the detail ends
 with the limit that was hit: `resource limit <n> hit` or `wall-clock limit <n> ms hit`. The budgets are per
 query, and a pair asks several (section 5.1), so neither bounds the time a pair takes. The defaults come from
