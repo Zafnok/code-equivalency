@@ -47,8 +47,9 @@ before and after a migration. It does not diff syntax. It lowers both versions t
 language-neutral intermediate representation (IR), encodes matched procedure pairs as
 SMT problems, and asks Z3 whether any input can make them disagree.
 
-MVP scope: **.NET Framework 4.8 → .NET 10 (C#)**. Next: detecting each side's runtime so that
-version upgrades (net6 → net8) and same-runtime cleanups are checked too (ADR 0040). Later:
+Scope: **any two C# solutions on .NET Framework 4.x or .NET 3.0 and later**, whether a migration,
+a version upgrade or a same-runtime change. Each side's runtime is read from its projects
+(ADR 0040). Later:
 Java 11 → 25, then cross-language rewrites. The language frontends are the only
 language-specific parts.
 
@@ -56,8 +57,8 @@ language-specific parts.
 
 ```mermaid
 flowchart LR
-    L["legacy<br/>.NET Framework 4.8"] --> F["Equiv.Frontend.CSharp<br/>Roslyn CFG"]
-    M["modern<br/>.NET 10"] --> F
+    L["legacy<br/>the solution before the change"] --> F["Equiv.Frontend.CSharp<br/>Roslyn CFG"]
+    M["modern<br/>the solution after it"] --> F
     F --> Match["match procedures<br/>(identity, rename map, HTTP route)"]
     Match --> IR["Equiv.Core<br/>SSA IR"]
     IR --> Z3["Equiv.Verify.Z3<br/>product program → SMT<br/>loop ladder, rungs 1–5"]
@@ -69,7 +70,7 @@ flowchart LR
 ## Status
 
 As of 2026-09-28 (`cc56ae8`), the MVP is complete. M0 to M4 are merged, along with M5 (the
-MCP server) and most of the first post-MVP milestone (P1). `equiv compare` loads 4.8 and .NET 10
+MCP server) and most of the first post-MVP milestone (P1). `equiv compare` loads .NET Framework and .NET
 solutions on Windows and Linux, matches procedures (including by HTTP route), lowers them to IR and
 verifies each matched pair through a five-rung loop ladder. With `--execute` it also runs the code
 on both real runtimes. Releases ship as a single-file binary, a container and a GitHub Action.
@@ -116,7 +117,7 @@ What exists today:
   caller-sufficient callee contracts, and failure refinement on every Unknown (does the modern
   side newly throw?).
 - `Equiv.Execute` — the second oracle (ADR 0035). With `--execute`, every Divergent is replayed
-  on .NET Framework 4.8 and .NET 10, and every Unknown pair is differentially tested on generated
+  on each side's detected runtime, and every Unknown pair is differentially tested on generated
   inputs. It also holds the `runtime-diff` harness (`tools/runtime-diff/`), which measures the
   BCL on both runtimes. Execution never proves a pair Equivalent.
 - `samples/` — paired 4.8/10 solutions, each README stating the expected verdicts.
@@ -179,6 +180,8 @@ equiv compare --legacy <solution.sln|.slnx> --modern <solution.sln|.slnx>
 equiv mcp [--execute]
 ```
 
+`--legacy` is the solution before the change and `--modern` the solution after it; `--before` and
+`--after` are aliases, and giving both spellings of one option is exit 3 (ADR 0040).
 Both paths must be solution files (`.sln` or `.slnx`); anything else is exit 3. Stdout carries
 `analysed lines of code: legacy=<n> modern=<n>`, a `route:` line with `--dry-run`, and after a run
 that verifies, the review list: `review list: <G> groups for <R> flagged results` and its ten
