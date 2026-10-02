@@ -478,7 +478,11 @@ work, P2-050, P1-019, P2-051 and P2-052.
   #11372 and #11284, PowerShell #19687), run them, and adjudicate every Divergent. Needs P2-055,
   P2-047.
 - P2-067 (L) `DelegateCreation` is 17.0% of Git Extensions' changed pairs on its own and has no open
-  owner: split it by cause, then lower the chosen construct. Found by P2-046.
+  owner: split it by cause, then lower the chosen construct. Found by P2-046. Done 2026-10-01: in
+  134 of the 213 such pairs the lambda was unchanged and already shared; a lambda or method group
+  whose conversion runs no code is now the pure function `delegate:<fingerprint>`, the reason alone
+  fell to 68 changed pairs and the lowerable share rose from 40.3% to 51.5%. Verdicts are not
+  expected to move until a delegate both sides apply stops being tainted (ADR 0026).
 - P2-061 (M) Three Preserving mechanical seeds on Git Extensions turn Equivalent into Divergent; find
   the cause of each (seeder or engine). Found by P2-046.
 - P2-062 (S) An opaque fragment in `properties.abstractions` names its reason. Found by P2-046.

@@ -55,6 +55,14 @@ internal sealed class SsaBuilder
     public void EmitFragment(IrBlockId block, IrOpaque fragment, ImmutableArray<Variable> captured) =>
         drafts[block.Value].Steps.Add(new Instruction(fragment) { Captured = captured });
 
+    /// <summary>
+    /// Emits <paramref name="value"/>, a delegate as a pure function of what it reads, whose lambda captures
+    /// <paramref name="captured"/> (ticket P2-067). <see cref="Build"/> puts <paramref name="otherwise"/> in its place when one
+    /// of them is stored at a point reachable after it: the lambda then sees a value its reads at creation do not determine.
+    /// </summary>
+    public void EmitDelegate(IrBlockId block, IrPure value, IrOpaque otherwise, ImmutableArray<Variable> captured) =>
+        drafts[block.Value].Steps.Add(new Instruction(value) { Captured = captured, Otherwise = otherwise });
+
     /// <summary>Reads <paramref name="variable"/> at this point of <paramref name="block"/>.</summary>
     public IrVar Load(IrBlockId block, Variable variable)
     {
@@ -144,6 +152,9 @@ internal sealed class SsaBuilder
                     break;
                 case Instruction { Value: IrCall { Closed: false } call }:
                     draft.Steps[i] = new Instruction(call with { Heap = HeapPairs(heap, draft.Id) });
+                    break;
+                case Instruction { Otherwise: { } otherwise } step when StoredAfter(draft, i, step.Captured):
+                    draft.Steps[i] = new Instruction(otherwise);
                     break;
                 case Instruction { Value: IrOpaque { Fingerprint: not null } fragment } step:
                     draft.Steps[i] = new Instruction(StoredAfter(draft, i, step.Captured)
@@ -369,10 +380,15 @@ internal sealed class SsaBuilder
 
     private interface IStep;
 
-    /// <summary>An instruction, and, for a fingerprinted fragment, the variables its lambdas capture.</summary>
+    /// <summary>
+    /// An instruction, and, for a fingerprinted fragment or a delegate, the variables its lambdas capture; a delegate also
+    /// has the opaque that replaces it when one of them is stored after it.
+    /// </summary>
     private sealed record Instruction(IrInstruction Value) : IStep
     {
         public ImmutableArray<Variable> Captured { get; init; } = [];
+
+        public IrOpaque? Otherwise { get; init; }
     }
 
     private sealed record LoadStep(Variable Variable, IrVar Temp) : IStep;
