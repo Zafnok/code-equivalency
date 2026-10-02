@@ -551,7 +551,9 @@ OpenRA are rerun once they land:
   the two bindings format in a different order. Covering it assumes a hole does not change the
   current culture. Starts with `equiv-adr`'s bar test. Needs P2-086.
 - P2-088 (S) `AnonymousObjectCreation` alone is 7.7% of eshop-manual's changed pairs (2 of 26): decide
-  whether it stays opaque.
+  whether it stays opaque. Done 2026-10-02: 44 of 47 measured sites pass the object straight to a call,
+  and that case lowers as a closed call of the property values; changed pairs holding the reason fell
+  from 2 to 0 on eshop-manual and 24 to 1 on Duplicati.
 - P2-090 (S) A branch on a compile-time constant lowers to a jump along its live edge, not to a
   branch into a block with no terminator. Seen while probing for P2-083; a likely cause of P2-082's
   `IrLoopAnalysis` crash, to be confirmed there.
