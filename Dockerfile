@@ -36,7 +36,8 @@ ARG VERSION=""
 # `dotnet`, not the self-contained single-file binary M3-004 also ships from `dotnet publish -r
 # <rid>` (which needs IncludeAllContentForSelfExtract; see Equiv.Cli.csproj). The SDK base already
 # carries the runtime, so bundling a second copy of it here would be wasted image size for nothing.
-RUN dotnet publish src/Equiv.Cli/Equiv.Cli.csproj -c Release --no-restore -o /app ${VERSION:+-p:MinVerVersionOverride=$VERSION}
+RUN dotnet publish src/Equiv.Cli/Equiv.Cli.csproj -c Release --no-restore -o /app \
+    ${VERSION:+-p:MinVerVersionOverride=$VERSION}
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS final
 WORKDIR /app
