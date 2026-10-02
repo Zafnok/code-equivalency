@@ -9,7 +9,7 @@ namespace Equiv.Cli.Tests;
 
 /// <summary>
 /// <see cref="LoweringCensus"/> (ADR 0027; ticket M3-014 acceptance criteria 1 and 3;
-/// ADR 0034, ticket M3-030 acceptance criteria 1 to 3; ticket M3-015 acceptance criterion 6): counts over the lowered
+/// ADR 0034, ticket M3-030 acceptance criteria 1 to 3; ticket M3-015 acceptance criterion 6; ticket P2-092): counts over the lowered
 /// bodies of matched pairs, computed without a solver. Each pair comes with whether it is congruent, which the CLI decides.
 /// </summary>
 public sealed class LoweringCensusTests
@@ -67,7 +67,7 @@ public sealed class LoweringCensusTests
         IrProcedure wholeBody = Body("""
             proc "T::M" (%a: bv32) -> bv32 entry B0
             B0:
-              %$0: bv32 = opaque "foreach-enumerator" at "f.cs" 1:1-9:2
+              %$0: bv32 = opaque body "foreach-enumerator" at "f.cs" 1:1-9:2
               ret %$0
             """);
 
@@ -77,29 +77,76 @@ public sealed class LoweringCensusTests
         Assert.Equal(new SideCounts(Legacy: 2, Modern: 2), Assert.Single(census.OpaqueByReason).Value);
     }
 
+    /// <summary>
+    /// Ticket P2-092: an unbound body is one whole-body opaque per cause (ADR 0029 decision 2), the last one defining
+    /// the value, and is still one whole-body opaque pair under one reason.
+    /// </summary>
     [Fact]
-    public void ABodyWithMoreThanTheOneOpaqueIsNotWholeBodyOpaque()
+    public void AnUnboundBodyWithSeveralCausesIsWholeBodyOpaque()
     {
-        IrProcedure twoOpaques = Body("""
+        IrProcedure unbound = Body("""
             proc "T::M" (%a: bv32) -> bv32 entry B0
             B0:
-              %$0: bv32 = opaque "undefined" at "f.cs" 1:1-9:2
-              %$1: bv32 = opaque "Binary" at "f.cs" 2:1-2:9
-              ret %$1
-            """);
-        IrProcedure twoBlocks = Body("""
-            proc "T::M" (%a: bv32) -> bv32 entry B0
-            B0:
-              %$0: bv32 = opaque "Binary" at "f.cs" 1:1-9:2
-              goto B1
-            B1:
+              opaque body "unbound" at "f.cs" 2:5-2:9
+              %$0: bv32 = opaque body "unbound" at "f.cs" 3:12-3:20
               ret %$0
             """);
 
-        LoweringCensus census = LoweringCensus.Compute([(twoOpaques, twoBlocks, false, null)], removed: 0, added: 0);
+        LoweringCensus census = LoweringCensus.Compute([(Body(Clean), unbound, false, null), (unbound, Body(Clean), true, null)], removed: 0, added: 0);
+
+        Assert.Equal(2, census.PairsWholeBodyOpaque);
+        Assert.Equal(1, census.Changed.WholeBodyOpaque);
+        Assert.Equal(new SideCounts(Legacy: 1, Modern: 1), Assert.Single(census.OpaqueByReason).Value);
+        Assert.Equal(1, census.Changed.ReasonSets["unbound"]);
+    }
+
+    /// <summary>
+    /// Ticket P2-092 acceptance criterion 3: the flag decides, not the shape. An opaque without it is expression-level
+    /// however little else the body holds, and a flagged one beside anything else does not stand for the whole body.
+    /// </summary>
+    [Theory]
+    [InlineData("""
+        B0:
+          %$0: bv32 = opaque "Binary" at "f.cs" 1:1-9:2
+          ret %$0
+        """)]
+    [InlineData("""
+        B0:
+          %$0: bv32 = opaque body "unbound" at "f.cs" 1:1-9:2
+          %$1: bv32 = opaque "Binary" at "f.cs" 2:1-2:9
+          ret %$1
+        """)]
+    [InlineData("""
+        B0:
+          %$0: bv32 = opaque "Binary" at "f.cs" 2:1-2:9
+          %$1: bv32 = opaque body "unbound" at "f.cs" 1:1-9:2
+          ret %$1
+        """)]
+    [InlineData("""
+        B0:
+          %$0: bv32 = call "N::F"(%a)
+          %$1: bv32 = opaque body "unbound" at "f.cs" 1:1-9:2
+          ret %$1
+        """)]
+    [InlineData("""
+        B0:
+          %$0: bv32 = opaque body "unbound" at "f.cs" 1:1-9:2
+          goto B1
+        B1:
+          ret %$0
+        """)]
+    public void OnlyABodyOfFlaggedOpaquesIsWholeBodyOpaque(string blocks)
+    {
+        IrProcedure body = Body($"""
+            proc "T::M" (%a: bv32) -> bv32 entry B0
+            {blocks}
+            """);
+
+        LoweringCensus census = LoweringCensus.Compute([(body, Body(Clean), false, null), (Body(Clean), body, false, null), (Body(Clean), Body(Clean), false, null)], removed: 0, added: 0);
 
         Assert.Equal(0, census.PairsWholeBodyOpaque);
-        Assert.Equal(0, census.PairsWithoutOpaque);
+        Assert.Equal(0, census.Changed.WholeBodyOpaque);
+        Assert.Equal(1, census.PairsWithoutOpaque);
     }
 
     [Fact]
@@ -127,7 +174,7 @@ public sealed class LoweringCensusTests
         IrProcedure wholeBody = Body("""
             proc "T::M" (%a: bv32) -> bv32 entry B0
             B0:
-              %$0: bv32 = opaque "lock" at "f.cs" 1:1-9:2
+              %$0: bv32 = opaque body "lock" at "f.cs" 1:1-9:2
               ret %$0
             """);
 

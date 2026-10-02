@@ -35,6 +35,24 @@ public sealed class IlFallbackSampleTests
     }
 
     /// <summary>
+    /// ADR 0042 (ticket P2-069): a rebound call is the same opaque when a pair is read from IL, so under <c>--il-fallback</c>
+    /// <c>samples/dependency-rebinding</c> keeps its verdicts: <c>Has</c> keeps its IOperation bodies and stays
+    /// Unknown, and <c>Clear</c> stays Divergent.
+    /// </summary>
+    [Fact]
+    public void AReboundCallStaysUnknownUnderTheFlag()
+    {
+        (string json, _) = Compare("dependency-rebinding", ilFallback: true);
+
+        SarifLog log = SarifLog.Load(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json)));
+        Result has = log.Runs[0].Results.Single(static r => r.Message.Text.Contains("::Has(", StringComparison.Ordinal));
+        Result clear = log.Runs[0].Results.Single(static r => r.Message.Text.Contains("::Clear(", StringComparison.Ordinal));
+        Assert.Equal(("EQ003", "operation"), (has.RuleId, has.GetProperty<string>("lowering")));
+        Assert.Single(has.GetProperty<List<Dictionary<string, string>>>("reboundCalls"));
+        Assert.Equal("EQ002", clear.RuleId);
+    }
+
+    /// <summary>
     /// <c>samples/business-layer/expected.sarif.json</c> is the run before this ticket, which it does not change; the stdout
     /// snapshot is that run's one line.
     /// </summary>

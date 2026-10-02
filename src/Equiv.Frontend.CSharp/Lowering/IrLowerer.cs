@@ -90,14 +90,16 @@ internal sealed class IrLowerer
     /// As the overload without them, applying <paramref name="equivalences"/> (the legacy side's enabled catalogue
     /// entries, or none for the modern side), and returning the sorted ids of the entries that fired. On a side whose
     /// floating point alone runs on x87 (<see cref="SideRuntime.X87"/>), every pure function that takes or yields floating
-    /// point is runtime-sensitive (ADR 0025; ticket M4-002).
+    /// point is runtime-sensitive (ADR 0025; ticket M4-002). Every call it lowers at a syntax node is recorded
+    /// in <paramref name="sites"/>, and each call to an identity <paramref name="sites"/> holds as rebound is an opaque (ADR
+    /// 0042; ticket P2-069).
     /// </summary>
     public static (IrProcedure Body, ImmutableArray<string> EquivalencesApplied) Lower(
-        IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime)
+        IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime, CallSites? sites = null)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
-        Catalogue entries = new(equivalences, runtime);
+        Catalogue entries = new(equivalences, runtime) { Sites = sites ?? new CallSites() };
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
@@ -516,19 +518,23 @@ internal sealed class IrLowerer
     /// block (ticket P2-010); <c>if (c) return; throw;</c> is one block whose conditional successor is the rethrow
     /// (ticket P2-034). Either way the rethrow gets a block of its own and is opaque as it is anywhere else. A <c>when</c>
     /// filter's last block falls through, when the filter is false, to its copy's structured-exception-handling exit
-    /// (ticket M4-008).
+    /// (ticket M4-008). A condition that is a compile-time constant is a jump along its live edge: Roslyn follows only
+    /// that edge when it marks blocks reachable, so the block the other edge names may never have been lowered, and a
+    /// branch to it would name a block with no terminator (ticket P2-090).
     /// </summary>
     private void Branch(BasicBlock block, ControlFlowBranch conditional, ControlFlowBranch fallThrough, LoweringContext context)
     {
-        IrVar condition = Value(block.BranchValue!, context);
+        bool? constant = block.BranchValue!.ConstantValue is { HasValue: true, Value: bool known } ? known : null;
+        IrVar? condition = constant is null ? Value(block.BranchValue, context) : null;
         IrBlockId? jumpRethrow = RethrowBlock(conditional, declined: null);
         IrBlockId jump = jumpRethrow ?? exceptions.Destination(conditional, context);
         IrBlockId? declined = fallThrough.Semantics == ControlFlowBranchSemantics.StructuredExceptionHandling ? context.HandlerExit : null;
         IrBlockId? rethrow = RethrowBlock(fallThrough, declined);
         IrBlockId next = rethrow ?? declined ?? exceptions.Destination(fallThrough, context);
-        ssa.Terminate(context.Current, block.ConditionKind == ControlFlowConditionKind.WhenTrue
-            ? new IrBranch(condition, jump, next)
-            : new IrBranch(condition, next, jump));
+        bool whenTrue = block.ConditionKind == ControlFlowConditionKind.WhenTrue;
+        (IrBlockId then, IrBlockId otherwise) = whenTrue ? (jump, next) : (next, jump);
+        IrBlockId live = constant == whenTrue ? jump : next; // read only when the condition is constant
+        ssa.Terminate(context.Current, condition is null ? new IrGoto(live) : new IrBranch(condition, then, otherwise));
         foreach (IrBlockId opaque in ((IrBlockId?[])[jumpRethrow, rethrow]).OfType<IrBlockId>())
         {
             context.Current = opaque;
@@ -819,9 +825,52 @@ internal sealed class IrLowerer
             case IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance } when !receiver.IsValueType:
                 // Of the containing type even where the reference is typed as the base, as in a `base(...)` initializer.
                 return heap.Inputs.This(receiver);
+            case IInterpolatedStringOperation interpolated when InterpolatedStrings.IsConcatenation(interpolated):
+                return Interpolate(interpolated, context);
             default:
                 return Opaque(operation, operation.Kind.ToString(), context);
         }
+    }
+
+    /// <summary>
+    /// An interpolated string that is the concatenation of its parts under both bindings (ticket P2-086;
+    /// <see cref="InterpolatedStrings"/>), lowered as the <c>+</c> chain of those parts is, so the same text is the same body
+    /// on .NET Framework and on .NET 10: each part in order joined to the ones before it by <see cref="Concat"/>, a text
+    /// part its constant, a <c>string</c> hole its value, and an integer hole its type's closed <c>ToString()</c> call. A
+    /// lone hole is joined to the empty string, since <c>$"{s}"</c> is never null.
+    /// </summary>
+    private IrVar Interpolate(IInterpolatedStringOperation interpolated, LoweringContext context)
+    {
+        ImmutableArray<IInterpolatedStringContentOperation> parts = interpolated.Parts;
+        IrVar text = parts.Length > 1 ? Part(parts[0], interpolated.Type!, context) : Constant(interpolated.Type!, string.Empty, context);
+        foreach (IInterpolatedStringContentOperation part in parts.Length > 1 ? parts[1..] : parts)
+        {
+            text = Concat(text, Part(part, interpolated.Type!, context), interpolated, context);
+        }
+
+        return text;
+    }
+
+    /// <summary>
+    /// One part of an interpolated string as a value of <paramref name="type"/>, which is <c>string</c>: its text, or its
+    /// hole's value, an integer's through the <c>ToString()</c> call a written <c>i.ToString()</c> lowers to.
+    /// </summary>
+    private IrVar Part(IInterpolatedStringContentOperation part, ITypeSymbol type, LoweringContext context)
+    {
+        if (part is IInterpolatedStringTextOperation text)
+        {
+            return Value(text.Text, context);
+        }
+
+        IOperation hole = ((IInterpolationOperation)part).Expression;
+        IrVar value = Value(hole, context);
+        if (!InterpolatedStrings.IsInteger(hole))
+        {
+            return value;
+        }
+
+        IMethodSymbol toString = hole.Type!.GetMembers(nameof(ToString)).OfType<IMethodSymbol>().Single(static m => m.Parameters.IsEmpty);
+        return Call(Called(toString, part), [value], Map(type), [], context)!;
     }
 
     /// <summary>
@@ -1416,17 +1465,16 @@ internal sealed class IrLowerer
 
         if (binary is { OperatorKind: BinaryOperatorKind.Add, LeftOperand.Type.SpecialType: SpecialType.System_String, RightOperand.Type.SpecialType: SpecialType.System_String })
         {
-            // Strings stay uninterpreted, so `a + b` is the call the compiler makes, which is closed (ADR 0041).
-            return Call(
-                new CallIdentity(ProcedureIdentityNormalizer.Member("System", "String", "Concat", 0, ["string", "string"], renames).Value),
-                [Value(binary.LeftOperand, context), Value(binary.RightOperand, context)],
-                Map(binary.Type!),
-                [],
-                closed: true,
-                context);
+            return Concat(Value(binary.LeftOperand, context), Value(binary.RightOperand, context), binary, context);
         }
 
-        if (!binary.IsLifted && PureCatalogue.Binary(binary.OperatorKind, binary.LeftOperand.Type!, binary.RightOperand.Type!) is { } entry)
+        if (binary.LeftOperand.Type is not { } leftType || binary.RightOperand.Type is not { } rightType)
+        {
+            // `x == null` on a nullable value type: the `null` literal has no type, and Roslyn does not report the operator as lifted (ticket P2-083).
+            return Opaque(binary, binary.Kind.ToString(), context);
+        }
+
+        if (!binary.IsLifted && PureCatalogue.Binary(binary.OperatorKind, leftType, rightType) is { } entry)
         {
             return Apply(entry, binary.IsChecked, [Value(binary.LeftOperand, context), Value(binary.RightOperand, context)], Map(binary.Type!), context);
         }
@@ -1436,7 +1484,7 @@ internal sealed class IrLowerer
             return UserDefined(binary, method, [binary.LeftOperand, binary.RightOperand], context);
         }
 
-        bool signed = TypeMapper.IsSigned(binary.LeftOperand.Type!);
+        bool signed = TypeMapper.IsSigned(leftType);
         IrVar left = Value(binary.LeftOperand, context);
         IrVar right = Value(binary.RightOperand, context);
         return OperatorMapper.Binary(binary.OperatorKind, signed, left.Type, right.Type) switch
@@ -1446,6 +1494,18 @@ internal sealed class IrLowerer
             { } op => Arithmetic(op, left, right, signed, binary.IsChecked, Map(binary.Type!), context),
         };
     }
+
+    /// <summary>
+    /// Strings stay uninterpreted, so <c>a + b</c> is the call the compiler makes, which is closed (ADR 0041), lowered for
+    /// <paramref name="site"/>, a <c>string</c>-typed <c>+</c> or interpolated string.
+    /// </summary>
+    private IrVar Concat(IrVar left, IrVar right, IOperation site, LoweringContext context) =>
+        Call(
+            new Callee(new CallIdentity(ProcedureIdentityNormalizer.Member("System", "String", "Concat", 0, ["string", "string"], renames).Value), Closed: true, site, nameof(string.Concat)),
+            [left, right],
+            Map(site.Type!),
+            [],
+            context)!;
 
     /// <summary>
     /// The operator method of <c>string == string</c> or <c>string != string</c>, which Roslyn binds as a predefined operator
@@ -1771,7 +1831,7 @@ internal sealed class IrLowerer
     /// </summary>
     private IrVar? Create(IObjectCreationOperation creation, LoweringContext context) =>
         RefOuts(creation.Arguments) is { } written
-            ? Call(Identity(creation.Constructor!), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, ClosedCalls.IsClosed(creation.Constructor!), context)
+            ? Call(Called(creation.Constructor!, creation), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, context)
             : Opaque(creation, "ref-argument", context);
 
     /// <summary>
@@ -1828,10 +1888,11 @@ internal sealed class IrLowerer
         if (written.IsEmpty && catalogue.Members.TryGetValue(callee.Value, out ApiEquivalence? entry) && Adapt(entry, invocation, context) is { } adapted)
         {
             catalogue.Applied.Add(entry.Id);
-            return Call(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), adapted, returns, [], closed: false, context);
+            return Call(new Callee(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), Closed: false, invocation, invocation.TargetMethod.Name), adapted, returns, [], context);
         }
 
-        return Dispatch(invocation.Instance, callee, Operands(invocation.Instance, invocation.Arguments, context), returns, written, ClosedCalls.IsClosed(invocation.TargetMethod), context);
+        Callee called = new(callee, ClosedCalls.IsClosed(invocation.TargetMethod), invocation, invocation.TargetMethod.Name);
+        return Dispatch(invocation.Instance, called, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
     }
 
     /// <summary>
@@ -1887,7 +1948,7 @@ internal sealed class IrLowerer
         }
 
         IrType? result = awaited.Type!.SpecialType == SpecialType.System_Void ? null : Map(awaited.Type);
-        return Call(CallIdentityFactory.Await(awaiter, renames, suppressedRuntimeChanges, runtime.Interval), [awaitable], result, [], closed: false, context);
+        return Call(new Callee(CallIdentityFactory.Await(awaiter, renames, suppressedRuntimeChanges, runtime.Interval), Closed: false, awaited, "await"), [awaitable], result, [], context);
     }
 
     /// <summary>
@@ -2011,7 +2072,7 @@ internal sealed class IrLowerer
         }
 
         IrType? returns = value is null ? Map(property.Type!) : null;
-        return Dispatch(property.Instance, Identity(accessor), value is null ? operands : [.. operands, value], returns, [], ClosedCalls.IsClosed(accessor), context);
+        return Dispatch(property.Instance, Called(accessor, property), value is null ? operands : [.. operands, value], returns, [], context);
     }
 
     /// <summary>A property read or an event's <c>+=</c> or <c>-=</c>: each is, unless the property's is a field, a call to an accessor.</summary>
@@ -2027,13 +2088,16 @@ internal sealed class IrLowerer
         IEventReferenceOperation reference = (IEventReferenceOperation)assignment.EventReference;
         IMethodSymbol accessor = (assignment.Adds ? reference.Event.AddMethod : reference.Event.RemoveMethod)!;
         ImmutableArray<IrVar> operands = Operands(reference.Instance, [], context);
-        return Dispatch(reference.Instance, Identity(accessor), [.. operands, Value(assignment.HandlerValue, context)], returns: null, [], ClosedCalls.IsClosed(accessor), context);
+        return Dispatch(reference.Instance, Called(accessor, assignment), [.. operands, Value(assignment.HandlerValue, context)], returns: null, [], context);
     }
 
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
     private static IMethodSymbol? Setter(IPropertySymbol property) => property.SetMethod is { IsInitOnly: false } setter ? setter : null;
 
     private CallIdentity Identity(IMethodSymbol method) => CallIdentityFactory.Of(method, compilation, renames, suppressedRuntimeChanges, runtime.Interval);
+
+    /// <summary>A call to <paramref name="method"/> lowered at <paramref name="site"/>.</summary>
+    private Callee Called(IMethodSymbol method, IOperation site) => new(Identity(method), ClosedCalls.IsClosed(method), site, method.Name);
 
     /// <summary>
     /// A member access's call operands: the receiver, then the arguments. The receiver is null-checked at the call, by
@@ -2047,14 +2111,14 @@ internal sealed class IrLowerer
     /// <c>callvirt</c>, it null-checks a receiver of a reference type at the call, after every argument, a setter's value
     /// included (ticket P2-017).
     /// </summary>
-    private IrVar? Dispatch(IOperation? receiver, CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, bool closed, LoweringContext context)
+    private IrVar? Dispatch(IOperation? receiver, Callee callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, LoweringContext context)
     {
         if (receiver is not null && !receiver.Type!.IsValueType)
         {
             ThrowIfNull(receiver, args[0], context);
         }
 
-        return Call(callee, args, returns, written, closed, context);
+        return Call(callee, args, returns, written, context);
     }
 
     /// <summary>
@@ -2075,14 +2139,31 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// A call's result, <c>threw</c> flag and <c>ref</c>/<c>out</c> outputs, each output stored to its variable before the call
-    /// can throw. A <paramref name="closed"/> call reaches no heap map (ADR 0041), so it gets no heap pairs.
+    /// can throw. A closed call reaches no heap map (ADR 0041), so it gets no heap pairs. The call is recorded as a call
+    /// site. When the other side binds that site to another callee, the call is rebound (ADR 0042; ticket P2-069): its
+    /// result and each output are an opaque with reason <see cref="ReboundCall.OpaqueReason"/> at the site, which no fragment
+    /// shares, and it has no <c>threw</c> edge, since an input that reaches it has an unknown outcome.
     /// </summary>
-    private IrVar? Call(CallIdentity callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, bool closed, LoweringContext context)
+    private IrVar? Call(Callee callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, LoweringContext context)
     {
+        catalogue.Sites.Add(callee.Site.Syntax, callee.Member, callee.Identity);
         IrVar? target = returns is null ? null : ssa.Temp(returns);
-        IrVar threw = ssa.Temp(Bool);
+        IrVar? threw = catalogue.Sites.IsRebound(callee.Identity) ? null : ssa.Temp(Bool);
         ImmutableArray<IrVar> outputs = [.. written.Select(w => ssa.Temp(w.Type))];
-        ssa.Emit(context.Current, new IrCall(target, threw, callee, args) { RefOuts = outputs, Closed = closed });
+        if (threw is null)
+        {
+            SourceSpan span = Span(callee.Site.Syntax);
+            ssa.Emit(context.Current, new IrOpaque(target, ReboundCall.OpaqueReason, span));
+            foreach (IrVar output in outputs)
+            {
+                ssa.Emit(context.Current, new IrOpaque(output, ReboundCall.OpaqueReason, span));
+            }
+        }
+        else
+        {
+            ssa.Emit(context.Current, new IrCall(target, threw, callee.Identity, args) { RefOuts = outputs, Closed = callee.Closed });
+        }
+
         foreach ((RefOut output, IrVar value) in written.Zip(outputs))
         {
             if (output.Variable is { } variable)
@@ -2091,12 +2172,22 @@ internal sealed class IrLowerer
             }
         }
 
-        ThrowIf(threw, "System.Exception", context, known: false);
+        if (threw is not null)
+        {
+            ThrowIf(threw, "System.Exception", context, known: false);
+        }
+
         return target;
     }
 
     /// <summary>The operation <see cref="Update"/> rewrites, the lvalue it reads and writes, and how: checked, and whether it yields the value read.</summary>
     private sealed record UpdateSite(IOperation Node, IOperation Target, bool IsChecked, bool IsPostfix);
+
+    /// <summary>
+    /// What a call calls and where: the callee's identity, whether the call is closed (ADR 0041), and its call site, the
+    /// operation it is lowered for and the member's name (ADR 0042).
+    /// </summary>
+    private sealed record Callee(CallIdentity Identity, bool Closed, IOperation Site, string Member);
 
     /// <summary>What a call's <c>ref</c> or <c>out</c> output is stored to, null for a discard, and its type (ticket M4-003).</summary>
     private sealed record RefOut(SsaBuilder.Variable? Variable, IrType Type);
@@ -2116,7 +2207,8 @@ internal sealed class IrLowerer
     /// <summary>
     /// The API-equivalence entries one body is lowered with (ADR 0020; ticket M3-009): member entries by legacy identity,
     /// type entries as <see cref="Sorts"/>, and the ids of the entries that fired, sorted. It also carries the side's
-    /// <see cref="SideRuntime"/>, which, like the entries, is fixed for the body (ADR 0040; ticket P2-055).
+    /// <see cref="SideRuntime"/>, which, like the entries, is fixed for the body (ADR 0040; ticket P2-055), and the body's
+    /// call sites (ADR 0042).
     /// </summary>
     private sealed class Catalogue
     {
@@ -2138,6 +2230,9 @@ internal sealed class IrLowerer
 
         /// <summary>The pair's runtime interval and whether this side's floating point alone runs on x87 (tickets M4-002, P2-055).</summary>
         public SideRuntime Runtime { get; }
+
+        /// <summary>The calls the body lowers, and the identities whose calls it lowers as opaque (ADR 0042; ticket P2-069).</summary>
+        public CallSites Sites { get; init; } = new();
 
         public SortedSet<string> Applied { get; } = new(StringComparer.Ordinal);
 

@@ -550,6 +550,19 @@ public sealed class IrLowererTests
         Assert.Equal(new IrReturned(new IrBoolValue(expected)), Run(procedure, Reference(0), Nulls("System.String", 0, isNull)));
     }
 
+    /// <summary>
+    /// Ticket P2-083: a nullable value compared with <c>null</c> in a branch condition (found by the P2-065 runs on
+    /// `eshop-manual`, `openra-17989` and `duplicati-3124`). The <c>null</c> literal has no type and the operator is not
+    /// reported as lifted, so it lowered to a bare NullReferenceException; now it is opaque as a lifted operator is.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(int? x) { if (x == null) return 0; return 1; }")]
+    [InlineData("static int M(int? x, bool b) { if (b && null != x) return 0; return 1; }")]
+    [InlineData("enum E { A } static int M(E? x) { if (x == null) return 0; return 1; }")]
+    [InlineData("static int M(string s) { if (s?.Length != null) return 0; return 1; }")]
+    public void AComparisonOfANullableValueWithNullStaysOpaque(string members) =>
+        Assert.Contains(Opaques(Method(members)), static o => o.Reason is "Binary");
+
     [Theory]
     [InlineData(true, true)]
     [InlineData(false, false)]
@@ -1391,6 +1404,48 @@ public sealed class IrLowererTests
         Assert.Empty(Opaques(procedure));
         Assert.Single(Calls(procedure)); // one copy of the finally
         Assert.Equal(new IrThrew("System.InvalidOperationException"), Run(procedure, Bits(32, k)));
+    }
+
+    /// <summary>
+    /// A branch on a compile-time constant keeps both edges in Roslyn's CFG, and the block only the dead edge leads to is
+    /// unreachable, so it is never lowered (ticket P2-090, seen while probing for P2-083). The branch named it all the
+    /// same, which left a block with no terminator that the validator threw a bare NullReferenceException on; now only
+    /// the live edge is lowered, as a jump. The last two shapes are a chain of tests on a constant, which folds into no switch.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(int k) { if (null == null) return 0; return 1; }", 0)]
+    [InlineData("static int M(int k) { if (1 == 2) return 0; return 1; }", 1)]
+    [InlineData("static int M(int k) { if (true) return 4; return 1; }", 4)]
+    [InlineData("const bool Debug = true; static int M(int k) { if (Debug) { k = 5; } else { k = 6; } return k; }", 5)]
+    [InlineData("const bool Debug = false; static int M(int k) { if (!Debug) return 4; return k; }", 4)]
+    [InlineData("const bool Debug = true; static int M(int k) { do { k++; } while (!Debug); return k; }", 4)]
+    [InlineData("const bool Debug = true; static int M(int k) { return Debug ? 2 : k; }", 2)]
+    [InlineData("const bool Debug = true; static int M(int k) { try { if (Debug) return 3; } finally { k = 0; } return k; }", 3)]
+    [InlineData("static int M(int k) { const int c = 1; if (c == 1) return 7; if (c == 2) return 8; return 9; }", 7)]
+    [InlineData("static int M(int k) { const int c = 2; if (c == 1) return 7; if (c == 2) return 8; return 9; }", 8)]
+    public void ABranchOnAConstantLowersOnlyItsLiveEdge(string members, int expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.DoesNotContain(procedure.Blocks, static b => b.Terminator is IrBranch or IrSwitch);
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, 3)));
+    }
+
+    /// <summary>
+    /// The dead edge of a branch on a constant can be a rethrow, or a `when` filter's false exit (ticket P2-090): the
+    /// rethrow is never reached, so nothing is opaque, and the filter always takes its handler.
+    /// </summary>
+    [Theory]
+    [InlineData("const bool Debug = true; static int M(int k) { try { return 6 / k; } catch (DivideByZeroException) { if (Debug) return 7; throw; } }", 3, 2)]
+    [InlineData("const bool Debug = true; static int M(int k) { try { return 6 / k; } catch (DivideByZeroException) { if (Debug) return 7; throw; } }", 0, 7)]
+    [InlineData("const bool Debug = true; static int M(int k) { try { return 6 / k; } catch (DivideByZeroException) when (Debug) { return 7; } }", 0, 7)]
+    public void ADeadEdgeThatLeavesACatchIsNotLowered(string members, int k, int expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(Bits(32, expected)), Run(procedure, Bits(32, k)));
     }
 
     /// <summary>

@@ -1,0 +1,375 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.DependencyRebinding.Probe::Has(Equiv.Samples.DependencyRebinding.Files.IFs,string) is unknown (Opaque): old: rebound-call; new: rebound-call. It is equivalent on every input that reaches none of the related locations."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/App/Probe.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 53,
+                  "endLine": 7,
+                  "endColumn": 70
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.DependencyRebinding.Probe::Has(Equiv.Samples.DependencyRebinding.Files.IFs,string)",
+            "resultFingerprint/v1": "9e698d084a3985594c086254581b4bfb26964ca1df35956cbd2169ac024f0c30"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/App/Probe.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 53,
+                  "endLine": 7,
+                  "endColumn": 70
+                }
+              },
+              "message": {
+                "text": "rebound-call"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/App/Probe.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 53,
+                  "endLine": 7,
+                  "endColumn": 70
+                }
+              },
+              "message": {
+                "text": "rebound-call"
+              }
+            }
+          ],
+          "baselineState": "new",
+          "rank": 20.002,
+          "properties": {
+            "unknownReason": "opaque",
+            "scope": "line",
+            "residualClaim": "equivalent unless a relatedLocation is reached",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "an input reaches an opaque node: old: rebound-call; new: rebound-call"
+              }
+            ],
+            "reboundCalls": [
+              {
+                "legacy": "Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)",
+                "modern": "Equiv.Samples.DependencyRebinding.Files.IFile::Exists(string)"
+              }
+            ],
+            "reviewGroup": "opaque:rebound-call"
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.DependencyRebinding.Probe::Clear(Equiv.Samples.DependencyRebinding.Files.IFs,string) diverges: inputs(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0, sort \"System.String\" 0, map<sort \"Equiv.Samples.DependencyRebinding.Files.FileBase\", bool> [] default bool true, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFs\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFile\", bool> [] default bool false) old(threw \"System.NullReferenceException\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0))) new(threw \"System.Exception\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0), \"Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFile\" 0, sort \"System.String\" 0)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/App/Probe.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 28,
+                  "endLine": 9,
+                  "endColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.DependencyRebinding.Probe::Clear(Equiv.Samples.DependencyRebinding.Files.IFs,string)",
+            "resultFingerprint/v1": "bd7037aba4fb09f04a01dd3abf33030d5307401d7af1679e75bd84d25a488fd5"
+          },
+          "baselineState": "new",
+          "rank": 60.002,
+          "properties": {
+            "model": "inputs(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0, sort \"System.String\" 0, map<sort \"Equiv.Samples.DependencyRebinding.Files.FileBase\", bool> [] default bool true, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFs\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFile\", bool> [] default bool false) old(threw \"System.NullReferenceException\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0))) new(threw \"System.Exception\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0), \"Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFile\" 0, sort \"System.String\" 0)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "reviewGroup": "calls:Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.DependencyRebinding.Files.NoFiles::Exists(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Files/Files.cs"
+                },
+                "region": {
+                  "startLine": 17,
+                  "startColumn": 30,
+                  "endLine": 17,
+                  "endColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.DependencyRebinding.Files.NoFiles::Exists(string)",
+            "resultFingerprint/v1": "3f5db904bb8dd5010a707cf167be78127b8d87f5c479e072c4b33507a8e470d4"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.DependencyRebinding.Files.NoFiles::Delete(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Files/Files.cs"
+                },
+                "region": {
+                  "startLine": 19,
+                  "startColumn": 30,
+                  "endLine": 19,
+                  "endColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.DependencyRebinding.Files.NoFiles::Delete(string)",
+            "resultFingerprint/v1": "36bace5156af6e7005bf46ab83a0ce6b12df2eae90a765d383c778fb41bb5699"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 4,
+            "modern": 4
+          },
+          "matchedPairs": 4,
+          "pairsWithoutOpaque": 3,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 2,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {
+            "rebound-call": {
+              "legacy": 1,
+              "modern": 1
+            }
+          },
+          "changedPairs": 2,
+          "changedPairsWithoutOpaque": 1,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 1,
+            "rebound-call": 1
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [],
+            "modern": []
+          },
+          "unknownByScope": {
+            "line": 1,
+            "method": 0
+          },
+          "failureRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 46,
+          "modern": 50
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.DependencyRebinding",
+              "runtime": "net48",
+              "source": "attribute"
+            },
+            {
+              "project": "Equiv.Samples.DependencyRebinding.Files",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.DependencyRebinding",
+              "runtime": "net10.0",
+              "source": "attribute"
+            },
+            {
+              "project": "Equiv.Samples.DependencyRebinding.Files",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "reviewList": [
+          {
+            "group": "calls:Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.DependencyRebinding.Probe::Clear(Equiv.Samples.DependencyRebinding.Files.IFs,string)"
+            ]
+          },
+          {
+            "group": "opaque:rebound-call",
+            "ruleId": "EQ003",
+            "rank": 20.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.DependencyRebinding.Probe::Has(Equiv.Samples.DependencyRebinding.Files.IFs,string)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

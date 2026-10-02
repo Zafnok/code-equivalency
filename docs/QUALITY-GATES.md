@@ -24,7 +24,7 @@ are pinned in `Directory.Packages.props` (Central Package Management) and listed
 | Security | GitHub CodeQL (C#), `dotnet list package --vulnerable --include-transitive` fails on any | | yes |
 | Dependency licence | `tools/licence-check` (M0-010), wraps the `nuget-license` local tool | every package in every `packages.lock.json`, `.config/dotnet-tools.json` and samples/ direct reference must resolve to a licence on `tools/licence-check/policy.json`'s allowlist or a reasoned exception in it (ADR 0017); also regenerates `THIRD-PARTY-NOTICES.md` and fails if that changes the tracked file | yes |
 | Secrets | gitleaks action | | yes |
-| Supply chain | Dependabot weekly, NuGet lock files (`RestorePackagesWithLockFile`), `--locked-mode` in CI | | yes |
+| Supply chain | Dependabot weekly, NuGet lock files (`RestorePackagesWithLockFile`), `--locked-mode` in CI. `dependabot-fixup.yml` completes each Dependabot NuGet PR (see "Dependabot NuGet PRs" below) | | yes |
 | Versioning | MinVer from git tags | | n/a |
 | Packaging | `dotnet publish` single-file for win-x64 + linux-x64, Docker multi-stage image (`equiv:<version>`), GitHub Action wrapper `action.yml` (M3-004). `rolling-release.yml` tags every green `main` commit (patch unless a `Release:` footer says otherwise; `.claude/skills/equiv-release`) and `release.yml` builds and publishes all three for that tag; `parity-run.ps1` (M3-029) exercises the published binaries, not `dotnet run`, so the loop-free build gate and the release artifact are the same code path | M3 | yes from M3 |
 
@@ -51,6 +51,22 @@ the nightly sweep never reuses one. Separately, a PR's `stryker` leg for a proje
 incremental run would have no mutants (see the Mutation row). `vulnerable-packages`,
 `gitleaks`, CodeQL and Sonar always run. If a test starts reading a file under an excluded
 path, add it to the script's keep list in the same PR.
+
+## Dependabot NuGet PRs
+
+Dependabot cannot fill the `Microsoft.Z3` feed (ADR 0030), so it leaves the lock files of
+`Equiv.Verify.Z3` and every project that references it, and `THIRD-PARTY-NOTICES.md`, stale.
+`dependabot-fixup.yml` runs on each of its NuGet PRs: a read-only Windows job fills the feed,
+restores, restores `samples/` (the same commands as `build.ps1 -Integration`) and runs `tools/licence-check --fix`;
+a second job applies the resulting patch, refuses it if it touches anything but
+`packages.lock.json` files and the notices, and pushes it as one `[dependabot skip]` commit, so
+Dependabot can still rebase the PR. A push made with `GITHUB_TOKEN` starts no `pull_request`
+run, so that job then dispatches `ci.yml` and `mutation.yml` on the branch
+(`workflow_dispatch`); their check runs land on the new head commit under the same required
+check names. Those runs test the branch head, not the merge with `main`, and a dispatched
+`mutation.yml` run is incremental against the branch's merge base. The failed checks on
+Dependabot's own commit are expected and superseded. A bump that brings in a package whose
+licence is not on the allowlist fails the fix-up and needs a person.
 
 ## Required checks (M0-004)
 

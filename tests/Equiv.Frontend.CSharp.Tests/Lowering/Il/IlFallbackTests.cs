@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
@@ -24,8 +26,8 @@ public sealed class IlFallbackTests
 
     private static readonly string[] Sides = ["legacy", "modern"];
 
-    private static readonly Func<IMethodSymbol, Compilation, SideRuntime, IrProcedure> Never =
-        static (_, _, _) => throw new InvalidOperationException("the pair must not be lowered again");
+    private static readonly Func<IMethodSymbol, Compilation, SideRuntime, ImmutableHashSet<string>, IrProcedure> Never =
+        static (_, _, _, _) => throw new InvalidOperationException("the pair must not be lowered again");
 
     [Fact]
     public void ACongruentPairIsNeverRelowered()
@@ -54,7 +56,7 @@ public sealed class IlFallbackTests
         (IlFallback.Side legacy, IlFallback.Side modern) = Pair(Legacy, Modern);
         List<(Compilation Compilation, SideRuntime Runtime)> read = [];
 
-        IlFallback.Choice choice = IlFallback.Choose(legacy, modern, congruent: false, NullRunLog.Instance, (method, compilation, runtime) =>
+        IlFallback.Choice choice = IlFallback.Choose(legacy, modern, congruent: false, NullRunLog.Instance, (method, compilation, runtime, _) =>
         {
             read.Add((compilation, runtime));
             return IlLowerer.Lower(method, compilation, runtime);
@@ -79,7 +81,7 @@ public sealed class IlFallbackTests
         legacy = legacy with { Runtime = Runtimes.Between("net48", "net10.0", x87: true) };
         List<SideRuntime> runtimes = [];
 
-        _ = IlFallback.Choose(legacy, modern, congruent: false, NullRunLog.Instance, (method, compilation, runtime) =>
+        _ = IlFallback.Choose(legacy, modern, congruent: false, NullRunLog.Instance, (method, compilation, runtime, _) =>
         {
             runtimes.Add(runtime);
             return IlLowerer.Lower(method, compilation, runtime);
@@ -94,8 +96,8 @@ public sealed class IlFallbackTests
     public void IlIsKeptOnlyWithFewerUnsharedOpaques()
     {
         (IlFallback.Side legacy, IlFallback.Side modern) = Pair(Legacy, Modern);
-        IrProcedure Same(IMethodSymbol method, Compilation compilation, SideRuntime runtime) => ReferenceEquals(compilation, legacy.Compilation) ? legacy.Body : modern.Body;
-        IrProcedure Fewer(IMethodSymbol method, Compilation compilation, SideRuntime runtime) => IlLowerer.Lower(method, compilation, runtime);
+        IrProcedure Same(IMethodSymbol method, Compilation compilation, SideRuntime runtime, ImmutableHashSet<string> rebound) => ReferenceEquals(compilation, legacy.Compilation) ? legacy.Body : modern.Body;
+        IrProcedure Fewer(IMethodSymbol method, Compilation compilation, SideRuntime runtime, ImmutableHashSet<string> rebound) => IlLowerer.Lower(method, compilation, runtime);
 
         IlFallback.Choice same = IlFallback.Choose(legacy, modern, congruent: false, NullRunLog.Instance, Same);
         IlFallback.Choice fewer = IlFallback.Choose(legacy, modern, congruent: false, NullRunLog.Instance, Fewer);
@@ -113,7 +115,7 @@ public sealed class IlFallbackTests
         Compilation unreadable = legacyUnreadable ? legacy.Compilation : modern.Compilation;
         RecordingRunLog log = new(isDebug: true);
 
-        IlFallback.Choice choice = IlFallback.Choose(legacy, modern, congruent: false, log, (method, compilation, runtime) =>
+        IlFallback.Choice choice = IlFallback.Choose(legacy, modern, congruent: false, log, (method, compilation, runtime, _) =>
             ReferenceEquals(compilation, unreadable)
                 ? IrLowerer.Opaque(IlLowerer.Lower(method, compilation, runtime), IlAstReader.EmitFailed, Span)
                 : IlLowerer.Lower(method, compilation, runtime));
@@ -130,7 +132,7 @@ public sealed class IlFallbackTests
     public void EveryReadFailureIsUnreadable(string reason)
     {
         (IlFallback.Side legacy, IlFallback.Side modern) = Pair(Legacy, Modern);
-        IrProcedure Failed(IMethodSymbol method, Compilation compilation, SideRuntime runtime) =>
+        IrProcedure Failed(IMethodSymbol method, Compilation compilation, SideRuntime runtime, ImmutableHashSet<string> rebound) =>
             IrLowerer.Opaque(IlLowerer.Lower(method, compilation, runtime), reason, Span);
 
         IlFallback.Choice choice = IlFallback.Choose(legacy, modern, congruent: false, NullRunLog.Instance, Failed);
@@ -144,7 +146,7 @@ public sealed class IlFallbackTests
     {
         (IlFallback.Side legacy, IlFallback.Side modern) = Pair(Legacy, "static int? Add(int? a, int b) => (a + b) + (a - b) + (a * b);");
         Assert.True(IlFallback.Unshared(legacy.Body, modern.Body) > 1);
-        IrProcedure Lowered(IMethodSymbol method, Compilation compilation, SideRuntime runtime) => ReferenceEquals(compilation, legacy.Compilation)
+        IrProcedure Lowered(IMethodSymbol method, Compilation compilation, SideRuntime runtime, ImmutableHashSet<string> rebound) => ReferenceEquals(compilation, legacy.Compilation)
             ? IlLowerer.Lower(method, compilation, runtime)
             : IrLowerer.Opaque(modern.Body, "UnboxAny", Span);
 
@@ -177,7 +179,7 @@ public sealed class IlFallbackTests
         (IlFallback.Side legacy, IlFallback.Side modern) = Pair(Legacy, Modern);
         RecordingRunLog log = new();
 
-        _ = IlFallback.Choose(legacy, modern, congruent: false, log, (method, compilation, runtime) =>
+        _ = IlFallback.Choose(legacy, modern, congruent: false, log, (method, compilation, runtime, _) =>
             IrLowerer.Opaque(IlLowerer.Lower(method, compilation, runtime), IlAstReader.NoBody, Span));
 
         Assert.Empty(log.Events);
@@ -213,6 +215,23 @@ public sealed class IlFallbackTests
     }
 
     /// <summary>The production overload reads the real IL: the lifted operator's pair keeps the IL bodies.</summary>
+    /// <summary>ADR 0042 (ticket P2-069): each side is read from IL with its own rebound callee identities.</summary>
+    [Fact]
+    public void EachSideIsReadWithItsReboundIdentities()
+    {
+        (IlFallback.Side legacy, IlFallback.Side modern) = Pair(Legacy, Modern);
+        List<(Compilation Compilation, string Rebound)> read = [];
+
+        _ = IlFallback.Choose(legacy with { Rebound = ["A::F()"] }, modern with { Rebound = ["B::F()"] }, congruent: false, NullRunLog.Instance, (method, compilation, x87, rebound) =>
+        {
+            read.Add((compilation, Assert.Single(rebound)));
+            return IlLowerer.Lower(method, compilation, x87, rebound);
+        });
+
+        Assert.Equal([(legacy.Compilation, "A::F()"), (modern.Compilation, "B::F()")], read);
+        Assert.Empty(Pair(Legacy, Modern).Legacy.Rebound);
+    }
+
     [Fact]
     public void TheProductionLoweringReadsTheIl()
     {

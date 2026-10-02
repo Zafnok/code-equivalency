@@ -580,7 +580,7 @@ internal static class CompareCommand
             runLog.Item(pair.New.Value, weight);
             if (decided is not null)
             {
-                results.Add(decided.Result with { Lowering = pair.Lowering, Runtimes = pair.Runtimes });
+                results.Add(decided.Result with { Lowering = pair.Lowering, Runtimes = pair.Runtimes, ReboundCalls = pair.ReboundCalls });
                 runLog.ItemDone(decided.Outcome);
                 continue;
             }
@@ -588,7 +588,7 @@ internal static class CompareCommand
             try
             {
                 Verdict verdict = backend.Verify(old, @new, options);
-                results.Add(new VerificationResult(pair.New, verdict) { EquivalencesApplied = pair.EquivalencesApplied, Lowering = pair.Lowering, Runtimes = pair.Runtimes });
+                results.Add(new VerificationResult(pair.New, verdict) { EquivalencesApplied = pair.EquivalencesApplied, Lowering = pair.Lowering, Runtimes = pair.Runtimes, ReboundCalls = pair.ReboundCalls });
                 runLog.ItemDone(verdict switch
                 {
                     Equivalent => "equivalent",

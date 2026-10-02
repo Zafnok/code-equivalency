@@ -2,9 +2,9 @@
 
 An Unknown that says whether the modern side can now throw (ADR 0037, ticket P1-013). The legacy
 `Report.Width(int count)` lowers fully and always returns. The modern `Width` first computes
-`$"{count}"`, an interpolated string the lowerer leaves opaque and the legacy side does not have, then
-adds a guard that throws `ArgumentOutOfRangeException` for a negative `count`, and returns the
-string's length.
+`$"{count:D}"`, an interpolated string the lowerer leaves opaque because its hole has a format clause
+(ticket P2-086) and the legacy side does not have, then adds a guard that throws
+`ArgumentOutOfRangeException` for a negative `count`, and returns the string's length.
 
 Every modern path reaches the unshared opaque node, so the pair is Unknown (`opaque`, scope `line`).
 The two failure-refinement queries then compare only whether each side returns or throws:

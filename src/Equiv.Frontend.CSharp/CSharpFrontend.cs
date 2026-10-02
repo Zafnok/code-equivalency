@@ -34,13 +34,15 @@ namespace Equiv.Frontend.CSharp;
 /// (ticket M4-009). Each loaded project gets its runtime (<see cref="RuntimeDetection"/>, ADR 0040; P2-053), and each pair is
 /// lowered and fingerprinted with the interval between its two projects' runtimes (<see cref="SideRuntime"/>; P2-055), which
 /// the pair carries as <see cref="ProcedurePair.Runtimes"/>. Under
-/// <c>--il-fallback</c> a pair may keep bodies lowered from IL instead (<see cref="IlFallback"/>, ADR 0039; P1-016).
+/// <c>--il-fallback</c> a pair may keep bodies lowered from IL instead (<see cref="IlFallback"/>, ADR 0039; P1-016). A pair
+/// with a call site that has the same text on both sides and binds to a different callee is lowered again with each such
+/// call an opaque, and lists the callee pairs (<see cref="CallSites"/>, ADR 0042; P2-069).
 /// </summary>
 public sealed class CSharpFrontend : ILanguageFrontend
 {
     private readonly ISolutionLoader _loader;
     private readonly IProcedureMatcher _matcher;
-    private readonly Func<IMethodSymbol, Compilation, EquivConfig, bool, SideRuntime, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> _lower;
+    private readonly Func<IMethodSymbol, Compilation, EquivConfig, bool, SideRuntime, CallSites, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> _lower;
 
     public CSharpFrontend()
         : this(CreateLoader(OperatingSystem.IsWindows()), new StableIdentityMatcher())
@@ -57,7 +59,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
     internal CSharpFrontend(
         ISolutionLoader loader,
         IProcedureMatcher matcher,
-        Func<IMethodSymbol, Compilation, EquivConfig, bool, SideRuntime, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> lower)
+        Func<IMethodSymbol, Compilation, EquivConfig, bool, SideRuntime, CallSites, (IrProcedure Body, ImmutableArray<string> EquivalencesApplied)> lower)
     {
         _loader = loader;
         _matcher = matcher;
@@ -176,8 +178,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
             log.Item(pair.New.Value, 1);
             try
             {
-                (IrProcedure oldBody, ImmutableArray<string> oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, legacyRuntime);
-                (IrProcedure newBody, ImmutableArray<string> newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, modernRuntime);
+                (IrProcedure oldBody, IrProcedure newBody, ImmutableArray<string> applied, ImmutableArray<ReboundCall> rebound) = Bodies((legacy, legacyRuntime), (modern, modernRuntime), config);
                 lowered.Add(Relowered(
                     pair with
                     {
@@ -185,7 +186,8 @@ public sealed class CSharpFrontend : ILanguageFrontend
                         NewBody = newBody,
                         OldFingerprint = BodyFingerprinter.Compute(legacy.Symbol, legacy.Compilation, config, legacy: true, legacyRuntime),
                         NewFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false, modernRuntime),
-                        EquivalencesApplied = [.. oldApplied.Union(newApplied, StringComparer.Ordinal).Order(StringComparer.Ordinal)],
+                        EquivalencesApplied = applied,
+                        ReboundCalls = rebound,
                         Runtimes = legacyRuntime.Interval,
                     },
                     (legacy, legacyRuntime),
@@ -206,6 +208,31 @@ public sealed class CSharpFrontend : ILanguageFrontend
     }
 
     /// <summary>
+    /// Both bodies of a pair, the catalogue entries that fired in either, sorted, and the pair's rebound calls (ADR 0042;
+    /// ticket P2-069). The bodies are lowered once to record their call sites. When a site with the same text binds to a
+    /// different callee on each side, both are lowered again with every call to such a callee an opaque. Every lowering of a
+    /// side uses that side's runtime facts (ADR 0040; ticket P2-055).
+    /// </summary>
+    private (IrProcedure Old, IrProcedure New, ImmutableArray<string> Applied, ImmutableArray<ReboundCall> Rebound) Bodies(
+        (SideProcedure Procedure, SideRuntime Runtime) legacySide, (SideProcedure Procedure, SideRuntime Runtime) modernSide, EquivConfig config)
+    {
+        (SideProcedure legacy, SideRuntime legacyRuntime) = legacySide;
+        (SideProcedure modern, SideRuntime modernRuntime) = modernSide;
+        CallSites oldSites = new();
+        CallSites newSites = new();
+        (IrProcedure oldBody, ImmutableArray<string> oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, legacyRuntime, oldSites);
+        (IrProcedure newBody, ImmutableArray<string> newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, modernRuntime, newSites);
+        ImmutableArray<ReboundCall> rebound = CallSites.Rebound(oldSites, newSites, config.CallIdentityRenames);
+        if (!rebound.IsEmpty)
+        {
+            (oldBody, oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, legacyRuntime, new CallSites(rebound.Select(static r => r.Legacy)));
+            (newBody, newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, modernRuntime, new CallSites(rebound.Select(static r => r.Modern)));
+        }
+
+        return (oldBody, newBody, [.. oldApplied.Union(newApplied, StringComparer.Ordinal).Order(StringComparer.Ordinal)], rebound);
+    }
+
+    /// <summary>
     /// <paramref name="pair"/>, lowered from IOperation and fingerprinted, with the bodies it keeps. Under <c>--il-fallback</c>
     /// <see cref="IlFallback"/> may lower both sides again from IL, once congruence is decided on the fingerprints (ADR 0039;
     /// ticket P1-016); IL-lowered bodies applied no API equivalence. Then, when exactly one side is <c>async</c>, both bodies
@@ -220,8 +247,8 @@ public sealed class CSharpFrontend : ILanguageFrontend
         {
             bool congruent = pair.OldFingerprint is { RuntimeSensitive: false } fingerprint && fingerprint == pair.NewFingerprint;
             (IrProcedure old, IrProcedure @new, bool tried, string lowering) = IlFallback.Choose(
-                new IlFallback.Side(legacy.Symbol, legacy.Compilation, pair.OldBody!, legacySide.Runtime),
-                new IlFallback.Side(modern.Symbol, modern.Compilation, pair.NewBody!, modernSide.Runtime),
+                new IlFallback.Side(legacy.Symbol, legacy.Compilation, pair.OldBody!, legacySide.Runtime) { Rebound = pair.ReboundCalls.Select(static r => r.Legacy).ToImmutableHashSet(StringComparer.Ordinal) },
+                new IlFallback.Side(modern.Symbol, modern.Compilation, pair.NewBody!, modernSide.Runtime) { Rebound = pair.ReboundCalls.Select(static r => r.Modern).ToImmutableHashSet(StringComparer.Ordinal) },
                 congruent,
                 log);
             pair = pair with
@@ -248,17 +275,19 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// <summary>
     /// The production lowering (M2-003): the legacy side with the API-equivalence entries <c>equiv.config.json</c> does not
     /// suppress, the modern side with none (ADR 0020; ticket M3-009), and each side with the runtime rules that apply
-    /// inside the pair's interval (ADRs 0025, 0040; tickets M4-002, P2-055).
+    /// inside the pair's interval (ADRs 0025, 0040; tickets M4-002, P2-055). <paramref name="sites"/> records the body's
+    /// call sites and holds the identities whose calls are rebound (ADR 0042; ticket P2-069).
     /// </summary>
     internal static (IrProcedure Body, ImmutableArray<string> EquivalencesApplied) LowerWithIrLowerer(
-        IMethodSymbol symbol, Compilation compilation, EquivConfig config, bool legacy, SideRuntime runtime) =>
+        IMethodSymbol symbol, Compilation compilation, EquivConfig config, bool legacy, SideRuntime runtime, CallSites? sites = null) =>
         IrLowerer.Lower(
             symbol,
             compilation,
             config.Renames,
             config.SuppressRuntimeChanges,
             legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [],
-            runtime);
+            runtime,
+            sites);
 
     /// <summary>
     /// <paramref name="skipped"/> (one side's skipped projects) as Core data. Each C# project's procedures are its own,

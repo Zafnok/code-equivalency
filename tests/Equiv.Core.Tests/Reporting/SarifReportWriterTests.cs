@@ -2,6 +2,7 @@
 
 using Equiv.Core.Execution;
 using Equiv.Core.Ir;
+using Equiv.Core.Matching;
 using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
 
@@ -716,6 +717,33 @@ public sealed class SarifReportWriterTests
 
         Assert.Equal(["webapi.not-found", "webapi.ok-of-int"], results[0].GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
         Assert.False(results[1].TryGetProperty("equivalencesApplied", out List<string> _));
+    }
+
+    /// <summary>ADR 0042; ticket P2-069 criterion 2: a result names the callee pairs its pair treated as possibly the same.</summary>
+    [Fact]
+    public void Sarif_ListsReboundCalls()
+    {
+        VerificationResult rebound = Fixtures.Result(new Unknown(UnknownReason.Opaque, "old: rebound-call; new: rebound-call")) with
+        {
+            ReboundCalls = [new ReboundCall("Lib.FileBase::Exists(string)", "Lib.IFile::Exists(string)"), new ReboundCall("Lib.Old::get_X()", "Lib.New::get_X()")],
+        };
+
+        Result[] results = [.. SarifReportWriter.Write([rebound, Fixtures.Result(new Equivalent(ProofMethod.Bounded))]).Runs[0].Results];
+
+        List<Dictionary<string, string>> listed = results[0].GetProperty<List<Dictionary<string, string>>>("reboundCalls");
+        Assert.Equal(["Lib.FileBase::Exists(string)", "Lib.Old::get_X()"], listed.Select(static r => r["legacy"]), StringComparer.Ordinal);
+        Assert.Equal(["Lib.IFile::Exists(string)", "Lib.New::get_X()"], listed.Select(static r => r["modern"]), StringComparer.Ordinal);
+        Assert.All(listed, static r => Assert.Equal(2, r.Count));
+        Assert.False(results[1].TryGetProperty("reboundCalls", out List<Dictionary<string, string>>? _));
+    }
+
+    /// <summary>ADR 0042: the rebound pairs are a property of the pair, never of the result's fingerprint.</summary>
+    [Fact]
+    public void ReboundCallsAreNotPartOfTheFingerprint()
+    {
+        VerificationResult plain = Fixtures.Result(new Unknown(UnknownReason.Opaque, "old: rebound-call; new: rebound-call"));
+
+        Assert.Equal(ResultFingerprint.Compute(plain), ResultFingerprint.Compute(plain with { ReboundCalls = [new ReboundCall("A::F()", "B::F()")] }));
     }
 
     /// <summary>ADR 0019; ticket M3-015 acceptance criterion 11.</summary>

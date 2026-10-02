@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 
 using Equiv.Core.Execution;
+using Equiv.Core.Matching;
 using Equiv.Core.Verdicts;
 
 namespace Equiv.Core.Reporting;
@@ -21,6 +22,8 @@ namespace Equiv.Core.Reporting;
 /// <see cref="Matching.ProcedurePair.Lowering"/> (ADR 0039; ticket P1-016), null when the run did not use <c>--il-fallback</c>;
 /// it is not part of the fingerprint. <see cref="Runtimes"/> is the pair's <see cref="Matching.ProcedurePair.Runtimes"/> (ADR 0040;
 /// ticket P2-055), which an EQ006 result's row is looked up in and its message names; it is not part of the fingerprint.
+/// <see cref="ReboundCalls"/> is the pair's
+/// <see cref="ProcedurePair.ReboundCalls"/> (ADR 0042; ticket P2-069), and is not part of the fingerprint either.
 /// </summary>
 public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
 {
@@ -37,4 +40,6 @@ public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verd
     public string? Lowering { get; init; }
 
     public RuntimeInterval? Runtimes { get; init; }
+
+    public ImmutableArray<ReboundCall> ReboundCalls { get; init; } = [];
 }

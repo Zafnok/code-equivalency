@@ -16,6 +16,8 @@ namespace Equiv.Core.Matching;
 /// <see cref="IlFallbackTried"/> whether the pair was lowered again from IL to choose it (ADR 0039; ticket P1-016); without the
 /// flag they are null and false. <see cref="Runtimes"/> is the interval between the runtimes of the two projects the bodies come
 /// from, which every runtime rule was applied by (ADR 0040 decision 2; ticket P2-055); null when the frontend knows no runtimes.
+/// <see cref="ReboundCalls"/> are the callee pairs the bodies treat as possibly the same
+/// function, sorted by legacy and then modern identity (ADR 0042; ticket P2-069).
 /// </summary>
 public sealed record ProcedurePair(
     ProcedureIdentity Old,
@@ -34,4 +36,6 @@ public sealed record ProcedurePair(
     public bool IlFallbackTried { get; init; }
 
     public RuntimeInterval? Runtimes { get; init; }
+
+    public ImmutableArray<ReboundCall> ReboundCalls { get; init; } = [];
 }
