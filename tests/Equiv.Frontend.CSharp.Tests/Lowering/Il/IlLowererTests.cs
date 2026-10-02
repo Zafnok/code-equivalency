@@ -94,7 +94,7 @@ public sealed class IlLowererTests
                 IrProcedure il = IlLowerer.Lower(procedure.Symbol, compilation, Runtimes.Migration);
                 string expected = Signature(operation);
                 string actual = Signature(il);
-                if (!string.Equals(expected, actual, StringComparison.Ordinal) && !UnreachableNoMatchArm.Contains($"{sample} {procedure.Identity.Value}"))
+                if (!string.Equals(expected, actual, StringComparison.Ordinal) && !KnownCalleeDifferences.Contains($"{sample} {procedure.Identity.Value}"))
                 {
                     different.Add($"{sample} {procedure.Identity.Value}:\n  operation {expected}\n  il        {actual}\n{IrText.Dump(il)}");
                 }
@@ -106,12 +106,19 @@ public sealed class IlLowererTests
     }
 
     /// <summary>
-    /// Sample methods whose two lowerings name different callees for a reason that is not a mapping difference: a
-    /// <c>switch</c> expression that ends in a discard arm. Roslyn's control-flow graph keeps the no-match block, which
+    /// Sample methods whose two lowerings name different callees for a reason that is not a mapping difference. The first
+    /// is a <c>switch</c> expression that ends in a discard arm: Roslyn's control-flow graph keeps the no-match block, which
     /// constructs a <c>SwitchExpressionException</c>, behind a branch that is never taken; the compiler emits no IL for it.
-    /// The two are Equivalent under Z3 (<c>IlLoweringParityTests</c>).
+    /// The two are Equivalent under Z3 (<c>IlLoweringParityTests</c>). The second is an interpolated string: the IOperation
+    /// lowering joins its parts with the two-argument <c>String.Concat</c>, one call for each part after the first (ticket
+    /// P2-086), and the compiler emits one call of the three-argument overload. That pair is one of
+    /// <c>IlLoweringParityTests</c>' known differences.
     /// </summary>
-    private static readonly string[] UnreachableNoMatchArm = ["same-runtime-cleanup/modern Equiv.Samples.SameRuntimeCleanup.Report::Rank(int)"];
+    private static readonly string[] KnownCalleeDifferences =
+    [
+        "same-runtime-cleanup/modern Equiv.Samples.SameRuntimeCleanup.Report::Rank(int)",
+        "cleanup-modern-syntax/modern Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)",
+    ];
 
     /// <summary>The Design's pitfall: the instruction's sign decides the division, not its operands' C# types.</summary>
     [Fact]

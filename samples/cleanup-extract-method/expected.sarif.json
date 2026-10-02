@@ -1,0 +1,298 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.CleanupExtractMethod.Invoice::Total(int,int) diverges: inputs(bv32 0, bv32 0, sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0) old(returned bv32 0 outs() trace()) new(returned bv32 0 outs() trace(\"Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)\"(sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0, bv32 0)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Invoice.cs"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 20,
+                  "endLine": 5,
+                  "endColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupExtractMethod.Invoice::Total(int,int)",
+            "resultFingerprint/v1": "558adf4a1026996816d205c3304bb1fe5cf50a0909dbf43530fb581272c11a6d"
+          },
+          "baselineState": "new",
+          "rank": 60.002,
+          "properties": {
+            "model": "inputs(bv32 0, bv32 0, sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0) old(returned bv32 0 outs() trace()) new(returned bv32 0 outs() trace(\"Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)\"(sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0, bv32 0)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "reviewGroup": "calls:Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)"
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.CleanupExtractMethod.Invoice::Shipping(int) diverges: inputs(bv32 0, sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0) old(returned bv32 5 outs() trace(\"Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)\"(sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0, bv32 0))) new(returned bv32 5 outs() trace())"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Invoice.cs"
+                },
+                "region": {
+                  "startLine": 17,
+                  "startColumn": 20,
+                  "endLine": 17,
+                  "endColumn": 28
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupExtractMethod.Invoice::Shipping(int)",
+            "resultFingerprint/v1": "fb53457e468aa71ba659545a66bed6f57dbb30866e2e901d139453a43dc12321"
+          },
+          "baselineState": "new",
+          "rank": 60.002,
+          "properties": {
+            "model": "inputs(bv32 0, sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0) old(returned bv32 5 outs() trace(\"Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)\"(sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0, bv32 0))) new(returned bv32 5 outs() trace())",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "reviewGroup": "calls:Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)"
+          }
+        },
+        {
+          "ruleId": "EQ004",
+          "kind": "informational",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int) was added."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Invoice.cs"
+                },
+                "region": {
+                  "startLine": 22,
+                  "startColumn": 17,
+                  "endLine": 22,
+                  "endColumn": 25
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)",
+            "resultFingerprint/v1": "305d9b10dc8ba926920ee769d723c7caa18fa21335d9bedaa586c68214e925ac"
+          },
+          "baselineState": "new"
+        },
+        {
+          "ruleId": "EQ005",
+          "kind": "informational",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int) was removed."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Invoice.cs"
+                },
+                "region": {
+                  "startLine": 23,
+                  "startColumn": 21,
+                  "endLine": 23,
+                  "endColumn": 29
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)",
+            "resultFingerprint/v1": "23d23b6ae7533fd72c8da89591591c4750c45ecb0000c1d8fdbe822aa4c7309f"
+          },
+          "baselineState": "new"
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 3,
+            "modern": 3
+          },
+          "matchedPairs": 2,
+          "pairsWithoutOpaque": 2,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 0,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 2,
+          "changedPairsWithoutOpaque": 2,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 2
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [],
+            "modern": []
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 41,
+          "modern": 38
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.CleanupExtractMethod",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.CleanupExtractMethod",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "reviewList": [
+          {
+            "group": "calls:Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.CleanupExtractMethod.Invoice::Shipping(int)"
+            ]
+          },
+          {
+            "group": "calls:Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.CleanupExtractMethod.Invoice::Total(int,int)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

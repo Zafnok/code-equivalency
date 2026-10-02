@@ -444,7 +444,18 @@ work, P2-050, P1-019, P2-051 and P2-052.
 - P2-048 (M) Five cleanup refactorings as Preserving seed operators, and a "cleanup proof rate" per
   seeded run. Needs M4-010, P2-035.
 - P2-049 (M) Samples for cleanup refactorings (modern syntax, extract and inline method). Each
-  non-Equivalent verdict becomes a ticket.
+  non-Equivalent verdict becomes a ticket. Done 2026-10-02: of 9 behaviour-preserving pairs in
+  `cleanup-modern-syntax` and `cleanup-extract-method`, 3 are Equivalent, 3 Unknown and 3 Divergent.
+  Filed as P2-093 to P2-097, the two precision bugs first:
+  - P2-097 (L) Precision bug: extracting or inlining a private helper makes its caller Divergent,
+    on the call trace alone. An `equiv-adr` decision on callees that exist on one side only.
+  - P2-094 (M) Precision bug: `string.Format` with plain holes is Divergent from the interpolated
+    string it becomes.
+  - P2-093 (S) A relational pattern (`>= 90`) lowers as a comparison, not opaque `switch-pattern`.
+  - P2-095 (M) A conversion to `Nullable<T>` and `default(T?)` lower, so `x == null ? (int?)null :
+    x.Length` and `x?.Length` are compared.
+  - P2-096 (L) A filter loop against `Where(...).ToList()` is Unknown(abstraction). An `equiv-adr`
+    decision on modelling LINQ-to-objects operators.
 - P2-050 (M) Deterministic solver budgets (Z3 `rlimit`, wall-clock as a backstop), and the
   timeout Unknowns measured at 1x, 4x and 20x. Needs P2-046. Done 2026-10-01: `resourceLimit`
   5,000,000 with `timeoutMs` 60,000 behind it. Of 172 timeouts, 4x decides 37 and 20x decides 73,
