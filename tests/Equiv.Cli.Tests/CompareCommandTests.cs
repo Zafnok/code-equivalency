@@ -959,8 +959,63 @@ public sealed class CompareCommandTests
         Result result = Assert.Single(sink.Log!.Runs[0].Results);
         Assert.Equal("EQ003", result.RuleId);
         Assert.Equal("unbound", result.GetProperty<string>("unknownReason"));
-        Assert.Contains("modern: unbound at a.cs 3:5; modern: unbound at a.cs 4:1", result.Message.Text, StringComparison.Ordinal);
+
+        // Ticket P2-085: the errors are the result's causes, and it points at the first one; the message holds no position.
+        Assert.Equal("T::Pair() is unknown (Unbound): the modern body does not bind", result.Message.Text);
+        Assert.Equal([(3, 5, "unbound"), (4, 1, "unbound")], result.RelatedLocations.Select(Position));
+        Assert.Equal((3, 5), (result.Locations[0].PhysicalLocation.Region.StartLine, result.Locations[0].PhysicalLocation.Region.StartColumn));
     }
+
+    /// <summary>Ticket P2-085: when neither body binds, both sides' errors are causes, legacy first, and the result points at the modern side's first.</summary>
+    [Fact]
+    public void AnUnboundPairsCausesAreTheErrorsOfBothSides()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedurePair pair = Pair(PairIdentity) with { OldBody = UnboundBody(PairIdentity, "old.cs"), NewBody = UnboundBody(PairIdentity) };
+        FakeBackend backend = new(NoVerdicts);
+        InMemoryReportSink sink = new();
+
+        CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink, NullRunLog.Instance);
+
+        Assert.Empty(backend.Calls);
+        Result result = Assert.Single(sink.Log!.Runs[0].Results);
+        Assert.Equal("T::Pair() is unknown (Unbound): the legacy body does not bind; the modern body does not bind", result.Message.Text);
+        Assert.Equal(["old.cs", "old.cs", "a.cs", "a.cs"], result.RelatedLocations.Select(static l => l.PhysicalLocation.ArtifactLocation.Uri.OriginalString), StringComparer.Ordinal);
+        Assert.Equal("a.cs", result.Locations[0].PhysicalLocation.ArtifactLocation.Uri.OriginalString);
+    }
+
+    /// <summary>
+    /// Ticket P2-085: the fingerprint hashes the detail, so the detail holds no path or position, and an unbound result is
+    /// <c>unchanged</c> against a baseline taken from another checkout or before the error moved.
+    /// </summary>
+    [Fact]
+    public void AnUnboundResultsFingerprintDoesNotDependOnWhereTheErrorIs()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        InMemoryReportSink here = new();
+        InMemoryReportSink elsewhere = new();
+
+        foreach ((InMemoryReportSink sink, string path) in new[] { (here, @"C:\here\a.cs"), (elsewhere, "/home/elsewhere/a.cs") })
+        {
+            CompareCommand.Run(
+                new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+                [new FakeFrontend("csharp", _ => true, new MatchResult([Pair(PairIdentity) with { NewBody = UnboundBody(PairIdentity, path) }], [], [], []))],
+                new FakeBackend(NoVerdicts),
+                sink,
+                NullRunLog.Instance);
+        }
+
+        Assert.Equal(
+            Assert.Single(here.Log!.Runs[0].Results).PartialFingerprints["resultFingerprint/v1"],
+            Assert.Single(elsewhere.Log!.Runs[0].Results).PartialFingerprints["resultFingerprint/v1"]);
+    }
+
+    private static (int Line, int Column, string Message) Position(Location location) =>
+        (location.PhysicalLocation.Region.StartLine, location.PhysicalLocation.Region.StartColumn, location.Message.Text);
 
     /// <summary>
     /// Ticket M4-006 acceptance criterion 2: a pair the frontend marked <c>async-mismatch</c> is Unknown with that detail, both
@@ -1028,7 +1083,9 @@ public sealed class CompareCommandTests
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
             [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], new FakeBackend(NoVerdicts), sink, NullRunLog.Instance);
 
-        Assert.Contains("legacy: unbound at a.cs 3:5", Assert.Single(sink.Log!.Runs[0].Results).Message.Text, StringComparison.Ordinal);
+        Result result = Assert.Single(sink.Log!.Runs[0].Results);
+        Assert.Equal("T::Pair() is unknown (Unbound): the legacy body does not bind", result.Message.Text);
+        Assert.Equal([(3, 5, "unbound"), (4, 1, "unbound")], result.RelatedLocations.Select(Position));
     }
 
     [Fact]
@@ -1621,7 +1678,7 @@ public sealed class CompareCommandTests
         [new IrBlock(new IrBlockId(0), [new IrOpaque(Target: null, Unknown.AsyncMismatchReason, span) { WholeBody = true }], new IrReturn(Value: null, []))],
         new IrBlockId(0));
 
-    private static IrProcedure UnboundBody(ProcedureIdentity identity) => new(
+    private static IrProcedure UnboundBody(ProcedureIdentity identity, string path = "a.cs") => new(
         identity,
         [],
         ReturnType: null,
@@ -1629,9 +1686,10 @@ public sealed class CompareCommandTests
             new IrBlock(
                 new IrBlockId(0),
                 [
-                    new IrOpaque(Target: null, Unknown.UnboundOpaqueReason, new SourceSpan("a.cs", 3, 5, 3, 9)),
-                    new IrOpaque(Target: null, "Invalid", new SourceSpan("a.cs", 3, 7, 3, 8)),
-                    new IrOpaque(Target: null, Unknown.UnboundOpaqueReason, new SourceSpan("a.cs", 4, 1, 4, 2)),
+                    new IrOpaque(Target: null, "Invalid", new SourceSpan(path, 2, 7, 2, 8)),
+                    new IrOpaque(Target: null, Unknown.UnboundOpaqueReason, new SourceSpan(path, 3, 5, 3, 9)),
+                    new IrOpaque(Target: null, "Invalid", new SourceSpan(path, 3, 7, 3, 8)),
+                    new IrOpaque(Target: null, Unknown.UnboundOpaqueReason, new SourceSpan(path, 4, 1, 4, 2)),
                 ],
                 new IrReturn(Value: null, [])),
         ],

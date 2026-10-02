@@ -584,14 +584,19 @@ internal static class CompareCommand
     private static Decision? Decide(ProcedurePair pair, IrProcedure old, IrProcedure @new)
     {
         // ADR 0029 decision 2: erroneous code is Unknown(Unbound) without asking the solver; it is never evidence of equivalence.
-        string unbound = string.Join("; ", UnboundCauses(LegacySide, old).Concat(UnboundCauses(ModernSide, @new)));
-        if (unbound.Length > 0)
+        // Its causes are the errors, so the result points at the modern side's first one. The detail only says which side
+        // does not bind: it is part of the fingerprint, which must not change with where the code is checked out (ticket P2-085).
+        ImmutableArray<UnknownCause> unbound = [.. Causes(Codebase.Legacy, old, Unknown.UnboundOpaqueReason), .. Causes(Codebase.Modern, @new, Unknown.UnboundOpaqueReason)];
+        if (!unbound.IsEmpty)
         {
-            return new Decision(new VerificationResult(pair.New, new Unknown(UnknownReason.Unbound, unbound)) { EquivalencesApplied = pair.EquivalencesApplied }, "unbound");
+            string detail = string.Join("; ", unbound.Select(static c => c.Side).Distinct().Select(static side => side == Codebase.Legacy ? "the legacy body does not bind" : "the modern body does not bind"));
+            return new Decision(
+                new VerificationResult(pair.New, new Unknown(UnknownReason.Unbound, detail) { Causes = unbound }) { EquivalencesApplied = pair.EquivalencesApplied },
+                "unbound");
         }
 
         // Ticket M4-006: exactly one side is async, so exception timing differs; the frontend made both bodies one opaque.
-        ImmutableArray<UnknownCause> mismatch = [.. AsyncMismatch(Codebase.Legacy, old), .. AsyncMismatch(Codebase.Modern, @new)];
+        ImmutableArray<UnknownCause> mismatch = [.. Causes(Codebase.Legacy, old, Unknown.AsyncMismatchReason), .. Causes(Codebase.Modern, @new, Unknown.AsyncMismatchReason)];
         if (!mismatch.IsEmpty)
         {
             return new Decision(
@@ -612,8 +617,8 @@ internal static class CompareCommand
     internal static bool IsCongruent(ProcedurePair pair, IrProcedure old, IrProcedure @new) =>
         pair.OldFingerprint is { RuntimeSensitive: false } fingerprint
         && fingerprint == pair.NewFingerprint
-        && !UnboundCauses(LegacySide, old).Any()
-        && !UnboundCauses(ModernSide, @new).Any();
+        && !Causes(Codebase.Legacy, old, Unknown.UnboundOpaqueReason).Any()
+        && !Causes(Codebase.Modern, @new, Unknown.UnboundOpaqueReason).Any();
 
     /// <summary>
     /// ADR 0019, once every verdict is known: each result of a lowered pair lists the matched pairs (lowered or not) that
@@ -738,20 +743,15 @@ internal static class CompareCommand
     /// </summary>
     private static string AmbiguousDetail(ProcedureIdentity identity) => $"{identity.Value} matches more than one overload with this identity";
 
-    /// <summary>Each <see cref="Unknown.UnboundOpaqueReason"/> opaque in <paramref name="body"/>, as <c>side: unbound at path line:column</c>.</summary>
-    private static IEnumerable<string> UnboundCauses(string side, IrProcedure body) =>
+    /// <summary>
+    /// Each opaque in <paramref name="body"/> whose reason is <paramref name="reason"/> (<see cref="Unknown.UnboundOpaqueReason"/>,
+    /// <see cref="Unknown.AsyncMismatchReason"/>), as a cause on <paramref name="side"/>, in the order the frontend gave them.
+    /// </summary>
+    private static IEnumerable<UnknownCause> Causes(Codebase side, IrProcedure body, string reason) =>
         body.Blocks
             .SelectMany(static b => b.Instructions)
             .OfType<IrOpaque>()
-            .Where(static o => string.Equals(o.Reason, Unknown.UnboundOpaqueReason, StringComparison.Ordinal))
-            .Select(o => string.Create(CultureInfo.InvariantCulture, $"{side}: unbound at {o.Span.Path} {o.Span.StartLine}:{o.Span.StartColumn}"));
-
-    /// <summary>Each <see cref="Unknown.AsyncMismatchReason"/> opaque in <paramref name="body"/>, as a cause on <paramref name="side"/>.</summary>
-    private static IEnumerable<UnknownCause> AsyncMismatch(Codebase side, IrProcedure body) =>
-        body.Blocks
-            .SelectMany(static b => b.Instructions)
-            .OfType<IrOpaque>()
-            .Where(static o => string.Equals(o.Reason, Unknown.AsyncMismatchReason, StringComparison.Ordinal))
+            .Where(o => string.Equals(o.Reason, reason, StringComparison.Ordinal))
             .Select(o => new UnknownCause(side, o.Reason, o.Span));
 
     private static int DecideExitCode(List<VerificationResult> results, SarifLog log, string? failOn)
