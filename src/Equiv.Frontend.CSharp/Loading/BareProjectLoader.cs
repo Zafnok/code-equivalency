@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 
+using Equiv.Core.Verdicts;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
@@ -23,7 +25,8 @@ internal sealed class BareProjectLoader(
     ReferenceAssemblyCache referenceAssemblies,
     PackageFeed feed,
     string? netStandardShims,
-    IReadOnlyDictionary<string, Compilation> sdkProjects)
+    IReadOnlyDictionary<string, Compilation> sdkProjects,
+    Codebase side)
 {
     private readonly Dictionary<string, BareProject> _projects = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _started = new(StringComparer.OrdinalIgnoreCase);
@@ -124,7 +127,7 @@ internal sealed class BareProjectLoader(
         [
             .. compilation.GetDiagnostics(ct)
                 .Where(static d => d.Severity == DiagnosticSeverity.Error)
-                .Select(d => new LoadDiagnostic(CompilationDiagnosticClassifier.Classify(d.Id), d.Id, name, d.GetMessage(CultureInfo.InvariantCulture))),
+                .Select(d => new LoadDiagnostic(CompilationDiagnosticClassifier.Classify(d.Id, side), d.Id, name, d.GetMessage(CultureInfo.InvariantCulture))),
         ];
         return new BareProject(name, project.Path, assemblyName, IsCSharp: true, compilation, diagnostics);
     }

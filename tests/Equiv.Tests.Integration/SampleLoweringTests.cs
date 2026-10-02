@@ -5,6 +5,7 @@ using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Progress;
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp;
 using Equiv.Frontend.CSharp.Loading;
 
@@ -74,7 +75,7 @@ public sealed partial class SampleLoweringTests
         {
             foreach (string side in (string[])["legacy", "modern"])
             {
-                LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(Solution(sample, side), TestContext.Current.CancellationToken);
+                LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(Solution(sample, side), side is "legacy" ? Codebase.Legacy : Codebase.Modern, TestContext.Current.CancellationToken);
                 kinds.UnionWith(loaded.Compilations.SelectMany(compilation => Kinds(compilation, TestContext.Current.CancellationToken)));
             }
         }

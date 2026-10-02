@@ -3,6 +3,8 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
+using Equiv.Core.Verdicts;
+
 using Microsoft.CodeAnalysis;
 
 namespace Equiv.Frontend.CSharp.Loading;
@@ -10,8 +12,10 @@ namespace Equiv.Frontend.CSharp.Loading;
 /// <summary>
 /// Loads a solution through MSBuildWorkspace (ADR 0004), containing each fault to its project (ADR 0029 decision 1).
 /// A C# project with a workspace failure or an unresolved reference is skipped, and so is a project in another
-/// language. Only a side with no C# project left aborts, with <see cref="SolutionLoadException"/>. A project the
-/// solution's default configuration does not build is never opened (<see cref="SolutionBuildConfiguration"/>, P2-013).
+/// language. A modern project whose references resolve is kept even when its source does not compile
+/// (<see cref="CompilationDiagnosticClassifier.Classify"/>, ticket P2-085). Only a side with no C# project left aborts,
+/// with <see cref="SolutionLoadException"/>. A project the solution's default configuration does not build is never
+/// opened (<see cref="SolutionBuildConfiguration"/>, P2-013).
 /// </summary>
 internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
 {
@@ -43,7 +47,7 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
         _readSolution = readSolution;
     }
 
-    public async Task<LoadedSolution> LoadAsync(string solutionPath, CancellationToken ct)
+    public async Task<LoadedSolution> LoadAsync(string solutionPath, Codebase side, CancellationToken ct)
     {
         // WorkspaceFailed is raised on a background thread.
         ConcurrentQueue<WorkspaceDiagnostic> workspaceEvents = new();
@@ -74,6 +78,7 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
                 project,
                 failuresByProject.Remove(key, out (string Path, List<LoadDiagnostic> Failures) opening) ? opening.Failures : [],
                 workspaceEvents,
+                side,
                 ct).ConfigureAwait(false);
             if (diagnostics.Any(static d => d.Kind is LoadDiagnosticKind.WorkspaceFailure or LoadDiagnosticKind.UnresolvedReference))
             {
@@ -144,6 +149,7 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
         Project project,
         List<LoadDiagnostic> openingFailures,
         ConcurrentQueue<WorkspaceDiagnostic> workspaceEvents,
+        Codebase side,
         CancellationToken ct)
     {
         // A C# project always has a compilation.
@@ -152,7 +158,7 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
         [
             .. compilation.GetDiagnostics(ct)
                 .Where(static d => d.Severity == DiagnosticSeverity.Error)
-                .Select(d => new LoadDiagnostic(CompilationDiagnosticClassifier.Classify(d.Id), d.Id, project.Name, d.GetMessage(CultureInfo.InvariantCulture))),
+                .Select(d => new LoadDiagnostic(CompilationDiagnosticClassifier.Classify(d.Id, side), d.Id, project.Name, d.GetMessage(CultureInfo.InvariantCulture))),
             .. Drain(workspaceEvents).Select(d => ToLoadDiagnostic(d, project.Name)),
             .. openingFailures,
         ];

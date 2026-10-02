@@ -82,9 +82,9 @@ public sealed class CSharpFrontend : ILanguageFrontend
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(log);
 
-        LoadedSolution legacy = Loaded("load-legacy", legacyPath, log, ct);
+        LoadedSolution legacy = Loaded("load-legacy", legacyPath, Codebase.Legacy, log, ct);
         legacy = legacy with { Runtimes = RuntimeDetection.Detect(legacy.Compilations, config.LegacyRuntime) };
-        LoadedSolution modern = Loaded("load-modern", modernPath, log, ct);
+        LoadedSolution modern = Loaded("load-modern", modernPath, Codebase.Modern, log, ct);
         modern = modern with { Runtimes = RuntimeDetection.Detect(modern.Compilations, config.ModernRuntime) };
 
         log.Phase("enumerate", 2, legacy.Compilations.Length + modern.Compilations.Length);
@@ -360,13 +360,15 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// One side's <paramref name="phase"/> (ADR 0038; ticket M4-013): the side loaded, with an item per project it opened,
     /// weighted by document count, then per project it skipped, each of which is also a debug <see cref="IRunLog.Detail"/>.
     /// The events follow the load, since the project count is only known once it is done; a load that fails is one failed item.
+    /// The loader is told which side it loads: a modern project that does not compile is kept, and its methods that do not
+    /// bind are Unknown(Unbound) one by one (ADR 0029 as clarified by ticket P2-085).
     /// </summary>
-    private LoadedSolution Loaded(string phase, string path, IRunLog log, CancellationToken ct)
+    private LoadedSolution Loaded(string phase, string path, Codebase codebase, IRunLog log, CancellationToken ct)
     {
         LoadedSolution loaded;
         try
         {
-            loaded = LoadOrThrow(path, ct);
+            loaded = LoadOrThrow(path, codebase, ct);
         }
         catch (FrontendLoadException)
         {
@@ -415,11 +417,11 @@ public sealed class CSharpFrontend : ILanguageFrontend
         return result;
     }
 
-    private LoadedSolution LoadOrThrow(string path, CancellationToken ct)
+    private LoadedSolution LoadOrThrow(string path, Codebase side, CancellationToken ct)
     {
         try
         {
-            return _loader.LoadAsync(path, ct).GetAwaiter().GetResult();
+            return _loader.LoadAsync(path, side, ct).GetAwaiter().GetResult();
         }
         catch (SolutionLoadException exception)
         {

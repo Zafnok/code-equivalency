@@ -7,6 +7,7 @@ using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Progress;
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 using Equiv.Frontend.CSharp.Lowering;
 using Equiv.Frontend.CSharp.Lowering.Il;
@@ -21,12 +22,38 @@ public sealed class CSharpFrontendTests
 {
     private sealed class StubLoader(Func<string, LoadedSolution> load) : ISolutionLoader
     {
-        public Task<LoadedSolution> LoadAsync(string solutionPath, CancellationToken ct) => Task.FromResult(load(solutionPath));
+        public Task<LoadedSolution> LoadAsync(string solutionPath, Codebase side, CancellationToken ct) => Task.FromResult(load(solutionPath));
     }
 
     private sealed class ThrowingLoader(SolutionLoadException exception) : ISolutionLoader
     {
-        public Task<LoadedSolution> LoadAsync(string solutionPath, CancellationToken ct) => throw exception;
+        public Task<LoadedSolution> LoadAsync(string solutionPath, Codebase side, CancellationToken ct) => throw exception;
+    }
+
+    /// <summary>Records which side each path was loaded as.</summary>
+    private sealed class SideRecordingLoader(Compilation compilation) : ISolutionLoader
+    {
+        public List<(string Path, Codebase Side)> Loads { get; } = [];
+
+        public Task<LoadedSolution> LoadAsync(string solutionPath, Codebase side, CancellationToken ct)
+        {
+            Loads.Add((solutionPath, side));
+            return Task.FromResult(new LoadedSolution(null!, [compilation], [], []));
+        }
+    }
+
+    /// <summary>
+    /// Ticket P2-085: the loader is told which side it loads, because only a modern project that does not compile is kept
+    /// (ADR 0029 as clarified).
+    /// </summary>
+    [Fact]
+    public void Analyze_LoadsEachSolutionAsItsOwnSide()
+    {
+        SideRecordingLoader loader = new(RoslynTestCompilations.Compile("namespace N { public class C { public int M() => 1; } }", "App"));
+
+        _ = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None);
+
+        Assert.Equal([("legacy.sln", Codebase.Legacy), ("modern.sln", Codebase.Modern)], loader.Loads);
     }
 
     [Theory]

@@ -1,3 +1,4 @@
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 
 using Xunit;
@@ -6,50 +7,75 @@ namespace Equiv.Frontend.CSharp.Tests.Loading;
 
 public sealed class CompilationDiagnosticClassifierTests
 {
+    /// <summary>A reference that is itself broken skips the project on either side (ADR 0029 decision 1).</summary>
     [Theory]
-    [InlineData("CS0006")] // metadata file not found
-    [InlineData("CS0012")] // type in unreferenced assembly
-    [InlineData("CS1705")] // referenced assembly version too high
-    public void Classify_MissingOrMismatchedAssemblyIsUnresolvedReference(string id)
+    [InlineData("CS0006", Codebase.Legacy)] // metadata file not found
+    [InlineData("CS0006", Codebase.Modern)]
+    [InlineData("CS1705", Codebase.Legacy)] // referenced assembly version too high
+    [InlineData("CS1705", Codebase.Modern)]
+    public void Classify_MissingOrMismatchedAssemblyIsUnresolvedReference(string id, Codebase side)
     {
-        Assert.Equal(LoadDiagnosticKind.UnresolvedReference, CompilationDiagnosticClassifier.Classify(id));
+        Assert.Equal(LoadDiagnosticKind.UnresolvedReference, CompilationDiagnosticClassifier.Classify(id, side));
     }
 
+    /// <summary>On the legacy side a name no reference provides still means the project was loaded wrongly (M3-024).</summary>
     [Theory]
+    [InlineData("CS0012")] // type in unreferenced assembly
     [InlineData("CS0234")] // namespace member missing
     [InlineData("CS0246")] // type or namespace not found
     [InlineData("CS0400")] // not found in global namespace
-    public void Classify_UnboundTypeOrNamespaceIsUnresolvedReference(string id)
+    public void Classify_UnboundTypeOrNamespaceIsUnresolvedReferenceOnTheLegacySide(string id)
     {
-        Assert.Equal(LoadDiagnosticKind.UnresolvedReference, CompilationDiagnosticClassifier.Classify(id));
+        Assert.Equal(LoadDiagnosticKind.UnresolvedReference, CompilationDiagnosticClassifier.Classify(id, Codebase.Legacy));
     }
 
-    [Fact]
-    public void Classify_MissingPredefinedTypeIsUnresolvedReference()
+    /// <summary>
+    /// Ticket P2-085 (ADR 0029 as clarified): on the modern side the same errors are what a migration tool's raw output
+    /// looks like, so the project is kept and each method that does not bind is Unknown(Unbound).
+    /// </summary>
+    [Theory]
+    [InlineData("CS0012")] // type in unreferenced assembly
+    [InlineData("CS0234")] // namespace member missing
+    [InlineData("CS0246")] // type or namespace not found
+    [InlineData("CS0400")] // not found in global namespace
+    public void Classify_UnboundTypeOrNamespaceIsACompilerErrorOnTheModernSide(string id)
     {
-        // CS0518 is how a missing .NET Framework 4.8 targeting pack shows up (ticket Pitfalls).
-        Assert.Equal(LoadDiagnosticKind.UnresolvedReference, CompilationDiagnosticClassifier.Classify("CS0518"));
-    }
-
-    [Fact]
-    public void Classify_AnalyzerLoadFailureIsUnresolvedReference()
-    {
-        Assert.Equal(LoadDiagnosticKind.UnresolvedReference, CompilationDiagnosticClassifier.Classify("CS8032"));
+        Assert.Equal(LoadDiagnosticKind.CompilerError, CompilationDiagnosticClassifier.Classify(id, Codebase.Modern));
     }
 
     [Theory]
-    [InlineData("CS0029")] // cannot implicitly convert
-    [InlineData("CS0103")] // name does not exist in the current context
-    [InlineData("CS1002")] // ; expected
-    public void Classify_OtherErrorIsCompilerError(string id)
+    [InlineData(Codebase.Legacy)]
+    [InlineData(Codebase.Modern)]
+    public void Classify_MissingPredefinedTypeIsUnresolvedReference(Codebase side)
     {
-        Assert.Equal(LoadDiagnosticKind.CompilerError, CompilationDiagnosticClassifier.Classify(id));
+        // CS0518 is how a missing .NET Framework 4.8 targeting pack shows up (ticket Pitfalls): with no core library nearly nothing binds.
+        Assert.Equal(LoadDiagnosticKind.UnresolvedReference, CompilationDiagnosticClassifier.Classify("CS0518", side));
+    }
+
+    [Theory]
+    [InlineData(Codebase.Legacy)]
+    [InlineData(Codebase.Modern)]
+    public void Classify_AnalyzerLoadFailureIsUnresolvedReference(Codebase side)
+    {
+        Assert.Equal(LoadDiagnosticKind.UnresolvedReference, CompilationDiagnosticClassifier.Classify("CS8032", side));
+    }
+
+    [Theory]
+    [InlineData("CS0029", Codebase.Legacy)] // cannot implicitly convert
+    [InlineData("CS0103", Codebase.Legacy)] // name does not exist in the current context
+    [InlineData("CS1002", Codebase.Legacy)] // ; expected
+    [InlineData("CS0103", Codebase.Modern)]
+    [InlineData("CS1002", Codebase.Modern)]
+    public void Classify_OtherErrorIsCompilerError(string id, Codebase side)
+    {
+        Assert.Equal(LoadDiagnosticKind.CompilerError, CompilationDiagnosticClassifier.Classify(id, side));
     }
 
     [Fact]
     public void Classify_IsCaseSensitive()
     {
-        Assert.Equal(LoadDiagnosticKind.CompilerError, CompilationDiagnosticClassifier.Classify("cs0246"));
+        Assert.Equal(LoadDiagnosticKind.CompilerError, CompilationDiagnosticClassifier.Classify("cs0246", Codebase.Legacy));
+        Assert.Equal(LoadDiagnosticKind.CompilerError, CompilationDiagnosticClassifier.Classify("cs0518", Codebase.Modern));
     }
 
     [Fact]

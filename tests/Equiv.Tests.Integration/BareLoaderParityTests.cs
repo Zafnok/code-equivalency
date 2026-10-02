@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 
 using Microsoft.CodeAnalysis;
@@ -30,8 +31,8 @@ public sealed class BareLoaderParityTests
         string solutionPath = Directory.GetFiles(Path.Combine(SamplesRoot, sample, "legacy"), "*.sln").Single();
         string solutionDirectory = Path.GetDirectoryName(solutionPath)!;
 
-        LoadedSolution msBuild = await new MsBuildSolutionLoader().LoadAsync(solutionPath, TestContext.Current.CancellationToken);
-        LoadedSolution bare = await new CompositeSolutionLoader().LoadAsync(solutionPath, TestContext.Current.CancellationToken);
+        LoadedSolution msBuild = await new MsBuildSolutionLoader().LoadAsync(solutionPath, Codebase.Legacy, TestContext.Current.CancellationToken);
+        LoadedSolution bare = await new CompositeSolutionLoader().LoadAsync(solutionPath, Codebase.Legacy, TestContext.Current.CancellationToken);
 
         Assert.Equal(Describe(msBuild, solutionDirectory), Describe(bare, solutionDirectory));
     }

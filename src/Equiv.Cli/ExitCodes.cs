@@ -4,7 +4,9 @@ namespace Equiv.Cli;
 /// Process exit codes for <c>equiv compare</c> (ARCHITECTURE.md's "Equiv.Cli" exit-codes list). When several apply,
 /// a tool fault outranks a verdict, because it leaves the result set incomplete (ADRs 0023 and 0029): 5 (internal
 /// error, M3-013) outranks 4, and both outrank 1 and 2. <see cref="LoadFailure"/> after a written SARIF log means some
-/// C# project was skipped; without one, it means a side had no C# project that loaded.
+/// C# project was skipped; without one, it means a side had no C# project that loaded. A modern project that loads but
+/// does not compile is not skipped: its methods that do not bind are Unknown results, so the verdicts decide the exit
+/// code (ADR 0029 as clarified by ticket P2-085).
 /// </summary>
 internal static class ExitCodes
 {

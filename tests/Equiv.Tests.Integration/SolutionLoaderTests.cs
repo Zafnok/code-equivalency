@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 
 using Xunit;
@@ -40,7 +41,8 @@ public sealed class SolutionLoaderTests
         string sideDir = Path.Combine(SamplesRoot, sample, side);
         string solutionPath = Directory.GetFiles(sideDir, string.Equals(side, "legacy", StringComparison.Ordinal) ? "*.sln" : "*.slnx").Single();
 
-        LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(solutionPath, TestContext.Current.CancellationToken);
+        Codebase codebase = string.Equals(side, "legacy", StringComparison.Ordinal) ? Codebase.Legacy : Codebase.Modern;
+        LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(solutionPath, codebase, TestContext.Current.CancellationToken);
 
         Assert.Single(loaded.Compilations);
         Assert.DoesNotContain(loaded.Diagnostics, static d => d.Kind is not LoadDiagnosticKind.WorkspaceWarning);
@@ -59,7 +61,7 @@ public sealed class SolutionLoaderTests
             string solutionPath = CreateBrokenLegacyCopy(copyDir);
 
             SolutionLoadException ex = await Assert.ThrowsAsync<SolutionLoadException>(
-                () => new MsBuildSolutionLoader().LoadAsync(solutionPath, TestContext.Current.CancellationToken));
+                () => new MsBuildSolutionLoader().LoadAsync(solutionPath, Codebase.Legacy, TestContext.Current.CancellationToken));
 
             Assert.Contains(ex.Diagnostics, static d => d is { Id: "CS0246", Kind: LoadDiagnosticKind.UnresolvedReference });
         }
@@ -82,7 +84,7 @@ public sealed class SolutionLoaderTests
             string solutionPath = CreateModernCopyWithAFrameworkOnlyPackage(copyDir);
             Restore(Path.Combine(copyDir, "Equiv.Samples.Identical.Modern.csproj"));
 
-            LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(solutionPath, TestContext.Current.CancellationToken);
+            LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(solutionPath, Codebase.Modern, TestContext.Current.CancellationToken);
 
             Assert.Single(loaded.Compilations);
             Assert.Empty(loaded.Skipped);

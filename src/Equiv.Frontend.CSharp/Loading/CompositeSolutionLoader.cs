@@ -1,6 +1,8 @@
 using System.Collections.Immutable;
 using System.Globalization;
 
+using Equiv.Core.Verdicts;
+
 using Microsoft.CodeAnalysis;
 
 namespace Equiv.Frontend.CSharp.Loading;
@@ -36,7 +38,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
         _get = get;
     }
 
-    public async Task<LoadedSolution> LoadAsync(string solutionPath, CancellationToken ct)
+    public async Task<LoadedSolution> LoadAsync(string solutionPath, Codebase side, CancellationToken ct)
     {
         string fullPath = Path.GetFullPath(solutionPath);
         string directory = Path.GetDirectoryName(fullPath)!;
@@ -46,7 +48,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
 
         LoadedSolution sdk = sdkStyle.IsEmpty
             ? new LoadedSolution(EmptySolution(), [], [], [])
-            : await LoadSdkStyleAsync(fullPath, sdkStyle, whole: nonSdk.IsEmpty, ct).ConfigureAwait(false);
+            : await LoadSdkStyleAsync(fullPath, sdkStyle, whole: nonSdk.IsEmpty, side, ct).ConfigureAwait(false);
         (HashSet<string> dropped, ImmutableArray<string> droppedPaths, Dictionary<string, string> nameByAssembly, Dictionary<string, Compilation> sdkByPath) = Opened(sdk, directory);
 
         NuGetSettings settings = NuGetSettings.Read(directory);
@@ -57,7 +59,8 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
             new ReferenceAssemblyCache(Path.GetFullPath(ReferenceAssemblyCache.DefaultRoot(_environment))),
             feed,
             NetStandardShims.Find(_environment),
-            sdkByPath);
+            sdkByPath,
+            side);
         foreach (string project in nonSdk.Concat(droppedPaths))
         {
             await bare.LoadAsync(project, ct).ConfigureAwait(false);
@@ -66,7 +69,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
         List<Compilation> compilations = [];
         List<LoadDiagnostic> diagnostics = [.. sdk.Diagnostics.Where(d => !dropped.Contains(d.Project)), .. restore];
         List<SkippedProject> skipped = [.. sdk.Skipped.Where(s => !dropped.Contains(s.Name))];
-        Rebind(sdk.Compilations.Where(c => nameByAssembly.ContainsKey(c.AssemblyName!)), bare.Projects, nameByAssembly, (compilations, diagnostics, skipped), ct);
+        Rebind(sdk.Compilations.Where(c => nameByAssembly.ContainsKey(c.AssemblyName!)), bare.Projects, nameByAssembly, (compilations, diagnostics, skipped), side, ct);
         foreach (BareProject project in bare.Projects)
         {
             if (project.IsSkipped)
@@ -127,6 +130,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
         IReadOnlyList<BareProject> bare,
         Dictionary<string, string> nameByAssembly,
         (List<Compilation> Compilations, List<LoadDiagnostic> Diagnostics, List<SkippedProject> Skipped) result,
+        Codebase side,
         CancellationToken ct)
     {
         Dictionary<string, Compilation> bareByAssembly = new(StringComparer.Ordinal);
@@ -148,7 +152,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
             // Its compiler errors were computed against MSBuildWorkspace's copy of the reference; they are recomputed.
             string name = nameByAssembly[compilation.AssemblyName!];
             result.Diagnostics.RemoveAll(d => string.Equals(d.Project, name, StringComparison.Ordinal) && d.Kind == LoadDiagnosticKind.CompilerError);
-            ImmutableArray<LoadDiagnostic> errors = Errors(rebound, name, ct);
+            ImmutableArray<LoadDiagnostic> errors = Errors(rebound, name, side, ct);
             if (errors.Any(static e => e.Kind == LoadDiagnosticKind.UnresolvedReference))
             {
                 result.Skipped.Add(new SkippedProject(name, compilation.AssemblyName!, IsCSharp: true, errors, rebound));
@@ -166,7 +170,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
     /// else a temporary <c>.slnf</c> naming only them (P2-013's mechanism). When none of them loads, each becomes a
     /// skipped project, so the non-SDK projects can still carry the side.
     /// </summary>
-    private async Task<LoadedSolution> LoadSdkStyleAsync(string solutionPath, ImmutableArray<string> sdkStyle, bool whole, CancellationToken ct)
+    private async Task<LoadedSolution> LoadSdkStyleAsync(string solutionPath, ImmutableArray<string> sdkStyle, bool whole, Codebase side, CancellationToken ct)
     {
         string filterPath = Path.Combine(Path.GetTempPath(), $"equiv-{Guid.NewGuid():N}.slnf");
         try
@@ -176,7 +180,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
                 await File.WriteAllTextAsync(filterPath, SolutionBuildConfiguration.FilterJson(solutionPath, sdkStyle), ct).ConfigureAwait(false);
             }
 
-            return await _sdkStyleLoader.LoadAsync(whole ? solutionPath : filterPath, ct).ConfigureAwait(false);
+            return await _sdkStyleLoader.LoadAsync(whole ? solutionPath : filterPath, side, ct).ConfigureAwait(false);
         }
         catch (SolutionLoadException exception)
         {
@@ -197,11 +201,11 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
         }
     }
 
-    private static ImmutableArray<LoadDiagnostic> Errors(Compilation compilation, string project, CancellationToken ct) =>
+    private static ImmutableArray<LoadDiagnostic> Errors(Compilation compilation, string project, Codebase side, CancellationToken ct) =>
     [
         .. compilation.GetDiagnostics(ct)
             .Where(static d => d.Severity == DiagnosticSeverity.Error)
-            .Select(d => new LoadDiagnostic(CompilationDiagnosticClassifier.Classify(d.Id), d.Id, project, d.GetMessage(CultureInfo.InvariantCulture))),
+            .Select(d => new LoadDiagnostic(CompilationDiagnosticClassifier.Classify(d.Id, side), d.Id, project, d.GetMessage(CultureInfo.InvariantCulture))),
     ];
 
     /// <summary>Whether the project file is SDK-style; a missing or malformed one is left to the bare loader, which reports it.</summary>

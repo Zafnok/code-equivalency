@@ -84,8 +84,11 @@ public sealed class IlLoweringParityTests
         int proved = 0;
         foreach (string solution in Directory.GetDirectories(Path.Combine(RepoRoot, "samples")).Order(StringComparer.Ordinal).SelectMany(Solutions))
         {
-            LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(solution, TestContext.Current.CancellationToken);
-            foreach (Compilation compilation in loaded.Compilations)
+            Codebase side = solution.EndsWith(".sln", StringComparison.Ordinal) ? Codebase.Legacy : Codebase.Modern;
+            LoadedSolution loaded = await new MsBuildSolutionLoader().LoadAsync(solution, side, TestContext.Current.CancellationToken);
+
+            // A project that does not compile emits no IL to read (samples/partly-compiling-modern; ticket P2-085).
+            foreach (Compilation compilation in loaded.Compilations.Where(static c => !c.GetDiagnostics(TestContext.Current.CancellationToken).Any(static d => d.Severity == DiagnosticSeverity.Error)))
             {
                 foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))
                 {

@@ -241,6 +241,10 @@ Top reason sets (up to 15; "" = no opaque): | reason set | changed pairs | ownin
 - By proofMethod: ...
 - Unknown by scope: line <n>, method <n>. Line-scoped Unknown share: <%>
 - Top Unknown reasons: ...
+- `unbound` Unknowns: <n>. A modern project that does not compile is loaded and counts in the load
+  rate, and each method that does not bind is one of these (ADR 0029, clarified 2026-10-01). On a
+  human or agent pair the modern side compiles, so each one is a finding with a ticket, as a skipped
+  project is (ADR 0028, same date). On a tool pair it is the tool's unfinished work: report the count.
 - Top abstractions: the entries of `properties.abstractions` over every `abstraction` Unknown, grouped by
   kind, top 15, with counts. An entry with a `reason` is an opaque fragment and its kind is
   `opaque <reason>` (for example `opaque DelegateCreation`), never its `opaque:<fingerprint>` identity; an

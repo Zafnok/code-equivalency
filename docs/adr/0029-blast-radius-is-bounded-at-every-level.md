@@ -104,3 +104,37 @@ methods it breaks. So there is no file level.
 - 2026-09-25 (M3-025). Decision 4's `line` needs the first query over every input, so an Unknown on
   a pair with a loop or self-call, whose rung 1 query runs on the unrolled pair, is `method`. So is
   an `abstraction` Unknown: its candidate came from that query, which was satisfiable.
+- 2026-10-01 (P2-085). Decision 1's "has unresolved references" is about the references, not about
+  names. On the modern side, a project that MSBuild opens, and whose reference set the compiler
+  accepts, is loaded even when its source does not compile, and decision 2 decides it method by
+  method. That is the usual state of a migration tool's raw output: every reference resolves, and
+  the source still names types the new references do not provide (CS0012, CS0234, CS0246, CS0400).
+  A project is still skipped whole when it cannot be opened (a workspace failure, which includes
+  a reference or a restore MSBuild reports as unresolved), when the reference set itself is broken
+  (CS0006, CS1705, CS8032, and CS0518: with no core library nearly nothing binds), when it
+  yields no procedures (P2-018), or when it is not C#. The legacy side keeps M3-024's rule, where
+  those four name errors also skip the project: it is the shipped application, so a name that does
+  not bind there means the tool loaded it wrongly, and a half-bound reference side is nothing to
+  compare against.
+- 2026-10-01 (P2-085). Decision 2, which methods an error breaks, on either side:
+  - A syntax error breaks every method declared in its file, and each is `Unknown(Unbound)` at the
+    file's first syntax error. "A syntax error surfaces as diagnostics on the methods it breaks"
+    does not hold: where each declaration begins and ends in such a file is the parser's
+    recovery. One missing brace makes the next method a local function of the one before it, and
+    one extra brace turns the members after it into top-level statements, while the methods before
+    it carry no diagnostic. There is still no `file` scope: each result is `method`-scoped.
+  - A method that binds without error is compared as it is bound, even when it calls a member of
+    a type that has errors elsewhere (an unresolved base type, another member that does not bind).
+    The callee's own pair is `Unknown(Unbound)`, and ADR 0019 already lists it under the caller's
+    `unprovenAssumptions`. An Equivalent verdict needs both bodies to bind the same members, and
+    the legacy body binds in a project that compiles, so a lookup that an error degraded can make a
+    pair Divergent or Unknown, never Equivalent.
+  - Two kinds of method reference an error-type symbol with no diagnostic in their own span, and
+    both are `Unknown(Unbound)`: a constructor of a type whose base type did not resolve (its bound
+    body leaves the base constructor call out), and a method with an error type in its signature
+    whose declaration is elsewhere (an accessor of a property whose type did not resolve).
+- 2026-10-01 (P2-085). A project compared method by method is a loaded project. It has no
+  notification, it is not counted in `projectsSkipped`, and it does not cause exit 4: its unbound
+  methods are EQ003 results, so the exit code follows the verdicts. This is not the rejected "treat
+  a skipped project's procedures as Unknown results": each of these Unknowns states an error in that
+  method's own code, not one fact about the tool repeated for every method.

@@ -23,6 +23,7 @@ public sealed class SamplesFixtureTests
             ["callee-changed-invisible"] = ["Divergent", "Equivalent"],
             ["loop-to-linq"] = ["Equivalent"],
             ["loop-fusion"] = ["Equivalent"],
+            ["partly-compiling-modern"] = ["Equivalent", "Unknown"],
         };
 
     private static string SamplesRoot =>

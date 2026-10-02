@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using Equiv.Core;
 using Equiv.Core.Configuration;
 using Equiv.Core.Matching;
+using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 using Equiv.TestSupport;
 
@@ -18,7 +19,7 @@ public sealed class FrontendProgressTests
 {
     private sealed class StubLoader(Func<string, LoadedSolution> load) : ISolutionLoader
     {
-        public Task<LoadedSolution> LoadAsync(string solutionPath, CancellationToken ct) =>
+        public Task<LoadedSolution> LoadAsync(string solutionPath, Codebase side, CancellationToken ct) =>
             string.Equals(solutionPath, "bad.sln", StringComparison.Ordinal) ? throw new SolutionLoadException(solutionPath, []) : Task.FromResult(load(solutionPath));
     }
 

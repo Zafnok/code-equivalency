@@ -11,10 +11,16 @@ internal enum LoadDiagnosticKind
     /// </summary>
     WorkspaceWarning,
 
-    /// <summary>A compiler error meaning references did not resolve; skips the project.</summary>
+    /// <summary>
+    /// A compiler error meaning references did not resolve; skips the project. On the legacy side that includes a name no
+    /// reference provides (<see cref="CompilationDiagnosticClassifier.Classify"/>).
+    /// </summary>
     UnresolvedReference,
 
-    /// <summary>Any other compiler error; kept, since the methods that bind are still usable.</summary>
+    /// <summary>
+    /// Any other compiler error; kept, since the methods that bind are still usable. On the modern side that includes a
+    /// name no reference provides (ADR 0029 as clarified by ticket P2-085).
+    /// </summary>
     CompilerError,
 
     /// <summary>A project that is not C#; skipped with a warning.</summary>

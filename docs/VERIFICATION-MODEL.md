@@ -651,7 +651,16 @@ A whole-body opaque's span is the construct that caused it (the `foreach`, the `
 `catch`), not the method body. A method whose bound body holds a compiler error, an
 `IInvalidOperation` or an error-type symbol is `Unknown(Unbound)`, with the diagnostics as its
 causes, and is never Equivalent by congruence. Neither scope nor causes is part of the
-fingerprint.
+fingerprint. The causes are the errors in source order, so the result's location is the modern
+side's first error, and the message only says which side does not bind: it holds no path, because
+the fingerprint hashes it. Three cases have no diagnostic in the method's own span (ADR 0029 as
+clarified by ticket P2-085). A syntax error makes every method declared in its file unbound, at the
+file's first syntax error, because where each declaration begins and ends is then the parser's
+recovery. A constructor of a type whose base type did not resolve is unbound, since its bound body
+leaves the base constructor call out. So is an accessor of a property or indexer whose type or
+parameter type did not resolve. A method that binds without error is compared as it is bound, even
+when it calls a member of a type with errors elsewhere: that callee's own pair is the Unknown, and
+the caller lists it under `unprovenAssumptions` (ADR 0019).
 
 Every run writes `run.properties.loweringCensus`: procedures per side, matched pairs, pairs
 without `IrOpaque`, whole-body opaque pairs, congruent pairs, and `IrOpaque` counts by reason
@@ -666,7 +675,8 @@ lists); a `.slnx`, or a `.sln` that lists no configuration, builds all of them. 
 never opened, so they are neither loaded nor skipped, and every run names them once per side in
 `run.properties.projectsNotBuilt` (`legacy`, `modern`). The project load rate (ADR 0028) is C#
 projects loaded over C# projects built: skipped projects count against it, projects not built do
-not (ticket P2-013).
+not (ticket P2-013). A modern project that does not compile but is compared method by method (below)
+counts as loaded (ticket P2-085).
 
 Every loaded project has a runtime, read from each side and never assumed (ADR 0040 decision 1;
 ticket P2-053). A project's runtime is its compilation's `TargetFrameworkAttribute`: .NET Framework
@@ -734,7 +744,14 @@ and the other pairs are reported as usual. Its baseline result, if any, is carri
 known divergence look fixed.
 
 A project that cannot be loaded is contained the same way, one level up (ADR 0029). A C# project
-that fails to load or has unresolved references, and any project that is not C#, is skipped. It
+that fails to load or has unresolved references, and any project that is not C#, is skipped.
+"Unresolved references" means the references themselves: a project MSBuild cannot open, or one
+whose reference set the compiler rejects (CS0006, CS0518, CS1705, CS8032). On the legacy side it
+also means a name no reference provides (CS0012, CS0234, CS0246, CS0400), since the shipped
+application has none unless it was loaded wrongly. On the modern side those four do not skip the
+project: that is what a migration tool's raw output looks like, so the project is loaded, each
+method that does not bind is `Unknown(Unbound)`, every other method is compared, and the exit code
+follows the verdicts (ticket P2-085; sample `partly-compiling-modern`). A skipped project
 gets a tool-execution notification (`error` for C#, `warning` otherwise), and its procedures are
 listed in `properties.unverified`. Their baseline results are carried as `unchanged` with
 `properties.unverified: true`. No Added or Removed result is reported for a procedure whose
@@ -852,7 +869,8 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   generated or sample pair, the solver on the same pair never reports Divergent.
 - Taint (ADR 0026): no Divergent result's differing observable is tainted.
 - Containment (ADR 0029): a solution with one unloadable project reports every other project's
-  results, and an unbound method is Unknown(Unbound), never congruent. Residual claim (property
+  results, and an unbound method is Unknown(Unbound), never congruent. No pair is Equivalent when
+  either body holds an error, one test per error kind (`UnboundNeverEquivalentTests`, ticket P2-085). Residual claim (property
   test): for a `line`-scoped Unknown, every generated input on which neither side reaches a listed
   cause gives equal observables in `IrInterpreter`.
 - Every row in the tables above has at least one unit test named after it.
