@@ -25,7 +25,8 @@ ADR 0028 (the load-rate rule), `src/Equiv.Frontend.CSharp/CSharpFrontend.cs`
 1. A project whose only type declarations have no member with a body loads, is not in
    `projectsSkipped`, and raises no notification. Unit test with one empty class.
 2. P2-018's case still skips: a project whose syntax has a method body and whose enumeration is
-   empty. Its existing test stays green unchanged.
+   empty. Its existing tests stay green with their assertions unchanged; their fixture gains a
+   destructor (see the `Deviation:` in Notes).
 3. A `--lower-only` run of `duplicati-3124` reports `projectsSkipped` 0 on both sides. The figure
    goes in `## Notes`.
 
@@ -44,3 +45,20 @@ Any other skip reason. How the load rate is computed.
 
 ## Notes
 - Found by P2-065, at equiv ef79ff6.
+- Deviation: criterion 2 said P2-018's existing test stays green unchanged. It could not: the fixture in
+  `ProjectWithTypesButNoProcedures_IsSkipped`, `AVacuousProjectIsSkippedWhateverItsOtherTreesHoldAndItsNeighboursStay`
+  and `NoProcedures_ExitsFour` was `class Empty { public int X; }`, a field and no body, which is exactly the
+  kind of project this ticket says is not a load failure. The fixture now also declares `~Empty() { }`, a body
+  the enumerator does not count (destructors are not procedures). Every assertion in the three tests is unchanged.
+- Decision: the walk is restricted to nodes inside a type declaration, so a project of top-level statements
+  only (no type) stays unaffected, as it was under `DeclaresAType`. Simpler alternative (any body anywhere in
+  the tree) would have newly skipped such a project whenever it holds an expression-bodied local function.
+- Decision: "a body" is an `AccessorDeclarationSyntax`, an `ArrowExpressionClauseSyntax`, or a
+  `BaseMethodDeclarationSyntax` with a block. The notification text is unchanged; it is still true.
+- Observed, not changed (the ticket counts any accessor): an interface-only project that declares a property
+  (`int P { get; }`) has an accessor in syntax and no procedure, so it is still skipped, as before this ticket.
+  A contracts-only project with no property now loads. No corpus pair shows the first case yet.
+- Criterion 3: `--lower-only` run of `duplicati-3124` at equiv e2741c6, 2026-10-01: `projectsSkipped` legacy 0,
+  modern 0 (was 1 and 1). `Duplicati.Tools` logs `outcome=loaded` on both sides; load-legacy 51 of 51,
+  load-modern 52 of 52, so the project load rate is 100% (103 of 103). Procedures 6340 / 6367 and matched pairs
+  6275 are the same as P2-065's run. Exit 5, 99 s: the eight pair-level lowering crashes P2-083 owns.
