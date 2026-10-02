@@ -170,7 +170,7 @@ internal static class ReplayArguments
         return outer ?? symbol.DeclaredAccessibility switch
         {
             Accessibility.Public or Accessibility.Internal or Accessibility.ProtectedOrInternal => null,
-            Accessibility accessibility => SyntaxFacts.GetText(accessibility),
+            var accessibility => SyntaxFacts.GetText(accessibility),
         };
     }
 
