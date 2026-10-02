@@ -518,8 +518,14 @@ OpenRA are rerun once they land:
 - P2-083 (S) Lowering a binary operator in a branch condition no longer throws a bare
   `NullReferenceException`: 19 pairs over eshop-manual, OpenRA and Duplicati.
 - P2-085 (L) A modern project that does not compile is still compared, method by method, with each
-  erroneous method Unknown(unbound). Raw output of Upgrade Assistant and of Porting Assistant is
-  skipped whole today. Starts with `equiv-adr`'s bar test.
+  erroneous method Unknown(unbound). Done 2026-10-01, under clarifications of ADR 0029 and ADR 0028:
+  `eshop-upgrade-assistant` goes from 2 matched pairs to 135 (101 Equivalent by congruence, 17
+  unbound). `eshop-porting-assistant` is unchanged, because its project cannot be opened at all
+  (P2-091).
+- P2-091 (M) Porting Assistant's output is still skipped: the `Microsoft.Net.Compilers` package it
+  leaves replaces the SDK's `Csc` task, which MSBuildWorkspace reports as a failure, and its restore
+  fails on NU1605. Find out whether the compilation the workspace returns is the project's. Needs
+  P2-085.
 - P2-084 (S) A project whose only types are empty is not a load failure (Duplicati's placeholder
   project; load rate 98.1% on a human pair).
 - P2-087 (M) `Binary` (lifted operators and the rest) alone is 6.2% of OpenRA's changed pairs and has
