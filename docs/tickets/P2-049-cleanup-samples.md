@@ -1,5 +1,5 @@
 # P2-049 Samples for cleanup refactorings: modern syntax and extract method
-Status: todo
+Status: in-progress
 Effort: M
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: M3-003, P2-055 (same-runtime pairs, ADR 0040)
@@ -53,3 +53,40 @@ sample: split or cut.
 Making any of these verdicts Equivalent. Refactorings the seeder can apply (P2-048).
 
 ## Notes
+- Result: 9 matched pairs, all behaviour-preserving. 3 Equivalent (`Circle.Diameter`,
+  `Tidy.OrDefault`, `Tidy.Measure`, each `bounded`), 3 Unknown and 3 Divergent. Five distinct
+  reasons, none with an open owner, so five tickets:
+  - `Tidy.Grade`: Unknown(opaque), `switch-pattern` on each relational pattern. P2-093.
+  - `Tidy.Join`: Divergent, `String::Format(string,object,object)` against the
+    `String::Concat(string,string)` chain P2-086 lowers the interpolated string to. P2-094.
+  - `Tidy.LengthOf`: Unknown(opaque), `Conversion` on both sides (`int` to `int?`) and `DefaultValue`
+    on the modern side (`default(int?)`). P2-095.
+  - `Tidy.Positives`: Unknown(abstraction), the divergence depends on the lambda's delegate. P2-096.
+  - `Invoice.Total` and `Invoice.Shipping`: Divergent on the call trace alone, with equal return
+    values in the counterexample. One reason, a call to a helper that exists on one side only. P2-097.
+- Owners checked and ruled out: P2-068 (a forwarder to a BCL member, not a helper with a body),
+  P2-070 (identical source rebinding to another overload), P2-071 (an extra effect-free call),
+  P2-081 (a closed call's free `threw`; it would turn `Join` Unknown at best), P2-087 (lifted binary
+  operators; `LengthOf` has none).
+- Decision: the legacy projects set `LangVersion` 7.3, so the compiler enforces "C# 7.3 style", and
+  use a block-scoped namespace. Reversible; the alternative (style by convention only) lets a later
+  edit slip modern syntax into the legacy side unnoticed.
+- Decision: `Grade` uses relational patterns (`>= 90`), not constants. `same-runtime-cleanup`'s
+  `Rank` already covers an `if` chain against a constant-pattern `switch` expression, and it is
+  Equivalent, so constants would measure nothing new.
+- Decision: both sides of `Positives` keep the same `if (values == null)` guard. Without it the pair
+  is not behaviour-preserving (`NullReferenceException` from the loop, `ArgumentNullException` from
+  `Where`), which criterion 1 requires on every input.
+- Decision: `Circle.Radius` is a public field, not an auto-property, so the sample has no accessor
+  pair beyond the `Diameter` getter the criterion asks for.
+- Deviation: `samples/README.md` is not in Files. Its sentence "Two samples pair other runtimes" became
+  false, so it now lists four.
+- `SamplesEndToEndTests.cs` is unchanged: its theories enumerate `samples/` by directory, so both
+  samples get the snapshot, baseline round-trip and refinement rows without an edit.
+- No change under `src/`. 7 procedures in one sample and 4 in the other.
+- Local run: the six theory rows for the two samples pass. `version-bump` and `webapi-basic` fail
+  locally because their packages are not restored here. `partly-compiling-modern` fails on `main` as
+  it stands: P2-085's snapshot has the EQ006 rule text "between .NET Framework and .NET", which
+  P2-055 reworded to "between the two sides' runtimes", and the two PRs only met on `main`. `main`
+  also does not compile at 46e6636 (`UnboundCodeTests.cs`, PR #340, which does not touch that
+  snapshot). Neither is this ticket's to fix, and this PR's gates stay red until both are.

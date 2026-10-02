@@ -1,0 +1,656 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CleanupModernSyntax.Circle::get_Diameter() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Circle.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 13,
+                  "endLine": 9,
+                  "endColumn": 16
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Circle::get_Diameter()",
+            "resultFingerprint/v1": "df14a7f4c35e1b6988fc4ffc1b4b8a67a08cb0417833e1e5e9dba5b9e9dd8b0f"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int) is unknown (Opaque): new: switch-pattern. It is equivalent on every input that reaches none of the related locations."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 13,
+                  "endLine": 12,
+                  "endColumn": 23
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int)",
+            "resultFingerprint/v1": "053e86cb5e71b02537da73f306242c1188933e480b278be6ff89f7e3d29e51d2"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 13,
+                  "endLine": 12,
+                  "endColumn": 23
+                }
+              },
+              "message": {
+                "text": "switch-pattern"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 13,
+                  "startColumn": 13,
+                  "endLine": 13,
+                  "endColumn": 23
+                }
+              },
+              "message": {
+                "text": "switch-pattern"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 14,
+                  "startColumn": 13,
+                  "endLine": 14,
+                  "endColumn": 23
+                }
+              },
+              "message": {
+                "text": "switch-pattern"
+              }
+            }
+          ],
+          "baselineState": "new",
+          "rank": 20.002,
+          "properties": {
+            "unknownReason": "opaque",
+            "scope": "line",
+            "residualClaim": "equivalent unless a relatedLocation is reached",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "an input reaches an opaque node: new: switch-pattern"
+              }
+            ],
+            "reviewGroup": "opaque:switch-pattern"
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string) diverges: inputs(sort \"System.String\" 671913018, sort \"System.String\" 671913017, map<sort \"System.String\", sort \"System.Object\"> [sort \"System.String\" 671913017 -> sort \"System.Object\" 1] default sort \"System.Object\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 671913019 outs() trace(\"System.String::Format(string,object,object)\"(sort \"System.String\" 157356947, sort \"System.Object\" 0, sort \"System.Object\" 1))) new(threw \"System.Exception\" outs() trace(\"System.String::Concat(string,string)\"(sort \"System.String\" 671913018, sort \"System.String\" 671913017)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 27,
+                  "startColumn": 23,
+                  "endLine": 27,
+                  "endColumn": 27
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)",
+            "resultFingerprint/v1": "a061eabd7787502cfc6ff0725b67500992825327074afb4b5f75dd8d45892b24"
+          },
+          "baselineState": "new",
+          "rank": 60.002,
+          "properties": {
+            "model": "inputs(sort \"System.String\" 671913018, sort \"System.String\" 671913017, map<sort \"System.String\", sort \"System.Object\"> [sort \"System.String\" 671913017 -> sort \"System.Object\" 1] default sort \"System.Object\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 671913019 outs() trace(\"System.String::Format(string,object,object)\"(sort \"System.String\" 157356947, sort \"System.Object\" 0, sort \"System.Object\" 1))) new(threw \"System.Exception\" outs() trace(\"System.String::Concat(string,string)\"(sort \"System.String\" 671913018, sort \"System.String\" 671913017)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "reviewGroup": "calls:System.String::Concat(string,string)|System.String::Format(string,object,object)"
+          }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::LengthOf(string) is unknown (Opaque): old: Conversion; new: DefaultValue; new: Conversion. It is equivalent on every input that reaches none of the related locations."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 26,
+                  "startColumn": 16,
+                  "endLine": 26,
+                  "endColumn": 17
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Tidy::LengthOf(string)",
+            "resultFingerprint/v1": "487f80bac5cc1c4f9e9a608fb22dd8807bc74d3f2570a8cf6a3cfa7eaef9c4c0"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 34,
+                  "startColumn": 45,
+                  "endLine": 34,
+                  "endColumn": 53
+                }
+              },
+              "message": {
+                "text": "Conversion"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 26,
+                  "startColumn": 16,
+                  "endLine": 26,
+                  "endColumn": 17
+                }
+              },
+              "message": {
+                "text": "DefaultValue"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 26,
+                  "startColumn": 18,
+                  "endLine": 26,
+                  "endColumn": 25
+                }
+              },
+              "message": {
+                "text": "Conversion"
+              }
+            }
+          ],
+          "baselineState": "new",
+          "rank": 20.002,
+          "properties": {
+            "unknownReason": "opaque",
+            "scope": "line",
+            "residualClaim": "equivalent unless a relatedLocation is reached",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "an input reaches an opaque node: old: Conversion; new: DefaultValue; new: Conversion"
+              }
+            ],
+            "reviewGroup": "opaque:Conversion+DefaultValue"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::OrDefault(string,string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 37,
+                  "startColumn": 23,
+                  "endLine": 37,
+                  "endColumn": 32
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Tidy::OrDefault(string,string)",
+            "resultFingerprint/v1": "e45ae58ab11d5d47875bd2671fa190c8fe5ab9d5acfd81f2455bae0c5045cb72"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::Measure(object) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 47,
+                  "startColumn": 20,
+                  "endLine": 47,
+                  "endColumn": 27
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Tidy::Measure(object)",
+            "resultFingerprint/v1": "6393e385692700b21f7aad287e0bc083f06386bacc1acdcb45bf79d69d6a47fc"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::Positives(System.Collections.Generic.List<int>) is unknown (Abstraction): the divergence depends on delegate:ef2a2148658992336971e94000f93fc32912f64ecc07a8ca0a62457b75e7b016#0"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Tidy.cs"
+                },
+                "region": {
+                  "startLine": 58,
+                  "startColumn": 26,
+                  "endLine": 58,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Tidy::Positives(System.Collections.Generic.List<int>)",
+            "resultFingerprint/v1": "431d1bf23dce4ed049dcfba44a3b84257a638d279cc9c381e0c2161483abe594"
+          },
+          "baselineState": "new",
+          "rank": 0.002,
+          "properties": {
+            "unknownReason": "abstraction",
+            "scope": "method",
+            "candidateCounterexample": "inputs(sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", sort \"System.Object\"> [] default sort \"System.Object\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool false, map<sort \"System.Object\", bool> [] default bool false, map<sort \"System.Collections.Generic.List`1\", sort \"System.Collections.Generic.IEnumerable`1\"> [] default sort \"System.Collections.Generic.IEnumerable`1\" 0) old(returned sort \"System.Collections.Generic.List`1\" 0 outs() trace(\"System.Collections.Generic.List`1::.ctor()<int>\"(), \"System.Collections.Generic.List`1::GetEnumerator()<int>\"(sort \"System.Collections.Generic.List`1\" 0), \"System.Collections.Generic.List`1.Enumerator::MoveNext()<int>\"(sort \"System.Collections.Generic.List`1+Enumerator\" 0), \"System.Collections.Generic.List`1.Enumerator::get_Current()<int>\"(sort \"System.Collections.Generic.List`1+Enumerator\" 0), \"System.Collections.Generic.List`1::Add(int)<int>\"(sort \"System.Collections.Generic.List`1\" 0, bv32 1), \"System.Collections.Generic.List`1.Enumerator::MoveNext()<int>\"(sort \"System.Collections.Generic.List`1+Enumerator\" 0), \"System.IDisposable::Dispose()\"(sort \"System.Collections.Generic.List`1+Enumerator\" 0))) new(threw \"System.Exception\" outs() trace(\"System.Linq.Enumerable::Where`1(System.Collections.Generic.IEnumerable<int>,System.Func<int, bool>)<int>\"(sort \"System.Collections.Generic.IEnumerable`1\" 0, sort \"System.Func`2\" 0), \"System.Linq.Enumerable::ToList`1(System.Collections.Generic.IEnumerable<int>)<int>\"(sort \"System.Collections.Generic.IEnumerable`1\" 1)))",
+            "abstractions": [
+              {
+                "identity": "delegate:ef2a2148658992336971e94000f93fc32912f64ecc07a8ca0a62457b75e7b016#0",
+                "side": "modern"
+              }
+            ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
+              }
+            ],
+            "reviewGroup": "abstraction"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 7,
+            "modern": 7
+          },
+          "matchedPairs": 7,
+          "pairsWithoutOpaque": 5,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 0,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {
+            "Conversion": {
+              "legacy": 1,
+              "modern": 1
+            },
+            "DefaultValue": {
+              "legacy": 0,
+              "modern": 1
+            },
+            "switch-pattern": {
+              "legacy": 0,
+              "modern": 1
+            }
+          },
+          "changedPairs": 7,
+          "changedPairsWithoutOpaque": 5,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 5,
+            "Conversion+DefaultValue": 1,
+            "switch-pattern": 1
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.IDisposable::Dispose()",
+                "callSites": 3
+              },
+              {
+                "member": "System.Collections.Generic.List`1::.ctor()<int>",
+                "callSites": 2
+              },
+              {
+                "member": "System.Collections.Generic.List`1.Enumerator::MoveNext()<int>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Collections.Generic.List`1.Enumerator::get_Current()<int>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Collections.Generic.List`1::Add(int)<int>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Collections.Generic.List`1::GetEnumerator()<int>",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::Format(string,object,object)",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.Collections.Generic.List`1::.ctor()<int>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Linq.Enumerable::ToList`1(System.Collections.Generic.IEnumerable<int>)<int>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Linq.Enumerable::Where`1(System.Collections.Generic.IEnumerable<int>,System.Func<int, bool>)<int>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Runtime.CompilerServices.SwitchExpressionException::.ctor()",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 2,
+            "method": 1
+          },
+          "failureRefinement": {
+            "pairs": 3,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 93,
+          "modern": 63
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.CleanupModernSyntax",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.CleanupModernSyntax",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "reviewList": [
+          {
+            "group": "calls:System.String::Concat(string,string)|System.String::Format(string,object,object)",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)"
+            ]
+          },
+          {
+            "group": "opaque:Conversion+DefaultValue",
+            "ruleId": "EQ003",
+            "rank": 20.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.CleanupModernSyntax.Tidy::LengthOf(string)"
+            ]
+          },
+          {
+            "group": "opaque:switch-pattern",
+            "ruleId": "EQ003",
+            "rank": 20.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int)"
+            ]
+          },
+          {
+            "group": "abstraction",
+            "ruleId": "EQ003",
+            "rank": 0.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.CleanupModernSyntax.Tidy::Positives(System.Collections.Generic.List<int>)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
