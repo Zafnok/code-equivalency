@@ -158,6 +158,11 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
   tool-execution notification, and its procedures are listed in `run.properties.unverified`. The run
   still writes every other result and then exits 4. A skipped non-C# project alone does not
   change the exit code. Exit 4 without a SARIF log means no C# project loaded on some side.
+- A modern project that does not compile is not a load failure when MSBuild opens it and its
+  references resolve (ADR 0029 as clarified by ticket P2-085): the loader, told which side it loads,
+  keeps it. Each of its methods that does not bind is an EQ003 with reason `unbound`, every other
+  method is compared, and the exit code follows the verdicts: 0, or 2 under `--fail-on unknown`,
+  never 4 for that project. The same errors on the legacy side still skip its project (exit 4).
 - Precedence: 5 outranks 4, and both outrank 1 and 2, because a tool fault makes the result set
   incomplete (ADRs 0023 and 0029).
 

@@ -228,7 +228,7 @@ equiv: +00:00:06 verify done in 00:00:00.124; eta@25%=00:00:00.000 eta@50%=00:00
 | 1 | At least one `Divergent` result that is `new` relative to `--baseline` |
 | 2 | `--fail-on unknown` and at least one new `Unknown` result |
 | 3 | Usage error: bad arguments, missing or unparseable file, no frontend for the paths |
-| 4 | A C# project was skipped because it failed to load (the SARIF lists it and is still written), or a side had no C# project that loaded (no SARIF). Outranks 1 and 2 |
+| 4 | A C# project was skipped because it failed to load (the SARIF lists it and is still written), or a side had no C# project that loaded (no SARIF). Outranks 1 and 2. A modern project that loads but does not compile is not skipped: its methods that do not bind are `Unknown` results with reason `unbound`, the rest are compared, and the exit code is 0, 1 or 2 as the verdicts say |
 | 5 | At least one pair's lowering or verification crashed (the SARIF lists it as a tool-execution notification and is still written), or any other unhandled internal error. Outranks 1, 2 and 4 |
 
 Output is always SARIF 2.1.0 (rules EQ001 to EQ006); the exact meaning of each verdict
