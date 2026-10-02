@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     The corpus is two checked-in manifests beside this script:
-      pairs.csv                        public before/after migrations (human- or tool-made), pinned by commit
+      pairs.csv                        public before/after pairs (human or tool migrations, cleanup commits), pinned by commit
       poly-migrationbench-dotnet.csv   verbatim copy of Amazon's Poly-MigrationBench .NET list (Apache-2.0)
 
     Third-party code only ever lands under <repo>/.corpus/, which .gitignore excludes. The script

@@ -6,7 +6,7 @@ through the skill `.claude/skills/equiv-corpus-run`, not by hand.
 | File | What it is |
 |---|---|
 | `poly-migrationbench-dotnet.csv` | Verbatim copy of Amazon's Poly-MigrationBench .NET list: 100 MIT or Apache-2.0 .NET Framework repos, each pinned at a commit where the build and unit tests pass. The columns are `repo,base_commit,license,num_cs_files,root_sln_or_csproj_files,verify_command`. |
-| `pairs.csv` | Public before-and-after migrations pinned by commit. Kind `human`: a person migrated it. Kind `tool`: raw output of .NET Upgrade Assistant or AWS Porting Assistant. |
+| `pairs.csv` | Public before-and-after migrations pinned by commit. Kind `human`: a person migrated it. Kind `tool`: raw output of .NET Upgrade Assistant or AWS Porting Assistant. Kind `cleanup`: a commit whose author says it changes no behaviour, on any runtimes (ADR 0040 decision 5). |
 | `corpus.ps1` | Lists, selects, fetches and cleans pairs; computes ADR 0028's unchanged share; refreshes the upstream list; `-SeedMechanical` drives the seeder (ticket M4-010); `-RuntimeDiff` runs `tools/runtime-diff` on a census's `externalCallees` (ADR 0035, ticket M3-033). |
 | `migration-prompt.md` | The fixed prompt an agent gets when it migrates an agent pair. |
 | `seeds.md` | The catalogue of hand-written behaviour changes injected in `seeded` mode, used to measure recall. |
@@ -58,6 +58,19 @@ its `license` column), and none of their code is in this repository.
 | `duplicati-3124` | duplicati/duplicati PR #3124 | Framework to .NET 5, a first step of 100 commits. Mostly project-file churn plus deleted Mono-only code. |
 | `openra-17989` | OpenRA/OpenRA PR #17989 | Minimal: 4 `.cs` files changed, mostly a new assembly loader. |
 | `eshop-manual`, `eshop-upgrade-assistant`, `eshop-porting-assistant` | mjrousos/UpgradeSample | One legacy MVC 5 app next to a hand-finished .NET 6 port and to the raw output of two migration tools. |
+
+### Cleanup pairs (ADR 0040 decision 5, ticket P2-058)
+
+A `cleanup` row pins one merged pull request. The modern commit is the squash commit on the default
+branch and the legacy commit is its first parent, so the pair's diff is exactly the pull request.
+`-List` and `-Fetch` treat the row as they treat a `human` row. The results are reported in the
+"Cleanup pairs" section of a verdict file and take no part in ADR 0028's thresholds.
+
+| Slug | Source | What its author says |
+|---|---|---|
+| `gitextensions-11372` | <https://github.com/gitextensions/gitextensions/pull/11372>, squash commit `1cfb0e4441e2` | Applies the collection-expression style rule (IDE0028): `new()` and collection initializers become `[...]`. The description presents it as a syntax change only, with a few analyzer suggestions taken back by hand because they did not compile. 198 files. |
+| `gitextensions-11284` | <https://github.com/gitextensions/gitextensions/pull/11284>, squash commit `89962d9f88b7` | Applies IDE0008, an explicit type in place of `var`, plus manual touch-ups (type aliases, indentation, casing, a few target-typed `new`). The author states the only check was that it compiles and starts, which is a claim that nothing else changed. 468 files. |
+| `powershell-19687` | <https://github.com/PowerShell/PowerShell/pull/19687>, squash commit `1c55e02df443` | Applies IDE0019 in the `Microsoft.Management` folder: `as` followed by a null check becomes an `is` pattern, and in places the pattern is merged into the enclosing condition. The pull request ticks "Breaking changes: None" and "User-facing changes: Not Applicable". 9 files. |
 
 `-Unchanged` matches files by relative path. A migration that renames folders (`eshop-manual`
 renames `eShopLegacyMVC` to `eShop.MVC`) therefore scores 0% even where contents match. Read
