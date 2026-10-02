@@ -22,11 +22,27 @@ namespace Equiv.Verify.Z3;
 /// reaches an <see cref="IrOpaque"/> gives <see cref="Divergent"/>, with a counterexample replayed in
 /// <see cref="IrInterpreter"/>; if not, an input reaching an opaque gives <see cref="UnknownReason.Opaque"/>. Each
 /// query gets its own <see cref="Context"/>, disposed on every path. A solver <c>unknown</c> is
-/// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason, which is not always a timeout. Any other
+/// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason and the limit it hit, the resource limit
+/// or the wall-clock backstop (<see cref="Limit"/>; ticket P2-050), or neither when the solver gave up for another reason. Any other
 /// Unknown carries <see cref="FailureRefinementQuery"/>'s two answers (ADR 0037).
 /// </summary>
 public sealed class Z3Backend : IVerificationBackend
 {
+    /// <summary>The Z3 parameter for the deterministic resource limit of a check or a fixedpoint query.</summary>
+    internal const string ResourceLimitParameter = "rlimit";
+
+    /// <summary>The Z3 parameter for the wall-clock limit of a check or a fixedpoint query, in milliseconds.</summary>
+    internal const string TimeoutParameter = "timeout";
+
+    /// <summary>A solver's reason for giving up when its timer fired.</summary>
+    internal const string SolverTimedOut = "timeout";
+
+    /// <summary>
+    /// Z3's reason when a limit cancelled the work in hand: a tactic solver's when <c>rlimit</c> ran out, and a fixedpoint
+    /// query's when its timer fired.
+    /// </summary>
+    internal const string Canceled = "canceled";
+
     private readonly Func<Context> createContext;
     private readonly Func<string, IInvariantProposer> proposers;
 
@@ -116,7 +132,7 @@ public sealed class Z3Backend : IVerificationBackend
         using Tactic smt = context.MkTactic("smt");
         using Tactic pipeline = context.AndThen(solveEqs, simplify, propagate, solveEqs, smt);
         Solver solver = context.MkSolver(pipeline);
-        solver.Set("timeout", (uint)options.TimeoutMs);
+        Limit(solver, options);
         solver.Add(encoding.Assertions);
         solver.Add(Inline(context, encoding.Assertions, query));
         return solver;
@@ -155,8 +171,35 @@ public sealed class Z3Backend : IVerificationBackend
         return [.. query.Select(q => (BoolExpr)q.Substitute(from, to))];
     }
 
+    /// <summary>
+    /// Bounds every check of <paramref name="solver"/> twice (ticket P2-050): by Z3's <c>rlimit</c>, a count of the solver's
+    /// own steps, so the same query gives up at the same point on every machine and under any load
+    /// (<see cref="VerificationOptions.ResourceLimit"/>); and by <c>timeout</c>, the wall-clock backstop behind it
+    /// (<see cref="VerificationOptions.TimeoutMs"/>). Every solver this backend creates goes through here.
+    /// </summary>
+    internal static void Limit(Solver solver, VerificationOptions options)
+    {
+        solver.Set(ResourceLimitParameter, (uint)options.ResourceLimit);
+        solver.Set(TimeoutParameter, (uint)options.TimeoutMs);
+    }
+
     internal static string Timeout(Solver solver, VerificationOptions options) =>
-        $"solver returned unknown ({solver.ReasonUnknown}) with a {options.TimeoutMs.ToString(CultureInfo.InvariantCulture)} ms timeout";
+        $"solver returned unknown ({solver.ReasonUnknown}){LimitHit(solver.ReasonUnknown, SolverTimedOut, (uint)options.ResourceLimit, options.TimeoutMs)}";
+
+    /// <summary>
+    /// Which limit Z3's <paramref name="reason"/> for giving up says was hit (ticket P2-050 criterion 4), as a suffix of a
+    /// detail: <c>wall-clock</c> when it is <paramref name="timedOut"/>, the reason the timer leaves
+    /// (<see cref="SolverTimedOut"/> on a solver; a fixedpoint is cancelled instead); <c>resource</c> when it is one of the
+    /// two an exhausted <c>rlimit</c> leaves, the same on every run; and nothing for any other reason, such as an
+    /// incomplete theory. <paramref name="resourceLimit"/> is the <c>rlimit</c> the query had, which for a Spacer query is
+    /// <see cref="ChcEncoder.SpacerResourceLimit"/>.
+    /// </summary>
+    internal static string LimitHit(string reason, string timedOut, uint resourceLimit, int timeoutMs) => reason switch
+    {
+        _ when string.Equals(reason, timedOut, StringComparison.Ordinal) => $": wall-clock limit {timeoutMs.ToString(CultureInfo.InvariantCulture)} ms hit",
+        Canceled or "max. resource limit exceeded" => $": resource limit {resourceLimit.ToString(CultureInfo.InvariantCulture)} hit",
+        _ => string.Empty,
+    };
 
     /// <summary>
     /// Every opaque node some input reaches (ADR 0027 decision 4): those <paramref name="model"/> reaches, then, while the

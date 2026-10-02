@@ -37,8 +37,6 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
     /// <summary>Steps each side's replay of a derivation may take; a replay that runs out does not diverge.</summary>
     public const int ReplayBudget = 1_000_000;
 
-    private uint Timeout => (uint)options.TimeoutMs;
-
     public Rung Prove(IrProcedure old, IrProcedure @new)
     {
         if ((Obstacle("old", old) ?? Obstacle("new", @new)) is { } obstacle)
@@ -51,8 +49,8 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
         if (options.ChcIntMode)
         {
             ChcEncoder integers = new(context, old, @new, ChcArithmetic.Integers, options.CallIdentityMap);
-            ChcAnswer found = integers.Query(overflows: false, Timeout);
-            if (found.Status == Status.UNSATISFIABLE && new ChcEncoder(context, old, @new, ChcArithmetic.WrappingIntegers, options.CallIdentityMap).Solves(found.Answer, Timeout))
+            ChcAnswer found = integers.Query(overflows: false, options);
+            if (found.Status == Status.UNSATISFIABLE && new ChcEncoder(context, old, @new, ChcArithmetic.WrappingIntegers, options.CallIdentityMap).Solves(found.Answer, options))
             {
                 return InMode(Proved(integers, found, "over the integers that holds with wrap-around arithmetic too"), ChcMode.BitVectors);
             }
@@ -63,7 +61,7 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
                 return InMode(rung, ChcMode.Integers);
             }
 
-            ChcAnswer overflow = integers.Query(overflows: true, Timeout);
+            ChcAnswer overflow = integers.Query(overflows: true, options);
             if (overflow.Status == Status.UNSATISFIABLE)
             {
                 return InMode(rung, ChcMode.Integers);
@@ -75,7 +73,7 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
         }
 
         ChcEncoder bits = new(context, old, @new, ChcArithmetic.BitVectors, options.CallIdentityMap);
-        return InMode(Conclude(bits, bits.Query(overflows: false, Timeout), old, @new, $"over the bitvectors, since {bitVectors}"), ChcMode.BitVectors);
+        return InMode(Conclude(bits, bits.Query(overflows: false, options), old, @new, $"over the bitvectors, since {bitVectors}"), ChcMode.BitVectors);
     }
 
     /// <summary>Why rung 4 does not apply to <paramref name="procedure"/>: the first call or pure function a reachable block holds.</summary>
@@ -100,10 +98,10 @@ internal sealed class SpacerRung(Func<Context> createContext, VerificationOption
     /// </summary>
     private Rung Conclude(ChcEncoder chc, ChcAnswer answer, IrProcedure old, IrProcedure @new, string how) => answer.Status switch
     {
-        Status.UNSATISFIABLE when chc.Solves(answer.Answer, Timeout) => Proved(chc, answer, how),
+        Status.UNSATISFIABLE when chc.Solves(answer.Answer, options) => Proved(chc, answer, how),
         Status.UNSATISFIABLE => Spurious($"Spacer found a coupling invariant {how}, but it does not solve the clauses"),
-        Status.SATISFIABLE => Replay(chc, old, @new, chc.DerivationInputs(answer.Answer, Timeout), how),
-        _ => TimedOut($"Spacer gave up {how}: {answer.Reason} with a {options.TimeoutMs.ToString(CultureInfo.InvariantCulture)} ms timeout"),
+        Status.SATISFIABLE => Replay(chc, old, @new, chc.DerivationInputs(answer.Answer, options), how),
+        _ => TimedOut($"Spacer gave up {how}: {answer.Reason}{Z3Backend.LimitHit(answer.Reason, Z3Backend.Canceled, ChcEncoder.SpacerResourceLimit(options), options.TimeoutMs)}"),
     };
 
     /// <summary>A derivation's inputs replayed through both original procedures.</summary>

@@ -95,12 +95,15 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
 - `equiv compare --legacy <path.sln> --modern <path.sln> [--baseline prev.sarif]
   [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
   [--dry-run] [--lower-only] [--execute] [--test-target 0.001] [--test-budget 10000[,60]]
-  [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback]`.
+  [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback] [--resource-limit <n>]`.
 - `--chc-int-mode` (default true) lets loop-ladder rung 4 ask Z3 Spacer over the integers first
   (VERIFICATION-MODEL.md section 5.1); `false` keeps it to the bitvectors.
 - `--invariant-model <id>` (off by default) turns on rung 5: when rung 4 times out, the Claude model `<id>` is asked
   for a coupling invariant over the Messages API (key in `ANTHROPIC_API_KEY`), which Z3 must admit
   (VERIFICATION-MODEL.md section 5.1; ADR 0036).
+- `--resource-limit` overrides the config's `resourceLimit`, Z3's deterministic `rlimit` for each
+  query; the config's `timeoutMs` is the wall-clock backstop (VERIFICATION-MODEL.md section 6;
+  ticket P2-050). A value that is not positive is exit 3.
 - `--il-fallback` (off by default until P1-018's corpus run decides otherwise; ADR 0039) turns on
   the frontend's IL fallback (step 5 above).
 - Every run prints the analysed line count of each codebase and writes both to

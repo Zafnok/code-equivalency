@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 
 using Equiv.Core;
+using Equiv.Core.Configuration;
 
 using Xunit;
 
@@ -57,6 +58,19 @@ public sealed class VerificationOptionsTests
         Assert.NotEqual(a, a with { ChcIntMode = false });
         Assert.Equal(a with { ChcIntMode = false }, new VerificationOptions(3, 5000, []) { ChcIntMode = false });
         Assert.Equal((a with { ChcIntMode = false }).GetHashCode(), new VerificationOptions(3, 5000, []) { ChcIntMode = false }.GetHashCode());
+    }
+
+    /// <summary>Ticket P2-050: the resource limit is the config's default unless set, and two options differing in it are unequal.</summary>
+    [Fact]
+    public void ResourceLimitIsTheConfigDefaultAndPartOfEquality()
+    {
+        VerificationOptions a = new(3, 5000, []);
+
+        Assert.Equal(EquivConfig.DefaultResourceLimit, a.ResourceLimit);
+        Assert.NotEqual(a, a with { ResourceLimit = 7 });
+        Assert.Equal(a with { ResourceLimit = 7 }, new VerificationOptions(3, 5000, []) { ResourceLimit = 7 });
+        Assert.Equal((a with { ResourceLimit = 7 }).GetHashCode(), new VerificationOptions(3, 5000, []) { ResourceLimit = 7 }.GetHashCode());
+        Assert.NotEqual((a with { ResourceLimit = 7 }).GetHashCode(), a.GetHashCode());
     }
 
     [Fact]

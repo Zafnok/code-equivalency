@@ -388,7 +388,7 @@ public sealed class McpCommandTests
         CallToolResult result = await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path, bound: bound, timeoutMs: timeoutMs)).ConfigureAwait(true);
 
         Assert.True(result.IsError);
-        Assert.Equal("error: bound and timeoutMs must be positive integers", Assert.Single(result.Content.Select(Text)));
+        Assert.Equal("error: bound, timeoutMs and resourceLimit must be positive integers", Assert.Single(result.Content.Select(Text)));
         Assert.Empty(backend.Calls);
     }
 

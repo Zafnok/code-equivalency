@@ -800,6 +800,34 @@ public sealed class CompareCommandTests
         }
     }
 
+    /// <summary>
+    /// Ticket P2-050 criterion 3: the backend hears the default resource limit, the config's <c>resourceLimit</c> in its
+    /// place, and <c>--resource-limit</c> in place of both; a value that is not positive is a usage error.
+    /// </summary>
+    [Fact]
+    public void ResourceLimitOptionOverridesConfig()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using TempFile config = new();
+        using TempFile outFile = new();
+        File.WriteAllText(config.Path, """{ "resourceLimit": 9000 }""");
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
+        Command command = CompareCommand.Create([frontend], backend);
+        string[] paths = ["--legacy", legacy.Path, "--modern", modern.Path, "--out", outFile.Path];
+        List<int> exitCodes = [];
+
+        _ = CaptureStdOut(() => exitCodes.Add(command.Parse(paths).Invoke()));
+        _ = CaptureStdOut(() => exitCodes.Add(command.Parse([.. paths, "--config", config.Path]).Invoke()));
+        _ = CaptureStdOut(() => exitCodes.Add(command.Parse([.. paths, "--config", config.Path, "--resource-limit", "42"]).Invoke()));
+        string error = CaptureStdErr(() => exitCodes.Add(command.Parse([.. paths, "--resource-limit", "0"]).Invoke()));
+
+        Assert.Equal([ExitCodes.Success, ExitCodes.Success, ExitCodes.Success, ExitCodes.UsageError], exitCodes);
+        Assert.Equal([EquivConfig.DefaultResourceLimit, 9000, 42], backend.Calls.Select(static o => o.ResourceLimit));
+        Assert.Equal($"error: bound, timeoutMs and resourceLimit must be positive integers{Environment.NewLine}", error, StringComparer.Ordinal);
+    }
+
     [Fact]
     public void Compare_UsesConfigBoundAndTimeout()
     {

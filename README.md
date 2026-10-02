@@ -174,6 +174,7 @@ equiv compare --legacy <solution.sln|.slnx> --modern <solution.sln|.slnx>
               [--dry-run] [--lower-only]
               [--execute [--test-target 0.001] [--test-budget <inputs>[,<seconds>]]]
               [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback]
+              [--resource-limit <n>]
               [--verbosity quiet|normal|debug] [--log <path>]
 equiv mcp [--execute]
 ```
@@ -207,6 +208,12 @@ Z3 checks every answer, so a wrong one can never prove a pair. It is off by defa
 proposer, which mines invariants from runs in process and sends nothing, is on by default and
 is asked first. `--chc-int-mode` (default `true`) lets rung 4 try integer arithmetic before
 falling back to bitvectors.
+
+`--resource-limit <n>` overrides the config's `resourceLimit` (default 5,000,000), the budget of each
+solver query in Z3's own step count. It is deterministic, so a pair that runs out of it is
+Unknown (`timeout`) on every run, whatever the machine's speed or load. The config's `timeoutMs`
+(default 60000) is the wall-clock backstop behind it. The Unknown's message says which of the two
+was hit.
 
 `--il-fallback` (off by default; ADR 0039) lowers a matched pair again from IL on both sides when
 it is not congruent and either side holds an opaque the other lacks, and keeps the IL bodies only

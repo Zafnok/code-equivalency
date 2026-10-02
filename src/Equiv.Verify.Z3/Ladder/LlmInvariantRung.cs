@@ -51,7 +51,7 @@ internal sealed class LlmInvariantRung(Func<Context> createContext, Verification
 
             string text = OneLine(candidate);
             (Dictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)>? definitions, string? error) = Parse(context, relations, candidate);
-            ChcEncoder.Refutation? rejection = error is null ? chc.Refutes(definitions!, (uint)options.TimeoutMs) : new ChcEncoder.Refutation(error);
+            ChcEncoder.Refutation? rejection = error is null ? chc.Refutes(definitions!, options) : new ChcEncoder.Refutation(error);
             if (rejection is null)
             {
                 Equivalent proved = new(method) { Invariant = text, ProposedBy = proposedBy };

@@ -40,7 +40,8 @@ public sealed class EquivConfigLoaderTests
               "typeRenames": { "Old.Ns.Foo": "New.Ns.Bar" },
               "callIdentityRenames": { "Old.Ns.Foo::M": "New.Ns.Bar::M" },
               "bound": 5,
-              "timeoutMs": 10000
+              "timeoutMs": 10000,
+              "resourceLimit": 123456
             }
             """;
 
@@ -51,6 +52,7 @@ public sealed class EquivConfigLoaderTests
         Assert.Equal("New.Ns.Bar::M", result.Config.CallIdentityRenames["Old.Ns.Foo::M"]);
         Assert.Equal(5, result.Config.Bound);
         Assert.Equal(10000, result.Config.TimeoutMs);
+        Assert.Equal(123456, result.Config.ResourceLimit);
     }
 
     [Fact]
@@ -81,6 +83,22 @@ public sealed class EquivConfigLoaderTests
         EquivConfigResult result = EquivConfigLoader.Load(json);
         Assert.Equal([EquivConfigDiagnosticIds.InvalidTimeout], result.Diagnostics.Select(static d => d.Id), StringComparer.Ordinal);
         Assert.Equal(EquivConfig.Default.TimeoutMs, result.Config.TimeoutMs);
+    }
+
+    /// <summary>Ticket P2-050 criterion 3: <c>resourceLimit</c> is a positive integer, validated as <c>timeoutMs</c> is.</summary>
+    [Theory]
+    [InlineData("""{ "resourceLimit": "plenty" }""")]
+    [InlineData("""{ "resourceLimit": 1.5 }""")]
+    [InlineData("""{ "resourceLimit": 0 }""")]
+    [InlineData("""{ "resourceLimit": -1 }""")]
+    [InlineData("""{ "resourceLimit": 4294967296 }""")]
+    public void ResourceLimit_IsValidated(string json)
+    {
+        EquivConfigResult result = EquivConfigLoader.Load(json);
+        Assert.Equal(new EquivConfigDiagnostic("CFG010", "/resourceLimit", "\"resourceLimit\" must be a positive integer"), Assert.Single(result.Diagnostics));
+        Assert.Equal(EquivConfig.DefaultResourceLimit, result.Config.ResourceLimit);
+        Assert.Equal(EquivConfig.DefaultResourceLimit, EquivConfig.Default.ResourceLimit);
+        Assert.Equal(1, EquivConfigLoader.Load("""{ "resourceLimit": 1 }""").Config.ResourceLimit);
     }
 
     [Fact]

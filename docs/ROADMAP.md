@@ -446,7 +446,9 @@ work, P2-050, P1-019, P2-051 and P2-052.
 - P2-049 (M) Samples for cleanup refactorings (modern syntax, extract and inline method). Each
   non-Equivalent verdict becomes a ticket.
 - P2-050 (M) Deterministic solver budgets (Z3 `rlimit`, wall-clock as a backstop), and the
-  timeout Unknowns measured at 1x, 4x and 20x. Needs P2-046.
+  timeout Unknowns measured at 1x, 4x and 20x. Needs P2-046. Done 2026-10-01: `resourceLimit`
+  5,000,000 with `timeoutMs` 60,000 behind it. Of 172 timeouts, 4x decides 37 and 20x decides 73,
+  none Equivalent (`docs/runs/2026-10-01-timeout-budget.md`); P2-082 and P2-083 filed.
 - P1-019 (M) Spike: how many `abstraction` Unknowns (261 of 700 on Git Extensions) refinement would
   resolve. An ADR only if the answer is at least 5%. Needs P2-046.
 - P2-051 (M) `runtime-diff` covers Windows Forms and `System.Drawing`, and every external callee.
@@ -575,6 +577,13 @@ rung, a pair or a run.
   pass (2h07m, unlogged) becomes a phase. Two full runs must agree on every decided result.
 - P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
   and no query ended sooner by contention. Needs P2-050, P2-076.
+
+Found by P2-050's measurement (`docs/runs/2026-10-01-timeout-budget.md`):
+- P2-082 (M) The same query under the same resource limit ends the same way whenever the garbage
+  collector runs. Two runs at the default budget agreed on 179 of 184 pairs; with collections made
+  rare the pairs that differed repeat. Needs P2-050.
+- P2-083 (M) Measurement: what the 99 timeouts that 20 times the budget does not decide have in
+  common, and whether another tactic pipeline proves any. Needs P2-050, P2-076.
 
 Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
 - P2-079 (M) Soundness, first: the IL lowering shares an opaque that names a lambda or local function

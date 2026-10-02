@@ -17,6 +17,8 @@ namespace Equiv.Cli;
 /// <see cref="Streams"/> is where the run's stdout and stderr lines go, the console's when null; <c>equiv mcp</c> passes its own
 /// because stdout is the protocol channel there (ADR 0033; ticket M5-001). <see cref="Bound"/> and <see cref="TimeoutMs"/>
 /// override the config's values of the same name and must be positive; <c>equiv mcp</c>'s <c>compare</c> tool sets them.
+/// <see cref="ResourceLimit"/> is <c>--resource-limit</c>, which overrides the config's <c>resourceLimit</c> the same way
+/// (<see cref="Core.VerificationOptions.ResourceLimit"/>; ticket P2-050).
 /// <see cref="IlFallback"/> is <c>--il-fallback</c>, off by default: lower a pair with an unshared opaque again from IL (ADR 0039;
 /// ticket P1-016).
 /// </summary>
@@ -44,6 +46,8 @@ internal sealed record CompareOptions(
     public int? Bound { get; init; }
 
     public int? TimeoutMs { get; init; }
+
+    public int? ResourceLimit { get; init; }
 
     public bool IlFallback { get; init; }
 }
