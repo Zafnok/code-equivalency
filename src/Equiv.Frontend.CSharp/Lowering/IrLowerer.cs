@@ -818,9 +818,52 @@ internal sealed class IrLowerer
             case IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance } when !receiver.IsValueType:
                 // Of the containing type even where the reference is typed as the base, as in a `base(...)` initializer.
                 return heap.Inputs.This(receiver);
+            case IInterpolatedStringOperation interpolated when InterpolatedStrings.IsConcatenation(interpolated):
+                return Interpolate(interpolated, context);
             default:
                 return Opaque(operation, operation.Kind.ToString(), context);
         }
+    }
+
+    /// <summary>
+    /// An interpolated string that is the concatenation of its parts under both bindings (ticket P2-086;
+    /// <see cref="InterpolatedStrings"/>), lowered as the <c>+</c> chain of those parts is, so the same text is the same body
+    /// on .NET Framework and on .NET 10: each part in order joined to the ones before it by <see cref="Concat"/>, a text
+    /// part its constant, a <c>string</c> hole its value, and an integer hole its type's closed <c>ToString()</c> call. A
+    /// lone hole is joined to the empty string, since <c>$"{s}"</c> is never null.
+    /// </summary>
+    private IrVar Interpolate(IInterpolatedStringOperation interpolated, LoweringContext context)
+    {
+        ImmutableArray<IInterpolatedStringContentOperation> parts = interpolated.Parts;
+        IrVar text = parts.Length > 1 ? Part(parts[0], interpolated.Type!, context) : Constant(interpolated.Type!, string.Empty, context);
+        foreach (IInterpolatedStringContentOperation part in parts.Length > 1 ? parts[1..] : parts)
+        {
+            text = Concat(text, Part(part, interpolated.Type!, context), interpolated.Type!, context);
+        }
+
+        return text;
+    }
+
+    /// <summary>
+    /// One part of an interpolated string as a value of <paramref name="type"/>, which is <c>string</c>: its text, or its
+    /// hole's value, an integer's through the <c>ToString()</c> call a written <c>i.ToString()</c> lowers to.
+    /// </summary>
+    private IrVar Part(IInterpolatedStringContentOperation part, ITypeSymbol type, LoweringContext context)
+    {
+        if (part is IInterpolatedStringTextOperation text)
+        {
+            return Value(text.Text, context);
+        }
+
+        IOperation hole = ((IInterpolationOperation)part).Expression;
+        IrVar value = Value(hole, context);
+        if (!InterpolatedStrings.IsInteger(hole))
+        {
+            return value;
+        }
+
+        IMethodSymbol toString = hole.Type!.GetMembers(nameof(ToString)).OfType<IMethodSymbol>().Single(static m => m.Parameters.IsEmpty);
+        return Call(Identity(toString), [value], Map(type), [], ClosedCalls.IsClosed(toString), context)!;
     }
 
     /// <summary>
@@ -1415,14 +1458,7 @@ internal sealed class IrLowerer
 
         if (binary is { OperatorKind: BinaryOperatorKind.Add, LeftOperand.Type.SpecialType: SpecialType.System_String, RightOperand.Type.SpecialType: SpecialType.System_String })
         {
-            // Strings stay uninterpreted, so `a + b` is the call the compiler makes, which is closed (ADR 0041).
-            return Call(
-                new CallIdentity(ProcedureIdentityNormalizer.Member("System", "String", "Concat", 0, ["string", "string"], renames).Value),
-                [Value(binary.LeftOperand, context), Value(binary.RightOperand, context)],
-                Map(binary.Type!),
-                [],
-                closed: true,
-                context);
+            return Concat(Value(binary.LeftOperand, context), Value(binary.RightOperand, context), binary.Type!, context);
         }
 
         if (!binary.IsLifted && PureCatalogue.Binary(binary.OperatorKind, binary.LeftOperand.Type!, binary.RightOperand.Type!) is { } entry)
@@ -1445,6 +1481,16 @@ internal sealed class IrLowerer
             { } op => Arithmetic(op, left, right, signed, binary.IsChecked, Map(binary.Type!), context),
         };
     }
+
+    /// <summary>Strings stay uninterpreted, so <c>a + b</c> is the call the compiler makes, which is closed (ADR 0041).</summary>
+    private IrVar Concat(IrVar left, IrVar right, ITypeSymbol type, LoweringContext context) =>
+        Call(
+            new CallIdentity(ProcedureIdentityNormalizer.Member("System", "String", "Concat", 0, ["string", "string"], renames).Value),
+            [left, right],
+            Map(type),
+            [],
+            closed: true,
+            context)!;
 
     /// <summary>
     /// The operator method of <c>string == string</c> or <c>string != string</c>, which Roslyn binds as a predefined operator

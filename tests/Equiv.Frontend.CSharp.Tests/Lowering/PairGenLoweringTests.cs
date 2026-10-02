@@ -38,11 +38,9 @@ public sealed class PairGenLoweringTests
                     IMethodSymbol method = compilation.GetTypeByMetadataName("Oracle")!.GetMembers("M").OfType<IMethodSymbol>().Single();
                     IrProcedure procedure = IrLowerer.Lower(method, compilation, RenameMap.Empty, []);
                     Assert.Empty(IrValidator.Validate(procedure));
-                    // Ticket P2-048: an interpolated string is opaque by design (IOPERATION-COVERAGE.md, InterpolatedString),
-                    // so the modern side of a ConcatToInterpolation pair has that opaque and no other.
-                    Assert.DoesNotContain(
-                        procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>(),
-                        o => pair.Operator != MutationOperator.ConcatToInterpolation || !string.Equals(o.Reason, "InterpolatedString", StringComparison.Ordinal));
+                    // Ticket P2-086: the interpolated string of a ConcatToInterpolation pair (ticket P2-048) holds only
+                    // string holes, so it lowers as the concatenation it replaced.
+                    Assert.DoesNotContain(procedure.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
                 }
             },
             seed: Seed,
