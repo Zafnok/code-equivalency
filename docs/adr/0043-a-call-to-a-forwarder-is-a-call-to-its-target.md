@@ -34,7 +34,11 @@ the runtime-changes table, the API-equivalence catalogue (ADR 0020), whether the
 0041), rebound call sites (ADR 0042, whose key keeps the site's own text and the member name written
 there), and the bound fingerprint (ADR 0024), which spells an invocation's callee as the IR names
 it. Both lowerings apply the rule from the callee's symbol, so they still produce the same IR (ADR
-0039). It applies on both sides and to every call, whether or not the forwarder is a matched pair.
+0039). It applies on both sides and to every call, with one exception. A method that is a matched
+pair is resolved only when its two sides **agree**: both are forwarders, and their targets have the
+same identity after the rename map. When they do not agree (one side is not a forwarder, or the two
+forward to different callees), no body of the run resolves it. A call to it stays a call to it on
+both sides, and ADR 0019 applies as before. A forwarder that only one side has is always resolved.
 Every result of a pair where a forwarder was resolved in either body carries
 `properties.forwardersResolved`: one `{ forwarder, target }` per forwarder, sorted.
 
@@ -47,9 +51,13 @@ Every result of a pair where a forwarder was resolved in either body carries
 - ADR 0019 rejected inlining because it explodes on recursion and deep call chains and discards
   modularity. A forwarder has no branch, no loop and exactly one call, so replacing the call adds no
   instruction and no path, and a cycle is refused. The caller's verdict stays modular in the target.
-- Reading the body is more precise than ADR 0019's assumption, and never less sound. If a forwarder
-  changed its target between the sides, its callers used to be Equivalent "assuming the forwarder",
-  and are now compared on the two targets.
+- A forwarder whose sides do not agree is the case ADR 0019 was written for: one callee changed, and
+  its callers did not. Resolving it would give every unchanged caller two different callees, and the
+  change would be reported once per caller (as Divergent, or as Unknown through ADR 0042, since the
+  call site's text is the same) and no longer where it is. `samples/partly-compiling-modern` showed
+  it: a legacy forwarder whose modern body does not bind made its unchanged caller Unknown. Keeping
+  such a forwarder as a callee leaves the caller Equivalent under the named assumption, and the
+  forwarder's own result says what changed.
 - The fingerprint must follow, or congruence would decide a pair from callee names the lowering no
   longer uses, and an Equivalent by congruence would not name the forwarder it assumed.
 - The conditions are the ones a symbol and a one-statement body can show without lowering the
@@ -80,8 +88,11 @@ Every result of a pair where a forwarder was resolved in either body carries
 ## Consequences
 - A pair whose only difference is a forwarder replaced by its target, or the reverse, moves from
   EQ002 to EQ001. When nothing else differs the bound fingerprints are equal, so congruence decides.
-- A caller of a forwarder no longer lists it in `assumedCallees`, and lists the target when that is
-  a matched pair. A forwarder whose own body changed is still its own result.
+- A caller of a resolved forwarder no longer lists it in `assumedCallees`, and lists the target when
+  that is a matched pair. A forwarder whose sides do not agree is still called, assumed and listed.
+- Lowering one pair now reads the other pairs of the run: the frontend finds the forwarders whose
+  sides do not agree before it lowers any body, and gives that set to both lowerings and to the
+  fingerprint.
 - A call to a forwarder to a runtime-changed member is now EQ006 in the caller, where it was hidden
   behind the forwarder's identity. That is the real behaviour.
 - A forwarder that changes an argument, adds a statement, or sits in a type with a static
