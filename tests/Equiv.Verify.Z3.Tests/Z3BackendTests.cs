@@ -1,5 +1,6 @@
 ﻿using System.Collections.Immutable;
 using System.Globalization;
+using System.Text;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -564,6 +565,62 @@ public sealed class Z3BackendTests
 
         IrMapValue lengths = Assert.IsType<IrMapValue>(divergent.Counterexample.Inputs.Arguments[1]);
         Assert.All(lengths.Entries.Select(static e => e.Value).Prepend(lengths.Default), static v => Assert.True(Assert.IsType<IrBitVecValue>(v).TwosComplement >= 0, $"negative length {v}"));
+    }
+
+    /// <summary>
+    /// Ticket P2-121: a loop that calls its own procedure, unrolled at bound 3, is 13,200 blocks that call on each side,
+    /// and each is an operand of the side's trace. One concatenation of them overflowed the native stack and ended the
+    /// process (ADR 0023, clarified 2026-10-03). Rung 1 gives up on a pair this size at the resource limit the test
+    /// sets, and rung 2 proves it.
+    /// </summary>
+    [Fact]
+    public void APairWhoseUnrolledTraceIsThousandsOfBlocksLongIsVerified()
+    {
+        IrProcedure procedure = IrText.Parse(LoopAroundASelfCall(calls: 200));
+        Assert.Equal(13_200, IrUnroller.Unroll(procedure, Options.Bound).Blocks.Count(static b => b.Instructions.OfType<IrCall>().Any()));
+
+        Verdict verdict = new Z3Backend().Verify(procedure, procedure, Options with { ResourceLimit = 200_000 });
+
+        Assert.Equal(ProofMethod.LockstepInduction, Assert.IsType<Equivalent>(verdict).Method);
+        Assert.Equal(ProofMethod.Bounded, verdict.Ladder[0].Rung);
+        Assert.NotEqual(RungOutcome.NotApplicable, verdict.Ladder[0].Outcome);
+    }
+
+    /// <summary>A counting loop whose body makes <paramref name="calls"/> calls, each ending its block, then calls the procedure itself.</summary>
+    private static string LoopAroundASelfCall(int calls)
+    {
+        StringBuilder text = new("""
+            proc "T::W(int)" (%n: bv32) entry B0
+            B0:
+              %z: bv32 = const bv32 0
+              %one: bv32 = const bv32 1
+              goto B1
+            B1:
+              %i: bv32 = phi [B0: %z, B3: %i2]
+              %c: bool = sge %i, %n
+              br %c, B5, B2
+            B2:
+
+            """);
+        for (int k = 0; k < calls; k++)
+        {
+            string id = k.ToString(CultureInfo.InvariantCulture);
+            string next = (100 + k).ToString(CultureInfo.InvariantCulture);
+            text.Append("  %f" + id + ": bv32 = call \"X::F(int)\"(%i) threw %g" + id + ": bool\n  br %g" + id + ", B4, B" + next + "\nB" + next + ":\n");
+        }
+
+        return text.Append("""
+              %m: bv32 = sub %n, %one
+              call "T::W(int)"(%m) threw %t: bool
+              br %t, B4, B3
+            B3:
+              %i2: bv32 = add %i, %one
+              goto B1
+            B4:
+              throw "System.Exception"
+            B5:
+              ret
+            """).ToString();
     }
 
     /// <summary>A procedure returning bitvector 1 of <paramref name="width"/> bits, or returning nothing when the width is 0.</summary>

@@ -28,6 +28,13 @@ namespace Equiv.Verify.Z3;
 /// </summary>
 internal sealed class TraceEncoder
 {
+    /// <summary>
+    /// The most operands one concatenation is given (ticket P2-121). Z3 makes a concatenation of n operands a chain n
+    /// deep and recurses natively on that depth: <c>Z3_mk_seq_concat</c> overflowed a 1 MB stack between 8,000 and 10,000
+    /// operands, and a stack overflow ends the process where no <c>catch</c> sees it (ADR 0023, clarified 2026-10-03).
+    /// </summary>
+    internal const int MaxOperands = 256;
+
     private readonly Context context;
     private readonly SortMapper sorts;
     private readonly ImmutableDictionary<string, string> callIdentityMap;
@@ -112,17 +119,36 @@ internal sealed class TraceEncoder
             [.. call.RefOuts.Select((r, i) => context.MkApp(RefOutFunction(side, call.Callee, types, i, r.Type), applied))]);
     }
 
-    /// <summary>The trace of one side: its blocks' events in reverse postorder, each block's only when it is reached.</summary>
+    /// <summary>
+    /// The trace of one side: its blocks' events in reverse postorder, each block's only when it is reached. However many
+    /// blocks or events there are, the term is no deeper than <see cref="Concat"/> makes it.
+    /// </summary>
     public SeqExpr Trace(IEnumerable<(BoolExpr Reach, IReadOnlyList<Expr> Events)> blocks)
     {
         SeqExpr empty = context.MkEmptySeq(trace);
-        return context.MkConcat(
+        return Concat(
         [
             empty,
             .. blocks
                 .Where(static b => b.Events.Count > 0)
-                .Select(b => (SeqExpr)context.MkITE(b.Reach, context.MkConcat([.. b.Events.Select(context.MkUnit)]), empty)),
+                .Select(b => (SeqExpr)context.MkITE(b.Reach, Concat([.. b.Events.Select(context.MkUnit)]), empty)),
         ]);
+    }
+
+    /// <summary>
+    /// The concatenation of <paramref name="operands"/> in order: one <c>seq.++</c> of up to <see cref="MaxOperands"/>
+    /// operands, and of the two halves' concatenations beyond that. Concatenation is associative, so it is the same
+    /// sequence either way.
+    /// </summary>
+    private SeqExpr Concat(ReadOnlySpan<SeqExpr> operands)
+    {
+        if (operands.Length <= MaxOperands)
+        {
+            return context.MkConcat([.. operands]);
+        }
+
+        int half = operands.Length / 2;
+        return context.MkConcat(Concat(operands[..half]), Concat(operands[half..]));
     }
 
     /// <summary>The result function <c>f(args..., position)</c> for a callee and signature, created on first use.</summary>

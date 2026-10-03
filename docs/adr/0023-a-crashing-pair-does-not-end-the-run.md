@@ -53,3 +53,17 @@ carried over as `absent`: its baseline result is copied through with `baselineSt
   not per pair in the CLI, so that needs its own step (per-pair lowering, or failures in
   `MatchResult`); this ADR covers backend failures and the process-level catch only.
 - If accepted, one S ticket implements it, ordered before M3-003, which verifies exit codes end to end.
+
+## Clarifications
+- 2026-10-03 (P2-121). A stack overflow is a crash the Decision's `catch` never sees: the runtime ends
+  the process there, with no SARIF. For that crash the Decision holds only if the overflow does not
+  happen, so no native call may be handed an input on whose size it recurses. The first case was
+  `TraceEncoder.Trace`, which gave `Z3_mk_seq_concat` one operand per block that calls (19,485 a side
+  for one unrolled pair of `openra-17989`). Z3 makes that a chain as deep as it is long and recurses
+  on the depth, and a 1 MB stack overflows between 8,000 and 10,000 operands. The trace is now a tree
+  of concatenations of at most 256 operands each: the same sequence, since concatenation is
+  associative, and the same term as before for every trace of up to 256 operands. Two other ways to
+  survive the pair were weighed and not taken. Verifying on a thread with a larger stack moves the
+  limit and leaves the process one larger pair away from the same end. An Unknown for a pair whose
+  unrolled size passes a limit is a new way to end a pair, which ADR 0029 decision 5 and ticket
+  P2-076 rule out while the work can be made to fit, and here it can.
