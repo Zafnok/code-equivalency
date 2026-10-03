@@ -547,7 +547,29 @@ prove or refute a small cleanup. It found three gaps that no ticket owned:
   the tool's output does not compile (`docs/runs/2026-10-01-migrations-verdict.md`). Filed as P2-082
   to P2-088.
 - P2-066 (M) Pin two public .NET-to-.NET version upgrades (a pure bump, and a bump with fixes) and run
-  them; every EQ006 must cite a row inside the pair's interval. Needs P2-055, P2-056, P2-047.
+  them; every EQ006 must cite a row inside the pair's interval. Needs P2-055, P2-056, P2-047. Done
+  2026-10-03 on `jellyfin-13023` (net8.0 to net9.0) and `gitextensions-9860` (net5.0 to net6.0): no
+  EQ006 cites a row outside its interval, but 158 of 161 cite a row with no change point. Of 173
+  Divergent results 5 are confirmed, 126 are false positives and 42 undetermined. The pure bump
+  proves none of its 573 changed pairs; the bump with fixes proves 239 of 722
+  (`docs/runs/2026-10-03-upgrade-verdict.md`). Filed as P2-113 to P2-119.
+
+Found by P2-066's upgrade runs (`docs/runs/2026-10-03-upgrade-verdict.md`). The first is the one that
+decides whether a .NET-to-.NET pair is usable:
+- P2-113 (M) First: every runtime-change row has a change point. The 32 rows without one fire on any
+  runtime difference: 120 false EQ006, and 353 unedited Jellyfin bodies out of congruence.
+- P2-114 (S) The `FileStream.Position` row fires only where the stream had an asynchronous read or
+  write.
+- P2-115 (S) A corpus restore does not inherit this repository's NuGet source mapping. Jellyfin's
+  restore fails as the skill writes it.
+- P2-116 (S) A string constant holding a lone surrogate no longer crashes lowering. 3 pairs on
+  jellyfin-13023, in code the regex source generator emits.
+- P2-117 (S) `Enum.GetValues<T>()` and `Enum.IsDefined<T>(v)` equal the `Type`-taking calls they
+  replace: 2 false EQ002.
+- P2-118 (M) Decide how code a source generator emits is compared and reported: 4 EQ002 and 12
+  Unknown nobody wrote. Starts with `equiv-adr`.
+- P2-119 (M) A controller action with one method is not an ambiguous overload: 29 actions on
+  jellyfin-13023 are never compared.
 
 Found by P2-065's runs (`docs/runs/2026-10-01-migrations-verdict.md`). Git Extensions is the only
 real migration `equiv` gets through, so the first two come before any rate work, and Duplicati and

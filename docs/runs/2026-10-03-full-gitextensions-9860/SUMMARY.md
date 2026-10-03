@@ -103,7 +103,7 @@ Top reason sets (up to 15; "" = no opaque):
 - `unbound` Unknowns: 0
 - Top abstractions: delegate 52, opaque switch-pattern 25, opaque Conversion 21, `conv.f32.f64` 12, `f64.mul` 10, `f64.div` 10, `op:System.String::op_Inequality(string,string)` 8, opaque DefaultValue 6, `f32.sub` 6, `f32.add` 5, `f32.mul` 4, `conv.f64.i32` 4, opaque ArrayElementReference 4, `f32.div` 4, `conv.f64.f32` 4
 - Review list: 75 groups for 503 flagged results (EQ002 + EQ003 + EQ006); flagged results as a share of matched pairs: 3.6%. Top five: `EQ003 timeout`: 98, `EQ003 opaque:InterpolatedString`: 51, `EQ003 opaque:Conversion`: 45, `EQ003 opaque:DelegateCreation`: 45, `EQ003 abstraction`: 28
-- EQ006 by row and the adjudication of every EQ002 and EQ006: `docs/runs/2026-10-02-upgrade-verdict.md`
+- EQ006 by row and the adjudication of every EQ002 and EQ006: `docs/runs/2026-10-03-upgrade-verdict.md`
 
 ## Tests (full only)
 - No `verify_command` for this pair. Not run. legacy n/a, modern n/a.
@@ -114,8 +114,8 @@ Top reason sets (up to 15; "" = no opaque):
 
 ## Findings
 - **Three pair-level lowering crashes**: `NullReferenceException` lowering `GitCommands.CommitDataManager::TryGetCommitLog(string,string,out string,out string,bool)`, `GitCommands.AppSettings::GetGitExtensionsFullPath()` and `GitExtUtils.GitArgumentBuilder::ToString()`. The same three crash on P2-058's `gitextensions-11284`; P2-105 owns them.
-- **56 of 59 EQ006 cite a row with no change point**: P2-108. ADR 0040 applies such a row whenever the runtimes differ, and each of the 32 rows records a difference between .NET Framework 4.8 and .NET 10. On a .NET-to-.NET pair most of them cannot differ.
-- **Three EQ006 on net6.0 rows are false positives**: two belong to P2-075 (a row that matches members its change does not touch: enumerating `ListView.Groups`, and reading `TreeNodeCollection`'s indexer where only assigning a null node reaches the change), one is P2-109 (`FileStream.Position` read where the stream had no asynchronous read or write).
+- **56 of 59 EQ006 cite a row with no change point**: P2-113. ADR 0040 applies such a row whenever the runtimes differ, and each of the 32 rows records a difference between .NET Framework 4.8 and .NET 10. On a .NET-to-.NET pair most of them cannot differ.
+- **Three EQ006 on net6.0 rows are false positives**: two belong to P2-075 (a row that matches members its change does not touch: enumerating `ListView.Groups`, and reading `TreeNodeCollection`'s indexer where only assigning a null node reaches the change), one is P2-114 (`FileStream.Position` read where the stream had no asynchronous read or write).
 - **`BugReporter.Program::Main()` is EQ002 with byte-identical source**: it passes the generated `ThisAssembly.Git.Sha` constant, which differs between the two commits. P2-098 owns the cause.
 - **P2-076's effect**: at 46e6636 `verify` took 17434 s and the contracts pass 1h55m; at 8e0ed3c they take 3448 s and 684 s. No result changed rule.
 - `Conversion` alone is 15.2% of changed pairs and `switch-pattern` alone 6.8%, with no open owner. Reported only: P2-066 does not ask for owners of opaque reasons.
