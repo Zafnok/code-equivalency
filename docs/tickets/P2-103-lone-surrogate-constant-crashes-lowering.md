@@ -11,8 +11,8 @@ transcode invalid UTF-16 string to UTF-8 JSON text":
 - `System.Text.RegularExpressions.Generated.Utilities::IndexOfNonAsciiOrAny_054D88A1CA74F303E737A5D6CB3A2FC78EF8B4B74FED9DBE7BF41353919E123B(System.ReadOnlySpan<char>)`
 - `System.Text.RegularExpressions.Generated.NonConformingUnicodeRegex_0::.ctor()`
 
-All three are emitted by the regex source generator, which writes character ranges such as
-`"𐏿"` as string constants. A string that is not well-formed UTF-16 cannot be written by
+All three are emitted by the regex source generator, which writes character sets as string
+constants, and a set that covers a surrogate range holds unpaired surrogates. A string that is not well-formed UTF-16 cannot be written by
 `System.Text.Json`, and something on the lowering path (a fingerprint, the census, or the log) writes
 the constant as JSON. The run exits 5 and the three pairs are unverified. Minimal repro, as a sample
 pair (identical file on both sides):
