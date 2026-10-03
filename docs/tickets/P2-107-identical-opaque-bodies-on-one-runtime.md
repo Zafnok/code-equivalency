@@ -16,8 +16,8 @@ what verdict it gets.
 
 ## Spec references
 ADR 0034 (changed pairs), ADR 0040 decision 2 (a same-runtime pair crosses no rule), ADR 0018
-(congruence); P2-072 (identical source that lowers differently, which limits what "identical"
-may mean); `docs/runs/2026-10-02-cleanup-verdict.md`.
+(congruence); P2-072 (a pair an audit took for identical source and was not: two files of one name,
+only one of them in the solution, which limits how "identical" may be established); `docs/runs/2026-10-02-cleanup-verdict.md`.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. The `equiv-adr` outcome is merged before any code change.

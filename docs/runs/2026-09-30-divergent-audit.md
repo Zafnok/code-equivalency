@@ -5,6 +5,14 @@ from P2-046's plain `full` runs (`docs/runs/2026-09-30-full-verdict.md`, equiv `
 reports Divergent precision. Nothing under `src/` or `tests/` was changed. It records identities,
 rules and classifications only, per `docs/runs/README.md`.
 
+Correction, 2026-10-02 (P2-072): row 17 was classed a false positive on the belief that both sides
+compile the same file. They do not. The modern solution no longer builds the vendored project and
+compiles an edited copy of the type from another project, in which the `try` block's call is behind a
+conditional-compilation symbol nothing defines. The difference is real, so row 17 is now undetermined
+(real by hand trace, not executed) and P2-072 is not a false-positive cause. The counts below are
+restated: 50 false positives (was 51), 25 undetermined (was 24), seven causes (was eight). Overall
+precision is still 3.8%, now 2 of 52.
+
 ## Audit set
 
 | Pair | Run | EQ002 in run | EQ006 in run | Audited |
@@ -60,24 +68,24 @@ ServiceAnt's 4 EQ002 that the ticket names came from M4-007. In P2-046 the same 
 
 | Rule | Confirmed | False positive | Undetermined | Total | Precision |
 |---|---|---|---|---|---|
-| EQ002 | 1 | 26 | 3 | 30 | 3.7% (1 of 27) |
+| EQ002 | 1 | 25 | 4 | 30 | 3.8% (1 of 26) |
 | EQ006 | 0 | 15 | 15 | 30 | 0% (0 of 15) |
-| **All** | 1 | 41 | 18 | 60 | **2.4% (1 of 42)** |
+| **All** | 1 | 40 | 19 | 60 | **2.4% (1 of 41)** |
 
 ### Overall
 
 | Rule | Confirmed | False positive | Undetermined | Total | Precision |
 |---|---|---|---|---|---|
-| EQ002 | 1 | 27 | 3 | 31 | 3.6% (1 of 28) |
+| EQ002 | 1 | 26 | 4 | 31 | 3.7% (1 of 27) |
 | EQ006 | 1 | 24 | 21 | 46 | 4.0% (1 of 25) |
-| **All** | 2 | 51 | 24 | 77 | **3.8% (2 of 53)** |
+| **All** | 2 | 50 | 25 | 77 | **3.8% (2 of 52)** |
 
 Divergent precision = confirmed / (confirmed + false positive) = **3.8%**. Even if every undetermined
-result were real, precision would be at most 33.8% (26 of 77). About two in three Divergent results
+result were real, precision would be at most 35.1% (27 of 77). About two in three Divergent results
 in this set are wrong, and the rest are mostly real differences that no oracle executed.
 
-Undetermined, by obstacle: 10 real by hand trace but not executed (5 with no legacy build, 4
-non-public, 1 UI handler), 6 depend on a native GDI+ failure, 4 are `GetHashCode` (real by
+Undetermined, by obstacle: 11 real by hand trace but not executed (5 with no legacy build, 4
+non-public, 1 UI handler, 1 whose difference is only in the call trace, which replay does not observe), 6 depend on a native GDI+ failure, 4 are `GetHashCode` (real by
 construction), 2 have no ICU/NLS input found, 1 depends on an environment variable and 1 on the
 process's current directory.
 
@@ -91,15 +99,14 @@ Every distinct cause is one ticket. No existing ticket owned any of them.
 | P2-069 | An unchanged call site binds to a different symbol after a dependency upgrade (a property retyped from a class to an interface, a new generic instantiation, a generated class moved namespace) | EQ002 | 9 |
 | P2-070 | Identical source binds to a different BCL overload or declaring type under the new reference assemblies (`TrimEnd(char[])` to `TrimEnd(char)`, `DirectoryInfo` to `FileSystemInfo`) | EQ002 | 3 |
 | P2-071 | An effect-free BCL call (a pure getter, an allocation-only constructor) that differs between the sides counts as an observable call-trace difference, and its uninterpreted `threw` is free | EQ002 | 3 |
-| P2-072 | Two identical bodies with a `try` whose `catch` rethrows lower to different call traces: one side omits the `try` block's calls | EQ002 | 1 |
 | P2-073 | An EQ006 row fires for a call whose constant arguments cannot reach the documented change (a regex pattern without case-insensitive ranges, a four-digit-year format, an ASCII constant compared under culture rules, a constant path or bitmap size, a serialized type without `[Obsolete]` members) | EQ006 | 15 |
 | P2-074 | An EQ006 path row fires on a path that comes from a BCL member that only yields valid paths (`Assembly.Location`, the test directory, the app-data folder), or that a guard validated first | EQ006 | 7 |
 | P2-075 | An EQ006 row matches a member or overload that its documented change does not affect (an `Ordinal` comparison under the ICU row; reading `ListView.Groups` under the group-ownership row) | EQ006 | 2 |
 
-Four of the eight causes (P2-068 to P2-071, 26 of 51 false positives) share one root: a call site
+Four of the seven causes (P2-068 to P2-071, 26 of 50 false positives) share one root: a call site
 that means the same thing on both sides is given two different callee identities, and ADR 0018 makes
 both the identity and the call's outcomes observable. P2-073 to P2-075 (24) are all EQ006 rows that
-match on the member alone. P2-072 (1) is a lowering difference on identical source.
+match on the member alone.
 
 ## Appendix: every audited result
 
@@ -125,7 +132,7 @@ owning ticket (false positive), the basis (confirmed) or the obstacle (undetermi
 | 14 | Tomas | EQ006 | `` java.util.ListItemForTest::GetHashCode() `` | `8f982349891d` | undetermined | real by construction (hash differs per runtime), not executed |
 | 15 | Tomas | EQ006 | `` Programmerare.ShortestPaths.Example.Roadrouting.Database.PersistenceSessionFactory::GetFullPath(string) `` | `ab3c565d865b` | false positive | P2-074 |
 | 16 | Tomas | EQ002 | `` Programmerare.ShortestPaths.Example.Roadrouting.Database.PersistenceSessionFactory::TryGetSQLiteSubDirectoryOfProjectRoot(System.IO.DirectoryInfo) `` | `f29c018fed8c` | false positive | P2-070 |
-| 17 | Git Extensions | EQ002 | `` EasyHook.LocalHook::Create(System.IntPtr,System.Delegate,object) `` | `e7f77e34249f` | false positive | P2-072 |
+| 17 | Git Extensions | EQ002 | `` EasyHook.LocalHook::Create(System.IntPtr,System.Delegate,object) `` | `e7f77e34249f` | undetermined | real difference by hand trace, not executed: call trace only (corrected by P2-072) |
 | 18 | Git Extensions | EQ002 | `` EasyHook.LocalHook::Release() `` | `c81407bf2277` | confirmed | replay `reproduced` |
 | 19 | Git Extensions | EQ002 | `` ICSharpCode.TextEditor.TextAreaControl::JumpTo(int) `` | `50d71b9d5605` | false positive | P2-070 |
 | 20 | Git Extensions | EQ002 | `` GitUI.GitExtensionsDialog::OnHelpButtonClicked(System.ComponentModel.CancelEventArgs) `` | `150d90a7ef48` | false positive | P2-068 |
