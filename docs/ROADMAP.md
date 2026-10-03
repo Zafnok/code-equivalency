@@ -513,6 +513,8 @@ of how much of the cleanup result each explains:
   Divergent, and none of its 12 edited pairs is proved.
 - P2-104 (S) `x is not T t` lowers as the negation of its inner pattern, not as an opaque.
 - P2-105 (M) Five procedures make the lowerer throw a null reference, so all three runs exit 5.
+- P2-110 (M) Rerun the three cleanup pairs on one commit once the crashes are fixed, and write the
+  cleanup verdict again. Needs P2-105.
 - P2-106 (M) A body whose only diagnostics are warnings promoted to errors is not `unbound`. 82
   pairs on powershell-19687. Starts with `equiv-adr`. Needs P2-085.
 - P2-107 (M) On a same-runtime pair, a whole-body opaque pair with identical source is not
