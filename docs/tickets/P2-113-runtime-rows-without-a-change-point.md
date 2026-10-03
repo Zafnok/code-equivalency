@@ -1,4 +1,4 @@
-# P2-108 Every runtime-change row has a change point, so a .NET-to-.NET pair is not flagged for Framework differences
+# P2-113 Every runtime-change row has a change point, so a .NET-to-.NET pair is not flagged for Framework differences
 Status: todo
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
@@ -35,7 +35,7 @@ with the reason.
 ## Spec references
 ADR 0040 decision 2 (interval, change points), ADR 0035 (measured rows), `runtime-changes.json`
 header, `tools/runtime-diff/README.md`, P2-054's Notes (why the 32 stayed null),
-`docs/runs/2026-10-02-upgrade-verdict.md`.
+`docs/runs/2026-10-03-upgrade-verdict.md`.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. Each of the 32 rows has a `changedIn`, or is listed in `## Notes` with why it stays null. A
@@ -58,4 +58,7 @@ Rows that already have a change point. Installing a runtime without asking the u
 needs one that is not installed, say which and ask.
 
 ## Notes
-- Found by P2-066 (`docs/runs/2026-10-02-upgrade-verdict.md`).
+- Found by P2-066 (`docs/runs/2026-10-03-upgrade-verdict.md`).
+- On `jellyfin-13023` (net8.0 to net9.0) all 102 EQ006 cite one of these rows, 92 of them the two
+  `String.Equals` rows, and 353 unedited bodies that hold such a call are not congruent. Over both
+  pairs: 158 of 161 EQ006, 120 adjudicated false and 38 undetermined.

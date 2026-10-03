@@ -1,4 +1,4 @@
-# P2-111 A string constant holding a lone surrogate no longer crashes lowering
+# P2-116 A string constant holding a lone surrogate no longer crashes lowering
 Status: todo
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
@@ -26,7 +26,7 @@ the code units as numbers), so that two equal constants still have equal encodin
 
 ## Spec references
 `docs/tickets/IOPERATION-COVERAGE.md` (`Literal`), ADR 0024 (fragment fingerprints),
-`docs/runs/2026-10-02-upgrade-verdict.md`.
+`docs/runs/2026-10-03-upgrade-verdict.md`.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. The sample pair above lowers with no notification and is congruent.

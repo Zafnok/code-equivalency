@@ -1,4 +1,4 @@
-# P2-109 The `FileStream.Position` row fires only where the stream had an asynchronous read or write
+# P2-114 The `FileStream.Position` row fires only where the stream had an asynchronous read or write
 Status: todo
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
@@ -25,7 +25,7 @@ through `equiv-decide` whether that case fires, and log the `Decision:` line.
 
 ## Spec references
 VERIFICATION-MODEL section 3 (runtime-changed APIs), `runtime-changes.json`, P2-073 (a row
-precondition on the call's arguments), `docs/runs/2026-10-02-upgrade-verdict.md`.
+precondition on the call's arguments), `docs/runs/2026-10-03-upgrade-verdict.md`.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. `samples/runtime-row-sync-position` (the pair above) has no EQ006.

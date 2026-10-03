@@ -68,3 +68,30 @@ Agent-made upgrades (a new migration prompt is a separate decision). Seeded runs
 ## Notes
 - Found by the 2026-09-30 goal review: the "in-place migration" goal includes version bumps, and
   nothing in the corpus is one.
+- Pairs: `jellyfin-13023` (pure bump, net8.0 to net9.0) and `gitextensions-9860` (bump with fixes,
+  net5.0 to net6.0). Both loaded on both sides, so no candidate was replaced.
+- Decision: one pair per repository, not both from Git Extensions -> a server application and a
+  WinForms one, so the two results are not one codebase's habits twice. Alternatives: Git Extensions
+  #9860 and #11240. Rule: 3.
+- Decision: `--execute` was not run -> criterion 3 asks for it where both runtimes are installed, and
+  the box has .NET 6.0 and 10.0 only (no 5, 8 or 9, and no WindowsDesktop 6). Installing a runtime
+  changes the machine and was not asked for.
+- Decision: with no runtime for either side, an EQ002 is confirmed by the pull request's diff plus a
+  test under `.corpus/audit/P2-066/` on net10.0 where the difference is in the code. P2-047 used each
+  side's real runtime. Alternatives: call all five undetermined, which hides two changes the diff
+  states outright. Rule: 3.
+- Decision: an EQ006 on a row with no change point is not counted against criterion 5 -> ADR 0040
+  decision 2 applies such a row whenever the runtimes differ, so P2-055 did what the ADR says. The
+  rows themselves are the finding (P2-113).
+- Toolchain: the first Jellyfin attempt died in 3 s on the checkout's `global.json` (SDK 8 pinned with
+  `latestMinor`, only SDK 10 installed). P2-058 fixed `-Fetch` on main while this ticket was open; this
+  PR adds the test for that patch (`tools/corpus/tests/Fetch.Tests.ps1`), which main did not have.
+- Toolchain: `dotnet restore` of Jellyfin fails with NU1100 as the skill writes it; restored with
+  `--configfile <this repo>/nuget.config` (P2-115).
+- The first full runs were at `46e6636`. Jellyfin's was stopped by the user after 12h17m: one pair had
+  spent 11h02m in `Z3Backend.Inline`, before any solver check (two `dotnet-stack` samples). P2-076
+  merged, and both pairs were rerun at `8e0ed3c`: 1h32m and 1h11m. Git Extensions' two runs agree on
+  every result's rule, proof method and runtime-change row.
+- Deviation: criterion 3's run directories and the verdict file are dated 2026-10-03, the day of the
+  reruns, not the day the ticket was started.
+- P2-071 merged (8bf3aa1) after the reruns' build; one Jellyfin EQ002 it owns was not rerun.
