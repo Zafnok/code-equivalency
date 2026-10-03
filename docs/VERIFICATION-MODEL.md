@@ -354,7 +354,9 @@ Migration-specific normalisations (applied to both sides before matching):
   forwarder too; a chain that returns to a method already on it is not followed. The rename map, the
   catalogue above, the runtime-changes table, closed calls (ADR 0041), rebound call sites and the
   bound fingerprint (ADR 0024) all see the target; a rebound site's key keeps the member name written
-  at the site. Both sides and both lowerings apply it. The pair lists what it resolved in
+  at the site. Both sides and both lowerings apply it. A method both sides have is resolved only when
+  both sides are forwarders to the same target identity; otherwise every call to it in the run stays a
+  call to it, assumed as section 1 says (ADR 0019). The pair lists what it resolved in
   `properties.forwardersResolved`. Any other callee is not read: an instance method, a body that
   changes an argument or has a second statement, a forwarder known only as a compiled reference.
 - Runtime-changed APIs: a shipped data table (`runtime-changes.json`, sourced from
