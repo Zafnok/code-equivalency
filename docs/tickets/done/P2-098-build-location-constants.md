@@ -1,5 +1,5 @@
 # P2-098 A constant that only says where or from which commit the code was built is not a divergence
-Status: in-progress
+Status: done (PR #367)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-058
@@ -53,3 +53,19 @@ ADR 0018 (congruence), ADR 0026 (what a Divergent rests on), VERIFICATION-MODEL 
 - Decision: where `AnExplicitDifferentPathArgumentStaysDivergent` lives -> a new
   `CallerLocationEquivalenceTests` in `Equiv.Tests.Integration`. Alternatives: a class named
   `EquivalenceTests`, which does not exist; every such class there is `<Topic>EquivalenceTests`. Rule: 4.
+- Criterion 4, the rerun (2026-10-03, `gitextensions-11372`, mode full, equiv 77194ce, wall-clock 2455s,
+  exit 5 from the one lowering crash P2-105 already owns). EQ002 went from 25 to 3. All 22
+  caller-file-path identities listed in `docs/runs/2026-10-02-cleanup-gitextensions-11372/SUMMARY.md`
+  are now EQ001 with `proofMethod: congruence`. By rule: EQ001 14249 (congruence 14242, bounded 7),
+  EQ002 3, EQ003 330. Congruent pairs rose from 14208 to 14242.
+- `BugReporter.Program::Main()` stays EQ002, as ADR 0046 decides: it passes the generated commit
+  constant, and the two sides are two commits. The other two EQ002 are the collection-expression
+  pairs P2-099 owns (`RepositoryXmlSerialiserTests::Serialize_recent_repositories()` and
+  `RepositoryCategorySerialiserTests::Verify_backwards_compatibility_of_object_graph()`); they no
+  longer rest on the caller file path as well.
+- The rerun took 41 minutes where P2-058 took 4h43m. That is P2-076 (merged since) and a box not
+  shared with another run, not this ticket.
+- Not covered: an opaque IL fragment hashes its ILAst text, literal included, so under the IL
+  fallback a fragment that holds such a call is unshared and Unknown (ADR 0046, Consequences).
+- No SUMMARY.md was written for the rerun: the criterion asks for these Notes only, and the
+  2026-10-02 summary stays the record of the run that found the problem.
