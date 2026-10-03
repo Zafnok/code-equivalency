@@ -33,6 +33,11 @@ the current culture whose getters write the program's fields). The constructor o
 closed too, whatever its property types are: the compiler writes it, and it only stores its arguments
 (ADR 0041, clarified 2026-10-02).
 
+A use of a member in the effect-free catalogue (section 3; ADR 0043) is not a call: it is no trace
+event and it cannot throw. An empty `List<T>` and an empty `Collection<T>`, each created and
+converted to an interface at once, are one object. This assumes that no code asks such an object for
+its concrete type (a type test, a downcast, `GetType`, `ToString`, reflection or serialisation).
+
 Evaluating a hole of an interpolated string is assumed to leave the current culture's integer
 formatting as it found it: the hole does not set the thread's current culture, and does not write the
 number format of a writable one (ADR 0044). `string.Format` formats an integer hole after the later
@@ -134,7 +139,8 @@ reference like `null.<Sort>` so that two variables holding one array share its e
 conversion between different IR types (M3-010), one `istype.<From>.<To>` map from `<From>`'s sort to Bool per
 reference type test (M4-005), one `typeof.<T>` input of `System.Type` sort
 per closed type `T` a body reads with `typeof(T)` (P2-002), and one `new.<Sort>` from bv32 to an
-array sort per array sort a body creates (P2-001). An array creation `new T[n]` (one `int` dimension)
+array sort per array sort a body creates (P2-001), or to a collection's sort per catalogued collection
+it creates (ADR 0043). An array creation `new T[n]` (one `int` dimension)
 throws `System.OverflowException` when `n` is negative, then reads its reference from `new.<Sort>` at
 the body's count of that sort's creations so far (0 for the first), writes `n` into `length.<Sort>`
 and a constant map of `default(T)` into `array.<Sort>` at that reference, and stores an initialiser's
@@ -244,6 +250,22 @@ evaluated. So every hole after the first integer hole must only read a local, a 
 another type, whose formatting goes through `IFormattable` or `ISpanFormattable` members the bindings do not share,
 or a call after the first integer hole) stays an `IrOpaque` with reason `InterpolatedString`, fingerprinted per
 binding.
+
+Effect-free BCL members (ADR 0043; P2-071). One frontend catalogue lists, by name, the BCL members that
+run no observable code. A use of one is no `IrCall`: no trace event, no `threw` edge, no heap pair, no position.
+It has two kinds of entry. A getter of an immutable value, which is `System.String::get_Length()`: the
+receiver is null-checked as a call's is, and the read is the `IrPure` function `get:<call identity>` of the
+receiver, which raises nothing and is tainted like every `IrPure` result (section 6). And the parameterless
+constructor of `List<T>`, `Dictionary<K,V>`, `HashSet<T>`, `Queue<T>`, `Stack<T>`, `LinkedList<T>`,
+`SortedDictionary<K,V>`, `SortedList<K,V>`, `SortedSet<T>`, `Collection<T>`, `ConcurrentBag<T>`,
+`ConcurrentDictionary<K,V>`, `ConcurrentQueue<T>` or `ConcurrentStack<T>`, when the type is declared in
+metadata: the new object is `new.<Sort>` at the body's count of that sort's creations so far, as a new
+array's reference is, and its shadow is false. A constructor with an argument stays a call, and so does every
+member the catalogue does not name. `List<T>` and `Collection<T>` are one family: a `new Collection<T>()` that
+is the operand of an implicit reference conversion to an interface is lowered as `new List<T>()` there, so it
+reads `new.<List sort>` and `cast.<List>.<To>` (the assumption is section 1's). Anywhere else a `Collection<T>`
+is its own sort. The IL lowering (section 3.1) applies the two kinds of entry and not the family rule, since a
+`newobj` carries no conversion.
 
 An anonymous object that is itself an argument of a call (P2-088), through the conversion to the parameter's type
 if there is one, is the closed call `{X,Y}::.ctor(<types>)` of its property values, each evaluated in declaration
