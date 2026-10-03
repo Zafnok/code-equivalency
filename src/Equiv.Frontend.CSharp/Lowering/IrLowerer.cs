@@ -1292,6 +1292,12 @@ internal sealed class IrLowerer
             return assigned;
         }
 
+        if (assignment.Target is IDiscardOperation)
+        {
+            // `_ = e` evaluates `e` and stores nothing (ticket P2-071).
+            return Value(assignment.Value, context);
+        }
+
         if (Target(assignment.Target) is not { } target)
         {
             return Opaque(assignment, Reason(assignment.Target), context);
@@ -1405,7 +1411,9 @@ internal sealed class IrLowerer
     {
         if (IsCast(conversion))
         {
-            return heap.MapRead(heap.Inputs.Cast(conversion.Operand.Type!, conversion.Type!), Value(conversion.Operand, context), context);
+            return conversion.Operand is IObjectCreationOperation creation && EffectFreeMembers.IsNewList(creation.Constructor!, conversion.Type!)
+                ? NewList(conversion.Type!, context)
+                : heap.MapRead(heap.Inputs.Cast(conversion.Operand.Type!, conversion.Type!), Value(conversion.Operand, context), context);
         }
 
         if ((conversion.IsTryCast || conversion.GetConversion() is { IsExplicit: true, IsReference: true })
@@ -1447,6 +1455,16 @@ internal sealed class IrLowerer
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// A new <c>Collection&lt;T&gt;</c> converted to the interface <paramref name="to"/> at once (ADR 0043): the next new
+    /// <c>List&lt;T&gt;</c>, converted as a new <c>List&lt;T&gt;</c> is, so the two leave one value.
+    /// </summary>
+    private IrVar NewList(ITypeSymbol to, LoweringContext context)
+    {
+        IrSort list = new(catalogue.Sorts(EffectFreeMembers.List));
+        return heap.MapRead(heap.Inputs.Cast(list, to), heap.Fresh(list, context), context);
     }
 
     /// <summary>Whether <paramref name="conversion"/> is an implicit reference or boxing conversion that changes the IR type.</summary>
@@ -1860,12 +1878,15 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// <c>new T(...)</c>: an opaque call to the constructor yielding the new object, which writes its <c>ref</c> and
-    /// <c>out</c> arguments as <see cref="Invoke"/>'s call does.
+    /// <c>out</c> arguments as <see cref="Invoke"/>'s call does. A constructor in the effect-free catalogue is no call
+    /// (ADR 0043): its object is the next of <c>new.&lt;Sort&gt;</c>.
     /// </summary>
     private IrVar? Create(IObjectCreationOperation creation, LoweringContext context) =>
-        RefOuts(creation.Arguments) is { } written
-            ? Call(Called(creation.Constructor!, creation), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, context)
-            : Opaque(creation, "ref-argument", context);
+        EffectFreeMembers.Allocates(creation.Constructor!)
+            ? heap.Fresh((IrSort)Map(creation.Type!), context)
+            : RefOuts(creation.Arguments) is { } written
+                ? Call(Called(creation.Constructor!, creation), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, context)
+                : Opaque(creation, "ref-argument", context);
 
     /// <summary>Whether <paramref name="creation"/> is itself an argument of a call, through the conversion to the parameter's type if there is one.</summary>
     private static bool IsArgument(IAnonymousObjectCreationOperation creation)
@@ -2130,13 +2151,21 @@ internal sealed class IrLowerer
     /// <summary>
     /// A property access is a call to its accessor, lowered as an invocation of it is (ticket M3-010 acceptance criteria
     /// 1 to 3): the getter with the receiver and index arguments, or, given <paramref name="value"/>, the setter with the
-    /// value last and no result. A property with no accessor for the access stays opaque.
+    /// value last and no result. A property with no accessor for the access stays opaque. A getter in the effect-free
+    /// catalogue is no call (ADR 0043): it is the pure function <see cref="EffectFreeMembers.Getter"/> of its null-checked receiver.
     /// </summary>
     private IrVar? Accessor(IPropertyReferenceOperation property, IMethodSymbol? accessor, ImmutableArray<IrVar> operands, IrVar? value, LoweringContext context)
     {
         if (accessor is null)
         {
             return Opaque(property, property.Kind.ToString(), context);
+        }
+
+        if (EffectFreeMembers.IsGetter(accessor))
+        {
+            ThrowIfNull(property.Instance!, operands[0], context);
+            CallIdentity identity = Identity(accessor);
+            return Pure(EffectFreeMembers.Getter(identity), [], identity.RuntimeChanged, operands, Map(property.Type!), context);
         }
 
         IrType? returns = value is null ? Map(property.Type!) : null;
