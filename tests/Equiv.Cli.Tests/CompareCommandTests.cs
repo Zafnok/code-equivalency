@@ -1208,6 +1208,32 @@ public sealed class CompareCommandTests
         Assert.Equal(["webapi.ok"], results.Single(static r => string.Equals(r.RuleId, "EQ003", StringComparison.Ordinal)).GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
     }
 
+    /// <summary>ADR 0047 (ticket P2-068 criterion 2): a pair's resolved forwarders reach its SARIF result, decided by the solver or without it.</summary>
+    [Fact]
+    public void ThePairsResolvedForwardersReachTheResult()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity unbound = new("N.C::U()");
+        ProcedurePair verified = Pair(PairIdentity) with { ForwardersResolved = [new ResolvedForwarder("N.Text::Blank(string)", "System.String::IsNullOrWhiteSpace(string)")] };
+        ProcedurePair unboundPair = Pair(unbound) with { NewBody = UnboundBody(unbound), ForwardersResolved = [new ResolvedForwarder("N.Text::Empty(string)", "System.String::IsNullOrEmpty(string)")] };
+        FakeBackend backend = new(ImmutableDictionary<string, Verdict>.Empty.Add(PairIdentity.Value, new Equivalent(ProofMethod.Bounded)));
+        InMemoryReportSink sink = new();
+
+        CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "unknown", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([verified, unboundPair], [], [], []))], backend, sink, NullRunLog.Instance);
+
+        Dictionary<string, string>[] listed =
+        [
+            .. sink.Log!.Runs[0].Results
+                .OrderBy(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal)
+                .Select(static r => Assert.Single(r.GetProperty<List<Dictionary<string, string>>>("forwardersResolved"))),
+        ];
+        Assert.Equal(["N.Text::Empty(string)", "N.Text::Blank(string)"], listed.Select(static f => f["forwarder"]), StringComparer.Ordinal);
+        Assert.Equal(["System.String::IsNullOrEmpty(string)", "System.String::IsNullOrWhiteSpace(string)"], listed.Select(static f => f["target"]), StringComparer.Ordinal);
+    }
+
     /// <summary>ADR 0042 (ticket P2-069 criterion 2): a pair's rebound callee pairs reach its SARIF result, decided by the solver or without it.</summary>
     [Fact]
     public void ThePairsReboundCallsReachTheResult()

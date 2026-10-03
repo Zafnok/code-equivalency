@@ -737,6 +737,34 @@ public sealed class SarifReportWriterTests
         Assert.False(results[1].TryGetProperty("reboundCalls", out List<Dictionary<string, string>>? _));
     }
 
+    /// <summary>ADR 0047; ticket P2-068 criterion 2: a result names each forwarder its pair resolved, and what to.</summary>
+    [Fact]
+    public void Sarif_ListsForwardersResolved()
+    {
+        VerificationResult resolved = Fixtures.Result(new Equivalent(ProofMethod.Congruence)) with
+        {
+            ForwardersResolved = [new ResolvedForwarder("N.Text::Blank(string)", "System.String::IsNullOrWhiteSpace(string)"), new ResolvedForwarder("N.Text::Empty(string)", "System.String::IsNullOrEmpty(string)")],
+        };
+
+        Result[] results = [.. SarifReportWriter.Write([resolved, Fixtures.Result(new Equivalent(ProofMethod.Bounded))]).Runs[0].Results];
+
+        List<Dictionary<string, string>> listed = results[0].GetProperty<List<Dictionary<string, string>>>("forwardersResolved");
+        Assert.Equal(["N.Text::Blank(string)", "N.Text::Empty(string)"], listed.Select(static f => f["forwarder"]), StringComparer.Ordinal);
+        Assert.Equal(["System.String::IsNullOrWhiteSpace(string)", "System.String::IsNullOrEmpty(string)"], listed.Select(static f => f["target"]), StringComparer.Ordinal);
+        Assert.All(listed, static f => Assert.Equal(2, f.Count));
+        Assert.False(results[0].TryGetProperty("reboundCalls", out List<Dictionary<string, string>>? _));
+        Assert.False(results[1].TryGetProperty("forwardersResolved", out List<Dictionary<string, string>>? _));
+    }
+
+    /// <summary>ADR 0047: the resolved forwarders are a property of the pair, never of the result's fingerprint.</summary>
+    [Fact]
+    public void ForwardersResolvedAreNotPartOfTheFingerprint()
+    {
+        VerificationResult plain = Fixtures.Result(new Equivalent(ProofMethod.Congruence));
+
+        Assert.Equal(ResultFingerprint.Compute(plain), ResultFingerprint.Compute(plain with { ForwardersResolved = [new ResolvedForwarder("A::F()", "B::G()")] }));
+    }
+
     /// <summary>ADR 0042: the rebound pairs are a property of the pair, never of the result's fingerprint.</summary>
     [Fact]
     public void ReboundCallsAreNotPartOfTheFingerprint()

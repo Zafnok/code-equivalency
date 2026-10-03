@@ -340,7 +340,7 @@ internal sealed class IrLowerer
     {
         bodySpan = span;
         receiver = method.ContainingType;
-        fragments = new FragmentFingerprinter(method, compilation, renames, suppressedRuntimeChanges, catalogue.Entries, runtime);
+        fragments = new FragmentFingerprinter(method, compilation, renames, suppressedRuntimeChanges, catalogue.Entries, runtime) { KeptForwarders = catalogue.Sites.KeptForwarders };
         heap = NewHeap();
         IrBlockId start = ssa.NewBlock();
         LoweringContext entry = new([], [], handlerExit: null) { Current = start };
@@ -2075,7 +2075,8 @@ internal sealed class IrLowerer
     /// is not a local, a parameter or a discard makes the call opaque with reason <c>ref-argument</c>. A call to an
     /// API-equivalence entry's legacy member whose arguments its adapter addresses, and that has no <c>ref</c> or
     /// <c>out</c> argument, is a call to the entry's modern member instead, and the entry is recorded as applied (ADR 0020;
-    /// ticket M3-009).
+    /// ticket M3-009). A call to a forwarder is the same call to its target (ADR 0047; ticket P2-068), which is then the
+    /// callee everything here reads: the catalogue, the runtime-changes table and whether the call is closed.
     /// </summary>
     private IrVar? Invoke(IInvocationOperation invocation, LoweringContext context)
     {
@@ -2084,7 +2085,15 @@ internal sealed class IrLowerer
             return Opaque(invocation, "ref-argument", context);
         }
 
-        CallIdentity callee = Identity(invocation.TargetMethod);
+        IMethodSymbol target = invocation.TargetMethod;
+        CallIdentity callee = Identity(target);
+        if (!catalogue.Sites.KeptForwarders.Contains(callee.Value) && Forwarders.Resolve(target, compilation) is { } resolved)
+        {
+            CallIdentity forwarded = CallIdentityFactory.Of(resolved.Target, resolved.Compilation, renames, suppressedRuntimeChanges, runtime.Interval);
+            catalogue.Sites.Forwarded(callee, forwarded);
+            (target, callee) = (resolved.Target, forwarded);
+        }
+
         IrType? returns = invocation.TargetMethod.ReturnsVoid ? null : Map(invocation.Type!);
         if (written.IsEmpty && catalogue.Members.TryGetValue(callee.Value, out ApiEquivalence? entry) && Adapt(entry, invocation, context) is { } adapted)
         {
@@ -2092,7 +2101,7 @@ internal sealed class IrLowerer
             return Call(new Callee(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), Closed: false, invocation, invocation.TargetMethod.Name), adapted, returns, [], context);
         }
 
-        Callee called = new(callee, ClosedCalls.IsClosed(invocation.TargetMethod), invocation, invocation.TargetMethod.Name);
+        Callee called = new(callee, ClosedCalls.IsClosed(target), invocation, invocation.TargetMethod.Name);
         return Dispatch(invocation.Instance, called, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
     }
 

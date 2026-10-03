@@ -120,3 +120,10 @@ own Added (EQ004) or Removed (EQ005) result.
   implements this carries `Release: minor`.
 - VERIFICATION-MODEL sections 1 and 6 change in the PR that accepts this ADR. Ticket P2-097
   implements it on `samples/cleanup-extract-method`.
+
+## Clarifications
+- 2026-10-03 (P2-068). Where this ADR says "ADR 0043" of forwarders (Context, and Rejected under
+  rebound-style Unknown), it means the forwarder ADR, which was proposed as 0043 and merged as ADR
+  0047. On `main`, ADR 0043 is the effect-free BCL members. A helper that is both a forwarder and a
+  one-sided private helper is resolved by ADR 0047 while its caller is lowered, so no call to it is
+  left for this ADR to replace; the caller lists it in `forwardersResolved`, not `calleesInlined`.

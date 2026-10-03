@@ -17,7 +17,9 @@ namespace Equiv.Core.Matching;
 /// flag they are null and false. <see cref="Runtimes"/> is the interval between the runtimes of the two projects the bodies come
 /// from, which every runtime rule was applied by (ADR 0040 decision 2; ticket P2-055); null when the frontend knows no runtimes.
 /// <see cref="ReboundCalls"/> are the callee pairs the bodies treat as possibly the same
-/// function, sorted by legacy and then modern identity (ADR 0042; ticket P2-069).
+/// function, sorted by legacy and then modern identity (ADR 0042; ticket P2-069). <see cref="ForwardersResolved"/> are the
+/// forwarders either body calls, each with the callee its calls were lowered as calls to, sorted by forwarder and then
+/// target (ADR 0047; ticket P2-068).
 /// </summary>
 public sealed record ProcedurePair(
     ProcedureIdentity Old,
@@ -38,4 +40,6 @@ public sealed record ProcedurePair(
     public RuntimeInterval? Runtimes { get; init; }
 
     public ImmutableArray<ReboundCall> ReboundCalls { get; init; } = [];
+
+    public ImmutableArray<ResolvedForwarder> ForwardersResolved { get; init; } = [];
 }

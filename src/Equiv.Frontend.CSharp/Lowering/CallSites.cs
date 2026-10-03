@@ -13,13 +13,15 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// identities of the pair's rebound calls on its side, and lowers each call to one as an <c>IrOpaque</c> with reason
 /// <see cref="ReboundCall.OpaqueReason"/>. It records every call it lowers at a syntax node, keyed by the node's tokens and
 /// the member's name, and <see cref="Rebound(CallSites, CallSites, ImmutableDictionary{string, string})"/> finds the
-/// rebound pairs of two bodies from those.
+/// rebound pairs of two bodies from those. It also records every forwarder a call was resolved through (ADR 0047; ticket
+/// P2-068); such a call's site keeps the member name written there, and its callee is the forwarder's target.
 /// </summary>
 /// <param name="rebound">The callee identities whose calls the body lowers as opaque.</param>
 internal sealed class CallSites(IEnumerable<string> rebound)
 {
     private readonly ImmutableHashSet<string> rebound = rebound.ToImmutableHashSet(StringComparer.Ordinal);
     private readonly List<Site> seen = [];
+    private readonly HashSet<ResolvedForwarder> forwarders = [];
 
     /// <summary>The call sites of a body none of whose calls is known to be rebound: a pair's first lowering.</summary>
     public CallSites()
@@ -27,11 +29,28 @@ internal sealed class CallSites(IEnumerable<string> rebound)
     {
     }
 
+    /// <summary>
+    /// The identities of the forwarders the body does not resolve, because the pair's two sides do not agree on what each
+    /// forwards to (ADR 0047): a call to one stays a call to it.
+    /// </summary>
+    public ImmutableHashSet<string> KeptForwarders { get; init; } = [];
+
     public bool IsRebound(CallIdentity callee) => rebound.Contains(callee.Value);
 
     /// <summary>Records a call to <paramref name="callee"/>, a member named <paramref name="member"/>, lowered at <paramref name="syntax"/>.</summary>
     public void Add(SyntaxNode syntax, string member, CallIdentity callee) =>
         seen.Add(new Site(string.Join(' ', syntax.DescendantTokens().Select(static t => t.Text)), member, callee));
+
+    /// <summary>Records that a call to <paramref name="forwarder"/> was lowered as a call to <paramref name="target"/>.</summary>
+    public void Forwarded(CallIdentity forwarder, CallIdentity target) => forwarders.Add(new ResolvedForwarder(forwarder.Value, target.Value));
+
+    /// <summary>The forwarders either of a matched pair's bodies resolved, sorted by forwarder and then target.</summary>
+    public static ImmutableArray<ResolvedForwarder> Forwarders(CallSites legacy, CallSites modern) =>
+    [
+        .. legacy.forwarders.Union(modern.forwarders)
+            .OrderBy(static f => f.Forwarder, StringComparer.Ordinal)
+            .ThenBy(static f => f.Target, StringComparer.Ordinal),
+    ];
 
     /// <summary>
     /// The rebound pairs of a matched pair's bodies, sorted by legacy and then modern identity. A key (text and member)

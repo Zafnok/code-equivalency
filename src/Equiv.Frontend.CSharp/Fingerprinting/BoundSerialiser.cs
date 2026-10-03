@@ -23,7 +23,8 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// one, its <c>checked</c> context. Symbols are spelled as matching spells them (the rename map, and on the legacy side the
 /// API-equivalence type entries and the member entries whose adapter passes every argument through unchanged); locals,
 /// labels, lambdas, local functions and their parameters are numbered by first occurrence, and the method's own parameters
-/// by position (ADR 0021). So trivia, comments, local names and parameter names cannot change the text, and a different
+/// by position (ADR 0021). A call to a forwarder is spelled as the call to its target that the lowering makes it (ADR 0047).
+/// So trivia, comments, local names and parameter names cannot change the text, and a different
 /// overload, operator, conversion, constant or <c>checked</c> context does. A file path or line number the compiler supplies
 /// for a caller-information parameter is written as <c>caller=</c> and its kind, without its value (ADR 0046). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
@@ -45,11 +46,13 @@ internal sealed class BoundSerialiser : OperationWalker
     private readonly StringBuilder text = new();
     private readonly Dictionary<ISymbol, string> numbered = new(SymbolEqualityComparer.Default);
     private readonly IMethodSymbol method;
+    private readonly Compilation compilation;
     private readonly RenameMap renames;
     private readonly ImmutableArray<string> suppressedRuntimeChanges;
     private readonly ImmutableDictionary<string, string> types;
     private readonly ImmutableDictionary<string, string> members;
     private readonly SideRuntime runtime;
+    private readonly ImmutableHashSet<string> keptForwarders;
     private readonly string interpolation;
     private readonly Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas;
     private int depth;
@@ -59,10 +62,12 @@ internal sealed class BoundSerialiser : OperationWalker
     private BoundSerialiser(IMethodSymbol method, Compilation compilation, Settings settings, Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas = null)
     {
         this.method = method;
+        this.compilation = compilation;
         this.lambdas = lambdas;
         renames = settings.Renames;
         suppressedRuntimeChanges = settings.SuppressedRuntimeChanges;
         runtime = settings.Runtime;
+        keptForwarders = settings.KeptForwarders;
         types = settings.Equivalences.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
         members = settings.Equivalences.Where(static e => !e.IsType && PassesArgumentsThrough(e)).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
         interpolation = ((CSharpCompilation)compilation).LanguageVersion >= LanguageVersion.CSharp10
@@ -76,7 +81,11 @@ internal sealed class BoundSerialiser : OperationWalker
     /// <c>runtime-changes.json</c> members not to flag, its API equivalences (the legacy side's; the modern side has none),
     /// and the pair's runtime interval with this side's x87 flag.
     /// </summary>
-    public sealed record Settings(RenameMap Renames, ImmutableArray<string> SuppressedRuntimeChanges, ImmutableArray<ApiEquivalence> Equivalences, SideRuntime Runtime);
+    public sealed record Settings(RenameMap Renames, ImmutableArray<string> SuppressedRuntimeChanges, ImmutableArray<ApiEquivalence> Equivalences, SideRuntime Runtime)
+    {
+        /// <summary>The identities of the forwarders the lowering does not resolve (ADR 0047), which are spelled as themselves here too.</summary>
+        public ImmutableHashSet<string> KeptForwarders { get; init; } = [];
+    }
 
     /// <summary>
     /// The serialisation of <paramref name="method"/>'s <paramref name="operations"/> (its body, after a constructor's field and
@@ -170,10 +179,13 @@ internal sealed class BoundSerialiser : OperationWalker
         }
     }
 
-    /// <summary>The symbols an operation references that its kind, type and children do not already say.</summary>
-    private static ImmutableArray<ISymbol?> Symbols(IOperation operation) => operation switch
+    /// <summary>
+    /// The symbols an operation references that its kind, type and children do not already say. A call to a forwarder
+    /// references the forwarder's target, as the lowering calls it (ADR 0047; ticket P2-068).
+    /// </summary>
+    private ImmutableArray<ISymbol?> Symbols(IOperation operation) => operation switch
     {
-        IInvocationOperation o => [o.TargetMethod],
+        IInvocationOperation o => [Called(o.TargetMethod)],
         IObjectCreationOperation o => [o.Constructor],
         IMemberReferenceOperation o => [o.Member],
         ILocalReferenceOperation o => [o.Local],
@@ -217,6 +229,10 @@ internal sealed class BoundSerialiser : OperationWalker
             Quote(string.Join(' ', operation.Syntax.DescendantTokens().Select(static t => t.Text))),
         _ => null,
     };
+
+    /// <summary>The method a call to <paramref name="callee"/> calls: a forwarder's target, unless the pair keeps the forwarder.</summary>
+    private IMethodSymbol Called(IMethodSymbol callee) =>
+        keptForwarders.Contains(CallIdentityFactory.Name(callee, renames)) ? callee : Forwarders.Resolve(callee, compilation)?.Target ?? callee;
 
     private static string Checked(bool isChecked) => isChecked ? "checked" : "unchecked";
 

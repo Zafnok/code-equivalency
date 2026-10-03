@@ -53,3 +53,4 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0044 | Evaluating a hole of an interpolated string leaves the current culture's integer formatting as it found it |
 | 0045 | A call to a private helper that exists on one side only is replaced by the helper's body (narrows 0019's rejection of inlining) |
 | 0046 | A caller file path or line number the compiler supplies is an input both sides share, not a constant |
+| 0047 | A call to a static one-call forwarder is a call to its target (narrows 0019's rejection of inlining) |
