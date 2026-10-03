@@ -622,6 +622,43 @@ public sealed class CompareCommandTests
     }
 
     /// <summary>
+    /// Ticket P2-082 criterion 4 (ADR 0023, ADR 0038): a pair whose weighing for the progress log throws is a pair-level
+    /// failure like a crash in the backend. Here its body jumps to a block that does not exist, so the loop analysis the
+    /// weight needs throws; the pair is never sent to the backend, and the other pair is still verified.
+    /// </summary>
+    [Fact]
+    public void Compare_PairWhoseWeighingThrows_IsReportedAsNotificationAndOtherPairsVerified()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity ok = new("T::Ok()");
+        ProcedureIdentity throwing = new("T::Throws()");
+        IrProcedure broken = IrText.Parse($"proc \"{throwing.Value}\" () entry B0 B0: goto B7");
+        MatchResult matchResult = new([Pair(ok), new ProcedurePair(throwing, throwing, broken, broken)], [], [], []);
+        FakeFrontend frontend = new("csharp", _ => true, matchResult);
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [ok.Value] = new Equivalent(ProofMethod.Bounded) });
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.Success;
+
+        string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [frontend], backend, sink, NullRunLog.Instance));
+
+        Assert.Equal(ExitCodes.InternalError, exitCode);
+        Run run = sink.Log!.Runs[0];
+        Assert.Equal("EQ001", Assert.Single(run.Results).RuleId);
+        Assert.Equal([throwing.Value], run.GetProperty<List<string>>("unverified"), StringComparer.Ordinal);
+        Assert.Single(backend.Calls);
+        Invocation invocation = Assert.Single(run.Invocations);
+        Assert.False(invocation.ExecutionSuccessful);
+        Notification notification = Assert.Single(invocation.ToolExecutionNotifications);
+        Assert.Equal(FailureLevel.Error, notification.Level);
+        Assert.StartsWith($"Weighing {throwing.Value} against {throwing.Value} failed: ", notification.Message.Text, StringComparison.Ordinal);
+        Assert.Equal(typeof(KeyNotFoundException).FullName, notification.Exception.Kind);
+        Assert.Contains($"error: Weighing {throwing.Value} against {throwing.Value} failed: ", errorOutput, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// P2-011: a pair the frontend could not lower takes M3-013's failure path, in <c>--lower-only</c> and full runs
     /// alike. It is matched, so <c>matchedPairs</c> counts it, but it has no lowered body for <c>pairsWithoutOpaque</c>
     /// or <c>pairsWholeBodyOpaque</c> to count; the other pair is counted and verified as usual.
