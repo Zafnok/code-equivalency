@@ -3,20 +3,19 @@
 - Pair: human, gitextensions/gitextensions PR #9860 ("Bump to .NET 6.0"), legacy bcd0c2617bdd, modern 37797ea4dd74
 - Corpus list: `tools/corpus/pairs.csv` (version-upgrade pair, bump with fixes; ticket P2-066)
 - Migrated by: human (upstream PR #9860, net5.0-windows to net6.0-windows)
-- equiv: 46e6636, mode full, wall-clock 24447s (6h47m), exit 5. Exit 5 is three pair-level lowering crashes (below); the SARIF was written and every other pair was verified. The run shared the machine with the `jellyfin-13023` run and with other sessions' `equiv` runs.
+- equiv: 8e0ed3c, mode full, wall-clock 4258s (1h11m), exit 5. Exit 5 is three pair-level lowering crashes (below); the SARIF was written and every other pair was verified. The run shared the machine with the `jellyfin-13023` run. A first run at 46e6636, before P2-076, took 24447s (6h47m) and gave the same rule, proof method and runtime-change row for every result; one Unknown's reason moved from `timeout` to `opaque`.
 
 ## Phase times
-`write` ends 1h55m after `verify` does: the ADR 0036 contracts pass runs in between and has no phase of its own (P2-076).
-
 | phase | items | seconds | ETA error at 50% |
 |---|---|---|---|
 | load-legacy | 43 | 0.000 | +0.000 |
 | load-modern | 43 | 0.000 | +0.000 |
-| enumerate | 2 | 0.531 | n/a |
-| match | 1 | 0.027 | n/a |
-| lower | 14020 | 75.151 | +38.552 |
-| verify | 14017 | 17433.546 | +14575.153 |
-| write | 1 | 0.295 | +0.000 |
+| enumerate | 2 | 0.813 | n/a |
+| match | 1 | 0.032 | n/a |
+| lower | 14020 | 86.360 | +40.807 |
+| verify | 14017 | 3447.706 | +992.174 |
+| contracts | 614 | 684.323 | +365.046 |
+| write | 1 | 0.318 | +0.000 |
 
 ## Load
 - Projects: legacy 43 of 43 C# projects loaded, modern 43 of 43; skipped: none
@@ -30,7 +29,7 @@
 | procedures | 14022 | 14022 |
 | analysed lines | 189310 | 189332 |
 
-- Matched pairs 14020; without opaque 9715 (69.3%); whole-body opaque 73 (0.5%); congruent 13295 (94.8%)
+- Matched pairs 14020; without opaque 9718 (69.3%); whole-body opaque 73 (0.5%); congruent 13295 (94.8%)
 - Unchanged share: 94.8% (`pairsCongruent` / `matchedPairs`). The "unchanged files" proxy is 99.0%: 1607 of 1623 legacy `.cs` files are byte-identical on the modern side.
 - Pair-level unchanged share (1 - changedPairs / matchedPairs): 94.9%. Not the row above; ADR 0034.
 
@@ -100,10 +99,10 @@ Top reason sets (up to 15; "" = no opaque):
 - By proofMethod: congruence 13295, bounded 227, lockstep-induction 12
 - Changed pairs by outcome: proved Equivalent 239 (33.1%; bounded 227, lockstep-induction 12), Unknown 421 (58.3%; 441 less 20 `unmatched-overload`), Divergent 62 (8.6%; EQ002 3, EQ006 59)
 - Unknown by scope: line 226, method 215. Line-scoped Unknown share: 51.2%
-- Top Unknown reasons: opaque 252 (line 226, method 26), timeout 99, abstraction 52, unmatched-overload 20, unaligned-loop 16, recursion 2
+- Top Unknown reasons: opaque 253 (line 226, method 27), timeout 98, abstraction 52, unmatched-overload 20, unaligned-loop 16, recursion 2
 - `unbound` Unknowns: 0
 - Top abstractions: delegate 52, opaque switch-pattern 25, opaque Conversion 21, `conv.f32.f64` 12, `f64.mul` 10, `f64.div` 10, `op:System.String::op_Inequality(string,string)` 8, opaque DefaultValue 6, `f32.sub` 6, `f32.add` 5, `f32.mul` 4, `conv.f64.i32` 4, opaque ArrayElementReference 4, `f32.div` 4, `conv.f64.f32` 4
-- Review list: 73 groups for 503 flagged results (EQ002 + EQ003 + EQ006); flagged results as a share of matched pairs: 3.6%. Top five: `EQ003 timeout`: 99, `EQ003 opaque:InterpolatedString`: 50, `EQ003 opaque:Conversion`: 45, `EQ003 opaque:DelegateCreation`: 45, `EQ003 abstraction`: 28
+- Review list: 75 groups for 503 flagged results (EQ002 + EQ003 + EQ006); flagged results as a share of matched pairs: 3.6%. Top five: `EQ003 timeout`: 98, `EQ003 opaque:InterpolatedString`: 51, `EQ003 opaque:Conversion`: 45, `EQ003 opaque:DelegateCreation`: 45, `EQ003 abstraction`: 28
 - EQ006 by row and the adjudication of every EQ002 and EQ006: `docs/runs/2026-10-02-upgrade-verdict.md`
 
 ## Tests (full only)
@@ -118,6 +117,6 @@ Top reason sets (up to 15; "" = no opaque):
 - **56 of 59 EQ006 cite a row with no change point**: P2-108. ADR 0040 applies such a row whenever the runtimes differ, and each of the 32 rows records a difference between .NET Framework 4.8 and .NET 10. On a .NET-to-.NET pair most of them cannot differ.
 - **Three EQ006 on net6.0 rows are false positives**: two belong to P2-075 (a row that matches members its change does not touch: enumerating `ListView.Groups`, and reading `TreeNodeCollection`'s indexer where only assigning a null node reaches the change), one is P2-109 (`FileStream.Position` read where the stream had no asynchronous read or write).
 - **`BugReporter.Program::Main()` is EQ002 with byte-identical source**: it passes the generated `ThisAssembly.Git.Sha` constant, which differs between the two commits. P2-098 owns the cause.
-- **Slow pairs**: `GitUI.CommandsDialogs.FormRemotes::InitializeComponent()` again took about 40 minutes, and the contracts pass took 1h55m after `verify` ended. Both are what P2-076 measured; this run predates its fix (PR #345).
+- **P2-076's effect**: at 46e6636 `verify` took 17434 s and the contracts pass 1h55m; at 8e0ed3c they take 3448 s and 684 s. No result changed rule.
 - `Conversion` alone is 15.2% of changed pairs and `switch-pattern` alone 6.8%, with no open owner. Reported only: P2-066 does not ask for owners of opaque reasons.
 - Restoring this pair needed no workaround. Fetching it needed `-Fetch`'s wider `global.json` patch (P2-058).
