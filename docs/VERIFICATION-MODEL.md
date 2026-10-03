@@ -183,7 +183,7 @@ is the one definition). A C# parameter whose name would be synthesised, which ca
 is spelled with a leading `$` in IR (`$this`; its source name stays `this`). No C# identifier contains `$`, so
 that name is never another parameter's (M3-007). A value's shadow is a `mapread` of `null.<Sort>`,
 so equal references are equally null; `new` sets the shadow to false instead. `this`,
-`null.*`, `cast.*`, `istype.*`, `length.*`, `typeof.*` and `new.*` are `In`, because nothing changes them, except
+`null.*`, `cast.*`, `istype.*`, `length.*`, `typeof.*`, `new.*` and `caller.*` are `In`, because nothing changes them, except
 that `length.<Sort>` is `Ref` in a body that creates an array of that sort (P2-001; ADR 0018 clarification). No CLR array has a
 negative length, so the encoder assumes every read of a `length.*` input is non-negative, whether or not the read is
 reached (the CLR never reads a null reference's length, so this drops no input a caller can pass), and the model
@@ -292,6 +292,18 @@ another order or other property types are another callee. Like any closed call i
 edge. An anonymous object that goes anywhere else (returned, stored in a local, nested in another one, a receiver)
 stays an `IrOpaque` with reason `AnonymousObjectCreation`, and a read of a property stays a getter call on the value.
 
+A collection expression (P2-099) is the construct it replaces, so the two are compared as two spellings of one
+body. For an array target `[a, b]` is the array creation `new T[] { a, b }` above, and `[]` is the call
+`System.Array::Empty<T>()` the compiler emits (a creation of length 0 where the framework has no `Array.Empty`).
+For a `List<T>` target it is a new `List<T>`, as `new List<T>()` is (ADR 0043), and then one `Add` call per element, as a
+collection initializer is. For an `IEnumerable<T>`, `IReadOnlyCollection<T>` or `IReadOnlyList<T>` target it is the
+array, read through the `cast.<T[]>.<Target>` map the array's conversion reads. Each element is evaluated, then
+stored or added, before the next, so element order is in the trace. Its shadow is false only where the old form's
+is: a creation or a `new`, read through no cast map. A spread element, a span, `IList<T>`, `ICollection<T>`, a type
+parameter, a type built by a `CollectionBuilder` method, any class other than `List<T>`, and an array the array
+creation leaves opaque, stay an `IrOpaque` with reason `CollectionExpression`. The conversion around a target-typed
+`new()` whose creation is already of the target type is its operand, so `new()` is `new T()`.
+
 The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
 locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
 each field's receiver, then every element of the literal (each already converted to its target's
@@ -375,9 +387,15 @@ Migration-specific normalisations (applied to both sides before matching):
   (`api-equivalences.json`, ADR 0020, ticket M3-009) of member and type pairs that are
   exactly equivalent whenever both are invoked: overload drift such as
   `String::Split(Char[])` → `String::Split(Char, StringSplitOptions)`, and Web API 2 →
-  ASP.NET Core result helpers and result types. The frontend rewrites a legacy call while
-  lowering it, with an argument adapter, and every entry applied to a pair is listed in
-  `properties.equivalencesApplied`. Users can suppress entries in `equiv.config.json`.
+  ASP.NET Core result helpers and result types. It also holds the rebinding forms (ticket
+  P2-070), where identical source binds to an overload the modern reference assemblies add or
+  to a member they move: `String::TrimEnd(Char[])` with one element → `String::TrimEnd(Char)`,
+  `String::TrimStart(Char[])` with no element → `String::TrimStart()`, and
+  `DirectoryInfo::get_FullName()` → `FileSystemInfo::get_FullName()`. The frontend rewrites a
+  legacy call while lowering it, with an argument adapter, and every entry applied to a pair is
+  listed in `properties.equivalencesApplied`. A property or event accessor call has no source
+  arguments to adapt, so an entry rewrites one only when its adapter passes every operand
+  through in order and unchanged. Users can suppress entries in `equiv.config.json`.
 - Rebound call sites (ADR 0042, ticket P2-069). A call site is a call the lowering emits for a member
   at a syntax node: an invocation, an object creation, a property, indexer or event accessor, an
   `await`. Its key is the node's source tokens and the member's name. When a key occurs on both sides
@@ -462,6 +480,15 @@ parameter naming are identical between the two lowerings. An instruction the IL 
 IOperation rules decline for a semantic reason: unboxing, reading a caught exception, `ref` locals,
 `throw` of anything but a `new`, `default` of a type parameter, and local functions. It also declines lambdas, which
 the IOperation rules lower from a bound fingerprint (P2-067) that the IL does not have.
+
+An argument the compiler supplies for a `[CallerFilePath]` or `[CallerLineNumber]` parameter (Roslyn's
+`ArgumentKind.DefaultValue`, of type `string` or `int`) is not its constant (ADR 0046, P2-098). It reads the
+synthesised input `caller.file` (a `string`) or `caller.line` (bv32), one of each per body, shared by both sides by
+name, and the bound fingerprint writes it as `caller=File` or `caller=Line` with no value. An argument the source
+writes out is an ordinary value, and so is a supplied default of any other parameter, `[CallerMemberName]` and
+`[CallerArgumentExpression]` included. IL does not say which arguments were supplied, so the IL lowering applies the
+rule to a string constant equal to the body's own file path, and to an `int` constant inside the body's own line span,
+passed for such a parameter.
 
 ## 4. Matching
 

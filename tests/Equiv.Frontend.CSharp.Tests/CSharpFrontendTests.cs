@@ -1094,4 +1094,90 @@ public sealed class CSharpFrontendTests
         Assert.Equal(["GET /api/orders/{id}"], result.Pairs.Select(static p => p.New.Value), StringComparer.Ordinal);
         Assert.Empty(result.Ambiguous);
     }
+
+    /// <summary>
+    /// Ticket P2-098 acceptance criterion 2 (ADR 0046): the same body in two directories, calling a method with a
+    /// <c>[CallerFilePath]</c> parameter, fingerprints equal, so it is Equivalent by congruence, and the argument reads the
+    /// shared input <c>caller.file</c> on both sides, not the path.
+    /// </summary>
+    [Fact]
+    public void ACallerFilePathArgumentIsTheSameOnBothSides()
+    {
+        ProcedurePair pair = CallerPair(CallerSource("File();"), CallerSource("File();"));
+
+        Assert.Equal(pair.OldFingerprint, pair.NewFingerprint);
+        Assert.All([pair.OldBody!, pair.NewBody!], static body =>
+        {
+            Assert.Equal(["caller.file"], body.Parameters.Select(static p => p.Var.Name).Where(static n => n.StartsWith("caller.", StringComparison.Ordinal)), StringComparer.Ordinal);
+            Assert.DoesNotContain(body.Blocks.SelectMany(static b => b.Instructions), static i => i is IrConst);
+        });
+    }
+
+    /// <summary>
+    /// ADR 0046: a line added above a call moves the number the compiler supplies for a <c>[CallerLineNumber]</c> parameter,
+    /// and the body is still congruent, since the argument reads the shared input <c>caller.line</c>.
+    /// </summary>
+    [Fact]
+    public void ACallerLineNumberArgumentIsTheSameOnBothSides()
+    {
+        ProcedurePair pair = CallerPair(CallerSource("Line();"), CallerSource("Line();", lead: "\n\n\n"));
+
+        Assert.Equal(pair.OldFingerprint, pair.NewFingerprint);
+        Assert.All([pair.OldBody!, pair.NewBody!], static body =>
+        {
+            Assert.Equal(["caller.line"], body.Parameters.Select(static p => p.Var.Name).Where(static n => n.StartsWith("caller.", StringComparison.Ordinal)), StringComparer.Ordinal);
+            Assert.DoesNotContain(body.Blocks.SelectMany(static b => b.Instructions), static i => i is IrConst);
+        });
+    }
+
+    /// <summary>
+    /// ADR 0046: an argument the source writes out is an ordinary value, so two explicit paths differ; and so is a default
+    /// the compiler supplies for any other parameter: <c>[CallerMemberName]</c>, a plain optional parameter of each type,
+    /// and an attribute of the same name in another namespace.
+    /// </summary>
+    [Theory]
+    [InlineData("File(\"a.cs\");", "File(\"b.cs\");", false)]
+    [InlineData("Line(7);", "Line(8);", false)]
+    [InlineData("Other();", "Other();", true)]
+    public void AnExplicitCallerArgumentIsAnOrdinaryValue(string legacy, string modern, bool congruent)
+    {
+        ProcedurePair pair = CallerPair(CallerSource(legacy), CallerSource(modern));
+
+        Assert.Equal(congruent, pair.OldFingerprint == pair.NewFingerprint);
+        Assert.All([pair.OldBody!, pair.NewBody!], static body =>
+        {
+            Assert.DoesNotContain(body.Parameters, static p => p.Var.Name.StartsWith("caller.", StringComparison.Ordinal));
+            Assert.Contains(body.Blocks.SelectMany(static b => b.Instructions), static i => i is IrConst);
+        });
+    }
+
+    private static string CallerSource(string body, string lead = "") => $$"""
+        using System.Runtime.CompilerServices;
+        namespace Mine { public sealed class CallerFilePathAttribute : System.Attribute { } }
+        namespace N
+        {
+            public static class C
+            {
+                {{lead}}
+                public static void File([CallerFilePath] string file = "") { }
+                public static void Line([CallerLineNumber] int line = 0) { }
+                public static void Other([CallerMemberName] string member = "", string text = "t", int count = 3, bool flag = true, [Mine.CallerFilePath] string mine = "m") { }
+                public static void M() { {{body}} }
+            }
+        }
+        """;
+
+    /// <summary>The pair of <c>M</c>, with the legacy source in one directory and the modern source in another.</summary>
+    private static ProcedurePair CallerPair(string legacy, string modern)
+    {
+        Compilation legacyCompilation = RoslynTestCompilations.CompileAt(legacy, Path.Combine(Path.GetTempPath(), "legacy", "C.cs"));
+        Compilation modernCompilation = RoslynTestCompilations.CompileAt(modern, Path.Combine(Path.GetTempPath(), "modern", "C.cs"));
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher()).Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
+
+        return result.Pairs.Single(static p => p.New.Value.Contains("::M(", StringComparison.Ordinal));
+    }
 }

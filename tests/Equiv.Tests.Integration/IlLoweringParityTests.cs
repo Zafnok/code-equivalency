@@ -29,6 +29,7 @@ public sealed class IlLoweringParityTests
     /// <summary>The methods whose two lowerings differ in representation only, by identity, with why.</summary>
     private static readonly ImmutableDictionary<string, string> Known = new Dictionary<string, string>(StringComparer.Ordinal)
     {
+        [$"bcl-overload-rebinding/legacy {Indent}"] = EmptyParamsArray,
         [$"business-layer/legacy {ConfirmAsync}"] = StateMachine,
         [$"business-layer/modern {ConfirmAsync}"] = StateMachine,
         [$"business-layer/legacy {Export}"] = UsingResource,
@@ -44,6 +45,8 @@ public sealed class IlLoweringParityTests
         [$"cleanup-modern-syntax/modern {Join}"] = InterpolatedString,
         [$"effect-free-bcl-call/modern {Basket}"] = ListFamily,
     }.ToImmutableDictionary(StringComparer.Ordinal);
+
+    private const string Indent = "Equiv.Samples.BclOverloadRebinding.Paths::Indent(string)";
 
     private const string ConfirmAsync = "Equiv.Samples.BusinessLayer.OrderService::ConfirmAsync(System.Threading.Tasks.Task<global::Equiv.Samples.BusinessLayer.Order>)";
 
@@ -91,6 +94,13 @@ public sealed class IlLoweringParityTests
     /// the IL lowering names as it is.
     /// </summary>
     private const string InterpolatedString = "IOperation lowers an interpolated string as a chain of Concat(string,string); the IL calls Concat(string,string,string)";
+
+    /// <summary>
+    /// The IOperation lowering makes the empty array of a <c>params</c> call with no elements, <c>s.TrimStart()</c> on .NET
+    /// Framework, a fresh array (ticket P1-006); the compiler emits a call of <c>Array.Empty&lt;char&gt;()</c>, which the IL
+    /// lowering names as it is (ticket P2-070).
+    /// </summary>
+    private const string EmptyParamsArray = "IOperation lowers an empty params array as a fresh array; the IL calls Array.Empty<char>()";
 
     /// <summary>
     /// The IOperation lowering makes a new <c>Collection&lt;T&gt;</c> converted to an interface a new <c>List&lt;T&gt;</c>

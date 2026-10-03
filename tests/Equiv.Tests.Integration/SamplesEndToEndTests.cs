@@ -176,6 +176,33 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-070 criterion 1: identical source that .NET 10 binds to an added overload or a moved member is Equivalent,
+    /// with the catalogue entry that rewrote the legacy call listed and no rebound call left.
+    /// </summary>
+    [Theory]
+    [InlineData("::Strip(", "bcl.string-trim-end-one-char")]
+    [InlineData("::Indent(", "bcl.string-trim-start-no-chars")]
+    [InlineData("::Full(", "bcl.directory-info-full-name")]
+    public void BclOverloadRebinding_IdenticalSourceIsEquivalentWithItsEntryApplied(string member, string entry)
+    {
+        Result result = Single("bcl-overload-rebinding", member);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal([entry], result.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
+        Assert.False(result.TryGetProperty("reboundCalls", out string? _));
+    }
+
+    /// <summary>Ticket P2-070 criterion 2: trimming a different character on the modern side stays Divergent.</summary>
+    [Fact]
+    public void BclOverloadRebinding_TrimmingAnotherCharacterIsDivergent()
+    {
+        Result result = Single("bcl-overload-rebinding", "::StripOther(");
+
+        Assert.Equal("EQ002", result.RuleId);
+        Assert.Equal(["bcl.string-trim-end-one-char"], result.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// Ticket P2-055 criterion 2 (ADR 0040 decision 2): both sides run on .NET 10, so no runtime rule applies. The
     /// byte-identical method that calls <c>double.ToString()</c> and <c>string.StartsWith(string)</c> and casts a
     /// <c>double</c> to <c>int</c> is Equivalent by congruence, and the <c>if</c> chain made a <c>switch</c> expression is

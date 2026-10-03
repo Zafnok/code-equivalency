@@ -1,5 +1,5 @@
 # P2-068 A call to a one-line forwarder and a call to its target are the same call
-Status: done (PR #360)
+Status: done (PR #355)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-047
@@ -48,6 +48,11 @@ covers them at no extra cost.
 - `equiv-adr` outcome: a new ADR, 0047 (PR #355), because it narrows ADR 0019's rejection of
   inlining and section 3's rule that two identities are two functions, changes verdicts, and adds a
   SARIF property.
+- Deviation: criterion 1 asks for the ADR on `main` before any code. The implementation PR (#360)
+  was merged into the ADR PR's branch, so #355 brings both to `main` in one merge. The ADR was
+  written and had passed CI before the code was final, and no code reaches `main` without it.
+- The ADR was proposed as 0043. `main` took that number for the effect-free BCL members (#361)
+  first, so it merged as 0047. ADR 0045 cites it under the old number and has a clarification.
 - Decision: the rule is narrower than the ticket's "non-virtual method". A forwarder is static, its
   target is static, and its arguments are its own parameters in order. That is what the audited
   cases need. An instance forwarder or an instance target needs a receiver's null check and
