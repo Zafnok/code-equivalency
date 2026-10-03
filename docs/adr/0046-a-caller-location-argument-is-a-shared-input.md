@@ -20,7 +20,7 @@ An argument the compiler supplies for a parameter marked `[CallerFilePath]` or `
 (Roslyn's `ArgumentKind.DefaultValue`, of type `string` or `int`) is not lowered as its constant. It
 reads a synthesised input: `caller.file` for a path and `caller.line` for a line number, one of each
 per body, `In`, shared by both sides by name (ADR 0021). The bound fingerprint (ADR 0024) writes the
-argument as `caller=file` or `caller=line` and leaves its value out. So `equiv` does not compare
+argument as `caller=File` or `caller=Line` and leaves its value out. So `equiv` does not compare
 where a body sits, in which directory, file or line; VERIFICATION-MODEL section 1 says so. An
 argument the source writes out is an ordinary value: a caller that passes `"a.cs"` on one side and
 `"b.cs"` on the other is Divergent as before, and so is one that passes an explicit value against
