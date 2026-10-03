@@ -89,6 +89,76 @@ Which C# constructs are supported is listed in
 [`samples/`](samples/) folder holds small paired solutions, and each one's README states the
 verdicts it should produce.
 
+## Where it stands
+
+As of 2026-10-03. Every number is measured on public code. Runs on `main` are in
+[docs/runs/](docs/runs/); the two version-upgrade runs are in pull request
+[Zafnok/code-equivalency#371](https://github.com/Zafnok/code-equivalency/pull/371), and ran on
+`main`'s current engine.
+
+**The three large runs on the current engine**, each a real pull request:
+
+| | Git Extensions, .NET Framework 4.8 to .NET 5 | Git Extensions, .NET 5 to .NET 6 | Jellyfin, .NET 8 to .NET 9 | All three |
+|---|---|---|---|---|
+| Analysed lines per side | 187,000 | 189,000 | 156,000 | |
+| Matched procedure pairs | 13,541 | 14,020 | 14,503 | 42,064 |
+| Equivalent by congruence (both bodies lower to the same IR and no runtime change applies; no solver) | 93.0% | 94.8% | 96.0% | **94.6%** |
+| Equivalent by the solver | 0.5% (71) | 1.7% (239) | 0% (0) | **0.7%** |
+| Divergent | 2.2% (292) | 0.4% (62) | 0.8% (111) | **1.1%** |
+| Unknown | 4.3% (588) | 3.0% (421) | 3.2% (462) | **3.5%** |
+| Wall-clock | 2h05m | 1h11m | 1h32m | **mean 1h36m** |
+
+So a reviewer is spared about 95% of the procedures and is handed the rest, grouped by cause.
+
+**The changed pairs are where the work is left.** Of the 2,246 pairs that are not congruent, the
+solver proves 310 (13.8%) Equivalent: 7.5%, 33.1% and 0% on the three runs. 65.5% are Unknown and
+20.7% are Divergent. Most changed pairs on the two upgrades are in files the pull request did not
+touch: a runtime rule or a rebound call took them out of congruence.
+
+The Unknowns of the three runs by reason: opaque construct 733, solver budget 400, abstraction
+246, unaligned loop 89, recursion 3.
+
+Other pairs, for range:
+
+| Pair | Congruent share | Changed pairs the solver proves |
+|---|---|---|
+| Three agent migrations of small repositories (median) | 98.5% | too few changed pairs to say |
+| Three "no functional change" cleanup pull requests (Git Extensions, PowerShell) | 97.6% to 99.6% | 9.9% (57 of 575) |
+| The collection-expression cleanup, on the branch of [Zafnok/code-equivalency#368](https://github.com/Zafnok/code-equivalency/pull/368) | 97.6% | 45.6% (160 of 351), from 2.0% on `main` |
+| Duplicati and OpenRA migrations (69,000 and 131,000 lines) | 85.0% and 95.8% | no verdicts: both runs crashed before the first one |
+
+**Run time.** Pairs are verified one at a time, and the time follows the number of changed pairs,
+not the number of lines. The mean of the three runs above is 1h36m (the two upgrades shared one
+machine). Before the fix that removed non-solver time from a pair, the same three took 2h43m,
+6h47m and more than 12 hours.
+
+| Run | Analysed lines per side | Changed pairs | Wall-clock |
+|---|---|---|---|
+| Git Extensions, 4.8 to .NET 5 | 187,000 | 951 | 2h05m (verify 81 min, callee contracts 41 min, lowering 98 s) |
+| Jellyfin, .NET 8 to .NET 9 | 156,000 | 573 | 1h32m |
+| Git Extensions, .NET 5 to .NET 6 | 189,000 | 722 | 1h11m |
+| Git Extensions cleanup, collection expressions (on the branch of pull request 368) | 195,000 | 351 | 31 min |
+| PowerShell cleanup | 464,000 | 140 | 5 min |
+| Agent migrations | 400 to 7,600 | 0 to 40 | 8 s to 2 min |
+
+**How close to usable.** The success criteria fixed before the first run
+([ADR 0028](docs/adr/0028-public-corpus-and-success-criteria.md)) are all met: every project
+loads, more than 40% of pairs are unchanged, and 28 of 28 seeded behaviour changes were caught,
+none reported Equivalent. On the two upgrades, no behaviour change the pull request made was
+reported Equivalent either. With the default options an Equivalent can be relied on today
+(`--il-fallback` has an open soundness bug on methods that hold a lambda). The rest cannot yet:
+
+| What is needed | Today |
+|---|---|
+| A Divergent is usually a real behaviour change | Of those audited and decided: 2 of 52 on the migration (3.8%), 5 of 131 on the upgrades (3.8%), 0 of 51 on cleanups. Counterexample results alone do better on the upgrades (5 of 8). One cause, runtime rules with no version they changed in, is 120 of the upgrades' 126 false positives and is not fixed. Three other causes have fixes in open pull requests; one of them takes the collection-expression cleanup from 25 Divergent to 3 |
+| The solver decides most changed pairs | 13.8% proved on the three large runs, 9.9% on cleanups |
+| Every large pair completes | Three of five. The crash that stops Duplicati and OpenRA is not fixed. Each completed run still loses one to three pairs to a lowering crash |
+| The same run gives the same results | 13,734 of 13,742 results agree between two runs |
+| A run fits in a CI job | 1h11m to 2h05m, one pair at a time. Verifying pairs in parallel is not built |
+
+In short: the sound half (congruence, no false Equivalent on seeded or real changes) is done, and
+the precise half (few false Divergents, few Unknowns on changed code) is early.
+
 ## Licence
 
 `equiv` is **source-available, not open source**. It is licensed under the

@@ -9,6 +9,8 @@
 // params array's elements count one by one), optionally with "unwrap": true (without its outermost implicit
 // conversion) or "convertTo" (through the implicit boxing or reference conversion to that metadata name), or
 // {"const": literal, "type": irType}. A call whose arguments the adapter cannot address all of is left as it is.
+// A property or event accessor has no source arguments to adapt, so an entry applies to an accessor call only when its
+// adapter passes the receiver, the index arguments and a setter's value through in order and unchanged (ticket P2-070).
 // A type entry maps a legacy metadata name to a modern one as a sort name.
 //
 // Soundness (ADR 0020): whenever both members are invoked on adapted arguments, they return the same value and either
@@ -35,6 +37,30 @@
     "arguments": [{ "arg": 0, "unwrap": true }, { "arg": 1 }],
     "reason": "On a non-null string, Enumerable.Contains<char> enumerates its characters and compares each with EqualityComparer<char>.Default, which is ordinal, and String.Contains(char) is an ordinal search, so both return the same bool and neither throws. On a null string the legacy call throws ArgumentNullException and the modern side's receiver check throws NullReferenceException before String.Contains is invoked, so the entry covers only the non-null case and that pair stays Divergent on null, which is the real behaviour change.",
     "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.contains"
+  },
+  {
+    "id": "bcl.string-trim-end-one-char",
+    "legacy": "System.String::TrimEnd(char[])",
+    "modern": "System.String::TrimEnd(char)",
+    "arguments": [{ "arg": 0 }, { "arg": 1 }],
+    "reason": "String.TrimEnd(params char[]) with exactly one element removes every trailing occurrence of that character, which is TrimEnd(char); neither throws for any character. Both are instance members, so a null receiver throws NullReferenceException from the receiver check on both sides before either is invoked.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.trimend"
+  },
+  {
+    "id": "bcl.string-trim-start-no-chars",
+    "legacy": "System.String::TrimStart(char[])",
+    "modern": "System.String::TrimStart()",
+    "arguments": [{ "arg": 0 }],
+    "reason": "String.TrimStart(params char[]) with no elements is given an empty array, for which it removes the leading white-space characters, which is TrimStart(); neither throws. Both are instance members, so a null receiver throws NullReferenceException from the receiver check on both sides before either is invoked.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.trimstart"
+  },
+  {
+    "id": "bcl.directory-info-full-name",
+    "legacy": "System.IO.DirectoryInfo::get_FullName()",
+    "modern": "System.IO.FileSystemInfo::get_FullName()",
+    "arguments": [{ "arg": 0 }],
+    "reason": "On .NET Framework DirectoryInfo overrides FileSystemInfo.FullName and returns the same full path of the directory after a path-discovery permission demand, which fully trusted code always passes; .NET has no code access security and declares the getter on FileSystemInfo only, so the same read of a DirectoryInfo returns the same path and throws for the same over-long path. Both are instance members, so a null receiver throws NullReferenceException from the receiver check on both sides before either is invoked.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.filesysteminfo.fullname"
   },
   {
     "id": "webapi.ok",

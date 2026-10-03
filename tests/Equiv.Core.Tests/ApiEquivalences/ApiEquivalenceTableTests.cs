@@ -39,10 +39,23 @@ public sealed class ApiEquivalenceTableTests
     {
         ImmutableArray<ApiEquivalence> entries = ApiEquivalenceTable.Load().Entries;
 
-        Assert.Equal(6, entries.Count(static entry => !entry.IsType));
+        Assert.Equal(9, entries.Count(static entry => !entry.IsType));
         Assert.Equal(5, entries.Count(static entry => entry.IsType));
         Assert.All(entries.Where(static entry => entry.IsType), static entry => Assert.Empty(entry.Arguments));
         Assert.DoesNotContain(entries, static entry => entry.Legacy.Contains("StatusCode", StringComparison.Ordinal));
+    }
+
+    /// <summary>Ticket P2-070: identical source that the modern reference assemblies bind to an added overload or a moved member.</summary>
+    [Theory]
+    [InlineData("bcl.string-trim-end-one-char", "System.String::TrimEnd(char[])", "System.String::TrimEnd(char)", 2)]
+    [InlineData("bcl.string-trim-start-no-chars", "System.String::TrimStart(char[])", "System.String::TrimStart()", 1)]
+    [InlineData("bcl.directory-info-full-name", "System.IO.DirectoryInfo::get_FullName()", "System.IO.FileSystemInfo::get_FullName()", 1)]
+    public void Table_HasTheRebindingEntries_EachPassingItsSourceArgumentsThrough(string id, string legacy, string modern, int arguments)
+    {
+        ApiEquivalence entry = ApiEquivalenceTable.Load().Entries.Single(e => string.Equals(e.Id, id, StringComparison.Ordinal));
+
+        Assert.Equal((legacy, modern), (entry.Legacy, entry.Modern));
+        Assert.Equal(Enumerable.Range(0, arguments).Select(static i => new ApiArgument(i)), entry.Arguments);
     }
 
     [Fact]
@@ -74,7 +87,7 @@ public sealed class ApiEquivalenceTableTests
         ApiEquivalenceTable table = ApiEquivalenceTable.Load();
 
         Assert.Equal(table.Entries, table.Enabled([]));
-        ImmutableArray<ApiEquivalence> enabled = table.Enabled(["webapi.", "bcl.string-split"]);
+        ImmutableArray<ApiEquivalence> enabled = table.Enabled(["webapi.", "bcl.string-split", "bcl.string-trim", "bcl.directory-info"]);
         Assert.Equal(["bcl.string-contains-char"], enabled.Select(static entry => entry.Id), StringComparer.Ordinal);
     }
 }

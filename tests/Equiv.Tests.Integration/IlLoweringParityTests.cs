@@ -29,6 +29,7 @@ public sealed class IlLoweringParityTests
     /// <summary>The methods whose two lowerings differ in representation only, by identity, with why.</summary>
     private static readonly ImmutableDictionary<string, string> Known = new Dictionary<string, string>(StringComparer.Ordinal)
     {
+        [$"bcl-overload-rebinding/legacy {Indent}"] = EmptyParamsArray,
         [$"business-layer/legacy {ConfirmAsync}"] = StateMachine,
         [$"business-layer/modern {ConfirmAsync}"] = StateMachine,
         [$"business-layer/legacy {Export}"] = UsingResource,
@@ -45,6 +46,8 @@ public sealed class IlLoweringParityTests
         [$"forwarder-to-bcl/legacy {BlankTrimmed}"] = NullConditionalOnAStackSlot,
         [$"effect-free-bcl-call/modern {Basket}"] = ListFamily,
     }.ToImmutableDictionary(StringComparer.Ordinal);
+
+    private const string Indent = "Equiv.Samples.BclOverloadRebinding.Paths::Indent(string)";
 
     private const string ConfirmAsync = "Equiv.Samples.BusinessLayer.OrderService::ConfirmAsync(System.Threading.Tasks.Task<global::Equiv.Samples.BusinessLayer.Order>)";
 
@@ -102,6 +105,13 @@ public sealed class IlLoweringParityTests
     /// reads (ticket P2-068 found it with this sample; the IL table is P1-014's).
     /// </summary>
     private const string NullConditionalOnAStackSlot = "the IL reads a null-conditional argument through a stack slot of type object and its casts";
+
+    /// <summary>
+    /// The IOperation lowering makes the empty array of a <c>params</c> call with no elements, <c>s.TrimStart()</c> on .NET
+    /// Framework, a fresh array (ticket P1-006); the compiler emits a call of <c>Array.Empty&lt;char&gt;()</c>, which the IL
+    /// lowering names as it is (ticket P2-070).
+    /// </summary>
+    private const string EmptyParamsArray = "IOperation lowers an empty params array as a fresh array; the IL calls Array.Empty<char>()";
 
     /// <summary>
     /// The IOperation lowering makes a new <c>Collection&lt;T&gt;</c> converted to an interface a new <c>List&lt;T&gt;</c>

@@ -505,10 +505,16 @@ of how much of the cleanup result each explains:
   keeps unedited bodies from being congruent. Starts with `equiv-adr`.
 - P2-099 (L) A collection expression equals the `new` and initializer it replaces. It is an opaque
   `Conversion` in 308 of gitextensions-11372's 351 changed pairs, and behind 2 false Divergent.
+  Done 2026-10-03: the solver proves 160 of the 351 (45.6%, from 2.0%); the 2 Divergent remain
+  (`docs/runs/2026-10-03-cleanup-gitextensions-11372/SUMMARY.md`).
+- P2-109 (L) A collection expression whose elements are evaluated ahead of it, and the targets
+  P2-099 left opaque: 3 false Divergent and 104 changed pairs on gitextensions-11372. Needs P2-071.
 - P2-103 (M) `x as T` followed by a null check equals `x is T t`. All 5 of powershell-19687's
   Divergent, and none of its 12 edited pairs is proved.
 - P2-104 (S) `x is not T t` lowers as the negation of its inner pattern, not as an opaque.
 - P2-105 (M) Five procedures make the lowerer throw a null reference, so all three runs exit 5.
+- P2-110 (M) Rerun the three cleanup pairs on one commit once the crashes are fixed, and write the
+  cleanup verdict again. Needs P2-105.
 - P2-106 (M) A body whose only diagnostics are warnings promoted to errors is not `unbound`. 82
   pairs on powershell-19687. Starts with `equiv-adr`. Needs P2-085.
 - P2-107 (M) On a same-runtime pair, a whole-body opaque pair with identical source is not
@@ -612,6 +618,11 @@ rung, a pair or a run.
   pass (2h07m, unlogged) becomes a phase. Two full runs must agree on every decided result.
 - P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
   and no query ended sooner by contention. Needs P2-050, P2-076.
+- P2-109 (S) Unrolling a loop is linear in its size. One OpenRA pair, a loop that calls its own procedure,
+  spent over twenty minutes in `IrUnroller` before its first solver query (found by P2-082's run). Needs P2-076.
+- P2-113 (M) A pair whose unrolled body is huge overflows the native stack in the trace encoding and ends the run
+  with no SARIF, which no per-pair `try` can catch. Same OpenRA pair, reached once P2-109 let it finish unrolling.
+  Needs P2-109.
 
 Found by P2-072's repro:
 - P2-108 (M) `System.IntPtr` and `nint` (and `System.UIntPtr` and `nuint`) are one type in an

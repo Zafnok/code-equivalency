@@ -910,6 +910,36 @@ public sealed class IlLowererTests
         _ => IrBitVecValue.FromSigned(64, (long)value),
     };
 
+    /// <summary>
+    /// ADR 0046 (ticket P2-098): IL does not say which arguments the compiler supplied, so a string constant equal to the
+    /// body's own file path, or an <c>int</c> constant inside the body's own line span, passed for a caller-information
+    /// parameter reads the shared input. Any other argument is an ordinary value.
+    /// </summary>
+    [Theory]
+    [InlineData("Own", new[] { "caller.file", "caller.line" })]
+    [InlineData("Explicit", new string[0])]
+    public void ACallerLocationConstantOfTheBodyIsTheSharedInput(string name, string[] expected)
+    {
+        Compilation compilation = RoslynTestCompilations.CompileAt(
+            """
+            using System.Runtime.CompilerServices;
+            static class C
+            {
+                static void File([CallerFilePath] string file = "") { }
+                static void Line([CallerLineNumber] int line = 0) { }
+                static void Own() { File(); Line(); }
+                static void Explicit(string s, int n) { File("other.cs"); File(s); Line(0); Line(100000); Line(n); }
+            }
+            """,
+            Path.Combine(Path.GetTempPath(), "il", "C.cs"));
+
+        IrProcedure procedure = IlLowerer.Lower(Method(compilation, name), compilation, Runtimes.Migration);
+
+        Assert.Empty(IrValidator.Validate(procedure));
+        Assert.DoesNotContain(procedure.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
+        Assert.Equal(expected, procedure.Parameters.Select(static p => p.Var.Name).Where(static n => n.StartsWith("caller.", StringComparison.Ordinal)), StringComparer.Ordinal);
+    }
+
     private static Compilation Compile(string members)
     {
         Compilation compilation = RoslynTestCompilations.Compile($"using System;\nclass C\n{{\n{members}\n}}\n");
