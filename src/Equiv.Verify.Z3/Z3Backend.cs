@@ -178,11 +178,17 @@ public sealed class Z3Backend : IVerificationBackend
     /// An interrupted solver answers unknown, with the reason <c>interrupted</c>, and a fixedpoint gives up with the
     /// reason its own timer leaves, so the query has the result a timeout has. Nothing but the one query is ended: the
     /// rung, the pair and the run go on. An interrupt that is under way when the query returns is waited for, so that
-    /// none reaches the context later.
+    /// none reaches the context later. An interrupt that throws changes none of this (<see cref="Interrupt"/>).
     /// </summary>
-    internal static T Interruptible<T>(Context context, long afterMs, Func<T> check)
+    internal static T Interruptible<T>(Context context, long afterMs, Func<T> check) => Interruptible(context.Interrupt, afterMs, check);
+
+    /// <summary>
+    /// <see cref="Interruptible{T}(Context, long, Func{T})"/> with the interrupt given, for tests. A
+    /// <see cref="Z3Exception"/> from <paramref name="interrupt"/> goes no further (<see cref="Interrupt"/>).
+    /// </summary>
+    internal static T Interruptible<T>(Action interrupt, long afterMs, Func<T> check)
     {
-        using Timer timer = new(_ => context.Interrupt(), state: null, dueTime: afterMs, period: System.Threading.Timeout.Infinite);
+        using Timer timer = new(_ => Interrupt(interrupt), state: null, dueTime: afterMs, period: System.Threading.Timeout.Infinite);
         try
         {
             return check();
@@ -192,6 +198,25 @@ public sealed class Z3Backend : IVerificationBackend
             using ManualResetEvent stopped = new(initialState: false);
             timer.Dispose(stopped);
             stopped.WaitOne();
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="interrupt"/> on the timer's thread, where an exception nothing catches ends the process
+    /// (ticket P2-112). <see cref="Context.Interrupt"/> interrupts the query and then throws if the context holds an
+    /// error, which it does when the query is at that moment giving up (<c>canceled</c>), by this interrupt or by a
+    /// limit of its own. The interrupt has been made either way, so the exception says nothing the query's own result
+    /// does not, and the query ends with that result.
+    /// </summary>
+    private static void Interrupt(Action interrupt)
+    {
+        try
+        {
+            interrupt();
+        }
+        catch (Z3Exception)
+        {
+            // The query's result, read on its own thread, is the answer.
         }
     }
 

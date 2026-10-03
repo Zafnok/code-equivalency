@@ -625,6 +625,9 @@ rung, a pair or a run.
   pass (2h07m, unlogged) becomes a phase. Two full runs must agree on every decided result.
 - P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
   and no query ended sooner by contention. Needs P2-050, P2-076.
+- P2-112 (S) An interrupt that throws on the timer thread can no longer end the process.
+  `Context.Interrupt()` threw `Z3Exception: canceled` on P2-076's timer and killed a CI test host
+  (PR #368); the same crash would end a corpus run with no SARIF.
 - P2-109 (S) Unrolling a loop is linear in its size. One OpenRA pair, a loop that calls its own procedure,
   spent over twenty minutes in `IrUnroller` before its first solver query (found by P2-082's run). Needs P2-076.
 - P2-121 (M) A pair whose unrolled body is huge overflows the native stack in the trace encoding and ends the run

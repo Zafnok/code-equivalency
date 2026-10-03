@@ -220,6 +220,47 @@ public sealed class Z3BackendTests
         Assert.Equal(Status.SATISFIABLE, Z3Backend.Check(context, easy, options, "easy"));
     }
 
+    /// <summary>
+    /// Ticket P2-112: <see cref="Context.Interrupt"/> throws when the context holds an error, here the one a tactic that
+    /// does not exist leaves. On the timer's thread nothing would catch it and the process would end. The query returns
+    /// what it returned.
+    /// </summary>
+    [Fact]
+    public void AnInterruptThatThrowsDoesNotEndTheProcessAndTheQueryReturns()
+    {
+        using Context context = new();
+        Assert.Throws<Z3Exception>(() => context.MkTactic("no-such-tactic"));
+        using ManualResetEventSlim fired = new();
+        Z3Exception? thrown = null;
+
+        int answer = Z3Backend.Interruptible(
+            () =>
+            {
+                try
+                {
+                    context.Interrupt();
+                }
+                catch (Z3Exception e)
+                {
+                    thrown = e;
+                    throw;
+                }
+                finally
+                {
+                    fired.Set();
+                }
+            },
+            afterMs: 1,
+            () =>
+            {
+                fired.Wait(TestContext.Current.CancellationToken);
+                return 7;
+            });
+
+        Assert.Equal(7, answer);
+        Assert.NotNull(thrown);
+    }
+
     [Theory]
     [InlineData("timeout", "timeout", ": wall-clock limit 10000 ms hit")]
     [InlineData("canceled", "canceled", ": wall-clock limit 10000 ms hit")]
