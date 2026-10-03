@@ -178,7 +178,7 @@ public sealed class Z3Backend : IVerificationBackend
     /// An interrupted solver answers unknown, with the reason <c>interrupted</c>, and a fixedpoint gives up with the
     /// reason its own timer leaves, so the query has the result a timeout has. Nothing but the one query is ended: the
     /// rung, the pair and the run go on. An interrupt that is under way when the query returns is waited for, so that
-    /// none reaches the context later.
+    /// none reaches the context later. An interrupt that throws changes none of this (<see cref="Interrupt"/>).
     /// </summary>
     internal static T Interruptible<T>(Context context, long afterMs, Func<T> check) => Interruptible(context.Interrupt, afterMs, check);
 
