@@ -42,5 +42,20 @@ internal static class RoslynTestCompilations
         return document.Project.GetCompilationAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult()!;
     }
 
+    /// <summary>
+    /// A one-file compilation whose file is at <paramref name="path"/>, with no errors: what the compiler supplies for a
+    /// <c>[CallerFilePath]</c> parameter is that path (ticket P2-098).
+    /// </summary>
+    public static Compilation CompileAt(string source, string path)
+    {
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            "Snippet",
+            [CSharpSyntaxTree.ParseText(SourceText.From(source, System.Text.Encoding.UTF8), path: path, cancellationToken: TestContext.Current.CancellationToken)],
+            References,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+        return compilation;
+    }
+
     public static MetadataReference ToReference(this Compilation compilation) => compilation.ToMetadataReference();
 }
