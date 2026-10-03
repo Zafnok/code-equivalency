@@ -38,8 +38,8 @@ Top opaque reasons (legacy / modern), up to 15. The share in the last column is 
 
 | reason | legacy | modern | owning ticket or "none" |
 |---|---|---|---|
-| Conversion | 1015 | 1014 | none (5.1%) |
-| switch-pattern | 991 | 991 | none (3.8%) |
+| Conversion | 1015 | 1014 | P2-123 (5.1%) |
+| switch-pattern | 991 | 991 | P2-122 (3.8%) |
 | Binary | 497 | 497 | P2-087 (4.0%) |
 | DefaultValue | 261 | 261 | none (below 5%) |
 | CaughtException | 228 | 228 | none (below 5%) |
@@ -68,9 +68,9 @@ Top reason sets (up to 15; "" = no opaque):
 | "DelegateCreation" | 53 | P2-067 done |
 | "DelegateCreation+switch-pattern" | 33 | none |
 | "no-body" | 30 | P2-118 (`[GeneratedRegex]` partial methods) |
-| "Conversion" | 29 | none |
+| "Conversion" | 29 | P2-123 |
 | "Binary" | 23 | P2-087 |
-| "switch-pattern" | 22 | none |
+| "switch-pattern" | 22 | P2-122 |
 | "await-using" | 13 | none |
 | "Conversion+switch-pattern" | 12 | none |
 | "rebound-call+switch-pattern" | 12 | P2-070 |
@@ -116,4 +116,4 @@ Top reason sets (up to 15; "" = no opaque):
 - **Calls rebound by .NET 9's new overloads** keep 63 unchanged bodies out of congruence: P2-070 (forms above).
 - **`ProviderManager::SaveImage(...)` is EQ002 for an added `ConfigureAwait(false)`**: P2-071, which merged after this build (8bf3aa1). Not rerun.
 - **What the pull request really changed**, and how it was reported: two behaviour changes are EQ002 (`StartupHelpers::PerformStaticInitialization()`, `ApplicationHost::GetCertificate(string,string)`), and two are Unknown (`PluginManager::TryGetPluginDlls(...)`, `timeout`; `ProbeResultNormalizer::GetMpegTimestamp(string)`, `abstraction`). None is reported Equivalent.
-- `DelegateCreation` alone is 9.2% of changed pairs, `no-body` 5.2% and `Conversion` 5.1%. Reported only: P2-066 does not ask for owners of opaque reasons.
+- `DelegateCreation` alone is 9.2% of changed pairs, `no-body` 5.2% (P2-118) and `Conversion` 5.1% (P2-123, filed after this run).

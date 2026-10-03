@@ -37,8 +37,8 @@ Top opaque reasons (legacy / modern), up to 15. The share in the last column is 
 
 | reason | legacy | modern | owning ticket or "none" |
 |---|---|---|---|
-| Conversion | 2019 | 2019 | none (15.2%) |
-| switch-pattern | 1189 | 1189 | none (6.8%) |
+| Conversion | 2019 | 2019 | P2-123 (15.2%) |
+| switch-pattern | 1189 | 1189 | P2-122 (6.8%) |
 | Binary | 655 | 655 | P2-087 (1.4%) |
 | InstanceReference | 422 | 422 | none (below 5%) |
 | DefaultValue | 355 | 355 | none (1.5%) |
@@ -63,8 +63,8 @@ Top reason sets (up to 15; "" = no opaque):
 | reason set | changed pairs | owning tickets or "none" |
 |---|---|---|
 | "" | 218 | n/a |
-| "Conversion" | 110 | none |
-| "switch-pattern" | 49 | none |
+| "Conversion" | 110 | P2-123 |
+| "switch-pattern" | 49 | P2-122 |
 | "Conversion+DelegateCreation" | 25 | P2-067 |
 | "rebound-call" | 25 | P2-070 |
 | "InterpolatedString" | 23 | P2-086 done |
@@ -118,5 +118,5 @@ Top reason sets (up to 15; "" = no opaque):
 - **Three EQ006 on net6.0 rows are false positives**: two belong to P2-075 (a row that matches members its change does not touch: enumerating `ListView.Groups`, and reading `TreeNodeCollection`'s indexer where only assigning a null node reaches the change), one is P2-114 (`FileStream.Position` read where the stream had no asynchronous read or write).
 - **`BugReporter.Program::Main()` is EQ002 with byte-identical source**: it passes the generated `ThisAssembly.Git.Sha` constant, which differs between the two commits. P2-098 owns the cause.
 - **P2-076's effect**: at 46e6636 `verify` took 17434 s and the contracts pass 1h55m; at 8e0ed3c they take 3448 s and 684 s. No result changed rule.
-- `Conversion` alone is 15.2% of changed pairs and `switch-pattern` alone 6.8%, with no open owner. Reported only: P2-066 does not ask for owners of opaque reasons.
+- `Conversion` alone is 15.2% of changed pairs and `switch-pattern` alone 6.8%. P2-123 and P2-122 were filed for them after this run.
 - Restoring this pair needed no workaround. Fetching it needed `-Fetch`'s wider `global.json` patch (P2-058).
