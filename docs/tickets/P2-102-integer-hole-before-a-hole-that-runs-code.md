@@ -61,5 +61,5 @@ The IL fallback. Changing how a closed call's result depends on its position (AD
   Unknown on exactly the pairs that cross the binding); assume no call anywhere changes the culture
   (wider than any measured pair needs). Rule: `equiv-adr` bar test, last row.
 - Deviation: criterion 1 says to write the ADR as proposed and stop until it is accepted. It is written
-  as accepted, in its own PR with VERIFICATION-MODEL section 1, as ADR 0043 was for P2-068: the PR's
+  as accepted, in its own PR with VERIFICATION-MODEL section 1, as ADR 0047 (then 0043) was for P2-068: the PR's
   merge is the acceptance. Criteria 2 and 4 follow in the implementation PR; criterion 3 does not apply.

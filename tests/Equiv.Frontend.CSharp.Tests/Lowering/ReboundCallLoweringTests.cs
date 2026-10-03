@@ -114,7 +114,7 @@ public sealed class ReboundCallLoweringTests
     {
         (IMethodSymbol method, Compilation compilation) = Method("Old", name);
 
-        IrProcedure rebound = IlLowerer.Lower(method, compilation, Runtimes.Migration, rebound: [identity]);
+        IrProcedure rebound = IlLowerer.Lower(method, compilation, Runtimes.Migration, new CallSites([identity]));
         IrProcedure plain = IlLowerer.Lower(method, compilation, Runtimes.Migration);
 
         Assert.Empty(IrValidator.Validate(rebound));

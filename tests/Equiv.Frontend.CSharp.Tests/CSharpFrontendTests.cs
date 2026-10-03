@@ -321,6 +321,93 @@ public sealed class CSharpFrontendTests
     }
 
     /// <summary>
+    /// ADR 0047 (ticket P2-068 criterion 2): the ticket's pair. The legacy body calls a forwarder and the modern one its
+    /// target, so both lower to the same call, the fingerprints are equal, and the pair names the forwarder it resolved.
+    /// Under <c>--il-fallback</c> the pair is congruent, keeps its IOperation bodies, and keeps what they resolved.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AForwarderReplacedByItsTargetIsOneCallAndIsNamed(bool ilFallback)
+    {
+        const string Helper = "public static class Text { public static bool Blank(string s) => string.IsNullOrWhiteSpace(s); }";
+        Compilation legacy = RoslynTestCompilations.Compile($"namespace N {{ {Helper} public class C {{ public string Name(string s) => Text.Blank(s) ? \"none\" : s; }} }}");
+        Compilation modern = RoslynTestCompilations.Compile("namespace N { public class C { public string Name(string s) => string.IsNullOrWhiteSpace(s) ? \"none\" : s; } }");
+
+        ProcedurePair name = Analyzed(legacy, modern, ilFallback).Pairs.Single(static p => p.New.Value.Contains("::Name(", StringComparison.Ordinal));
+
+        Assert.Equal([new ResolvedForwarder("N.Text::Blank(string)", "System.String::IsNullOrWhiteSpace(string)")], name.ForwardersResolved);
+        Assert.Equal(name.OldFingerprint, name.NewFingerprint);
+        Assert.Equal(
+            ["System.String::IsNullOrWhiteSpace(string)"],
+            name.OldBody!.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee.Value),
+            StringComparer.Ordinal);
+        Assert.Equal(ilFallback ? "operation" : null, name.Lowering);
+    }
+
+    /// <summary>
+    /// ADR 0047: a pair that keeps its IL bodies names the forwarders those resolved. Here the IOperation lowering never
+    /// reaches the modern side's forwarder call, an operand of a lifted operator it leaves opaque, and the IL lowering does.
+    /// </summary>
+    [Fact]
+    public void APairLoweredFromIlNamesTheForwardersItsIlBodiesResolved()
+    {
+        const string Library = "public static class Lib { public static int Count(string s) => s.Length; } public static class Text { public static int Size(string s) => Lib.Count(s); }";
+        Compilation legacy = RoslynTestCompilations.Compile(
+            $"namespace N {{ {Library} public class C {{ public int? Add(int? a, string s) {{ int n = Lib.Count(s); if (a.HasValue) {{ return new int?(a.GetValueOrDefault() + n); }} return null; }} }} }}");
+        Compilation modern = RoslynTestCompilations.Compile($"namespace N {{ {Library} public class C {{ public int? Add(int? a, string s) => a + Text.Size(s); }} }}");
+        ResolvedForwarder[] size = [new("N.Text::Size(string)", "N.Lib::Count(string)")];
+
+        ProcedurePair il = Analyzed(legacy, modern, ilFallback: true).Pairs.Single(static p => p.New.Value.Contains("::Add(", StringComparison.Ordinal));
+        ProcedurePair operation = Analyzed(legacy, modern, ilFallback: false).Pairs.Single(static p => p.New.Value.Contains("::Add(", StringComparison.Ordinal));
+
+        Assert.Equal("il", il.Lowering);
+        Assert.Equal(size, il.ForwardersResolved);
+        Assert.Empty(operation.ForwardersResolved);
+    }
+
+    /// <summary>
+    /// ADR 0047: a forwarder both sides have is resolved only where they agree on its target. <c>Blank</c> forwards to the
+    /// same member on both sides, so a caller that now calls the member directly is one call with it. <c>Empty</c> is a
+    /// forwarder on the legacy side only, so its unchanged caller still calls it on both sides and is congruent, as ADR
+    /// 0019 has it, and the pair of <c>Empty</c> itself is where the change shows. The IL bodies keep it too.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AMatchedForwarderIsResolvedOnlyWhereItsSidesAgree(bool ilFallback)
+    {
+        const string Blank = "public static bool Blank(string s) => string.IsNullOrWhiteSpace(s);";
+        const string Lifted = "public static int? Add(int? a, string s) { int n = Text.Empty(s) ? 1 : 0; if (a.HasValue) { return new int?(a.GetValueOrDefault() + n); } return null; }";
+        Compilation legacy = RoslynTestCompilations.Compile(
+            $"namespace N {{ public static class Text {{ {Blank} public static bool Empty(string s) => string.IsNullOrEmpty(s); }} public class C {{ public bool A(string s) => Text.Blank(s); public bool B(string s) => Text.Empty(s); {Lifted} }} }}");
+        Compilation modern = RoslynTestCompilations.Compile(
+            $"namespace N {{ public static class Text {{ {Blank} public static bool Empty(string s) => s == null || s.Length == 0; }} public class C {{ public bool A(string s) => string.IsNullOrWhiteSpace(s); public bool B(string s) => Text.Empty(s); public static int? Add(int? a, string s) => a + (Text.Empty(s) ? 1 : 0); }} }}");
+
+        MatchResult result = Analyzed(legacy, modern, ilFallback);
+
+        ProcedurePair agreed = result.Pairs.Single(static p => p.New.Value.Contains("::A(", StringComparison.Ordinal));
+        ProcedurePair kept = result.Pairs.Single(static p => p.New.Value.Contains("::B(", StringComparison.Ordinal));
+        ProcedurePair add = result.Pairs.Single(static p => p.New.Value.Contains("::Add(", StringComparison.Ordinal));
+        Assert.Equal([new ResolvedForwarder("N.Text::Blank(string)", "System.String::IsNullOrWhiteSpace(string)")], agreed.ForwardersResolved);
+        Assert.Equal(agreed.OldFingerprint, agreed.NewFingerprint);
+        Assert.Empty(kept.ForwardersResolved);
+        Assert.Equal(kept.OldFingerprint, kept.NewFingerprint);
+        Assert.All(
+            (IrProcedure[])[kept.OldBody!, kept.NewBody!, add.OldBody!, add.NewBody!],
+            static body => Assert.Contains("N.Text::Empty(string)", body.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static c => c.Callee.Value), StringComparer.Ordinal));
+        Assert.Empty(add.ForwardersResolved);
+        Assert.Equal(ilFallback ? "il" : null, add.Lowering);
+    }
+
+    private static MatchResult Analyzed(Compilation legacy, Compilation modern, bool ilFallback)
+    {
+        StubLoader loader = new(path => new LoadedSolution(null!, [string.Equals(path, "legacy.sln", StringComparison.Ordinal) ? legacy : modern], [], []));
+        return new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = ilFallback }, NullRunLog.Instance, CancellationToken.None).Match;
+    }
+
+    /// <summary>
     /// ADR 0042 (ticket P2-069 criteria 2 and 3): a call site with the same text that binds to another callee is listed as a
     /// rebound pair and is an opaque in both bodies, each lowered a second time for it. A call to another member is an
     /// ordinary call in a pair lowered once.
@@ -389,7 +476,7 @@ public sealed class CSharpFrontendTests
             Assert.DoesNotContain(IlLowerer.Lower(method, compilation, Runtimes.Migration).Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
             Assert.Equal(
                 ReboundCall.OpaqueReason,
-                Assert.Single(IlLowerer.Lower(method, compilation, Runtimes.Migration, rebound: [identity]).Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>()).Reason);
+                Assert.Single(IlLowerer.Lower(method, compilation, Runtimes.Migration, new CallSites([identity])).Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>()).Reason);
         }
     }
 

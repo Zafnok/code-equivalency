@@ -136,8 +136,11 @@ internal sealed partial class IlLowerer
         exceptions = new ExceptionLowerer(ssa, compilation: null!, cfg: null!, chains: null!, loops: null!, bodySpan, fill: null!);
     }
 
-    /// <summary>The callee identities whose calls are rebound, each lowered as an opaque (ADR 0042; ticket P2-069).</summary>
-    private ImmutableHashSet<string> Rebounds { get; init; } = [];
+    /// <summary>
+    /// The callee identities whose calls are rebound, each lowered as an opaque (ADR 0042; ticket P2-069), and the record of
+    /// the forwarders the body's calls are resolved through (ADR 0047; ticket P2-068).
+    /// </summary>
+    private CallSites Sites { get; init; } = new();
 
     private ITypeSymbol Boolean => compilation.GetSpecialType(SpecialType.System_Boolean);
 
@@ -149,17 +152,19 @@ internal sealed partial class IlLowerer
     /// <paramref name="method"/>'s body, read from <paramref name="compilation"/>'s IL. A method with no ILAst is one
     /// whole-body opaque whose reason is <see cref="IlAstReader"/>'s. <paramref name="runtime"/> decides which calls and pure
     /// functions are runtime-sensitive, as it does for <see cref="IrLowerer"/> (ADR 0040; tickets M4-002, P2-055). A call to an identity
-    /// in <paramref name="rebound"/> is an opaque, as <see cref="IrLowerer"/> makes a rebound call (ADR 0042; ticket P2-069).
+    /// <paramref name="sites"/> holds as rebound is an opaque, as <see cref="IrLowerer"/> makes a rebound call (ADR 0042; ticket
+    /// P2-069), and each forwarder a call is resolved through is recorded there (ADR 0047; ticket P2-068). The IL has no
+    /// source text, so no call site is.
     /// </summary>
-    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, SideRuntime runtime, ImmutableHashSet<string>? rebound = null) =>
-        Lower(method, compilation, runtime, static op => op, rebound);
+    public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, SideRuntime runtime, CallSites? sites = null) =>
+        Lower(method, compilation, runtime, static op => op, sites);
 
     /// <summary>
     /// Seam for the differential soundness gate (ticket P1-017): <paramref name="mapped"/> rewrites the IR operator each
     /// integral arithmetic or comparison instruction maps to, so a test can break a mapping on purpose and show the gate
     /// catches it. The product maps every operator to itself.
     /// </summary>
-    internal static IrProcedure Lower(IMethodSymbol method, Compilation compilation, SideRuntime runtime, Func<IrBinaryOp, IrBinaryOp> mapped, ImmutableHashSet<string>? rebound = null)
+    internal static IrProcedure Lower(IMethodSymbol method, Compilation compilation, SideRuntime runtime, Func<IrBinaryOp, IrBinaryOp> mapped, CallSites? sites = null)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
@@ -169,7 +174,7 @@ internal sealed partial class IlLowerer
         IlAstReader.Body body = IlAstReader.Read(method, compilation);
         return body.Failure is { } failure
             ? IrLowerer.Opaque(RoslynIdentity.Of(method, RenameMap.Empty), parameters, returnType, failure, [span])
-            : new IlLowerer(method, compilation, body, span, returnType, runtime, mapped) { Rebounds = rebound ?? [] }.Procedure(parameters, body.Function!);
+            : new IlLowerer(method, compilation, body, span, returnType, runtime, mapped) { Sites = sites ?? new CallSites() }.Procedure(parameters, body.Function!);
     }
 
     /// <summary>The procedure: the C# parameters, then the heap inputs the lowering used, as <see cref="IrLowerer"/> orders them.</summary>
@@ -907,6 +912,7 @@ internal sealed partial class IlLowerer
     /// auto-property's accessor reads or writes its backing field's map (ticket M4-008), each as <see cref="IrLowerer"/>
     /// lowers it. A struct's constructor is only ever a <c>newobj</c> here: ILSpy reads one called on a local's address as
     /// the local's store of a <c>newobj</c>, and Roslyn stores one into a field or element. Null for a call with no result.
+    /// A call to a forwarder is the same call to its target (<see cref="Callee"/>; ADR 0047).
     /// A member in the effect-free catalogue is no call (ADR 0043): a getter is its receiver's pure function and a
     /// constructor's object the next of <c>new.&lt;Sort&gt;</c>, each as <see cref="IrLowerer"/> lowers it, less the family rule.
     /// A call to an identity the pair's other side binds differently at the same source text is <see cref="Rebound"/> (ADR 0042).
@@ -943,16 +949,35 @@ internal sealed partial class IlLowerer
             ThrowIfNull(call.Arguments[0], receiver.Value.Var);
         }
 
-        CallIdentity identity = CallIdentityFactory.Of(target, compilation, RenameMap.Empty, [], runtime.Interval);
+        (CallIdentity identity, bool closed) = Callee(target);
         ImmutableArray<IrVar> operands = receiver is { } self ? [self.Var, .. arguments] : arguments;
-        return (isOperator, Rebounds.Contains(identity.Value)) switch
+        return (isOperator, Sites.IsRebound(identity)) switch
         {
             _ when EffectFreeMembers.IsGetter(target) => new(Pure(EffectFreeMembers.Getter(identity), [], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType),
             _ when call is NewObj && EffectFreeMembers.Allocates(target) => new(heap.Fresh((IrSort)Map(target.ContainingType), context), target.ContainingType),
             (true, _) => new(Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType),
             (_, true) => Rebound(call, written, Result(call, target)),
-            _ => Invoke(identity, operands, written, Result(call, target), ClosedCalls.IsClosed(target)),
+            _ => Invoke(identity, operands, written, Result(call, target), closed),
         };
+    }
+
+    /// <summary>
+    /// What a call to <paramref name="target"/> calls, and whether that call is closed (ADR 0041): <paramref name="target"/>
+    /// itself, or, when it is a forwarder, the target of its chain, as <see cref="IrLowerer"/> resolves one (ADR 0047; ticket
+    /// P2-068), unless the pair's sides do not agree on it. The forwarder's parameters and result are its target's, so the
+    /// operands and the result's type stay as read.
+    /// </summary>
+    private (CallIdentity Identity, bool Closed) Callee(IMethodSymbol target)
+    {
+        CallIdentity identity = CallIdentityFactory.Of(target, compilation, RenameMap.Empty, [], runtime.Interval);
+        if (Sites.KeptForwarders.Contains(identity.Value) || Forwarders.Resolve(target, compilation) is not { } resolved)
+        {
+            return (identity, ClosedCalls.IsClosed(target));
+        }
+
+        CallIdentity forwarded = CallIdentityFactory.Of(resolved.Target, resolved.Compilation, RenameMap.Empty, [], runtime.Interval);
+        Sites.Forwarded(identity, forwarded);
+        return (forwarded, ClosedCalls.IsClosed(resolved.Target));
     }
 
     /// <summary>

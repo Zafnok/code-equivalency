@@ -382,6 +382,29 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-068 criteria 2 and 3 (ADR 0047): the legacy <c>Name</c> calls <c>Text.Blank</c>, whose whole body forwards
+    /// to <c>string.IsNullOrWhiteSpace</c>, and the modern one calls that directly. It is Equivalent, and names the
+    /// forwarder it resolved. <c>Trimmed</c>'s helper passes <c>s?.Trim()</c>, so it is no forwarder: the pair stays
+    /// Divergent and names none.
+    /// </summary>
+    [Fact]
+    public async Task ForwarderToBcl_TheForwarderIsItsTargetAndAHelperThatChangesItsArgumentIsNot()
+    {
+        SampleRun run = RunSample("forwarder-to-bcl");
+        Result name = Single("forwarder-to-bcl", "::Name(");
+        Result trimmed = Single("forwarder-to-bcl", "::Trimmed(");
+
+        Assert.Equal(await Snapshot("forwarder-to-bcl"), run.NormalizedSarif);
+        Assert.Equal("EQ001", name.RuleId);
+        Dictionary<string, string> resolved = Assert.Single(name.GetProperty<List<Dictionary<string, string>>>("forwardersResolved"));
+        Assert.Equal("Equiv.Samples.ForwarderToBcl.Text::Blank(string)", resolved["forwarder"]);
+        Assert.Equal("System.String::IsNullOrWhiteSpace(string)", resolved["target"]);
+        Assert.Equal("EQ002", trimmed.RuleId);
+        Assert.False(trimmed.TryGetProperty("forwardersResolved", out List<Dictionary<string, string>>? _));
+        Assert.Equal(1, run.ExitCode);
+    }
+
+    /// <summary>
     /// Ticket P2-071 criteria 2 and 3 (ADR 0043): a discarded extra read of <c>String.Length</c> and a new
     /// <c>Collection&lt;int&gt;</c> stored where the legacy side stored a new <c>List&lt;int&gt;</c> are no calls, so both
     /// pairs are Equivalent by the solver. A modern side that calls <c>list.Clear()</c>, a member with an effect, stays
