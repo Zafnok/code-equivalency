@@ -101,6 +101,134 @@ public sealed class ApiEquivalenceLoweringTests
         Assert.Empty(applied);
     }
 
+    /// <summary>Stand-ins for .NET Framework's <c>String.TrimEnd(params char[])</c> and <c>String.TrimStart(params char[])</c> (ticket P2-070).</summary>
+    private const string Trimmer = "class S { public string TrimEnd(params char[] trimChars) => null!; public string TrimStart(params char[] trimChars) => null!; }\n";
+
+    /// <summary>
+    /// A stand-in for .NET Framework's <c>DirectoryInfo.FullName</c>, which overrides <c>FileSystemInfo.FullName</c>; .NET
+    /// declares it on the base only (ticket P2-070).
+    /// </summary>
+    private const string Directories = "class B { public virtual string FullName => null!; }\nclass D : B { public override string FullName => null!; }\n";
+
+    /// <summary>The catalogue's rebinding entries (ticket P2-070), each with its legacy member the stand-in's.</summary>
+    private static ImmutableArray<ApiEquivalence> Rebinding =>
+    [
+        Entry("bcl.string-trim-end-one-char") with { Legacy = "S::TrimEnd(char[])" },
+        Entry("bcl.string-trim-start-no-chars") with { Legacy = "S::TrimStart(char[])" },
+        Entry("bcl.directory-info-full-name") with { Legacy = "D::get_FullName()" },
+    ];
+
+    [Fact]
+    public void LegacyTrimEndOfOneChar_IsRewrittenToTheCharOverload()
+    {
+        (IrProcedure body, ImmutableArray<string> applied) = Legacy(Trimmer + "class C { static string M(S s) => s.TrimEnd('/'); }", Rebinding);
+
+        IrCall call = Assert.Single(Calls(body));
+        Assert.Equal("System.String::TrimEnd(char)", call.Callee.Value);
+        Assert.Equal(2, call.Args.Length);
+        Assert.Equal("s", call.Args[0].SourceName);
+        IrConst trimmed = body.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>().Single(c => c.Target == call.Args[1]);
+        Assert.Equal(Bits(16, '/'), trimmed.Value);
+        Assert.Equal(["bcl.string-trim-end-one-char"], applied);
+    }
+
+    [Fact]
+    public void LegacyTrimStartOfNoChars_IsRewrittenToTheParameterlessOverload()
+    {
+        (IrProcedure body, ImmutableArray<string> applied) = Legacy(Trimmer + "class C { static string M(S s) => s.TrimStart(); }", Rebinding);
+
+        IrCall call = Assert.Single(Calls(body));
+        Assert.Equal("System.String::TrimStart()", call.Callee.Value);
+        Assert.Equal("s", Assert.Single(call.Args).SourceName);
+        Assert.Equal(["bcl.string-trim-start-no-chars"], applied);
+    }
+
+    /// <summary>Each trim entry covers one element count; any other count, or an array, keeps the legacy overload.</summary>
+    [Theory]
+    [InlineData("s.TrimEnd()", "S::TrimEnd(char[])")]
+    [InlineData("s.TrimEnd('/', '.')", "S::TrimEnd(char[])")]
+    [InlineData("s.TrimEnd(new[] { '/' })", "S::TrimEnd(char[])")]
+    [InlineData("s.TrimStart(' ')", "S::TrimStart(char[])")]
+    [InlineData("s.TrimStart(new char[0])", "S::TrimStart(char[])")]
+    public void TrimWithAnotherElementCount_IsNotRewritten(string call, string callee)
+    {
+        (IrProcedure body, ImmutableArray<string> applied) = Legacy(Trimmer + $"class C {{ static string M(S s) => {call}; }}", Rebinding);
+
+        Assert.Equal(callee, Assert.Single(Calls(body)).Callee.Value);
+        Assert.Empty(applied);
+    }
+
+    [Fact]
+    public void LegacyDirectoryInfoFullName_IsRewrittenToTheBaseGetter()
+    {
+        (IrProcedure body, ImmutableArray<string> applied) = Legacy(Directories + "class C { static string M(D d) => d.FullName; }", Rebinding);
+
+        IrCall call = Assert.Single(Calls(body));
+        Assert.Equal("System.IO.FileSystemInfo::get_FullName()", call.Callee.Value);
+        Assert.False(call.Closed);
+        Assert.Equal("d", Assert.Single(call.Args).SourceName);
+        Assert.Equal(["bcl.directory-info-full-name"], applied);
+    }
+
+    /// <summary>The rewritten getter call keeps the legacy call's receiver null check.</summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void LegacyDirectoryInfoFullName_KeepsTheReceiverNullCheck(bool isNull, bool thrown)
+    {
+        IrProcedure body = Legacy(Directories + "class C { static string M(D d) => d.FullName; }", Rebinding).Body;
+
+        IrOutcome outcome = Run(body, Reference(0, "D"), Nulls("D", 0, isNull));
+
+        Assert.Equal(thrown, outcome is IrThrew { ExceptionType: "System.NullReferenceException" });
+    }
+
+    /// <summary>The base getter read through the base type is not the entry's legacy member.</summary>
+    [Fact]
+    public void TheBaseGetter_IsNotRewritten()
+    {
+        (IrProcedure body, ImmutableArray<string> applied) = Legacy(Directories + "class C { static string M(B b) => b.FullName; }", Rebinding);
+
+        Assert.Equal("B::get_FullName()", Assert.Single(Calls(body)).Callee.Value);
+        Assert.Empty(applied);
+    }
+
+    /// <summary>An accessor has no source arguments to adapt, so only an entry that passes its operands through applies to one.</summary>
+    [Theory]
+    [MemberData(nameof(AccessorAdapters), DisableDiscoveryEnumeration = true)]
+    public void AnAccessorEntryThatDoesNotPassItsOperandsThrough_LeavesTheCallAsItIs(ApiArgument[] arguments)
+    {
+        ApiEquivalence entry = Rebinding[2] with { Arguments = [.. arguments] };
+
+        (IrProcedure body, ImmutableArray<string> applied) = Legacy(Directories + "class C { static string M(D d) => d.FullName; }", [entry]);
+
+        Assert.Equal("D::get_FullName()", Assert.Single(Calls(body)).Callee.Value);
+        Assert.Empty(applied);
+    }
+
+    public static TheoryData<ApiArgument[]> AccessorAdapters() => new()
+    {
+        { [] },
+        { [new ApiArgument(0), new ApiArgument(1)] },
+        { [new ApiArgument(0, ConvertTo: "System.Object")] },
+        { [new ApiArgument(Source: null, ConstantType: "bool", Constant: "true")] },
+    };
+
+    /// <summary>A setter's value is its last operand, passed through like the receiver.</summary>
+    [Fact]
+    public void AnAccessorEntry_RewritesASetterCall()
+    {
+        ApiEquivalence entry = new("t", IsType: false, "P::set_X(int)", "Q::set_X(int)", [new ApiArgument(0), new ApiArgument(1)], "r", new Uri("https://learn.microsoft.com/x"));
+        const string Holder = "class P { public int X { get => 0; set { } } }\n";
+
+        (IrProcedure body, ImmutableArray<string> applied) = Legacy(Holder + "class C { static void M(P p, int i) { p.X = i; } }", [entry]);
+
+        IrCall call = Assert.Single(Calls(body));
+        Assert.Equal("Q::set_X(int)", call.Callee.Value);
+        Assert.Equal(["p", "i"], call.Args.Select(static a => a.SourceName), StringComparer.Ordinal);
+        Assert.Equal(["t"], applied);
+    }
+
     [Fact]
     public void LegacyLinqContains_UnwrapsTheStringArgument()
     {
