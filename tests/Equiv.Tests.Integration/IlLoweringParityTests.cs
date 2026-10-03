@@ -42,6 +42,7 @@ public sealed class IlLoweringParityTests
         [$"cleanup-modern-syntax/legacy {Positives}"] = NullTestOfAConversion,
         [$"cleanup-modern-syntax/modern {Positives}"] = Lambda,
         [$"cleanup-modern-syntax/modern {Join}"] = InterpolatedString,
+        [$"forwarder-to-bcl/legacy {BlankTrimmed}"] = NullConditionalOnAStackSlot,
     }.ToImmutableDictionary(StringComparer.Ordinal);
 
     private const string ConfirmAsync = "Equiv.Samples.BusinessLayer.OrderService::ConfirmAsync(System.Threading.Tasks.Task<global::Equiv.Samples.BusinessLayer.Order>)";
@@ -57,6 +58,8 @@ public sealed class IlLoweringParityTests
     private const string Positives = "Equiv.Samples.CleanupModernSyntax.Tidy::Positives(System.Collections.Generic.List<int>)";
 
     private const string Join = "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)";
+
+    private const string BlankTrimmed = "Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)";
 
     /// <summary>An <c>async</c> method's IL is its state machine's kickoff, whose ILAst is opaque (out of scope; P1-012).</summary>
     private const string StateMachine = "the IL of an async method is its state machine's kickoff, which is opaque";
@@ -88,6 +91,14 @@ public sealed class IlLoweringParityTests
     /// the IL lowering names as it is.
     /// </summary>
     private const string InterpolatedString = "IOperation lowers an interpolated string as a chain of Concat(string,string); the IL calls Concat(string,string,string)";
+
+    /// <summary>
+    /// The compiler emits <c>s?.Trim()</c> as an argument with both branches leaving their value on the stack, which ILSpy
+    /// reads as a slot of type <c>object</c>. The IL lowering then passes the value through <c>cast.System.Object.System.String</c>
+    /// and its null shadow through <c>null.System.Object</c>, two maps the IOperation lowering of the same expression never
+    /// reads (ticket P2-068 found it with this sample; the IL table is P1-014's).
+    /// </summary>
+    private const string NullConditionalOnAStackSlot = "the IL reads a null-conditional argument through a stack slot of type object and its casts";
 
     private static readonly VerificationOptions Options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, []);
 

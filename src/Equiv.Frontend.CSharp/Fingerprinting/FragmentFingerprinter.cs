@@ -47,6 +47,9 @@ internal sealed class FragmentFingerprinter(
 
     private readonly Dictionary<ControlFlowGraph, ImmutableHashSet<ISymbol>> writtenByFunctions = [];
 
+    /// <summary>The forwarders a fragment's text names as themselves, as the body's lowering calls them (ADR 0043).</summary>
+    public ImmutableHashSet<string> KeptForwarders { get; init; } = [];
+
     /// <summary><paramref name="operation"/>'s fragment, an operation of <paramref name="graph"/>, or null when it gets no fingerprint.</summary>
     public Fragment? Of(IOperation operation, ControlFlowGraph graph)
     {
@@ -75,7 +78,8 @@ internal sealed class FragmentFingerprinter(
             return null;
         }
 
-        (string text, bool runtimeSensitive) = BoundSerialiser.SerialiseFragment(method, compilation, operation, Lambda, new(renames, suppressedRuntimeChanges, equivalences, runtime));
+        (string text, bool runtimeSensitive) = BoundSerialiser.SerialiseFragment(
+            method, compilation, operation, Lambda, new(renames, suppressedRuntimeChanges, equivalences, runtime) { KeptForwarders = KeptForwarders });
         return runtimeSensitive ? null : new Fragment(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), reads, captured);
     }
 

@@ -168,7 +168,7 @@ public static class SarifReportWriter
             sarifResult.SetProperty("lowering", lowering);
         }
 
-        SetReboundCalls(sarifResult, result.ReboundCalls);
+        SetCalleeProperties(sarifResult, result);
 
         // Ticket P2-064: a flagged result says which cause it shares with others; ReviewList.Apply ranks the groups.
         if (ReviewList.KeyOf(result.Verdict, runtimeChange) is { } reviewGroup)
@@ -217,16 +217,26 @@ public static class SarifReportWriter
 
     /// <summary>
     /// ADR 0042: the callee pairs a call site with the same text binds to, which the pair treats as possibly the same, as
-    /// <c>reboundCalls</c>; left out when there is none.
+    /// <c>reboundCalls</c>. ADR 0043: the forwarders the pair's bodies call, each with the callee its calls were lowered as
+    /// calls to, as <c>forwardersResolved</c>. Each is left out when there is none.
     /// </summary>
-    private static void SetReboundCalls(Result sarifResult, ImmutableArray<ReboundCall> rebound)
+    private static void SetCalleeProperties(Result sarifResult, VerificationResult result)
     {
-        if (!rebound.IsEmpty)
+        if (!result.ReboundCalls.IsEmpty)
         {
-            sarifResult.SetProperty("reboundCalls", rebound.Select(static r => new Dictionary<string, string>(StringComparer.Ordinal)
+            sarifResult.SetProperty("reboundCalls", result.ReboundCalls.Select(static r => new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["legacy"] = r.Legacy,
                 ["modern"] = r.Modern,
+            }).ToList());
+        }
+
+        if (!result.ForwardersResolved.IsEmpty)
+        {
+            sarifResult.SetProperty("forwardersResolved", result.ForwardersResolved.Select(static f => new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["forwarder"] = f.Forwarder,
+                ["target"] = f.Target,
             }).ToList());
         }
     }

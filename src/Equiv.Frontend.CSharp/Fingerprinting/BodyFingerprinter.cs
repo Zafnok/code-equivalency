@@ -28,18 +28,21 @@ internal static class BodyFingerprinter
     /// and, on the <paramref name="legacy"/> side, its enabled API-equivalence entries (ADR 0020), as lowering uses them. It is
     /// runtime-sensitive by the rules that apply inside <paramref name="runtime"/>'s interval (ADR 0040; ticket P2-055).
     /// </summary>
-    public static BodyFingerprint? Compute(IMethodSymbol method, Compilation compilation, EquivConfig config, bool legacy, SideRuntime runtime) =>
-        Compute(method, compilation, config, legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [], runtime);
+    public static BodyFingerprint? Compute(IMethodSymbol method, Compilation compilation, EquivConfig config, bool legacy, SideRuntime runtime, ImmutableHashSet<string>? keptForwarders = null) =>
+        Compute(method, compilation, config, legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [], runtime, keptForwarders);
 
     /// <summary>As the overload that takes the side, applying <paramref name="equivalences"/>, which only the legacy side has.</summary>
-    public static BodyFingerprint? Compute(IMethodSymbol method, Compilation compilation, EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime) =>
-        Text(method, compilation, config, equivalences, runtime) is ({ } text, bool runtimeSensitive)
+    public static BodyFingerprint? Compute(
+        IMethodSymbol method, Compilation compilation, EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime, ImmutableHashSet<string>? keptForwarders = null) =>
+        Text(method, compilation, config, equivalences, runtime, keptForwarders) is ({ } text, bool runtimeSensitive)
             ? new BodyFingerprint(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), runtimeSensitive)
             : null;
 
     /// <summary>The canonical serialisation the fingerprint hashes, readable for tests and review; a null text when there is no body.</summary>
-    public static (string? Text, bool RuntimeSensitive) Text(IMethodSymbol method, Compilation compilation, EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime)
+    public static (string? Text, bool RuntimeSensitive) Text(
+        IMethodSymbol method, Compilation compilation, EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime, ImmutableHashSet<string>? keptForwarders = null)
     {
+        BoundSerialiser.Settings settings = new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime) { KeptForwarders = keptForwarders ?? [] };
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
         ArgumentNullException.ThrowIfNull(config);
@@ -48,12 +51,12 @@ internal static class BodyFingerprinter
         if (compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax) is not { } body)
         {
             return IsAutoAccessor(method)
-                ? BoundSerialiser.Serialise(method, compilation, [], new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime))
+                ? BoundSerialiser.Serialise(method, compilation, [], settings)
                 : (null, false);
         }
 
         ImmutableArray<IOperation> operations = [.. Initializers(method, syntax).Select(node => compilation.GetSemanticModel(node.SyntaxTree).GetOperation(node)!), body];
-        return BoundSerialiser.Serialise(method, compilation, operations, new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime));
+        return BoundSerialiser.Serialise(method, compilation, operations, settings);
     }
 
     /// <summary>An accessor of a property that has a compiler-generated backing field.</summary>
