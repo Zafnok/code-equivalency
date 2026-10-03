@@ -30,7 +30,7 @@ rule applied and there is no EQ006 anywhere.
 
 PowerShell's 140 changed pairs include 128 whose source is the same on both sides (82 `unbound`,
 46 `no-body`). A whole-body opaque pair is never congruent, so the census counts it as changed
-(P2-097). The rows below use the 12 pairs the pull request edited.
+(P2-107). The rows below use the 12 pairs the pull request edited.
 
 | Pair | Changed pairs | Proved Equivalent, by `proofMethod` | Unknown, by reason | Divergent |
 |---|---|---|---|---|
@@ -62,7 +62,7 @@ By cause:
 |---|---|---|
 | A `[CallerFilePath]` argument holds the absolute path of the source file, and the two sides are two checkout directories. 26 of these 44 are in files that are byte-identical on both sides. | 44 | P2-098 |
 | `BugReporter.Program::Main()` passes a commit hash that the build generates. The two sides are two commits, so the values do differ. The pull request did not touch the file. | 1 | P2-098 |
-| `x as T` plus a null check, against `x is T t`: the cast's null flag and the type test are unrelated in the encoding. | 5 | P2-093 |
+| `x as T` plus a null check, against `x is T t`: the cast's null flag and the type test are unrelated in the encoding. | 5 | P2-103 |
 | A collection expression against the `new()` and initializer it replaces: the two call traces start with different calls. | 2 | P2-099 |
 
 The one "real by construction" result is not counted as confirmed, because criterion 4 defines
@@ -81,7 +81,7 @@ migrations. Neither sets a threshold.
   because the one construct it introduces is opaque. The `as`-to-`is` pull request is 0 of 12,
   because the two forms are modelled apart.
 - **Each pull request applies one rewrite, and for two of the three `equiv` has no model of that
-  rewrite.** P2-099 and P2-093 are those two.
+  rewrite.** P2-099 and P2-103 are those two.
 - **None of the 52 Divergent was a behaviour change.** 45 of them come from the two sides being
   two checkout directories, which is how every corpus pair is laid out.
 
@@ -112,9 +112,9 @@ There is no `not-reproduced` replay anywhere, and no Unknown became Divergent.
 |---|---|
 | Build-location constants: 45 Divergent, and unedited bodies that are not congruent | P2-098 |
 | Collection expressions are an opaque `Conversion`: 308 of 351 changed pairs on gitextensions-11372 | P2-099 |
-| `as` plus null check against an `is` pattern: 5 Divergent, 0 of 12 proved | P2-093 |
-| `is not T t` is opaque: 3 of PowerShell's 12 edited pairs | P2-094 |
-| Five lowering crashes (null references) over the three runs, so every run exits 5 | P2-095 |
-| 82 `unbound` pairs on PowerShell, where the diagnostics a hand build shows are warnings promoted to errors | P2-096 |
-| Identical whole-body opaque pairs counted as changed on a same-runtime pair: 128 of PowerShell's 140 | P2-097 |
-| 62 timeouts over the three runs, and two pairs that ran 91 and 48 minutes on gitextensions-11372 | P2-076, P2-083 (timeouts), both open |
+| `as` plus null check against an `is` pattern: 5 Divergent, 0 of 12 proved | P2-103 |
+| `is not T t` is opaque: 3 of PowerShell's 12 edited pairs | P2-104 |
+| Five lowering crashes (null references) over the three runs, so every run exits 5 | P2-105 |
+| 82 `unbound` pairs on PowerShell, where the diagnostics a hand build shows are warnings promoted to errors | P2-106 |
+| Identical whole-body opaque pairs counted as changed on a same-runtime pair: 128 of PowerShell's 140 | P2-107 |
+| 62 timeouts over the three runs, and two pairs that ran 91 and 48 minutes on gitextensions-11372 | P2-076, P2-101, both open |

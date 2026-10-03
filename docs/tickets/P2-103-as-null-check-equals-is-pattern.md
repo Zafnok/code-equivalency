@@ -1,4 +1,4 @@
-# P2-093 `x as T` followed by a null check equals `x is T t`
+# P2-103 `x as T` followed by a null check equals `x is T t`
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
@@ -37,6 +37,6 @@ A new IR instruction, or a change to how `istype` itself is modelled: stop and a
 
 ## Out of scope
 Value-type and nullable-value `as`. Pattern forms other than the declaration and type patterns
-(P2-094 owns `is not`).
+(P2-104 owns `is not`).
 
 ## Notes

@@ -171,7 +171,7 @@ Not run. The corpus row has no `verifyCommand`.
 - Three lowering crashes, each a null reference, on
   `GitCommands.CommitDataManager::TryGetCommitLog(string,string,out string,out string,bool)`,
   `GitCommands.AppSettings::GetGitExtensionsFullPath()` and
-  `GitExtUtils.GitArgumentBuilder::ToString()`. They make the run exit 5: P2-095.
-- 17 timeouts: P2-083 (timeouts), open.
+  `GitExtUtils.GitArgumentBuilder::ToString()`. They make the run exit 5: P2-105.
+- 17 timeouts: P2-101, open.
 - The solver proved 50 of 212 changed pairs (23.6%). 66.0% are still Unknown, 110 of the 140 for
   an opaque node.

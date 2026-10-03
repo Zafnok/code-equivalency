@@ -1,4 +1,4 @@
-# P2-089 Decide whether an integer hole followed by a hole that runs code stays opaque
+# P2-102 Decide whether an integer hole followed by a hole that runs code stays opaque
 Status: todo
 Effort: S
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.

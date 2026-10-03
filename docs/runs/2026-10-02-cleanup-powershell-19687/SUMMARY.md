@@ -53,7 +53,7 @@ Top opaque reasons (up to 15). "none" here means the reason is in no changed pai
 | Conversion | 1408 | 1408 | none (in 3 edited pairs) |
 | CaughtException | 600 | 600 | none |
 | call-throw-in-try | 529 | 529 | none |
-| switch-pattern | 466 | 468 | P2-094 (the 3 edited pairs) |
+| switch-pattern | 466 | 468 | P2-104 (the 3 edited pairs) |
 | ArrayElementReference | 460 | 460 | none |
 | ref-argument | 353 | 353 | none |
 | iterator | 306 | 306 | none |
@@ -62,7 +62,7 @@ Top opaque reasons (up to 15). "none" here means the reason is in no changed pai
 | rethrow | 122 | 122 | none |
 | DelegateCreation | 119 | 119 | none |
 | DefaultValue | 106 | 106 | none |
-| unbound | 82 | 82 | P2-096 |
+| unbound | 82 | 82 | P2-106 |
 
 ## Changed code
 - Changed pairs 140 of 33889; without opaque 6; whole-body opaque 128
@@ -70,17 +70,17 @@ Top opaque reasons (up to 15). "none" here means the reason is in no changed pai
 - **Only 12 of the 140 are pairs the pull request edited.** All 12 are in
   `Microsoft.Management.Infrastructure.CimCmdlets`. The other 128 have the same source text on both
   sides: 82 are `unbound` and 46 are `no-body`. A whole-body opaque pair is never congruent, so the
-  census counts it as changed (P2-097). Over the 12 edited pairs the lowerable share is 50.0% (6).
+  census counts it as changed (P2-107). Over the 12 edited pairs the lowerable share is 50.0% (6).
 
 Top reason sets ("" = no opaque):
 
 | reason set | changed pairs | owning tickets or "none" |
 |---|---|---|
-| unbound | 82 | P2-096 |
-| no-body | 46 | M4-008 (backlog); P2-097 for counting them as changed |
+| unbound | 82 | P2-106 |
+| no-body | 46 | M4-008 (backlog); P2-107 for counting them as changed |
 | "" | 6 | n/a |
 | Conversion | 3 | none |
-| switch-pattern | 3 | P2-094 |
+| switch-pattern | 3 | P2-104 |
 
 | runtime-change calls | legacy | modern |
 |---|---|---|
@@ -103,7 +103,7 @@ Top reason sets ("" = no opaque):
   SYSLIB0051 (54), CS0672 (31) and SYSLIB0050 (2), the obsoletion of formatter-based
   serialization, plus one CS0103. The first three are warnings promoted to errors on bodies that
   bind. That is the likely cause of most of the 82; the SARIF does not record which diagnostic
-  unbound a body, so P2-096 confirms it first.
+  unbound a body, so P2-106 confirms it first.
 - Top abstractions: `opaque switch-pattern` 1
 - Review list: 12 groups for 140 flagged results; flagged results as a share of matched pairs: 0.4%.
   Top five: `EQ003 unbound: 82`, `EQ003 opaque:no-body: 46`, `EQ003 timeout: 2`,
@@ -132,7 +132,7 @@ the model was read against them.
 
 | Procedure | Classification | Cause |
 |---|---|---|
-| `CimGetInstance::IsClassNameQuerySet` | false positive | `as` and `is` are unrelated in the encoding (P2-093) |
+| `CimGetInstance::IsClassNameQuerySet` | false positive | `as` and `is` are unrelated in the encoding (P2-103) |
 | `CimIndicationWatcher::NewSubscriptionResultHandler` | false positive | same |
 | `CimRegisterCimIndication::CimIndicationHandler` | false positive | same |
 | `ErrorToErrorRecord::ErrorRecordFromAnyException` | false positive | same |
@@ -152,17 +152,17 @@ Not run. The corpus row has no `verifyCommand`, and PowerShell's tests need its 
 
 ## Findings
 - 5 false EQ002 on the `as`-plus-null-check to `is`-pattern rewrite, the whole point of this pull
-  request: P2-093.
-- `is not T x` is opaque (`switch-pattern`). It accounts for 3 of the 12 edited pairs: P2-094.
+  request: P2-103.
+- `is not T x` is opaque (`switch-pattern`). It accounts for 3 of the 12 edited pairs: P2-104.
 - One lowering crash, a null reference, on
   `System.Management.Automation.Security.SystemPolicy::GetFilePolicyEnforcement(string,System.IO.FileStream)`,
-  whose source is the same on both sides. It makes the run exit 5: P2-095.
-- 82 `unbound` Unknowns whose only diagnostics are warnings promoted to errors: P2-096.
+  whose source is the same on both sides. It makes the run exit 5: P2-105.
+- 82 `unbound` Unknowns whose only diagnostics are warnings promoted to errors: P2-106.
 - 128 pairs with identical source on a same-runtime pair are counted as changed because they are
   whole-body opaque, which puts the lowerable share at 4.3% where the edited pairs give 50.0%:
-  P2-097.
+  P2-107.
 - No edited pair was proved by the solver. Of the 7 Unknown, 3 are loop or recursion alignment
   failures (in `GetBaseObject` and `CreateQuery` the unpaired header states are the cast's local
-  and its null flag) and 2 are timeouts. Whether P2-093 also decides these is for that ticket to measure.
+  and its null flag) and 2 are timeouts. Whether P2-103 also decides these is for that ticket to measure.
 - `-Fetch` did not patch a `global.json` whose `rollForward` stays inside a major. Fixed in this
   PR (`corpus.ps1`).

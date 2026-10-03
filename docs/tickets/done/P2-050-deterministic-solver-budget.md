@@ -102,10 +102,10 @@ budget does not help, write that up as a P2 ticket with the data.
   give up.
 - Observed: two runs at the default budget agree on 179 of 184 pairs. Four of the other five met the
   wall-clock backstop in one run. The fifth differs under the same resource limit, and the evidence
-  points at the garbage collector's timing changing the solver's path (P2-082). Criterion 5 holds as
+  points at the garbage collector's timing changing the solver's path (P2-100). Criterion 5 holds as
   written (a tiny limit, byte-identical SARIF), but run-to-run identity on a real pair is not there yet.
 - Observed: nine pairs take 92% of the 1x time outside any budget (P2-076). The harness's two
   all-206 runs were left to finish them; their numbers are in the run file.
 - Observed: ARCHITECTURE.md lists `--bound` and `--timeout-ms` for `compare`; the command has
   neither. Not changed here.
-- Result: `docs/runs/2026-10-01-timeout-budget.md`; tickets P2-082 and P2-083.
+- Result: `docs/runs/2026-10-01-timeout-budget.md`; tickets P2-100 and P2-101.

@@ -16,7 +16,7 @@ and detail twice. Four of the five that differ ran into the wall-clock backstop 
 fifth exhausted the same resource limit in one run and found a model in the other, which a
 deterministic budget alone should not allow. The evidence points at the timing of the .NET garbage
 collector: with collections made rare, the same pairs gave the same outcome three times out of three
-(see "Repeatability"). That is P2-082.
+(see "Repeatability"). That is P2-100.
 
 ## Setup
 - Pair: human, gitextensions/gitextensions PR #8522, legacy 3f4ed21998af, modern 5190ba5c1a5f
@@ -143,7 +143,7 @@ mechanism, not yet confirmed: Z3's .NET binding releases a
 term when the garbage collector finalises its wrapper (it enables `Z3_enable_concurrent_dec_ref`),
 Z3 gives a freed term's id to the next term it builds, and several of its procedures order terms by
 id. The resource limit removes the dependence on machine speed and load. It does not remove this.
-P2-082.
+P2-100.
 
 ## Decisions
 - `resourceLimit` defaults to 5,000,000. A larger budget proves nothing more, so the default keeps
@@ -160,9 +160,9 @@ P2-082.
   run whose verify phase took 24,000 s or more.
 
 ## Findings
-- No timeout becomes Equivalent at 4x or 20x, and 99 of 172 still time out at 20x: P2-083.
+- No timeout becomes Equivalent at 4x or 20x, and 99 of 172 still time out at 20x: P2-101.
 - The same query and resource limit can end differently when the garbage collector runs at a
-  different moment: P2-082.
+  different moment: P2-100.
 - Nine pairs take 92% of the time, outside any budget: P2-076 (already open).
 - ARCHITECTURE.md lists `--bound` and `--timeout-ms` for `compare`, and the command has neither.
   Only `equiv mcp`'s `compare` tool and `equiv.config.json` set them.

@@ -1,4 +1,4 @@
-# P2-096 A body whose only diagnostics are warnings promoted to errors is not `unbound`
+# P2-106 A body whose only diagnostics are warnings promoted to errors is not `unbound`
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.

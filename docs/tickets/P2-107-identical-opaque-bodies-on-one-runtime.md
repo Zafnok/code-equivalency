@@ -1,4 +1,4 @@
-# P2-097 On a same-runtime pair, a whole-body opaque pair with identical source is not "changed"
+# P2-107 On a same-runtime pair, a whole-body opaque pair with identical source is not "changed"
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
