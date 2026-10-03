@@ -796,10 +796,18 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// The operation's value, or null for an operation without one (a statement, a void call). An operation of an array
-    /// <c>foreach</c> is its index loop's (ticket P1-004).
+    /// <c>foreach</c> is its index loop's (ticket P1-004), and a file path or line number the compiler supplied for a
+    /// caller-information parameter is the input both sides share (ADR 0046; ticket P2-098).
     /// </summary>
-    private IrVar? Lower(IOperation operation, LoweringContext context) =>
-        loops.Of(operation) is { } site ? ForEach(site, context) : Operation(operation, context);
+    private IrVar? Lower(IOperation operation, LoweringContext context)
+    {
+        if (CallerLocation.Of(operation) is { } location)
+        {
+            return heap.Inputs.Caller(location, operation.Type!);
+        }
+
+        return loops.Of(operation) is { } site ? ForEach(site, context) : Operation(operation, context);
+    }
 
     private IrVar? Operation(IOperation operation, LoweringContext context)
     {

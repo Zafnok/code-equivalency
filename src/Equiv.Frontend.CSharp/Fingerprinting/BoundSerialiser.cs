@@ -24,7 +24,8 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// API-equivalence type entries and the member entries whose adapter passes every argument through unchanged); locals,
 /// labels, lambdas, local functions and their parameters are numbered by first occurrence, and the method's own parameters
 /// by position (ADR 0021). So trivia, comments, local names and parameter names cannot change the text, and a different
-/// overload, operator, conversion, constant or <c>checked</c> context does. The walk also decides whether the body is
+/// overload, operator, conversion, constant or <c>checked</c> context does. A file path or line number the compiler supplies
+/// for a caller-information parameter is written as <c>caller=</c> and its kind, without its value (ADR 0046). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
 /// P2-055). Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
 /// <see cref="OperationKind.None"/>) carry their source tokens instead, which costs congruence on a rename there but never
@@ -142,7 +143,9 @@ internal sealed class BoundSerialiser : OperationWalker
             .Append(" syntax=").Append((SyntaxKind)operation.Syntax.RawKind)
             .Append(" implicit=").Append(operation.IsImplicit);
         Append("type", operation.Type is { } type ? Type(type) : null);
-        Append("const", operation.ConstantValue.HasValue ? Constant(operation.ConstantValue.Value) : null);
+        CallerLocationKind? caller = CallerLocation.Of(operation);
+        Append("const", caller is null && operation.ConstantValue.HasValue ? Constant(operation.ConstantValue.Value) : null);
+        Append("caller", caller?.ToString());
         Append("symbols", string.Join(", ", Symbols(operation).OfType<ISymbol>().Select(Render)));
         Append("context", Context(operation));
         text.Append('\n');

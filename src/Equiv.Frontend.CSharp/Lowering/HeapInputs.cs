@@ -16,12 +16,13 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// reference or boxing conversion (ticket M3-010), whose result's nullness is over-approximated: it is read from
 /// <c>null.&lt;To&gt;</c>, not tied to the operand's, one <c>istype.&lt;From&gt;.&lt;To&gt;</c> predicate per type test (ticket M4-005), and one <c>typeof.&lt;T&gt;</c> input per closed type read by
 /// <c>typeof(T)</c> (ticket P2-002), which is never null and adds no trace event, and one <c>new.&lt;Sort&gt;</c> per array sort
-/// created, from an allocation count to the array it allocates (ticket P2-001). Each is created once, on first use, and they become parameters ordered by name, so both
+/// created, from an allocation count to the array it allocates (ticket P2-001), and <c>caller.file</c> and <c>caller.line</c>, the path and line
+/// the compiler supplies for a caller-information parameter (ADR 0046). Each is created once, on first use, and they become parameters ordered by name, so both
 /// sides of a pair share them by name, while the C# parameters, which a caller binds by position, are shared by position (ADR 0021). IR variable names take
 /// only letters, digits, <c>_</c>, <c>.</c> and <c>$</c>, so every part of a name is spelled with dots.
 /// <c>field.*</c> and <c>array.*</c> are <see cref="IrParameterKind.Ref"/>: the body writes them and the final heap is an
 /// observable (ADR 0018, ticket M3-007), so every exit names their final version in its outs. <c>this</c>, <c>null.*</c>,
-/// <c>cast.*</c>, <c>istype.*</c>, <c>length.*</c>, <c>typeof.*</c> and <c>new.*</c> are <see cref="IrParameterKind.In"/>, because nothing the body does changes them,
+/// <c>cast.*</c>, <c>istype.*</c>, <c>length.*</c>, <c>typeof.*</c>, <c>new.*</c> and <c>caller.*</c> are <see cref="IrParameterKind.In"/>, because nothing the body does changes them,
 /// except that a <c>length.*</c> the body writes, which only an array creation does, is <see cref="IrParameterKind.Ref"/> (ticket P2-001).
 /// Every sort name, in a type and in an input's name, goes through <paramref name="sorts"/> (<see cref="TypeMapper"/>;
 /// ticket M3-009).
@@ -86,6 +87,14 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// (<c>System.Type</c>) sort, shared by both sides by name (ticket P2-002).
     /// </summary>
     public IrVar TypeOf(ITypeSymbol operand, ITypeSymbol type) => Input($"typeof.{Part(TypeMapper.MetadataName(operand, sorts))}", TypeMapper.Map(type, sorts));
+
+    /// <summary>
+    /// The file path or line number the compiler supplies for a caller-information parameter (ADR 0046; ticket P2-098), of
+    /// <paramref name="type"/> (<c>string</c> or <c>int</c>): one <c>caller.file</c> and one <c>caller.line</c> per body,
+    /// shared by both sides by name, so where a body sits is not compared.
+    /// </summary>
+    public IrVar Caller(CallerLocationKind kind, ITypeSymbol type) =>
+        Input(kind == CallerLocationKind.File ? "caller.file" : "caller.line", TypeMapper.Map(type, sorts));
 
     /// <summary>The elements of every array of <paramref name="array"/>'s sort: from the array reference to its elements by bv32 index.</summary>
     public IrVar Elements(IrSort array, IrType element) => Input($"array.{Part(array.Name)}", new IrMap(array, new IrMap(new IrBitVec(32), element)));

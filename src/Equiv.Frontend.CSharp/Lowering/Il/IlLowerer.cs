@@ -1044,7 +1044,7 @@ internal sealed partial class IlLowerer
             }
             else
             {
-                passed[i] = IsAddress(argument) ? Read(Address(argument)).Var : Value(argument, target.Parameters[i].Type);
+                passed[i] = IsAddress(argument) ? Read(Address(argument)).Var : Supplied(argument, target.Parameters[i]) ?? Value(argument, target.Parameters[i].Type);
             }
         }
 
@@ -1058,6 +1058,18 @@ internal sealed partial class IlLowerer
 
         return ([.. passed.OfType<IrVar>()], [.. written.OfType<Place>()]);
     }
+
+    /// <summary>
+    /// The shared input an argument the compiler supplied for a caller-information <paramref name="parameter"/> reads (ADR
+    /// 0046; ticket P2-098), or null. IL does not say which arguments were supplied, so it is a string constant equal to the
+    /// body's own file path, or an <c>int</c> constant inside the body's own line span.
+    /// </summary>
+    private IrVar? Supplied(ILInstruction argument, IParameterSymbol parameter) =>
+        CallerLocation.Of(parameter, parameter.Type) is { } kind && IsOwn(argument, kind) ? heap.Inputs.Caller(kind, parameter.Type) : null;
+
+    private bool IsOwn(ILInstruction argument, CallerLocationKind kind) => kind == CallerLocationKind.File
+        ? argument is LdStr text && string.Equals(text.Value, bodySpan.Path, StringComparison.Ordinal)
+        : argument is LdcI4 line && line.Value >= bodySpan.StartLine && line.Value <= bodySpan.EndLine;
 
     private static bool IsWritten(IParameterSymbol parameter) => parameter.RefKind is RefKind.Ref or RefKind.Out;
 
