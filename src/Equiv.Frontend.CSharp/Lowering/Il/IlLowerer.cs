@@ -501,8 +501,35 @@ internal sealed partial class IlLowerer
 
     private static bool IsThis(ILVariable variable) => variable is { Kind: VariableKind.Parameter, Index: -1 };
 
-    /// <summary>A variable's type in the loaded compilation, or null when the IR has none for it, such as a <c>ref</c>'s.</summary>
-    private ITypeSymbol? VariableType(ILVariable variable) => symbols.Type(variable.Type);
+    /// <summary>
+    /// A variable's type in the loaded compilation, or null when the IR has none for it, such as a <c>ref</c>'s. A stack
+    /// slot ILSpy types as <c>object</c>, as it does one whose first store is a <c>null</c> (both branches of
+    /// <c>s?.Trim()</c> leaving their value on the stack), is of the type stored into it, as the IOperation lowering's
+    /// flow capture is of its expression's type and reads no <c>object</c> cast (ticket P2-108).
+    /// </summary>
+    private ITypeSymbol? VariableType(ILVariable variable) => symbols.Type(variable.Type) switch
+    {
+        { SpecialType: SpecialType.System_Object } slot when variable.Kind == VariableKind.StackSlot => Stored(variable) ?? slot,
+        var type => type,
+    };
+
+    /// <summary>
+    /// The one type of every value stored into <paramref name="slot"/>, a <c>null</c> aside, which has none; null when
+    /// two differ or one is not read off its instruction.
+    /// </summary>
+    private ITypeSymbol? Stored(ILVariable slot) =>
+        slot.StoreInstructions.OfType<StLoc>().Where(static s => s.Value is not LdNull).Select(s => Static(s.Value)).Distinct<ITypeSymbol?>(SymbolEqualityComparer.Default).ToArray() is [{ } only]
+            ? only
+            : null;
+
+    /// <summary>The type a value has before it is lowered: a call's result, a variable's as ILSpy types it, a string literal's.</summary>
+    private ITypeSymbol? Static(ILInstruction value) => value switch
+    {
+        CallInstruction call => symbols.Method(call.Method) is { } target ? Result(call, target) : null,
+        LdLoc load => symbols.Type(load.Variable.Type),
+        LdStr => compilation.GetSpecialType(SpecialType.System_String),
+        _ => null,
+    };
 
     /// <summary>A local's SSA variable, named as its PDB names it, with a null shadow when it is a reference the source declares or a stack slot.</summary>
     private SsaBuilder.Variable Variable(ILVariable variable)

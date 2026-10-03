@@ -112,16 +112,12 @@ public sealed class IlLowererTests
     /// The two are Equivalent under Z3 (<c>IlLoweringParityTests</c>). The second is an interpolated string: the IOperation
     /// lowering joins its parts with the two-argument <c>String.Concat</c>, one call for each part after the first (ticket
     /// P2-086), and the compiler emits one call of the three-argument overload. That pair is one of
-    /// <c>IlLoweringParityTests</c>' known differences. The third passes <c>s?.Trim()</c> as an argument: both branches
-    /// leave their value on the stack, ILSpy reads that as a slot of type <c>object</c>, and the IL lowering's parameters
-    /// then hold the <c>object</c> cast and null maps, which the IOperation lowering does not use. It is one of
-    /// <c>IlLoweringParityTests</c>' known differences too.
+    /// <c>IlLoweringParityTests</c>' known differences.
     /// </summary>
     private static readonly string[] KnownCalleeDifferences =
     [
         "same-runtime-cleanup/modern Equiv.Samples.SameRuntimeCleanup.Report::Rank(int)",
         "cleanup-modern-syntax/modern Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)",
-        "forwarder-to-bcl/legacy Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)",
     ];
 
     /// <summary>The Design's pitfall: the instruction's sign decides the division, not its operands' C# types.</summary>
@@ -830,6 +826,29 @@ public sealed class IlLowererTests
     }
 
     /// <summary>
+    /// A stack slot ILSpy types as <c>object</c>, as it does one whose first store is a <c>null</c>, is of the one type
+    /// stored into it: a call's result, a new object, a variable, a string literal. So a null-conditional argument reads
+    /// no <c>object</c> cast and no <c>null.System.Object</c>, as the IOperation lowering reads none (ticket P2-108). It
+    /// stays <c>object</c> when two stores differ, or one is a value whose type is not read off its instruction, and a
+    /// local declared <c>object</c> is never retyped.
+    /// </summary>
+    [Theory]
+    [InlineData("static bool M(string s) => string.IsNullOrWhiteSpace(s?.Trim());", false)]
+    [InlineData("static bool M(string s, bool b) => string.IsNullOrWhiteSpace(b ? null : s);", false)]
+    [InlineData("static bool M(bool b) => string.IsNullOrWhiteSpace(b ? null : \"x\");", false)]
+    [InlineData("static bool M(bool b) => N(b ? null : new Uri(\"x\")); static bool N(Uri u) => true;", false)]
+    [InlineData("static bool M(string s, string t) => string.IsNullOrWhiteSpace(s?.Trim() ?? t?.Trim());", false)]
+    [InlineData("static bool M(string s) { object o = s.Trim(); return o == null; }", true)]
+    [InlineData("static bool M(string s, Uri u) => Equals(s?.Trim() ?? (object)u, null);", true)]
+    [InlineData("string f; static bool M(C c) => string.IsNullOrWhiteSpace(c?.f);", true)]
+    public void AStackSlotIsOfTheTypeStoredIntoIt(string members, bool throughObject)
+    {
+        IrProcedure procedure = Lower(members);
+
+        Assert.Equal(throughObject, procedure.Parameters.Any(static p => p.Var.Name.Contains("System.Object", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
     /// A member of a reference that did not load is refused, never an exception: a field, a struct's default, box, array
     /// and element, a type test, a method's pointer, a <c>catch</c> of its type, and <c>typeof</c> of it.
     /// </summary>
@@ -844,10 +863,11 @@ public sealed class IlLowererTests
     [InlineData("Func<int> M(K k) => k.V;", "LdVirtFtn")]
     [InlineData("int M(int a) { try { return F(a); } catch (E) { return 2; } } static int F(int a) => a;", "TryCatch")]
     [InlineData("Type M() => typeof(S);", "Call")]
+    [InlineData("bool M(K k) => string.IsNullOrEmpty(k?.T());", "Call")]
     public void AnUnloadedReferenceIsRefused(string members, string reason)
     {
         Compilation library = RoslynTestCompilations.Compile(
-            "public struct S { public int X; } public class E : System.Exception { } public class K { public int N() => 1; public virtual int V() => 2; } public class B { } public class D : B { }",
+            "public struct S { public int X; } public class E : System.Exception { } public class K { public string T() => null; public int N() => 1; public virtual int V() => 2; } public class B { } public class D : B { }",
             "Unloaded");
         string path = Path.Combine(Path.GetTempPath(), $"equiv-il-{Guid.NewGuid():N}.dll");
         using (MemoryStream image = new())
@@ -994,11 +1014,19 @@ public sealed class IlLowererTests
     {
         Dictionary<IrBlockId, IrBlock> blocks = procedure.Blocks.ToDictionary(static b => b.Id);
         SortedSet<string> paths = new(StringComparer.Ordinal);
-        void Walk(IrBlockId id, ImmutableList<string> calls, ImmutableHashSet<IrBlockId> entered)
+        void Walk(IrBlockId id, ImmutableList<string> calls, ImmutableHashSet<IrBlockId> entered, ImmutableDictionary<IrVar, bool> decided)
         {
             IrBlock block = blocks[id];
             ImmutableList<string> through = calls.AddRange(block.Instructions.OfType<IrCall>().Select(static c => c.Callee.Value));
-            ImmutableArray<IrBlockId> next = [.. Successors(block.Terminator).Where(s => !entered.Contains(s))];
+            IrBranch? branch = block.Terminator as IrBranch;
+
+            // A branch on a condition the path has already branched on goes the way it went: the IOperation lowering
+            // null-checks the receiver of `s?.Trim()` behind the test that it is not null, and the IL has no such check.
+            ImmutableArray<IrBlockId> next =
+            [
+                .. Successors(block.Terminator).Where(s => !entered.Contains(s)
+                    && (branch is null || !decided.TryGetValue(branch.Cond, out bool taken) || s == (taken ? branch.Then : branch.Else))),
+            ];
             if (next.IsEmpty)
             {
                 paths.Add(string.Join(" > ", through));
@@ -1006,11 +1034,11 @@ public sealed class IlLowererTests
 
             foreach (IrBlockId successor in next)
             {
-                Walk(successor, through, entered.Add(successor));
+                Walk(successor, through, entered.Add(successor), branch is null ? decided : decided.SetItem(branch.Cond, successor == branch.Then));
             }
         }
 
-        Walk(procedure.Entry, [], [procedure.Entry]);
+        Walk(procedure.Entry, [], [procedure.Entry], []);
         return $"calls {{{string.Join(" | ", paths)}}} parameters [{string.Join(", ", procedure.Parameters.Select(static p => $"{p.Var.Name}: {p.Var.Type}"))}]";
     }
 
