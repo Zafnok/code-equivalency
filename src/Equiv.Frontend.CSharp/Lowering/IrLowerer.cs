@@ -1412,9 +1412,7 @@ internal sealed class IrLowerer
     {
         if (IsCast(conversion))
         {
-            return conversion.Operand is IObjectCreationOperation creation && EffectFreeMembers.IsNewList(creation.Constructor!, conversion.Type!)
-                ? NewList(conversion.Type!, context)
-                : heap.MapRead(heap.Inputs.Cast(conversion.Operand.Type!, conversion.Type!), Value(conversion.Operand, context), context);
+            return Cast(conversion, context);
         }
 
         if ((conversion.IsTryCast || conversion.GetConversion() is { IsExplicit: true, IsReference: true })
@@ -1423,7 +1421,7 @@ internal sealed class IrLowerer
             return conversion.IsTryCast ? TryCast(conversion, test, context) : Downcast(conversion, test, context);
         }
 
-        if (conversion.GetConversion().IsIdentity || IsTargetTypedNew(conversion))
+        if (IsItsOperand(conversion))
         {
             // Such as the one the CFG wraps around a `foreach` collection.
             return Value(conversion.Operand, context);
@@ -1464,6 +1462,18 @@ internal sealed class IrLowerer
     /// </summary>
     private static bool IsTargetTypedNew(IConversionOperation conversion) =>
         conversion.GetConversion().IsObjectCreation && SymbolEqualityComparer.Default.Equals(conversion.Operand.Type, conversion.Type);
+
+    /// <summary>Whether <paramref name="conversion"/> yields its operand unchanged: an identity conversion, or a target-typed <c>new()</c>'s.</summary>
+    private static bool IsItsOperand(IConversionOperation conversion) => conversion.GetConversion().IsIdentity || IsTargetTypedNew(conversion);
+
+    /// <summary>
+    /// An implicit reference or boxing conversion that changes the IR type: a read of its <c>cast</c> map, or, for a new
+    /// <c>Collection&lt;T&gt;</c> converted to an interface at once, <see cref="NewList"/> (ADR 0043).
+    /// </summary>
+    private IrVar Cast(IConversionOperation conversion, LoweringContext context) =>
+        conversion.Operand is IObjectCreationOperation creation && EffectFreeMembers.IsNewList(creation.Constructor!, conversion.Type!)
+            ? NewList(conversion.Type!, context)
+            : heap.MapRead(heap.Inputs.Cast(conversion.Operand.Type!, conversion.Type!), Value(conversion.Operand, context), context);
 
     /// <summary>
     /// A new <c>Collection&lt;T&gt;</c> converted to the interface <paramref name="to"/> at once (ADR 0043): the next new
@@ -1892,9 +1902,13 @@ internal sealed class IrLowerer
     private IrVar? Create(IObjectCreationOperation creation, LoweringContext context) =>
         EffectFreeMembers.Allocates(creation.Constructor!)
             ? heap.Fresh((IrSort)Map(creation.Type!), context)
-            : RefOuts(creation.Arguments) is { } written
-                ? Call(Called(creation.Constructor!, creation), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, context)
-                : Opaque(creation, "ref-argument", context);
+            : Construct(creation, context);
+
+    /// <summary>The call to <paramref name="creation"/>'s constructor, or an opaque when a <c>ref</c> or <c>out</c> argument cannot be written.</summary>
+    private IrVar? Construct(IObjectCreationOperation creation, LoweringContext context) =>
+        RefOuts(creation.Arguments) is { } written
+            ? Call(Called(creation.Constructor!, creation), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, context)
+            : Opaque(creation, "ref-argument", context);
 
     /// <summary>Whether <paramref name="creation"/> is itself an argument of a call, through the conversion to the parameter's type if there is one.</summary>
     private static bool IsArgument(IAnonymousObjectCreationOperation creation)
