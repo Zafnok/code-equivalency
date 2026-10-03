@@ -1,5 +1,5 @@
 # P2-098 A constant that only says where or from which commit the code was built is not a divergence
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-058
@@ -40,3 +40,16 @@ ADR 0018 (congruence), ADR 0026 (what a Divergent rests on), VERIFICATION-MODEL 
 `#line` directives. Paths that the code itself computes at run time.
 
 ## Notes
+- Decision (criterion 1, `equiv-adr` bar test, 2026-10-03): a new ADR, 0046, accepted. It changes what
+  ADR 0024 fingerprints ("constants by type and value") and what an Equivalent claims, so it is the
+  bar test's last row and not a clarification. A supplied `[CallerFilePath]` or `[CallerLineNumber]`
+  argument reads a synthesised input, `caller.file` or `caller.line`, shared by name. A line number is
+  therefore not compared: one input per body, not per site. The generated commit constant stays an
+  ordinary constant. Alternatives: the path relative to the solution directory; one line input per
+  call site; keep the Divergent under its own reason. Rule: `equiv-adr` bar test, last row.
+- Deviation: criterion 1 says the outcome is merged before any code change. The ADR is written as
+  accepted, in its own PR with VERIFICATION-MODEL section 1, as ADR 0044 was for P2-102: the PR's
+  merge is the acceptance. The number is 0046 because open PRs already hold 0043 and 0045.
+- Decision: where `AnExplicitDifferentPathArgumentStaysDivergent` lives -> a new
+  `CallerLocationEquivalenceTests` in `Equiv.Tests.Integration`. Alternatives: a class named
+  `EquivalenceTests`, which does not exist; every such class there is `<Topic>EquivalenceTests`. Rule: 4.

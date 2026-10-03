@@ -24,7 +24,7 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0015 | A call's heap effect and array aliasing are named limits, not defects |
 | 0016 | SonarQube's overall backlog becomes batched GitHub issues, filtered by a checked-in policy |
 | 0017 | BUSL-1.1 with a three-seat, 50k-LOC free tier; permissive-only dependencies |
-| 0018 | The final heap is observable, and a call is a function of its position and the heap (amended by 0041) |
+| 0018 | The final heap is observable, and a call is a function of its position and the heap (amended by 0041 and 0043) |
 | 0019 | Verdicts are modular, and an Equivalent names the callee pairs it assumed |
 | 0020 | A shipped catalogue of known-equivalent API pairs, applied visibly |
 | 0021 | Source-language parameters are shared by position, synthesised inputs by name |
@@ -49,4 +49,7 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0040 | Each side's runtime is detected from its projects, and a runtime rule applies only if the pair crosses it |
 | 0041 | A call to a string or primitive member with only string and primitive arguments reaches no heap map |
 | 0042 | A call site with the same text on both sides that binds to a different callee is possibly the same call, and its outcome is unknown |
+| 0043 | A catalogued BCL member that runs no observable code is not a call |
 | 0044 | Evaluating a hole of an interpolated string leaves the current culture's integer formatting as it found it |
+| 0045 | A call to a private helper that exists on one side only is replaced by the helper's body (narrows 0019's rejection of inlining) |
+| 0046 | A caller file path or line number the compiler supplies is an input both sides share, not a constant |

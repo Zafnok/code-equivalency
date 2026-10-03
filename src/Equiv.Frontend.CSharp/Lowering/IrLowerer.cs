@@ -1293,6 +1293,12 @@ internal sealed class IrLowerer
             return assigned;
         }
 
+        if (assignment.Target is IDiscardOperation)
+        {
+            // `_ = e` evaluates `e` and stores nothing (ticket P2-071).
+            return Value(assignment.Value, context);
+        }
+
         if (Target(assignment.Target) is not { } target)
         {
             return Opaque(assignment, Reason(assignment.Target), context);
@@ -1406,7 +1412,9 @@ internal sealed class IrLowerer
     {
         if (IsCast(conversion))
         {
-            return heap.MapRead(heap.Inputs.Cast(conversion.Operand.Type!, conversion.Type!), Value(conversion.Operand, context), context);
+            return conversion.Operand is IObjectCreationOperation creation && EffectFreeMembers.IsNewList(creation.Constructor!, conversion.Type!)
+                ? NewList(conversion.Type!, context)
+                : heap.MapRead(heap.Inputs.Cast(conversion.Operand.Type!, conversion.Type!), Value(conversion.Operand, context), context);
         }
 
         if ((conversion.IsTryCast || conversion.GetConversion() is { IsExplicit: true, IsReference: true })
@@ -1456,6 +1464,16 @@ internal sealed class IrLowerer
     /// </summary>
     private static bool IsTargetTypedNew(IConversionOperation conversion) =>
         conversion.GetConversion().IsObjectCreation && SymbolEqualityComparer.Default.Equals(conversion.Operand.Type, conversion.Type);
+
+    /// <summary>
+    /// A new <c>Collection&lt;T&gt;</c> converted to the interface <paramref name="to"/> at once (ADR 0043): the next new
+    /// <c>List&lt;T&gt;</c>, converted as a new <c>List&lt;T&gt;</c> is, so the two leave one value.
+    /// </summary>
+    private IrVar NewList(ITypeSymbol to, LoweringContext context)
+    {
+        IrSort list = new(catalogue.Sorts(EffectFreeMembers.List));
+        return heap.MapRead(heap.Inputs.Cast(list, to), heap.Fresh(list, context), context);
+    }
 
     /// <summary>Whether <paramref name="conversion"/> is an implicit reference or boxing conversion that changes the IR type.</summary>
     private static bool IsCast(IConversionOperation conversion) =>
@@ -1868,12 +1886,15 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// <c>new T(...)</c>: an opaque call to the constructor yielding the new object, which writes its <c>ref</c> and
-    /// <c>out</c> arguments as <see cref="Invoke"/>'s call does.
+    /// <c>out</c> arguments as <see cref="Invoke"/>'s call does. A constructor in the effect-free catalogue is no call
+    /// (ADR 0043): its object is the next of <c>new.&lt;Sort&gt;</c>.
     /// </summary>
     private IrVar? Create(IObjectCreationOperation creation, LoweringContext context) =>
-        RefOuts(creation.Arguments) is { } written
-            ? Call(Called(creation.Constructor!, creation), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, context)
-            : Opaque(creation, "ref-argument", context);
+        EffectFreeMembers.Allocates(creation.Constructor!)
+            ? heap.Fresh((IrSort)Map(creation.Type!), context)
+            : RefOuts(creation.Arguments) is { } written
+                ? Call(Called(creation.Constructor!, creation), [.. Arguments([], creation.Arguments, context)], Map(creation.Type!), written, context)
+                : Opaque(creation, "ref-argument", context);
 
     /// <summary>Whether <paramref name="creation"/> is itself an argument of a call, through the conversion to the parameter's type if there is one.</summary>
     private static bool IsArgument(IAnonymousObjectCreationOperation creation)
@@ -1948,7 +1969,7 @@ internal sealed class IrLowerer
     /// A collection expression (ticket P2-099) is the construct it replaces; it has no type of its own, so the conversion
     /// around it is to the type it already builds, and is the collection expression. For an array it is <see cref="CreateArray"/>'s
     /// creation of its elements, and with no element the call <c>System.Array::Empty&lt;T&gt;()</c> the compiler emits. For
-    /// a <c>List&lt;T&gt;</c> it is the call to the parameterless constructor and then one <c>Add</c> call per element, as
+    /// a <c>List&lt;T&gt;</c> it is a new list, as <c>new List&lt;T&gt;()</c> is, and then one <c>Add</c> call per element, as
     /// a collection initializer is. For <c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyCollection&lt;T&gt;</c> or
     /// <c>IReadOnlyList&lt;T&gt;</c> it is the array, read through the <c>cast</c> map the array's conversion reads. Each
     /// element is evaluated, then stored or added, before the next. Anything else (<see cref="Built"/>) is opaque with
@@ -1962,7 +1983,7 @@ internal sealed class IrLowerer
         }
 
         IrVar built = plan.Factory is { } factory
-            ? Call(Called(factory, collection), [], Map(plan.Type), [], context)!
+            ? Made(factory, plan.Type, collection, context)
             : heap.Allocate((IrSort)Map(plan.Type), Map(((IArrayTypeSymbol)plan.Type).ElementType), Const(new IrBitVecValue(32, (ulong)collection.Elements.Length), context), plan.Initial!, context);
         for (int i = 0; i < collection.Elements.Length; i++)
         {
@@ -1979,6 +2000,15 @@ internal sealed class IrLowerer
 
         return plan.ThroughCast ? heap.MapRead(heap.Inputs.Cast(plan.Type, collection.Type!), built, context) : built;
     }
+
+    /// <summary>
+    /// The <paramref name="type"/> <paramref name="factory"/> yields for <paramref name="collection"/>: a call's result, or, for a constructor in
+    /// the effect-free catalogue (ADR 0043), the next new object of its sort, as <see cref="Create"/> makes a <c>new</c>.
+    /// </summary>
+    private IrVar Made(IMethodSymbol factory, ITypeSymbol type, ICollectionExpressionOperation collection, LoweringContext context) =>
+        EffectFreeMembers.Allocates(factory)
+            ? heap.Fresh((IrSort)Map(type), context)
+            : Call(Called(factory, collection), [], Map(type), [], context)!;
 
     /// <summary>
     /// What <see cref="Collection"/> builds, or null, with nothing emitted, for a collection expression that stays opaque:
@@ -2214,13 +2244,21 @@ internal sealed class IrLowerer
     /// <summary>
     /// A property access is a call to its accessor, lowered as an invocation of it is (ticket M3-010 acceptance criteria
     /// 1 to 3): the getter with the receiver and index arguments, or, given <paramref name="value"/>, the setter with the
-    /// value last and no result. A property with no accessor for the access stays opaque.
+    /// value last and no result. A property with no accessor for the access stays opaque. A getter in the effect-free
+    /// catalogue is no call (ADR 0043): it is the pure function <see cref="EffectFreeMembers.Getter"/> of its null-checked receiver.
     /// </summary>
     private IrVar? Accessor(IPropertyReferenceOperation property, IMethodSymbol? accessor, ImmutableArray<IrVar> operands, IrVar? value, LoweringContext context)
     {
         if (accessor is null)
         {
             return Opaque(property, property.Kind.ToString(), context);
+        }
+
+        if (EffectFreeMembers.IsGetter(accessor))
+        {
+            ThrowIfNull(property.Instance!, operands[0], context);
+            CallIdentity identity = Identity(accessor);
+            return Pure(EffectFreeMembers.Getter(identity), [], identity.RuntimeChanged, operands, Map(property.Type!), context);
         }
 
         IrType? returns = value is null ? Map(property.Type!) : null;

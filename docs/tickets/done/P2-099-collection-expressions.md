@@ -64,3 +64,4 @@ Dictionary targets, spans, `ImmutableArray<T>` and other builder-based targets.
 - The 3 new EQ002 were Unknown before and lower fully now: 2 are P2-098's caller file path, 1 is P2-109's.
 - Toolchain: the corpus skill's `MSBuild -t:restore` for a legacy side fails with MSB4018 on this SDK-style net8.0 solution; `dotnet restore --force` restores it.
 - Decision: criterion 2's samples -> snippet pairs in `Equiv.Tests.Integration.CollectionExpressionEquivalenceTests`, as P2-088's are. Alternatives: a `samples/` project pair. Rule: 4.
+- Merge with P2-071 (ADR 0043), 2026-10-03: `new List<T>()` is no longer a call, so a `List<T>` collection expression is the next new list and its `Add` calls, with no constructor call. The rerun above predates this; P2-109 and P2-110 rerun on the merged rule.

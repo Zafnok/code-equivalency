@@ -13,36 +13,40 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 
 /// <summary>
 /// Ticket P2-099: a collection expression lowers as the construct it replaces. An array is the array creation, and with
-/// no element the <c>Array.Empty</c> call; a <c>List&lt;T&gt;</c> is its constructor and one <c>Add</c> per element; a
+/// no element the <c>Array.Empty</c> call; a <c>List&lt;T&gt;</c> is a new list (ADR 0043) and one <c>Add</c> per element; a
 /// read-only interface is the array through the <c>cast</c> map. Every other target stays opaque with reason
 /// <c>CollectionExpression</c>.
 /// </summary>
 public sealed class CollectionExpressionLoweringTests
 {
-    /// <summary>A <c>List&lt;T&gt;</c> is the parameterless constructor, then each element evaluated and added in order.</summary>
+    /// <summary>A <c>List&lt;T&gt;</c> is a new list, which is no call (ADR 0043), then each element evaluated and added in order.</summary>
     [Theory]
-    [InlineData("static List<int> M() => [];", new[] { "System.Collections.Generic.List`1::.ctor()<int>" })]
+    [InlineData("static List<int> M() => [];", new string[0])]
     [InlineData(
         "static int A() => 1; static int B() => 2; static List<int> M() => [A(), B()];",
-        new[] { "System.Collections.Generic.List`1::.ctor()<int>", "C::A()", "System.Collections.Generic.List`1::Add(int)<int>", "C::B()", "System.Collections.Generic.List`1::Add(int)<int>" })]
-    public void ACollectionExpressionForAListIsItsConstructorAndItsAdds(string members, string[] calls)
+        new[] { "C::A()", "System.Collections.Generic.List`1::Add(int)<int>", "C::B()", "System.Collections.Generic.List`1::Add(int)<int>" })]
+    public void ACollectionExpressionForAListIsANewListAndItsAdds(string members, string[] calls)
     {
         IrProcedure procedure = Generic(members);
 
         Assert.Empty(Opaques(procedure));
         Assert.Equal(calls, Calls(procedure).Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        Assert.Contains(procedure.Parameters, static p => p.Var.Name.StartsWith("new.", StringComparison.Ordinal));
     }
 
-    /// <summary>Each <c>Add</c> takes the list the constructor yielded, then the element.</summary>
+    /// <summary>Each <c>Add</c> takes the new list, which is the value of the expression, then the element.</summary>
     [Fact]
     public void EachAddTakesTheNewList()
     {
         IrProcedure procedure = Generic("static List<int> M(int a) => [a];");
 
-        Assert.Equal([Calls(procedure)[0].Target!.Name, "a"], Calls(procedure)[1].Args.Select(static a => a.SourceName ?? a.Name), StringComparer.Ordinal);
+        IrCall add = Assert.Single(Calls(procedure));
+        IrReturn exit = Assert.Single(procedure.Blocks.Select(static b => b.Terminator).OfType<IrReturn>());
+        Assert.Equal(exit.Value, add.Args[0]);
+        Assert.Equal("a", add.Args[1].SourceName);
     }
 
-    /// <summary>A collection expression lowers exactly as the list it replaces does once the constructor has returned.</summary>
+    /// <summary>A collection expression makes exactly the calls the list it replaces does.</summary>
     [Theory]
     [InlineData("static List<int> M(int a, int b) => new List<int> { a, b };", "static List<int> M(int a, int b) => [a, b];")]
     [InlineData("static List<string> M() { List<string> l = new(); return l; }", "static List<string> M() { List<string> l = []; return l; }")]

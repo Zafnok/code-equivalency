@@ -19,7 +19,7 @@ public sealed class ClosedCallsTests
     {
         { "static string M(string s) { f++; return string.Concat(s, \"t\"); }", true },
         { "static string M(string s) { f++; return s + \"t\"; }", true },
-        { "static int M(string s) { f++; return s.Length; }", true },
+        { "static string M(string s) { f++; return s.Trim(); }", true },
         { "static int M(int? x) { f++; return x.GetValueOrDefault(); }", true },
         { "static bool M(DayOfWeek? d) { f++; return d.HasValue; }", true },
         { "static bool M(string s) { f++; return int.TryParse(s, out _); }", true },

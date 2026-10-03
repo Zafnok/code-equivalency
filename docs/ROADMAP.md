@@ -619,6 +619,11 @@ rung, a pair or a run.
 - P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
   and no query ended sooner by contention. Needs P2-050, P2-076.
 
+Found by P2-072's repro:
+- P2-108 (M) `System.IntPtr` and `nint` (and `System.UIntPtr` and `nuint`) are one type in an
+  identity on every target. A byte-identical method with an `IntPtr` parameter is one EQ005 and one
+  EQ004 between net48 and net10.0. The bodies' verdict is recorded, not fixed.
+
 Found by P2-050's measurement (`docs/runs/2026-10-01-timeout-budget.md`):
 - P2-100 (M) The same query under the same resource limit ends the same way whenever the garbage
   collector runs. Two runs at the default budget agreed on 179 of 184 pairs; with collections made
