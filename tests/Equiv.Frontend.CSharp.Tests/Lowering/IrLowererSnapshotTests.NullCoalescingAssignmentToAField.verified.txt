@@ -1,24 +1,23 @@
-﻿proc "C::M()" (ref %field.C.items: map<sort "C", sort "System.Collections.Generic.List`1">, %null.System.Collections.Generic.List_1: map<sort "System.Collections.Generic.List`1", bool>, %this: sort "C") -> sort "System.Collections.Generic.List`1" entry B0
+﻿proc "C::M()" (ref %field.C.items: map<sort "C", sort "System.Collections.Generic.List`1">, %new.System.Collections.Generic.List_1: map<bv32, sort "System.Collections.Generic.List`1">, %null.System.Collections.Generic.List_1: map<sort "System.Collections.Generic.List`1", bool>, %this: sort "C") -> sort "System.Collections.Generic.List`1" entry B0
 B0:
+  %$new.System.Collections.Generic.List_1.17: bv32 = const bv32 0
   goto B1
 B1:
   goto B2
 B2:
-  %$c0.14: sort "System.Collections.Generic.List`1" = mapread %field.C.items, %this
-  %$c0.isNull.15: bool = mapread %null.System.Collections.Generic.List_1, %$c0.14
-  br %$c0.isNull.15, B4, B3
+  %$c0.18: sort "System.Collections.Generic.List`1" = mapread %field.C.items, %this
+  %$c0.isNull.19: bool = mapread %null.System.Collections.Generic.List_1, %$c0.18
+  br %$c0.isNull.19, B4, B3
 B3:
   goto B5
 B4:
-  %$c1.18: sort "System.Collections.Generic.List`1" = call "System.Collections.Generic.List`1::.ctor()<int>"() threw %$8: bool heap("field.C.items" %field.C.items -> %field.C.items.16: map<sort "C", sort "System.Collections.Generic.List`1">)
-  br %$8, B7, B8
-B5:
-  %$c1.20: sort "System.Collections.Generic.List`1" = phi [B3: %$c0.14, B8: %$c1.18]
-  %field.C.items.21: map<sort "C", sort "System.Collections.Generic.List`1"> = phi [B3: %field.C.items, B8: %field.C.items.17]
-  ret %$c1.20 outs(%field.C.items = %field.C.items.21)
-B7:
-  throw "System.Exception" outs(%field.C.items = %field.C.items.16)
-B8:
-  %field.C.items.17: map<sort "C", sort "System.Collections.Generic.List`1"> = mapwrite %field.C.items.16, %this, %$c1.18
-  %$c1.isNull.19: bool = mapread %null.System.Collections.Generic.List_1, %$c1.18
+  %$c1.22: sort "System.Collections.Generic.List`1" = mapread %new.System.Collections.Generic.List_1, %$new.System.Collections.Generic.List_1.17
+  %$10: bv32 = const bv32 1
+  %$new.System.Collections.Generic.List_1.20: bv32 = add %$new.System.Collections.Generic.List_1.17, %$10
+  %field.C.items.21: map<sort "C", sort "System.Collections.Generic.List`1"> = mapwrite %field.C.items, %this, %$c1.22
+  %$c1.isNull.23: bool = mapread %null.System.Collections.Generic.List_1, %$c1.22
   goto B5
+B5:
+  %$c1.24: sort "System.Collections.Generic.List`1" = phi [B3: %$c0.18, B4: %$c1.22]
+  %field.C.items.25: map<sort "C", sort "System.Collections.Generic.List`1"> = phi [B3: %field.C.items, B4: %field.C.items.21]
+  ret %$c1.24 outs(%field.C.items = %field.C.items.25)

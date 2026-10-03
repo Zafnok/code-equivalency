@@ -132,7 +132,7 @@ internal static class CompareCommand
     /// <summary>
     /// The pipeline. <paramref name="execution"/> is where <c>--execute</c> runs, <see cref="ExecutionEnvironment.Current"/>
     /// when null; without <c>--execute</c> nothing reads it (ADR 0035; ticket M4-009). <paramref name="runLog"/> hears the
-    /// <c>verify</c>, <c>execute</c> and <c>write</c> phases, and the backend hears it through
+    /// <c>verify</c>, <c>contracts</c>, <c>execute</c> and <c>write</c> phases, and the backend hears it through
     /// <see cref="VerificationOptions.Log"/> (ADR 0038; ticket M4-012); tests pass <see cref="NullRunLog.Instance"/>.
     /// </summary>
     public static int Run(
@@ -704,30 +704,43 @@ internal static class CompareCommand
     /// for leaves <see cref="VerificationResult.UnprovenAssumptions"/>, and that callee's own unproven assumptions join the
     /// caller's assumed and unproven ones, since the contract's proof assumed them. Otherwise, and when the backend throws,
     /// the result stays as it was; a throw is written to stderr as a warning, because the verdict it leaves is still sound.
+    /// Each result that goes back is one item of the <c>contracts</c> phase, weighed by <see cref="PairWeight"/> (ADR 0038;
+    /// ticket P2-076); a run in which none does has no such phase.
     /// </summary>
     private static List<VerificationResult> WithContracts(
         List<VerificationResult> results, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, VerificationOptions options, TextWriter error)
     {
         Dictionary<string, (IrProcedure Old, IrProcedure New)> bodies = lowered.ToDictionary(static p => p.Pair.New.Value, static p => (p.Old, p.New), StringComparer.Ordinal);
         Dictionary<string, VerificationResult> byIdentity = results.ToDictionary(static r => r.Identity.Value, StringComparer.Ordinal);
-        return [.. results.Select(result => UnderContracts(result, bodies, byIdentity, backend, options, error))];
+        Dictionary<string, ContractCandidate> candidates = results
+            .Where(static result => result.Verdict is Equivalent)
+            .Select(result => (Result: result, Callees: result.UnprovenAssumptions.Where(bodies.ContainsKey).Select(c => new CalleePair(c, bodies[c].Old, bodies[c].New)).ToImmutableArray()))
+            .Where(static c => !c.Callees.IsEmpty)
+            .ToDictionary(static c => c.Result.Identity.Value, c => new ContractCandidate(bodies[c.Result.Identity.Value].Old, bodies[c.Result.Identity.Value].New, c.Callees), StringComparer.Ordinal);
+        if (candidates.Count == 0)
+        {
+            return results;
+        }
+
+        options.Log.Phase("contracts", candidates.Count, candidates.Values.Sum(static c => c.Weight));
+        List<VerificationResult> contracted =
+        [
+            .. results.Select(result => candidates.TryGetValue(result.Identity.Value, out ContractCandidate? candidate) ? UnderContracts(result, candidate, byIdentity, backend, options, error) : result),
+        ];
+        options.Log.PhaseDone();
+        return contracted;
     }
 
     private static VerificationResult UnderContracts(
         VerificationResult result,
-        Dictionary<string, (IrProcedure Old, IrProcedure New)> bodies,
+        ContractCandidate candidate,
         Dictionary<string, VerificationResult> byIdentity,
         IVerificationBackend backend,
         VerificationOptions options,
         TextWriter error)
     {
-        ImmutableArray<CalleePair> callees = [.. result.UnprovenAssumptions.Where(bodies.ContainsKey).Select(c => new CalleePair(c, bodies[c].Old, bodies[c].New))];
-        if (result.Verdict is not Equivalent || callees.IsEmpty)
-        {
-            return result;
-        }
-
-        (IrProcedure old, IrProcedure @new) = bodies[result.Identity.Value];
+        (IrProcedure old, IrProcedure @new, ImmutableArray<CalleePair> callees) = candidate;
+        options.Log.Item(result.Identity.Value, candidate.Weight);
         Equivalent? proved;
         try
         {
@@ -736,14 +749,17 @@ internal static class CompareCommand
         catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
         {
             error.WriteLine($"warning: Verifying {result.Identity.Value} under callee contracts failed, so it keeps its verdict: {exception.Message}");
+            options.Log.ItemDone("failed");
             return result;
         }
 
         if (proved is null)
         {
+            options.Log.ItemDone("unchanged");
             return result;
         }
 
+        options.Log.ItemDone("proved");
         HashSet<string> contracted = new(proved.ContractsUsed.Select(static c => c.Callee), StringComparer.Ordinal);
         string[] inherited = [.. contracted.SelectMany(c => byIdentity.TryGetValue(c, out VerificationResult? callee) ? callee.UnprovenAssumptions : [])];
         return result with
@@ -826,6 +842,15 @@ internal static class CompareCommand
             false when string.Equals(failOn, "unknown", StringComparison.Ordinal) && anyNewUnknown => ExitCodes.UnknownPresent,
             _ => ExitCodes.Success,
         };
+    }
+
+    /// <summary>
+    /// A pair the contracts pass re-verifies: its two bodies and the lowered callee pairs its Equivalent still assumes; as an
+    /// item of the <c>contracts</c> phase it weighs what it weighed in <c>verify</c>.
+    /// </summary>
+    private sealed record ContractCandidate(IrProcedure Old, IrProcedure New, ImmutableArray<CalleePair> Callees)
+    {
+        public long Weight { get; } = PairWeight.Of(Old, New, solver: true);
     }
 
     /// <summary>A pair's result decided without the solver, and the outcome the verify phase logs for it.</summary>

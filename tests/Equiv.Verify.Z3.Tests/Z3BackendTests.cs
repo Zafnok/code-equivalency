@@ -4,6 +4,7 @@ using System.Globalization;
 using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
+using Equiv.TestSupport;
 
 using Microsoft.Z3;
 
@@ -179,6 +180,46 @@ public sealed class Z3BackendTests
     /// fixedpoint's <c>canceled</c>; an exhausted <c>rlimit</c> leaves <c>canceled</c> on a tactic solver and Z3's
     /// resource message elsewhere; any other reason names no limit.
     /// </summary>
+    /// <summary>
+    /// Ticket P2-076 criterion 3: a query is interrupted at four times its timeout, never earlier, and a timeout so long
+    /// that four of them pass a timer's longest wait is interrupted at that wait.
+    /// </summary>
+    [Fact]
+    public void AQueryIsInterruptedAtFourTimesItsTimeout()
+    {
+        Assert.Equal(4, Z3Backend.InterruptAfterTimeouts);
+        Assert.Equal(240_000, Z3Backend.InterruptAfterMs(Options with { TimeoutMs = 60_000 }));
+        Assert.Equal(uint.MaxValue - 1L, Z3Backend.InterruptAfterMs(Options with { TimeoutMs = int.MaxValue }));
+    }
+
+    /// <summary>
+    /// A solver with no limit of its own, on a query it cannot answer: the check runs until it is interrupted, four
+    /// timeouts in and no sooner, and answers unknown with Z3's reason for an interrupt. The context goes on working.
+    /// </summary>
+    [Fact]
+    public void ACheckNoLimitEndsIsInterruptedAfterTheSlackAndAnswersUnknown()
+    {
+        Fixture hard = Fixture.Load("hard-multiplication");
+        VerificationOptions options = Options with { TimeoutMs = 100 };
+        RecordingRunLog log = new(isDebug: true);
+        using Context context = new();
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, hard.Old, hard.New, options.CallIdentityMap);
+        using Solver unlimited = context.MkSolver();
+        unlimited.Add(encoding.Assertions);
+        unlimited.Add(encoding.Differs);
+        using Solver easy = context.MkSolver();
+        long started = TimeProvider.System.GetTimestamp();
+
+        Status status = Z3Backend.Check(context, unlimited, options with { Log = log }, "hard");
+
+        Assert.InRange(TimeProvider.System.GetElapsedTime(started).TotalMilliseconds, 400, 60_000);
+        Assert.Equal(Status.UNKNOWN, status);
+        Assert.Equal("interrupted", unlimited.ReasonUnknown);
+        Assert.Equal("solver returned unknown (interrupted)", Z3Backend.Timeout(unlimited, options));
+        Assert.Equal(["check:hard=unknown"], BackendProgressTests.Details(log));
+        Assert.Equal(Status.SATISFIABLE, Z3Backend.Check(context, easy, options, "easy"));
+    }
+
     [Theory]
     [InlineData("timeout", "timeout", ": wall-clock limit 10000 ms hit")]
     [InlineData("canceled", "canceled", ": wall-clock limit 10000 ms hit")]

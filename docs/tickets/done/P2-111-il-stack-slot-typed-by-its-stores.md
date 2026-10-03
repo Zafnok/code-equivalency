@@ -1,4 +1,4 @@
-# P2-108 The IL lowering types a stack slot by the values stored into it
+# P2-111 The IL lowering types a stack slot by the values stored into it
 Status: done (PR #364)
 Effort: S
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
@@ -77,3 +77,6 @@ by default.
   (criterion 4).
 - Local quirk: `IlLoweringParityTests` fails in a fresh worktree until the samples are restored
   (`build.ps1`'s "restore samples" step); `samples/version-bump/legacy` then loads.
+- Renumbered from P2-108 while the PR was open: `main` took that id for the `nint` identity ticket
+  first. The branch keeps its old name. P2-068 was squash-merged into
+  `P2-068-adr-forwarder-is-its-target` meanwhile, which is the PR's base now.

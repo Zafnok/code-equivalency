@@ -138,7 +138,7 @@ internal sealed partial class IlLowerer
 
     /// <summary>
     /// The callee identities whose calls are rebound, each lowered as an opaque (ADR 0042; ticket P2-069), and the record of
-    /// the forwarders the body's calls are resolved through (ADR 0043; ticket P2-068).
+    /// the forwarders the body's calls are resolved through (ADR 0047; ticket P2-068).
     /// </summary>
     private CallSites Sites { get; init; } = new();
 
@@ -153,7 +153,7 @@ internal sealed partial class IlLowerer
     /// whole-body opaque whose reason is <see cref="IlAstReader"/>'s. <paramref name="runtime"/> decides which calls and pure
     /// functions are runtime-sensitive, as it does for <see cref="IrLowerer"/> (ADR 0040; tickets M4-002, P2-055). A call to an identity
     /// <paramref name="sites"/> holds as rebound is an opaque, as <see cref="IrLowerer"/> makes a rebound call (ADR 0042; ticket
-    /// P2-069), and each forwarder a call is resolved through is recorded there (ADR 0043; ticket P2-068). The IL has no
+    /// P2-069), and each forwarder a call is resolved through is recorded there (ADR 0047; ticket P2-068). The IL has no
     /// source text, so no call site is.
     /// </summary>
     public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, SideRuntime runtime, CallSites? sites = null) =>
@@ -505,7 +505,7 @@ internal sealed partial class IlLowerer
     /// A variable's type in the loaded compilation, or null when the IR has none for it, such as a <c>ref</c>'s. A stack
     /// slot ILSpy types as <c>object</c>, as it does one whose first store is a <c>null</c> (both branches of
     /// <c>s?.Trim()</c> leaving their value on the stack), is of the type stored into it, as the IOperation lowering's
-    /// flow capture is of its expression's type and reads no <c>object</c> cast (ticket P2-108).
+    /// flow capture is of its expression's type and reads no <c>object</c> cast (ticket P2-111).
     /// </summary>
     private ITypeSymbol? VariableType(ILVariable variable) => symbols.Type(variable.Type) switch
     {
@@ -939,7 +939,9 @@ internal sealed partial class IlLowerer
     /// auto-property's accessor reads or writes its backing field's map (ticket M4-008), each as <see cref="IrLowerer"/>
     /// lowers it. A struct's constructor is only ever a <c>newobj</c> here: ILSpy reads one called on a local's address as
     /// the local's store of a <c>newobj</c>, and Roslyn stores one into a field or element. Null for a call with no result.
-    /// A call to a forwarder is the same call to its target (<see cref="Callee"/>; ADR 0043).
+    /// A call to a forwarder is the same call to its target (<see cref="Callee"/>; ADR 0047).
+    /// A member in the effect-free catalogue is no call (ADR 0043): a getter is its receiver's pure function and a
+    /// constructor's object the next of <c>new.&lt;Sort&gt;</c>, each as <see cref="IrLowerer"/> lowers it, less the family rule.
     /// A call to an identity the pair's other side binds differently at the same source text is <see cref="Rebound"/> (ADR 0042).
     /// </summary>
     private Val? Call(CallInstruction call)
@@ -978,6 +980,8 @@ internal sealed partial class IlLowerer
         ImmutableArray<IrVar> operands = receiver is { } self ? [self.Var, .. arguments] : arguments;
         return (isOperator, Sites.IsRebound(identity)) switch
         {
+            _ when EffectFreeMembers.IsGetter(target) => new(Pure(EffectFreeMembers.Getter(identity), [], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType),
+            _ when call is NewObj && EffectFreeMembers.Allocates(target) => new(heap.Fresh((IrSort)Map(target.ContainingType), context), target.ContainingType),
             (true, _) => new(Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType),
             (_, true) => Rebound(call, written, Result(call, target)),
             _ => Invoke(identity, operands, written, Result(call, target), closed),
@@ -986,7 +990,7 @@ internal sealed partial class IlLowerer
 
     /// <summary>
     /// What a call to <paramref name="target"/> calls, and whether that call is closed (ADR 0041): <paramref name="target"/>
-    /// itself, or, when it is a forwarder, the target of its chain, as <see cref="IrLowerer"/> resolves one (ADR 0043; ticket
+    /// itself, or, when it is a forwarder, the target of its chain, as <see cref="IrLowerer"/> resolves one (ADR 0047; ticket
     /// P2-068), unless the pair's sides do not agree on it. The forwarder's parameters and result are its target's, so the
     /// operands and the result's type stay as read.
     /// </summary>

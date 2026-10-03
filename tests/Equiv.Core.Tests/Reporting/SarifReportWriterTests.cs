@@ -737,7 +737,7 @@ public sealed class SarifReportWriterTests
         Assert.False(results[1].TryGetProperty("reboundCalls", out List<Dictionary<string, string>>? _));
     }
 
-    /// <summary>ADR 0043; ticket P2-068 criterion 2: a result names each forwarder its pair resolved, and what to.</summary>
+    /// <summary>ADR 0047; ticket P2-068 criterion 2: a result names each forwarder its pair resolved, and what to.</summary>
     [Fact]
     public void Sarif_ListsForwardersResolved()
     {
@@ -756,7 +756,7 @@ public sealed class SarifReportWriterTests
         Assert.False(results[1].TryGetProperty("forwardersResolved", out List<Dictionary<string, string>>? _));
     }
 
-    /// <summary>ADR 0043: the resolved forwarders are a property of the pair, never of the result's fingerprint.</summary>
+    /// <summary>ADR 0047: the resolved forwarders are a property of the pair, never of the result's fingerprint.</summary>
     [Fact]
     public void ForwardersResolvedAreNotPartOfTheFingerprint()
     {

@@ -158,7 +158,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// as they do for verification (ADR 0023). Both bodies are lowered and fingerprinted with the one interval between the
     /// runtimes of the two projects they come from (ADR 0040 decision 2; P2-055), so a runtime rule the pair does not cross
     /// applies to neither. A matched method whose two sides do not agree on what it forwards to is kept as a callee in every
-    /// body of the run (ADR 0043; ticket P2-068).
+    /// body of the run (ADR 0047; ticket P2-068).
     /// </summary>
     private (ImmutableArray<ProcedurePair> Pairs, ImmutableArray<LoweringFailure> Failures) Lowered(
         ImmutableArray<ProcedurePair> pairs,
@@ -213,7 +213,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
     }
 
     /// <summary>
-    /// The identities of the matched methods a call to which is not the same call on both sides (ADR 0043; ticket P2-068):
+    /// The identities of the matched methods a call to which is not the same call on both sides (ADR 0047; ticket P2-068):
     /// one side's is a forwarder and the other's is not, or the two forward to different callees. No body resolves such a
     /// forwarder, so its callers still assume the pair (ADR 0019) and its own result says what changed.
     /// </summary>
@@ -225,7 +225,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
 
     /// <summary>
     /// Both bodies of a pair, the catalogue entries that fired in either, sorted, the pair's rebound calls (ADR 0042;
-    /// ticket P2-069) and the forwarders the bodies it returns resolved (ADR 0043; ticket P2-068). The bodies are lowered once to record their call sites. When a site with the same text binds to a
+    /// ticket P2-069) and the forwarders the bodies it returns resolved (ADR 0047; ticket P2-068). The bodies are lowered once to record their call sites. When a site with the same text binds to a
     /// different callee on each side, both are lowered again with every call to such a callee an opaque. Every lowering of a
     /// side uses that side's runtime facts (ADR 0040; ticket P2-055).
     /// </summary>
@@ -254,7 +254,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// <paramref name="pair"/>, lowered from IOperation and fingerprinted, with the bodies it keeps. Under <c>--il-fallback</c>
     /// <see cref="IlFallback"/> may lower both sides again from IL, once congruence is decided on the fingerprints (ADR 0039;
     /// ticket P1-016); IL-lowered bodies applied no API equivalence, and resolved the forwarders their own calls name (ADR
-    /// 0043; ticket P2-068). Then, when exactly one side is <c>async</c>, both bodies
+    /// 0047; ticket P2-068). Then, when exactly one side is <c>async</c>, both bodies
     /// are one opaque, whichever lowering they came from (ticket M4-006).
     /// </summary>
     private static ProcedurePair Relowered(

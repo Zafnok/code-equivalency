@@ -105,7 +105,7 @@ public sealed class CallSitesTests
         Assert.False(new CallSites().IsRebound(new CallIdentity(Legacy)));
     }
 
-    /// <summary>ADR 0043 (ticket P2-068): the forwarders of both bodies, each once, sorted by forwarder and then target.</summary>
+    /// <summary>ADR 0047 (ticket P2-068): the forwarders of both bodies, each once, sorted by forwarder and then target.</summary>
     [Fact]
     public void TheForwardersOfBothBodiesAreListedOnceAndSorted()
     {

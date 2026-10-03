@@ -1,4 +1,4 @@
-# ADR 0043: A call to a static one-call forwarder is a call to its target
+# ADR 0047: A call to a static one-call forwarder is a call to its target
 
 Status: accepted (2026-10-02). Narrows ADR 0019's rejection of inlining for one shape of callee, and
 VERIFICATION-MODEL section 3's rule that two different callee identities are two different functions.
@@ -100,6 +100,10 @@ Every result of a pair where a forwarder was resolved in either body carries
 - A forwarder declared in another project is resolved when that project is loaded from source in the
   same run. One that is only a compiled reference has no body to read and stays an ordinary callee.
 - The census counts the target, not the forwarder, in `externalCallees` and the runtime-change counts.
+- Proposed as ADR 0043 and renumbered on merge, since `main` took that number first. ADR 0045, which
+  replaces a call to a one-sided private helper by its body, cites it under the old number. A
+  helper that is both is resolved here, while its caller is lowered, and ADR 0045 then finds no call
+  to replace.
 - SARIF gains `properties.forwardersResolved`. Verdicts change on existing input, so the change that
   implements this carries `Release: minor`.
 - VERIFICATION-MODEL sections 3 and 6 change in the PR that accepts this ADR. Ticket P2-068

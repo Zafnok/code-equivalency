@@ -828,7 +828,7 @@ public sealed class IlLowererTests
     /// <summary>
     /// A stack slot ILSpy types as <c>object</c>, as it does one whose first store is a <c>null</c>, is of the one type
     /// stored into it: a call's result, a new object, a variable, a string literal. So a null-conditional argument reads
-    /// no <c>object</c> cast and no <c>null.System.Object</c>, as the IOperation lowering reads none (ticket P2-108). It
+    /// no <c>object</c> cast and no <c>null.System.Object</c>, as the IOperation lowering reads none (ticket P2-111). It
     /// stays <c>object</c> when two stores differ, or one is a value whose type is not read off its instruction, and a
     /// local declared <c>object</c> is never retyped.
     /// </summary>

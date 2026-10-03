@@ -25,6 +25,23 @@ with each side's call given its own outcome and heap, related to the other side'
 caller is still Equivalent, f moves from `unprovenAssumptions` to `contractsUsed`. The proof of K is
 itself modular, so f's own unproven assumptions join the caller's.
 
+A callee with no pair is not assumed, it is read (ADR 0045; ticket P2-097). A one-sided helper is a
+`private` ordinary method with a body, declared in one side's source, whose identity is Added or
+Removed after the rename map. It is not generic, not in a generic type, not `async`, not an iterator
+and not `extern`, has no `ref`, `out` or `in` parameter, does not return by reference, lowered without
+a failure, and does not call itself, directly or through other one-sided helpers. Its expanded body,
+the lowered body with every call this rule resolves inside it replaced in turn, has at most 256 IR
+instructions. A call to one from a method of the helper's own type is replaced by a copy of that
+expanded body: the parameters are bound to the evaluated arguments and `this` to the null-checked
+receiver, the helper's synthesised inputs become the caller's by name, and a heap map enters the copy
+at the caller's version and leaves as the caller's next version. The helper's call has no trace
+event and no functions; its body's calls are the caller's, at the caller's positions. A returning
+exit continues after the call. A throwing exit keeps its exception type: `System.Exception` takes the
+call's `threw` edge, and any other type is the caller's own throw, which needs the call to be outside
+every `try`, `catch`, `finally`, `using`, `lock` and `foreach` region, or the call is not resolved. A
+call that is not resolved is an ordinary call. The frontend resolves on the lowered IR after
+matching, for both lowerings. A callee matched on both sides is never read this way (ADR 0019).
+
 A call is closed when its callee's containing type, every parameter type and every type argument
 are inert: `bool`, `char`, the 8- to 64-bit integers, `float`, `double`, `decimal`, `string`, an enum, or
 `Nullable<T>` of an inert `T` (ADR 0041). A closed call reads and writes no heap map. This assumes that
@@ -33,11 +50,21 @@ the current culture whose getters write the program's fields). The constructor o
 closed too, whatever its property types are: the compiler writes it, and it only stores its arguments
 (ADR 0041, clarified 2026-10-02).
 
+A use of a member in the effect-free catalogue (section 3; ADR 0043) is not a call: it is no trace
+event and it cannot throw. An empty `List<T>` and an empty `Collection<T>`, each created and
+converted to an interface at once, are one object. This assumes that no code asks such an object for
+its concrete type (a type test, a downcast, `GetType`, `ToString`, reflection or serialisation).
+
 Evaluating a hole of an interpolated string is assumed to leave the current culture's integer
 formatting as it found it: the hole does not set the thread's current culture, and does not write the
 number format of a writable one (ADR 0044). `string.Format` formats an integer hole after the later
 holes have run and `DefaultInterpolatedStringHandler` before, so only a pair whose sides bind the same
 text differently leans on this.
+
+Where a body sits is not compared (ADR 0046). The file path or line number the compiler supplies for a
+`[CallerFilePath]` or `[CallerLineNumber]` parameter is an input both sides share, so a pair that
+differs only in the directory it was checked out to, the file a body is in, or the line a call is on
+is Equivalent. A path or line the source writes out is an ordinary value and is compared.
 
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
@@ -129,7 +156,8 @@ reference like `null.<Sort>` so that two variables holding one array share its e
 conversion between different IR types (M3-010), one `istype.<From>.<To>` map from `<From>`'s sort to Bool per
 reference type test (M4-005), one `typeof.<T>` input of `System.Type` sort
 per closed type `T` a body reads with `typeof(T)` (P2-002), and one `new.<Sort>` from bv32 to an
-array sort per array sort a body creates (P2-001). An array creation `new T[n]` (one `int` dimension)
+array sort per array sort a body creates (P2-001), or to a collection's sort per catalogued collection
+it creates (ADR 0043). An array creation `new T[n]` (one `int` dimension)
 throws `System.OverflowException` when `n` is negative, then reads its reference from `new.<Sort>` at
 the body's count of that sort's creations so far (0 for the first), writes `n` into `length.<Sort>`
 and a constant map of `default(T)` into `array.<Sort>` at that reference, and stores an initialiser's
@@ -240,6 +268,22 @@ another type, whose formatting goes through `IFormattable` or `ISpanFormattable`
 or a call after the first integer hole) stays an `IrOpaque` with reason `InterpolatedString`, fingerprinted per
 binding.
 
+Effect-free BCL members (ADR 0043; P2-071). One frontend catalogue lists, by name, the BCL members that
+run no observable code. A use of one is no `IrCall`: no trace event, no `threw` edge, no heap pair, no position.
+It has two kinds of entry. A getter of an immutable value, which is `System.String::get_Length()`: the
+receiver is null-checked as a call's is, and the read is the `IrPure` function `get:<call identity>` of the
+receiver, which raises nothing and is tainted like every `IrPure` result (section 6). And the parameterless
+constructor of `List<T>`, `Dictionary<K,V>`, `HashSet<T>`, `Queue<T>`, `Stack<T>`, `LinkedList<T>`,
+`SortedDictionary<K,V>`, `SortedList<K,V>`, `SortedSet<T>`, `Collection<T>`, `ConcurrentBag<T>`,
+`ConcurrentDictionary<K,V>`, `ConcurrentQueue<T>` or `ConcurrentStack<T>`, when the type is declared in
+metadata: the new object is `new.<Sort>` at the body's count of that sort's creations so far, as a new
+array's reference is, and its shadow is false. A constructor with an argument stays a call, and so does every
+member the catalogue does not name. `List<T>` and `Collection<T>` are one family: a `new Collection<T>()` that
+is the operand of an implicit reference conversion to an interface is lowered as `new List<T>()` there, so it
+reads `new.<List sort>` and `cast.<List>.<To>` (the assumption is section 1's). Anywhere else a `Collection<T>`
+is its own sort. The IL lowering (section 3.1) applies the two kinds of entry and not the family rule, since a
+`newobj` carries no conversion.
+
 An anonymous object that is itself an argument of a call (P2-088), through the conversion to the parameter's type
 if there is one, is the closed call `{X,Y}::.ctor(<types>)` of its property values, each evaluated in declaration
 order first: the constructor's identity with the type spelled by its property names in declaration order, since an
@@ -347,7 +391,7 @@ Migration-specific normalisations (applied to both sides before matching):
   the receiver is null-checked. An input that reaches one has an unknown outcome (ADR 0014). The pair
   lists its rebound pairs in `properties.reboundCalls`. A call to a member with another name, or at a
   site with other text, is an ordinary call. The IL lowering (section 3.1) marks the same identities.
-- Forwarders (ADR 0043, ticket P2-068). A forwarder is an ordinary static method declared in the
+- Forwarders (ADR 0047, ticket P2-068). A forwarder is an ordinary static method declared in the
   solution's source that is not `virtual`, not `async`, not generic and not in a generic type, has no
   `ref`, `out` or `in` parameter, does not return by reference, whose declaring type has no static
   constructor (written, or implied by a static initializer), that has no `[Conditional]` attribute
@@ -576,7 +620,7 @@ Every verdict on a matched pair with bodies also carries `properties.assumedCall
 catalogue entry fired (ADR 0020), and `properties.reboundCalls` when a call site was rebound (ADR
 0042): one `{ legacy, modern }` per rebound pair of callee identities, sorted by legacy and then
 modern identity. It is not part of the fingerprint. `properties.forwardersResolved` lists the forwarders a body's calls were
-resolved through (ADR 0043): one `{ forwarder, target }` per forwarder, sorted by forwarder and then target; it is not part
+resolved through (ADR 0047): one `{ forwarder, target }` per forwarder, sorted by forwarder and then target; it is not part
 of the fingerprint either. A result whose ladder reached rung 4 carries `properties.chcMode`, and an
 Equivalent by `chc` carries Spacer's coupling invariant in `properties.invariant` (section 5.1). An Equivalent by
 `llm-invariant` or `trace-invariant` carries the admitted invariant there too, and what proposed it in
@@ -586,7 +630,10 @@ contracts (section 5.2; ticket P1-010) has `proofMethod` suffixed `+contract` (f
 per callee: `contract` is K in SMT-LIB over `r.old`/`r.new`, `threw.*`, `type.*`, `calls.*` and
 `heap.<map>.*`, and `proposedBy` is `observed-predicates`. Each such callee is left out of
 `unprovenAssumptions`, and its own unproven assumptions are added to the caller's `assumedCallees` and
-`unprovenAssumptions`.
+`unprovenAssumptions`. A result of a pair where a call to a one-sided helper was resolved in either body
+(section 1, ADR 0045) carries `properties.calleesInlined`: one `{ callee, side }` per helper, `side`
+being `legacy` or `modern`, helpers resolved inside helpers included, sorted by callee and then side.
+It is not part of the fingerprint.
 
 A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
 and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the
@@ -716,6 +763,10 @@ A query that exhausts either is Unknown with reason `timeout` (`chc-timeout` on 
 with the limit that was hit: `resource limit <n> hit` or `wall-clock limit <n> ms hit`. The budgets are per
 query, and a pair asks several (section 5.1), so neither bounds the time a pair takes. The defaults come from
 `docs/runs/2026-10-01-timeout-budget.md`.
+
+A query that neither budget has ended once it has run four times `timeoutMs` is interrupted (ticket P2-076). It is
+Unknown with reason `timeout` like the others, the ladder goes on to the next rung as it does after a timeout, and
+the detail says `interrupted` in place of a limit. Only the one query is ended: nothing caps a rung, a pair or a run.
 
 Every Unknown other than `unbound` and `timeout` also carries `properties.failureRefinement` (ADR 0037;
 ticket P1-013): `{ newFailures, removedFailures }`, each `{ outcome, model? }`. The backend asks two more

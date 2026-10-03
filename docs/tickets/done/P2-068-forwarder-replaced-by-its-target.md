@@ -45,13 +45,13 @@ covers them at no extra cost.
 ## Notes
 - Found by P2-047: 11 false positives on Git Extensions (a `Strings.IsNullOrEmpty` /
   `IsNullOrWhiteSpace` wrapper replaced by `string.IsNullOrEmpty` / `IsNullOrWhiteSpace`).
-- `equiv-adr` outcome: a new ADR, 0043 (PR #355), because it narrows ADR 0019's rejection of
+- `equiv-adr` outcome: a new ADR, 0047 (PR #355), because it narrows ADR 0019's rejection of
   inlining and section 3's rule that two identities are two functions, changes verdicts, and adds a
   SARIF property.
 - Decision: the rule is narrower than the ticket's "non-virtual method". A forwarder is static, its
   target is static, and its arguments are its own parameters in order. That is what the audited
   cases need. An instance forwarder or an instance target needs a receiver's null check and
-  dispatch wired into both lowerings (ADR 0043, Rejected).
+  dispatch wired into both lowerings (ADR 0047, Rejected).
 - Decision: four more conditions, each because the call would otherwise do more or less than its
   target: no static constructor on the declaring type, not `async`, no `[Conditional]`, no
   `System.Security` attribute on the method or its type.

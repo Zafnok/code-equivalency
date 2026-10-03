@@ -10,7 +10,7 @@ using Xunit;
 namespace Equiv.Frontend.CSharp.Tests.Lowering;
 
 /// <summary>
-/// ADR 0043 (ticket P2-068): which methods are forwarders, and what a call to one is a call to. Each case is one static
+/// ADR 0047 (ticket P2-068): which methods are forwarders, and what a call to one is a call to. Each case is one static
 /// method <c>F</c> of a class <c>C</c>; the targets are in <c>T</c>.
 /// </summary>
 public sealed class ForwardersTests
@@ -36,7 +36,7 @@ public sealed class ForwardersTests
         }
         """;
 
-    /// <summary>The shapes ADR 0043 names: an arrow body, a block that returns the call, and a call that returns nothing.</summary>
+    /// <summary>The shapes ADR 0047 names: an arrow body, a block that returns the call, and a call that returns nothing.</summary>
     [Theory]
     [InlineData("static bool F(string s) => T.G(s);", "T.G(string)")]
     [InlineData("static bool F(string s) { return T.G(s); }", "T.G(string)")]
@@ -51,7 +51,7 @@ public sealed class ForwardersTests
     public void AStaticMethodWhoseBodyIsOneCallOfItsOwnParametersIsAForwarder(string forwarder, string target) =>
         Assert.Equal(target, Resolve(forwarder));
 
-    /// <summary>Every condition of ADR 0043, one at a time: a method that fails one is an ordinary callee.</summary>
+    /// <summary>Every condition of ADR 0047, one at a time: a method that fails one is an ordinary callee.</summary>
     [Theory]
     [InlineData("static bool F(string s) => T.G(s.Trim());")] // changes the argument
     [InlineData("static bool F(string s) => T.G(null);")] // passes something else

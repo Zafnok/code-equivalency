@@ -17,7 +17,7 @@ using Xunit;
 namespace Equiv.Frontend.CSharp.Tests.Lowering;
 
 /// <summary>
-/// ADR 0043 (ticket P2-068): a call to a forwarder is lowered as the same call to its target, by both lowerings and in the
+/// ADR 0047 (ticket P2-068): a call to a forwarder is lowered as the same call to its target, by both lowerings and in the
 /// bound fingerprint, and the lowering says which forwarder it resolved. The ticket's pair is the fixture: <c>Legacy</c>
 /// calls <c>Text.Blank</c>, whose body is <c>string.IsNullOrWhiteSpace</c>, and <c>Modern</c> calls that directly.
 /// </summary>
@@ -143,7 +143,7 @@ public sealed class ForwarderLoweringTests
     }
 
     /// <summary>
-    /// A forwarder the sides of the pair do not agree on is kept (ADR 0043): both lowerings call it as itself and record
+    /// A forwarder the sides of the pair do not agree on is kept (ADR 0047): both lowerings call it as itself and record
     /// nothing, and the fingerprint spells its name.
     /// </summary>
     [Fact]

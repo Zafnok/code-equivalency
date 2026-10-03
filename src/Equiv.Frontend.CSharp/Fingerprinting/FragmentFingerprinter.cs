@@ -47,7 +47,7 @@ internal sealed class FragmentFingerprinter(
 
     private readonly Dictionary<ControlFlowGraph, ImmutableHashSet<ISymbol>> writtenByFunctions = [];
 
-    /// <summary>The forwarders a fragment's text names as themselves, as the body's lowering calls them (ADR 0043).</summary>
+    /// <summary>The forwarders a fragment's text names as themselves, as the body's lowering calls them (ADR 0047).</summary>
     public ImmutableHashSet<string> KeptForwarders { get; init; } = [];
 
     /// <summary><paramref name="operation"/>'s fragment, an operation of <paramref name="graph"/>, or null when it gets no fingerprint.</summary>
