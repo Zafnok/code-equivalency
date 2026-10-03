@@ -48,10 +48,8 @@ language-neutral intermediate representation (IR), encodes matched procedure pai
 SMT problems, and asks Z3 whether any input can make them disagree.
 
 Scope: **any two C# solutions on .NET Framework 4.x or .NET 3.0 and later**, whether a migration,
-a version upgrade or a same-runtime change. Each side's runtime is read from its projects
-(ADR 0040). Later:
-Java 11 → 25, then cross-language rewrites. The language frontends are the only
-language-specific parts.
+a version upgrade or a same-runtime change. Each side's runtime is read from its projects.
+Java 11 → 25 and cross-language rewrites are planned.
 
 ## How it works
 
@@ -67,68 +65,29 @@ flowchart LR
     X -.-> S
 ```
 
-## Status
+## What it does
 
-As of 2026-09-28 (`cc56ae8`), the MVP is complete. M0 to M4 are merged, along with M5 (the
-MCP server) and most of the first post-MVP milestone (P1). `equiv compare` loads .NET Framework and .NET
-solutions on Windows and Linux, matches procedures (including by HTTP route), lowers them to IR and
-verifies each matched pair through a five-rung loop ladder. With `--execute` it also runs the code
-on both real runtimes. Releases ship as a single-file binary, a container and a GitHub Action.
+- **Loads both solutions** (.NET Framework and .NET, SDK-style and legacy `.csproj`) on Windows
+  or Linux.
+- **Matches procedures** across the two sides by identity, by a rename map you supply in
+  `equiv.config.json`, or by HTTP route (Web API 2, MVC 5 and ASP.NET Core attribute routes).
+- **Proves or refutes each matched pair** with Z3. Loops go through a five-step ladder: bounded
+  unrolling, lockstep relational induction, k-induction, Spacer CHC, then Z3-checked loop
+  invariants.
+- **Reports one verdict per pair** in SARIF 2.1.0: `Equivalent`, `Divergent` with a concrete
+  counterexample, `Unknown` with a reason and a scope, `Added` or `Removed`. Known behaviour
+  changes between runtimes are reported as their own rule (EQ006).
+- **Ranks what to review**, grouping the Divergent and Unknown results by cause, most certain
+  first.
+- **Supports baselines**, so CI fails only on new findings.
+- **Optionally runs the code** (`--execute`): it replays every counterexample on both real
+  runtimes and tests every Unknown pair on generated inputs. Running the code never proves a pair
+  Equivalent.
 
-The first full corpus run (M4-007, [verdict](docs/runs/2026-09-27-m4-007-verdict.md)) came back
-**continue** against ADR 0028's thresholds, which were fixed before any data existed:
-
-- 83% to 100% of matched pairs were congruent (unchanged code).
-- 17% to 73% of the changed pairs lowered with no opaque node (37% on Git Extensions).
-- 28 of 28 hand-written seeded behaviour changes were reported Divergent or Unknown. None was
-  called Equivalent.
-
-Every ticket that run produced (P2-023 to P2-045: opaque reasons, crashes, `--execute` hangs,
-replay mismatches) is merged. Two spikes have reported since. The IL-lowering spike found that
-an IL fallback would make 10% of Git Extensions' changed pairs lowerable (ADR 0039, tickets
-P1-014 to P1-018). The equality-saturation spike found 0%, so it was dropped.
-
-What is open ([docs/ROADMAP.md](docs/ROADMAP.md), "P2 — Success assessment"):
-- a second full corpus run to replace M4-007's now-stale rates (P2-046);
-- a hand-audit of Divergent precision (P2-047);
-- measuring cleanup refactorings (P2-048, P2-049, P2-058);
-- detecting runtimes per side (ADR 0040, P2-053 to P2-057);
-- the IL fallback;
-- the hosted tier on Azure Container Apps (M6-001).
-
-What exists today:
-
-- `Equiv.Core` — SSA IR (records, validator, text dump/parse round trip, interpreter),
-  CsCheck generators in `tests/Equiv.TestSupport`; verdict model (`Equivalent`,
-  `Divergent` + counterexample, `Unknown` + reason, `Added`, `Removed`); procedure
-  identity normalisation with rename maps; `equiv.config.json` loader; stable identity
-  matcher; SARIF 2.1.0 writer with fingerprint-based `baselineState`; the
-  runtime-changes table (EQ006).
-- `Equiv.Frontend.CSharp` — `MSBuildWorkspace` loader (and, off Windows, a bare loader for
-  non-SDK projects, M3-029), symbol enumeration, endpoint
-  discovery (Web API 2 / MVC 5 / ASP.NET Core attribute routes), and lowering from
-  Roslyn's CFG to IR. Coverage per `OperationKind` is in
-  [docs/tickets/IOPERATION-COVERAGE.md](docs/tickets/IOPERATION-COVERAGE.md).
-- `Equiv.Cli` — `equiv compare` (argument parsing, frontend routing by language, exit codes,
-  baselines, the lowering census, run log with phase clocks and ETA) and `equiv mcp`.
-- `Equiv.Verify.Z3` — product-program encoder and Z3 driver. The loop ladder has five rungs:
-  bounded unrolling, lockstep relational induction, k-induction, Spacer CHC, then Z3-checked
-  coupling invariants proposed from traces or by an LLM. It also does abstraction taint on counterexamples,
-  caller-sufficient callee contracts, and failure refinement on every Unknown (does the modern
-  side newly throw?).
-- `Equiv.Execute` — the second oracle (ADR 0035). With `--execute`, every Divergent is replayed
-  on each side's detected runtime, and every Unknown pair is differentially tested on generated
-  inputs. It also holds the `runtime-diff` harness (`tools/runtime-diff/`), which measures the
-  BCL on both runtimes. Execution never proves a pair Equivalent.
-- `samples/` — paired 4.8/10 solutions, each README stating the expected verdicts.
-- `tools/corpus/` — the public migration corpus `equiv` is assessed on (ADR 0028): a pinned copy
-  of Amazon's Poly-MigrationBench .NET list (100 repos) and public before/after pairs such as Git
-  Extensions' 4.8-to-.NET 5 migration. Fetched into the git-ignored `.corpus/`, run through the
-  `equiv-corpus-run` skill, and summarised under `docs/runs/`. No third-party code is committed.
-- Gates — 100% line and branch coverage on every `src/` project, warnings as errors,
-  ArchUnitNET dependency rules, CodeQL, gitleaks, Dependabot, locked restores, a
-  dependency licence gate, and Stryker mutation testing. SonarQube Cloud runs on every
-  PR but is not yet a required check.
+Which C# constructs are supported is listed in
+[docs/tickets/IOPERATION-COVERAGE.md](docs/tickets/IOPERATION-COVERAGE.md). The
+[`samples/`](samples/) folder holds small paired solutions, and each one's README states the
+verdicts it should produce.
 
 ## Licence
 
@@ -166,7 +125,7 @@ commercial licence, open an issue. Reasoning and the dependency licence policy a
 [ADR 0017](docs/adr/0017-licensing-and-ip.md); attribution for bundled third-party code is in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-## Usage (current surface)
+## Usage
 
 ```
 equiv compare --legacy <solution.sln|.slnx> --modern <solution.sln|.slnx>
@@ -181,7 +140,7 @@ equiv mcp [--execute]
 ```
 
 `--legacy` is the solution before the change and `--modern` the solution after it; `--before` and
-`--after` are aliases, and giving both spellings of one option is exit 3 (ADR 0040).
+`--after` are aliases, and giving both spellings of one option is exit 3.
 Both paths must be solution files (`.sln` or `.slnx`); anything else is exit 3. Stdout carries
 `analysed lines of code: legacy=<n> modern=<n>`, a `route:` line with `--dry-run`, and after a run
 that verifies, the review list: `review list: <G> groups for <R> flagged results` and its ten
@@ -218,13 +177,13 @@ Unknown (`timeout`) on every run, whatever the machine's speed or load. The conf
 (default 60000) is the wall-clock backstop behind it. The Unknown's message says which of the two
 was hit.
 
-`--il-fallback` (off by default; ADR 0039) lowers a matched pair again from IL on both sides when
+`--il-fallback` (off by default) lowers a matched pair again from IL on both sides when
 it is not congruent and either side holds an opaque the other lacks, and keeps the IL bodies only
 when they hold fewer such opaques. Every result on a matched pair then says which lowering it used,
 in `properties.lowering` (`operation` or `il`), and the census counts `pairsIlFallbackTried` and
 `pairsLoweredFromIl`.
 
-Progress goes to stderr, never stdout (ADR 0038). `normal` prints each phase's start and end, a
+Progress goes to stderr, never stdout. `normal` prints each phase's start and end, a
 line at most every 5%, and a heartbeat every 60 s that names the pair being worked on. `debug`
 adds one line per item and the solver's rung timings. `quiet` prints nothing. `--log <path>`
 copies the same lines to a file that is flushed line by line. The grammar is fixed, so scripts
@@ -248,7 +207,7 @@ Output is always SARIF 2.1.0 (rules EQ001 to EQ006); the exact meaning of each v
 and of `baselineState` is in [docs/VERIFICATION-MODEL.md](docs/VERIFICATION-MODEL.md).
 
 A real `Divergent` result, from `equiv compare --legacy samples/added-branch/legacy/*.sln
---modern samples/added-branch/modern/*.slnx` (ticket M3-003; see `samples/added-branch/README.md`),
+--modern samples/added-branch/modern/*.slnx` (see `samples/added-branch/README.md`),
 one result from `equiv.sarif`'s `runs[0].results`:
 
 ```json
@@ -274,12 +233,12 @@ An `Unknown` (EQ003) says how far it can be trusted. `properties.scope` is `line
 is equivalent unless one of the listed `relatedLocations` is reached, and `method` otherwise.
 `properties.failureRefinement` says whether the solver found, or ruled out, an input on which the
 modern side throws where the legacy side returns (`newFailures`), and the reverse
-(`removedFailures`), each as `found`, `none-proved` or `unknown` (ADR 0037).
+(`removedFailures`), each as `found`, `none-proved` or `unknown`.
 
 ## Use from a coding agent
 
 `equiv mcp` runs the same pipeline as `equiv compare` as a [Model Context Protocol](https://modelcontextprotocol.io)
-server over stdio (ADR 0033), so a coding agent can ask "is my port equivalent?" while it works. It
+server over stdio, so a coding agent can ask "is my port equivalent?" while it works. It
 has two read-only tools that write no file:
 
 - `compare`: `legacy` and `modern` (solution paths, required), and optionally `config`, `baseline`,
@@ -290,7 +249,7 @@ has two read-only tools that write no file:
 An input error `equiv compare` exits 3 or 4 on (a missing file, no frontend for the paths, no C#
 project that loads) comes back as a tool error with the same message.
 
-`equiv mcp --execute` also registers `probe` (ADR 0035, ADR 0036; ticket M5-002), which runs code
+`equiv mcp --execute` also registers `probe`, which runs code
 from both solutions on this machine and so needs Windows for a .NET Framework side, same as
 `compare --execute`: an agent that
 gets Unknown back from `compare` can name a matched pair by its normalised identity and supply its
@@ -318,128 +277,35 @@ docker run -i --rm -v <repo>:/src equiv mcp
 
 Only protocol messages go to stdout; the run's own progress and messages go to stderr.
 
-## Building and running the gates
+## Installing
 
-```
-./build.ps1               # build, format check, tests, 100% coverage gate, architecture tests
-./build.ps1 -Integration  # also runs tests/Equiv.Tests.Integration (needs VS Build Tools)
-```
+Each release has three ways to run `equiv` without a checkout. Every commit on `main` that passes
+CI is published as a patch release. Every artifact carries `LICENSE` and `THIRD-PARTY-NOTICES.md`.
+The licence is BUSL-1.1 (source-available, not open source), and each release has its own Change
+Date.
 
-`Microsoft.Z3` restores only from the git-ignored local feed `.z3-feed/` (ADR 0030), which
-`build.ps1` fills first. Before any direct `dotnet restore`, `dotnet build` or `dotnet test`
-on a fresh clone (an IDE build included), run `./tools/z3-feed/fetch.ps1` once.
+**Single-file binary.** Download `equiv-<version>-win-x64.zip` or `equiv-<version>-linux-x64.tar.gz`
+from the GitHub release, extract it and run `equiv compare ...` directly. The
+[requirements](#requirements) below still apply.
 
-Every gate in [docs/QUALITY-GATES.md](docs/QUALITY-GATES.md) runs locally through this
-script and in GitHub Actions on every PR. Coverage flags for coverlet.MTP go after `--`
-on `dotnet test`; the script already does this.
+**Container.**
 
-## Read in this order
-
-1. [CLAUDE.md](CLAUDE.md) — rules for anyone (human or agent) touching this repo.
-2. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, boundaries, data flow.
-3. [docs/VERIFICATION-MODEL.md](docs/VERIFICATION-MODEL.md) — what "equivalent" means here, exactly.
-4. [docs/QUALITY-GATES.md](docs/QUALITY-GATES.md) — the gates every change must pass.
-5. [docs/ROADMAP.md](docs/ROADMAP.md) — milestones; [docs/tickets/](docs/tickets/) — the work items.
-6. [docs/adr/](docs/adr/) — why each technology was chosen (and what was rejected).
-
-## Layout
-
-```
-src/        production code, one project per component (see ARCHITECTURE.md)
-tests/      one test project per src project, Equiv.TestSupport (generators),
-            Equiv.Tests.Architecture, Equiv.Tests.Integration
-samples/    tiny paired legacy/modern solutions used as fixtures and demos
-tools/      check-coverage (100% gate), licence-check, sonar-triage, corpus (ADR 0028),
-            runtime-diff (BCL on both runtimes), z3-feed (ADR 0030), spikes
-docs/       everything above; docs/runs/ holds corpus-run summaries
-.corpus/    git-ignored: third-party checkouts and raw output of corpus runs
-.github/    ci.yml, codeql.yml, mutation.yml, sonar.yml, sonar-triage.yml,
-            rolling-release.yml, release.yml, dependabot.yml
-.claude/    skills that encode the workflow for coding agents
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v <dir>:/samples ghcr.io/zafnok/equiv:<version> compare --legacy /samples/legacy/<name>.sln --modern /samples/modern/<name>.slnx --out /samples/equiv.sarif
 ```
 
-## Prerequisites
+Mount the directory that holds the solutions read-write, because loading writes `obj/` there.
+The image runs as a non-root user (uid/gid 1654), so `--user "$(id -u):$(id -g)"` makes its
+writes into your mounted directory land with your own ownership instead of failing with
+"Permission denied". The image is based on the .NET SDK, because SDK-style projects are evaluated
+by the SDK's MSBuild, and is about 1.6 GB. It holds no .NET Framework reference assemblies or
+NuGet packages. Those are fetched into `$EQUIV_REFERENCE_ASSEMBLIES`
+(`/data/reference-assemblies`) on first use, so mount a volume there
+(`-v equiv-ref-assemblies:/data/reference-assemblies`) to avoid fetching them on every run.
 
-### Windows dev box
-
-- .NET 10 SDK (the exact patch is pinned in `global.json`).
-- Visual Studio 2026 **Build Tools** with workload ".NET desktop build tools" and the
-  component ".NET Framework 4.8 targeting pack". This is what lets Roslyn's out-of-process
-  build host evaluate legacy (non-SDK) `.csproj` files. No Win32 API is used anywhere.
-  Build Tools install under `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`
-  (the x86 prefix, even on 64-bit Windows); net48 reference assemblies land under
-  `C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8`.
-  Unattended install with the exact component ids:
-
-  ```bash
-  winget install --source winget Microsoft.VisualStudio.BuildTools --override "--wait --quiet --norestart --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.Net.Component.4.8.TargetingPack --add Microsoft.Net.Component.4.8.SDK"
-  ```
-
-  Without the targeting pack, legacy projects fail to load with `CS0518` (predefined type
-  not defined), not with a workspace error. `./build.ps1 -Integration` loads every sample
-  and is the quickest check that the box is set up.
-- Git, Docker Desktop (for the container packaging milestone), GitHub CLI.
-
-### Linux
-
-Off Windows, `equiv` loads legacy (non-SDK) `.csproj` files with its own bare loader and SDK-style ones through
-MSBuildWorkspace on the .NET SDK (ADR 0031, ticket M3-029). A Linux host needs:
-
-- the **.NET 10 SDK**, not only the runtime: SDK-style projects are evaluated by its MSBuild.
-- **network access to the package sources** the solution's `nuget.config` names (nuget.org when it names none),
-  or a pre-filled cache. `equiv` restores `packages.config` packages into the folder their HintPaths expect, and
-  fetches the .NET Framework reference assemblies (`Microsoft.NETFramework.ReferenceAssemblies.<tfm>`, about
-  110 MB per framework version) on first use into `$EQUIV_REFERENCE_ASSEMBLIES`, by default
-  `~/.local/share/equiv/reference-assemblies`. A version already in that folder (layout
-  `.NETFramework/v4.8/...`, as `tools/corpus/corpus.ps1 -Prepare` writes it) is never fetched again.
-- a **`dotnet restore`** of any legacy project that uses `<PackageReference>`: the bare loader reads the
-  `project.assets.json` it writes, exactly as Visual Studio's `ResolveNuGetPackageAssets` does.
-
-No Mono, nuget.exe or MSBuild.exe is needed. A legacy project that uses MSBuild the bare loader cannot evaluate
-exactly (`<Choose>`, a property function in a property it reads, a target that adds `Compile` or `Reference`
-items, a COM reference, ...) is skipped with a notification naming the construct (exit 4), never loaded
-approximately (ADR 0029).
-
-CI runs the full pipeline on `windows-latest`, everything except the integration tests on `ubuntu-latest`, and a
-`parity` job that fails when `equiv compare` gives different SARIF results on the two for any sample.
-
-Linux hosts need **glibc 2.38 or newer** (Ubuntu 24.04+): the `Microsoft.Z3` 5.1.0 native
-(from the official Z3Prover/z3 GitHub release, ADR 0030) is built against it. Debian 12,
-Ubuntu 22.04 and Alpine are unsupported for the linux-x64 build.
-
-## Running without cloning
-
-Every green commit on `main` (CI, CodeQL and SonarQube Cloud) publishes a patch release
-(`.github/workflows/rolling-release.yml`, then `release.yml`; versioning policy in
-`.claude/skills/equiv-release`), with three ways to run `equiv` without a checkout. Every artifact carries `LICENSE` and `THIRD-PARTY-NOTICES.md`
-(ADR 0017); the licence is BUSL-1.1, source-available and not open source, with a Change Date
-specific to that release.
-
-**Single-file binary.** `equiv-<version>-win-x64.zip` / `equiv-<version>-linux-x64.tar.gz` on the
-GitHub release, built with `dotnet publish -r <rid>` (`PublishSingleFile`, `SelfContained`,
-`IncludeNativeLibrariesForSelfExtract`; see `src/Equiv.Cli/Equiv.Cli.csproj`). Extract and run
-`equiv compare ...` directly; no .NET SDK install needed. On Linux, the same [Prerequisites](#linux)
-above still apply (SDK for SDK-style projects, network access for `packages.config` and reference
-assemblies) except the SDK itself is bundled with the binary.
-
-**Container.** `docker run --rm --user "$(id -u):$(id -g)" -v <samples>:/samples
-ghcr.io/zafnok/equiv:<version> compare --legacy /samples/legacy/*.sln --modern
-/samples/modern/*.slnx --out /samples/equiv.sarif` (mount whatever directory holds the solutions
-read-write; MSBuildWorkspace writes `obj/` there). The image runs as a non-root user (uid/gid
-1654, the base image's own `app` user), not root, so `--user "$(id -u):$(id -g)"` is what makes
-the container's writes into your mounted directory land with your own ownership instead of
-failing with "Permission denied" — the same pattern any rootless container needs for bind-mount
-access. The image is the .NET SDK itself, not a runtime-only base (Dockerfile; ADR 0031), because
-the SDK-style loader path shells into the SDK's own MSBuild at runtime. It holds no net4x
-reference assemblies or NuGet packages; those are fetched into `$EQUIV_REFERENCE_ASSEMBLIES`
-(`/data/reference-assemblies`) on first use (M3-029) — mount a volume there
-(`-v equiv-ref-assemblies:/data/reference-assemblies`) to avoid re-fetching on every run. Image
-size: 1.62 GB (measured locally; M3-028 measured the plain Debian `sdk:10.0` base at 917 MB, so
-the `noble` base plus the app layer roughly doubles it).
-
-**GitHub Action.** `action.yml` at the repo root runs the container (`runs.using: docker`) with
-inputs `legacy`, `modern`, `config`, `baseline`, `fail-on` and output `sarif`. Follow it with
-`github/codeql-action/upload-sarif` to get results into Code Scanning:
+**GitHub Action.** `action.yml` at the repo root runs the container with inputs `legacy`,
+`modern`, `config`, `baseline` and `fail-on`, and output `sarif`. Follow it with
+`github/codeql-action/upload-sarif` to get the results into Code Scanning:
 
 ```yaml
 - uses: zafnok/code-equivalency@v0.1.0
@@ -453,40 +319,83 @@ inputs `legacy`, `modern`, `config`, `baseline`, `fail-on` and output `sarif`. F
     category: equiv
 ```
 
-SonarQube can also consume the same SARIF file via `sonar.sarifReportPaths` (not integrated here;
-see Out of scope in ticket M3-004).
+SonarQube can also read the same SARIF file through `sonar.sarifReportPaths`.
 
-## Hosted (preview)
+## Requirements
 
-`deploy/aca/` (M6-001, ADR 0032) is a **test deployment, not the hosted tier**: there is no API,
-queue, authentication, key or quota, and you start every run by hand. It proves that the released
-image runs as an Azure Container Apps Job for about $0. One Bicep deployment (`main.bicep`) creates,
-in one resource group:
+### Windows
 
-- a Container Apps environment with only the Consumption workload profile (no VNet, no Dedicated
-  profile, no Log Analytics);
-- a Standard LRS storage account with an Azure Files share, mounted into the environment at `/mnt/work`;
-- a manual-trigger job that runs `ghcr.io/zafnok/equiv:<version>` with 1 vCPU, 2 GiB, a 30-minute
-  replica timeout and no retries (no Azure Container Registry: the image is pulled from public GHCR,
-  so the package must be public);
-- a $5/month budget on the resource group that emails you at 50% and 100% of actual spend.
+- The .NET 10 SDK.
+- Visual Studio 2026 **Build Tools** with the workload ".NET desktop build tools" and the
+  component ".NET Framework 4.8 targeting pack". This is what lets `equiv` load legacy
+  (non-SDK) `.csproj` files. Build Tools install under
+  `C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools` (the x86 prefix, even on 64-bit
+  Windows), and the net48 reference assemblies land under
+  `C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8`.
+  Unattended install with the exact component ids:
 
-The Consumption plan's monthly free grant is 180,000 vCPU-seconds and 360,000 GiB-seconds per
-subscription (Microsoft Learn, "Billing in Azure Container Apps"). At 1 vCPU and 2 GiB a job execution
-uses 1 vCPU-second and 2 GiB-seconds per second, so both limits give the same answer: 180,000 seconds,
-50 hours of execution a month, free. Storage is a few MB of samples, cents a month.
+  ```bash
+  winget install --source winget Microsoft.VisualStudio.BuildTools --override "--wait --quiet --norestart --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.Net.Component.4.8.TargetingPack --add Microsoft.Net.Component.4.8.SDK"
+  ```
 
-Three scripts, run from `deploy/aca/` with the Azure CLI signed in (`az login`):
+  Without the targeting pack, legacy projects fail to load with `CS0518` (predefined type
+  not defined), not with a workspace error.
 
-```powershell
-./deploy.ps1 -Subscription <id> -Location <region> -Version <tag, no leading v>   # deploy, upload samples/, print the job name
-./run.ps1 -Sample <name>                                                          # one execution, then download the SARIF
-./teardown.ps1                                                                    # delete the resource group and everything in it
+### Linux
+
+Off Windows, `equiv` loads legacy (non-SDK) `.csproj` files with its own loader, and SDK-style
+ones through MSBuild on the .NET SDK. A Linux host needs:
+
+- the **.NET 10 SDK**, not only the runtime: SDK-style projects are evaluated by its MSBuild.
+- **glibc 2.38 or newer** (Ubuntu 24.04+), which the bundled Z3 native library is built against.
+  Debian 12, Ubuntu 22.04 and Alpine are not supported.
+- **network access to the package sources** the solution's `nuget.config` names (nuget.org when
+  it names none), or a pre-filled cache. `equiv` restores `packages.config` packages into the
+  folder their HintPaths expect, and on first use fetches the .NET Framework reference assemblies
+  (`Microsoft.NETFramework.ReferenceAssemblies.<tfm>`, about 110 MB per framework version) into
+  `$EQUIV_REFERENCE_ASSEMBLIES`, by default `~/.local/share/equiv/reference-assemblies`. A
+  version already in that folder (layout `.NETFramework/v4.8/...`) is never fetched again.
+- a **`dotnet restore`** of any legacy project that uses `<PackageReference>`: the loader reads
+  the `project.assets.json` it writes, exactly as Visual Studio's `ResolveNuGetPackageAssets`
+  does.
+
+No Mono, nuget.exe or MSBuild.exe is needed. A legacy project that uses MSBuild the loader cannot
+evaluate exactly (`<Choose>`, a property function in a property it reads, a target that adds
+`Compile` or `Reference` items, a COM reference, ...) is skipped with a notification naming the
+construct (exit 4), never loaded approximately.
+
+CI fails any change for which `equiv compare` gives different SARIF results on Windows and Linux
+for any sample.
+
+## Building from source
+
+Requires the .NET 10 SDK (the exact patch is pinned in `global.json`) and, on Windows, the Build
+Tools above.
+
+```
+./build.ps1               # build, format check, tests, 100% coverage gate, architecture tests
+./build.ps1 -Integration  # also runs tests/Equiv.Tests.Integration (needs VS Build Tools)
 ```
 
-`run.ps1` writes `<name>.sarif`, `<name>.log` and `<name>.exit` (the `equiv` exit code) to its `-OutDir`.
-To compare a set of runs with the Linux CI parity leg for the same version, download that run's
-`parity-Linux` artifact and run `.github/scripts/sarif-parity.ps1 -Left <OutDir> -Right <parity-Linux dir>`.
+`Microsoft.Z3` restores only from the git-ignored local feed `.z3-feed/`, which `build.ps1`
+fills first. Before any direct `dotnet restore`, `dotnet build` or `dotnet test` on a fresh clone
+(an IDE build included), run `./tools/z3-feed/fetch.ps1` once. `./build.ps1 -Integration` loads
+every sample and is the quickest check that a Windows box is set up.
+
+```
+src/        production code, one project per component (see docs/ARCHITECTURE.md)
+tests/      one test project per src project, plus architecture and integration tests
+samples/    small paired legacy/modern solutions used as fixtures and demos
+tools/      build and gate tooling
+docs/       architecture, verification model, quality gates, decision records
+```
+
+## Further reading
+
+- [docs/VERIFICATION-MODEL.md](docs/VERIFICATION-MODEL.md): what "equivalent" means here, exactly.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): components, boundaries and data flow.
+- [docs/QUALITY-GATES.md](docs/QUALITY-GATES.md): the gates every change must pass.
+- [docs/adr/](docs/adr/): why each technology was chosen, and what was rejected.
 
 <!--
 Star history chart, hidden until the repo has stars. With 0 stars star-history.com has no data
