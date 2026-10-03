@@ -79,3 +79,22 @@ P2-083's lowering crashes on the same pairs. Changing how a pair is weighed.
   has to be named by running this branch's `CompareCommand` fix on a tree without P2-090.
 - Decision: the new rule id IR014 lives in `IrDiagnosticIds.cs`, which the Files list does not name; a validator check
   cannot be reported without an id.
+- 2026-10-03, runs on a build of this branch merged with P2-109's (PR #372), at main c11f10f:
+  - `duplicati-3124`, `full`: exit 1 (divergent results present), 12,352 s, SARIF written, no
+    `toolExecutionNotification`, nothing in `properties.unverified`. By rule: EQ001 5,641, EQ002 32, EQ003 424,
+    EQ004 92, EQ005 65, EQ006 184 (6,438 results). So no pair throws at weighing on Duplicati once P2-090 is in.
+    Criterion 5 holds for this pair.
+  - `openra-17989`, `full`: no SARIF. The run passed the point where ef79ff6 died and verified 1,230 of 10,114
+    pairs, then one pair (`OpenRA.WidgetLoader::LoadWidget(OpenRA.Widgets.WidgetArgs,OpenRA.Widgets.Widget,OpenRA.MiniYamlNode)`)
+    first sat in the unroller for over ninety minutes (P2-109, fixed) and then, with that fix, overflowed the native
+    stack in the trace encoding, which ends the process (P2-113, open). Criterion 5 for OpenRA waits on P2-113.
+    A weighing failure is reported when the loop reaches its pair, so the 8,884 pairs after that one say nothing yet
+    about whether an OpenRA pair still throws at weighing.
+  - One pair-level failure in verifying, outside this ticket and not filed yet:
+    `OpenRA.ObjectCreator::.ctor(OpenRA.Manifest,OpenRA.InstalledMods)`, "domain sort ... and parameter sort ... do
+    not match" between two tuple array types that differ only in element names.
+- Criterion 1 is still open: no run has named the procedure. Duplicati's clean run says its construct is the one
+  P2-090 fixed (a branch on a compile-time constant whose dead edge named an unlowered block), by inference, not by
+  identity. Naming it takes this branch's `CompareCommand` fix on a tree without P2-090, run on either pair.
+- The P2-065 worktree that held both pairs' restored checkouts no longer exists (seen 2026-10-03 after the Duplicati
+  run ended), so the next run starts from `corpus.ps1 -Fetch` and a restore of both sides.
