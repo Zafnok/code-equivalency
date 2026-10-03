@@ -75,3 +75,16 @@ Forwarders to BCL members (P2-068).
 ## Notes
 - Found by P2-049 (`samples/cleanup-extract-method`, `Invoice.Total` and `Invoice.Shipping`). Review
   groups `calls:...Invoice::Discount(int)` and `calls:...Invoice::Billable(int)`.
+- Criterion 1: the `equiv-adr` bar test gives a new ADR (it changes what a call means for a verdict
+  and adds a SARIF property). ADR 0044, accepted 2026-10-02, in its own docs-only PR: a call to a
+  `private` one-sided helper from its own type is replaced by the helper's expanded body, at most 256
+  IR instructions, never on a call cycle; the result lists it in `properties.calleesInlined`. Code
+  starts once that PR is merged.
+- Decision: one bound, 256 IR instructions on the expanded body -> no separate depth bound.
+  Alternatives: depth and size, a configurable bound. Rule: 4.
+- Decision: an unresolved call stays an ordinary call (Divergent on the trace, as today) -> no new
+  Unknown reason. Alternatives: an unshared `IrOpaque` as ADR 0042 does. Rule: 4.
+- For criterion 4's variants: `virtual` cannot be `private`, so a `protected virtual` helper is the
+  virtual case. ADR 0044 also leaves a typed throw inside a `try` region unresolved; `IrUnroller`'s
+  `InlineCall` merges throwing exits into the `threw` phi and drops the type, so the helper inliner
+  must not reuse that part as it is.
