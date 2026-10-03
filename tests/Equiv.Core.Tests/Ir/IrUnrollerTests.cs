@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 
@@ -471,30 +470,22 @@ public sealed class IrUnrollerTests
     }
 
     /// <summary>
-    /// Ticket P2-109: the cost of unrolling grows with the size of what is copied, not with its cube. The procedure is
-    /// the shape that took an OpenRA pair over an hour: a loop that calls its own procedure, so inlining nests the loop
-    /// in itself, with a block per call in its body, and a second loop beside it. Four times the body took 45 times as
-    /// long before the fix and takes about four times as long after it; the bound of ten sits between the two.
+    /// Ticket P2-109: the work of unrolling grows with the size of what is copied. The procedure is the shape that took
+    /// an OpenRA pair over an hour: a loop that calls its own procedure, so inlining nests the loop in itself, with a
+    /// block per call in its body, and a second loop beside it. Four times the body is about four times the blocks
+    /// touched. The count is of the editor's block reads, replacements and additions, each of which was a scan of the
+    /// block list before the fix; it does not measure time.
     /// </summary>
     [Fact]
-    public void UnrollingALoopThatCallsItsOwnProcedureIsLinearInItsSize()
+    public void UnrollingALoopThatCallsItsOwnProcedureTouchesBlocksInProportionToItsSize()
     {
-        IrProcedure small = IrText.Parse(LoopAroundASelfCall(calls: 80));
-        IrProcedure large = IrText.Parse(LoopAroundASelfCall(calls: 320));
-        Assert.Empty(IrValidator.Validate(large));
-        IrProcedure unrolled = IrUnroller.Unroll(large, 3);
+        IrProcedure small = IrUnroller.Unroll(IrText.Parse(LoopAroundASelfCall(calls: 20)), 3, out long few);
+        IrProcedure large = IrUnroller.Unroll(IrText.Parse(LoopAroundASelfCall(calls: 80)), 3, out long many);
 
-        Assert.Empty(IrLoopAnalysis.Of(unrolled).Loops);
-        Assert.True(unrolled.Blocks.Length > 20_000);
-        Assert.True(Fastest(large) < 10 * Fastest(small), "unrolling four times the loop took more than ten times as long");
-
-        static TimeSpan Fastest(IrProcedure procedure) =>
-            Enumerable.Range(0, 3).Min(_ =>
-            {
-                Stopwatch watch = Stopwatch.StartNew();
-                IrUnroller.Unroll(procedure, 3);
-                return watch.Elapsed;
-            });
+        Assert.Empty(IrLoopAnalysis.Of(large).Loops);
+        Assert.InRange(large.Blocks.Length, 3 * small.Blocks.Length, 4 * small.Blocks.Length);
+        Assert.InRange(few, small.Blocks.Length, 20L * small.Blocks.Length);
+        Assert.InRange(many, 3 * few, 4 * few);
     }
 
     [Fact]

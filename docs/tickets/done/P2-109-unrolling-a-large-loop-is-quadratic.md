@@ -80,12 +80,13 @@ Verifying pairs in parallel (P2-077).
   measured, criterion 1.
 - A first procedure, with the same instruction counts in a handful of large blocks, unrolled in 0.13 s before the
   fix. The cost follows the number of blocks, so a body of calls (each call ends its block) is what shows it.
-- Decision: how criterion 3 is tested -> by the ratio of two timings, the fastest of three runs each, for k = 80 and
-  k = 320: under ten times, where it was 45 before and is about 4 after
-  (`IrUnrollerTests.UnrollingALoopThatCallsItsOwnProcedureIsLinearInItsSize`). The criterion asks for a counter of
-  instructions visited. The time was in block lookups that are now dictionary reads, so a counter would count
-  whatever the code chose to count and would not notice a scan coming back. Alternatives: a counter on the editor
-  read through an internal overload; an absolute time limit. Rule: 3.
+- Decision: what criterion 3's counter counts -> the editor's block reads, replacements and additions while loops are
+  copied, returned by an internal `Unroll` overload: each was a scan of the block list before the fix, and none
+  is now. `IrUnrollerTests.UnrollingALoopThatCallsItsOwnProcedureTouchesBlocksInProportionToItsSize` asserts that
+  four times the body touches three to four times the blocks. It counts blocks, not the instructions the criterion
+  names, because the cost followed blocks. Alternatives: a ratio of two timings, tried first: it passed here and on
+  the Linux gate and failed on the Windows gate, under coverage and parallel tests. Rule: 3. The counter cannot see
+  a lookup turned back into a scan; the timings in the table above are the evidence for the speed.
 - Criterion 2: the existing fixtures, the two snapshots and the property tests in `IrUnrollerTests` pass unchanged
   (797 of 797 in `tests/Equiv.Core.Tests`). A whole-procedure pass per copied loop remains (`IrSsaRepair`'s
   predecessor map, `IrLoopAnalysis.Of` in `Unroll`'s loop), so the cost is blocks times loops, not strictly linear.

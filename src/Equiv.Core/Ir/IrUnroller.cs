@@ -35,7 +35,14 @@ public static class IrUnroller
     /// <paramref name="bound"/> times with the last copy's back edges unreachable.
     /// </summary>
     /// <exception cref="ArgumentException">The procedure is self-recursive and <see cref="InliningObstacle"/> is not null.</exception>
-    public static IrProcedure Unroll(IrProcedure procedure, int bound)
+    public static IrProcedure Unroll(IrProcedure procedure, int bound) => Unroll(procedure, bound, out _);
+
+    /// <summary>
+    /// <see cref="Unroll(IrProcedure, int)"/>, and in <paramref name="touched"/> how many times copying the loops read,
+    /// replaced or added a block: the work a test can count to see that it grows with the size of what is copied
+    /// (ticket P2-109).
+    /// </summary>
+    internal static IrProcedure Unroll(IrProcedure procedure, int bound, out long touched)
     {
         ArgumentNullException.ThrowIfNull(procedure);
         ArgumentOutOfRangeException.ThrowIfLessThan(bound, 1);
@@ -47,10 +54,12 @@ public static class IrUnroller
         RequireReducible(procedure);
 
         IrProcedure current = Inline(Prune(procedure), bound);
+        touched = 0;
         while (IrLoopAnalysis.Of(current).Loops is { IsEmpty: false } loops)
         {
             IrLoop innermost = loops.First(l => !loops.Any(inner => inner.Parent == l.Header));
-            current = Copy(current, innermost, bound, IrLastCopy.Unreachable).Procedure;
+            (current, _, long copying) = Copy(current, innermost, bound, IrLastCopy.Unreachable);
+            touched += copying;
         }
 
         return Checked(procedure, current);
@@ -227,7 +236,7 @@ public static class IrUnroller
         IrProcedure pruned = Prune(procedure);
         IrLoop loop = IrLoopAnalysis.Of(pruned).Loops.FirstOrDefault(l => l.Header == header)
             ?? throw new ArgumentException($"{IrText.Block(header)} is not a loop header of {procedure.Identity.Value}.", nameof(header));
-        (IrProcedure result, ImmutableArray<IrBlockId> headers) = Copy(pruned, loop, copies, last);
+        (IrProcedure result, ImmutableArray<IrBlockId> headers, _) = Copy(pruned, loop, copies, last);
         return (Checked(procedure, result), headers);
     }
 
@@ -258,11 +267,11 @@ public static class IrUnroller
         return Prune(editor.Build());
     }
 
-    private static (IrProcedure Procedure, ImmutableArray<IrBlockId> Headers) Copy(IrProcedure procedure, IrLoop loop, int copies, IrLastCopy last)
+    private static (IrProcedure Procedure, ImmutableArray<IrBlockId> Headers, long Touched) Copy(IrProcedure procedure, IrLoop loop, int copies, IrLastCopy last)
     {
         IrEditor editor = new(procedure);
         ImmutableArray<IrBlockId> headers = editor.CopyLoop(loop, copies, last);
-        return (Prune(editor.Build()), headers);
+        return (Prune(editor.Build()), headers, editor.Touched);
     }
 
     /// <summary>A procedure under edit: its blocks in order, the names in use, and the next free block id.</summary>
@@ -286,12 +295,24 @@ public static class IrUnroller
 
         public IrProcedure Build() => procedure with { Blocks = [.. blocks] };
 
-        public IrBlock Get(IrBlockId id) => blocks[positions[id]];
+        /// <summary>How many times a block was read, replaced or added.</summary>
+        public long Touched { get; private set; }
 
-        public void Replace(IrBlock block) => blocks[positions[block.Id]] = block;
+        public IrBlock Get(IrBlockId id)
+        {
+            Touched++;
+            return blocks[positions[id]];
+        }
+
+        public void Replace(IrBlock block)
+        {
+            Touched++;
+            blocks[positions[block.Id]] = block;
+        }
 
         public void Add(IrBlock block)
         {
+            Touched++;
             positions.Add(block.Id, blocks.Count);
             blocks.Add(block);
         }
