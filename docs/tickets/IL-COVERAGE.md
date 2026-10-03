@@ -26,7 +26,11 @@ load) makes its instruction refused. Values follow IL's stack: a `bool` stays Bo
 its own type's sign where it is used as an `int`, and a reference passed where an implicit reference conversion takes it
 reads `cast.<From>.<To>` (M3-010). Locals start at their type's default (`.locals init`); a source-declared reference
 local, a parameter and a stack slot have a null shadow, a compiler-added local (Debug's return temporary) has none, as
-the IOperation lowering has no variable for it.
+the IOperation lowering has no variable for it. A stack slot ILSpy types as `object`, as it does one whose first store
+is a `null` (both branches of `s?.Trim()` leaving their value on the stack), is of the one type of the values stored
+into it, a `null` aside: a call's result, a new object's type, a variable's, a string literal's. So it reads no
+`cast.<T>.System.Object` and no `null.System.Object`, as the IOperation lowering's flow capture reads none. It stays
+`object` when two stores differ or one is any other instruction (P2-111).
 
 | ILAst key | Status | Test | Ticket |
 |---|---|---|---|
@@ -41,7 +45,7 @@ the IOperation lowering has no variable for it.
 | SwitchSection | lowered: a case of its `IrSwitch`, or its default | IlLowererTests.ASwitchIsOneIrSwitch | P1-014 |
 | LdLoc | lowered: the variable's SSA value; `this` of a class is the receiver input, as the IOperation lowering reads it where referenced; a `ref`, `out` or `in` parameter and a slot holding an address are, as an address, their place; opaque when the variable's type has no sort (a struct's `this`, a pointer, a compiler-generated closure class), or when its value is used as a type no conversion takes it to (an enum as an integer) | IlLowererTests.RefusedInstructionsLowerTheirOperands, .AnAddressIsItsPlace; IlLoweringOracleTests.LoweredIrAgreesWithCompiledCSharp | P1-014, P1-015 |
 | LdLoc[caught exception] | opaque: the caught exception object is not modelled, as `CaughtException` is not in IOperation lowering | IlLowererTests.KeysAreRefinedByPosition | P1-012 |
-| StLoc | lowered: an SSA store of its value as the variable's type, and of the value's nullness to its shadow; to a slot that holds an address, the place it names, evaluated there; to a variable holding a caught exception, which only copies another, nothing; opaque, its value lowered first, when the variable's type has no sort | IlLowererTests.RefusedInstructionsLowerTheirOperands, .AnAddressIsItsPlace; IlLoweringOracleTests.LoweredIrAgreesWithCompiledCSharp | P1-014, P1-015 |
+| StLoc | lowered: an SSA store of its value as the variable's type, and of the value's nullness to its shadow; to a slot that holds an address, the place it names, evaluated there; to a variable holding a caught exception, which only copies another, nothing; opaque, its value lowered first, when the variable's type has no sort; a stack slot typed `object` is of the one type stored into it (above) | IlLowererTests.RefusedInstructionsLowerTheirOperands, .AnAddressIsItsPlace, .AStackSlotIsOfTheTypeStoredIntoIt; IlLoweringOracleTests.LoweredIrAgreesWithCompiledCSharp | P1-014, P1-015, P2-111 |
 | StLoc[ref local] | opaque: a `ref` local, as IOperation lowering leaves it | IlLowererTests.KeysAreRefinedByPosition | P1-012 |
 | LdcI4 | lowered: `IrConst` of the type wanted: that width's bits, Bool (not zero), or an enum's element as `TypeMapper.Constant` spells its underlying value | IlLowererTests.ConstantsTakeTheTypeTheyAreUsedAs; IlLoweringOracleTests.LoweredIrAgreesWithCompiledCSharp | P1-014 |
 | LdcI8 | lowered: as `LdcI4` | IlLoweringOracleTests.LoweredIrAgreesWithCompiledCSharp | P1-014 |
