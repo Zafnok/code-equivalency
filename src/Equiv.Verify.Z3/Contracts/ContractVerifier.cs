@@ -29,20 +29,22 @@ internal sealed class ContractVerifier(Func<Context> createContext, Verification
         }
 
         bool looping = !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
-        using Context context = createContext();
-        ProductEncoding encoding = ProductEncoder.Encode(
-            context, IrUnroller.Unroll(old, options.Bound), IrUnroller.Unroll(@new, options.Bound), options.CallIdentityMap, relation: contract);
-        BoolExpr[] reachable = [context.MkNot(encoding.Old.Unreachable), context.MkNot(encoding.New.Unreachable)];
-        using Solver broken = Z3Backend.Query(context, encoding, options, [encoding.Differs, .. reachable]);
-        return broken.Check() switch
+        (IrProcedure oldUnrolled, IrProcedure newUnrolled) = Stages.Timed(options, Stages.Unroll, () => (IrUnroller.Unroll(old, options.Bound), IrUnroller.Unroll(@new, options.Bound)));
+        return Stages.WithContext<ContractCheck>(options, createContext, context =>
         {
-            Status.SATISFIABLE => new ContractCheck.Rejected(new ContractModel(
-                [.. encoding.Conjuncts.Select((c, i) => (c, i)).Where(t => broken.Model.Eval(t.c, completion: true).IsFalse).Select(static t => t.i)],
-                broken.Model.ToString())),
-            Status.UNKNOWN => new ContractCheck.Unknown(Z3Backend.Timeout(broken, options)),
-            _ when looping => Induction(old, @new, oldShape, newShape, contract),
-            _ => new ContractCheck.Admitted(ProofMethod.Bounded),
-        };
+            ProductEncoding encoding = Stages.Timed(options, Stages.Encode, () => ProductEncoder.Encode(context, oldUnrolled, newUnrolled, options.CallIdentityMap, relation: contract));
+            BoolExpr[] reachable = [context.MkNot(encoding.Old.Unreachable), context.MkNot(encoding.New.Unreachable)];
+            using Solver broken = Z3Backend.Query(context, encoding, options, [encoding.Differs, .. reachable]);
+            return Z3Backend.Check(context, broken, options, "contract") switch
+            {
+                Status.SATISFIABLE => new ContractCheck.Rejected(new ContractModel(
+                    [.. encoding.Conjuncts.Select((c, i) => (c, i)).Where(t => broken.Model.Eval(t.c, completion: true).IsFalse).Select(static t => t.i)],
+                    broken.Model.ToString())),
+                Status.UNKNOWN => new ContractCheck.Unknown(Z3Backend.Timeout(broken, options)),
+                _ when looping => Induction(old, @new, oldShape, newShape, contract),
+                _ => new ContractCheck.Admitted(ProofMethod.Bounded),
+            };
+        });
     }
 
     /// <summary>Rungs 2 and 3 with the contract as the pair's exit condition.</summary>

@@ -129,13 +129,16 @@ internal sealed class ChcEncoder
             fixedpoint.AddRule(context.MkForall(Constants(rule), rule));
         }
 
+        long started = Stages.Start();
         try
         {
-            Status status = fixedpoint.Query(Bad);
+            Status status = Z3Backend.Interruptible(context, Z3Backend.InterruptAfterMs(options), () => fixedpoint.Query(Bad));
+            Stages.Checked(options, "spacer", started, status);
             return new ChcAnswer(status, fixedpoint.GetAnswer(), fixedpoint.GetReasonUnknown());
         }
         catch (Z3Exception exception)
         {
+            Stages.Checked(options, "spacer", started, Status.UNKNOWN);
             return new ChcAnswer(Status.UNKNOWN, context.MkTrue(), exception.Message);
         }
     }
@@ -181,7 +184,7 @@ internal sealed class ChcEncoder
             using Solver solver = context.MkSolver();
             Z3Backend.Limit(solver, options);
             solver.Add(context.MkOr(counterexamples));
-            Status status = solver.Check();
+            Status status = Z3Backend.Check(context, solver, options, "certificate");
             if (status != Status.SATISFIABLE)
             {
                 return status == Status.UNSATISFIABLE;
@@ -226,7 +229,7 @@ internal sealed class ChcEncoder
             using Solver solver = context.MkSolver();
             Z3Backend.Limit(solver, options);
             solver.Add(context.MkOr(counterexamples));
-            Status status = solver.Check();
+            Status status = Z3Backend.Check(context, solver, options, "invariant");
             if (status == Status.UNSATISFIABLE)
             {
                 continue;
@@ -294,7 +297,7 @@ internal sealed class ChcEncoder
         using Solver solver = context.MkSolver();
         Z3Backend.Limit(solver, options);
         solver.Add(context.MkOr(entryDivergence));
-        solver.Check();
+        Z3Backend.Check(context, solver, options, "derivation");
         Model model = solver.Model;
         return Decode([.. Inputs.Select(i => model.Eval(i.Term, completion: true))], [.. literals.Select(l => model.Eval(l, completion: true))]);
     }
