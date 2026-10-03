@@ -1,4 +1,4 @@
-# P2-100 Every runtime-change row has a change point, so a .NET-to-.NET pair is not flagged for Framework differences
+# P2-108 Every runtime-change row has a change point, so a .NET-to-.NET pair is not flagged for Framework differences
 Status: todo
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
@@ -8,8 +8,8 @@ Depends on: P2-066
 32 rows of `runtime-changes.json` have `changedIn: null`, which ADR 0040 decision 2 applies whenever
 the two runtimes differ. P2-054 left them null because a measured witness shows only that net48 and
 net10.0 differ, not where. On a .NET-to-.NET pair that rule is the largest source of false EQ006:
-on P2-066's `gitextensions-9860` (net5.0 to net6.0), 54 of 59 EQ006 cite one of these rows, and none
-of the 54 could be confirmed. Several of the rows record a change that is documented to predate
+on P2-066's `gitextensions-9860` (net5.0 to net6.0), 56 of 59 EQ006 cite one of these rows, and none
+of the 56 could be confirmed. Several of the rows record a change that is documented to predate
 .NET 5, so it cannot differ between any two .NET versions:
 - `System.String::Equals(string,System.StringComparison)` and its static form: ICU replaced NLS on
   Windows in .NET 5 (the table's own `IndexOf` row says `net5.0`), 12 results;

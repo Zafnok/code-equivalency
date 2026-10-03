@@ -57,7 +57,7 @@ Top opaque reasons (legacy / modern), up to 15. The share in the last column is 
 ## Changed code
 - Changed pairs 722 of 14020; without opaque 218; whole-body opaque 9
 - Lowerable share (changedPairsWithoutOpaque / changedPairs): 30.2%
-- The pull request edits 16 `.cs` files. 25 changed pairs are in those files; the other 697 are in files that are byte-identical on both sides. A text scan of those 697 bodies finds an interpolated string in 417, including 223 of the 233 the solver proved: on net5.0 an interpolated string binds to `string.Format`, on net6.0 to `DefaultInterpolatedStringHandler`, so the two sides lower differently and lose congruence, and the solver then proves most of them. 56 of the 697 are EQ006 on rows with no change point (below).
+- The pull request edits 16 `.cs` files. 25 changed pairs are in those files; the other 697 are in files that are byte-identical on both sides. A text scan of those 697 bodies finds an interpolated string in 417, including 223 of the 233 the solver proved: on net5.0 an interpolated string binds to `string.Format`, on net6.0 to `DefaultInterpolatedStringHandler`, so the two sides lower differently and lose congruence, and the solver then proves most of them. 56 of the 697 are EQ006 (below).
 
 Top reason sets (up to 15; "" = no opaque):
 
@@ -114,10 +114,10 @@ Top reason sets (up to 15; "" = no opaque):
 - Not run. Neither side's runtime is installed: the box has Microsoft.NETCore.App 6.0.36 and 10.0.x, and Microsoft.WindowsDesktop.App 10.0.x only, so net5.0-windows and net6.0-windows both lack a runtime. ADR 0040 decision 3 forbids running either on another version, and the ticket asks for `--execute` only where both runtimes are installed.
 
 ## Findings
-- **Three pair-level lowering crashes**: `NullReferenceException` lowering `GitCommands.CommitDataManager::TryGetCommitLog(string,string,out string,out string,bool)`, `GitCommands.AppSettings::GetGitExtensionsFullPath()` and `GitExtUtils.GitArgumentBuilder::ToString()`. The same three crash on P2-058's `gitextensions-11284`, and PR #352 files them ("Five procedures make the lowerer throw a null reference").
-- **54 of 59 EQ006 cite a row with no change point**: P2-100. ADR 0040 applies such a row whenever the runtimes differ, and each of the 32 rows records a difference between .NET Framework 4.8 and .NET 10. On a .NET-to-.NET pair most of them cannot differ.
-- **Three EQ006 on net6.0 rows are false positives**: two belong to P2-075 (a row that matches members its change does not touch: enumerating `ListView.Groups`, and reading `TreeNodeCollection`'s indexer where only assigning a null node reaches the change), one is P2-101 (`FileStream.Position` read where the stream had no asynchronous read or write).
-- **`BugReporter.Program::Main()` is EQ002 with byte-identical source**: it passes the generated `ThisAssembly.Git.Sha` constant, which differs between the two commits. PR #352 files the cause ("A constant that only says where or from which commit the code was built is not a divergence").
-- **Slow pairs**: `GitUI.CommandsDialogs.FormRemotes::InitializeComponent()` again took about 40 minutes, and the contracts pass took 1h55m after `verify` ended. Both are P2-076's measurements (PR #345 in progress).
+- **Three pair-level lowering crashes**: `NullReferenceException` lowering `GitCommands.CommitDataManager::TryGetCommitLog(string,string,out string,out string,bool)`, `GitCommands.AppSettings::GetGitExtensionsFullPath()` and `GitExtUtils.GitArgumentBuilder::ToString()`. The same three crash on P2-058's `gitextensions-11284`; P2-105 owns them.
+- **56 of 59 EQ006 cite a row with no change point**: P2-108. ADR 0040 applies such a row whenever the runtimes differ, and each of the 32 rows records a difference between .NET Framework 4.8 and .NET 10. On a .NET-to-.NET pair most of them cannot differ.
+- **Three EQ006 on net6.0 rows are false positives**: two belong to P2-075 (a row that matches members its change does not touch: enumerating `ListView.Groups`, and reading `TreeNodeCollection`'s indexer where only assigning a null node reaches the change), one is P2-109 (`FileStream.Position` read where the stream had no asynchronous read or write).
+- **`BugReporter.Program::Main()` is EQ002 with byte-identical source**: it passes the generated `ThisAssembly.Git.Sha` constant, which differs between the two commits. P2-098 owns the cause.
+- **Slow pairs**: `GitUI.CommandsDialogs.FormRemotes::InitializeComponent()` again took about 40 minutes, and the contracts pass took 1h55m after `verify` ended. Both are what P2-076 measured; this run predates its fix (PR #345).
 - `Conversion` alone is 15.2% of changed pairs and `switch-pattern` alone 6.8%, with no open owner. Reported only: P2-066 does not ask for owners of opaque reasons.
-- Restoring this pair needed no workaround. Fetching it needed `-Fetch`'s wider `global.json` patch (this ticket).
+- Restoring this pair needed no workaround. Fetching it needed `-Fetch`'s wider `global.json` patch (P2-058).
