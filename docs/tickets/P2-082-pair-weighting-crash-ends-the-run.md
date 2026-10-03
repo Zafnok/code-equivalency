@@ -66,3 +66,16 @@ P2-083's lowering crashes on the same pairs. Changing how a pair is weighed.
   (`const bool` flag) whose dead edge named a block that was never lowered. A Release build does not validate, so
   that procedure reaches `IrLoopAnalysis.Search` and throws at this ticket's line 102. Rerun with P2-090 in before
   hunting for the construct; criterion 1 still has to name the pair, and criteria 3 (the validator check) and 4 stand.
+- In progress (2026-10-02), branch `P2-082-pair-weighting-crash`. Done: criterion 4 (`Verified` catches a throw from
+  deciding or weighing a pair; `CompareCommandTests.Compare_PairWhoseWeighingThrows_IsReportedAsNotificationAndOtherPairsVerified`)
+  and criterion 3's validator half (`IrValidator` reports a block with no terminator as IR014;
+  `IrValidatorTests.IR014ABlockWithoutATerminator`). Open: criteria 1, 2 and 5.
+- A `full` run of `openra-17989` at this branch (P2-090 in) was started and stopped by hand at verify 151 of 10114,
+  3 minutes 20 seconds in, because its own estimate was about two hours. Up to there: no lowering failure, no weighing
+  failure, 145 congruent, 2 divergent, 4 unknown. It got past the point where ef79ff6 died, but it did not finish, so it
+  says nothing yet about the remaining pairs. The pair checkouts are restored in the P2-065 worktree's `.corpus/`.
+- Next: rerun `full` on both pairs to the end (criterion 5). A pair that still fails at weighing is named by its
+  `Weighing ... failed` notification, which settles criterion 1. If none does, P2-090 fixed the construct, and the pair
+  has to be named by running this branch's `CompareCommand` fix on a tree without P2-090.
+- Decision: the new rule id IR014 lives in `IrDiagnosticIds.cs`, which the Files list does not name; a validator check
+  cannot be reported without an id.
