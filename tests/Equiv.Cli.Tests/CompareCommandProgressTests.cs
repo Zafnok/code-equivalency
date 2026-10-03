@@ -203,6 +203,59 @@ public sealed partial class CompareCommandProgressTests
             StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-076 criterion 4: the contracts pass (ADR 0036) is the <c>contracts</c> phase, between <c>verify</c> and
+    /// <c>write</c>. Its items are the pairs it re-verifies, the Equivalent results that still assume a lowered callee, each
+    /// with the weight it had in <c>verify</c> and whether a contract proved it; no other result is an item.
+    /// </summary>
+    [Fact]
+    public void ContractsPassIsAPhase()
+    {
+        MatchResult match = new([Caller("T::Proved()", "T::F()"), Caller("T::Kept()", "T::F()"), Caller("T::Differs()", "T::F()"), Caller("T::F()")], [], [], []);
+        Dictionary<string, Verdict> verdicts = new(StringComparer.Ordinal)
+        {
+            ["T::Proved()"] = new Equivalent(ProofMethod.Bounded),
+            ["T::Kept()"] = new Equivalent(ProofMethod.Bounded),
+            ["T::Differs()"] = new Divergent(Candidate),
+            ["T::F()"] = new Divergent(Candidate),
+        };
+        FakeBackend proving = new(verdicts)
+        {
+            Contracts = new Dictionary<string, Equivalent>(StringComparer.Ordinal)
+            {
+                ["T::Proved()"] = new Equivalent(ProofMethod.Bounded) { ContractsUsed = [new ContractUse("T::F()", "true", "observed-predicates")] },
+            },
+        };
+        FakeBackend failing = new(verdicts) { ContractFailure = new InvalidOperationException("contract bug") };
+        long weight = PairWeight.Of(match.Pairs[0].OldBody!, match.Pairs[0].NewBody!, solver: true);
+
+        List<string> proved = Events(match, proving);
+        List<string> failed = Events(match, failing);
+
+        Assert.Equal(
+            [
+                "phase-done",
+                Invariant($"phase contracts 2 {2 * weight}"),
+                Invariant($"item T::Proved() {weight}"), "done proved",
+                Invariant($"item T::Kept() {weight}"), "done unchanged",
+                "phase-done",
+                "phase write 1 1",
+            ],
+            proved.GetRange(proved.IndexOf("phase-done"), 8));
+        Assert.Equal(["done failed", "done failed"], failed.Where(static e => e.StartsWith("done ", StringComparison.Ordinal)).Skip(4).Take(2), StringComparer.Ordinal);
+        Assert.Equal(["T::Proved()", "T::Kept()"], proving.ContractCalls.Select(static call => call.Caller), StringComparer.Ordinal);
+    }
+
+    /// <summary>A run that re-verifies no pair under contracts has no <c>contracts</c> phase.</summary>
+    [Fact]
+    public void A_Run_That_Re_Verifies_Nothing_Has_No_Contracts_Phase()
+    {
+        MatchResult match = new([Caller("T::Differs()", "T::F()"), Caller("T::F()")], [], [], []);
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { ["T::Differs()"] = new Divergent(Candidate), ["T::F()"] = new Divergent(Candidate) });
+
+        Assert.DoesNotContain(Events(match, backend), static e => e.StartsWith("phase contracts", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Run_Rejects_A_Null_Log()
     {
@@ -230,6 +283,25 @@ public sealed partial class CompareCommandProgressTests
         {
             File.Delete(outPath);
         }
+    }
+
+    /// <summary>The events of one run on <paramref name="match"/>.</summary>
+    private static List<string> Events(MatchResult match, FakeBackend backend)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        RecordingLog log = new();
+        _ = CaptureStdErr(() => CaptureStdOut(() => CompareCommand.Run(
+            Options(legacy.Path, modern.Path), [new FakeFrontend("csharp", _ => true, match)], backend, new InMemoryReportSink(), log)));
+        return log.Events;
+    }
+
+    /// <summary>A pair whose bodies call each of <paramref name="callees"/> once, in order, and return nothing.</summary>
+    private static ProcedurePair Caller(string identity, params string[] callees)
+    {
+        string calls = string.Concat(callees.Select(static (callee, i) => Invariant($"  %c{i}: bv32 = call \"{callee}\"()\n")));
+        IrProcedure body = IrText.Parse($"proc \"{identity}\" () entry B0\nB0:\n{calls}  ret\n");
+        return new ProcedurePair(new ProcedureIdentity(identity), new ProcedureIdentity(identity), body, body);
     }
 
     private static CompareOptions Options(string legacy, string modern) =>

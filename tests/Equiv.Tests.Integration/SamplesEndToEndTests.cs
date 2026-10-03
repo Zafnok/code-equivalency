@@ -382,6 +382,29 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-071 criteria 2 and 3 (ADR 0043): a discarded extra read of <c>String.Length</c> and a new
+    /// <c>Collection&lt;int&gt;</c> stored where the legacy side stored a new <c>List&lt;int&gt;</c> are no calls, so both
+    /// pairs are Equivalent by the solver. A modern side that calls <c>list.Clear()</c>, a member with an effect, stays
+    /// Divergent on that call. The checked-in snapshot is the whole run.
+    /// </summary>
+    [Fact]
+    public async Task EffectFreeBclCall_AnEffectFreeMemberIsNoCallAndAMemberWithAnEffectStaysDivergent()
+    {
+        SampleRun run = RunSample("effect-free-bcl-call");
+        Result first = Single("effect-free-bcl-call", "::First(");
+        Result basket = Single("effect-free-bcl-call", "Basket::.ctor(");
+        Result reset = Single("effect-free-bcl-call", "::Reset(");
+
+        Assert.Equal(await Snapshot("effect-free-bcl-call"), run.NormalizedSarif);
+        Assert.Equal("EQ001", first.RuleId);
+        Assert.Equal("bounded", first.GetProperty<string>("proofMethod"));
+        Assert.Equal("EQ001", basket.RuleId);
+        Assert.Equal("bounded", basket.GetProperty<string>("proofMethod"));
+        Assert.Equal("EQ002", reset.RuleId);
+        Assert.Equal(4, run.Log.Runs[0].Results.Count);
+    }
+
+    /// <summary>
     /// Ticket P2-064 criterion 5: the three methods the same API swap was made in share one review group, which ranks above
     /// the group of the method that changed on its own. The checked-in snapshot is the whole run.
     /// </summary>

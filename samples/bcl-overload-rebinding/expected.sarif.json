@@ -264,19 +264,10 @@
             }
           },
           "externalCallees": {
-            "legacy": [
-              {
-                "member": "System.String::get_Length()",
-                "callSites": 2
-              }
-            ],
+            "legacy": [],
             "modern": [
               {
                 "member": "System.String::TrimEnd(char)",
-                "callSites": 2
-              },
-              {
-                "member": "System.String::get_Length()",
                 "callSites": 2
               },
               {

@@ -63,3 +63,6 @@ Rebinding in user or third-party libraries (P2-069). Overloads that change behav
   empty `params` array; the IOperation lowering makes it a fresh array and the compiler's IL calls
   `Array.Empty<char>()`, so the two lowerings of that one body are not proved equal. It joined the
   test's `Known` list with that reason. The pair itself is unaffected: the catalogue entry drops the array.
+- Merge with `main` after P2-071 (ADR 0043): `String::get_Length()` is now a pure function, not a call, so
+  the sample's snapshot lost it from the run's call census. Verdicts and applied entries are unchanged. In
+  `Accessor`, the effect-free getter check runs first and the catalogue rewrite after it.
