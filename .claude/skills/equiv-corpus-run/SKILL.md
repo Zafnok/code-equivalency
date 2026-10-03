@@ -55,6 +55,32 @@ When a repo fails at any step below, take the next row in `-Select`'s order, and
 skipped repo and the reason in the verdict file. `tool` pairs (`eshop-*`) and the other human
 pairs are optional extras. Run `./tools/corpus/corpus.ps1 -List` to see them.
 
+### Cleanup pairs
+
+A `cleanup` row in `pairs.csv` is a public commit whose author says it changes no behaviour (ADR
+0040 decision 5; `tools/corpus/README.md` lists each one's source). Both sides usually target the
+same runtime, so no runtime rule applies and EQ006 cannot fire. Cleanup pairs are never part of the
+default set and take no part in ADR 0028's rule table.
+- Fetch, restore and run one exactly as a human pair (sections 3 and 5): `-Fetch <slug>`, restore
+  both sides, then `full`. One plain `full` run is enough; the `--fail-on unknown` run is not needed.
+- Add a `full --execute` run only where every runtime in the first run's `run.properties.runtimes`
+  is installed (`dotnet --list-runtimes`). ADR 0040 decision 3 never substitutes another runtime, so
+  otherwise record "execution unavailable: <runtime> not installed" and move on. Installing a
+  runtime changes the machine: ask the user first.
+- Write the usual `docs/runs/<yyyy-mm-dd>-cleanup-<slug>/SUMMARY.md` from section 6's template, with
+  the mode written as `cleanup`. Under Load, add one line with the detected runtimes of both sides.
+- A pair whose solution does not load is replaced by another "no functional change" pull request
+  from the same repository's release notes. Record the skipped one and its reason in the verdict file.
+- The results go in `docs/runs/<yyyy-mm-dd>-cleanup-verdict.md`, under a "Cleanup pairs" heading,
+  outside ADR 0028's rule table and with no continue, re-scope or stop line. Per pair it reports:
+  the detected runtimes of both sides; matched pairs and changed pairs; and, of the changed pairs,
+  those proved Equivalent (by `proofMethod`), Unknown (by reason) and Divergent.
+- Adjudicate every Divergent as `docs/runs/2026-09-30-divergent-audit.md` does (ticket P2-047):
+  replay where there is one, otherwise a hand trace of both bodies against the model. **Confirmed**
+  means the cleanup changed behaviour: report it to the user by procedure identity before opening
+  the PR. **False positive** means a new `P2-nnn` precision ticket. Identities and classifications
+  only, never source text or model values.
+
 ## 3. Fetch and prepare
 
 Once per box: `./tools/corpus/corpus.ps1 -Prepare`. It writes sentinel `Directory.Build.props`,
