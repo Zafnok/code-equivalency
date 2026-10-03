@@ -559,7 +559,8 @@ internal static class CompareCommand
     /// carrying the exception, and its identity in the returned unverified list; every other pair is still
     /// verified. <see cref="OperationCanceledException"/> and <see cref="OutOfMemoryException"/> propagate unchanged.
     /// Each pair is one item of the <c>verify</c> phase, weighed by <see cref="PairWeight"/>, and the phase is bounded by
-    /// the pairs the solver decides (ADR 0038).
+    /// the pairs the solver decides (ADR 0038). A pair whose deciding or weighing throws fails the same way, before the
+    /// backend sees it, and weighs 1 (ticket P2-082).
     /// </summary>
     private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) Verified(
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, VerificationOptions options, IRunLog runLog, TextWriter error)
@@ -574,13 +575,20 @@ internal static class CompareCommand
         List<Notification> failures = [];
         List<ProcedureIdentity> unverified = [];
 
-        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New, Decision? Decided, long Weight)> pairs =
-            [.. lowered.Select(static p => Weighed(p.Pair, p.Old, p.New, Decide(p.Pair, p.Old, p.New)))];
-        List<int> solverRungs = [.. pairs.Where(static p => p.Decided is null).Select(static p => PairWeight.Rungs(p.Old, p.New))];
+        List<Weighing> pairs = [.. lowered.Select(static p => Weighed(p.Pair, p.Old, p.New))];
+        List<int> solverRungs = [.. pairs.Where(static p => p.Rungs > 0).Select(static p => p.Rungs)];
         runLog.Phase("verify", pairs.Count, pairs.Sum(static p => p.Weight), new PhaseBound(solverRungs.Count, options.TimeoutMs, solverRungs.DefaultIfEmpty(1).Max()));
-        foreach ((ProcedurePair pair, IrProcedure old, IrProcedure @new, Decision? decided, long weight) in pairs)
+        foreach ((ProcedurePair pair, IrProcedure old, IrProcedure @new, Decision? decided, long weight, _, Exception? crash) in pairs)
         {
             runLog.Item(pair.New.Value, weight);
+            if (crash is not null)
+            {
+                failures.Add(PairFailure("Weighing", pair.Old, pair.New, crash, error));
+                unverified.Add(pair.New);
+                runLog.ItemDone("failed");
+                continue;
+            }
+
             if (decided is not null)
             {
                 results.Add(decided.Result with { Lowering = pair.Lowering, Runtimes = pair.Runtimes, ReboundCalls = pair.ReboundCalls, ForwardersResolved = pair.ForwardersResolved });
@@ -606,7 +614,7 @@ internal static class CompareCommand
                     _ => "unknown",
                 });
             }
-            catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
+            catch (Exception exception) when (IsPairFailure(exception))
             {
                 failures.Add(PairFailure("Verifying", pair.Old, pair.New, exception, error));
                 unverified.Add(pair.New);
@@ -618,9 +626,24 @@ internal static class CompareCommand
         return (results, failures, unverified);
     }
 
-    private static (ProcedurePair Pair, IrProcedure Old, IrProcedure New, Decision? Decided, long Weight) Weighed(
-        ProcedurePair pair, IrProcedure old, IrProcedure @new, Decision? decided) =>
-        (pair, old, @new, decided, PairWeight.Of(old, @new, solver: decided is null));
+    /// <summary>
+    /// The pair decided without the solver if it can be, with its weight and, when the solver decides it, its rungs (0
+    /// otherwise). A throw is the pair's <see cref="Weighing.Crash"/>, not the run's end (ticket P2-082, ADR 0023).
+    /// </summary>
+    private static Weighing Weighed(ProcedurePair pair, IrProcedure old, IrProcedure @new)
+    {
+        try
+        {
+            Decision? decided = Decide(pair, old, @new);
+            return decided is null
+                ? new Weighing(pair, old, @new, decided, PairWeight.Of(old, @new, solver: true), PairWeight.Rungs(old, @new), Crash: null)
+                : new Weighing(pair, old, @new, decided, PairWeight.Of(old, @new, solver: false), Rungs: 0, Crash: null);
+        }
+        catch (Exception exception) when (IsPairFailure(exception))
+        {
+            return new Weighing(pair, old, @new, Decided: null, Weight: 1, Rungs: 0, exception);
+        }
+    }
 
     /// <summary>The result of a pair decided without the solver, with its one-word outcome; null when the solver decides it.</summary>
     private static Decision? Decide(ProcedurePair pair, IrProcedure old, IrProcedure @new)
@@ -746,7 +769,7 @@ internal static class CompareCommand
         {
             proved = backend.VerifyUnderContracts(old, @new, callees, options);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
+        catch (Exception exception) when (IsPairFailure(exception))
         {
             error.WriteLine($"warning: Verifying {result.Identity.Value} under callee contracts failed, so it keeps its verdict: {exception.Message}");
             options.Log.ItemDone("failed");
@@ -777,6 +800,9 @@ internal static class CompareCommand
     /// ADR 0023's record of a pair the tool failed on: an <c>error</c> notification naming both identities and carrying
     /// the exception, also written to stderr. <paramref name="stage"/> says what failed (<c>Lowering</c>, <c>Verifying</c>).
     /// </summary>
+    /// <summary>Whether <paramref name="exception"/> fails one pair (ADR 0023) rather than the run: cancellation and running out of memory end the run.</summary>
+    private static bool IsPairFailure(Exception exception) => exception is not OperationCanceledException and not OutOfMemoryException;
+
     private static Notification PairFailure(string stage, ProcedureIdentity old, ProcedureIdentity @new, Exception exception, TextWriter error)
     {
         string text = $"{stage} {old.Value} against {@new.Value} failed: {exception.Message}";
@@ -855,6 +881,9 @@ internal static class CompareCommand
 
     /// <summary>A pair's result decided without the solver, and the outcome the verify phase logs for it.</summary>
     private sealed record Decision(VerificationResult Result, string Outcome);
+
+    /// <summary>A lowered pair ready for the verify phase: its decision without the solver, weight, solver rungs (0 when none) and the exception that ended its weighing.</summary>
+    private sealed record Weighing(ProcedurePair Pair, IrProcedure Old, IrProcedure New, Decision? Decided, long Weight, int Rungs, Exception? Crash);
 
     /// <summary>Where <see cref="Report"/> writes: the SARIF sink, the run log and the run's two text streams (sonar(src): csharpsquid:S107).</summary>
     private sealed record Output(IReportSink Sink, IRunLog Log, Streams Streams);
