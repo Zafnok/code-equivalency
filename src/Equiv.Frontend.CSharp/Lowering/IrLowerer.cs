@@ -800,9 +800,11 @@ internal sealed class IrLowerer
     /// caller-information parameter is the input both sides share (ADR 0046; ticket P2-098).
     /// </summary>
     private IrVar? Lower(IOperation operation, LoweringContext context) =>
-        CallerLocation.Of(operation) is { } location ? heap.Inputs.Caller(location, operation.Type!)
-        : loops.Of(operation) is { } site ? ForEach(site, context)
-        : Operation(operation, context);
+        Supplied(operation) ?? (loops.Of(operation) is { } site ? ForEach(site, context) : Operation(operation, context));
+
+    /// <summary>The shared input <paramref name="operation"/> reads when it is a caller location the compiler supplied, or null.</summary>
+    private IrVar? Supplied(IOperation operation) =>
+        CallerLocation.Of(operation) is { } location ? heap.Inputs.Caller(location, operation.Type!) : null;
 
     private IrVar? Operation(IOperation operation, LoweringContext context)
     {
