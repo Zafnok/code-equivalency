@@ -1,4 +1,4 @@
-# P2-094 `x is not T t` lowers as the negation of its inner pattern
+# P2-104 `x is not T t` lowers as the negation of its inner pattern
 Status: todo
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.

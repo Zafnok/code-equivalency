@@ -191,7 +191,7 @@ Not run. The corpus row has no `verifyCommand`.
   changed pairs and behind 2 false EQ002: P2-099.
 - One lowering crash, a null reference, on
   `GitUI.UserControls.RevisionGrid.Graph.RevisionGraph::LoadingCompleted()`. It makes the run
-  exit 5: P2-095.
-- 43 timeouts, and two pairs that ran 91 and 48 minutes: P2-076 and P2-083, both open.
+  exit 5: P2-105.
+- 43 timeouts, and two pairs that ran 91 and 48 minutes: P2-076 and P2-101, both open.
 - The solver proved 7 of 351 changed pairs (2.0%). On Git Extensions' migration (P2-046) it
   proved 77 of 1143 (6.7%).

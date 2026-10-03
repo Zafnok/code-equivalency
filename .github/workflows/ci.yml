@@ -205,6 +205,14 @@ jobs:
             exit 1
           fi
 
+  ticket-ids:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Every ticket id is one file, and every dependency resolves
+        run: bash .github/scripts/check-ticket-ids.sh
+
   gitleaks:
     runs-on: ubuntu-latest
     permissions:

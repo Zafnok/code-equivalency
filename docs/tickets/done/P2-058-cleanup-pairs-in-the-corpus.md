@@ -75,7 +75,7 @@ Changing ADR 0028's thresholds. Agent-made cleanups (a new migration prompt is a
   Divergent that rests on a generated commit hash. Criterion 4's "confirmed" means the cleanup
   changed behaviour, which it did not, and the two builds do differ, so it is not a false positive.
 - Decision: PowerShell's per-pair figures use the 12 pairs the pull request edited, with the 140
-  the census counts stated beside them. The other 128 have identical source (P2-097).
+  the census counts stated beside them. The other 128 have identical source (P2-107).
 - `--execute`: net8.0 is not installed here (only 6.0.36, 10.0.9 and 10.0.12), so the two net8.0
   pairs have no execution run. `gitextensions-11284` is net6.0 and was run with `--execute`.
 - The `gitextensions-11372` run took 4h43m, of which two pairs took 2h19m. Another session's corpus

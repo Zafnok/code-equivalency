@@ -459,7 +459,7 @@ work, P2-050, P1-019, P2-051 and P2-052.
 - P2-050 (M) Deterministic solver budgets (Z3 `rlimit`, wall-clock as a backstop), and the
   timeout Unknowns measured at 1x, 4x and 20x. Needs P2-046. Done 2026-10-01: `resourceLimit`
   5,000,000 with `timeoutMs` 60,000 behind it. Of 172 timeouts, 4x decides 37 and 20x decides 73,
-  none Equivalent (`docs/runs/2026-10-01-timeout-budget.md`); P2-082 and P2-083 filed.
+  none Equivalent (`docs/runs/2026-10-01-timeout-budget.md`); P2-100 and P2-101 filed.
 - P1-019 (M) Spike: how many `abstraction` Unknowns (261 of 700 on Git Extensions) refinement would
   resolve. An ADR only if the answer is at least 5%. Needs P2-046.
 - P2-051 (M) `runtime-diff` covers Windows Forms and `System.Drawing`, and every external callee.
@@ -495,7 +495,7 @@ work, P2-050, P1-019, P2-051 and P2-052.
   PowerShell's 12 edited pairs, not its 128 identical opaque ones), the solver proved 57 (9.9%),
   52 are Divergent and 466 Unknown. 51 of the 52 Divergent are
   false positives and 1 is a commit-hash constant that differs between any two commits
-  (`docs/runs/2026-10-02-cleanup-verdict.md`). Filed as P2-093 to P2-099.
+  (`docs/runs/2026-10-02-cleanup-verdict.md`). Filed as P2-098, P2-099 and P2-103 to P2-107.
 
 Found by P2-058's cleanup runs (`docs/runs/2026-10-02-cleanup-verdict.md`). A cleanup pair keeps
 the runtime, so every one of these is about the engine and none is about a runtime rule. In order
@@ -505,13 +505,13 @@ of how much of the cleanup result each explains:
   keeps unedited bodies from being congruent. Starts with `equiv-adr`.
 - P2-099 (L) A collection expression equals the `new` and initializer it replaces. It is an opaque
   `Conversion` in 308 of gitextensions-11372's 351 changed pairs, and behind 2 false Divergent.
-- P2-093 (M) `x as T` followed by a null check equals `x is T t`. All 5 of powershell-19687's
+- P2-103 (M) `x as T` followed by a null check equals `x is T t`. All 5 of powershell-19687's
   Divergent, and none of its 12 edited pairs is proved.
-- P2-094 (S) `x is not T t` lowers as the negation of its inner pattern, not as an opaque.
-- P2-095 (M) Five procedures make the lowerer throw a null reference, so all three runs exit 5.
-- P2-096 (M) A body whose only diagnostics are warnings promoted to errors is not `unbound`. 82
+- P2-104 (S) `x is not T t` lowers as the negation of its inner pattern, not as an opaque.
+- P2-105 (M) Five procedures make the lowerer throw a null reference, so all three runs exit 5.
+- P2-106 (M) A body whose only diagnostics are warnings promoted to errors is not `unbound`. 82
   pairs on powershell-19687. Starts with `equiv-adr`. Needs P2-085.
-- P2-097 (M) On a same-runtime pair, a whole-body opaque pair with identical source is not
+- P2-107 (M) On a same-runtime pair, a whole-body opaque pair with identical source is not
   "changed": 128 of powershell-19687's 140 changed pairs. Starts with `equiv-adr`.
 - P2-067 (L) `DelegateCreation` is 17.0% of Git Extensions' changed pairs on its own and has no open
   owner: split it by cause, then lower the chosen construct. Found by P2-046. Done 2026-10-01: in
@@ -568,7 +568,7 @@ OpenRA are rerun once they land:
   same text binds differently on the two runtimes. Done 2026-10-01: a string of `string` and integer
   holes lowers as the concatenation of its parts under both bindings; the reason alone fell from 5 to
   2 pairs on eshop-manual (7.7%), 25 to 2 on Duplicati and 45 to 7 on Git Extensions.
-- P2-089 (S) The 2 eshop-manual pairs left: an integer hole followed by a hole that runs code, which
+- P2-102 (S) The 2 eshop-manual pairs left: an integer hole followed by a hole that runs code, which
   the two bindings format in a different order. Covering it assumes a hole does not change the
   current culture. Starts with `equiv-adr`'s bar test. Needs P2-086.
 - P2-088 (S) `AnonymousObjectCreation` alone is 7.7% of eshop-manual's changed pairs (2 of 26): decide
@@ -613,10 +613,10 @@ rung, a pair or a run.
   and no query ended sooner by contention. Needs P2-050, P2-076.
 
 Found by P2-050's measurement (`docs/runs/2026-10-01-timeout-budget.md`):
-- P2-082 (M) The same query under the same resource limit ends the same way whenever the garbage
+- P2-100 (M) The same query under the same resource limit ends the same way whenever the garbage
   collector runs. Two runs at the default budget agreed on 179 of 184 pairs; with collections made
   rare the pairs that differed repeat. Needs P2-050.
-- P2-083 (M) Measurement: what the 99 timeouts that 20 times the budget does not decide have in
+- P2-101 (M) Measurement: what the 99 timeouts that 20 times the budget does not decide have in
   common, and whether another tactic pipeline proves any. Needs P2-050, P2-076.
 
 Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):

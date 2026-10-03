@@ -24,6 +24,7 @@ are pinned in `Directory.Packages.props` (Central Package Management) and listed
 | Security | GitHub CodeQL (C#), `dotnet list package --vulnerable --include-transitive` fails on any | | yes |
 | Dependency licence | `tools/licence-check` (M0-010), wraps the `nuget-license` local tool | every package in every `packages.lock.json`, `.config/dotnet-tools.json` and samples/ direct reference must resolve to a licence on `tools/licence-check/policy.json`'s allowlist or a reasoned exception in it (ADR 0017); also regenerates `THIRD-PARTY-NOTICES.md` and fails if that changes the tracked file | yes |
 | Secrets | gitleaks action | | yes |
+| Ticket ids | `ticket-ids` job (ci.yml), `.github/scripts/check-ticket-ids.sh` | no two files in `docs/tickets/` and `done/` share an id, and every open ticket's `Depends on:` id is exactly one file. Two PRs branched from the same `main` take the same next number; the one that merges second renumbers its ticket and every reference to it | yes |
 | Supply chain | Dependabot weekly, NuGet lock files (`RestorePackagesWithLockFile`), `--locked-mode` in CI. `dependabot-fixup.yml` completes each Dependabot NuGet PR (see "Dependabot NuGet PRs" below) | | yes |
 | Versioning | MinVer from git tags | | n/a |
 | Packaging | `dotnet publish` single-file for win-x64 + linux-x64, Docker multi-stage image (`equiv:<version>`), GitHub Action wrapper `action.yml` (M3-004). `rolling-release.yml` tags every green `main` commit (patch unless a `Release:` footer says otherwise; `.claude/skills/equiv-release`) and `release.yml` builds and publishes all three for that tag; `parity-run.ps1` (M3-029) exercises the published binaries, not `dotnet run`, so the loop-free build gate and the release artifact are the same code path | M3 | yes from M3 |
@@ -71,7 +72,7 @@ licence is not on the allowlist fails the fix-up and needs a person.
 ## Required checks (M0-004)
 
 CI runs in `.github/workflows/`: `ci.yml` (gates on windows-latest + ubuntu-latest, plus
-`parity`, `vulnerable-packages` and `gitleaks`), `codeql.yml`, `mutation.yml` (blocking since M0-011;
+`parity`, `vulnerable-packages`, `ticket-ids` and `gitleaks`), `codeql.yml`, `mutation.yml` (blocking since M0-011;
 see Mutation row above), `sonar.yml` (M0-006, informational; see Code smells row above).
 Applying branch protection with these as required checks on GitHub
 is the user's action — this ticket only wires the workflows. Mark as required:
@@ -81,6 +82,7 @@ is the user's action — this ticket only wires the workflows. Mark as required:
 - `vulnerable-packages`
 - `parity` (M3-029; `parity-run (windows-latest)` and `parity-run (ubuntu-latest)` feed it)
 - `gitleaks`
+- `ticket-ids`
 - `analyze` (CodeQL)
 - `stryker (Equiv.Core, Equiv.Core.Tests)`, `stryker (Equiv.Cli, Equiv.Cli.Tests)`,
   `stryker (Equiv.Frontend.CSharp, Equiv.Frontend.CSharp.Tests)`,

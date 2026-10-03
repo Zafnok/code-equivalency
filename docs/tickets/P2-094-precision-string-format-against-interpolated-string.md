@@ -28,7 +28,7 @@ to the same `Concat` chain.
 ## Spec references
 `docs/tickets/IOPERATION-COVERAGE.md` rows `InterpolatedString` and `Invocation`;
 `docs/tickets/done/P2-086-interpolated-string-owner.md` (the representation and its evaluation-order
-limits); ADR 0041 (closed calls); ADR 0018; P2-089 (an integer hole before a hole that runs code).
+limits); ADR 0041 (closed calls); ADR 0018; P2-102 (an integer hole before a hole that runs code).
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. Decide with `equiv-decide`, and through `equiv-adr`'s bar test if the decision needs more than
@@ -54,7 +54,7 @@ and `README.md`.
 - `SamplesEndToEndTests` row for `cleanup-modern-syntax`; an integration test for criterion 5.
 
 ## Size guard
-A change to how the interpolated string itself lowers is P2-089's, not this ticket's: stop.
+A change to how the interpolated string itself lowers is P2-102's, not this ticket's: stop.
 
 ## Out of scope
 `string.Concat` and `+` chains (already the same IR). `StringBuilder.AppendFormat`. Holes of types

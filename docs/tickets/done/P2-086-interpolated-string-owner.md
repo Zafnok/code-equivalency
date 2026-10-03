@@ -152,7 +152,7 @@ The IL fallback. `string.Format` calls written by hand.
 - **`eshop-manual` is still over the 5% line: 2 of 26 (7.7%).** That is the number of pairs the split
   found whose `int` hole is followed by a hole that calls `Count()`, the shape the last decision above
   leaves opaque. Covering it takes the assumption that evaluating a hole does not change the current
-  culture, which is a new line in VERIFICATION-MODEL section 1 and so a new ADR. Filed as P2-089,
+  culture, which is a new line in VERIFICATION-MODEL section 1 and so a new ADR. Filed as P2-102,
   which is the owner ADR 0028 asks for. The reason is under 1% on the two large pairs; the 2 pairs
   left on `duplicati-3124` are the number the split found with a `System.TimeSpan` hole.
 - **What this does not change.** A pair is lowerable, not decided. Each `Concat` and `ToString` is a
