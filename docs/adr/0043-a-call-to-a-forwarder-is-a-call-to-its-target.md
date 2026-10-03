@@ -13,15 +13,18 @@ helper's body is in the run, and it says the two calls are one call.
 
 ## Decision
 A **forwarder** is a method declared in the source of the solution being lowered that is all of:
-- an ordinary static method that is not `virtual`, not generic and not in a generic type, with no
-  `ref`, `out` or `in` parameter, that does not return by reference, and whose declaring type has no
-  static constructor, written or implied by a static field or property initializer;
+- an ordinary static method that is not `virtual`, not `async`, not generic and not in a generic
+  type, with no `ref`, `out` or `in` parameter, that does not return by reference, and whose
+  declaring type has no static constructor, written or implied by a static field or property
+  initializer;
+- one that carries no `[Conditional]` attribute, and neither it nor its declaring type carries an
+  attribute from `System.Security` or a namespace under it;
 - one whose body, block or arrow, is exactly one statement: `return G(p1, ..., pn);`, or `G(p1, ..., pn);`
   when it returns nothing;
 - where `G` is a static method, each argument is written explicitly and is the forwarder's own
   parameter at the same position with nothing applied to it (no conversion node), every parameter
-  is passed, `G` has no other parameter, and the parameter types and the return type of the two
-  methods are the same.
+  is passed, `G` has no other parameter and takes each by value, and the parameter types and the
+  return type of the two methods are the same.
 
 `G` is the forwarder's **target**. When the target is itself a forwarder the chain is followed to its
 end, and a chain that comes back to a method already on it is not followed at all. A call to a
@@ -51,6 +54,10 @@ Every result of a pair where a forwarder was resolved in either body carries
   longer uses, and an Equivalent by congruence would not name the forwarder it assumed.
 - The conditions are the ones a symbol and a one-statement body can show without lowering the
   forwarder. Each one that is dropped needs something the caller's lowering would have to model.
+- Four conditions are there because the call would otherwise do more, or less, than the target call.
+  A static constructor runs before the forwarder does. An `async` forwarder puts the target's
+  exception into a task. A `[Conditional]` call is not compiled when its symbol is undefined. A
+  declarative security attribute can make the call throw before the target runs.
 
 ## Rejected
 - **A catalogue entry per helper (ADR 0020).** The catalogue is shipped and cited. A helper is the

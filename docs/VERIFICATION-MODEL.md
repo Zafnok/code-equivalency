@@ -342,12 +342,14 @@ Migration-specific normalisations (applied to both sides before matching):
   lists its rebound pairs in `properties.reboundCalls`. A call to a member with another name, or at a
   site with other text, is an ordinary call. The IL lowering (section 3.1) marks the same identities.
 - Forwarders (ADR 0043, ticket P2-068). A forwarder is an ordinary static method declared in the
-  solution's source that is not `virtual`, not generic and not in a generic type, has no `ref`, `out`
-  or `in` parameter, does not return by reference, whose declaring type has no static constructor
-  (written, or implied by a static initializer), and whose body is the one statement
+  solution's source that is not `virtual`, not `async`, not generic and not in a generic type, has no
+  `ref`, `out` or `in` parameter, does not return by reference, whose declaring type has no static
+  constructor (written, or implied by a static initializer), that has no `[Conditional]` attribute
+  and, like its declaring type, none from `System.Security` or below, and whose body is the one statement
   `return G(p1, ..., pn);` (or `G(p1, ..., pn);` when it returns nothing): `G` is a static method, the
   arguments are explicit and are the forwarder's own parameters, each at its own position with no
-  conversion, `G` has no other parameter, and the parameter and return types of the two are the same.
+  conversion, `G` has no other parameter and takes each by value, and the parameter and return types
+  of the two are the same.
   A call to a forwarder is lowered as the same call to `G`, or to the end of the chain when `G` is a
   forwarder too; a chain that returns to a method already on it is not followed. The rename map, the
   catalogue above, the runtime-changes table, closed calls (ADR 0041), rebound call sites and the
