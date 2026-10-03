@@ -1,5 +1,5 @@
 # P2-109 Unrolling a loop costs time in proportion to its size, not to its square
-Status: in-progress
+Status: done (PR #372)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-076
