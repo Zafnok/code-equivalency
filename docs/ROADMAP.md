@@ -505,6 +505,10 @@ of how much of the cleanup result each explains:
   keeps unedited bodies from being congruent. Starts with `equiv-adr`.
 - P2-099 (L) A collection expression equals the `new` and initializer it replaces. It is an opaque
   `Conversion` in 308 of gitextensions-11372's 351 changed pairs, and behind 2 false Divergent.
+  Done 2026-10-03: the solver proves 160 of the 351 (45.6%, from 2.0%); the 2 Divergent remain
+  (`docs/runs/2026-10-03-cleanup-gitextensions-11372/SUMMARY.md`).
+- P2-109 (L) A collection expression whose elements are evaluated ahead of it, and the targets
+  P2-099 left opaque: 3 false Divergent and 104 changed pairs on gitextensions-11372. Needs P2-071.
 - P2-103 (M) `x as T` followed by a null check equals `x is T t`. All 5 of powershell-19687's
   Divergent, and none of its 12 edited pairs is proved.
 - P2-104 (S) `x is not T t` lowers as the negation of its inner pattern, not as an opaque.
