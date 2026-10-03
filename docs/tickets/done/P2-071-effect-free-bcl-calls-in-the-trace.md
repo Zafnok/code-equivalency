@@ -1,5 +1,5 @@
 # P2-071 An effect-free BCL call is not an observable call-trace event
-Status: in-progress
+Status: done (PR #362)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-047
@@ -44,7 +44,7 @@ User-code purity analysis.
 
 ## Notes
 - Found by P2-047: 3 false positives on Git Extensions.
-- Decision (criterion 1, through `equiv-adr`): a new ADR, 0043, not a clarification of 0018. It adds a
+- Decision (criterion 1, through `equiv-adr`): a new ADR, 0043 (PR #361), not a clarification of 0018. It adds a
   catalogue of members by name, which ADR 0041 had rejected in another form, and one assumption to
   VERIFICATION-MODEL section 1. The catalogue has one getter (`System.String::get_Length()`) and the
   parameterless constructors of 14 collection types declared in metadata. A use of either is no
@@ -87,3 +87,12 @@ User-code purity analysis.
 - Surprise: a Divergent that depended on the value of `String.Length` is now Unknown (`abstraction`).
   ADR 0043 lists it under Consequences. `ClosedCallsTests` used `s.Length` as a closed call and now
   uses `s.Trim()`.
+- Deviation: the sample is not the Goal's pair to the letter. `Lengths.Reset` has no null guard on the
+  list and `Basket` exposes `Items`, not a member that calls through the list. A `list == null` test and
+  a call through an inherited interface member each lower differently from IL in ways
+  `IlLoweringParityTests.Known` already records (a null test of a conversion), and neither is this
+  ticket's subject. `Lengths.First` is the Goal's pair as written.
+- Local runs: `Equiv.Frontend.CSharp.Tests` and `Equiv.Cli.Tests` pass. In `Equiv.Tests.Integration`
+  the 24 tests that load `samples/webapi-basic` or `samples/version-bump` fail in this worktree, which
+  has neither sample's restored references. `IlLoweringParityTests` is one of them, so it was run
+  restricted to the new sample.
