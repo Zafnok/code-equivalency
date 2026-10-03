@@ -27,13 +27,6 @@ internal static class CallIdentityFactory
         return Of(Name(method, renames), suppressedRuntimeChanges, interval);
     }
 
-    /// <summary>The <see cref="CallIdentity.Value"/> of a call to <paramref name="method"/>, which no runtime rule changes.</summary>
-    public static string Name(IMethodSymbol method, RenameMap renames)
-    {
-        ArgumentNullException.ThrowIfNull(method);
-        return Constructed(RoslynIdentity.Of(method, renames).Value, [.. TypeArguments(method.ContainingType), .. method.TypeArguments]);
-    }
-
     /// <summary>
     /// As the overload without a compilation, but also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
     /// <paramref name="method"/>'s containing assembly is one of <paramref name="compilation"/>'s reference assemblies
@@ -52,6 +45,13 @@ internal static class CallIdentityFactory
     {
         CallIdentity callee = new(value);
         return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, interval, suppressedRuntimeChanges, out _) };
+    }
+
+    /// <summary>The <see cref="CallIdentity.Value"/> of a call to <paramref name="method"/>, which no runtime rule changes.</summary>
+    public static string Name(IMethodSymbol method, RenameMap renames)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        return Constructed(RoslynIdentity.Of(method, renames).Value, [.. TypeArguments(method.ContainingType), .. method.TypeArguments]);
     }
 
     private static bool IsExternal(IAssemblySymbol assembly, Compilation compilation) =>

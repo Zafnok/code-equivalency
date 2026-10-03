@@ -42,7 +42,7 @@ internal static class Forwarders
         ArgumentNullException.ThrowIfNull(compilation);
         HashSet<IMethodSymbol> followed = new(SymbolEqualityComparer.Default);
         Resolved? last = null;
-        for (Resolved? next = Target(method, compilation); next is not null; next = Target(next.Target, next.Compilation))
+        for (Resolved? next = TargetOf(method, compilation); next is not null; next = TargetOf(next.Target, next.Compilation))
         {
             if (!followed.Add(next.Target))
             {
@@ -56,7 +56,7 @@ internal static class Forwarders
     }
 
     /// <summary>What <paramref name="method"/> forwards to, read from its source in the compilation that holds it; null when it is not a forwarder.</summary>
-    private static Resolved? Target(IMethodSymbol method, Compilation compilation) =>
+    private static Resolved? TargetOf(IMethodSymbol method, Compilation compilation) =>
         method is
         {
             MethodKind: MethodKind.Ordinary,
