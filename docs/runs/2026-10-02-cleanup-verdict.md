@@ -69,7 +69,7 @@ The one "real by construction" result is not counted as confirmed, because crite
 confirmed as "the cleanup changed behaviour", and it is not a false positive either, because the
 two builds do pass different strings.
 
-Divergent precision on these pairs is 0 of 51. P2-047's audit measured 3.8% (2 of 53) on
+Divergent precision on these pairs is 0 of 51. P2-047's audit measured 3.8% (2 of 52) on
 migrations. Neither sets a threshold.
 
 ### What this says about cleanup commits

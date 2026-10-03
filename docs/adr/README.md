@@ -50,3 +50,4 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0041 | A call to a string or primitive member with only string and primitive arguments reaches no heap map |
 | 0042 | A call site with the same text on both sides that binds to a different callee is possibly the same call, and its outcome is unknown |
 | 0043 | A catalogued BCL member that runs no observable code is not a call |
+| 0044 | Evaluating a hole of an interpolated string leaves the current culture's integer formatting as it found it |

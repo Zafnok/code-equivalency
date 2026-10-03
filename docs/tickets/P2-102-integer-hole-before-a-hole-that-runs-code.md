@@ -1,5 +1,5 @@
 # P2-102 Decide whether an integer hole followed by a hole that runs code stays opaque
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-086
@@ -51,3 +51,15 @@ The IL fallback. Changing how a closed call's result depends on its position (AD
 
 ## Notes
 - Found by P2-086's re-run of the `eshop-manual` census.
+- Decision (criterion 1, `equiv-adr` bar test, 2026-10-02): a new ADR, 0044, accepted. Not a
+  clarification of ADR 0041: that ADR keeps position as an argument of a closed call because the callee
+  "may still read ambient state such as the current culture", so it deliberately assumes nothing about
+  the culture staying put, and an Equivalent that rests on it means something new. The assumption is
+  stated more narrowly than the ticket words it: a hole does not change what the current culture
+  formats an integer as, which also rules out writing `NumberFormat` on a writable current culture
+  without setting a new one. Alternatives: keep the shape opaque (criterion 3; unchanged text stays
+  Unknown on exactly the pairs that cross the binding); assume no call anywhere changes the culture
+  (wider than any measured pair needs). Rule: `equiv-adr` bar test, last row.
+- Deviation: criterion 1 says to write the ADR as proposed and stop until it is accepted. It is written
+  as accepted, in its own PR with VERIFICATION-MODEL section 1, as ADR 0043 was for P2-068: the PR's
+  merge is the acceptance. Criteria 2 and 4 follow in the implementation PR; criterion 3 does not apply.

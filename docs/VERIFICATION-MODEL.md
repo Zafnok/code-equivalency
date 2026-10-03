@@ -38,6 +38,12 @@ event and it cannot throw. An empty `List<T>` and an empty `Collection<T>`, each
 converted to an interface at once, are one object. This assumes that no code asks such an object for
 its concrete type (a type test, a downcast, `GetType`, `ToString`, reflection or serialisation).
 
+Evaluating a hole of an interpolated string is assumed to leave the current culture's integer
+formatting as it found it: the hole does not set the thread's current culture, and does not write the
+number format of a writable one (ADR 0044). `string.Format` formats an integer hole after the later
+holes have run and `DefaultInterpolatedStringHandler` before, so only a pair whose sides bind the same
+text differently leans on this.
+
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
 No single algorithm decides equivalence for every program pair, but this sub-problem
