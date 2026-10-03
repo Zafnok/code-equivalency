@@ -604,9 +604,8 @@ public sealed class Z3BackendTests
             """);
         for (int k = 0; k < calls; k++)
         {
-            string id = k.ToString(CultureInfo.InvariantCulture);
-            string next = (100 + k).ToString(CultureInfo.InvariantCulture);
-            text.Append("  %f" + id + ": bv32 = call \"X::F(int)\"(%i) threw %g" + id + ": bool\n  br %g" + id + ", B4, B" + next + "\nB" + next + ":\n");
+            int next = 100 + k;
+            text.Append(CultureInfo.InvariantCulture, $"  %f{k}: bv32 = call \"X::F(int)\"(%i) threw %g{k}: bool\n  br %g{k}, B4, B{next}\nB{next}:\n");
         }
 
         return text.Append("""
