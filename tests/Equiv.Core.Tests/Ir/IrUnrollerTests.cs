@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using System.Globalization;
+using System.Text;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -467,6 +469,25 @@ public sealed class IrUnrollerTests
         Assert.Equal(6, instructions.SelectMany(static i => i.Definitions()).Count());
     }
 
+    /// <summary>
+    /// Ticket P2-109: the work of unrolling grows with the size of what is copied. The procedure is the shape that took
+    /// an OpenRA pair over an hour: a loop that calls its own procedure, so inlining nests the loop in itself, with a
+    /// block per call in its body, and a second loop beside it. Four times the body is about four times the blocks
+    /// touched. The count is of the editor's block reads, replacements and additions, each of which was a scan of the
+    /// block list before the fix; it does not measure time.
+    /// </summary>
+    [Fact]
+    public void UnrollingALoopThatCallsItsOwnProcedureTouchesBlocksInProportionToItsSize()
+    {
+        IrProcedure small = IrUnroller.Unroll(IrText.Parse(LoopAroundASelfCall(calls: 20)), 3, out long few);
+        IrProcedure large = IrUnroller.Unroll(IrText.Parse(LoopAroundASelfCall(calls: 80)), 3, out long many);
+
+        Assert.Empty(IrLoopAnalysis.Of(large).Loops);
+        Assert.InRange(large.Blocks.Length, 3 * small.Blocks.Length, 4 * small.Blocks.Length);
+        Assert.InRange(few, small.Blocks.Length, 20L * small.Blocks.Length);
+        Assert.InRange(many, 3 * few, 4 * few);
+    }
+
     [Fact]
     public void ArgumentsAreChecked()
     {
@@ -478,6 +499,52 @@ public sealed class IrUnrollerTests
         Assert.Throws<ArgumentNullException>(static () => IrUnroller.Peel(null!, new IrBlockId(1), 1));
         Assert.Throws<ArgumentNullException>(() => IrUnroller.Peel(single, null!, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => IrUnroller.UnrollInPlace(single, new IrBlockId(1), 0));
+    }
+
+    /// <summary>A counting loop whose body makes <paramref name="calls"/> calls, each ending its block, then calls the procedure itself; a second loop follows.</summary>
+    private static string LoopAroundASelfCall(int calls)
+    {
+        StringBuilder text = new("""
+            proc "T::W(int)" (%n: bv32) entry B0
+            B0:
+              %z: bv32 = const bv32 0
+              %one: bv32 = const bv32 1
+              goto B1
+            B1:
+              %i: bv32 = phi [B0: %z, B3: %i2]
+              %c: bool = sge %i, %n
+              br %c, B5, B2
+            B2:
+
+            """);
+        for (int k = 0; k < calls; k++)
+        {
+            string id = k.ToString(CultureInfo.InvariantCulture);
+            string next = (100 + k).ToString(CultureInfo.InvariantCulture);
+            text.Append("  %f" + id + ": bv32 = call \"X::F(int)\"(%i) threw %g" + id + ": bool\n  br %g" + id + ", B4, B" + next + "\nB" + next + ":\n");
+        }
+
+        return text.Append("""
+              %m: bv32 = sub %n, %one
+              call "T::W(int)"(%m) threw %t: bool
+              br %t, B4, B3
+            B3:
+              %i2: bv32 = add %i, %one
+              goto B1
+            B4:
+              throw "System.Exception"
+            B5:
+              goto B6
+            B6:
+              %j: bv32 = phi [B5: %z, B7: %j2]
+              %d: bool = sge %j, %n
+              br %d, B8, B7
+            B7:
+              %j2: bv32 = add %j, %one
+              goto B6
+            B8:
+              ret
+            """).ToString();
     }
 
     private static IrProcedure Load(string name) => IrText.Parse(name switch

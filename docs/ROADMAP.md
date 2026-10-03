@@ -612,6 +612,11 @@ rung, a pair or a run.
   pass (2h07m, unlogged) becomes a phase. Two full runs must agree on every decided result.
 - P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
   and no query ended sooner by contention. Needs P2-050, P2-076.
+- P2-109 (S) Unrolling a loop is linear in its size. One OpenRA pair, a loop that calls its own procedure,
+  spent over twenty minutes in `IrUnroller` before its first solver query (found by P2-082's run). Needs P2-076.
+- P2-113 (M) A pair whose unrolled body is huge overflows the native stack in the trace encoding and ends the run
+  with no SARIF, which no per-pair `try` can catch. Same OpenRA pair, reached once P2-109 let it finish unrolling.
+  Needs P2-109.
 
 Found by P2-072's repro:
 - P2-108 (M) `System.IntPtr` and `nint` (and `System.UIntPtr` and `nuint`) are one type in an
