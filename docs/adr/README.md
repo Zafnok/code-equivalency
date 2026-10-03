@@ -49,3 +49,4 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0040 | Each side's runtime is detected from its projects, and a runtime rule applies only if the pair crosses it |
 | 0041 | A call to a string or primitive member with only string and primitive arguments reaches no heap map |
 | 0042 | A call site with the same text on both sides that binds to a different callee is possibly the same call, and its outcome is unknown |
+| 0043 | A call to a static one-call forwarder is a call to its target (narrows 0019's rejection of inlining) |

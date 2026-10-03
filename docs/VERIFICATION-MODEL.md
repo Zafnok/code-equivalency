@@ -341,6 +341,20 @@ Migration-specific normalisations (applied to both sides before matching):
   the receiver is null-checked. An input that reaches one has an unknown outcome (ADR 0014). The pair
   lists its rebound pairs in `properties.reboundCalls`. A call to a member with another name, or at a
   site with other text, is an ordinary call. The IL lowering (section 3.1) marks the same identities.
+- Forwarders (ADR 0043, ticket P2-068). A forwarder is an ordinary static method declared in the
+  solution's source that is not `virtual`, not generic and not in a generic type, has no `ref`, `out`
+  or `in` parameter, does not return by reference, whose declaring type has no static constructor
+  (written, or implied by a static initializer), and whose body is the one statement
+  `return G(p1, ..., pn);` (or `G(p1, ..., pn);` when it returns nothing): `G` is a static method, the
+  arguments are explicit and are the forwarder's own parameters, each at its own position with no
+  conversion, `G` has no other parameter, and the parameter and return types of the two are the same.
+  A call to a forwarder is lowered as the same call to `G`, or to the end of the chain when `G` is a
+  forwarder too; a chain that returns to a method already on it is not followed. The rename map, the
+  catalogue above, the runtime-changes table, closed calls (ADR 0041), rebound call sites and the
+  bound fingerprint (ADR 0024) all see the target; a rebound site's key keeps the member name written
+  at the site. Both sides and both lowerings apply it. The pair lists what it resolved in
+  `properties.forwardersResolved`. Any other callee is not read: an instance method, a body that
+  changes an argument or has a second statement, a forwarder known only as a compiled reference.
 - Runtime-changed APIs: a shipped data table (`runtime-changes.json`, sourced from
   Microsoft's .NET Core 3.0 to .NET 10 breaking-changes list) names BCL members whose
   behaviour differs between two runtimes even when the call is textually
@@ -551,7 +565,9 @@ Every verdict on a matched pair with bodies also carries `properties.assumedCall
 `properties.unprovenAssumptions` (ADR 0019), `properties.equivalencesApplied` when a
 catalogue entry fired (ADR 0020), and `properties.reboundCalls` when a call site was rebound (ADR
 0042): one `{ legacy, modern }` per rebound pair of callee identities, sorted by legacy and then
-modern identity. It is not part of the fingerprint. A result whose ladder reached rung 4 carries `properties.chcMode`, and an
+modern identity. It is not part of the fingerprint. `properties.forwardersResolved` lists the forwarders a body's calls were
+resolved through (ADR 0043): one `{ forwarder, target }` per forwarder, sorted by forwarder and then target; it is not part
+of the fingerprint either. A result whose ladder reached rung 4 carries `properties.chcMode`, and an
 Equivalent by `chc` carries Spacer's coupling invariant in `properties.invariant` (section 5.1). An Equivalent by
 `llm-invariant` or `trace-invariant` carries the admitted invariant there too, and what proposed it in
 `properties.proposedBy`: the model id, or `trace` (ADR 0036). An Equivalent whose proof used callee
