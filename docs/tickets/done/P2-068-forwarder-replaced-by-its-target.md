@@ -1,5 +1,5 @@
 # P2-068 A call to a one-line forwarder and a call to its target are the same call
-Status: in-progress
+Status: done (PR #360)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-047
