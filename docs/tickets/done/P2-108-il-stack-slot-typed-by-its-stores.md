@@ -1,5 +1,5 @@
 # P2-108 The IL lowering types a stack slot by the values stored into it
-Status: in-progress
+Status: done (PR #364)
 Effort: S
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-068
