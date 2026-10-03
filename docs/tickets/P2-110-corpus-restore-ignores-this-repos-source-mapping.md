@@ -1,4 +1,4 @@
-# P2-102 A corpus restore does not inherit this repository's NuGet source mapping
+# P2-110 A corpus restore does not inherit this repository's NuGet source mapping
 Status: todo
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
