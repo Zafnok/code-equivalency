@@ -112,16 +112,12 @@ public sealed class IlLowererTests
     /// The two are Equivalent under Z3 (<c>IlLoweringParityTests</c>). The second is an interpolated string: the IOperation
     /// lowering joins its parts with the two-argument <c>String.Concat</c>, one call for each part after the first (ticket
     /// P2-086), and the compiler emits one call of the three-argument overload. That pair is one of
-    /// <c>IlLoweringParityTests</c>' known differences. The third passes <c>s?.Trim()</c> as an argument: both branches
-    /// leave their value on the stack, ILSpy reads that as a slot of type <c>object</c>, and the IL lowering's parameters
-    /// then hold the <c>object</c> cast and null maps, which the IOperation lowering does not use. It is one of
-    /// <c>IlLoweringParityTests</c>' known differences too.
+    /// <c>IlLoweringParityTests</c>' known differences.
     /// </summary>
     private static readonly string[] KnownCalleeDifferences =
     [
         "same-runtime-cleanup/modern Equiv.Samples.SameRuntimeCleanup.Report::Rank(int)",
         "cleanup-modern-syntax/modern Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)",
-        "forwarder-to-bcl/legacy Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)",
     ];
 
     /// <summary>The Design's pitfall: the instruction's sign decides the division, not its operands' C# types.</summary>

@@ -43,7 +43,6 @@ public sealed class IlLoweringParityTests
         [$"cleanup-modern-syntax/legacy {Positives}"] = NullTestOfAConversion,
         [$"cleanup-modern-syntax/modern {Positives}"] = Lambda,
         [$"cleanup-modern-syntax/modern {Join}"] = InterpolatedString,
-        [$"forwarder-to-bcl/legacy {BlankTrimmed}"] = NullConditionalOnAStackSlot,
         [$"effect-free-bcl-call/modern {Basket}"] = ListFamily,
     }.ToImmutableDictionary(StringComparer.Ordinal);
 
@@ -62,8 +61,6 @@ public sealed class IlLoweringParityTests
     private const string Positives = "Equiv.Samples.CleanupModernSyntax.Tidy::Positives(System.Collections.Generic.List<int>)";
 
     private const string Join = "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)";
-
-    private const string BlankTrimmed = "Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)";
 
     private const string Basket = "Equiv.Samples.EffectFreeBclCall.Basket::.ctor()";
 
@@ -97,14 +94,6 @@ public sealed class IlLoweringParityTests
     /// the IL lowering names as it is.
     /// </summary>
     private const string InterpolatedString = "IOperation lowers an interpolated string as a chain of Concat(string,string); the IL calls Concat(string,string,string)";
-
-    /// <summary>
-    /// The compiler emits <c>s?.Trim()</c> as an argument with both branches leaving their value on the stack, which ILSpy
-    /// reads as a slot of type <c>object</c>. The IL lowering then passes the value through <c>cast.System.Object.System.String</c>
-    /// and its null shadow through <c>null.System.Object</c>, two maps the IOperation lowering of the same expression never
-    /// reads (ticket P2-068 found it with this sample; the IL table is P1-014's).
-    /// </summary>
-    private const string NullConditionalOnAStackSlot = "the IL reads a null-conditional argument through a stack slot of type object and its casts";
 
     /// <summary>
     /// The IOperation lowering makes the empty array of a <c>params</c> call with no elements, <c>s.TrimStart()</c> on .NET

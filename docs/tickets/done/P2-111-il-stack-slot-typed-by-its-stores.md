@@ -80,3 +80,4 @@ by default.
 - Renumbered from P2-108 while the PR was open: `main` took that id for the `nint` identity ticket
   first. The branch keeps its old name. P2-068 was squash-merged into
   `P2-068-adr-forwarder-is-its-target` meanwhile, which is the PR's base now.
+- The PR's base is `main` now that P2-068 has landed there.
