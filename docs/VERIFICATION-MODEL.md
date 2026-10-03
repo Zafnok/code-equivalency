@@ -183,7 +183,7 @@ is the one definition). A C# parameter whose name would be synthesised, which ca
 is spelled with a leading `$` in IR (`$this`; its source name stays `this`). No C# identifier contains `$`, so
 that name is never another parameter's (M3-007). A value's shadow is a `mapread` of `null.<Sort>`,
 so equal references are equally null; `new` sets the shadow to false instead. `this`,
-`null.*`, `cast.*`, `istype.*`, `length.*`, `typeof.*` and `new.*` are `In`, because nothing changes them, except
+`null.*`, `cast.*`, `istype.*`, `length.*`, `typeof.*`, `new.*` and `caller.*` are `In`, because nothing changes them, except
 that `length.<Sort>` is `Ref` in a body that creates an array of that sort (P2-001; ADR 0018 clarification). No CLR array has a
 negative length, so the encoder assumes every read of a `length.*` input is non-negative, whether or not the read is
 reached (the CLR never reads a null reference's length, so this drops no input a caller can pass), and the model
@@ -456,6 +456,15 @@ parameter naming are identical between the two lowerings. An instruction the IL 
 IOperation rules decline for a semantic reason: unboxing, reading a caught exception, `ref` locals,
 `throw` of anything but a `new`, `default` of a type parameter, and local functions. It also declines lambdas, which
 the IOperation rules lower from a bound fingerprint (P2-067) that the IL does not have.
+
+An argument the compiler supplies for a `[CallerFilePath]` or `[CallerLineNumber]` parameter (Roslyn's
+`ArgumentKind.DefaultValue`, of type `string` or `int`) is not its constant (ADR 0046, P2-098). It reads the
+synthesised input `caller.file` (a `string`) or `caller.line` (bv32), one of each per body, shared by both sides by
+name, and the bound fingerprint writes it as `caller=File` or `caller=Line` with no value. An argument the source
+writes out is an ordinary value, and so is a supplied default of any other parameter, `[CallerMemberName]` and
+`[CallerArgumentExpression]` included. IL does not say which arguments were supplied, so the IL lowering applies the
+rule to a string constant equal to the body's own file path, and to an `int` constant inside the body's own line span,
+passed for such a parameter.
 
 ## 4. Matching
 
