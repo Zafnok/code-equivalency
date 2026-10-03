@@ -24,7 +24,7 @@ namespace Equiv.Core.Reporting;
 /// ticket P2-055), which an EQ006 result's row is looked up in and its message names; it is not part of the fingerprint.
 /// <see cref="ReboundCalls"/> is the pair's
 /// <see cref="ProcedurePair.ReboundCalls"/> (ADR 0042; ticket P2-069), and is not part of the fingerprint either; nor is
-/// <see cref="ForwardersResolved"/>, the pair's <see cref="ProcedurePair.ForwardersResolved"/> (ADR 0043; ticket P2-068).
+/// <see cref="ForwardersResolved"/>, the pair's <see cref="ProcedurePair.ForwardersResolved"/> (ADR 0047; ticket P2-068).
 /// </summary>
 public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
 {

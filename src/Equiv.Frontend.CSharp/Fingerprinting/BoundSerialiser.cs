@@ -23,7 +23,7 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// one, its <c>checked</c> context. Symbols are spelled as matching spells them (the rename map, and on the legacy side the
 /// API-equivalence type entries and the member entries whose adapter passes every argument through unchanged); locals,
 /// labels, lambdas, local functions and their parameters are numbered by first occurrence, and the method's own parameters
-/// by position (ADR 0021). A call to a forwarder is spelled as the call to its target that the lowering makes it (ADR 0043).
+/// by position (ADR 0021). A call to a forwarder is spelled as the call to its target that the lowering makes it (ADR 0047).
 /// So trivia, comments, local names and parameter names cannot change the text, and a different
 /// overload, operator, conversion, constant or <c>checked</c> context does. The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
@@ -82,7 +82,7 @@ internal sealed class BoundSerialiser : OperationWalker
     /// </summary>
     public sealed record Settings(RenameMap Renames, ImmutableArray<string> SuppressedRuntimeChanges, ImmutableArray<ApiEquivalence> Equivalences, SideRuntime Runtime)
     {
-        /// <summary>The identities of the forwarders the lowering does not resolve (ADR 0043), which are spelled as themselves here too.</summary>
+        /// <summary>The identities of the forwarders the lowering does not resolve (ADR 0047), which are spelled as themselves here too.</summary>
         public ImmutableHashSet<string> KeptForwarders { get; init; } = [];
     }
 
@@ -178,7 +178,7 @@ internal sealed class BoundSerialiser : OperationWalker
 
     /// <summary>
     /// The symbols an operation references that its kind, type and children do not already say. A call to a forwarder
-    /// references the forwarder's target, as the lowering calls it (ADR 0043; ticket P2-068).
+    /// references the forwarder's target, as the lowering calls it (ADR 0047; ticket P2-068).
     /// </summary>
     private ImmutableArray<ISymbol?> Symbols(IOperation operation) => operation switch
     {

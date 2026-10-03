@@ -217,7 +217,7 @@ public static class SarifReportWriter
 
     /// <summary>
     /// ADR 0042: the callee pairs a call site with the same text binds to, which the pair treats as possibly the same, as
-    /// <c>reboundCalls</c>. ADR 0043: the forwarders the pair's bodies call, each with the callee its calls were lowered as
+    /// <c>reboundCalls</c>. ADR 0047: the forwarders the pair's bodies call, each with the callee its calls were lowered as
     /// calls to, as <c>forwardersResolved</c>. Each is left out when there is none.
     /// </summary>
     private static void SetCalleeProperties(Result sarifResult, VerificationResult result)

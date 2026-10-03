@@ -45,6 +45,12 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     public int? InvariantTimeoutMs { get; init; }
 
     /// <summary>
+    /// How long a query of rungs 1 to 3 may run before it is interrupted, <see cref="Z3Backend.InterruptAfterMs"/> unless
+    /// set; a test sets it below the timeout, to interrupt a query no limit has ended yet (ticket P2-076 criterion 3).
+    /// </summary>
+    public long? InterruptAfterMs { get; init; }
+
+    /// <summary>
     /// The local proposer rung 5 asks first, on by default because it runs in process and sends nothing (ticket P1-009);
     /// a test sets it to null to run the model's proposer alone.
     /// </summary>
@@ -68,7 +74,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// </summary>
     public Verdict Verify(IrProcedure old, IrProcedure @new)
     {
-        ProductEncoder.SharedFragments shared = ProductEncoder.ShareFragments(old, @new);
+        ProductEncoder.SharedFragments shared = Stages.Timed(options, Stages.Share, () => ProductEncoder.ShareFragments(old, @new));
         Verdict verdict = Climb(shared.Old, shared.New);
         if (verdict is not Unknown { Reason: UnknownReason.Abstraction } unknown)
         {
@@ -81,14 +87,13 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
 
     private Verdict Climb(IrProcedure old, IrProcedure @new)
     {
-        IrLoopAnalysis oldShape = IrLoopAnalysis.Of(old);
-        IrLoopAnalysis newShape = IrLoopAnalysis.Of(@new);
+        (IrLoopAnalysis oldShape, IrLoopAnalysis newShape) = Stages.Timed(options, Stages.Shape, () => (IrLoopAnalysis.Of(old), IrLoopAnalysis.Of(@new)));
         bool recursive = oldShape.IsSelfRecursive || newShape.IsSelfRecursive;
         bool looping = recursive || !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
         List<Rung> rungs = [Timed(() => Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible))];
         if (looping && rungs[^1].Verdict is null)
         {
-            LockstepInduction lockstep = new(this, old, @new, oldShape, newShape);
+            LockstepInduction lockstep = Stages.Timed(options, Stages.Couple, () => new LockstepInduction(this, old, @new, oldShape, newShape));
             rungs.Add(Timed(lockstep.Prove));
             if (rungs[^1].Verdict is null)
             {
@@ -206,12 +211,12 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             (BoolExpr premise, BoolExpr violation) = terms?.Invoke(context, encoding) ?? (context.MkTrue(), context.MkFalse());
             BoolExpr opaque = context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew);
             using Solver solver = Z3Backend.Query(context, encoding, options, [premise, context.MkOr(encoding.Differs, opaque, violation), .. Reachable(context, encoding)]);
-            Status status = solver.Check();
+            Status status = Z3Backend.Check(context, solver, options, "obligation", InterruptAfterMs);
             return status switch
             {
                 Status.SATISFIABLE => new Obligation(
                     status,
-                    replay is { } originals ? ModelDecoder.TryReplay(context, solver.Model, encoding, originals.Old, originals.New, ReplayBudget) : null,
+                    replay is { } originals ? Stages.Timed(options, Stages.Replay, () => ModelDecoder.TryReplay(context, solver.Model, encoding, originals.Old, originals.New, ReplayBudget)) : null,
                     solver.Model.Eval(opaque, completion: true).IsTrue)
                 {
                     Causes = Z3Backend.Causes(encoding, Z3Backend.Reached(solver.Model, encoding)),
@@ -260,11 +265,11 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             _ => UnknownReason.Timeout,
         };
 
-    private T Session<T>(IrProcedure old, IrProcedure @new, Func<Context, ProductEncoding, T> body)
-    {
-        using Context context = createContext();
-        return body(context, ProductEncoder.Encode(context, old, @new, options.CallIdentityMap, Contracts, Relation));
-    }
+    private T Session<T>(IrProcedure old, IrProcedure @new, Func<Context, ProductEncoding, T> body) =>
+        Stages.WithContext(
+            options,
+            createContext,
+            context => body(context, Stages.Timed(options, Stages.Encode, () => ProductEncoder.Encode(context, old, @new, options.CallIdentityMap, Contracts, Relation))));
 
     /// <summary>
     /// Rung 1. Not applicable to irreducible control flow, or to a self-recursive side that cannot be inlined
@@ -286,22 +291,21 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             return NotApplicable(ProofMethod.Bounded, $"self-recursion is not inlined: {obstacle}", cause: null);
         }
 
-        IrProcedure oldUnrolled = IrUnroller.Unroll(old, k);
-        IrProcedure newUnrolled = IrUnroller.Unroll(@new, k);
+        (IrProcedure oldUnrolled, IrProcedure newUnrolled) = Stages.Timed(options, Stages.Unroll, () => (IrUnroller.Unroll(old, k), IrUnroller.Unroll(@new, k)));
         return Session(oldUnrolled, newUnrolled, (context, encoding) =>
         {
             BoolExpr[] reachable = Reachable(context, encoding);
             using Solver divergence = Z3Backend.Query(context, encoding, options, [encoding.Differs, context.MkNot(encoding.OpaqueOld), context.MkNot(encoding.OpaqueNew), .. reachable]);
-            Status diverges = divergence.Check();
+            Status diverges = Z3Backend.Check(context, divergence, options, "divergence", InterruptAfterMs);
             if (diverges != Status.UNSATISFIABLE)
             {
                 return diverges == Status.SATISFIABLE
-                    ? Found(ModelDecoder.Replay(context, divergence.Model, encoding, oldUnrolled, newUnrolled), bound)
+                    ? Found(Stages.Timed(options, Stages.Replay, () => ModelDecoder.Replay(context, divergence.Model, encoding, oldUnrolled, newUnrolled)), bound)
                     : TimedOut(Z3Backend.Timeout(divergence, options));
             }
 
             using Solver opaque = Z3Backend.Query(context, encoding, options, [context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew), .. reachable]);
-            Status opaqueReached = opaque.Check();
+            Status opaqueReached = Z3Backend.Check(context, opaque, options, "opaque", InterruptAfterMs);
             if (opaqueReached != Status.UNSATISFIABLE)
             {
                 if (opaqueReached == Status.UNKNOWN)
@@ -309,7 +313,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
                     return TimedOut(Z3Backend.Timeout(opaque, options));
                 }
 
-                ImmutableArray<UnknownCause> causes = Z3Backend.ReachableOpaques(context, encoding, options, opaque.Model, reachable);
+                ImmutableArray<UnknownCause> causes = Z3Backend.ReachableOpaques(context, encoding, options, opaque.Model, reachable, InterruptAfterMs);
                 string reasons = Z3Backend.OpaqueReasons(causes);
                 return new Rung(
                     new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"an input reaches an opaque node: {reasons}"),
@@ -335,7 +339,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     private Rung WithinBound(Context context, ProductEncoding encoding, int k, string bound)
     {
         using Solver cut = Z3Backend.Query(context, encoding, options, context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable));
-        return cut.Check() switch
+        return Z3Backend.Check(context, cut, options, "bound", InterruptAfterMs) switch
         {
             Status.UNSATISFIABLE => Proved(ProofMethod.Bounded, $"no input goes past the bound {bound}", new Equivalent(ProofMethod.Bounded, k)),
             Status.SATISFIABLE => new Rung(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"no divergence within the bound {bound}, and some input goes past it")),

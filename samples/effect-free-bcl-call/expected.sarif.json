@@ -1,0 +1,315 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.EffectFreeBclCall.Basket::.ctor() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Basket.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 16,
+                  "endLine": 9,
+                  "endColumn": 22
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.EffectFreeBclCall.Basket::.ctor()",
+            "resultFingerprint/v1": "3a1f7d1da48de6a1527d981bb8240d5112c9ddb07a28e79c52c3750eb50e5cb7"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.EffectFreeBclCall.Basket::get_Items() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Basket.cs"
+                },
+                "region": {
+                  "startLine": 16,
+                  "startColumn": 13,
+                  "endLine": 16,
+                  "endColumn": 16
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.EffectFreeBclCall.Basket::get_Items()",
+            "resultFingerprint/v1": "600aa9a8c06fc1508f8c1937009e5808f7b30924bec72c35eeeddcc6411c98f3"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.EffectFreeBclCall.Lengths::First(string,string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Lengths.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 27,
+                  "endLine": 7,
+                  "endColumn": 32
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.EffectFreeBclCall.Lengths::First(string,string)",
+            "resultFingerprint/v1": "71c47ee70dfe58f51e67f0b947301f5d8450d00bbd1451ebaa62ed8cd4da66c5"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.EffectFreeBclCall.Lengths::Reset(string,System.Collections.Generic.List<int>) diverges: inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 2 outs() trace()) new(threw \"System.Exception\" outs() trace(\"System.Collections.Generic.List`1::Clear()<int>\"(sort \"System.Collections.Generic.List`1\" 0)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Lengths.cs"
+                },
+                "region": {
+                  "startLine": 17,
+                  "startColumn": 27,
+                  "endLine": 17,
+                  "endColumn": 32
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.EffectFreeBclCall.Lengths::Reset(string,System.Collections.Generic.List<int>)",
+            "resultFingerprint/v1": "bea3626a6e98d0876dbbc2704c6bcc568f3c3d4b796c83914e66980e0ed60664"
+          },
+          "baselineState": "new",
+          "rank": 60.002,
+          "properties": {
+            "model": "inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 2 outs() trace()) new(threw \"System.Exception\" outs() trace(\"System.Collections.Generic.List`1::Clear()<int>\"(sort \"System.Collections.Generic.List`1\" 0)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "reviewGroup": "calls:System.Collections.Generic.List`1::Clear()<int>"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 4,
+            "modern": 4
+          },
+          "matchedPairs": 4,
+          "pairsWithoutOpaque": 4,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 1,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 3,
+          "changedPairsWithoutOpaque": 3,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 3
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.Object::.ctor()",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.Collections.Generic.List`1::Clear()<int>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Object::.ctor()",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 56,
+          "modern": 54
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.EffectFreeBclCall",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.EffectFreeBclCall",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "reviewList": [
+          {
+            "group": "calls:System.Collections.Generic.List`1::Clear()<int>",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.EffectFreeBclCall.Lengths::Reset(string,System.Collections.Generic.List<int>)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

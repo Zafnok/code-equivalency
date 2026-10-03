@@ -13,7 +13,7 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// identities of the pair's rebound calls on its side, and lowers each call to one as an <c>IrOpaque</c> with reason
 /// <see cref="ReboundCall.OpaqueReason"/>. It records every call it lowers at a syntax node, keyed by the node's tokens and
 /// the member's name, and <see cref="Rebound(CallSites, CallSites, ImmutableDictionary{string, string})"/> finds the
-/// rebound pairs of two bodies from those. It also records every forwarder a call was resolved through (ADR 0043; ticket
+/// rebound pairs of two bodies from those. It also records every forwarder a call was resolved through (ADR 0047; ticket
 /// P2-068); such a call's site keeps the member name written there, and its callee is the forwarder's target.
 /// </summary>
 /// <param name="rebound">The callee identities whose calls the body lowers as opaque.</param>
@@ -31,7 +31,7 @@ internal sealed class CallSites(IEnumerable<string> rebound)
 
     /// <summary>
     /// The identities of the forwarders the body does not resolve, because the pair's two sides do not agree on what each
-    /// forwards to (ADR 0043): a call to one stays a call to it.
+    /// forwards to (ADR 0047): a call to one stays a call to it.
     /// </summary>
     public ImmutableHashSet<string> KeptForwarders { get; init; } = [];
 

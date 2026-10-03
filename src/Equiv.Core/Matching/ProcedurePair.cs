@@ -19,7 +19,7 @@ namespace Equiv.Core.Matching;
 /// <see cref="ReboundCalls"/> are the callee pairs the bodies treat as possibly the same
 /// function, sorted by legacy and then modern identity (ADR 0042; ticket P2-069). <see cref="ForwardersResolved"/> are the
 /// forwarders either body calls, each with the callee its calls were lowered as calls to, sorted by forwarder and then
-/// target (ADR 0043; ticket P2-068).
+/// target (ADR 0047; ticket P2-068).
 /// </summary>
 public sealed record ProcedurePair(
     ProcedureIdentity Old,

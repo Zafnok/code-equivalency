@@ -321,7 +321,7 @@ public sealed class CSharpFrontendTests
     }
 
     /// <summary>
-    /// ADR 0043 (ticket P2-068 criterion 2): the ticket's pair. The legacy body calls a forwarder and the modern one its
+    /// ADR 0047 (ticket P2-068 criterion 2): the ticket's pair. The legacy body calls a forwarder and the modern one its
     /// target, so both lower to the same call, the fingerprints are equal, and the pair names the forwarder it resolved.
     /// Under <c>--il-fallback</c> the pair is congruent, keeps its IOperation bodies, and keeps what they resolved.
     /// </summary>
@@ -346,7 +346,7 @@ public sealed class CSharpFrontendTests
     }
 
     /// <summary>
-    /// ADR 0043: a pair that keeps its IL bodies names the forwarders those resolved. Here the IOperation lowering never
+    /// ADR 0047: a pair that keeps its IL bodies names the forwarders those resolved. Here the IOperation lowering never
     /// reaches the modern side's forwarder call, an operand of a lifted operator it leaves opaque, and the IL lowering does.
     /// </summary>
     [Fact]
@@ -367,7 +367,7 @@ public sealed class CSharpFrontendTests
     }
 
     /// <summary>
-    /// ADR 0043: a forwarder both sides have is resolved only where they agree on its target. <c>Blank</c> forwards to the
+    /// ADR 0047: a forwarder both sides have is resolved only where they agree on its target. <c>Blank</c> forwards to the
     /// same member on both sides, so a caller that now calls the member directly is one call with it. <c>Empty</c> is a
     /// forwarder on the legacy side only, so its unchanged caller still calls it on both sides and is congruent, as ADR
     /// 0019 has it, and the pair of <c>Empty</c> itself is where the change shows. The IL bodies keep it too.

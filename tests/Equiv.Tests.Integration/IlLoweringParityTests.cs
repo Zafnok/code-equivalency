@@ -43,6 +43,7 @@ public sealed class IlLoweringParityTests
         [$"cleanup-modern-syntax/modern {Positives}"] = Lambda,
         [$"cleanup-modern-syntax/modern {Join}"] = InterpolatedString,
         [$"forwarder-to-bcl/legacy {BlankTrimmed}"] = NullConditionalOnAStackSlot,
+        [$"effect-free-bcl-call/modern {Basket}"] = ListFamily,
     }.ToImmutableDictionary(StringComparer.Ordinal);
 
     private const string ConfirmAsync = "Equiv.Samples.BusinessLayer.OrderService::ConfirmAsync(System.Threading.Tasks.Task<global::Equiv.Samples.BusinessLayer.Order>)";
@@ -60,6 +61,8 @@ public sealed class IlLoweringParityTests
     private const string Join = "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)";
 
     private const string BlankTrimmed = "Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)";
+
+    private const string Basket = "Equiv.Samples.EffectFreeBclCall.Basket::.ctor()";
 
     /// <summary>An <c>async</c> method's IL is its state machine's kickoff, whose ILAst is opaque (out of scope; P1-012).</summary>
     private const string StateMachine = "the IL of an async method is its state machine's kickoff, which is opaque";
@@ -99,6 +102,13 @@ public sealed class IlLoweringParityTests
     /// reads (ticket P2-068 found it with this sample; the IL table is P1-014's).
     /// </summary>
     private const string NullConditionalOnAStackSlot = "the IL reads a null-conditional argument through a stack slot of type object and its casts";
+
+    /// <summary>
+    /// The IOperation lowering makes a new <c>Collection&lt;T&gt;</c> converted to an interface a new <c>List&lt;T&gt;</c>
+    /// at the conversion (ADR 0043; ticket P2-071); a <c>newobj</c> carries no conversion, so the IL lowering keeps it a
+    /// new <c>Collection&lt;T&gt;</c>.
+    /// </summary>
+    private const string ListFamily = "IOperation makes a new Collection<T> converted to an interface a new List<T>; the IL keeps it a Collection<T>";
 
     private static readonly VerificationOptions Options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, []);
 

@@ -16,7 +16,7 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// reference or boxing conversion (ticket M3-010), whose result's nullness is over-approximated: it is read from
 /// <c>null.&lt;To&gt;</c>, not tied to the operand's, one <c>istype.&lt;From&gt;.&lt;To&gt;</c> predicate per type test (ticket M4-005), and one <c>typeof.&lt;T&gt;</c> input per closed type read by
 /// <c>typeof(T)</c> (ticket P2-002), which is never null and adds no trace event, and one <c>new.&lt;Sort&gt;</c> per array sort
-/// created, from an allocation count to the array it allocates (ticket P2-001). Each is created once, on first use, and they become parameters ordered by name, so both
+/// created, from an allocation count to the array it allocates (ticket P2-001), and per sort of a catalogued collection created (ADR 0043). Each is created once, on first use, and they become parameters ordered by name, so both
 /// sides of a pair share them by name, while the C# parameters, which a caller binds by position, are shared by position (ADR 0021). IR variable names take
 /// only letters, digits, <c>_</c>, <c>.</c> and <c>$</c>, so every part of a name is spelled with dots.
 /// <c>field.*</c> and <c>array.*</c> are <see cref="IrParameterKind.Ref"/>: the body writes them and the final heap is an
@@ -72,6 +72,13 @@ internal sealed class HeapInputs(Func<string, string> sorts)
             new IrMap(TypeMapper.Map(from, sorts), TypeMapper.Map(to, sorts)));
 
     /// <summary>
+    /// <see cref="Cast(ITypeSymbol, ITypeSymbol)"/> from the reference sort <paramref name="from"/>, for a value whose sort
+    /// is not its C# type's: a new <c>Collection&lt;T&gt;</c> created as a <c>List&lt;T&gt;</c> (ADR 0043).
+    /// </summary>
+    public IrVar Cast(IrSort from, ITypeSymbol to) =>
+        Input($"cast.{Part(from.Name)}.{Part(TypeMapper.MetadataName(to, sorts))}", new IrMap(from, TypeMapper.Map(to, sorts)));
+
+    /// <summary>
     /// Whether a value of <paramref name="from"/> is, at run time, of <paramref name="to"/> (ticket M4-005): a free predicate
     /// per pair of types, shared by both sides by name, read at a non-null value by <c>is</c>, <c>as</c>, a downcast and a
     /// type pattern. Nothing ties it to the type hierarchy, so it over-approximates.
@@ -95,7 +102,7 @@ internal sealed class HeapInputs(Func<string, string> sorts)
 
     /// <summary>
     /// The arrays of <paramref name="array"/>'s sort a body allocates, by allocation count: its first array creation of
-    /// that sort is element 0, its second element 1 (ticket P2-001). Shared by name, so both sides' k-th allocations are
+    /// that sort is element 0, its second element 1 (ticket P2-001). A catalogued collection's sort likewise (ADR 0043). Shared by name, so both sides' k-th allocations are
     /// one reference. Nothing ties it to the arrays the inputs reach, so the model may alias a fresh array with one of
     /// them; every real run is still a model, and the product only gains inputs.
     /// </summary>

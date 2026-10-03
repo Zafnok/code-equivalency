@@ -17,7 +17,7 @@ namespace Equiv.Frontend.CSharp.Lowering.Il;
 /// <c>async</c> or iterator method, whose IL is only the kickoff of a state machine the IL lowering does not follow. Each
 /// such method is one debug detail line. Each side is read with its rebound callee identities, so a rebound call is the
 /// same opaque in both lowerings and never a reason to prefer the IL bodies (ADR 0042; ticket P2-069). The same
-/// <see cref="CallSites"/> record the forwarders the IL bodies' calls were resolved through (ADR 0043; ticket P2-068).
+/// <see cref="CallSites"/> record the forwarders the IL bodies' calls were resolved through (ADR 0047; ticket P2-068).
 /// </summary>
 internal static class IlFallback
 {
@@ -106,7 +106,7 @@ internal static class IlFallback
     /// <summary>
     /// One side of a matched pair: its method, the compilation it is read from, its IOperation lowering, the runtime facts
     /// both lowerings use, and the call sites its IL is read with: they hold the callee identities whose calls that
-    /// lowering made opaque as rebound (ADR 0042), and are told the forwarders the IL body resolves (ADR 0043).
+    /// lowering made opaque as rebound (ADR 0042), and are told the forwarders the IL body resolves (ADR 0047).
     /// </summary>
     internal sealed record Side(IMethodSymbol Symbol, Compilation Compilation, IrProcedure Body, SideRuntime Runtime)
     {

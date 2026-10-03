@@ -1208,7 +1208,7 @@ public sealed class CompareCommandTests
         Assert.Equal(["webapi.ok"], results.Single(static r => string.Equals(r.RuleId, "EQ003", StringComparison.Ordinal)).GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
     }
 
-    /// <summary>ADR 0043 (ticket P2-068 criterion 2): a pair's resolved forwarders reach its SARIF result, decided by the solver or without it.</summary>
+    /// <summary>ADR 0047 (ticket P2-068 criterion 2): a pair's resolved forwarders reach its SARIF result, decided by the solver or without it.</summary>
     [Fact]
     public void ThePairsResolvedForwardersReachTheResult()
     {

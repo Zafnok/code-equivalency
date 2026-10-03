@@ -18,7 +18,7 @@ namespace Equiv.Tests.Integration;
 /// <summary>
 /// Ticket P2-037: Git Extensions' <c>GitSshHelpers.SetSsh</c>, standalone. The legacy side tests its argument through the
 /// solution's own <c>Strings.IsNullOrEmpty</c> wrapper and the modern side through <c>string.IsNullOrEmpty</c>. The wrapper
-/// is a forwarder, so its call is the call to its target and the two bodies are one (ADR 0043; ticket P2-068). Before
+/// is a forwarder, so its call is the call to its target and the two bodies are one (ADR 0047; ticket P2-068). Before
 /// that, and still when the wrapper is kept as a callee because its two sides do not agree, the call traces differ at
 /// their first event, which is a real observable (ADR 0018), so the pair is Divergent; the legacy run's <c>threw</c> is
 /// only the answer the solver chose for the wrapper's <c>threw</c> edge once the traces had split, which no real run need

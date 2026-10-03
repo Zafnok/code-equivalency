@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
+using Equiv.TestSupport;
 
 using Equiv.Verify.Z3.Contracts;
 
@@ -198,6 +199,25 @@ public sealed class ContractTests
             "(and (= threw.old threw.new) (=> (and threw.old threw.new) (= type.old type.new)) (= calls.old calls.new) "
             + "(or threw.old threw.new (= (bvsgt r.old #x00000000) (bvsgt r.new #x00000000))))",
             contract.Contract);
+    }
+
+    /// <summary>
+    /// Ticket P2-076 criterion 4: the contracts pass logs its time by stage as the ladder does. The search for the callee's
+    /// contract is one step, holding the stages of each candidate it checks, and the caller's ladder follows it.
+    /// </summary>
+    [Fact]
+    public void VerifyUnderContracts_LogsTheContractSearchAsAStepBeforeTheLadder()
+    {
+        (IrProcedure caller, _) = Fixture.Pair(Classify + "\n---\n" + Classify);
+        (IrProcedure old, IrProcedure @new) = Fixture.Pair(Score);
+        RecordingRunLog log = new(isDebug: true);
+
+        new Z3Backend().VerifyUnderContracts(caller, caller, [new CalleePair("T::Score(int)", old, @new)], Options with { Log = log });
+
+        Assert.Equal(
+            "unroll encode assert inline check:contract=unsat dispose step:contract-search "
+            + "share shape unroll encode assert inline check:divergence=unsat assert inline check:opaque=unsat dispose rung:bounded=unsat",
+            string.Join(' ', BackendProgressTests.Details(log)));
     }
 
     [Fact]

@@ -9,7 +9,7 @@ using Microsoft.CodeAnalysis.Operations;
 namespace Equiv.Frontend.CSharp.Lowering;
 
 /// <summary>
-/// Which methods are forwarders, and what each forwards to (ADR 0043; ticket P2-068). A forwarder is an ordinary static
+/// Which methods are forwarders, and what each forwards to (ADR 0047; ticket P2-068). A forwarder is an ordinary static
 /// method declared in source whose body is one call of a static method with its own parameters, each at its own position
 /// and unchanged, whose result it returns. A call to one is the same call to its target, so both lowerings and the bound
 /// fingerprint ask this one rule from the callee's symbol. The other conditions each rule out a call that would do more,

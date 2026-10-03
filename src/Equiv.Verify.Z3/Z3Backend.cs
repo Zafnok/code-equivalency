@@ -43,6 +43,13 @@ public sealed class Z3Backend : IVerificationBackend
     /// </summary>
     internal const string Canceled = "canceled";
 
+    /// <summary>
+    /// How many times <see cref="VerificationOptions.TimeoutMs"/> a query may run before it is interrupted (ticket P2-076
+    /// criterion 3). Four is the least the ticket allows. At the default timeout it is 240 s, and the longest any query of
+    /// the <c>gitextensions-8522</c> run took to answer sat or unsat was 13.5 s (<c>docs/runs/2026-10-02-pair-time.md</c>).
+    /// </summary>
+    internal const int InterruptAfterTimeouts = 4;
+
     private readonly Func<Context> createContext;
     private readonly Func<string, IInvariantProposer> proposers;
 
@@ -87,10 +94,12 @@ public sealed class Z3Backend : IVerificationBackend
         ArgumentNullException.ThrowIfNull(newBody);
         ArgumentNullException.ThrowIfNull(options);
         ContractSearch search = new(createContext, options);
+        long searching = Stages.Start();
         ImmutableSortedDictionary<string, CalleeContract> admitted = callees
             .Select(c => (c.Identity, Contract: search.Admit(oldBody, newBody, c)))
             .Where(static c => c.Contract is not null)
             .ToImmutableSortedDictionary(static c => c.Identity, static c => c.Contract!, StringComparer.Ordinal);
+        Stages.StepDone(options, Stages.ContractSearch, searching);
         if (admitted.IsEmpty)
         {
             return null;
@@ -122,10 +131,12 @@ public sealed class Z3Backend : IVerificationBackend
     /// <c>(not (= x r))</c>, which <c>solve-eqs</c> no longer reads as a definition, and two copies of a
     /// multiplier left behind a <c>reach</c> variable time out. Z3's default solver is worse here: in
     /// incremental mode it skips preprocessing, and its non-incremental default tactic times out on a
-    /// plain diamond. The query itself is added with the definitions already <see cref="Inline"/>d.
+    /// plain diamond. The query itself is added with the definitions already <see cref="Inline"/>d. Making the solver
+    /// and inlining the query are a stage each (<see cref="Stages"/>).
     /// </summary>
     internal static Solver Query(Context context, ProductEncoding encoding, VerificationOptions options, params BoolExpr[] query)
     {
+        long started = Stages.Start();
         using Tactic solveEqs = context.MkTactic("solve-eqs");
         using Tactic simplify = context.MkTactic("simplify");
         using Tactic propagate = context.MkTactic("propagate-values");
@@ -134,8 +145,54 @@ public sealed class Z3Backend : IVerificationBackend
         Solver solver = context.MkSolver(pipeline);
         Limit(solver, options);
         solver.Add(encoding.Assertions);
+        Stages.Done(options, Stages.Assert, started);
+        started = Stages.Start();
         solver.Add(Inline(context, encoding.Assertions, query));
+        Stages.Done(options, Stages.Inline, started);
         return solver;
+    }
+
+    /// <summary>
+    /// Checks <paramref name="solver"/>, as the stage <c>check:</c><paramref name="query"/> (<see cref="Stages"/>). A check
+    /// still running after <paramref name="interruptAfterMs"/> (<see cref="InterruptAfterMs"/> unless a test gives another)
+    /// is interrupted (<see cref="Interruptible"/>).
+    /// </summary>
+    internal static Status Check(Context context, Solver solver, VerificationOptions options, string query, long? interruptAfterMs = null)
+    {
+        long started = Stages.Start();
+        Status status = Interruptible(context, interruptAfterMs ?? InterruptAfterMs(options), () => solver.Check());
+        Stages.Checked(options, query, started, status);
+        return status;
+    }
+
+    /// <summary>
+    /// How long a query may run before it is interrupted: <see cref="InterruptAfterTimeouts"/> times
+    /// <see cref="VerificationOptions.TimeoutMs"/>, or the longest wait a timer takes when that is longer.
+    /// </summary>
+    internal static long InterruptAfterMs(VerificationOptions options) => Math.Min((long)InterruptAfterTimeouts * options.TimeoutMs, uint.MaxValue - 1);
+
+    /// <summary>
+    /// Runs <paramref name="check"/>, one query in <paramref name="context"/>, and interrupts it
+    /// (<see cref="Context.Interrupt"/>) if it is still running after <paramref name="afterMs"/> (ticket P2-076 criterion
+    /// 3). The resource limit and the timeout Z3 was given end a query long before that; this ends one that neither did.
+    /// An interrupted solver answers unknown, with the reason <c>interrupted</c>, and a fixedpoint gives up with the
+    /// reason its own timer leaves, so the query has the result a timeout has. Nothing but the one query is ended: the
+    /// rung, the pair and the run go on. An interrupt that is under way when the query returns is waited for, so that
+    /// none reaches the context later.
+    /// </summary>
+    internal static T Interruptible<T>(Context context, long afterMs, Func<T> check)
+    {
+        using Timer timer = new(_ => context.Interrupt(), state: null, dueTime: afterMs, period: System.Threading.Timeout.Infinite);
+        try
+        {
+            return check();
+        }
+        finally
+        {
+            using ManualResetEvent stopped = new(initialState: false);
+            timer.Dispose(stopped);
+            stopped.WaitOne();
+        }
     }
 
     /// <summary>
@@ -145,30 +202,26 @@ public sealed class Z3Backend : IVerificationBackend
     /// the result is equivalent to the query; what it adds is that both sides' copies of an unchanged
     /// computation are one term before Z3 sees them. Z3 5.1's <c>solve-eqs</c> can instead invert a
     /// definition such as <c>t = u + in.b</c> to eliminate the shared input <c>in.b</c>, which leaves
-    /// the two sides as different terms and a self-comparison timing out (ticket M3-027).
+    /// the two sides as different terms and a self-comparison timing out (ticket M3-027). The terms are
+    /// those substituting every definition at every step gives, at a cost that grows with the size of
+    /// the assertions and not with its square (<see cref="Definitions"/>; ticket P2-076).
     /// </summary>
     internal static BoolExpr[] Inline(Context context, IEnumerable<BoolExpr> assertions, BoolExpr[] query)
     {
-        List<Expr> names = [];
-        List<Expr> values = [];
+        using Definitions definitions = new();
         foreach (BoolExpr assertion in assertions)
         {
             if (assertion.IsConst)
             {
-                names.Add(assertion);
-                values.Add(context.MkTrue());
+                definitions.Add(assertion, definitions.Own(context.MkTrue()));
             }
-            else if (assertion.IsEq && assertion.Args[0].IsConst)
+            else if (assertion.IsEq && definitions.Own(assertion.Arg(0)) is { IsConst: true } name)
             {
-                Expr value = assertion.Args[1].Substitute([.. names], [.. values]);
-                names.Add(assertion.Args[0]);
-                values.Add(value);
+                definitions.Add(name, definitions.Own(definitions.Apply(definitions.Own(assertion.Arg(1)))));
             }
         }
 
-        Expr[] from = [.. names];
-        Expr[] to = [.. values];
-        return [.. query.Select(q => (BoolExpr)q.Substitute(from, to))];
+        return [.. query.Select(q => (BoolExpr)definitions.Apply(q))];
     }
 
     /// <summary>
@@ -206,13 +259,15 @@ public sealed class Z3Backend : IVerificationBackend
     /// solver finds an input under <paramref name="constraints"/> that reaches one not listed yet, those that input
     /// reaches. A query that is unsatisfiable or gives up ends the search with what it has.
     /// </summary>
-    internal static ImmutableArray<UnknownCause> ReachableOpaques(Context context, ProductEncoding encoding, VerificationOptions options, Model model, BoolExpr[] constraints)
+    internal static ImmutableArray<UnknownCause> ReachableOpaques(
+        Context context, ProductEncoding encoding, VerificationOptions options, Model model, BoolExpr[] constraints, long? interruptAfterMs = null)
     {
+        long started = Stages.Start();
         HashSet<int> reached = [.. Reached(model, encoding)];
         for (BoolExpr[] rest = Unreached(); rest.Length > 0; rest = Unreached())
         {
             using Solver solver = Query(context, encoding, options, [context.MkOr(rest), .. constraints]);
-            if (solver.Check() != Status.SATISFIABLE)
+            if (Check(context, solver, options, "reachable-opaque", interruptAfterMs) != Status.SATISFIABLE)
             {
                 break;
             }
@@ -220,6 +275,7 @@ public sealed class Z3Backend : IVerificationBackend
             reached.UnionWith(Reached(solver.Model, encoding));
         }
 
+        Stages.StepDone(options, Stages.ReachableOpaques, started);
         return Causes(encoding, reached);
 
         BoolExpr[] Unreached() => [.. encoding.Opaques.Where((_, i) => !reached.Contains(i)).Select(static o => o.Reach)];
