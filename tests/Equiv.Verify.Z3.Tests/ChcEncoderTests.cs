@@ -1,5 +1,6 @@
 using Equiv.Core;
 using Equiv.Core.Ir;
+using Equiv.TestSupport;
 
 using Microsoft.Z3;
 
@@ -108,7 +109,9 @@ public sealed class ChcEncoderTests
         Assert.False(wrapping.Solves(context.MkTrue(), starved));
         Assert.Equal("Z3 gave up on the init obligation: max. resource limit exceeded", integers.Refutes(definitions, starved)?.Reason);
         Assert.StartsWith("the exit obligation fails: ", integers.Refutes(definitions, Options)?.Reason, StringComparison.Ordinal);
-        Assert.NotNull(entry.DerivationInputs(context.MkTrue(), Options));
+        RecordingRunLog log = new(isDebug: true);
+        Assert.NotNull(entry.DerivationInputs(context.MkTrue(), Options with { Log = log }));
+        Assert.Equal(["check:derivation=sat"], BackendProgressTests.Details(log));
         Assert.Throws<Z3Exception>(() => entry.DerivationInputs(context.MkTrue(), starved));
     }
 

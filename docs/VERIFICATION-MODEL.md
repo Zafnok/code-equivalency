@@ -25,7 +25,7 @@ with each side's call given its own outcome and heap, related to the other side'
 caller is still Equivalent, f moves from `unprovenAssumptions` to `contractsUsed`. The proof of K is
 itself modular, so f's own unproven assumptions join the caller's.
 
-A callee with no pair is not assumed, it is read (ADR 0044; ticket P2-097). A one-sided helper is a
+A callee with no pair is not assumed, it is read (ADR 0045; ticket P2-097). A one-sided helper is a
 `private` ordinary method with a body, declared in one side's source, whose identity is Added or
 Removed after the rename map. It is not generic, not in a generic type, not `async`, not an iterator
 and not `extern`, has no `ref`, `out` or `in` parameter, does not return by reference, lowered without
@@ -49,6 +49,12 @@ an inert type's members run no user code installed as ambient state (a `CultureI
 the current culture whose getters write the program's fields). The constructor of an anonymous type is
 closed too, whatever its property types are: the compiler writes it, and it only stores its arguments
 (ADR 0041, clarified 2026-10-02).
+
+Evaluating a hole of an interpolated string is assumed to leave the current culture's integer
+formatting as it found it: the hole does not set the thread's current culture, and does not write the
+number format of a writable one (ADR 0044). `string.Format` formats an integer hole after the later
+holes have run and `DefaultInterpolatedStringHandler` before, so only a pair whose sides bind the same
+text differently leans on this.
 
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
@@ -578,7 +584,7 @@ per callee: `contract` is K in SMT-LIB over `r.old`/`r.new`, `threw.*`, `type.*`
 `heap.<map>.*`, and `proposedBy` is `observed-predicates`. Each such callee is left out of
 `unprovenAssumptions`, and its own unproven assumptions are added to the caller's `assumedCallees` and
 `unprovenAssumptions`. A result of a pair where a call to a one-sided helper was resolved in either body
-(section 1, ADR 0044) carries `properties.calleesInlined`: one `{ callee, side }` per helper, `side`
+(section 1, ADR 0045) carries `properties.calleesInlined`: one `{ callee, side }` per helper, `side`
 being `legacy` or `modern`, helpers resolved inside helpers included, sorted by callee and then side.
 It is not part of the fingerprint.
 
@@ -710,6 +716,10 @@ A query that exhausts either is Unknown with reason `timeout` (`chc-timeout` on 
 with the limit that was hit: `resource limit <n> hit` or `wall-clock limit <n> ms hit`. The budgets are per
 query, and a pair asks several (section 5.1), so neither bounds the time a pair takes. The defaults come from
 `docs/runs/2026-10-01-timeout-budget.md`.
+
+A query that neither budget has ended once it has run four times `timeoutMs` is interrupted (ticket P2-076). It is
+Unknown with reason `timeout` like the others, the ladder goes on to the next rung as it does after a timeout, and
+the detail says `interrupted` in place of a limit. Only the one query is ended: nothing caps a rung, a pair or a run.
 
 Every Unknown other than `unbound` and `timeout` also carries `properties.failureRefinement` (ADR 0037;
 ticket P1-013): `{ newFailures, removedFailures }`, each `{ outcome, model? }`. The backend asks two more

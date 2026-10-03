@@ -32,6 +32,7 @@ internal sealed class FailureRefinementQuery(Func<Context> createContext, Verifi
         (RefinementResult newFailures, RefinementResult removedFailures) = encodable
             ? Query(old, @new)
             : (RefinementResult.Unknown, RefinementResult.Unknown);
+        Stages.StepDone(options, Stages.FailureRefinement, started);
         return new FailureRefinement(newFailures, removedFailures) { Elapsed = TimeProvider.System.GetElapsedTime(started) };
     }
 
@@ -39,14 +40,15 @@ internal sealed class FailureRefinementQuery(Func<Context> createContext, Verifi
     {
         (old, @new, _) = ProductEncoder.ShareFragments(old, @new);
         bool looping = new[] { IrLoopAnalysis.Of(old), IrLoopAnalysis.Of(@new) }.Any(static s => s.IsSelfRecursive || !s.Loops.IsEmpty);
-        IrProcedure oldUnrolled = IrUnroller.Unroll(old, options.Bound);
-        IrProcedure newUnrolled = IrUnroller.Unroll(@new, options.Bound);
-        using Context context = createContext();
-        ProductEncoding encoding = ProductEncoder.Encode(context, oldUnrolled, newUnrolled, options.CallIdentityMap);
-        Pair pair = new(context, encoding, oldUnrolled, newUnrolled, looping);
-        return (
-            Fails(pair, (encoding.Old, encoding.OpaqueOld), (encoding.New, encoding.OpaqueNew)),
-            Fails(pair, (encoding.New, encoding.OpaqueNew), (encoding.Old, encoding.OpaqueOld)));
+        (IrProcedure oldUnrolled, IrProcedure newUnrolled) = Stages.Timed(options, Stages.Unroll, () => (IrUnroller.Unroll(old, options.Bound), IrUnroller.Unroll(@new, options.Bound)));
+        return Stages.WithContext(options, createContext, context =>
+        {
+            ProductEncoding encoding = Stages.Timed(options, Stages.Encode, () => ProductEncoder.Encode(context, oldUnrolled, newUnrolled, options.CallIdentityMap));
+            Pair pair = new(context, encoding, oldUnrolled, newUnrolled, looping);
+            return (
+                Fails(pair, (encoding.Old, encoding.OpaqueOld), (encoding.New, encoding.OpaqueNew)),
+                Fails(pair, (encoding.New, encoding.OpaqueNew), (encoding.Old, encoding.OpaqueOld)));
+        });
     }
 
     /// <summary>Whether some input makes <paramref name="returns"/> return and <paramref name="fails"/> throw.</summary>
@@ -56,10 +58,10 @@ internal sealed class FailureRefinementQuery(Func<Context> createContext, Verifi
         BoolExpr[] withinBound = [context.MkNot(encoding.Old.Unreachable), context.MkNot(encoding.New.Unreachable)];
         using Solver modelled = Z3Backend.Query(
             context, encoding, options, [returns.Terms.Returned, fails.Terms.Threw, context.MkNot(returns.Opaque), context.MkNot(fails.Opaque), .. withinBound]);
-        switch (modelled.Check())
+        switch (Z3Backend.Check(context, modelled, options, "failure-modelled"))
         {
             case Status.SATISFIABLE:
-                Counterexample runs = ModelDecoder.Runs(context, modelled.Model, encoding, old, @new);
+                Counterexample runs = Stages.Timed(options, Stages.Replay, () => ModelDecoder.Runs(context, modelled.Model, encoding, old, @new));
                 return runs.Old.Taint.Outcome || runs.New.Taint.Outcome ? RefinementResult.Unknown : new RefinementResult(RefinementOutcome.Found, runs);
             case Status.UNKNOWN:
                 return RefinementResult.Unknown;
@@ -71,7 +73,7 @@ internal sealed class FailureRefinementQuery(Func<Context> createContext, Verifi
             encoding,
             options,
             [context.MkOr(returns.Terms.Returned, returns.Opaque, returns.Terms.Unreachable), context.MkOr(fails.Terms.Threw, fails.Opaque, fails.Terms.Unreachable), .. looping ? [] : withinBound]);
-        return resolved.Check() == Status.UNSATISFIABLE ? RefinementResult.NoneProved : RefinementResult.Unknown;
+        return Z3Backend.Check(context, resolved, options, "failure-resolved") == Status.UNSATISFIABLE ? RefinementResult.NoneProved : RefinementResult.Unknown;
     }
 
     /// <summary>The product both queries share, the unrolled procedures its models replay through, and whether the pair loops.</summary>

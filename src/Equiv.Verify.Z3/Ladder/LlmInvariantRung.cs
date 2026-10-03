@@ -32,17 +32,19 @@ internal sealed class LlmInvariantRung(Func<Context> createContext, Verification
     /// <summary>The most candidates rung 5 asks for.</summary>
     public const int MaxRounds = 3;
 
-    public ImmutableArray<Rung> Prove(IrProcedure old, IrProcedure @new)
+    public ImmutableArray<Rung> Prove(IrProcedure old, IrProcedure @new) =>
+        Stages.WithContext(options, createContext, context => Prove(context, old, @new));
+
+    private ImmutableArray<Rung> Prove(Context context, IrProcedure old, IrProcedure @new)
     {
-        using Context context = createContext();
-        ChcEncoder chc = new(context, old, @new, ChcArithmetic.WrappingIntegers, options.CallIdentityMap);
+        ChcEncoder chc = Stages.Timed(options, Stages.EncodeChc, () => new ChcEncoder(context, old, @new, ChcArithmetic.WrappingIntegers, options.CallIdentityMap));
         ImmutableArray<Relation> relations = [.. chc.Relations];
         InvariantRequest request = new(IrText.Dump(old), IrText.Dump(@new), [.. relations.Select(Describe)], []);
         List<Rung> rounds = [];
         for (int round = 1; round <= MaxRounds; round++)
         {
             string at = $"round {round.ToString(CultureInfo.InvariantCulture)}";
-            string? candidate = proposer.ProposeAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+            string? candidate = Stages.Timed(options, Stages.Propose, () => proposer.ProposeAsync(request, CancellationToken.None).GetAwaiter().GetResult());
             if (candidate is null)
             {
                 rounds.Add(new Rung(new LadderStep(method, RungOutcome.Inconclusive, $"{at}: {proposedBy} proposed no invariant")));

@@ -1,4 +1,4 @@
-# ADR 0044: A call to a private helper that exists on one side only is replaced by the helper's body
+# ADR 0045: A call to a private helper that exists on one side only is replaced by the helper's body
 
 Status: accepted (2026-10-02). Narrows ADR 0019's rejection of inlining to callees that are matched
 pairs, and ADR 0018's rule that every call is a trace event.
