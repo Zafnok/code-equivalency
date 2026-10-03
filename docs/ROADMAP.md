@@ -438,9 +438,9 @@ work, P2-050, P1-019, P2-051 and P2-052.
   re-scored per-ticket unlock table. Done 2026-09-30: 0 pair-level crashes (92 before), unchanged share 91.6%, lowerable share 39.1%,
   Preserving Equivalent share 70.1%, verdict continue (`docs/runs/2026-09-30-full-verdict.md`).
 - P2-047 (M) Divergent audit: hand-adjudicate a fixed sample of EQ002 and EQ006 and report Divergent
-  precision. Needs P2-046. Done 2026-09-30: 77 results, 2 confirmed, 51 false positive, 24
-  undetermined, Divergent precision 3.8% (`docs/runs/2026-09-30-divergent-audit.md`); eight causes
-  filed as P2-068 to P2-075.
+  precision. Needs P2-046. Done 2026-09-30: 77 results, 2 confirmed, 50 false positive, 25
+  undetermined, Divergent precision 3.8% (`docs/runs/2026-09-30-divergent-audit.md`, as corrected by
+  P2-072); seven causes filed as P2-068 to P2-071 and P2-073 to P2-075.
 - P2-048 (M) Five cleanup refactorings as Preserving seed operators, and a "cleanup proof rate" per
   seeded run. Needs M4-010, P2-035.
 - P2-049 (M) Samples for cleanup refactorings (modern syntax, extract and inline method). Each
@@ -583,7 +583,7 @@ OpenRA are rerun once they land:
   eshop-upgrade-assistant's 17 unbound pairs, the ones with a single error. Done 2026-10-01: the
   census reads `IrOpaque.WholeBody`, so a body of nothing but flagged opaques counts however many.
 
-P2-047's audit found Divergent precision of 3.8% (2 of 53 adjudicated). Each false-positive cause is
+P2-047's audit found Divergent precision of 3.8% (2 of 52 adjudicated). Each false-positive cause is
 one ticket, in order of how many false positives it accounts for. Four causes (P2-068 to P2-071)
 give one call two identities. Three (P2-073 to P2-075) are EQ006 rows that match on the member alone.
 
@@ -599,8 +599,9 @@ give one call two identities. Three (P2-073 to P2-075) are EQ006 rows that match
 - P2-071 (M) An effect-free BCL call (pure getter, empty-collection constructor) is not a trace
   event. 3.
 - P2-075 (S) The ICU and `ListViewGroup` rows match only the members their change affects. 2.
-- P2-072 (M) Two identical bodies with a rethrowing catch lower to different call traces. 1, but
-  it is a lowering bug on identical source.
+- P2-072 (M) Two identical bodies with a rethrowing catch lower to different call traces. Done
+  2026-10-02: not a bug. The two bodies are different source (the modern solution compiles an edited
+  copy), the Divergent is right, and the audit's row 17 is corrected to undetermined.
 
 Run time (found 2026-09-30 during P1-018). A Git Extensions `full` run takes 8h57m. That is over a
 hosted GitHub runner's 6-hour job limit, and six pairs that all end Unknown spend 5.4 of its 6.8 verify
