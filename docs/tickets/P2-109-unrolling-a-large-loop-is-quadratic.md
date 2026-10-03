@@ -1,5 +1,5 @@
 # P2-109 Unrolling a loop costs time in proportion to its size, not to its square
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-076
@@ -60,3 +60,32 @@ Verifying pairs in parallel (P2-077).
   stopped. At the time of writing the pair had not finished, so its outcome and its total are not known.
 - Not measured: the size of the unrolled procedure. The quadratic scan is read from the code and the stacks; that the
   self-call is what makes the loop large is inferred from `Unroll`'s order of work, not observed. Criterion 1 settles both.
+- Criterion 1, measured 2026-10-03 on a procedure written for it (`IrUnrollerTests.LoopAroundASelfCall`: a counting
+  loop whose body makes k calls, each ending its block, then calls its own procedure, and a second loop beside it),
+  at bound 3, Release build. Instructions before inlining, after unrolling, blocks after unrolling, seconds in `Unroll`:
+
+  | k | instructions in | instructions out | blocks out | before | block index only | after |
+  |---|---|---|---|---|---|---|
+  | 40 | 50 | 3,650 | 3,185 | 0.46 | 0.13 | 0.05 |
+  | 80 | 90 | 6,290 | 5,825 | 2.73 | 0.66 | 0.18 |
+  | 160 | 170 | 11,570 | 11,105 | 16.63 | 1.07 | 0.33 |
+  | 320 | 330 | 22,130 | 21,665 | 123.10 | 3.67 | 0.69 |
+
+  Doubling the body multiplied the time by six to seven: the cost was cubic, not quadratic as the Goal says.
+- Decision: the dominant cost -> `IrEditor.Get` and `IrEditor.Replace`, which found a block by scanning the block
+  list. `Versions` called `Get` once per loop block per defined variable, which is where the stack samples sat; with
+  the lookup indexed it is 3.67 s of the 123.10, and its own scan the rest. Both are fixed: the editor keeps each
+  block's position by id, and `IrLoopCopies` records each variable's defining block as it collects the definitions.
+  Alternatives: fixing `Versions` alone, which leaves `IrSsaRepair.Run`'s `Replace` of every block quadratic. Rule:
+  measured, criterion 1.
+- A first procedure, with the same instruction counts in a handful of large blocks, unrolled in 0.13 s before the
+  fix. The cost follows the number of blocks, so a body of calls (each call ends its block) is what shows it.
+- Decision: how criterion 3 is tested -> by the ratio of two timings, the fastest of three runs each, for k = 80 and
+  k = 320: under ten times, where it was 45 before and is about 4 after
+  (`IrUnrollerTests.UnrollingALoopThatCallsItsOwnProcedureIsLinearInItsSize`). The criterion asks for a counter of
+  instructions visited. The time was in block lookups that are now dictionary reads, so a counter would count
+  whatever the code chose to count and would not notice a scan coming back. Alternatives: a counter on the editor
+  read through an internal overload; an absolute time limit. Rule: 3.
+- Criterion 2: the existing fixtures, the two snapshots and the property tests in `IrUnrollerTests` pass unchanged
+  (797 of 797 in `tests/Equiv.Core.Tests`). A whole-procedure pass per copied loop remains (`IrSsaRepair`'s
+  predecessor map, `IrLoopAnalysis.Of` in `Unroll`'s loop), so the cost is blocks times loops, not strictly linear.

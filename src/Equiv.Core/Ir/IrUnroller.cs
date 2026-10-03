@@ -270,6 +270,7 @@ public static class IrUnroller
     {
         private readonly IrProcedure procedure = procedure;
         private readonly List<IrBlock> blocks = [.. procedure.Blocks];
+        private readonly Dictionary<IrBlockId, int> positions = procedure.Blocks.Select(static (b, i) => (b.Id, i)).ToDictionary();
         private readonly HashSet<string> names = new(
             procedure.Parameters.Select(static p => p.Var.Name)
                 .Concat(procedure.Blocks.SelectMany(static b => b.Instructions).SelectMany(static i => i.Definitions()).Select(static v => v.Name)),
@@ -285,11 +286,15 @@ public static class IrUnroller
 
         public IrProcedure Build() => procedure with { Blocks = [.. blocks] };
 
-        public IrBlock Get(IrBlockId id) => blocks.First(b => b.Id == id);
+        public IrBlock Get(IrBlockId id) => blocks[positions[id]];
 
-        public void Replace(IrBlock block) => blocks[blocks.FindIndex(b => b.Id == block.Id)] = block;
+        public void Replace(IrBlock block) => blocks[positions[block.Id]] = block;
 
-        public void Add(IrBlock block) => blocks.Add(block);
+        public void Add(IrBlock block)
+        {
+            positions.Add(block.Id, blocks.Count);
+            blocks.Add(block);
+        }
 
         public IrBlockId NewBlock() => new(nextBlock++);
 
@@ -449,7 +454,8 @@ public static class IrUnroller
         private readonly int copies;
         private readonly IrLastCopy last;
         private readonly HashSet<IrBlockId> body;
-        private readonly List<IrVar> defined;
+        private readonly List<IrVar> defined = [];
+        private readonly Dictionary<string, IrBlockId> home = new(StringComparer.Ordinal);
         private readonly Dictionary<IrBlockId, IrBlockId>[] ids;
         private readonly Dictionary<string, IrVar>[] vars;
 
@@ -460,7 +466,15 @@ public static class IrUnroller
             this.copies = copies;
             this.last = last;
             body = [.. loop.Blocks];
-            defined = [.. loop.Blocks.SelectMany(b => editor.Get(b).Instructions).SelectMany(static i => i.Definitions())];
+            foreach (IrBlockId block in loop.Blocks)
+            {
+                foreach (IrVar var in editor.Get(block).Instructions.SelectMany(static i => i.Definitions()))
+                {
+                    defined.Add(var);
+                    home.Add(var.Name, block);
+                }
+            }
+
             ids = new Dictionary<IrBlockId, IrBlockId>[copies + 1];
             vars = new Dictionary<string, IrVar>[copies + 1];
             for (int c = 1; c <= copies; c++)
@@ -505,11 +519,7 @@ public static class IrUnroller
         public Dictionary<string, Dictionary<IrBlockId, IrVar>> Versions() =>
             defined.ToDictionary(
                 static v => v.Name,
-                v =>
-                {
-                    IrBlockId home = loop.Blocks.First(b => editor.Get(b).Instructions.Any(i => i.Definitions().Contains(v)));
-                    return Enumerable.Range(1, copies).ToDictionary(c => ids[c][home], c => vars[c][v.Name]);
-                },
+                v => Enumerable.Range(1, copies).ToDictionary(c => ids[c][home[v.Name]], c => vars[c][v.Name]),
                 StringComparer.Ordinal);
 
         private IrVar Var(int c, IrVar var) => vars[c].GetValueOrDefault(var.Name, var);

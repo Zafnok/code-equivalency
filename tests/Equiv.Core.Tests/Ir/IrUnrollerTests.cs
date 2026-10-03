@@ -1,4 +1,7 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -467,6 +470,33 @@ public sealed class IrUnrollerTests
         Assert.Equal(6, instructions.SelectMany(static i => i.Definitions()).Count());
     }
 
+    /// <summary>
+    /// Ticket P2-109: the cost of unrolling grows with the size of what is copied, not with its cube. The procedure is
+    /// the shape that took an OpenRA pair over an hour: a loop that calls its own procedure, so inlining nests the loop
+    /// in itself, with a block per call in its body, and a second loop beside it. Four times the body took 45 times as
+    /// long before the fix and takes about four times as long after it; the bound of ten sits between the two.
+    /// </summary>
+    [Fact]
+    public void UnrollingALoopThatCallsItsOwnProcedureIsLinearInItsSize()
+    {
+        IrProcedure small = IrText.Parse(LoopAroundASelfCall(calls: 80));
+        IrProcedure large = IrText.Parse(LoopAroundASelfCall(calls: 320));
+        Assert.Empty(IrValidator.Validate(large));
+        IrProcedure unrolled = IrUnroller.Unroll(large, 3);
+
+        Assert.Empty(IrLoopAnalysis.Of(unrolled).Loops);
+        Assert.True(unrolled.Blocks.Length > 20_000);
+        Assert.True(Fastest(large) < 10 * Fastest(small), "unrolling four times the loop took more than ten times as long");
+
+        static TimeSpan Fastest(IrProcedure procedure) =>
+            Enumerable.Range(0, 3).Min(_ =>
+            {
+                Stopwatch watch = Stopwatch.StartNew();
+                IrUnroller.Unroll(procedure, 3);
+                return watch.Elapsed;
+            });
+    }
+
     [Fact]
     public void ArgumentsAreChecked()
     {
@@ -478,6 +508,52 @@ public sealed class IrUnrollerTests
         Assert.Throws<ArgumentNullException>(static () => IrUnroller.Peel(null!, new IrBlockId(1), 1));
         Assert.Throws<ArgumentNullException>(() => IrUnroller.Peel(single, null!, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => IrUnroller.UnrollInPlace(single, new IrBlockId(1), 0));
+    }
+
+    /// <summary>A counting loop whose body makes <paramref name="calls"/> calls, each ending its block, then calls the procedure itself; a second loop follows.</summary>
+    private static string LoopAroundASelfCall(int calls)
+    {
+        StringBuilder text = new("""
+            proc "T::W(int)" (%n: bv32) entry B0
+            B0:
+              %z: bv32 = const bv32 0
+              %one: bv32 = const bv32 1
+              goto B1
+            B1:
+              %i: bv32 = phi [B0: %z, B3: %i2]
+              %c: bool = sge %i, %n
+              br %c, B5, B2
+            B2:
+
+            """);
+        for (int k = 0; k < calls; k++)
+        {
+            string id = k.ToString(CultureInfo.InvariantCulture);
+            string next = (100 + k).ToString(CultureInfo.InvariantCulture);
+            text.Append("  %f" + id + ": bv32 = call \"X::F(int)\"(%i) threw %g" + id + ": bool\n  br %g" + id + ", B4, B" + next + "\nB" + next + ":\n");
+        }
+
+        return text.Append("""
+              %m: bv32 = sub %n, %one
+              call "T::W(int)"(%m) threw %t: bool
+              br %t, B4, B3
+            B3:
+              %i2: bv32 = add %i, %one
+              goto B1
+            B4:
+              throw "System.Exception"
+            B5:
+              goto B6
+            B6:
+              %j: bv32 = phi [B5: %z, B7: %j2]
+              %d: bool = sge %j, %n
+              br %d, B8, B7
+            B7:
+              %j2: bv32 = add %j, %one
+              goto B6
+            B8:
+              ret
+            """).ToString();
     }
 
     private static IrProcedure Load(string name) => IrText.Parse(name switch
