@@ -23,7 +23,8 @@ namespace Equiv.Core.Reporting;
 /// it is not part of the fingerprint. <see cref="Runtimes"/> is the pair's <see cref="Matching.ProcedurePair.Runtimes"/> (ADR 0040;
 /// ticket P2-055), which an EQ006 result's row is looked up in and its message names; it is not part of the fingerprint.
 /// <see cref="ReboundCalls"/> is the pair's
-/// <see cref="ProcedurePair.ReboundCalls"/> (ADR 0042; ticket P2-069), and is not part of the fingerprint either.
+/// <see cref="ProcedurePair.ReboundCalls"/> (ADR 0042; ticket P2-069), and is not part of the fingerprint either; nor is
+/// <see cref="ForwardersResolved"/>, the pair's <see cref="ProcedurePair.ForwardersResolved"/> (ADR 0043; ticket P2-068).
 /// </summary>
 public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
 {
@@ -42,4 +43,6 @@ public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verd
     public RuntimeInterval? Runtimes { get; init; }
 
     public ImmutableArray<ReboundCall> ReboundCalls { get; init; } = [];
+
+    public ImmutableArray<ResolvedForwarder> ForwardersResolved { get; init; } = [];
 }

@@ -24,8 +24,14 @@ internal static class CallIdentityFactory
 {
     public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval)
     {
+        return Of(Name(method, renames), suppressedRuntimeChanges, interval);
+    }
+
+    /// <summary>The <see cref="CallIdentity.Value"/> of a call to <paramref name="method"/>, which no runtime rule changes.</summary>
+    public static string Name(IMethodSymbol method, RenameMap renames)
+    {
         ArgumentNullException.ThrowIfNull(method);
-        return Of(Constructed(RoslynIdentity.Of(method, renames).Value, [.. TypeArguments(method.ContainingType), .. method.TypeArguments]), suppressedRuntimeChanges, interval);
+        return Constructed(RoslynIdentity.Of(method, renames).Value, [.. TypeArguments(method.ContainingType), .. method.TypeArguments]);
     }
 
     /// <summary>

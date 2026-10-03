@@ -105,6 +105,24 @@ public sealed class CallSitesTests
         Assert.False(new CallSites().IsRebound(new CallIdentity(Legacy)));
     }
 
+    /// <summary>ADR 0043 (ticket P2-068): the forwarders of both bodies, each once, sorted by forwarder and then target.</summary>
+    [Fact]
+    public void TheForwardersOfBothBodiesAreListedOnceAndSorted()
+    {
+        CallSites legacy = new();
+        legacy.Forwarded(new CallIdentity("B::F()"), new CallIdentity("T::Z()"));
+        legacy.Forwarded(new CallIdentity("B::F()"), new CallIdentity("T::Z()"));
+        legacy.Forwarded(new CallIdentity("A::F()"), new CallIdentity("T::Y()"));
+        CallSites modern = new();
+        modern.Forwarded(new CallIdentity("B::F()"), new CallIdentity("T::Z()"));
+        modern.Forwarded(new CallIdentity("A::F()"), new CallIdentity("T::X()"));
+
+        Assert.Equal(
+            [new ResolvedForwarder("A::F()", "T::X()"), new ResolvedForwarder("A::F()", "T::Y()"), new ResolvedForwarder("B::F()", "T::Z()")],
+            CallSites.Forwarders(legacy, modern));
+        Assert.Empty(CallSites.Forwarders(new CallSites(), new CallSites()));
+    }
+
     private static CallSites Sites(params (string Text, string Member, string Callee)[] calls)
     {
         CallSites sites = new();

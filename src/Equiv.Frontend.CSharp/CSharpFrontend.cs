@@ -157,7 +157,8 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// level). <see cref="OperationCanceledException"/> and <see cref="OutOfMemoryException"/> propagate unchanged,
     /// as they do for verification (ADR 0023). Both bodies are lowered and fingerprinted with the one interval between the
     /// runtimes of the two projects they come from (ADR 0040 decision 2; P2-055), so a runtime rule the pair does not cross
-    /// applies to neither.
+    /// applies to neither. A matched method whose two sides do not agree on what it forwards to is kept as a callee in every
+    /// body of the run (ADR 0043; ticket P2-068).
     /// </summary>
     private (ImmutableArray<ProcedurePair> Pairs, ImmutableArray<LoweringFailure> Failures) Lowered(
         ImmutableArray<ProcedurePair> pairs,
@@ -166,6 +167,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
         IRunLog log)
     {
         RuntimeChangeTable table = RuntimeChangeTable.Load();
+        ImmutableHashSet<string> kept = KeptForwarders(pairs, sides, config.Renames);
         log.Phase("lower", pairs.Length, pairs.Length);
         ImmutableArray<ProcedurePair>.Builder lowered = ImmutableArray.CreateBuilder<ProcedurePair>(pairs.Length);
         ImmutableArray<LoweringFailure>.Builder failures = ImmutableArray.CreateBuilder<LoweringFailure>();
@@ -178,21 +180,24 @@ public sealed class CSharpFrontend : ILanguageFrontend
             log.Item(pair.New.Value, 1);
             try
             {
-                (IrProcedure oldBody, IrProcedure newBody, ImmutableArray<string> applied, ImmutableArray<ReboundCall> rebound) = Bodies((legacy, legacyRuntime), (modern, modernRuntime), config);
+                (IrProcedure oldBody, IrProcedure newBody, ImmutableArray<string> applied, ImmutableArray<ReboundCall> rebound, ImmutableArray<ResolvedForwarder> forwarders) =
+                    Bodies((legacy, legacyRuntime), (modern, modernRuntime), config, kept);
                 lowered.Add(Relowered(
                     pair with
                     {
                         OldBody = oldBody,
                         NewBody = newBody,
-                        OldFingerprint = BodyFingerprinter.Compute(legacy.Symbol, legacy.Compilation, config, legacy: true, legacyRuntime),
-                        NewFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false, modernRuntime),
+                        OldFingerprint = BodyFingerprinter.Compute(legacy.Symbol, legacy.Compilation, config, legacy: true, legacyRuntime, kept),
+                        NewFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false, modernRuntime, kept),
                         EquivalencesApplied = applied,
                         ReboundCalls = rebound,
+                        ForwardersResolved = forwarders,
                         Runtimes = legacyRuntime.Interval,
                     },
                     (legacy, legacyRuntime),
                     (modern, modernRuntime),
                     config,
+                    kept,
                     log));
                 log.ItemDone("lowered");
             }
@@ -208,56 +213,74 @@ public sealed class CSharpFrontend : ILanguageFrontend
     }
 
     /// <summary>
-    /// Both bodies of a pair, the catalogue entries that fired in either, sorted, and the pair's rebound calls (ADR 0042;
-    /// ticket P2-069). The bodies are lowered once to record their call sites. When a site with the same text binds to a
+    /// The identities of the matched methods a call to which is not the same call on both sides (ADR 0043; ticket P2-068):
+    /// one side's is a forwarder and the other's is not, or the two forward to different callees. No body resolves such a
+    /// forwarder, so its callers still assume the pair (ADR 0019) and its own result says what changed.
+    /// </summary>
+    private static ImmutableHashSet<string> KeptForwarders(ImmutableArray<ProcedurePair> pairs, Sides sides, RenameMap renames) =>
+        pairs.Select(p => (Legacy: sides.Legacy[p.Old], Modern: sides.Modern[p.New]))
+            .Where(p => !Forwarders.Agree((p.Legacy.Symbol, p.Legacy.Compilation), (p.Modern.Symbol, p.Modern.Compilation), renames))
+            .SelectMany(p => (string[])[CallIdentityFactory.Name(p.Legacy.Symbol, renames), CallIdentityFactory.Name(p.Modern.Symbol, renames)])
+            .ToImmutableHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Both bodies of a pair, the catalogue entries that fired in either, sorted, the pair's rebound calls (ADR 0042;
+    /// ticket P2-069) and the forwarders the bodies it returns resolved (ADR 0043; ticket P2-068). The bodies are lowered once to record their call sites. When a site with the same text binds to a
     /// different callee on each side, both are lowered again with every call to such a callee an opaque. Every lowering of a
     /// side uses that side's runtime facts (ADR 0040; ticket P2-055).
     /// </summary>
-    private (IrProcedure Old, IrProcedure New, ImmutableArray<string> Applied, ImmutableArray<ReboundCall> Rebound) Bodies(
-        (SideProcedure Procedure, SideRuntime Runtime) legacySide, (SideProcedure Procedure, SideRuntime Runtime) modernSide, EquivConfig config)
+    private (IrProcedure Old, IrProcedure New, ImmutableArray<string> Applied, ImmutableArray<ReboundCall> Rebound, ImmutableArray<ResolvedForwarder> Forwarders) Bodies(
+        (SideProcedure Procedure, SideRuntime Runtime) legacySide, (SideProcedure Procedure, SideRuntime Runtime) modernSide, EquivConfig config, ImmutableHashSet<string> kept)
     {
         (SideProcedure legacy, SideRuntime legacyRuntime) = legacySide;
         (SideProcedure modern, SideRuntime modernRuntime) = modernSide;
-        CallSites oldSites = new();
-        CallSites newSites = new();
+        CallSites oldSites = new() { KeptForwarders = kept };
+        CallSites newSites = new() { KeptForwarders = kept };
         (IrProcedure oldBody, ImmutableArray<string> oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, legacyRuntime, oldSites);
         (IrProcedure newBody, ImmutableArray<string> newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, modernRuntime, newSites);
         ImmutableArray<ReboundCall> rebound = CallSites.Rebound(oldSites, newSites, config.CallIdentityRenames);
         if (!rebound.IsEmpty)
         {
-            (oldBody, oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, legacyRuntime, new CallSites(rebound.Select(static r => r.Legacy)));
-            (newBody, newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, modernRuntime, new CallSites(rebound.Select(static r => r.Modern)));
+            oldSites = new CallSites(rebound.Select(static r => r.Legacy)) { KeptForwarders = kept };
+            newSites = new CallSites(rebound.Select(static r => r.Modern)) { KeptForwarders = kept };
+            (oldBody, oldApplied) = _lower(legacy.Symbol, legacy.Compilation, config, true, legacyRuntime, oldSites);
+            (newBody, newApplied) = _lower(modern.Symbol, modern.Compilation, config, false, modernRuntime, newSites);
         }
 
-        return (oldBody, newBody, [.. oldApplied.Union(newApplied, StringComparer.Ordinal).Order(StringComparer.Ordinal)], rebound);
+        return (oldBody, newBody, [.. oldApplied.Union(newApplied, StringComparer.Ordinal).Order(StringComparer.Ordinal)], rebound, CallSites.Forwarders(oldSites, newSites));
     }
 
     /// <summary>
     /// <paramref name="pair"/>, lowered from IOperation and fingerprinted, with the bodies it keeps. Under <c>--il-fallback</c>
     /// <see cref="IlFallback"/> may lower both sides again from IL, once congruence is decided on the fingerprints (ADR 0039;
-    /// ticket P1-016); IL-lowered bodies applied no API equivalence. Then, when exactly one side is <c>async</c>, both bodies
+    /// ticket P1-016); IL-lowered bodies applied no API equivalence, and resolved the forwarders their own calls name (ADR
+    /// 0043; ticket P2-068). Then, when exactly one side is <c>async</c>, both bodies
     /// are one opaque, whichever lowering they came from (ticket M4-006).
     /// </summary>
     private static ProcedurePair Relowered(
-        ProcedurePair pair, (SideProcedure Procedure, SideRuntime Runtime) legacySide, (SideProcedure Procedure, SideRuntime Runtime) modernSide, EquivConfig config, IRunLog log)
+        ProcedurePair pair, (SideProcedure Procedure, SideRuntime Runtime) legacySide, (SideProcedure Procedure, SideRuntime Runtime) modernSide, EquivConfig config, ImmutableHashSet<string> kept, IRunLog log)
     {
         SideProcedure legacy = legacySide.Procedure;
         SideProcedure modern = modernSide.Procedure;
         if (config.IlFallback)
         {
             bool congruent = pair.OldFingerprint is { RuntimeSensitive: false } fingerprint && fingerprint == pair.NewFingerprint;
+            CallSites oldSites = new(pair.ReboundCalls.Select(static r => r.Legacy)) { KeptForwarders = kept };
+            CallSites newSites = new(pair.ReboundCalls.Select(static r => r.Modern)) { KeptForwarders = kept };
             (IrProcedure old, IrProcedure @new, bool tried, string lowering) = IlFallback.Choose(
-                new IlFallback.Side(legacy.Symbol, legacy.Compilation, pair.OldBody!, legacySide.Runtime) { Rebound = pair.ReboundCalls.Select(static r => r.Legacy).ToImmutableHashSet(StringComparer.Ordinal) },
-                new IlFallback.Side(modern.Symbol, modern.Compilation, pair.NewBody!, modernSide.Runtime) { Rebound = pair.ReboundCalls.Select(static r => r.Modern).ToImmutableHashSet(StringComparer.Ordinal) },
+                new IlFallback.Side(legacy.Symbol, legacy.Compilation, pair.OldBody!, legacySide.Runtime) { Sites = oldSites },
+                new IlFallback.Side(modern.Symbol, modern.Compilation, pair.NewBody!, modernSide.Runtime) { Sites = newSites },
                 congruent,
                 log);
+            bool il = string.Equals(lowering, IlFallback.Il, StringComparison.Ordinal);
             pair = pair with
             {
                 OldBody = old,
                 NewBody = @new,
                 Lowering = lowering,
                 IlFallbackTried = tried,
-                EquivalencesApplied = string.Equals(lowering, IlFallback.Il, StringComparison.Ordinal) ? [] : pair.EquivalencesApplied,
+                EquivalencesApplied = il ? [] : pair.EquivalencesApplied,
+                ForwardersResolved = il ? CallSites.Forwarders(oldSites, newSites) : pair.ForwardersResolved,
             };
         }
 
