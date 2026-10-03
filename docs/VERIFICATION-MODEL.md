@@ -56,6 +56,11 @@ number format of a writable one (ADR 0044). `string.Format` formats an integer h
 holes have run and `DefaultInterpolatedStringHandler` before, so only a pair whose sides bind the same
 text differently leans on this.
 
+Where a body sits is not compared (ADR 0046). The file path or line number the compiler supplies for a
+`[CallerFilePath]` or `[CallerLineNumber]` parameter is an input both sides share, so a pair that
+differs only in the directory it was checked out to, the file a body is in, or the line a call is on
+is Equivalent. A path or line the source writes out is an ordinary value and is compared.
+
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
 No single algorithm decides equivalence for every program pair, but this sub-problem
