@@ -96,6 +96,6 @@ Verifying pairs in parallel (P2-077).
   `TraceEncoder.Trace`, native `Z3_mk_seq_concat`, stack overflow, exit -1073741571, no SARIF. So the pair has no
   outcome and the run has no slowest-five list. The size guard trips: the unrolled procedure is what is too large.
   Its size was not measured (117 s at the linear rate above suggests millions of instructions; that is an estimate).
-  Filed as P2-113, which measures it and takes the question to `equiv-adr`.
+  Filed as P2-121, which measures it and takes the question to `equiv-adr`.
 - The run got to verify 1,230 of 10,114 before the overflow, with one pair-level failure unrelated to this ticket
   (`OpenRA.ObjectCreator::.ctor(OpenRA.Manifest,OpenRA.InstalledMods)`, a sort mismatch in verifying).
