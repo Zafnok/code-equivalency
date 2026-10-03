@@ -907,6 +907,8 @@ internal sealed partial class IlLowerer
     /// auto-property's accessor reads or writes its backing field's map (ticket M4-008), each as <see cref="IrLowerer"/>
     /// lowers it. A struct's constructor is only ever a <c>newobj</c> here: ILSpy reads one called on a local's address as
     /// the local's store of a <c>newobj</c>, and Roslyn stores one into a field or element. Null for a call with no result.
+    /// A member in the effect-free catalogue is no call (ADR 0043): a getter is its receiver's pure function and a
+    /// constructor's object the next of <c>new.&lt;Sort&gt;</c>, each as <see cref="IrLowerer"/> lowers it, less the family rule.
     /// A call to an identity the pair's other side binds differently at the same source text is <see cref="Rebound"/> (ADR 0042).
     /// </summary>
     private Val? Call(CallInstruction call)
@@ -945,6 +947,8 @@ internal sealed partial class IlLowerer
         ImmutableArray<IrVar> operands = receiver is { } self ? [self.Var, .. arguments] : arguments;
         return (isOperator, Rebounds.Contains(identity.Value)) switch
         {
+            _ when EffectFreeMembers.IsGetter(target) => new(Pure(EffectFreeMembers.Getter(identity), [], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType),
+            _ when call is NewObj && EffectFreeMembers.Allocates(target) => new(heap.Fresh((IrSort)Map(target.ContainingType), context), target.ContainingType),
             (true, _) => new(Pure(PureCatalogue.UserDefined(identity), [PureCatalogue.AnyException], identity.RuntimeChanged, operands, Map(target.ReturnType)), target.ReturnType),
             (_, true) => Rebound(call, written, Result(call, target)),
             _ => Invoke(identity, operands, written, Result(call, target), ClosedCalls.IsClosed(target)),

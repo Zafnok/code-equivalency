@@ -184,10 +184,6 @@
               {
                 "member": "System.ArgumentOutOfRangeException::.ctor(string)",
                 "callSites": 1
-              },
-              {
-                "member": "System.String::get_Length()",
-                "callSites": 1
               }
             ]
           },
