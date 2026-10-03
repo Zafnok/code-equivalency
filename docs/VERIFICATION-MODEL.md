@@ -33,6 +33,12 @@ the current culture whose getters write the program's fields). The constructor o
 closed too, whatever its property types are: the compiler writes it, and it only stores its arguments
 (ADR 0041, clarified 2026-10-02).
 
+Evaluating a hole of an interpolated string is assumed to leave the current culture's integer
+formatting as it found it: the hole does not set the thread's current culture, and does not write the
+number format of a writable one (ADR 0044). `string.Format` formats an integer hole after the later
+holes have run and `DefaultInterpolatedStringHandler` before, so only a pair whose sides bind the same
+text differently leans on this.
+
 Everything else (timing, allocation, log text, exception messages) is not observed.
 
 No single algorithm decides equivalence for every program pair, but this sub-problem
