@@ -25,6 +25,23 @@ with each side's call given its own outcome and heap, related to the other side'
 caller is still Equivalent, f moves from `unprovenAssumptions` to `contractsUsed`. The proof of K is
 itself modular, so f's own unproven assumptions join the caller's.
 
+A callee with no pair is not assumed, it is read (ADR 0045; ticket P2-097). A one-sided helper is a
+`private` ordinary method with a body, declared in one side's source, whose identity is Added or
+Removed after the rename map. It is not generic, not in a generic type, not `async`, not an iterator
+and not `extern`, has no `ref`, `out` or `in` parameter, does not return by reference, lowered without
+a failure, and does not call itself, directly or through other one-sided helpers. Its expanded body,
+the lowered body with every call this rule resolves inside it replaced in turn, has at most 256 IR
+instructions. A call to one from a method of the helper's own type is replaced by a copy of that
+expanded body: the parameters are bound to the evaluated arguments and `this` to the null-checked
+receiver, the helper's synthesised inputs become the caller's by name, and a heap map enters the copy
+at the caller's version and leaves as the caller's next version. The helper's call has no trace
+event and no functions; its body's calls are the caller's, at the caller's positions. A returning
+exit continues after the call. A throwing exit keeps its exception type: `System.Exception` takes the
+call's `threw` edge, and any other type is the caller's own throw, which needs the call to be outside
+every `try`, `catch`, `finally`, `using`, `lock` and `foreach` region, or the call is not resolved. A
+call that is not resolved is an ordinary call. The frontend resolves on the lowered IR after
+matching, for both lowerings. A callee matched on both sides is never read this way (ADR 0019).
+
 A call is closed when its callee's containing type, every parameter type and every type argument
 are inert: `bool`, `char`, the 8- to 64-bit integers, `float`, `double`, `decimal`, `string`, an enum, or
 `Nullable<T>` of an inert `T` (ADR 0041). A closed call reads and writes no heap map. This assumes that
@@ -593,7 +610,10 @@ contracts (section 5.2; ticket P1-010) has `proofMethod` suffixed `+contract` (f
 per callee: `contract` is K in SMT-LIB over `r.old`/`r.new`, `threw.*`, `type.*`, `calls.*` and
 `heap.<map>.*`, and `proposedBy` is `observed-predicates`. Each such callee is left out of
 `unprovenAssumptions`, and its own unproven assumptions are added to the caller's `assumedCallees` and
-`unprovenAssumptions`.
+`unprovenAssumptions`. A result of a pair where a call to a one-sided helper was resolved in either body
+(section 1, ADR 0045) carries `properties.calleesInlined`: one `{ callee, side }` per helper, `side`
+being `legacy` or `modern`, helpers resolved inside helpers included, sorted by callee and then side.
+It is not part of the fingerprint.
 
 A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
 and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the

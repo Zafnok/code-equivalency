@@ -51,4 +51,5 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0042 | A call site with the same text on both sides that binds to a different callee is possibly the same call, and its outcome is unknown |
 | 0043 | A catalogued BCL member that runs no observable code is not a call |
 | 0044 | Evaluating a hole of an interpolated string leaves the current culture's integer formatting as it found it |
+| 0045 | A call to a private helper that exists on one side only is replaced by the helper's body (narrows 0019's rejection of inlining) |
 | 0046 | A caller file path or line number the compiler supplies is an input both sides share, not a constant |
