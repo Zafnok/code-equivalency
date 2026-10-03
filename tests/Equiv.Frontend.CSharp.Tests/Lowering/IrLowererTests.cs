@@ -941,6 +941,34 @@ public sealed class IrLowererTests
     public void AnUnsupportedArrayCreationIsOpaque(string members) =>
         Assert.Equal("ArrayCreation", Assert.Single(Opaques(Method(members))).Reason);
 
+    /// <summary>
+    /// Ticket P2-099: a collection expression for an array target is the array creation it replaces, instruction for
+    /// instruction: the same length, the same defaults, and each element evaluated and stored in order.
+    /// </summary>
+    [Theory]
+    [InlineData("static int[] M(int a, int b) => new int[] { a, b };", "static int[] M(int a, int b) => [a, b];")]
+    [InlineData("static int[] M(int a, int b) => new[] { a + b, a };", "static int[] M(int a, int b) => [a + b, a];")]
+    [InlineData("static string[] M(string s) { string[] r = new string[] { s, null }; return r; }", "static string[] M(string s) { string[] r = [s, null]; return r; }")]
+    [InlineData("static int F(int x) => x; static long[] M(int a) => new long[] { F(a), a };", "static int F(int x) => x; static long[] M(int a) => [F(a), a];")]
+    public void ACollectionExpressionForAnArrayLowersAsAnArrayCreation(string creation, string expression)
+    {
+        IrProcedure procedure = Method(expression);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(IrText.Dump(Method(creation)), IrText.Dump(procedure));
+    }
+
+    /// <summary>
+    /// Ticket P2-099 criterion 4: a collection expression with a spread element stays opaque, with reason
+    /// <c>CollectionExpression</c>, whatever its target.
+    /// </summary>
+    [Theory]
+    [InlineData("static int[] M(int[] a, int b) => [.. a, b];")]
+    [InlineData("static System.Collections.Generic.List<int> M(int[] a) => [.. a];")]
+    [InlineData("static System.Collections.Generic.IEnumerable<int> M(int[] a, int[] b) => [.. a, .. b];")]
+    public void ACollectionExpressionWithASpreadIsOpaque(string members) =>
+        Assert.Equal("CollectionExpression", Assert.Single(Opaques(Method(members))).Reason);
+
     /// <summary>A <c>new.&lt;Sort&gt;</c> input: allocation <c>k</c> of <paramref name="sort"/> is element <c>k + 1</c>.</summary>
     /// <summary>
     /// The map each branch's condition reads, in block order (with the key when it is a parameter), or its name when a

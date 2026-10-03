@@ -292,6 +292,18 @@ another order or other property types are another callee. Like any closed call i
 edge. An anonymous object that goes anywhere else (returned, stored in a local, nested in another one, a receiver)
 stays an `IrOpaque` with reason `AnonymousObjectCreation`, and a read of a property stays a getter call on the value.
 
+A collection expression (P2-099) is the construct it replaces, so the two are compared as two spellings of one
+body. For an array target `[a, b]` is the array creation `new T[] { a, b }` above, and `[]` is the call
+`System.Array::Empty<T>()` the compiler emits (a creation of length 0 where the framework has no `Array.Empty`).
+For a `List<T>` target it is a new `List<T>`, as `new List<T>()` is (ADR 0043), and then one `Add` call per element, as a
+collection initializer is. For an `IEnumerable<T>`, `IReadOnlyCollection<T>` or `IReadOnlyList<T>` target it is the
+array, read through the `cast.<T[]>.<Target>` map the array's conversion reads. Each element is evaluated, then
+stored or added, before the next, so element order is in the trace. Its shadow is false only where the old form's
+is: a creation or a `new`, read through no cast map. A spread element, a span, `IList<T>`, `ICollection<T>`, a type
+parameter, a type built by a `CollectionBuilder` method, any class other than `List<T>`, and an array the array
+creation leaves opaque, stay an `IrOpaque` with reason `CollectionExpression`. The conversion around a target-typed
+`new()` whose creation is already of the target type is its operand, so `new()` is `new T()`.
+
 The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
 locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
 each field's receiver, then every element of the literal (each already converted to its target's
