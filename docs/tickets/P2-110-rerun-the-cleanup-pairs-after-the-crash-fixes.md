@@ -26,7 +26,7 @@ with no crashed pair in it.
    not written from a run with a crashed pair.
 3. `docs/runs/<date>-cleanup-verdict.md` has the per-pair table of the 2026-10-02 verdict with a
    "before" column from it: changed pairs, proved Equivalent by `proofMethod`, Unknown by reason,
-   Divergent. It names which of P2-071, P2-098, P2-101, P2-103, P2-104, P2-106, P2-107 and P2-109
+   Divergent. It names which of P2-071, P2-098, P2-101, P2-103, P2-104, P2-106, P2-107 and P2-120
    were done at the commit that ran.
 4. Every Divergent is adjudicated by P2-047's method. A cause with an open ticket is counted under
    it; a new cause is a new `P2-nnn` ticket. A confirmed behaviour change is reported to the user by

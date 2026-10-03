@@ -58,7 +58,7 @@ Top opaque reasons (up to 15):
 | DelegateCreation | 252 | 252 | none |
 | CaughtException | 132 | 132 | none |
 | ImplicitIndexerReference | 121 | 121 | none |
-| CollectionExpression | 0 | 104 | P2-109 |
+| CollectionExpression | 0 | 104 | P2-120 |
 | InterpolatedString | 99 | 99 | P1-014 (ADR 0039) |
 | DeconstructionAssignment | 79 | 79 | P1-014 (ADR 0039) |
 | iterator | 77 | 77 | none |
@@ -79,15 +79,15 @@ Top reason sets (up to 15; "" = no opaque):
 | reason set | changed pairs | owning tickets or "none" |
 |---|---|---|
 | "" | 133 | n/a |
-| CollectionExpression | 53 | P2-109 |
+| CollectionExpression | 53 | P2-120 |
 | Conversion | 22 | P1-014 |
 | switch-pattern | 16 | P1-014 |
-| CollectionExpression+switch-pattern | 15 | P2-109, P1-014 |
+| CollectionExpression+switch-pattern | 15 | P2-120, P1-014 |
 | no-body | 6 | M4-008 (backlog) |
 | Binary | 6 | P2-087 |
 | CaughtException | 5 | none |
 | DelegateCreation | 5 | none |
-| CollectionExpression+Conversion | 5 | P2-109 |
+| CollectionExpression+Conversion | 5 | P2-120 |
 | ImplicitIndexerReference | 3 | none |
 | Conversion+DefaultValue+switch-pattern | 3 | P1-014 |
 | DelegateCreation+switch-pattern | 3 | P1-014 |
@@ -139,7 +139,7 @@ at which the model's two traces part was read against both bodies.
 |---|---|---|
 | A caller-file-path argument differs because the two sides are two checkout directories (P2-098) | 24 | false positive |
 | A build-generated commit constant differs between any two commits (P2-098) | 1 | real, by construction; not a behaviour change of the pull request |
-| A collection expression's elements are evaluated ahead of it, so its calls are in another order than the initializer's (P2-109) | 3 | false positive |
+| A collection expression's elements are evaluated ahead of it, so its calls are in another order than the initializer's (P2-120) | 3 | false positive |
 
 Confirmed behaviour changes 0, false positive 27, real by construction 1, undetermined 0.
 
@@ -171,7 +171,7 @@ Not run. The corpus row has no `verifyCommand`.
   share from 6.6% to 37.9%.
 - The two EQ002 P2-099 names are still EQ002, and one more of the same kind appeared: elements
   evaluated ahead of the collection expression. `CollectionExpression` is opaque in 104 changed
-  pairs (targets P2-099 left out, and spreads): P2-109.
+  pairs (targets P2-099 left out, and spreads): P2-120.
 - 24 false EQ002 and 1 by-construction EQ002 from build-location constants: P2-098, open.
 - The lowering crash on `GitUI.UserControls.RevisionGrid.Graph.RevisionGraph::LoadingCompleted()`
   is unchanged, and the run exits 5: P2-105.
