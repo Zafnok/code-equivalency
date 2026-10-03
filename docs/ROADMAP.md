@@ -507,7 +507,7 @@ of how much of the cleanup result each explains:
   `Conversion` in 308 of gitextensions-11372's 351 changed pairs, and behind 2 false Divergent.
   Done 2026-10-03: the solver proves 160 of the 351 (45.6%, from 2.0%); the 2 Divergent remain
   (`docs/runs/2026-10-03-cleanup-gitextensions-11372/SUMMARY.md`).
-- P2-109 (L) A collection expression whose elements are evaluated ahead of it, and the targets
+- P2-120 (L) A collection expression whose elements are evaluated ahead of it, and the targets
   P2-099 left opaque: 3 false Divergent and 104 changed pairs on gitextensions-11372. Needs P2-071.
 - P2-103 (M) `x as T` followed by a null check equals `x is T t`. All 5 of powershell-19687's
   Divergent, and none of its 12 edited pairs is proved.
@@ -570,6 +570,13 @@ OpenRA are rerun once they land:
   project; load rate 98.1% on a human pair).
 - P2-087 (M) `Binary` (lifted operators and the rest) alone is 6.2% of OpenRA's changed pairs and has
   no open owner since P1-018 left the IL fallback off. Needs P2-083.
+- P2-122 (M) `switch-pattern` alone is 6.9% of gitextensions-8522's changed pairs and 6.8% of
+  gitextensions-9860's, and has no open owner for the same reason. Counts the pattern forms and lowers
+  the largest one that P2-093, P2-103 and P2-104 do not own.
+- P2-123 (M) `Conversion` alone is 15.2% of gitextensions-9860's changed pairs after P2-099, with no
+  open owner. Counts the conversion forms and lowers the largest one P2-095 does not own. Needs P2-066.
+- P2-124 (M) Rerun the two version-upgrade pairs on one commit once every runtime-change row has a
+  change point (the ticket P2-066 files), and write the upgrade verdict again. Needs P2-066, P2-105.
 - P2-086 (M) `InterpolatedString` alone is 19.2% of eshop-manual's changed pairs, same reason: the
   same text binds differently on the two runtimes. Done 2026-10-01: a string of `string` and integer
   holes lowers as the concatenation of its parts under both bindings; the reason alone fell from 5 to
@@ -618,9 +625,12 @@ rung, a pair or a run.
   pass (2h07m, unlogged) becomes a phase. Two full runs must agree on every decided result.
 - P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
   and no query ended sooner by contention. Needs P2-050, P2-076.
+- P2-112 (S) An interrupt that throws on the timer thread can no longer end the process.
+  `Context.Interrupt()` threw `Z3Exception: canceled` on P2-076's timer and killed a CI test host
+  (PR #368); the same crash would end a corpus run with no SARIF.
 - P2-109 (S) Unrolling a loop is linear in its size. One OpenRA pair, a loop that calls its own procedure,
   spent over twenty minutes in `IrUnroller` before its first solver query (found by P2-082's run). Needs P2-076.
-- P2-113 (M) A pair whose unrolled body is huge overflows the native stack in the trace encoding and ends the run
+- P2-121 (M) A pair whose unrolled body is huge overflows the native stack in the trace encoding and ends the run
   with no SARIF, which no per-pair `try` can catch. Same OpenRA pair, reached once P2-109 let it finish unrolling.
   Needs P2-109.
 

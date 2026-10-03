@@ -1,4 +1,4 @@
-# P2-109 A collection expression whose elements are evaluated ahead of it, and the targets P2-099 left opaque
+# P2-120 A collection expression whose elements are evaluated ahead of it, and the targets P2-099 left opaque
 Status: todo
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
