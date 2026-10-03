@@ -1,5 +1,5 @@
 # P2-099 A collection expression equals the `new` and initializer it replaces
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-058
@@ -47,3 +47,14 @@ More than the four target shapes above: stop, the rest is its own ticket.
 Dictionary targets, spans, `ImmutableArray<T>` and other builder-based targets.
 
 ## Notes
+- Bar test (criterion 1): no ADR and no clarification. A collection expression lowers to the calls and
+  the allocation the old form makes, with instructions the IR already has, so no component boundary,
+  Core contract, verdict or SARIF shape changes; the rule is one paragraph in VERIFICATION-MODEL
+  section 3. A new IR node for a collection value lost: it is a Core contract change (a new ADR), and
+  it needs a model of what a `List<T>` holds, which P2-071 owns.
+- Decision: what `[]` is for an array or read-only interface target -> the call `System.Array::Empty<T>()`, which is what the compiler emits; a zero-length allocation only where the framework has no `Array.Empty`. Alternatives: always a zero-length allocation (then `Array.Empty<T>()` against `[]` differs by a call), lowering `Array.Empty<T>()` itself as an allocation (P2-071's call, and it makes two results distinct references). Rule: 1.
+- Decision: interface targets -> `IEnumerable<T>`, `IReadOnlyCollection<T>` and `IReadOnlyList<T>` are the array, read through the `cast` map the old form's conversion reads; `IList<T>` and `ICollection<T>` stay opaque. Alternatives: lower the two mutable ones as a `List<T>`, which the operation does not name (it has no construct method), so it needs a type lookup that can fail. Rule: 4.
+- Decision: which class targets -> `List<T>` only, by its parameterless constructor and its one `Add`; every other collection-initializer type, a `CollectionBuilder` type and a span stay opaque. Alternatives: every type with a constructor and an `Add` (the operation does not say which `Add` binds). Rule: 4 (and the size guard).
+- Decision: nullness -> a collection expression is known non-null exactly where the old form is (an array creation, a `new List<T>`); an `Array.Empty` call's result and a value read through a cast map ask `null.<Sort>`, as they do on the old side. Alternatives: always non-null (true at run time, but then the two sides differ on a null check the old side models). Rule: 1.
+- Decision: opaque reason -> `CollectionExpression`, the operation's kind, on the collection expression and not on its conversion. Alternatives: keep `Conversion`. Rule: 3.
+- Decision: criterion 2's samples -> snippet pairs in `Equiv.Tests.Integration.CollectionExpressionEquivalenceTests`, as P2-088's are. Alternatives: a `samples/` project pair. Rule: 4.
