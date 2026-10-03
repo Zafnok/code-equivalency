@@ -1,5 +1,5 @@
 # P2-121 A pair whose unrolled body is huge ends the run with a native stack overflow
-Status: in-progress
+Status: done (PR #375)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-109
@@ -95,3 +95,14 @@ The value of `bound`. Verifying pairs in parallel (P2-077). The `ObjectCreator::
 - Seen while sizing that test, not fixed here: at the default resource limit and a 10 second timeout, the same pair's
   `check:bound` query returned unknown after 84 seconds, past both the timeout and P2-076's interrupt at four times
   it.
+- Criterion 4, `full` run of `openra-17989` on 2026-10-03 at 550e260: the run wrote its SARIF (10,206 results) in
+  4,593 seconds, `verify` 3,575 of them and `contracts` 950. The pair ended Unknown after 262.0 seconds. Its stages,
+  in seconds: `unroll` 97.4, `encode` 9.4, `inline` 12.5, `check:divergence` 1.1 (unknown), `dispose` 5.0, so rung 1
+  took 125.4 and timed out; rung 2 0.1 (its base obligation is satisfiable and reaches an opaque node); rung 3 does
+  not apply; then failure refinement 136.5, which unrolls (98.3), encodes (8.6) and inlines (9.7 and 9.9) the pair
+  again for two queries that both return unknown after 1.1. So 196 of the pair's 262 seconds are two unrollings of
+  the same two procedures.
+- The run exits 5, as ADR 0023 says it must: `OpenRA.ObjectCreator::.ctor(OpenRA.Manifest,OpenRA.InstalledMods)`
+  fails in `verify` (the sort mismatch this ticket puts out of scope) and is the run's one notification and one
+  `unverified` entry. `OpenRA.ModData::.ctor(OpenRA.Manifest,OpenRA.InstalledMods,bool)` logs `outcome=failed` in the
+  `contracts` phase; it was not looked into here.
