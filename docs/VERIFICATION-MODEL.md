@@ -325,9 +325,15 @@ Migration-specific normalisations (applied to both sides before matching):
   (`api-equivalences.json`, ADR 0020, ticket M3-009) of member and type pairs that are
   exactly equivalent whenever both are invoked: overload drift such as
   `String::Split(Char[])` → `String::Split(Char, StringSplitOptions)`, and Web API 2 →
-  ASP.NET Core result helpers and result types. The frontend rewrites a legacy call while
-  lowering it, with an argument adapter, and every entry applied to a pair is listed in
-  `properties.equivalencesApplied`. Users can suppress entries in `equiv.config.json`.
+  ASP.NET Core result helpers and result types. It also holds the rebinding forms (ticket
+  P2-070), where identical source binds to an overload the modern reference assemblies add or
+  to a member they move: `String::TrimEnd(Char[])` with one element → `String::TrimEnd(Char)`,
+  `String::TrimStart(Char[])` with no element → `String::TrimStart()`, and
+  `DirectoryInfo::get_FullName()` → `FileSystemInfo::get_FullName()`. The frontend rewrites a
+  legacy call while lowering it, with an argument adapter, and every entry applied to a pair is
+  listed in `properties.equivalencesApplied`. A property or event accessor call has no source
+  arguments to adapt, so an entry rewrites one only when its adapter passes every operand
+  through in order and unchanged. Users can suppress entries in `equiv.config.json`.
 - Rebound call sites (ADR 0042, ticket P2-069). A call site is a call the lowering emits for a member
   at a syntax node: an invocation, an object creation, a property, indexer or event accessor, an
   `await`. Its key is the node's source tokens and the member's name. When a key occurs on both sides

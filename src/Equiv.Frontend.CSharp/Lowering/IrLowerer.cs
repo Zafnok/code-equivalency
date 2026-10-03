@@ -2130,7 +2130,9 @@ internal sealed class IrLowerer
     /// <summary>
     /// A property access is a call to its accessor, lowered as an invocation of it is (ticket M3-010 acceptance criteria
     /// 1 to 3): the getter with the receiver and index arguments, or, given <paramref name="value"/>, the setter with the
-    /// value last and no result. A property with no accessor for the access stays opaque.
+    /// value last and no result. A property with no accessor for the access stays opaque. A call to an API-equivalence
+    /// entry's legacy accessor is a call to the entry's modern member instead when the entry's adapter passes every
+    /// operand through in order and unchanged, and the entry is recorded as applied (ADR 0020; ticket P2-070).
     /// </summary>
     private IrVar? Accessor(IPropertyReferenceOperation property, IMethodSymbol? accessor, ImmutableArray<IrVar> operands, IrVar? value, LoweringContext context)
     {
@@ -2140,7 +2142,16 @@ internal sealed class IrLowerer
         }
 
         IrType? returns = value is null ? Map(property.Type!) : null;
-        return Dispatch(property.Instance, Called(accessor, property), value is null ? operands : [.. operands, value], returns, [], context);
+        ImmutableArray<IrVar> args = value is null ? operands : [.. operands, value];
+        Callee callee = Called(accessor, property);
+        if (catalogue.Members.TryGetValue(callee.Identity.Value, out ApiEquivalence? entry)
+            && entry.Arguments.SequenceEqual(Enumerable.Range(0, args.Length).Select(static i => new ApiArgument(i))))
+        {
+            catalogue.Applied.Add(entry.Id);
+            callee = callee with { Identity = CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), Closed = false };
+        }
+
+        return Dispatch(property.Instance, callee, args, returns, [], context);
     }
 
     /// <summary>A property read or an event's <c>+=</c> or <c>-=</c>: each is, unless the property's is a field, a call to an accessor.</summary>

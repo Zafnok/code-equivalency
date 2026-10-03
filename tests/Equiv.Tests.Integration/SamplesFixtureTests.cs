@@ -19,6 +19,7 @@ public sealed class SamplesFixtureTests
             ["added-removed"] = ["Added", "Removed"],
             ["business-layer"] = ["Equivalent", "Divergent", "Unknown"],
             ["api-drift"] = ["Equivalent", "Divergent"],
+            ["bcl-overload-rebinding"] = ["Equivalent", "Divergent"],
             ["callee-changed"] = ["Divergent", "Equivalent"],
             ["callee-changed-invisible"] = ["Divergent", "Equivalent"],
             ["loop-to-linq"] = ["Equivalent"],
