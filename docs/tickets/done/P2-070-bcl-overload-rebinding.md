@@ -1,5 +1,5 @@
 # P2-070 Identical source that binds to a different BCL overload is the same call
-Status: in-progress
+Status: done (PR #359)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-047
