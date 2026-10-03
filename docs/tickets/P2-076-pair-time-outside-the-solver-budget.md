@@ -59,6 +59,8 @@ and items), ADR 0036 (contracts pass), `src/Equiv.Verify.Z3/Z3Backend.cs` (`Quer
    - a result may differ only by going from Unknown(timeout) to a decided verdict or to another
      Unknown reason, and each such pair is listed.
    If any decided result becomes Unknown, the ticket is not done. Remove the part that caused it.
+   A result that two runs of the same build do not give alike (P2-082) is compared instead by how
+   often repeated runs of each build decide it (see the Deviation in Notes).
    The report also gives verify and contracts seconds before and after, and the ten slowest pairs
    after.
 
@@ -110,3 +112,57 @@ budget: all P2-050 (its criterion 1 reruns them at 1x, 4x and 20x). Verifying pa
   factory. Rule: 4.
 - Decision: the detail of an interrupted solver query -> Z3's own reason, `solver returned unknown (interrupted)`,
   with no limit named after it. Alternatives: a new suffix naming the slack. Rule: 1.
+- Criterion 1, measured 2026-10-02 in a `full` run of `gitextensions-8522` at the base commit with the stage
+  log added and nothing else changed (`docs/runs/2026-10-02-pair-time.md`). Stage totals in seconds of the 30
+  pairs over 30 s in P2-046's run. `other` is the time no stage line covered: the context's disposal, which had
+  no line yet, and bookkeeping. "After the ladder" is failure refinement, already counted in the stages.
+  14 of the 30 are congruent on today's `main` and take 0 s: `GitUI.FileStatusList::UpdateFileStatusListView(bool)`, `GitUI.BranchTreePanel.RepoObjectsTree.Nodes::FillTreeViewNode(System.Windows.Forms.TreeNode)`, `GitUI.CommandsDialogs.FormBrowse::.ctor(GitUI.GitUICommands,string,GitUIPluginInterfaces.ObjectId,GitUIPluginInterfaces.ObjectId)`, `GitUI.CommandsDialogs.FormBrowse::InternalInitialize(bool)`, `GitUI.CommandsDialogs.FormFileHistory::.ctor(GitUI.GitUICommands,string,GitUIPluginInterfaces.GitRevision,bool,bool)`, `GitUI.CommandsDialogs.FormRemotes::InitializeComponent()`, `GitUI.CommandsDialogs.BrowseDialog.DashboardControl.UserRepositoriesList::InitializeComponent()`, `GitUI.CommitInfo.CommitInfo::InitializeComponent()`, `GitUI.Editor.FileViewer::ToHexDump(byte[],System.Text.StringBuilder,int,int)`, `GitUI.Editor.RichTextBoxExtension.RichTextBoxXhtmlSupportExtension::ProcessTags(System.Windows.Forms.RichTextBox,System.Collections.Generic.List<global::System.Collections.Generic.KeyValuePair<int, string>>,bool)`, `GitCommands.Git.AheadBehindDataProvider::GetData(System.Text.Encoding,string)`, `ResourceManager.Xliff.TranslationUtil::TranslateItemsFromList(string,ResourceManager.ITranslation,System.Collections.Generic.IEnumerable<(string name, object item)>)`, `ICSharpCode.TextEditor.TextView::PaintLinePart(System.Drawing.Graphics,int,int,int,System.Drawing.Rectangle,int)`, `ICSharpCode.TextEditor.TextView::DrawDocumentWord(System.Drawing.Graphics,string,System.Drawing.Point,System.Drawing.Font,System.Drawing.Color,System.Drawing.Brush)`.
+
+  | pair | outcome | seconds | unroll and encode | inline | check | replay | other | of it after the ladder |
+  |---|---|---|---|---|---|---|---|---|
+  | `ICSharpCode.TextEditor.Document.DefaultHighlightingStrategy::ParseLine(ICSharpCode.TextEditor.Document.IDocument)` | unknown | 370.7 | 1.1 | 329.0 | 9.4 | 0.0 | 30.8 | 0.0 |
+  | `GitUI.UserControls.RevisionGrid.Graph.RevisionGraph::BuildOrderedRowCache(GitUI.UserControls.RevisionGrid.Graph.RevisionGraphRevision[],int,int)` | unknown | 277.2 | 0.6 | 204.8 | 20.2 | 0.0 | 50.4 | 220.3 |
+  | `GitUI.CommandsDialogs.FormPush::PushChanges(System.Windows.Forms.IWin32Window)` | unknown | 250.8 | 2.3 | 177.1 | 62.8 | 0.0 | 8.6 | 0.0 |
+  | `GitCommands.GitModule::GetRebasePatchFiles()` | unknown | 221.6 | 1.5 | 130.3 | 42.3 | 0.0 | 46.4 | 161.2 |
+  | `TranslationApp.TranslationHelpers::LoadTranslation(System.Collections.Generic.IDictionary<string, global::ResourceManager.Xliff.TranslationFile>,System.Collections.Generic.IDictionary<string, global::System.Collections.Generic.List<global::TranslationApp.TranslationItemWithCategory>>)` | unknown | 193.4 | 0.9 | 9.3 | 110.8 | 0.0 | 72.4 | 121.7 |
+  | `GitUI.CommandsDialogs.FormCommit::Stage(System.Collections.Generic.IReadOnlyList<global::GitCommands.GitItemStatus>)` | unknown | 133.8 | 0.4 | 81.1 | 35.0 | 0.0 | 17.0 | 110.4 |
+  | `GitCommands.GitModule::ParseGitBlame(string,System.Text.Encoding)` | unknown | 119.8 | 1.0 | 72.6 | 36.4 | 0.2 | 9.5 | 51.3 |
+  | `GitExtensions.Plugins.GitImpact.ImpactControl::UpdatePathsAndLabels()` | unknown | 119.0 | 0.6 | 82.9 | 6.9 | 0.0 | 26.8 | 0.0 |
+  | `NetSpell.SpellChecker.Dictionary.WordDictionary::Initialize()` | unknown | 107.4 | 0.7 | 41.3 | 61.6 | 0.0 | 3.8 | 0.0 |
+  | `GitUI.CommandsDialogs.FormCommit::generateListOfChangesInSubmodulesChangesToolStripMenuItem_Click(object,System.EventArgs)` | unknown | 88.5 | 0.2 | 4.8 | 69.0 | 0.0 | 14.6 | 24.9 |
+  | `AppVeyorIntegration.AppVeyorAdapter::ExtractBuildInfo(string,string)` | divergent | 82.4 | 0.1 | 24.7 | 23.7 | 0.0 | 33.9 | 0.0 |
+  | `GitUI.AutoCompletion.CommitAutoCompleteProvider::GetAutoCompleteWordsAsync(System.Threading.CancellationToken)` | unknown | 60.5 | 0.3 | 17.8 | 32.6 | 0.0 | 8.9 | 0.0 |
+  | `GitCommands.ExternalLinks.ExternalLinkRevisionParser::ParseRemotes(GitCommands.ExternalLinks.ExternalLinkDefinition)` | unknown | 47.8 | 0.0 | 6.3 | 22.3 | 0.0 | 19.0 | 29.9 |
+  | `GitCommands.Patches.Chunk::FromNewFile(GitCommands.GitModule,string,int,int,bool,byte[],System.Text.Encoding)` | unknown | 40.3 | 0.0 | 9.2 | 21.2 | 0.0 | 9.9 | 22.6 |
+  | `GitUI.Blame.BlameControl::BuildBlameContents(string,int)` | unknown | 30.1 | 0.1 | 10.9 | 13.7 | 0.0 | 5.4 | 20.4 |
+  | `ICSharpCode.TextEditor.Document.DefaultHighlightingStrategy::MatchExpr(ICSharpCode.TextEditor.Document.LineSegment,char[],int,ICSharpCode.TextEditor.Document.IDocument,bool)` | unknown | 26.5 | 0.2 | 8.5 | 11.8 | 0.0 | 6.1 | 9.2 |
+  | total, 30 pairs | | 2169.9 | 10.1 | 1210.6 | 579.5 | 0.3 | 363.5 | 771.9 |
+
+- Decision: the dominant stages -> `Inline` (1,211 of the 30 pairs' 2,170 s, 1,520 of the run's 7,016 `verify`
+  seconds) and the disposal of the query's context (the 364 s and 774 s no stage line covered; the after runs'
+  `dispose` lines show 40 s once it was cheap). Solver queries are the rest (580 s and 4,679 s), and their
+  budget is P2-050's. Alternatives: encoding (19 s over the whole phase), model decoding (16 s), the steps
+  after the ladder (their own queries). Rule: measured, criterion 1.
+- Queries that returned sat or unsat after more than `timeoutMs` (60,000 ms) in that run: none. The longest
+  sat took 13.5 s and the longest unsat 13.4 s, of 3,519 queries. No query ran past `timeoutMs` either: the
+  longest unknown took 60.1 s.
+- Decision: the interrupt's slack -> four times `timeoutMs`, 240 s at the default: the floor the ticket sets,
+  and more than twice the longest sat or unsat answer (13.5 s; 22.4 s in the after runs). Alternatives: a fixed
+  number of seconds, which a configured `timeoutMs` could undercut. Rule: 4.
+- Deviation: criterion 5 cannot hold as written. It assumes a run gives the same result twice, but two `full`
+  runs at the base commit, handing Z3 identical assertions, already differ on 7 of 13,742 results and lose 2
+  Divergents to each other: queries at the edge of the resource limit end differently from run to run
+  (P2-082, found after this ticket was written). The base run and the after run differ on 8 results, and
+  every one of them, rerun ten times, gives different results from run to run with one build or the other.
+  The twelve pairs that differ in any of the four runs are decided 22 times of 120 before and 28 after. One pair, `AmendState_should_be_false_if_file_contains`, is decided less often: 40 of
+  200 runs at the base commit, 17 of 200 on this branch. The part that moves it is the new `Inline` (51 of
+  200 with the old `Inline`, 19 of 200 with its objects left to the finalizer). The terms it hands Z3 are the
+  same, so the cause is when the collector runs, which P2-082 is removing. Removing the new `Inline` would bring
+  back 1,520 s of quadratic substitution that criterion 2 requires gone, and would trade this pair for others
+  that the new `Inline` decides more often, such as `GitBranchNameNormaliser::Rule04`, decided 4 of 10 times
+  before and 9 of 10 after. Two Unknowns move the same way without a verdict at stake:
+  `GitModule::GetInteractiveRebasePatchFiles` (unaligned-loop 10 of 10 before, timeout 6 of 10 after) and
+  `BlameControlTests::BuildBlameContents_WithDateAndTime` (opaque 10 of 10 before, timeout 5 of 10 after). So
+  the new `Inline` stays, and criterion 5 is read as above: no decided result that the base commit gives in
+  every run is lost, and each pair whose result differs between runs is listed in the report with its rate
+  before and after.
