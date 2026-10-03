@@ -89,3 +89,12 @@ Verifying pairs in parallel (P2-077).
 - Criterion 2: the existing fixtures, the two snapshots and the property tests in `IrUnrollerTests` pass unchanged
   (797 of 797 in `tests/Equiv.Core.Tests`). A whole-procedure pass per copied loop remains (`IrSsaRepair`'s
   predecessor map, `IrLoopAnalysis.Of` in `Unroll`'s loop), so the cost is blocks times loops, not strictly linear.
+- Criterion 4, `full` run of `openra-17989` on 2026-10-03, on a build with this branch and P2-082's branch merged
+  (P2-082's fix is what lets the run reach verify at all). The pair's `stage=unroll` took 116.9 s, where before it
+  had not finished after more than ninety minutes. The run then died in the next stage: `ProductEncoder.Encode`,
+  `TraceEncoder.Trace`, native `Z3_mk_seq_concat`, stack overflow, exit -1073741571, no SARIF. So the pair has no
+  outcome and the run has no slowest-five list. The size guard trips: the unrolled procedure is what is too large.
+  Its size was not measured (117 s at the linear rate above suggests millions of instructions; that is an estimate).
+  Filed as P2-113, which measures it and takes the question to `equiv-adr`.
+- The run got to verify 1,230 of 10,114 before the overflow, with one pair-level failure unrelated to this ticket
+  (`OpenRA.ObjectCreator::.ctor(OpenRA.Manifest,OpenRA.InstalledMods)`, a sort mismatch in verifying).
