@@ -97,3 +97,10 @@ exist:
   its meaning, on a pair whose modern side compiles (a human or an agent pair) an `unbound` Unknown
   is a ticket, as a skipped project is: there it can only come from how `equiv` loaded the code.
   On a tool pair it is the migration tool's unfinished work, and is reported, not ticketed.
+- 2026-10-04 (P1-032). The lowerable-share row's 5% decides one thing: which tickets stay in M4. A
+  ticket under it goes to the backlog, where it can still be scheduled. The row is not a test of
+  whether a sound technique is built at all, and it says nothing about post-MVP work, spikes or
+  defaults. Tickets that cited it that way (P1-011, P1-018, P1-019, P1-021) each used their own
+  denominator, and since the Unknowns that remain are a long tail, the reading rejects every
+  technique one at a time. Outside the M4 list, a measured yield orders the work and decides which
+  mode a technique runs in (ADR 0049 decision 7). The threshold and the M4 rule are unchanged.

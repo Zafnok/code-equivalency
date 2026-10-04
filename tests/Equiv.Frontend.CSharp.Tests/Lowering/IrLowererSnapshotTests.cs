@@ -360,5 +360,16 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task CompoundAssignmentToAFieldOfABranchingValue() => Dump("static int f; static void M(bool b, int a) { f += b ? 1 : a; }");
 
+    /// <summary>Ticket P1-029: the disposal is the call <c>DisposeAsync()</c> and an await of its result, skipped for a null resource.</summary>
+    [Fact]
+    public Task AwaitUsingStatement() => Dump("static async System.Threading.Tasks.Task<int> M(IAsyncDisposable d, int a) { await using (d) { a = a + 1; } return a; }");
+
+    [Fact]
+    public Task AwaitUsingDeclaration() => Dump("static async System.Threading.Tasks.Task<int> M(System.IO.Stream s) { await using System.IO.Stream t = s; return t.ReadByte(); }");
+
+    /// <summary>Ticket P1-029: the enumerator loop, with an awaited <c>MoveNextAsync()</c> and an awaited <c>DisposeAsync()</c> in the <c>finally</c>.</summary>
+    [Fact]
+    public Task AwaitForEach() => Dump("static async System.Threading.Tasks.Task<int> M(System.Collections.Generic.IAsyncEnumerable<int> xs) { int s = 0; await foreach (int x in xs) s += x; return s; }");
+
     private static Task Dump(string members, string name = "M") => Verify(IrText.Dump(Lowered.Method(members, name)));
 }

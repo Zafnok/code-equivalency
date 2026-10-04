@@ -43,9 +43,9 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0034 | The census measures what the solver will see: changed pairs, their reason sets, and what congruence cannot vouch for |
 | 0035 | The real runtimes are a second oracle: execution measures, confirms and bounds, and never proves |
 | 0036 | A proposed invariant, contract or table row is a hypothesis until a checker admits it; callee contracts replace unproven assumptions |
-| 0037 | An Unknown says whether the modern side can fail where the legacy side does not |
+| 0037 | An Unknown says whether the modern side can fail where the legacy side does not (superseded in part by 0049) |
 | 0038 | A run reports its progress on stderr, with a clock per phase, an ETA, and a writer that never blocks the pipeline |
-| 0039 | A pair that IOperation leaves with an unshared opaque is lowered from ILAst instead; IOperation stays primary |
+| 0039 | A pair that IOperation leaves with an unshared opaque is lowered from ILAst instead; IOperation stays primary (superseded in part by 0049) |
 | 0040 | Each side's runtime is detected from its projects, and a runtime rule applies only if the pair crosses it |
 | 0041 | A call to a string or primitive member with only string and primitive arguments reaches no heap map |
 | 0042 | A call site with the same text on both sides that binds to a different callee is possibly the same call, and its outcome is unknown |
@@ -55,4 +55,5 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0046 | A caller file path or line number the compiler supplies is an input both sides share, not a constant |
 | 0047 | A call to a static one-call forwarder is a call to its target (narrows 0019's rejection of inlining) |
 | 0048 | A result that is not Equivalent may carry a proved input condition under which the pair agrees (`properties.agreesWhen`); no verdict, rule id, exit code or fingerprint depends on it |
+| 0049 | `equiv compare` has a thorough mode (the default) and a quick mode; thorough is quick plus further passes over what is still Unknown; measured yield chooses a technique's mode, not whether it exists |
 | 0050 | cvc5 is asked the rung 1 queries Z3 gives up on (supersedes 0005's "Z3 alone") |

@@ -362,9 +362,23 @@ different trace positions (ADR 0018), so awaiting one task twice is not forced t
 that is not idempotent is modelled. `ConfigureAwait(false)` is an ordinary call whose result is what is awaited. A pair
 where exactly one side is `async` is Unknown with detail `async-mismatch`, without the solver: a synchronous method
 throws to its caller at the call, an `async` one into its task, which the caller sees only when it awaits, so their
-exception timing differs. Iterators (`yield`, async or not), `await foreach` and `await using` stay whole-body opaque with
-reasons `iterator`, `await-foreach` and `await-using`: their desugaring is a state machine or awaits calls the CFG does
-not show.
+exception timing differs. Iterators (`yield`, async or not) stay whole-body opaque with reason `iterator`: their
+desugaring is a state machine.
+
+`await using` and `await foreach` (ticket P1-029) lower as the CFG desugars them, which is as the synchronous `using`
+and `foreach` do with the awaits the compiler emits in place. An `await using`, statement or declaration, is its body in
+a `try` whose `finally` calls `DisposeAsync()` on the resource and then awaits the result (`await:<awaiter type>`), on
+the normal and on the exceptional exit, after the null test that skips both for a null resource of a reference type;
+several resources in one statement nest, the last acquired disposed first. An `await foreach` is the enumerator loop:
+`GetAsyncEnumerator(...)`, a `MoveNextAsync()` call whose awaited result is the loop's condition, `get_Current`, and a
+`finally` that calls and awaits `DisposeAsync()` when the enumerator has one. `WithCancellation` and `ConfigureAwait`
+on the collection are ordinary calls whose result is what is enumerated, so the awaiters are then the configured ones.
+These awaits have no `await` expression: the awaiter type is the result of the awaited type's own parameterless
+`GetAwaiter`, and one that only an extension method supplies leaves that await `IrOpaque` with reason `Await`. The
+`default` the compiler passes for a parameter `GetAsyncEnumerator` leaves optional, its `CancellationToken`, is the
+constant element 0 of its sort on both sides: it is only ever that call's argument, and as an opaque it would have no
+fingerprint to share, its syntax being the loop. Since `using` calls `Dispose()` and `await using` calls
+`DisposeAsync()` and awaits it, a pair with one on each side makes different calls and is not Equivalent.
 
 Floating-point, `decimal` and user-defined operators (ADR 0025, ticket M4-002) are `IrPure`
 applications of the functions one frontend catalogue lists: `f32.<op>` and `f64.<op>` (arithmetic,

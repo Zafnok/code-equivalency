@@ -1,0 +1,61 @@
+﻿proc "C::M(System.IO.Stream)" (%s "s": sort "System.IO.Stream", %null.System.IO.Stream: map<sort "System.IO.Stream", bool>) -> bv32 entry B0
+B0:
+  %s.isNull.29 "s": bool = mapread %null.System.IO.Stream, %s
+  goto B1
+B1:
+  goto B2
+B2:
+  br %s.isNull.29, B5, B12
+B4:
+  throw "System.NullReferenceException"
+B5:
+  br %s.isNull.29, B7, B6
+B6:
+  br %s.isNull.29, B4, B8
+B7:
+  goto B4
+B8:
+  %$9: sort "System.Threading.Tasks.ValueTask" = call "System.IO.Stream::DisposeAsync()"(%s) threw %$10: bool
+  br %$10, B9, B10
+B9:
+  throw "System.Exception"
+B10:
+  call "await:System.Runtime.CompilerServices.ValueTaskAwaiter"(%$9) threw %$11: bool
+  br %$11, B9, B11
+B11:
+  goto B7
+B12:
+  %$12: bv32 = call "System.IO.Stream::ReadByte()"(%s) threw %$13: bool
+  br %$13, B13, B19
+B13:
+  br %s.isNull.29, B15, B14
+B14:
+  br %s.isNull.29, B4, B16
+B15:
+  goto B9
+B16:
+  %$18: sort "System.Threading.Tasks.ValueTask" = call "System.IO.Stream::DisposeAsync()"(%s) threw %$19: bool
+  br %$19, B9, B17
+B17:
+  call "await:System.Runtime.CompilerServices.ValueTaskAwaiter"(%$18) threw %$20: bool
+  br %$20, B9, B18
+B18:
+  goto B15
+B19:
+  goto B21
+B20:
+  ret %$12
+B21:
+  br %s.isNull.29, B23, B22
+B22:
+  br %s.isNull.29, B4, B24
+B23:
+  goto B20
+B24:
+  %$25: sort "System.Threading.Tasks.ValueTask" = call "System.IO.Stream::DisposeAsync()"(%s) threw %$26: bool
+  br %$26, B9, B25
+B25:
+  call "await:System.Runtime.CompilerServices.ValueTaskAwaiter"(%$25) threw %$27: bool
+  br %$27, B9, B26
+B26:
+  goto B23

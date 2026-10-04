@@ -98,6 +98,18 @@ public sealed partial class SamplesEndToEndTests
         });
     }
 
+    /// <summary>
+    /// Ticket P1-029, criterion 3: with the same <c>await using</c> or <c>await foreach</c> on both sides, each pair is
+    /// compared on the statement inside it, one Equivalent and one Divergent per construct.
+    /// </summary>
+    [Theory]
+    [InlineData("::FlushAsync(", "EQ001")]
+    [InlineData("::CloseAsync(", "EQ002")]
+    [InlineData("::LastAsync(", "EQ001")]
+    [InlineData("::FirstAsync(", "EQ002")]
+    public void AsyncDisposal_EachConstructHasAnEquivalentAndADivergentPair(string procedure, string rule) =>
+        Assert.Equal(rule, Single("async-disposal", procedure).RuleId);
+
     [Fact]
     public void RenamedLocals_EveryProcedureIsEquivalent()
     {
