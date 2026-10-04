@@ -88,10 +88,10 @@ public static class IrValidator
         /// <summary>Reports each block built without a terminator; true when there is one.</summary>
         private bool MissingTerminators()
         {
-            List<IrBlock> missing = [.. procedure.Blocks.Where(static b => b.Terminator is null)];
-            foreach (IrBlock block in missing)
+            List<IrBlockId> missing = [.. procedure.Blocks.Where(static b => b.Terminator is null).Select(static b => b.Id)];
+            foreach (IrBlockId block in missing)
             {
-                Report(IrDiagnosticIds.MissingTerminator, block.Id, $"block {IrText.Block(block.Id)} has no terminator");
+                Report(IrDiagnosticIds.MissingTerminator, block, $"block {IrText.Block(block)} has no terminator");
             }
 
             return missing.Count > 0;
