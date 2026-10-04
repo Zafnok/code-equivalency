@@ -595,8 +595,9 @@ OpenRA are rerun once they land:
 - P2-122 (M) `switch-pattern` alone is 6.9% of gitextensions-8522's changed pairs and 6.8% of
   gitextensions-9860's, and has no open owner for the same reason. Counts the pattern forms and lowers
   the largest one that P2-093, P2-103 and P2-104 do not own.
-- P2-123 (M) `Conversion` alone is 15.2% of gitextensions-9860's changed pairs after P2-099, with no
-  open owner. Counts the conversion forms and lowers the largest one P2-095 does not own. Needs P2-066.
+- P2-123 (M) `Conversion` alone was 15.2% of gitextensions-9860's changed pairs. Done 2026-10-03, with
+  nothing lowered: that run predates P2-099, which took the reason from 110 pairs to 16 (2.2%). 13 of
+  the 16 are conversions to `Nullable<T>`, which P2-095 owns, and no other form holds more than 1.
 - P2-124 (M) Rerun the two version-upgrade pairs on one commit once every runtime-change row has a
   change point (the ticket P2-066 files), and write the upgrade verdict again. Needs P2-066, P2-105.
 - P2-086 (M) `InterpolatedString` alone is 19.2% of eshop-manual's changed pairs, same reason: the

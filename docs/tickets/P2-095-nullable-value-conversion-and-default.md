@@ -64,3 +64,6 @@ user-defined struct type. The IL lowering.
 ## Notes
 - Found by P2-049 (`samples/cleanup-modern-syntax`, `Tidy.LengthOf`). Review group
   `opaque:Conversion+DefaultValue`.
+- P2-123's split (2026-10-03): on `gitextensions-9860` this form is 13 of the 16 changed pairs that
+  `Conversion` alone keeps opaque (2.2% of 725), and is in 34 changed pairs. 11 of the 13 have an
+  `int` or `bool` `T`; the operand is a literal in 28 of the 59 nodes per side.
