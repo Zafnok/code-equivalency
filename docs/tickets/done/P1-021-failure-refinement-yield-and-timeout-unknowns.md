@@ -60,7 +60,7 @@ User assertions (`Debug.Assert`, contract calls) as checked properties. Changing
   a `timeout` at `a74f2e0`, and 2 of them (1.4%) would have one; 17 (12.3%) get an answer from
   either query, at 0.44 times the pair's time.
 - Deviation: criterion 4. The share is 1.4%, under 5%, so the criterion asks for a ROADMAP line and
-  no ticket. P1-032 is filed as well, on the user's direction of 2026-10-04 ("our goal is
+  no ticket. P1-035 is filed as well, on the user's direction of 2026-10-04 ("our goal is
   soundness/correctness across as much code as possible then speed"): measured yield orders work
   and does not by itself leave a sound gain unbuilt. The measured line is on P1-021's own ROADMAP
   entry, not in the post-MVP list, since the work is scheduled.

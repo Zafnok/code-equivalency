@@ -1,4 +1,4 @@
-# P1-032 A `timeout` Unknown says whether the modern side can fail where the legacy side does not
+# P1-035 A `timeout` Unknown says whether the modern side can fail where the legacy side does not
 Status: todo
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.

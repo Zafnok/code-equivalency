@@ -17,7 +17,7 @@ where ADR 0037 does not ask?
   queries add 0.44 times the pair's time in both runs, not twice it.
 
 Criterion 4 of the ticket files a follow-up at 5% `none-proved` and the measured share is 1.4%. The
-follow-up, P1-032, is filed regardless, on the user's direction of 2026-10-04; the ticket's Notes
+follow-up, P1-035, is filed regardless, on the user's direction of 2026-10-04; the ticket's Notes
 record the deviation.
 
 ## Setup
@@ -196,11 +196,11 @@ The second run adds `GitCommands.EnvironmentConfiguration::SetEnvironmentVariabl
 
 ## Findings
 - Asking on a `timeout` Unknown answers 17 to 19 pairs of about 140 at 0.44 times their verify time:
-  P1-032.
+  P1-035.
 - 16 of the run's 164 `timeout` Unknowns are Equivalent at `a74f2e0`, and 2 Divergent. Nothing to
   file: this is what the tickets merged since `7cbe2d7` did.
 - 14 pairs are `found` in both directions where the full query times out. Whether these are
-  divergences the full query should report is not measured here; P1-032's Out of scope points at
+  divergences the full query should report is not measured here; P1-035's Out of scope points at
   P1-020 and P1-031.
 - Not measured: gitextensions-9860 and jellyfin-13023's 236 `timeout` Unknowns. The ticket asks for
   gitextensions-8522 only.
