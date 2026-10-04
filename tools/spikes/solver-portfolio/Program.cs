@@ -47,18 +47,23 @@ internal static class Program
 
         if (args.Length < 4)
         {
-            Console.Error.WriteLine("usage: solver-portfolio-spike --self-test | --horn <equiv.sarif>... | <equiv.sarif> <legacy.sln> <modern.sln> <outDir> [--threads n] [--queries <results.tsv>] [--solver name=path[|option]...]...");
+            Console.Error.WriteLine("usage: solver-portfolio-spike --self-test | --horn <equiv.sarif>... | <equiv.sarif> <legacy.sln> <modern.sln> <outDir> [--threads n] [--only index,...] [--queries <results.tsv>] [--solver name=path[|option]...]...");
             return 2;
         }
 
         int threads = 4;
         Dictionary<string, string>? known = null;
+        HashSet<int>? only = null;
         List<(string Name, string Path)> solvers = [];
         for (int i = 4; i + 1 < args.Length; i += 2)
         {
             if (args[i] == "--threads")
             {
                 threads = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            }
+            else if (args[i] == "--only")
+            {
+                only = [.. args[i + 1].Split(',').Select(static n => int.Parse(n, CultureInfo.InvariantCulture))];
             }
             else if (args[i] == "--queries")
             {
@@ -80,7 +85,7 @@ internal static class Program
         ConcurrentBag<Row> rows = [];
         int done = 0;
         Parallel.ForEach(
-            identities.Select(static (identity, index) => (identity, index)),
+            identities.Select(static (identity, index) => (identity, index)).Where(item => only?.Contains(item.index) != false),
             new ParallelOptions { MaxDegreeOfParallelism = threads },
             item =>
             {
@@ -148,7 +153,29 @@ internal static class Program
             }
         }
 
-        return new Row(index, identity, query, null) { Logic = file.Logic, Z3Only = file.Z3Only, Answers = answers };
+        // A divergence query another solver proves unsatisfiable proves the pair only with rung 1's other queries, which Z3 is asked.
+        string rest = string.Empty;
+        if (query == Rung1.Divergence && answers.Exists(static a => a.Status == "unsat"))
+        {
+            rest = "pair proved: the other rung 1 queries are unsatisfiable";
+            foreach (string name in (string[])[Rung1.Opaque, Rung1.Bound])
+            {
+                if (name == Rung1.Bound && !rung.Looping)
+                {
+                    break;
+                }
+
+                using Solver solver = Equiv.Verify.Z3.Z3Backend.Query(context, encoding, options, Rung1.Terms(context, encoding, name));
+                Status status = Equiv.Verify.Z3.Z3Backend.Check(context, solver, options, name);
+                if (status != Status.UNSATISFIABLE)
+                {
+                    rest = $"pair not proved: `{name}` is {(status == Status.SATISFIABLE ? "satisfiable" : "a timeout")}";
+                    break;
+                }
+            }
+        }
+
+        return new Row(index, identity, query, null) { Logic = file.Logic, Z3Only = file.Z3Only, Answers = answers, Rest = rest };
     }
 
     /// <summary>Criterion 4: the rung 4 Unknowns of each run, by reason.</summary>
@@ -216,6 +243,9 @@ internal sealed record Row(int Index, string Identity, string? Query, string? Wh
     public IReadOnlyList<string> Z3Only { get; init; } = [];
 
     public IReadOnlyList<Answer> Answers { get; init; } = [];
+
+    /// <summary>For a divergence query some solver proves unsatisfiable: what rung 1's other queries say.</summary>
+    public string Rest { get; init; } = string.Empty;
 
     public bool Exported => Query is not null && Z3Only.Count == 0;
 }
@@ -332,6 +362,15 @@ internal static class Report
         foreach (Row row in exported.OrderBy(static r => r.Identity, StringComparer.Ordinal))
         {
             Console.WriteLine($"| `{row.Identity}` | `{row.Query}` | {string.Join(" | ", solvers.Select(s => Cell(row.Answers.First(a => a.Solver == s))))} |");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("## Queries proved unsatisfiable (listed apart)");
+        Console.WriteLine("| procedure identity | query | proved by | rung 1's other queries, asked of Z3 |");
+        Console.WriteLine("|---|---|---|---|");
+        foreach (Row row in exported.Where(static r => r.Answers.Any(static a => a.Status == "unsat")).OrderBy(static r => r.Identity, StringComparer.Ordinal))
+        {
+            Console.WriteLine($"| `{row.Identity}` | `{row.Query}` | {string.Join(", ", row.Answers.Where(static a => a.Status == "unsat").Select(static a => $"{a.Solver} in {a.Milliseconds} ms"))} | {row.Rest} |");
         }
 
         // An unsatisfiable answer proves the query; a satisfiable one refutes the pair only when its model replays to a Divergent.
