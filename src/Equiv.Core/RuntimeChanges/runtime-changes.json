@@ -80,7 +80,7 @@
     {
       "member": "System.Text.Encoding::get_Default(",
       "source": "curated",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Encoding.Default is UTF-8 on .NET but the process's ANSI code page on .NET Framework 4.8, so the same bytes decode differently.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.text.encoding.default?view=net-10.0"
     },
@@ -2620,9 +2620,9 @@
     {
       "member": "System.Drawing.Size::Ceiling(System.Drawing.SizeF)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "Converting a NaN or out-of-range float to int saturates to 0 (and to int.MinValue/MaxValue by sign) on .NET 10, where .NET Framework's x86 conversion yields int.MinValue.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.drawing.size.ceiling",
+      "changedIn": "net9.0",
+      "reason": "Converting a NaN or out-of-range float to int saturates to 0 (and to int.MinValue/MaxValue by sign) from .NET 9, where .NET Framework's x86 conversion yields int.MinValue.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/jit/9.0/fp-to-integer",
       "witness": { "input": [["0xFFC00000", "0xFFC00000"]], "culture": "invariant", "legacy": [-2147483648, -2147483648], "modern": [0, 0] }
     },
     {
@@ -2988,17 +2988,17 @@
     {
       "member": "System.String::Equals(string,System.StringComparison)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "Culture-sensitive comparison uses ICU on .NET 10 and NLS on .NET Framework: \"ss\" equals \"ß\" under NLS but not under ICU.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.equals",
+      "changedIn": "net5.0",
+      "reason": "Culture-sensitive comparison uses ICU from .NET 5 and NLS on .NET Framework: \"ss\" equals \"ß\" under NLS but not under ICU.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api",
       "witness": { "input": ["ss", "\u00df", 0], "culture": "invariant", "legacy": true, "modern": false }
     },
     {
       "member": "System.String::Equals(string,string,System.StringComparison)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "Culture-sensitive comparison uses ICU on .NET 10 and NLS on .NET Framework: \"ss\" equals \"ß\" under NLS but not under ICU.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.equals",
+      "changedIn": "net5.0",
+      "reason": "Culture-sensitive comparison uses ICU from .NET 5 and NLS on .NET Framework: \"ss\" equals \"ß\" under NLS but not under ICU.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api",
       "witness": { "input": ["ss", "\u00df", 0], "culture": "invariant", "legacy": true, "modern": false }
     },
     {
@@ -3012,17 +3012,17 @@
     {
       "member": "System.String::Split(char[],System.StringSplitOptions)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "StringSplitOptions.TrimEntries (2) is defined on .NET 10 only; .NET Framework throws ArgumentException for it.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.split",
+      "changedIn": "net5.0",
+      "reason": "StringSplitOptions.TrimEntries (2) is defined from .NET 5; .NET Framework throws ArgumentException for it.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.stringsplitoptions",
       "witness": { "input": ["i", null, 2], "culture": "invariant", "legacy": "System.ArgumentException", "modern": ["i"] }
     },
     {
       "member": "System.String::Split(string[],System.StringSplitOptions)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "StringSplitOptions.TrimEntries (2) is defined on .NET 10 only; .NET Framework throws ArgumentException for it.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.split",
+      "changedIn": "net5.0",
+      "reason": "StringSplitOptions.TrimEntries (2) is defined from .NET 5; .NET Framework throws ArgumentException for it.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.stringsplitoptions",
       "witness": { "input": ["i", null, 2], "culture": "invariant", "legacy": "System.ArgumentException", "modern": ["i"] }
     },
     {

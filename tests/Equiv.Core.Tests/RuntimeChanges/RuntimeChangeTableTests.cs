@@ -12,8 +12,8 @@ public sealed class RuntimeChangeTableTests
 {
     private const int CuratedRowCount = 13;
 
-    /// <summary>The rows ticket P2-054's backfill left with an unknown change point, as its PR lists them.</summary>
-    private const int UnknownChangePointCount = 32;
+    /// <summary>The rows with an unknown change point: those ticket P2-113 could not place, as its Notes list them.</summary>
+    private const int UnknownChangePointCount = 26;
 
     private const string RowTag = "row: ";
 
@@ -181,7 +181,7 @@ public sealed class RuntimeChangeTableTests
         Assert.Null(Assert.Single(table.Rows).Witness);
     }
 
-    /// <summary>Ticket P2-054: the rows the backfill could not place (listed in its PR) are the only unknown change points.</summary>
+    /// <summary>Tickets P2-054 and P2-113: the rows neither could place (listed in P2-113's Notes) are the only unknown change points.</summary>
     [Fact]
     public void EveryRowHasAParseableChangedIn()
     {

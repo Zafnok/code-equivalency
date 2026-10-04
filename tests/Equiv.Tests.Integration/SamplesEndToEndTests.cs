@@ -243,6 +243,48 @@ public sealed partial class SamplesEndToEndTests
         Assert.Equal("congruence", format.GetProperty<string>("proofMethod"));
     }
 
+    /// <summary>
+    /// Ticket P2-113 criterion 3: .NET 8 against .NET 9 crosses neither the <c>String.Equals</c> row (changed in .NET 5)
+    /// nor the <c>Encoding.Default</c> row (changed at the .NET Framework to .NET boundary), so the byte-identical
+    /// methods that call them are Equivalent by congruence and nothing is EQ006.
+    /// </summary>
+    [Fact]
+    public void RuntimeRowFrameworkOnlyChange_NoRowAppliesBetweenTwoNetVersions()
+    {
+        Result[] results = [.. RunSample("runtime-row-framework-only-change").Log.Runs[0].Results];
+
+        Assert.Equal(2, results.Length);
+        Assert.All(results, static r => Assert.Equal("EQ001", r.RuleId));
+        Assert.All(results, static r => Assert.Equal("congruence", r.GetProperty<string>("proofMethod")));
+    }
+
+    /// <summary>
+    /// Ticket P2-113 criterion 3: the same file with the legacy project on .NET Framework 4.8 crosses both change
+    /// points, so both methods stay EQ006.
+    /// </summary>
+    [Fact]
+    public void RuntimeRowFrameworkOnlyChange_FromNet48KeepsBothRows()
+    {
+        string sampleDir = Path.Combine(SamplesRoot, "runtime-row-framework-only-change");
+        string legacy = Directory.GetFiles(Path.Combine(sampleDir, "net48", "legacy"), "*.sln").Single();
+        string modern = Directory.GetFiles(Path.Combine(sampleDir, "modern"), "*.slnx").Single();
+        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P2-113-{Guid.NewGuid():N}.sarif");
+        try
+        {
+            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacy, "--modern", modern, "--out", outPath]));
+
+            Assert.Equal(ExitCodes.Divergent, exitCode);
+            Result[] results = [.. SarifLog.Load(outPath).Runs[0].Results];
+            Assert.Equal(2, results.Length);
+            Assert.All(results, static r => Assert.Equal("EQ006", r.RuleId));
+            Assert.All(results, static r => Assert.Contains("between net48 and net9.0 (", r.Message.Text, StringComparison.Ordinal));
+        }
+        finally
+        {
+            File.Delete(outPath);
+        }
+    }
+
     [Fact]
     public void AddedRemoved_HasAnEQ004AndAnEQ005()
     {

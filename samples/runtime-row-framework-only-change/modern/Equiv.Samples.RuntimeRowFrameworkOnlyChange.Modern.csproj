@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>Equiv.Samples.RuntimeRowFrameworkOnlyChange</RootNamespace>
+    <AssemblyName>Equiv.Samples.RuntimeRowFrameworkOnlyChange</AssemblyName>
+  </PropertyGroup>
+
+</Project>
