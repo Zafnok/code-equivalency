@@ -1,5 +1,5 @@
 # P1-023 Spike: how many `unaligned-loop` Unknowns have an alignment that their runs show?
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-009
@@ -60,3 +60,34 @@ Traces from the real runtimes: `IrInterpreter` runs are enough to propose. A loo
 - From the 2026-10-03 improvement review (its third priority). The review expects non-lockstep loops
   to be the most common structural change; the three large runs put `unaligned-loop` fourth among
   Unknown reasons, behind opaque (733), solver budget (400) and abstraction (246).
+- Result: 0 of 89 have a fitting schedule other than 1:1 with no offset, so P1-024 is closed
+  (criterion 4). 47 fit lockstep; 42 fit nothing: the call events differ in 17, the runs do not
+  exercise the loop in 22, the loop counts differ in 2, and 1 has no loop at this commit.
+- Surprise: `unaligned-loop` mostly does not mean misaligned. In 66 of the 89 rung 2 aligned the
+  loops and an obligation had a model (`LoopLadder.Failed` gives that the same reason). Only 22 have
+  a `Misalignment` text in their run, and none of the three runs is on the commit measured, so the
+  spike records both the run's `ladderTrace` detail and the alignment at `a74f2e0`.
+- The SARIF and checkouts of the three runs are in other worktrees' `.corpus/` (`sad-maxwell-71be44`
+  for gitextensions-8522, `version-upgrade-pairs-corpus-1c9943` for the other two). They were read in
+  place; `TargetFrameworkRootPath` has to point at that worktree's `.corpus/refasm`.
+- Decision: "both sides leave their loops at a paired point" is read as "after the same paired
+  point", with the last stretch compared up to the exit. An unrolled body keeps its exit tests and
+  leaves mid-stretch on an odd trip count, which P1-024's rewrite allows; read strictly, the 2:1
+  self-test pair this ticket requires would not fit.
+- Decision: a schedule fits only if some run exercises it (one whole paired stretch on both sides).
+  Otherwise every schedule fits a pair whose loop no run enters.
+- Decision: header visits are found by a marker call at the top of each header, not by cutting into
+  segments as `TraceInvariantProposer` does. Its segments are for fragments that make no calls; a
+  marker puts the visits into the interpreter's own call trace, between the real calls.
+- Decision: the call oracle answers by callee and by the count of real calls before it, not by
+  arguments, so two sides that make the same calls get the same answers even where their arguments
+  differ; the comparison of events still sees the arguments.
+- Decision: with more than one loop the schedule applies to one loop at a time and the forests must
+  be equal; every other loop pairs visit for visit. A wider search is outside criterion 2's bounds.
+- Decision: one invocation per run writes rows to a file outside git and `--report` prints the
+  tables, since each pair needs its own environment and takes minutes to load.
+- Decision: a diagnostic beyond the criteria, for the pairs with no schedule: what first differs in
+  lockstep, and whether a schedule fits by callee alone. It splits the "other" cause and shows the 0
+  is not an artefact of comparing arguments.
+- The citations check out as written. Only Churchill et al. align from runs; property-directed
+  self-composition searches for the composition with the invariant, over given predicates.

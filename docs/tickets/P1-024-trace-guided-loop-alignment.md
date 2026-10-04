@@ -1,5 +1,5 @@
 # P1-024 Trace-guided loop alignment: runs propose a pairing of iterations, relational induction proves it
-Status: todo
+Status: closed (not built; P1-023 measured 0 pairs against a bar of 10)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-023, P1-009
@@ -93,3 +93,9 @@ them where it applies. Disjunctive invariants. Traces from the real runtimes.
 ## Notes
 - From the 2026-10-03 improvement review (its third priority). Gated by P1-023 criterion 4: fewer
   than 10 alignable pairs closes this ticket unbuilt.
+- Closed 2026-10-04 by P1-023 criterion 4. Of the 89 `unaligned-loop` Unknowns of the three large
+  runs, none has a fitting schedule other than 1:1 with no offset; 47 fit lockstep and 42 fit nothing
+  (`docs/runs/2026-10-04-loop-alignment-spike.md`). The proposer this ticket describes would run the
+  same interpreter on the same inputs, so it would propose nothing on these pairs. Reopen only if a
+  later corpus shows restructured loops. The spike's finding that is worth a ticket is a different
+  one: the 47 lockstep pairs need a stronger relation at the header, on loops that make calls.
