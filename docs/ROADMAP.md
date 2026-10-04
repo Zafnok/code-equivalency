@@ -865,7 +865,10 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   Unknown(abstraction), 4 unsatisfiable) and proves no pair; Bitwuzla reads none; no rung 4 Unknown
   to give a Horn solver (`docs/runs/2026-10-04-solver-portfolio.md`). ADR 0050.
 - P1-033 (L) cvc5 is asked the rung 1 queries Z3 gives up on, as a process behind `ISmtSolver`, with
-  every satisfiable answer replayed (`+cvc5`; ADR 0050). Needs P1-025.
+  every satisfiable answer replayed (`+cvc5`; ADR 0050). Needs P1-025. Done 2026-10-04: at `--rlimit`
+  2,000,000, 103 of `gitextensions-8522`'s 164 `timeout` Unknowns stay timeouts, against 140 without
+  cvc5 (8 more Divergent, 27 more Unknown(abstraction), 2 more Unknown(opaque)), and no pair is proved
+  (`docs/runs/2026-10-04-cvc5-budget.md`).
 - P1-034 (M) Spike: the call trace encoded without sequences and datatypes, asked of Z3, cvc5 and
   Bitwuzla on the same 142 queries. It decides whether rung 1 changes its trace encoding and whether
   Bitwuzla is worth adding. Needs P1-025.
