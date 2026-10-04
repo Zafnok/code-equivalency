@@ -12,8 +12,8 @@ public sealed class RuntimeChangeTableTests
 {
     private const int CuratedRowCount = 13;
 
-    /// <summary>The rows with an unknown change point: those ticket P2-113 could not place, as its Notes list them.</summary>
-    private const int UnknownChangePointCount = 26;
+    /// <summary>The rows with an unknown change point: ticket P2-113 placed every one, so its Notes list none.</summary>
+    private const int UnknownChangePointCount = 0;
 
     private const string RowTag = "row: ";
 
@@ -128,7 +128,7 @@ public sealed class RuntimeChangeTableTests
         Assert.All(rows, static row => Assert.True(Enum.IsDefined(row.Source), $"'{row.Member}' has no known source"));
         Assert.Equal(CuratedRowCount, rows.Count(static row => row.Source == RuntimeChangeSource.Curated));
         Assert.Contains(rows, static row => row.Source == RuntimeChangeSource.Documented);
-        Assert.Equal(rows.Length, rows.Select(static row => row.Member).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(rows.Length, rows.Select(static row => (row.Member, row.ChangedIn)).Distinct().Count());
     }
 
     [Theory]
@@ -181,7 +181,7 @@ public sealed class RuntimeChangeTableTests
         Assert.Null(Assert.Single(table.Rows).Witness);
     }
 
-    /// <summary>Tickets P2-054 and P2-113: the rows neither could place (listed in P2-113's Notes) are the only unknown change points.</summary>
+    /// <summary>Tickets P2-054 and P2-113: every row has a change point, documented or measured between adjacent runtimes.</summary>
     [Fact]
     public void EveryRowHasAParseableChangedIn()
     {
@@ -192,6 +192,24 @@ public sealed class RuntimeChangeTableTests
         Assert.All(
             table.Rows.Where(static row => row.ChangedIn is not null),
             static row => Assert.True(row.ChangedIn >= Boundary, $"'{row.Member}' changed before .NET existed"));
+    }
+
+    /// <summary>
+    /// Ticket P2-113: a member whose behaviour changed at two runtimes has one row per change point, and a pair is
+    /// flagged by the row it crosses: <c>StreamReader(string, Encoding)</c> changed in .NET 7 and again in .NET 10.
+    /// </summary>
+    [Fact]
+    public void SplitRowAppliesAtEachOfItsChangePoints()
+    {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        CallIdentity identity = new("System.IO.StreamReader::.ctor(string,System.Text.Encoding)");
+
+        Assert.True(table.TryMatch(identity, Interval("net6.0", "net7.0"), out RuntimeChange first));
+        Assert.Equal(TargetRuntime.Parse("net7.0"), first.ChangedIn);
+        Assert.True(table.TryMatch(identity, Interval("net9.0", "net10.0"), out RuntimeChange second));
+        Assert.Equal(TargetRuntime.Parse("net10.0"), second.ChangedIn);
+        Assert.False(table.TryMatch(identity, Interval("net7.0", "net9.0"), out _));
+        Assert.False(table.TryMatch(identity, Interval("net48", "net6.0"), out _));
     }
 
     [Fact]
