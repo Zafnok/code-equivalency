@@ -161,7 +161,7 @@ internal sealed class PartitionedSolve(string cvc5, int timeoutMs, Slots slots, 
             // read-back; after writing partitions cvc5 prints unsat whatever the query is, so its unsat is never taken.
             return split.Status == Sat
                 ? new Solved(Sat, 0, "n/a", split.Status, string.Empty, split.WallMs, split.CpuMs, split.Output)
-                : new Solved(split.Status == Error ? Error : NoPartitions, 0, "n/a", split.Status, split.Error, split.WallMs, split.CpuMs, string.Empty);
+                : new Solved(split.Status == Error ? Error : NoPartitions, 0, "n/a", split.Status, split.WallMs > timeoutMs + 5000 ? "late=1" : split.Error, split.WallMs, split.CpuMs, string.Empty);
         }
 
         string script = File.ReadAllText(file);
@@ -203,6 +203,10 @@ internal sealed class PartitionedSolve(string cvc5, int timeoutMs, Slots slots, 
 
             string status = Combine([.. answers.Select(static a => a.Status)], cover.Status == Unsat);
             string parts = string.Join(',', answers.GroupBy(static a => a.Status).OrderBy(static g => g.Key, StringComparer.Ordinal).Select(static g => $"{g.Key}={g.Count()}"));
+
+            // A process that outlived its limit by more than its own start and stop is a fault of the spike, and is counted.
+            int late = ((Ran[])[split, cover, .. answers]).Count(a => a.WallMs > timeoutMs + 5000);
+            parts += late > 0 ? $",late={late}" : string.Empty;
             string values = status == Sat ? answers.First(static a => a.Status == Sat).Output : string.Empty;
             return new Solved(status, partitions.Length, cover.Status, split.Status, parts, wall, cpu, values);
         }

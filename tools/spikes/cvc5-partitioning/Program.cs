@@ -33,6 +33,8 @@ internal static class Program
 
     public static int Main(string[] args)
     {
+        // Each cvc5 process is stopped by a continuation on the pool; it must never wait for a thread.
+        ThreadPool.SetMinThreads(256, 256);
         switch (args)
         {
             case ["--self-test", string cvc5]:
@@ -95,27 +97,44 @@ internal static class Program
         PartitionedSolve solver = new(cvc5, timeoutMs, new Slots(slotCount), work);
         object gate = new();
         int finished = 0;
-        Parallel.ForEach(
-            System.Collections.Concurrent.Partitioner.Create(items, EnumerablePartitionerOptions.NoBuffering),
-            new ParallelOptions { MaxDegreeOfParallelism = slotCount },
-            item =>
-            {
-                string tag = $"{set}-{item.Run}-{item.Count}-{item.Strategy}-{item.Query.Index:D3}";
-                Solved solved = solver.Solve(Path.Combine(smt, $"{item.Query.Index:D3}.u.smt2"), item.Count, item.Strategy, tag);
-                string valuesFile = string.Empty;
-                if (solved.Values.Length > 0)
-                {
-                    valuesFile = tag + ".txt";
-                    File.WriteAllText(Path.Combine(values, valuesFile), solved.Values);
-                }
 
-                Outcome outcome = new(set, item.Run, item.Count, item.Strategy, item.Query.Index, solved.Status, solved.Partitions, solved.Cover, solved.Own, solved.Parts, solved.WallMs, solved.CpuMs, valuesFile);
-                lock (gate)
+        // One thread of its own a place, and none from the pool: these block, and a pool with every thread blocked runs
+        // no continuation, so no process would be stopped at its time limit.
+        ConcurrentQueue<(int Run, int Count, string Strategy, Known Query)> queue = new(items);
+        Thread[] workers =
+        [
+            .. Enumerable.Range(0, slotCount).Select(_ => new Thread(() =>
+            {
+                while (queue.TryDequeue(out (int Run, int Count, string Strategy, Known Query) item))
                 {
-                    File.AppendAllText(results, outcome.Line() + "\n");
-                    Console.Error.WriteLine($"[{++finished}/{items.Count}] {tag} {solved.Status} partitions={solved.Partitions} {solved.Parts} {solved.WallMs} ms");
+                    string tag = $"{set}-{item.Run}-{item.Count}-{item.Strategy}-{item.Query.Index:D3}";
+                    Solved solved = solver.Solve(Path.Combine(smt, $"{item.Query.Index:D3}.u.smt2"), item.Count, item.Strategy, tag);
+                    string valuesFile = string.Empty;
+                    if (solved.Values.Length > 0)
+                    {
+                        valuesFile = tag + ".txt";
+                        File.WriteAllText(Path.Combine(values, valuesFile), solved.Values);
+                    }
+
+                    Outcome outcome = new(set, item.Run, item.Count, item.Strategy, item.Query.Index, solved.Status, solved.Partitions, solved.Cover, solved.Own, solved.Parts, solved.WallMs, solved.CpuMs, valuesFile);
+                    lock (gate)
+                    {
+                        File.AppendAllText(results, outcome.Line() + "\n");
+                        Console.Error.WriteLine($"[{++finished}/{items.Count}] {tag} {solved.Status} partitions={solved.Partitions} {solved.Parts} {solved.WallMs} ms");
+                    }
                 }
-            });
+            })),
+        ];
+        foreach (Thread worker in workers)
+        {
+            worker.Start();
+        }
+
+        foreach (Thread worker in workers)
+        {
+            worker.Join();
+        }
+
         return 0;
     }
 
