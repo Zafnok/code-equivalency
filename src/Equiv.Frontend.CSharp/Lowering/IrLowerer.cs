@@ -152,21 +152,15 @@ internal sealed class IrLowerer
         IMethodSymbol method, IOperation body, ImmutableArray<ControlFlowGraph> graphs, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue)
     {
         SourceSpan span = Span(body.Syntax);
-        // An `async` method is its synchronous body, each `await` a call (ticket M4-006). An iterator is checked first: its
-        // state machine is not modelled, whether or not it is also async. `await foreach` and `await using` are only looked
-        // for in an async method, so an async lambda in a sync one leaves it alone; their desugaring awaits calls the CFG
-        // does not show.
+        // An `async` method is its synchronous body, each `await` a call (ticket M4-006). An iterator's state machine is
+        // not modelled, whether or not it is also async.
         // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles, and
-        // desugars `foreach`, `using` and `lock` into calls, conversions and a `finally` (tickets M4-001, M4-011).
+        // desugars `foreach`, `using` and `lock` into calls, conversions and a `finally` (tickets M4-001, M4-011); for
+        // `await foreach` and `await using` it wraps the `MoveNextAsync()` and `DisposeAsync()` calls in awaits (ticket P1-029).
         // A whole-body opaque points at the first offending construct, not the body (ADR 0029 decision 3).
-        (string Reason, SourceSpan Span)? wholeBody = body switch
+        if (method.IsIterator)
         {
-            _ when method.IsIterator => ("iterator", Span(body.Descendants().First(static o => o.Kind is OperationKind.YieldReturn or OperationKind.YieldBreak).Syntax)),
-            _ => null,
-        };
-        if (wholeBody is { } opaque)
-        {
-            return Opaque(method, renames, catalogue, opaque.Reason, [opaque.Span]);
+            return Opaque(method, renames, catalogue, "iterator", [Span(body.Descendants().First(static o => o.Kind is OperationKind.YieldReturn or OperationKind.YieldBreak).Syntax)]);
         }
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
@@ -2249,7 +2243,10 @@ internal sealed class IrLowerer
     /// <c>await e</c> (ticket M4-006): a call <c>await:&lt;awaiter type&gt;</c> of the awaitable, yielding the awaited value,
     /// whose <c>threw</c> flag branches as any call's. A reference-typed awaitable whose <c>GetAwaiter</c> is an instance
     /// method is null-checked first, as a <c>callvirt</c> receiver is (ticket P2-017). An await whose awaiter is not a named
-    /// type, a dynamic one or a type parameter, is opaque with reason <c>Await</c>.
+    /// type, a dynamic one or a type parameter, is opaque with reason <c>Await</c>. The await the control flow graph makes of
+    /// an <c>await using</c>'s <c>DisposeAsync()</c> or an <c>await foreach</c>'s <c>MoveNextAsync()</c> (ticket P1-029) has
+    /// no await expression to ask the semantic model about: its awaiter is the result of the awaited type's own parameterless
+    /// <c>GetAwaiter</c>, and one found only as an extension is opaque with reason <c>Await</c>.
     /// </summary>
     private IrVar? Await(IAwaitOperation awaited, LoweringContext context)
     {
