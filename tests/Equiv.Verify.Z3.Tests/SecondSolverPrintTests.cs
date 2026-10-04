@@ -138,6 +138,10 @@ public sealed class SecondSolverPrintTests
             "(declare-fun flag () Bool)\n(assert (= flag true))\n(declare-fun |in.a b| () (_ BitVec 8))\n(assert (= |in.a b| #xAf))\n(declare-fun n () (_ BitVec 3))\n(assert (= n #b101))\n",
             printed.Pins(values));
         Assert.NotNull(printed.Pins(values.SetItem("flag", "false")));
+
+        // A name with and without its bars is one symbol: cvc5 drops bars a symbol does not need, and may add them.
+        Assert.Equal(printed.Pins(values), printed.Pins(values.Remove("flag").Add("|flag|", "true")));
+        Assert.Contains("(assert (= |in.a b| #x00))", printed.Pins(values.Remove("|in.a b|").Add("in.a b", "#x00")), StringComparison.Ordinal);
         Assert.Null(printed.Pins(values.SetItem("flag", "#b1")));
         Assert.Null(printed.Pins(values.SetItem("n", "#x5")));
         Assert.Null(printed.Pins(values.SetItem("n", "#b1010")));

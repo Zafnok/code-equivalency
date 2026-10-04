@@ -354,14 +354,22 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
         /// <summary>
         /// <paramref name="values"/> as assertions Z3 parses, one constant at a time and by name: each constant declared as
         /// the script declares it and equal to its value. Null unless every constant asked for has a value of its own sort,
-        /// written as a literal (<c>true</c>, <c>false</c>, <c>#b…</c> or <c>#x…</c> of the constant's width).
+        /// written as a literal (<c>true</c>, <c>false</c>, <c>#b…</c> or <c>#x…</c> of the constant's width). A name is
+        /// the same symbol with or without its <c>|...|</c>, and solvers differ in when they print them: cvc5 answers
+        /// <c>|in.a|</c> as <c>in.a</c>.
         /// </summary>
         public string? Pins(ImmutableDictionary<string, string> values)
         {
+            Dictionary<string, string> bySymbol = new(StringComparer.Ordinal);
+            foreach ((string name, string value) in values)
+            {
+                bySymbol[name.Trim('|')] = value;
+            }
+
             StringBuilder pins = new();
             foreach ((string name, string sort) in Scalars)
             {
-                if (!values.TryGetValue(name, out string? value) || !Fits(sort, value))
+                if (!bySymbol.TryGetValue(name.Trim('|'), out string? value) || !Fits(sort, value))
                 {
                     return null;
                 }

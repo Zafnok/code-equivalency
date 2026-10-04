@@ -105,7 +105,10 @@ public sealed class Cvc5IntegrationTests
         Assert.IsType<SmtUnsat>(solver.Ask("(set-logic QF_BV)\n(declare-fun p () Bool)\n(assert (and p (not p)))\n(check-sat)\n", TimeSpan.FromSeconds(60)));
         SmtSat sat = Assert.IsType<SmtSat>(solver.Ask(Small, TimeSpan.FromSeconds(60)));
         Assert.Equal("true", sat.Values["found"]);
-        Assert.Equal(0xec4bu, Convert.ToUInt32(sat.Values["|in.left|"][2..], 2) * Convert.ToUInt32(sat.Values["right"][2..], 2));
+
+        // cvc5 prints a symbol that needs no bars without them, whatever the script wrote.
+        Assert.Equal(["found", "in.left", "right"], sat.Values.Keys.Order(StringComparer.Ordinal), StringComparer.Ordinal);
+        Assert.Equal(0xec4bu, Convert.ToUInt32(sat.Values["in.left"][2..], 2) * Convert.ToUInt32(sat.Values["right"][2..], 2));
         Assert.StartsWith("(error ", Assert.IsType<SmtUnknown>(solver.Ask("(set-logic QF_BV)\n(check-sat", TimeSpan.FromSeconds(60))).Reason, StringComparison.Ordinal);
 
         // A resource limit of a thousand steps ends the search almost at once; a wall-clock limit of a millisecond ends the process.
