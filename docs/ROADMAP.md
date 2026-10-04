@@ -663,6 +663,10 @@ rung, a pair or a run.
 - P2-121 (M) A pair whose unrolled body is huge overflows the native stack in the trace encoding and ends the run
   with no SARIF, which no per-pair `try` can catch. Same OpenRA pair, reached once P2-109 let it finish unrolling.
   Needs P2-109.
+- P2-125 (S) Verifying crashes on two tuple array types that differ only in tuple element names ("domain sort ...
+  and parameter sort ... do not match", the family of P2-031 to P2-033). One OpenRA pair, the only pair-level
+  failure left in the `openra-17989` `full` run and why it exits 5. Also looks into a second pair's
+  `outcome=failed` in the `contracts` phase of the same run.
 
 Found by P2-072's repro:
 - P2-108 (M) `System.IntPtr` and `nint` (and `System.UIntPtr` and `nuint`) are one type in an
