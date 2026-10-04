@@ -113,6 +113,28 @@ public static class PairGen
     public static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> IlPair { get; } = Pairs(IlMethod);
 
     /// <summary>
+    /// A pair that differs only inside a lambda or only inside a local function (ticket P2-079): a generated method with
+    /// one more statement somewhere before its last, <c>F = closure(e);</c>, where the closure is <c>v =&gt; v op K</c> on
+    /// the legacy side and <c>v =&gt; v op (K + 1)</c> on the modern one, and <c>op</c> is one under which the two differ
+    /// on every <c>v</c>. The closure is a lambda called at once, a local function called by name, or a local function
+    /// converted to a delegate and called. Read from IL each is named by an ordinal, the same on both sides, with its
+    /// body elsewhere. The pair is in the changing family, as a <see cref="MutationOperator.ChangeConstant"/> of the
+    /// closure's literal.
+    /// </summary>
+    public static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> ClosurePair { get; } =
+        Gen.Select(Method, Gen.Int[0, 2], Gen.OneOfConst("+", "-", "^"), Gen.Int[-16, 16], Flat(typeof(int)), Gen.Int[0, MaxStatements], static (method, shape, op, constant, argument, at) =>
+            (RenderMethod(WithClosure(method, shape, op, constant, argument, at)), RenderMethod(WithClosure(method, shape, op, constant + 1, argument, at)), MutationOperator.ChangeConstant));
+
+    /// <summary><paramref name="method"/> with <c>F = closure(argument);</c> at <paramref name="at"/>, the closure of <paramref name="shape"/> reading <c>v op constant</c>.</summary>
+    private static Method WithClosure(Method method, int shape, string op, int constant, IExpr argument, int at)
+    {
+        const string Function = "L";
+        Binary body = new(op, new Name(typeof(int), "v"), new Literal(typeof(int), constant), IsChecked: false);
+        Method declared = shape == 0 ? method : method with { Locals = [.. method.Locals, new LocalFunction(Function, body)] };
+        return Insert(declared, at % method.Body.Length, new Assign(Field, shape == 0 ? new Fragment(body, argument) : new Invoke(Function, argument, AsDelegate: shape == 2)));
+    }
+
+    /// <summary>
     /// A generated method with one construct a P2-048 cleanup operator rewrites, which the base generator rarely or
     /// never makes: an <c>if</c>/<c>else</c> assigning one local, or returning, from both branches; a trailing <c>if</c>
     /// with no <c>else</c> in a <c>void</c> method; a null check or concatenation over the string local <c>w</c>; or an

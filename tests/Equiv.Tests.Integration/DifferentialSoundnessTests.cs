@@ -61,6 +61,12 @@ public sealed class DifferentialSoundnessTests
     internal static readonly Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Generated =
         Gen.Frequency((3, PairGen.Pair), (1, PairGen.IlPair));
 
+    /// <summary>
+    /// How many of <see cref="PairGen.ClosurePair"/> the gate draws for each four of <see cref="Generated"/> (ticket
+    /// P2-079). They are drawn apart from <see cref="Generated"/>, which <see cref="BrokenIlSeed"/>'s first pair depends on.
+    /// </summary>
+    private const int ClosureShare = 4;
+
     private static readonly ImmutableArray<PairRuntime.Lowering> BothLowerings = [PairRuntime.Lowering.Operation, PairRuntime.Lowering.Il];
 
     private static readonly ImmutableArray<Rule> Rules = [new(1, Soundness), new(2, Decoding), new(3, Precision)];
@@ -158,6 +164,16 @@ public sealed class DifferentialSoundnessTests
     [Fact]
     public void GeneratedPairsAreSoundUnderBothLowerings() => Assert.Null(Failed(BothLowerings, Rules, Seed));
 
+    /// <summary>
+    /// Ticket P2-079: rules 1 to 3, under the IL lowering, on pairs that differ only inside a lambda or a local function.
+    /// The IL lowering names such a closure by an ordinal that is the same on both sides; while it shared the fragment
+    /// that held the name, these pairs were Equivalent and rule 1 failed here. The IOperation lowering fails rule 1 on
+    /// the pairs that call a local function by name, which is ticket P2-125; that ticket adds it here.
+    /// </summary>
+    [Fact]
+    public void PairsThatDifferOnlyInsideAClosureAreSoundUnderTheIlLowering() =>
+        Assert.Null(Record.Exception(() => Sample(PairGen.ClosurePair, [PairRuntime.Lowering.Il], Rules, Seed, Pairs / ClosureShare)));
+
     /// <summary>A deliberately broken IL mapping fails rule 1 within the pull-request budget, and the failure prints its seed.</summary>
     [Fact]
     public void ABrokenIlMappingIsCaught()
@@ -224,11 +240,13 @@ public sealed class DifferentialSoundnessTests
     }
 
     /// <summary>CsCheck reports a counter-example by throwing; surfacing it as a value gives each test its assertion.</summary>
-    private static Exception? Failed(ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules, string seed) => Record.Exception(() => Sample(lowerings, rules, seed));
+    private static Exception? Failed(ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules, string seed) =>
+        Record.Exception(() => Sample(Generated, lowerings, rules, seed, Pairs));
 
-    private static void Sample(ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules, string seed) =>
-        Gen.Select(Generated, PairGen.Input.Array[InputsPerPair], static (pair, inputs) => new Case(pair.LegacySource, pair.ModernSource, pair.Operator, inputs))
-            .Sample(c => Check(c, lowerings, rules) is null, seed: seed, iter: Pairs, print: c => Check(c, lowerings, rules)?.Describe(c) ?? string.Empty);
+    private static void Sample(
+        Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> pairs, ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules, string seed, int count) =>
+        Gen.Select(pairs, PairGen.Input.Array[InputsPerPair], static (pair, inputs) => new Case(pair.LegacySource, pair.ModernSource, pair.Operator, inputs))
+            .Sample(c => Check(c, lowerings, rules) is null, seed: seed, iter: count, print: c => Check(c, lowerings, rules)?.Describe(c) ?? string.Empty);
 
     /// <summary>The first failure of <paramref name="c"/> that no <see cref="Skips"/> entry tolerates, lowering by lowering and rule by rule.</summary>
     private static Failure? Check(Case c, ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules) =>

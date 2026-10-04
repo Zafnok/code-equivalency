@@ -24,6 +24,9 @@ public sealed class PairGenTests
     /// <summary>Pairs drawn to find every IL fallback construct in both families.</summary>
     private const int IlDraws = 400;
 
+    /// <summary>Pairs drawn to find every shape of closure.</summary>
+    private const int ClosureDraws = 60;
+
     private static readonly string[] IlConstructs = ["lifted operator", "nullable conversion", "interpolated string", "positional pattern in a switch"];
 
     /// <summary>Acceptance criterion 5.</summary>
@@ -52,6 +55,48 @@ public sealed class PairGenTests
             seed: DifferentialSoundnessTests.Budget.Seed,
             iter: 1,
             print: static pairs => $"{pairs.Length} pairs");
+
+    /// <summary>
+    /// Ticket P2-079, acceptance criterion 5: a closure pair's two sides compile and differ in one line, which is the
+    /// lambda or the local function, and a lambda, a call of a local function and a local function's method group are all drawn.
+    /// </summary>
+    [Fact]
+    public void ClosurePairsDifferOnlyInsideALambdaOrALocalFunction() =>
+        PairGen.ClosurePair.Array[ClosureDraws].Sample(
+            static pairs =>
+            {
+                HashSet<string> shapes = new(StringComparer.Ordinal);
+                foreach ((string legacy, string modern, MutationOperator op) in pairs)
+                {
+                    Assert.Equal(MutationOperator.ChangeConstant, op);
+                    Assert.All((string[])[legacy, modern], static source => Assert.DoesNotContain(PairRuntime.Compile(source, "Pair").GetDiagnostics(TestContext.Current.CancellationToken), static d => d.Severity == DiagnosticSeverity.Error));
+                    string[] before = legacy.Split('\n');
+                    string[] after = modern.Split('\n');
+                    Assert.Equal(before.Length, after.Length);
+                    string[] changed = [.. before.Zip(after).Where(static l => !string.Equals(l.First, l.Second, StringComparison.Ordinal)).Select(static l => l.First)];
+
+                    // A closure after a return is not rendered, and then the two sides are one text.
+                    Assert.True(changed.Length <= 1, legacy + modern);
+                    shapes.UnionWith(changed.Select(line => Shape(line, legacy)));
+                }
+
+                Assert.Equal(["call of a local function", "lambda", "method group of a local function"], shapes.Order(StringComparer.Ordinal), StringComparer.Ordinal);
+            },
+            seed: DifferentialSoundnessTests.Budget.Seed,
+            iter: 1,
+            print: static pairs => $"{pairs.Length} pairs");
+
+    /// <summary>The closure the changed <paramref name="line"/> of <paramref name="source"/> is, which must be one.</summary>
+    private static string Shape(string line, string source)
+    {
+        if (line.Contains("(v => ", StringComparison.Ordinal))
+        {
+            return "lambda";
+        }
+
+        Assert.Contains("int L(int v) => ", line, StringComparison.Ordinal);
+        return source.Contains("(System.Func<int, int>)L)", StringComparison.Ordinal) ? "method group of a local function" : "call of a local function";
+    }
 
     [Fact]
     public void PreservingOperatorsCompile() => Compile(preserving: true);

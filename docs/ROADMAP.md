@@ -652,6 +652,9 @@ Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
   lambdas prove Equivalent (repro in the ticket). 20 of P1-018's 21 new Equivalents rest on it.
   Until it lands, no `--il-fallback` verdict on a method that holds a lambda is to be relied on.
   Needs P1-016, P1-017.
+- P2-125 (M) Soundness: a call of a local function is an ordinary call of a callee no pair verifies,
+  so two members that differ only inside a local function prove Equivalent in a default run (repro in
+  the ticket; found by P2-079's closure pairs). Needs P2-079.
 - P2-078 (M) Ill-sorted IR from the IL lowering no longer crashes the encoder: one Git Extensions pair
   exits the `--il-fallback` run with code 5. `IlFallback` keeps the IOperation bodies when the IL
   bodies do not validate. Needs P1-016, P1-017.
