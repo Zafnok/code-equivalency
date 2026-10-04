@@ -1,5 +1,5 @@
 # P1-025 Spike: would a second solver decide the queries Z3 gives up on?
-Status: todo
+Status: done (PR #395)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-050
@@ -64,3 +64,30 @@ Proof certificates (P1-026).
 ## Notes
 - From the 2026-10-03 improvement review (the "Solver portfolio" row).
 - If P2-101 has landed, use its feature groups to pick which pairs to report first.
+- Result (2026-10-04, `docs/runs/2026-10-04-solver-portfolio.md`): 142 of 164 `timeout` Unknowns
+  export a rung 1 query. cvc5 1.4.1 answers 59 of them in the 60 s Z3 had (4 unsatisfiable, 55
+  satisfiable: 9 replay to Divergent, 27 to Unknown(abstraction), 19 not read back) and proves no
+  pair. Bitwuzla 0.9.1 reads none. The three large runs hold 0 rung 4 Unknowns, so Eldarica and
+  Golem were not run (criterion 4). ADR 0050, P1-033 and P1-034 follow.
+- Deviation: the size guard says to export what Z3 prints and count what does not parse. As printed,
+  cvc5 reads 1 file of 142, because Z3 prints a `seq.++` of one argument. The spike also runs each
+  solver on the file with that unwrapped, and reports both rows. Without it the spike would have
+  measured Z3's printer and not cvc5.
+- Decision: the query is exported from a plain solver holding the assertions and the query's terms,
+  not from the production solver, whose inlined terms print to up to 250 MB a file. It is the same
+  query (the definitions stay asserted).
+- Decision: only rung 1's queries are exported. Rungs 2 and 3 build their obligations inside the
+  rung, out of reach without a change under `src/`; one of the 164 times out there.
+- Decision: read-back asserts the solver's Bool and bit-vector values beside the query and lets Z3
+  complete the model, then replays with `ModelDecoder.Replay`. Z3 cannot complete 19 of 55; P1-033
+  notes it.
+- Decision: cvc5 ran with `--arrays-exp`, without which it rejects 9 more files (constant arrays).
+- Decision: a `divergence` query proved unsatisfiable does not prove its pair, so Z3 was asked the
+  rest of rung 1 for those four: none is proved (`opaque` satisfiable on two, a timeout on two).
+- Decision: ADR 0050 is the next free number; 0048 and 0049 are taken by open pull requests
+  (#387, #388), as is P1-032 (#388, #393).
+- P2-101 had not landed.
+- Toolchain: PowerShell does not write a native process's stderr to a `2>` file until the process
+  ends; run through `cmd /c` to watch progress. Z3's API parser is not given `check-sat` or
+  `get-value`, so the self-test strips those lines from the script before parsing it.
+- The spike's first pass exported the inlined form before the size was noticed. It was left running, not killed, and its files under `.corpus/pairs/gitextensions-8522/runs/20261004-p1025-export` (1.5 GB after twelve queries) are of no use.
