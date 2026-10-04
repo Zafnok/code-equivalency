@@ -63,7 +63,7 @@ public sealed class LadderPropertyTests
     [Fact]
     public void ALoopingMutantIsNeverEquivalentAndEveryDivergenceReplays()
     {
-        TerminatingCallingMutants.Sample(AssertNeverEquivalent, iter: 200, print: Print);
+        TerminatingCallingMutants.Sample(static m => AssertNeverEquivalent(m), iter: 200, print: Print);
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public sealed class LadderPropertyTests
     [Fact]
     public void TheCallingMutantGeneratorDoesNotRunOutOnSeedA6AU7haBK73()
     {
-        TerminatingCallingMutants.Sample(AssertNeverEquivalent, iter: 1, seed: "a6-aU7haBK73", print: Print);
+        TerminatingCallingMutants.Sample(static m => AssertNeverEquivalent(m), iter: 1, seed: "a6-aU7haBK73", print: Print);
     }
 
     /// <summary>
