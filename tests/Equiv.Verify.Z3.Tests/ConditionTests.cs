@@ -104,6 +104,7 @@ public sealed class ConditionTests
               %isLit: bool = eq %s, %lit
               %thisSame: bool = eq %this, %this
               %both: bool = and %flag, %t
+              %mixed: bool = and %notNeg, %flag
               br %flag, B1, B2
             B1:
               goto B3
@@ -128,7 +129,7 @@ public sealed class ConditionTests
         ImmutableArray<ConditionTerm> candidates = CandidateHarvest.Of(old, @new, shared);
 
         Assert.Equal(
-            ["flag", "!flag", "x < 0", "x >= 0", "s == null", "s != null", "flag & true", "!(flag & true)", "(x + b) > 0", "(x + b) <= 0"],
+            ["flag", "!flag", "x < 0", "x >= 0", "s == null", "s != null", "flag & true", "!(flag & true)", "(x + b) > 0", "(x + b) <= 0", "(x >= 0) & flag", "!((x >= 0) & flag)"],
             candidates.Select(c => ConditionText.Source(c, shared)),
             StringComparer.Ordinal);
     }
