@@ -1,5 +1,5 @@
 # P1-034 Spike: does a call trace encoded without sequences and datatypes make the hard queries easier?
-Status: todo
+Status: done (PR #401)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-025
@@ -57,3 +57,40 @@ Rungs 2 to 5, whose traces carry cut events of loop segments. Adopting Bitwuzla.
 ## Notes
 - From P1-025. Bitwuzla also rejects an `or` of one argument, which Z3 prints in the `opaque`
   queries; unwrap it as the P1-025 spike unwraps `seq.++`.
+- Result (2026-10-04, `docs/runs/2026-10-04-trace-encoding.md`): all 142 products build in the
+  positional form (logic `QF_AUFBV`). Z3 answers 72 of them where it answered none: 4 unsatisfiable,
+  68 satisfiable (26 replay to a Divergent, 42 to Unknown(abstraction)). cvc5 answers 78 against 56
+  in the sequence form in the same pass. Bitwuzla 0.9.1 answers none as the file is written and 103
+  with each uninterpreted sort defined as a 64-bit vector. No pair is proved: the four unsatisfiable
+  `divergence` queries all have a satisfiable `opaque`.
+- Deviation: criterion 5 writes the follow-on ticket only if some solver proves a pair, and none
+  does. P1-038 is written all the same: Z3 alone decides 72 of 142 `timeout` Unknowns in the
+  positional form, more than cvc5 decides in the sequence form ADR 0050 adopted it for, at no
+  dependency. The part of criterion 5 that adds a solver keeps its gate: ADR 0050 is not clarified,
+  and Bitwuzla gets the measured line in ROADMAP's post-MVP list.
+- Deviation: criterion 3 asks Bitwuzla the positional file. It answers `unknown` to an equality over
+  an uninterpreted sort and crashes on an array of one, and the product has both whatever the trace
+  is. The spike also runs it on the file with each `declare-sort` written as a `define-sort` of a
+  64-bit vector, and reports both rows. That is one line of text per sort, not the heap re-encoded
+  (the size guard): every array, function and assertion is as printed.
+- Decision: the product is `ProductEncoder.Encode`'s own. Two more `FragmentEncoder`s over the
+  encoding's sorts and call encoders give the call sites and exits `Encode` does not hand out, and
+  the query is rebuilt from them. Given production's own conjuncts the rebuild must be the very term
+  `Encode` returned; the tool checks that on every query.
+- Decision: the exception type, an `Int` in production's query, is a bv32 in the positional one.
+  Without that the query is not "bit-vectors, arrays and uninterpreted functions only".
+- Decision: trace equality is pairwise (every old site against every new site that can stand at the
+  same position), not an array indexed by position. It needs no extensionality and no constant
+  array, which cvc5 rejects in 49 files already.
+- Decision: cvc5 is also run on the sequence file in the same pass, as the control. P1-025's 59 were
+  measured at another commit and under another load; here it is 56.
+- Decision: which query Z3 gives up on is read from P1-025's `results.tsv`, and Z3 is asked that
+  query again in both encodings. It still gives up on all 142 in the sequence form.
+- For a `divergence` query proved unsatisfiable, rung 1's other queries are asked of Z3 and then of
+  the other solvers, which P1-025 did not do. It settles the two P1-025 left open: `opaque` is
+  satisfiable on both (cvc5).
+- The positional form is quadratic in call sites: up to 325,266 pairs of sites in one query, and no
+  solver decides any query above 10,000. P1-038 carries a cap.
+- Toolchain: a bash heredoc holding an apostrophe does not parse here; the report was written as a
+  file. The run reads the corpus checkout, solvers and `results.tsv` of the P1-025 worktree's
+  `.corpus/`, and writes under this worktree's.
