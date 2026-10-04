@@ -782,14 +782,15 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// A capture's value; for one that stands for a field or property place, a read of that place, since <c>f ??= v</c> reads
-    /// the place it may then write (ticket P2-006).
+    /// the place it may then write (ticket P2-006). The flag an interpolated string handler's constructor sets through its
+    /// trailing <c>out bool</c> has no type where the graph branches on it (ticket P2-105): it is a <c>bool</c>.
     /// </summary>
     private IrVar? CaptureRead(IFlowCaptureReferenceOperation reference, LoweringContext context) => reference.Id switch
     {
         CaptureId id when sliceTargets.TryGetValue(id, out HeapLowerer.Access slice) => heap.ReadSlice(slice, context),
         CaptureId id when propertyTargets.TryGetValue(id, out PropertyAccess? property) =>
             Accessor(property.Reference, property.Reference.Property.GetMethod, property.Operands, value: null, context),
-        _ => ssa.Load(context.Current, Capture(reference.Id, reference.Type!)),
+        _ => ssa.Load(context.Current, Capture(reference.Id, reference.Type ?? compilation.GetSpecialType(SpecialType.System_Boolean))),
     };
 
     private IrVar Value(IOperation operation, LoweringContext context) => Lower(operation, context)!;
@@ -2113,16 +2114,14 @@ internal sealed class IrLowerer
     private ImmutableArray<RefOut>? RefOuts(ImmutableArray<IArgumentOperation> arguments)
     {
         ImmutableArray<RefOut>.Builder written = ImmutableArray.CreateBuilder<RefOut>();
-        foreach (IOperation lvalue in arguments
-            .Where(static a => IsWritten(a.Parameter!))
-            .OrderBy(static a => a.Parameter!.Ordinal)
-            .Select(static a => a.Value is IDeclarationExpressionOperation declaration ? declaration.Expression : a.Value))
+        foreach (IArgumentOperation argument in arguments.Where(static a => IsWritten(a.Parameter!)).OrderBy(static a => a.Parameter!.Ordinal))
         {
+            IOperation lvalue = argument.Value is IDeclarationExpressionOperation declaration ? declaration.Expression : argument.Value;
             if (lvalue is IDiscardOperation discard)
             {
                 written.Add(new RefOut(Variable: null, Map(discard.Type!)));
             }
-            else if (Target(lvalue) is { } variable && !written.Any(w => w.Variable == variable))
+            else if ((Initialized(lvalue, argument.Parameter!.Type) ?? Target(lvalue)) is { } variable && !written.Any(w => w.Variable == variable))
             {
                 written.Add(new RefOut(variable, variable.Template.Type));
             }
@@ -2134,6 +2133,14 @@ internal sealed class IrLowerer
 
         return written.ToImmutable();
     }
+
+    /// <summary>
+    /// The variable of a capture that an <c>out</c> argument initializes, or null for any other lvalue. The control flow graph
+    /// makes one for the flag an interpolated string handler's constructor sets through its trailing <c>out bool</c>, and
+    /// branches on it to skip the appends (ticket P2-105); no <see cref="IFlowCaptureOperation"/> ever stores it.
+    /// </summary>
+    private SsaBuilder.Variable? Initialized(IOperation lvalue, ITypeSymbol type) =>
+        lvalue is IFlowCaptureReferenceOperation { IsInitialization: true } reference ? Capture(reference.Id, type) : null;
 
     private static bool IsWritten(IParameterSymbol parameter) => parameter.RefKind is RefKind.Ref or RefKind.Out;
 
