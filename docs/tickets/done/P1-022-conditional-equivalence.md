@@ -1,5 +1,5 @@
 # P1-022 Conditional equivalence: a pair that is not Equivalent says under which inputs it is
-Status: in-progress
+Status: done (PR #394)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-013, M3-025
@@ -118,7 +118,7 @@ differs when"). A new rule id or verdict. Counting how many inputs satisfy the c
   (`EQUIV_DIFFERENTIAL_BUDGET=nightly`, 5,000 pairs) and passed. `mutation.yml`'s nightly `differential` job filters to
   `DifferentialSoundnessTests` alone, so it does not run `ConditionSoundnessTests`; adding the class to that filter is a
   workflow change outside this ticket's Files.
-- Snapshots: 13 `samples/*/expected.sarif.json` and the two `*.execute.sarif` files changed. Seven results gained
+- Snapshots: 13 `samples/*/expected.sarif.json` and the two `*.execute.sarif` files changed. Eight results gained
   `agreesWhen` (`added-branch`, `api-drift`, `bcl-overload-rebinding`, `callee-changed-invisible`,
   `dependency-rebinding`, `effect-free-bcl-call`, `removed-null-check`, `repeated-edit`); the rest only gained the
   census entry. Three of the conditions are `<receiver> == null`: both sides throw the same exception there, which is
