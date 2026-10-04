@@ -1,5 +1,5 @@
 # P2-082 Weighing a pair for the progress log can no longer end the run
-Status: in-progress
+Status: done (PR #376)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
