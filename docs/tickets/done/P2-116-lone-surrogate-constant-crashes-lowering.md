@@ -51,3 +51,8 @@ Lowering the generated regex code any further than it lowers today.
 - Locally, `webapi-basic` and `version-bump` wrote no SARIF in this worktree (they need a package restore that the
   targeted test run does not do); not checked without this change, so CI is the check for those two. The other 24
   snapshots were unchanged.
+- CI found what the local run did not: `Find` is the first sample method that calls a member on a string literal,
+  and the two lowerings differ there. The IOperation lowering null-checks the literal receiver through
+  `null.System.String`; the IL lowering does not. Both sides of a pair get the same check, so the pair is still
+  congruent. It is a known difference in `IlLowererTests.CallIdentitiesMatchTheOperationLowering` and
+  `IlLoweringParityTests`, owned by P2-126 (out of scope here: this ticket lowers nothing further).

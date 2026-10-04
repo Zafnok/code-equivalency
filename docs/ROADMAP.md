@@ -564,6 +564,8 @@ decides whether a .NET-to-.NET pair is usable:
   restore fails as the skill writes it.
 - P2-116 (S) A string constant holding a lone surrogate no longer crashes lowering. 3 pairs on
   jellyfin-13023, in code the regex source generator emits.
+- P2-126 (S) A string literal is never null, so a call on one makes no null check. The IOperation lowering
+  null-checks a literal receiver and the IL lowering does not (found by P2-116's sample). Needs P2-116.
 - P2-117 (S) `Enum.GetValues<T>()` and `Enum.IsDefined<T>(v)` equal the `Type`-taking calls they
   replace: 2 false EQ002.
 - P2-118 (M) Decide how code a source generator emits is compared and reported: 4 EQ002 and 12
