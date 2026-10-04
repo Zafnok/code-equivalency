@@ -17,7 +17,7 @@ ADR 0037 is that question, and P1-013 built it. Two things about it have never b
 Measure both. Answer with counts, not a design.
 
 ## Spec references
-ADR 0037, ADR 0028 (the 5% bar), VERIFICATION-MODEL.md section 6 (`failureRefinement`, the two
+ADR 0037, ADR 0049 (decision 7: yield chooses the mode), VERIFICATION-MODEL.md section 6 (`failureRefinement`, the two
 budgets), `docs/runs/2026-10-01-timeout-budget.md`, the P1-019 spike (the shape to follow).
 
 ## Acceptance criteria (all must hold; nothing beyond them)
@@ -31,9 +31,10 @@ budgets), `docs/runs/2026-10-01-timeout-budget.md`, the P1-019 spike (the shape 
    run's verify time, and one line each for: the share of today's queried Unknowns with a
    `none-proved` `newFailures`, and the share of the `timeout` Unknowns that would have one.
    Identities and counts only.
-4. If at least 5% of the `timeout` Unknowns get `none-proved` for `newFailures`, the ticket files
-   `P1-nnn` to ask the queries there, starting with a clarification of ADR 0037. Otherwise it adds one
-   measured line to ROADMAP's post-MVP list.
+4. The report ends with one line on whether quick mode should ask the queries on `timeout` Unknowns
+   too, from the measured time and yield, and the ticket adds that line to ROADMAP beside P1-032.
+   Thorough mode asks them whatever the number is (ADR 0049, P1-032), so no follow-up ticket is
+   filed for that.
 5. Nothing under `src/` changes. The spike is not in `Equiv.slnx`.
 
 ## Files
@@ -55,3 +56,5 @@ User assertions (`Debug.Assert`, contract calls) as checked properties. Changing
 ## Notes
 - From the 2026-10-03 improvement review (the "Differential assertion checking" row). The review lists
   it as absent; it is ADR 0037 and P1-013, and what is absent is the measurement.
+- 2026-10-04: criterion 4 rewritten under ADR 0049. It gated the queries on a 5% share; the
+  measurement now only decides whether quick mode asks them as well.
