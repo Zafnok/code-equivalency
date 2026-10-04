@@ -796,13 +796,13 @@ internal static class CompareCommand
     private static IEnumerable<string> Callees(IrProcedure body) =>
         body.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Select(static call => call.Callee.Value);
 
+    /// <summary>Whether <paramref name="exception"/> fails one pair (ADR 0023) rather than the run: cancellation and running out of memory end the run.</summary>
+    private static bool IsPairFailure(Exception exception) => exception is not OperationCanceledException and not OutOfMemoryException;
+
     /// <summary>
     /// ADR 0023's record of a pair the tool failed on: an <c>error</c> notification naming both identities and carrying
     /// the exception, also written to stderr. <paramref name="stage"/> says what failed (<c>Lowering</c>, <c>Verifying</c>).
     /// </summary>
-    /// <summary>Whether <paramref name="exception"/> fails one pair (ADR 0023) rather than the run: cancellation and running out of memory end the run.</summary>
-    private static bool IsPairFailure(Exception exception) => exception is not OperationCanceledException and not OutOfMemoryException;
-
     private static Notification PairFailure(string stage, ProcedureIdentity old, ProcedureIdentity @new, Exception exception, TextWriter error)
     {
         string text = $"{stage} {old.Value} against {@new.Value} failed: {exception.Message}";

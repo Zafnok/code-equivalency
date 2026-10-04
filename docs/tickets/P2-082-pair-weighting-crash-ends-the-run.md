@@ -98,3 +98,30 @@ P2-083's lowering crashes on the same pairs. Changing how a pair is weighed.
   identity. Naming it takes this branch's `CompareCommand` fix on a tree without P2-090, run on either pair.
 - The P2-065 worktree that held both pairs' restored checkouts no longer exists (seen 2026-10-03 after the Duplicati
   run ended), so the next run starts from `corpus.ps1 -Fetch` and a restore of both sides.
+- 2026-10-03, criterion 1. A build of 0baa20f (the commit before P2-090) with a throwaway line that prints every
+  lowered body holding a block with no terminator, run `--lower-only` on both pairs (exit 0 on each, 73 and 74 seconds):
+  - `openra-17989`: one pair, `OpenRA.Server.Program::Main(string[])`, both sides. Of 104 blocks, B61 has no
+    terminator and no instructions; the `IrBranch` of a loop header (two `IrPhi`, then the `IrConst` it branches on)
+    names it as its false target.
+  - `duplicati-3124`: one pair, `Duplicati.UnitTest.TestUtils::GrowingFile(string,System.Threading.CancellationToken)`,
+    both sides. Of 30 blocks, B12; an empty block with an `IrGoto`, a copy of the `finally`, names it.
+  - The construct is the same on both: a `WhileLoop` whose condition is the `Literal` `true` and that nothing leaves
+    normally, so the condition's false edge leads only to code that is never reached. On OpenRA the loop is the last
+    statement of a method that returns nothing and holds a second such loop left by a `Branch` (`break`); on Duplicati
+    it is inside a `Try` with a `finally`, in an `async` method. This is P2-090's dead edge of a branch on a
+    compile-time constant, in a shape its Notes did not list: they say `while (true)` emits no conditional branch,
+    which holds only when something after the loop is reachable.
+- Criterion 2: `IrLowererTests.AnEndlessLoopWhoseExitIsNeverReachedLowers`, one row per pair's shape. On 0baa20f both
+  rows fail with the `NullReferenceException` from `IrValidator.IrChecker.CheckTargets`; here both pass.
+- Criterion 3: P2-090 (PR #333) is the lowering fix; nothing in `src/Equiv.Frontend.CSharp` changes here. The validator
+  did not accept the bad IR, it threw on it; it now reports IR014 (`IrValidatorTests.IR014ABlockWithoutATerminator`).
+- Criterion 5. No pair fails at weighing on either pair any more, so neither `full` run was repeated on this branch's
+  head; the two runs below are the evidence, and the only code they lack or differ in is `Verified`'s catch, which
+  neither would have entered.
+  - `duplicati-3124`: the run above (this branch's fix on c11f10f). Exit 1, SARIF written, by rule EQ001 5,641,
+    EQ002 32, EQ003 424, EQ004 92, EQ005 65, EQ006 184.
+  - `openra-17989`: P2-121's criterion 4 run at 550e260, which has P2-090 and not this branch. Exit 5, SARIF written
+    (10,206 results) in 4,593 seconds, by rule EQ001 9,777, EQ002 6, EQ003 266, EQ004 31, EQ005 62, EQ006 64. Its one
+    notification and one `unverified` entry are the `OpenRA.ObjectCreator::.ctor` sort mismatch noted above, a failure
+    in verifying. `OpenRA.Server.Program::Main(string[])` is EQ003 in it.
+- The pair checkouts used here are in the `pair-weighting-crash-fix-a9ea8b` worktree's `.corpus/`.

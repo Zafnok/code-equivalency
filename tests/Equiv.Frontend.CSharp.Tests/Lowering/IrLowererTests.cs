@@ -1477,6 +1477,26 @@ public sealed class IrLowererTests
     }
 
     /// <summary>
+    /// The construct P2-082 found on `openra-17989` (`OpenRA.Server.Program::Main(string[])`, both sides): a
+    /// `while (true)` that nothing leaves except a throw, so its condition's false edge leads only to code that is never
+    /// reached, around an inner `while (true)` left by `break`. It is P2-090's dead edge: before that fix the loop header
+    /// branched to a block with no terminator, and weighing the pair threw in `IrLoopAnalysis`. The second shape is the
+    /// one on `duplicati-3124` (`Duplicati.UnitTest.TestUtils::GrowingFile`): the same loop inside a `try` with a
+    /// `finally`, where the dead edge runs through a copy of the `finally` first.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(int k) { while (true) { while (true) { k++; if (k > 4) break; } if (k > 5) throw new InvalidOperationException(); } }", 2)]
+    [InlineData("static int M(int k) { try { while (true) { k++; if (k > 5) throw new InvalidOperationException(); } } finally { k = 0; } }", 1)]
+    public void AnEndlessLoopWhoseExitIsNeverReachedLowers(string members, int loops)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(loops, IrLoopAnalysis.Of(procedure).Loops.Length);
+        Assert.Equal(new IrThrew("System.InvalidOperationException"), Run(procedure, Bits(32, 3)));
+    }
+
+    /// <summary>
     /// A conditional `throw;` in a `catch` is one CFG block: its condition branches past the rethrow, and its
     /// fall-through is the rethrow itself, which names no block (found by the `gitextensions-8522` census,
     /// ticket P2-010). The rethrow is opaque as usual; the path that skips it still runs.
