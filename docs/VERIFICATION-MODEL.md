@@ -295,14 +295,25 @@ stays an `IrOpaque` with reason `AnonymousObjectCreation`, and a read of a prope
 A collection expression (P2-099) is the construct it replaces, so the two are compared as two spellings of one
 body. For an array target `[a, b]` is the array creation `new T[] { a, b }` above, and `[]` is the call
 `System.Array::Empty<T>()` the compiler emits (a creation of length 0 where the framework has no `Array.Empty`).
-For a `List<T>` target it is a new `List<T>`, as `new List<T>()` is (ADR 0043), and then one `Add` call per element, as a
-collection initializer is. For an `IEnumerable<T>`, `IReadOnlyCollection<T>` or `IReadOnlyList<T>` target it is the
-array, read through the `cast.<T[]>.<Target>` map the array's conversion reads. Each element is evaluated, then
-stored or added, before the next, so element order is in the trace. Its shadow is false only where the old form's
-is: a creation or a `new`, read through no cast map. A spread element, a span, `IList<T>`, `ICollection<T>`, a type
-parameter, a type built by a `CollectionBuilder` method, any class other than `List<T>`, and an array the array
-creation leaves opaque, stay an `IrOpaque` with reason `CollectionExpression`. The conversion around a target-typed
-`new()` whose creation is already of the target type is its operand, so `new()` is `new T()`.
+For a class with a parameterless constructor, `List<T>` among them, it is a new object, as `new T()` is (for `List<T>`
+no call; ADR 0043), and then one `Add` call per element, as a collection initializer is (P2-120). The `Add` is the only
+method of that name with one parameter that the class or a base type declares, and its parameter has the elements'
+type; a call to it is lowered as any call is, a forwarder as its target (ADR 0047). With no element nothing is added,
+so `[]` is `new T()` for any such class, a `Dictionary<K, V>` included. For an `IEnumerable<T>`,
+`IReadOnlyCollection<T>` or `IReadOnlyList<T>` target it is the array, read through the `cast.<T[]>.<Target>` map the
+array's conversion reads. For an `IList<T>` or `ICollection<T>` target it is the `List<T>` the compiler builds, read
+through `cast.<List<T>>.<Target>` (P2-120). Each element is evaluated, then stored or added, before the next, so element
+order is in the trace. The CFG evaluates an element that needs more than one operation (`new T { P = x }`, `a ?? b`),
+and every element before it, into flow captures ahead of the collection expression. For a class target the order above
+still holds (P2-120): the object is made where the first such element starts, and each `Add` is where the next element
+starts, or at the collection expression for the last ones. That is the order of the collection initializer and of the
+compiled code. An element starts at the first statement or branch value of the graph whose syntax lies inside the
+element's. An array is created after its captured elements, as the CFG has the array creation it replaces. Its shadow
+is false only where the old form's is: a creation or a `new`, read through no cast map. A spread element, a span, a
+type parameter, a type built by a `CollectionBuilder` method, a struct, a class whose constructor takes an argument, a
+class with an element and not exactly one such `Add`, and an array the array creation leaves opaque, stay an
+`IrOpaque` with reason `CollectionExpression`. The conversion around a target-typed `new()` whose creation is already
+of the target type is its operand, so `new()` is `new T()`.
 
 The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
 locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
