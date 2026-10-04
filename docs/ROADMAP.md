@@ -846,7 +846,10 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   under ADR 0049 they run in thorough mode and quick skips them: P1-035 asks them, P1-032 adds the
   modes.
 - P1-035 (S) A `timeout` Unknown carries `properties.failureRefinement` like any other Unknown,
-  starting with a clarification of ADR 0037. Needs P1-013, P1-021.
+  starting with a clarification of ADR 0037. Needs P1-013, P1-021. Done 2026-10-04: on a `full` run of
+  gitextensions-8522, 19 of the 143 `timeout` Unknowns (13.3%) get an answer from at least one
+  query, 2 of them a `none-proved` `newFailures`, and the queries' time goes from 501 s to 2,306 s
+  (the ticket's Notes).
 - P1-032 (L) `equiv compare --mode thorough|quick` (ADR 0049). Both modes run one first pass
   (`resourceLimit` 2,000,000). Thorough, the default, then verifies what is still Unknown again at
   `bound` 8 and `resourceLimit` 30,000,000 and from IL, asks ADR 0037's queries on `timeout`
