@@ -1,6 +1,6 @@
 # ADR 0005: Direct Z3 encoding; Lean and Boogie rejected for the MVP
 
-Status: accepted (2026-09-17)
+Status: accepted (2026-09-17); superseded in part by 0050 (Z3 is no longer the only solver)
 
 ## Decision
 `Equiv.Verify.Z3` encodes a bounded product program straight into Z3 via `Microsoft.Z3`.

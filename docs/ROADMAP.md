@@ -797,8 +797,7 @@ over IR and does not cover them.
 The review listed eight verification techniques absent from the README, and three priorities: IR
 coverage, conditional equivalence, and trace-guided loop alignment. Checked against the ADRs, two of
 the eight are already here and get no implementation ticket:
-- Differential assertion checking is ADR 0037 and P1-013. What is missing is its measured yield
-  (P1-021).
+- Differential assertion checking is ADR 0037 and P1-013. Its yield was measured by P1-021.
 - Equivalence modulo uninterpreted calls is ADR 0019 (with the mutual-summary rule for cycles) and
   P1-010's contracts.
 
@@ -813,9 +812,9 @@ tail, and a 5% cut-off applied to one technique at a time rejects all of them. A
 decides only which tickets stay in M4 (its 2026-10-04 clarification).
 
 Order: P1-028 and P1-029 (coverage, the first priority; no dependency on the rest), then P1-022,
-then P1-023 → P1-024, with P1-020 and P1-021 alongside. Then P1-032 (the two modes), so that P1-030
-and P1-031, which follow it, land with a mode to run in. The three spikes P1-025 → P1-026 and P1-027
-come last; each reports its yield, which orders what follows it.
+then P1-023 (which closed P1-024), with P1-020 and P1-021 alongside. Then P1-035 and P1-032 (the two
+modes), so that P1-030 and P1-031, which follow, land with a mode to run in. The three spikes
+P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders what follows it.
 
 - P1-028 (M) Measurement: the opaque reasons with no owner, counted over the three large runs
   together, by what each unlocks once the open owners land. Files a ticket for each at or above 1% of
@@ -834,14 +833,21 @@ come last; each reports its yield, which orders what follows it.
 - P1-020 (M) A Divergent says whether the modern side only removed failures, added one, or changed a
   result (`properties.divergenceKind`), from ADR 0037's two queries and a third. Needs P1-013.
 - P1-021 (M) Measurement: what failure refinement answers today, and what it would answer on the 400
-  `timeout` Unknowns that ADR 0037 does not query. Its number decides whether quick mode asks there
-  too; thorough does regardless (ADR 0049). Needs P1-013, P2-050.
+  `timeout` Unknowns that ADR 0037 does not query. Needs P1-013, P2-050. Done 2026-10-04: today 11
+  of the 1,072 queried Unknowns (1.0%) have a `none-proved` `newFailures` and 30 a `found` one. Asked
+  on gitextensions-8522's `timeout` Unknowns, 2 of the 138 still a `timeout` (1.4%) would be
+  `none-proved`, and 17 (12.3%) get some answer, at 0.44 times the pair's time
+  (`docs/runs/2026-10-04-failure-refinement.md`). The solver gives up on half of those queries, so
+  under ADR 0049 they run in thorough mode and quick skips them: P1-035 asks them, P1-032 adds the
+  modes.
+- P1-035 (S) A `timeout` Unknown carries `properties.failureRefinement` like any other Unknown,
+  starting with a clarification of ADR 0037. Needs P1-013, P1-021.
 - P1-032 (L) `equiv compare --mode thorough|quick` (ADR 0049). Both modes run one first pass
   (`resourceLimit` 2,000,000). Thorough, the default, then verifies what is still Unknown again at
   `bound` 8 and `resourceLimit` 30,000,000 and from IL, asks ADR 0037's queries on `timeout`
-  Unknowns, and runs the contracts pass; quick stops after the first pass. A later pass only ever
-  replaces an Unknown. `run.properties.mode` records it. `Release: minor`. Needs P1-013, P1-016,
-  P1-010, P2-050, P2-076.
+  Unknowns (P1-035), and runs the contracts pass; quick stops after the first pass. A later pass
+  only ever replaces an Unknown. `run.properties.mode` records it. `Release: minor`. Needs P1-013,
+  P1-016, P1-010, P1-035, P2-050, P2-076.
 - P1-030 (L) Abstraction refinement, part 1: when an `abstraction` Unknown's candidate depends only
   on interpretable pure functions (`IntPtr` equality, `float` and `double` arithmetic as IEEE), the
   pair is asked again with them interpreted (`proofMethod` suffix `+refined`). Starts with a new ADR
@@ -849,9 +855,15 @@ come last; each reports its yield, which orders what follows it.
 - P1-031 (L) Abstraction refinement, part 2: a rung 1 query that times out is asked again with
   multiplication, division and remainder of two unknowns as shared functions, refined by point facts
   from spurious models (`+abstracted`). Needs P2-050, M3-016.
-- P1-025 (M) Spike: do Bitwuzla, cvc5, Eldarica or Golem decide the queries Z3 gives up on. It writes
-  the ADR that supersedes ADR 0005's "Z3 alone" and the ticket that adds the best of them, unless
-  none decides anything. Needs P2-050.
+- P1-025 (M) Spike: do Bitwuzla, cvc5, Eldarica or Golem decide the queries Z3 gives up on. Done:
+  cvc5 answers 59 of the 142 rung 1 queries Z3 gives up on for gitextensions-8522 (9 Divergent, 27
+  Unknown(abstraction), 4 unsatisfiable) and proves no pair; Bitwuzla reads none; no rung 4 Unknown
+  to give a Horn solver (`docs/runs/2026-10-04-solver-portfolio.md`). ADR 0050.
+- P1-033 (L) cvc5 is asked the rung 1 queries Z3 gives up on, as a process behind `ISmtSolver`, with
+  every satisfiable answer replayed (`+cvc5`; ADR 0050). Needs P1-025.
+- P1-034 (M) Spike: the call trace encoded without sequences and datatypes, asked of Z3, cvc5 and
+  Bitwuzla on the same 142 queries. It decides whether rung 1 changes its trace encoding and whether
+  Bitwuzla is worth adding. Needs P1-025.
 - P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
   gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
 - P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model
@@ -883,6 +895,7 @@ are unchanged; a later census that shows more changed pairs can move any of thes
 - SonarQube: confirm `sonar.sarifReportPaths` ingestion of EQ* rules; GitHub Code Scanning upload step in `action.yml`.
 - `--il-fallback` on by default (ADR 0039, P1-018): measured on Git Extensions 2026-10-01. Of 1,294 changed pairs it lowers 116 from IL and moves 21 (1.6%) from Unknown(opaque) to Equivalent and 21 to Divergent, none reproduced by replay, with no Equivalent regressed, one crash (P2-078) and one Divergent turned Unknown(timeout). A hand check found 20 of the 21 Equivalents unproved: the IL lowering never reads a lambda's body (soundness, P2-079), so the sound gain is 1 pair (0.1%) (`docs/runs/2026-10-01-il-fallback-verdicts.md`). Under ADR 0049 that yield places it in thorough mode only, as a later pass that cannot turn a decided result into an Unknown or a crash (P1-032); quick leaves it off.
 - Congruence modulo verified rewrites (equality saturation, P1-011): measured on Git Extensions 2026-09-28, 0 of 1,195 changed pairs (0.0%) close under the rule set, so there is nothing to schedule until a rule set closes a pair (`docs/runs/2026-09-28-egraph-spike.md`).
+- Trace-guided loop alignment (P1-024; semantic program alignment, Churchill et al., PLDI 2019): measured by P1-023 on the three large runs 2026-10-04. Of their 89 `unaligned-loop` Unknowns, 0 have an unrolled, batched or peeled pairing of iterations that 200 runs of both sides show (0.0% of 2,246 changed pairs), under the ticket's bar of 10; P1-024 is closed unbuilt. 47 of the 89 (2.1% of changed pairs) run in lockstep with equal calls and outcomes on every run and fail rung 2's step or base obligation, so what they lack is a stronger header relation, not a schedule (`docs/runs/2026-10-04-loop-alignment-spike.md`).
 
 From the 2026-09-24 second-oracle review, unticketed until a result above asks for them:
 - Shadowing the residual in staging or production: generate a Scientist.NET experiment, or a

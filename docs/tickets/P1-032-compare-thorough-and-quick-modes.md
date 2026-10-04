@@ -2,7 +2,7 @@
 Status: todo
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
-Depends on: P1-013, P1-016, P1-010, P2-050, P2-076
+Depends on: P1-013, P1-016, P1-010, P1-035, P2-050, P2-076
 
 ## Goal
 ADR 0049. A migration run should spend machine time to leave fewer Unknowns; a diff check should
@@ -23,8 +23,9 @@ ADR 0036, ADR 0023, ADR 0033, VERIFICATION-MODEL.md sections 5.1 and 6, ARCHITEC
   timeout), and remembers which of `bound`, `resourceLimit`, `timeoutMs` the file set, so a mode's
   values apply only where nothing was set. `DefaultResourceLimit` becomes 2,000,000.
 - `VerificationOptions` gains what the backend must know: whether rung 5's local proposer runs, and
-  whether a `timeout` Unknown gets failure refinement. `Z3Backend.Verify` reads them where it
-  decides today (`Reason: not UnknownReason.Timeout`).
+  whether a `timeout` Unknown gets failure refinement. P1-035 makes `Z3Backend.Verify` ask on every
+  Unknown; this ticket makes quick skip the `timeout` ones again, and nothing else about the queries
+  changes.
 - `CompareCommand` runs the passes. After `Verified`: the budget pass over each result that is
   Unknown and whose `ladderTrace` holds a step that hit a budget, or whose pair has a loop or a
   self-call; then the IL pass; then `WithAssumptions`, `WithContracts` (thorough only), `Executed`.

@@ -124,8 +124,11 @@ left are a long tail, so that reading rejects every technique, one at a time.
   and any run later runs are compared against. A run that checks one thing uses quick: a crash is
   gone, a named pair's result changed, a newly lowered construct is decided. A ticket that asks for
   a run says which; `equiv-corpus-run` holds the rule.
-- P1-021's measurement no longer decides whether the queries run on `timeout` Unknowns, only whether
-  quick asks them too. P1-030 and P1-031 land in thorough and state in their own Notes whether they
-  also run in quick.
+- P1-021 measured the queries on `timeout` Unknowns (`docs/runs/2026-10-04-failure-refinement.md`):
+  17 of 138 (12.3%) get an answer, the solver gives up on half of the `newFailures` queries, and
+  they add 0.44 times the pair's time. That is work whose usual result is no answer, so it runs in
+  thorough and not in quick. P1-035 asks the queries; P1-032 makes quick skip them.
+- P1-030, P1-031 and P1-033 (cvc5, ADR 0050) land in thorough and state in their own Notes whether
+  they also run in quick.
 - Ticket P1-032 implements this. ARCHITECTURE.md and VERIFICATION-MODEL.md sections 5 and 6 change
   in that PR, with the mode table.
