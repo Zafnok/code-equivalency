@@ -868,7 +868,13 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   every satisfiable answer replayed (`+cvc5`; ADR 0050). Needs P1-025.
 - P1-034 (M) Spike: the call trace encoded without sequences and datatypes, asked of Z3, cvc5 and
   Bitwuzla on the same 142 queries. It decides whether rung 1 changes its trace encoding and whether
-  Bitwuzla is worth adding. Needs P1-025.
+  Bitwuzla is worth adding. Needs P1-025. Done 2026-10-04: in the positional form Z3 answers 72 of the 142
+  (26 Divergent, 42 Unknown(abstraction), 4 unsatisfiable) where it answered none, cvc5 24 more than
+  in the sequence form, Bitwuzla 103 once the sorts are bit-vectors; no pair is proved
+  (`docs/runs/2026-10-04-trace-encoding.md`). P1-038.
+- P1-038 (M) Rung 1 compares the call traces by position, without sequences, so Z3 itself answers
+  the queries P1-034 measured. A full run before and after shows no decided result becomes a
+  timeout. Needs P1-034.
 - P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
   gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
 - P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model
@@ -943,6 +949,7 @@ are unchanged; a later census that shows more changed pairs can move any of thes
 - SonarQube: confirm `sonar.sarifReportPaths` ingestion of EQ* rules; GitHub Code Scanning upload step in `action.yml`.
 - `--il-fallback` on by default (ADR 0039, P1-018): measured on Git Extensions 2026-10-01. Of 1,294 changed pairs it lowers 116 from IL and moves 21 (1.6%) from Unknown(opaque) to Equivalent and 21 to Divergent, none reproduced by replay, with no Equivalent regressed, one crash (P2-078) and one Divergent turned Unknown(timeout). A hand check found 20 of the 21 Equivalents unproved: the IL lowering never reads a lambda's body (soundness, P2-079), so the sound gain is 1 pair (0.1%) (`docs/runs/2026-10-01-il-fallback-verdicts.md`). Under ADR 0049 that yield places it in thorough mode only, as a later pass that cannot turn a decided result into an Unknown or a crash (P1-032); quick leaves it off.
 - Congruence modulo verified rewrites (equality saturation, P1-011): measured on Git Extensions 2026-09-28, 0 of 1,195 changed pairs (0.0%) close under the rule set, so there is nothing to schedule until a rule set closes a pair (`docs/runs/2026-09-28-egraph-spike.md`).
+- Bitwuzla as a second `ISmtSolver` (P1-034): measured on gitextensions-8522 2026-10-04. On the 142 rung 1 queries Z3 gives up on, in the positional trace encoding and with each uninterpreted sort written as a 64-bit vector, Bitwuzla 0.9.1 decides 103 (3 unsatisfiable, 100 satisfiable: 21 replay to a Divergent, 34 to Unknown(abstraction)), 46 of them beyond Z3 in the same encoding; as the file is written it decides none. It proves no pair. Not scheduled; ask again after P1-038 and P1-033 (`docs/runs/2026-10-04-trace-encoding.md`).
 - The share of inputs a Divergent diverges on, by approximate model counting (P1-027): measured on the three large runs 2026-10-04. Of 80 EQ002 results 18 (22.5%) have a countable parameter space and 12 (15.0%) are counted in time, below the ticket's half; all 12 have share 1, 11 of them with no source parameter. 55 of the 62 others pass a `string` or an object to a call. Not scheduled (`docs/runs/2026-10-04-divergent-count-spike.md`).
 - Trace-guided loop alignment (P1-024; semantic program alignment, Churchill et al., PLDI 2019): measured by P1-023 on the three large runs 2026-10-04. Of their 89 `unaligned-loop` Unknowns, 0 have an unrolled, batched or peeled pairing of iterations that 200 runs of both sides show (0.0% of 2,246 changed pairs), under the ticket's bar of 10; P1-024 is closed unbuilt. 47 of the 89 (2.1% of changed pairs) run in lockstep with equal calls and outcomes on every run and fail rung 2's step or base obligation, so what they lack is a stronger header relation, not a schedule (`docs/runs/2026-10-04-loop-alignment-spike.md`).
 
