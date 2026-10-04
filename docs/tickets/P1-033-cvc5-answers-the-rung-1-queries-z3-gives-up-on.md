@@ -1,5 +1,5 @@
 # P1-033 cvc5 is asked the rung 1 queries Z3 gives up on
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-025
@@ -90,3 +90,43 @@ Linux or in the container image.
 - From P1-025. The spike's read-back asks Z3 to complete the model and loses 19 of 55 satisfiable
   answers that way; decoding the functions cvc5's model gives would lose fewer, and is a follow-up
   only if criterion 7's run shows the loss is still large.
+- Decision: a Divergent or an Unknown cvc5 answered a query of gets `proofMethod: <rung>+cvc5`,
+  though neither carries a `proofMethod` otherwise. ADR 0050 decision 4 says "a result", and the
+  `+contract` precedent only covers an Equivalent. A Divergent the runtimes showed stays `observed`.
+- Decision: the step is tagged (`LadderStep.Solver`, a `SolverUse` of name and version) only when
+  cvc5's answer was used: an `unsat` taken, or a `sat` Z3 read back to a model. An answer that leaves
+  the timeout tags nothing, so a result that says `+cvc5` is one cvc5 changed.
+- Decision: the constant-array rewrite works on Z3's terms before printing, not on the text, and
+  asserts the default at every index read from an array built on the constant array, whether or not
+  a store in between covers it. The extra constraints are true of the constant array, so the rewrite
+  is still exact; pruning them would need an index comparison for no gain. It fits in
+  `SecondSolver.cs`, so the size guard's fallback was not needed.
+- Decision: a `sat` on `opaque` or `bound` is read back through Z3 as one on `divergence` is, so no
+  rung 1 answer rests on cvc5's `sat` alone.
+- Decision: the read-back takes a value only as a literal of the constant's own sort and width
+  (`true`, `false`, `#b`, `#x`) and needs one for every constant asked for; anything else is the
+  timeout. Names are matched as symbols, with or without `|...|`: cvc5 prints `|in.a|` back as `in.a`.
+  CI's first run caught that, in the integration test.
+- Decision: criterion 3's "a `sat` that replays to no difference" is tested with values on which the
+  sides agree (every constant zero). Z3 rejects them at the read-back, before any replay. A model Z3
+  itself confirms and that then replays to no difference is the encoder bug it was before, and still
+  fails loudly.
+- Decision: `--rlimit` 2,000,000 (`docs/runs/2026-10-04-cvc5-budget.md`). It gets the answers there
+  are to get, 58 of 95 scripts against 34 at a quarter of it. It does not meet ADR 0050 decision 5 in
+  full: the wall-clock limit ends 23 of the 37 scripts cvc5 gives up on.
+- Decision: the process is killed 5 s after `--tlimit`, not at it: cvc5 checks its own limit between
+  steps and then says why it stopped, which the run needs to tell the clock from the resource limit.
+- Deviation: files outside the Files list. `tools/spikes/cvc5-budget/` is criterion 7's measurement
+  tool (throwaway, not in `Equiv.slnx`, as P1-025's is). `tests/Equiv.Verify.Cvc5.Tests/`, the
+  `mutation.yml` leg, `docs/QUALITY-GATES.md` and `.gitignore` follow from a new `src/` project and
+  a fetched binary. `README.md` gains one paragraph on the setting.
+- Deviation: ADR 0050's Consequences say the run's properties name the solver and its version. No
+  criterion asks for it and it is not built; each result cvc5 touched names both in its step.
+- The 49 `timeout` Unknowns that send cvc5 nothing were not split into "constant array used as a
+  whole" and "timeout on a later rung"; the tool does not record why nothing was sent.
+- `tools/licence-check` needs no `policy.json` entry: cvc5 is in no lock file, so the tool never sees it.
+- The new required check `stryker (Equiv.Verify.Cvc5, Equiv.Verify.Cvc5.Tests)` has to be added to
+  the branch ruleset by hand.
+- Z3's `Expr.ToString()` prints a bit-vector numeral in decimal, so a test solver built on Z3 has to
+  format `#b` literals itself. `cvc5 --version` starts `cvc5 1.4.1 [git ...]`; the word "version"
+  on its second line is the compiler's.
