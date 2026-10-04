@@ -106,3 +106,49 @@ Turning `--il-fallback` on by default. Lowering lambdas (P2-067). The crash in P
   compiler-generated method or type gets no fingerprint. Alternatives: hash every body reachable through generated
   members and apply M3-015's rule to each call in them. Rule: 4 (the smaller change; reading the bodies is P2-067's
   lowering of them, and a refusal cannot prove a pair wrongly).
+- Decision: how a fragment is found to name generated code -> the fingerprint's own writer flags it: every type it
+  writes whose reflection name holds a `<` (itself, a type it is nested in, a type argument), and every method whose
+  own name starts with one. Alternatives: scan the instruction tree for each kind of operand that carries a member or
+  a type. Rule: 1 (the text is what is hashed, so what the text names is what must not be an ordinal). A field's own
+  name is not looked at: a property's backing field `<P>k__BackingField` is named from the property.
+- The refusal covers more than the ticket lists, each for the same reason: a cached delegate's class (`<>c`, and
+  `<>O` for a static method group, C# 11), an anonymous type, and `<PrivateImplementationDetails>`. All are names
+  the compiler numbers.
+- Before the fix a `NewObj[closure class]`, a `Call[local function]` and a `Call[compiler-generated method]` already
+  had no fingerprint, by accident: `IlSymbols` resolves no generated method in the source compilation, and the
+  runtime check treated that as a call that does not resolve. Only `ldftn`, which that check did not look at, was
+  shared. The rule is now explicit and comes first, so it does not depend on what resolves.
+- Decision: criterion 3's refusal -> `Lowerable` is false for `ldftn` and `ldvirtftn` of a runtime-changed method, so
+  it is an opaque with its key and no fingerprint, its receiver lowered first. Alternatives: a constant that carries
+  the side, a `RuntimeSensitive` pure function. Rule: 1 (the IOperation lowering's `Delegate` leaves a
+  runtime-sensitive creation an unshared opaque).
+- Deviation: criterion 1's repro, as written, is no longer read from IL. Since P2-067 the IOperation lowering makes
+  a lambda the pure function `delegate:<fingerprint>` of its bound body, so `set_X` and `Subscribe` hold no opaque,
+  the fallback is not tried, and both are already Unknown(abstraction) with `lowering: operation`.
+  `IlFallbackSampleTests.ALambdaWhoseBodyDiffersIsNotEquivalent` therefore adds a lifted `int?` operator to each
+  member, spelled out on the legacy side as `samples/il-fallback` does. That is an opaque only the modern IOperation
+  body has, so the pair is read from IL. On the code before the fix both members are `EQ001`, `proofMethod: bounded`,
+  `lowering: il`; now both are `EQ003`. `IlFragmentTests` uses the ticket's repro unchanged.
+- Decision: criterion 1's end-to-end test -> an integration test that writes the two projects to a temporary
+  directory from `samples/il-fallback/legacy`'s project file. Alternatives: a new `samples/` directory. Rule: 4 (a
+  sample needs an `expected.sarif.json`, a README and a place in the parity job, and both sides here are .NET
+  Framework projects, which no sample's modern side is).
+- Decision: criterion 5 -> `PairGen.ClosurePair`, drawn by its own fact
+  `DifferentialSoundnessTests.PairsThatDifferOnlyInsideAClosureAreSoundUnderTheIlLowering` at a quarter of the
+  budget (50 pairs per pull request, 1,250 nightly). Alternatives: a third arm of `Generated`'s `Frequency`.
+  Rule: 4 (`BrokenIlSeed` and P2-080 depend on the first pair `Generated` draws from a seed). A closure pair is not
+  made by `SyntaxMutator`: one method is rendered twice with the closure's literal `K` and `K + 1`, under an
+  operator (`+`, `-`, `^`) that makes the two closures differ on every argument, and the result is written to `F`.
+  The closure is a lambda called at once, a local function called by name, or a local function's method group.
+  `PairGenTests.ClosurePairsDifferOnlyInsideALambdaOrALocalFunction` is the generator's test.
+- Criterion 5, the gate before the fix: with `src/` at `bb69554` the new fact fails rule 1 under the il lowering
+  (CsCheck seed `0000Sk4jyHq2`, 50 pairs). With the fix it passes at 50 pairs and at the nightly 1,250 (74 s).
+- Finding, filed as P2-125 (not an IL bug, and outside this ticket's files): the same pairs fail rule 1 under the
+  IOperation lowering. `IrLowerer` lowers a call of a local function as an `IrCall` of `<Type>::<Name>(...)`, the
+  same on both sides, and no pair verifies a local function. `compare` with no flag reports `EQ001` for a member
+  whose two sides differ only in the local function it calls. The new fact therefore runs under the IL lowering
+  only, which is what criterion 5 asks; P2-125's criterion 3 adds the IOperation lowering. README's sentence on
+  what an Equivalent can be relied on for now names that exception.
+- Deviation: the Files list has no `IlLowerer.cs` (criterion 3's check is in `Typed`, beside `Heap.cs`'s `Function`),
+  `PairSyntax.cs` (the generator's renderer needs a local function), `PairGenLoweringTests.cs`, `PairGenTests.cs`,
+  README, ROADMAP or the P2-125 ticket. `IlKeys.cs` is unchanged: no key changed.
