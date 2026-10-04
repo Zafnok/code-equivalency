@@ -355,7 +355,7 @@ public sealed class SarifReportWriterTests
     /// </summary>
     [Theory]
     [InlineData("net48", "net8.0", "diverges via a runtime-changed API between net48 and net8.0 (")]
-    [InlineData("net10.0", "net8.0", "diverges via a runtime-changed API between net8.0 and net10.0 (")]
+    [InlineData("net10.0", "net48", "diverges via a runtime-changed API between net48 and net10.0 (")]
     [InlineData(null, null, "diverges via a runtime-changed API between net40 and net10.0 (")]
     public void AnEQ006MessageNamesBothRuntimes(string? legacy, string? modern, string expected)
     {
