@@ -67,8 +67,8 @@ public sealed class BoundSerialiserTests
 
     /// <summary>
     /// A member's row applies only inside the interval: <c>String.IndexOf</c> changed in .NET 5, <c>Double.ToString</c> in
-    /// .NET Core 3.0, <c>BinaryReader.ReadString</c> in .NET 9, and <c>Encoding.Default</c>'s row has no known change point,
-    /// so it applies whenever the runtimes differ.
+    /// .NET Core 3.0, <c>BinaryReader.ReadString</c> in .NET 9, and <c>Encoding.Default</c> at the .NET Framework to .NET
+    /// boundary (ticket P2-113).
     /// </summary>
     [Theory]
     [InlineData("int M(string s) => s.IndexOf(\"x\");", "net48", "net10.0", true)]
@@ -78,8 +78,8 @@ public sealed class BoundSerialiserTests
     [InlineData("string M(double d) => d.ToString();", "net48", "net8.0", true)]
     [InlineData("string M(System.IO.BinaryReader r) => r.ReadString();", "net8.0", "net10.0", true)]
     [InlineData("string M(System.IO.BinaryReader r) => r.ReadString();", "net48", "net8.0", false)]
-    [InlineData("System.Text.Encoding M() => System.Text.Encoding.Default;", "net8.0", "net10.0", true)]
-    [InlineData("System.Text.Encoding M() => System.Text.Encoding.Default;", "net8.0", "net8.0", false)]
+    [InlineData("System.Text.Encoding M() => System.Text.Encoding.Default;", "net8.0", "net10.0", false)]
+    [InlineData("System.Text.Encoding M() => System.Text.Encoding.Default;", "net48", "net8.0", true)]
     public void ARuntimeChangedMemberIsSensitiveOnlyInsideTheInterval(string member, string legacy, string modern, bool expected) =>
         Assert.Equal(expected, Fingerprint(Compile(member), Runtimes.Between(legacy, modern)).RuntimeSensitive);
 

@@ -13,7 +13,9 @@
 // behaviour; netcoreapp1.0 marks the .NET Framework to .NET boundary. A row applies to a pair only when
 // its changedIn lies in (older runtime, newer runtime]; null means the change point is unknown and the
 // row applies whenever the runtimes differ. "coveredFrom" is the oldest .NET version whose changes this
-// table lists. Backfilled once by tools/runtime-changes-backfill (P2-054).
+// table lists. Backfilled once by tools/runtime-changes-backfill (P2-054); the measured rows were placed by running
+// tools/runtime-diff between adjacent runtimes (P2-113). A member whose behaviour changed at more than one runtime
+// has one row per change point.
 //
 // x87 vs SSE floating-point on x86 is NOT a row here: floats are an uninterpreted Sort in the
 // MVP, so there is no bit-level float semantics yet for a row to flag calls against. Add it once
@@ -66,7 +68,7 @@
     {
       "member": "System.String::GetHashCode(",
       "source": "curated",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "String.GetHashCode is randomized per process on .NET and is not guaranteed to match .NET Framework 4.8's algorithm, so the same string can hash differently on each side.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0"
     },
@@ -80,7 +82,7 @@
     {
       "member": "System.Text.Encoding::get_Default(",
       "source": "curated",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Encoding.Default is UTF-8 on .NET but the process's ANSI code page on .NET Framework 4.8, so the same bytes decode differently.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.text.encoding.default?view=net-10.0"
     },
@@ -2596,7 +2598,7 @@
     {
       "member": "System.Char::IsLetterOrDigit(char)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "net5.0",
       "reason": "A newer Unicode version reclassifies code points: U+08C3 (Arabic) is not a letter on .NET Framework and is one on .NET 10.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.char.isletterordigit",
       "witness": { "input": [2243], "culture": "invariant", "legacy": false, "modern": true }
@@ -2604,7 +2606,7 @@
     {
       "member": "System.Drawing.Font::FromLogFont(object)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Argument validation order or exception type changed: for the witness's null argument .NET Framework throws System.ArgumentException, .NET 10 throws System.ArgumentNullException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.drawing.font.fromlogfont",
       "witness": { "input": [null], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.ArgumentNullException" }
@@ -2612,7 +2614,7 @@
     {
       "member": "System.Drawing.RectangleF::Union(System.Drawing.RectangleF,System.Drawing.RectangleF)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Union's component-wise Min/Max follow Math.Min/Max, which order -0 below +0 on .NET 10 only, so a union with a negative-zero corner keeps -0 there.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.drawing.rectanglef.union",
       "witness": { "input": [["0x80000000", "0x80000000", "0x80000000", "0x80000000"], ["0x00000000", "0x00000000", "0x00000000", "0x00000000"]], "culture": "invariant", "legacy": ["0x00000000", "0x00000000", "0x00000000", "0x00000000"], "modern": ["0x80000000", "0x80000000", "0x00000000", "0x00000000"] }
@@ -2620,15 +2622,15 @@
     {
       "member": "System.Drawing.Size::Ceiling(System.Drawing.SizeF)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "Converting a NaN or out-of-range float to int saturates to 0 (and to int.MinValue/MaxValue by sign) on .NET 10, where .NET Framework's x86 conversion yields int.MinValue.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.drawing.size.ceiling",
+      "changedIn": "net9.0",
+      "reason": "Converting a NaN or out-of-range float to int saturates to 0 (and to int.MinValue/MaxValue by sign) from .NET 9, where .NET Framework's x86 conversion yields int.MinValue.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/jit/9.0/fp-to-integer",
       "witness": { "input": [["0xFFC00000", "0xFFC00000"]], "culture": "invariant", "legacy": [-2147483648, -2147483648], "modern": [0, 0] }
     },
     {
       "member": "System.Environment::GetEnvironmentVariable(string,System.EnvironmentVariableTarget)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "An undefined EnvironmentVariableTarget throws ArgumentOutOfRangeException on .NET 10 where .NET Framework threw ArgumentException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.environment.getenvironmentvariable",
       "witness": { "input": ["i", 3], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.ArgumentOutOfRangeException" }
@@ -2636,7 +2638,7 @@
     {
       "member": "System.Environment::GetFolderPath(System.Environment.SpecialFolder)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "A special folder that does not exist on disk (PrinterShortcuts here) returns an empty string on .NET 10, where .NET Framework returned its path anyway. The witness's legacy value is machine-specific and is written with %APPDATA%.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.environment.getfolderpath",
       "witness": { "input": [27], "culture": "invariant", "legacy": "%APPDATA%\\Microsoft\\Windows\\Printer Shortcuts", "modern": "" }
@@ -2740,7 +2742,7 @@
     {
       "member": "System.IO.File::ReadAllText(string,System.Text.Encoding)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "net7.0",
       "reason": "Argument validation order or exception type changed: for the witness's null argument .NET Framework throws System.ArgumentNullException, .NET 10 throws System.ArgumentException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.readalltext",
       "witness": { "input": ["", null], "culture": "invariant", "legacy": "System.ArgumentNullException", "modern": "System.ArgumentException" }
@@ -2756,7 +2758,7 @@
     {
       "member": "System.IO.File::WriteAllBytes(string,byte[])",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "net9.0",
       "reason": "Argument validation order or exception type changed: for the witness's null argument .NET Framework throws System.ArgumentException, .NET 10 throws System.ArgumentNullException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.writeallbytes",
       "witness": { "input": ["", null], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.ArgumentNullException" }
@@ -2764,7 +2766,7 @@
     {
       "member": "System.IO.File::WriteAllLines(string,System.Collections.Generic.IEnumerable<string>)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "net7.0",
       "reason": "Argument validation order or exception type changed: for the witness's null argument .NET Framework throws System.ArgumentNullException, .NET 10 throws System.ArgumentException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.writealllines",
       "witness": { "input": ["", null], "culture": "invariant", "legacy": "System.ArgumentNullException", "modern": "System.ArgumentException" }
@@ -2772,7 +2774,7 @@
     {
       "member": "System.IO.File::WriteAllText(string,string,System.Text.Encoding)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "net7.0",
       "reason": "Argument validation order or exception type changed: for the witness's null argument .NET Framework throws System.ArgumentNullException, .NET 10 throws System.ArgumentException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.writealltext",
       "witness": { "input": ["", "i", null], "culture": "invariant", "legacy": "System.ArgumentNullException", "modern": "System.ArgumentException" }
@@ -2780,7 +2782,7 @@
     {
       "member": "System.IO.IsolatedStorage.IsolatedStorageFileStream::.ctor(string,System.IO.FileMode,System.IO.FileAccess,System.IO.FileShare)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Opening an isolated-storage file with a mode and access combination the file does not allow throws IsolatedStorageException on .NET 10, where .NET Framework threw ArgumentException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.isolatedstorage.isolatedstoragefilestream.-ctor",
       "witness": { "input": ["i", 1, 1, 0], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IsolatedStorage.IsolatedStorageException" }
@@ -2868,10 +2870,18 @@
     {
       "member": "System.IO.StreamReader::.ctor(string,System.Text.Encoding)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "Argument validation order or exception type changed: for the witness's null argument .NET Framework throws System.ArgumentNullException, .NET 10 throws System.ArgumentException.",
+      "changedIn": "net7.0",
+      "reason": "Argument validation order changed in .NET 7: the path is validated before the null encoding, so an empty path with a null encoding throws System.ArgumentException where .NET 6 and .NET Framework throw System.ArgumentNullException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.streamreader.-ctor",
-      "witness": { "input": ["\u0000", null], "culture": "invariant", "legacy": "System.ArgumentNullException", "modern": "System.ArgumentException" }
+      "witness": { "input": ["", null], "culture": "invariant", "legacy": "System.ArgumentNullException", "modern": "System.ArgumentException" }
+    },
+    {
+      "member": "System.IO.StreamReader::.ctor(string,System.Text.Encoding)",
+      "source": "measured",
+      "changedIn": "net10.0",
+      "reason": "A null encoding is accepted from .NET 10, so the constructor goes on to open the file (FileNotFoundException for the witness's missing file); .NET 9 and earlier throw System.ArgumentNullException.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.streamreader.-ctor",
+      "witness": { "input": ["i", null], "culture": "invariant", "legacy": "System.ArgumentNullException", "modern": "System.IO.FileNotFoundException" }
     },
     {
       "member": "System.IO.StreamWriter::.ctor(string)",
@@ -2892,7 +2902,7 @@
     {
       "member": "System.Math::Ceiling(double)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Ceiling of a small negative number returns -0 on .NET 10 (IEEE 754) and +0 on .NET Framework.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.ceiling",
       "witness": { "input": ["0x8621A03FE0BBDB7B"], "culture": "invariant", "legacy": "0x0000000000000000", "modern": "0x8000000000000000" }
@@ -2900,7 +2910,7 @@
     {
       "member": "System.Math::Cos(double)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Cos of a large argument is range-reduced correctly on .NET 10 (the C runtime's IEEE-compliant implementation), where .NET Framework's x87 fcos returns the argument unchanged beyond 2^63.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.cos",
       "witness": { "input": ["0x7FEFFFFFFFFFFFFF"], "culture": "invariant", "legacy": "0x7FEFFFFFFFFFFFFF", "modern": "0xBFEFFFE62ECFAB75" }
@@ -2908,7 +2918,7 @@
     {
       "member": "System.Math::Max(double,double)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Max orders -0 below +0 on .NET 10 (IEEE 754-2019 maximum); .NET Framework returns whichever zero came second.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.max",
       "witness": { "input": ["0x0000000000000000", "0x8000000000000000"], "culture": "invariant", "legacy": "0x8000000000000000", "modern": "0x0000000000000000" }
@@ -2916,7 +2926,7 @@
     {
       "member": "System.Math::Max(float,float)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Max orders -0 below +0 on .NET 10 (IEEE 754-2019 maximum); .NET Framework returns whichever zero came second.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.max",
       "witness": { "input": ["0x00000000", "0x80000000"], "culture": "invariant", "legacy": "0x80000000", "modern": "0x00000000" }
@@ -2924,7 +2934,7 @@
     {
       "member": "System.Math::Min(double,double)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Min orders -0 below +0 on .NET 10 (IEEE 754-2019 minimum); .NET Framework returns whichever zero came second.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.min",
       "witness": { "input": ["0x8000000000000000", "0x0000000000000000"], "culture": "invariant", "legacy": "0x0000000000000000", "modern": "0x8000000000000000" }
@@ -2932,7 +2942,7 @@
     {
       "member": "System.Math::Min(float,float)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Min orders -0 below +0 on .NET 10 (IEEE 754-2019 minimum); .NET Framework returns whichever zero came second.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.min",
       "witness": { "input": ["0x80000000", "0x00000000"], "culture": "invariant", "legacy": "0x00000000", "modern": "0x80000000" }
@@ -2940,7 +2950,7 @@
     {
       "member": "System.Math::Sin(double)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "Sin of a large argument is range-reduced correctly on .NET 10 (the C runtime's IEEE-compliant implementation), where .NET Framework's x87 fsin returns the argument unchanged beyond 2^63.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.math.sin",
       "witness": { "input": ["0x7FEFFFFFFFFFFFFF"], "culture": "invariant", "legacy": "0x7FEFFFFFFFFFFFFF", "modern": "0x3F7452FC98B34E97" }
@@ -2948,7 +2958,7 @@
     {
       "member": "System.Net.Http.Headers.AuthenticationHeaderValue::.ctor(string,string)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "net8.0",
       "reason": "Argument validation order or exception type changed: for the witness's null argument .NET Framework throws System.ArgumentException, .NET 10 throws System.ArgumentNullException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.net.http.headers.authenticationheadervalue.-ctor",
       "witness": { "input": [null, "i"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.ArgumentNullException" }
@@ -2956,7 +2966,7 @@
     {
       "member": "System.Net.Http.Headers.MediaTypeWithQualityHeaderValue::.ctor(string)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "net8.0",
       "reason": "Argument validation order or exception type changed: for the witness's null argument .NET Framework throws System.ArgumentException, .NET 10 throws System.ArgumentNullException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.net.http.headers.mediatypewithqualityheadervalue.-ctor",
       "witness": { "input": [null], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.ArgumentNullException" }
@@ -2972,7 +2982,7 @@
     {
       "member": "System.Net.WebUtility::HtmlEncode(string)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "A lone surrogate is replaced by U+FFFD on .NET 10 and passed through unchanged on .NET Framework.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.net.webutility.htmlencode",
       "witness": { "input": ["fi_\u00e9\u00e9 \udc00\ud800"], "culture": "invariant", "legacy": "fi_&#233;&#233; \udc00\ud800", "modern": "fi_&#233;&#233; \ufffd\ufffd" }
@@ -2988,23 +2998,23 @@
     {
       "member": "System.String::Equals(string,System.StringComparison)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "Culture-sensitive comparison uses ICU on .NET 10 and NLS on .NET Framework: \"ss\" equals \"ß\" under NLS but not under ICU.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.equals",
+      "changedIn": "net5.0",
+      "reason": "Culture-sensitive comparison uses ICU from .NET 5 and NLS on .NET Framework: \"ss\" equals \"ß\" under NLS but not under ICU.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api",
       "witness": { "input": ["ss", "\u00df", 0], "culture": "invariant", "legacy": true, "modern": false }
     },
     {
       "member": "System.String::Equals(string,string,System.StringComparison)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "Culture-sensitive comparison uses ICU on .NET 10 and NLS on .NET Framework: \"ss\" equals \"ß\" under NLS but not under ICU.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.equals",
+      "changedIn": "net5.0",
+      "reason": "Culture-sensitive comparison uses ICU from .NET 5 and NLS on .NET Framework: \"ss\" equals \"ß\" under NLS but not under ICU.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api",
       "witness": { "input": ["ss", "\u00df", 0], "culture": "invariant", "legacy": true, "modern": false }
     },
     {
       "member": "System.String::Remove(int)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "net6.0",
       "reason": "Remove(startIndex) with startIndex equal to the length returns the string unchanged on .NET 10, where .NET Framework throws ArgumentOutOfRangeException for an empty string.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.remove",
       "witness": { "input": ["", 0], "culture": "invariant", "legacy": "System.ArgumentOutOfRangeException", "modern": "" }
@@ -3012,23 +3022,23 @@
     {
       "member": "System.String::Split(char[],System.StringSplitOptions)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "StringSplitOptions.TrimEntries (2) is defined on .NET 10 only; .NET Framework throws ArgumentException for it.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.split",
+      "changedIn": "net5.0",
+      "reason": "StringSplitOptions.TrimEntries (2) is defined from .NET 5; .NET Framework throws ArgumentException for it.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.stringsplitoptions",
       "witness": { "input": ["i", null, 2], "culture": "invariant", "legacy": "System.ArgumentException", "modern": ["i"] }
     },
     {
       "member": "System.String::Split(string[],System.StringSplitOptions)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "StringSplitOptions.TrimEntries (2) is defined on .NET 10 only; .NET Framework throws ArgumentException for it.",
-      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.split",
+      "changedIn": "net5.0",
+      "reason": "StringSplitOptions.TrimEntries (2) is defined from .NET 5; .NET Framework throws ArgumentException for it.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.stringsplitoptions",
       "witness": { "input": ["i", null, 2], "culture": "invariant", "legacy": "System.ArgumentException", "modern": ["i"] }
     },
     {
       "member": "System.String::ToUpper(System.Globalization.CultureInfo)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "netcoreapp1.0",
       "reason": "A null culture means the current culture on .NET 10; .NET Framework throws ArgumentNullException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.toupper",
       "witness": { "input": ["i", null], "culture": "invariant", "legacy": "System.ArgumentNullException", "modern": "I" }
@@ -3036,15 +3046,23 @@
     {
       "member": "System.Uri::EscapeDataString(string)",
       "source": "measured",
-      "changedIn": null,
-      "reason": "A lone surrogate is escaped as the UTF-8 of U+FFFD on .NET 10, where .NET Framework throws UriFormatException.",
+      "changedIn": "net5.0",
+      "reason": "A lone surrogate is escaped as the UTF-8 of U+FFFD from .NET 5, where .NET Core 3.1 and .NET Framework throw UriFormatException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.uri.escapedatastring",
       "witness": { "input": ["fi_\u00e9\u00e9 \udc00\ud800"], "culture": "invariant", "legacy": "System.UriFormatException", "modern": "fi_%C3%A9%C3%A9%20%EF%BF%BD%EF%BF%BD" }
     },
     {
+      "member": "System.Uri::EscapeDataString(string)",
+      "source": "measured",
+      "changedIn": "netcoreapp1.0",
+      "reason": "An apostrophe is escaped as %27 on .NET (RFC 3986 reserved characters), where .NET Framework leaves it unescaped.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/api/system.uri.escapedatastring",
+      "witness": { "input": ["é9æ'p\\é0"], "culture": "invariant", "legacy": "%C3%A99%C3%A6'p%5C%C3%A90", "modern": "%C3%A99%C3%A6%27p%5C%C3%A90" }
+    },
+    {
       "member": "System.Windows.Forms.ButtonRenderer::DrawButton(System.Drawing.Graphics,System.Drawing.Rectangle,System.Windows.Forms.VisualStyles.PushButtonState)",
       "source": "measured",
-      "changedIn": null,
+      "changedIn": "net7.0",
       "reason": "A null Graphics is not checked on .NET 10, which returns without drawing; .NET Framework throws ArgumentNullException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.buttonrenderer.drawbutton",
       "witness": { "input": [null, [0, 0, 0, 0], 1], "culture": "invariant", "legacy": "System.ArgumentNullException", "modern": null }
