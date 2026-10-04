@@ -77,8 +77,8 @@ Top reason sets (up to 15; "" = no opaque):
 | Conversion | 18 | P2-123 |
 | Binary | 8 | P2-087 |
 | no-body | 6 | M4-008 (backlog) |
-| CollectionExpression | 6 | P2-125 |
-| CollectionExpression+Conversion | 5 | P2-125, P2-123 |
+| CollectionExpression | 6 | P2-128 |
+| CollectionExpression+Conversion | 5 | P2-128, P2-123 |
 | DelegateCreation | 5 | none |
 | DefaultValue | 4 | none |
 | ImplicitIndexerReference | 4 | none |
@@ -145,7 +145,7 @@ Not run. The corpus row has no `verifyCommand`.
   from 45.6% to 75.2%, and the lowerable share from 37.9% to 48.3%.
 - `CollectionExpression` is still opaque in 11 changed pairs, 9 of them in the tests of
   `GitExtUtils.ArgumentBuilder` and of `LazyStringSplit`: spread elements and classes whose elements
-  are not added through one `Add`. P2-125.
+  are not added through one `Add`. P2-128.
 - The lowering crash on `GitUI.UserControls.RevisionGrid.Graph.RevisionGraph::LoadingCompleted()`
   is unchanged, and the run exits 5: P2-105.
 - 19 timeouts (before 39): P2-101, open.

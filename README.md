@@ -147,7 +147,7 @@ loads, more than 40% of pairs are unchanged, and 28 of 28 seeded behaviour chang
 none reported Equivalent. On the two upgrades, no behaviour change the pull request made was
 reported Equivalent either. An Equivalent can be relied on today, with one known exception: a member
 that calls a local function by name is proved without the local function's body being read
-([P2-125](docs/tickets/P2-125-soundness-local-function-call-is-an-unverified-callee.md)).
+([P2-127](docs/tickets/P2-127-soundness-local-function-call-is-an-unverified-callee.md)).
 The rest cannot yet:
 
 | What is needed | Today |
