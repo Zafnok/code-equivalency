@@ -29,6 +29,14 @@ public sealed class IlLoweringParityTests
     /// <summary>The methods whose two lowerings differ in representation only, by identity, with why.</summary>
     private static readonly ImmutableDictionary<string, string> Known = new Dictionary<string, string>(StringComparer.Ordinal)
     {
+        [$"async-disposal/legacy {FlushAsync}"] = StateMachine,
+        [$"async-disposal/legacy {CloseAsync}"] = StateMachine,
+        [$"async-disposal/legacy {LastAsync}"] = StateMachine,
+        [$"async-disposal/legacy {FirstAsync}"] = StateMachine,
+        [$"async-disposal/modern {FlushAsync}"] = StateMachine,
+        [$"async-disposal/modern {CloseAsync}"] = StateMachine,
+        [$"async-disposal/modern {LastAsync}"] = StateMachine,
+        [$"async-disposal/modern {FirstAsync}"] = StateMachine,
         [$"bcl-overload-rebinding/legacy {Indent}"] = EmptyParamsArray,
         [$"business-layer/legacy {ConfirmAsync}"] = StateMachine,
         [$"business-layer/modern {ConfirmAsync}"] = StateMachine,
@@ -47,6 +55,14 @@ public sealed class IlLoweringParityTests
         [$"lone-surrogate-constant/legacy {Find}"] = LiteralReceiver,
         [$"lone-surrogate-constant/modern {Find}"] = LiteralReceiver,
     }.ToImmutableDictionary(StringComparer.Ordinal);
+
+    private const string FlushAsync = "Equiv.Samples.AsyncDisposal.Journal::FlushAsync(System.IAsyncDisposable,int)";
+
+    private const string CloseAsync = "Equiv.Samples.AsyncDisposal.Journal::CloseAsync(System.IAsyncDisposable,int)";
+
+    private const string LastAsync = "Equiv.Samples.AsyncDisposal.Journal::LastAsync(System.Collections.Generic.IAsyncEnumerable<int>)";
+
+    private const string FirstAsync = "Equiv.Samples.AsyncDisposal.Journal::FirstAsync(System.Collections.Generic.IAsyncEnumerable<int>)";
 
     private const string Indent = "Equiv.Samples.BclOverloadRebinding.Paths::Indent(string)";
 

@@ -106,3 +106,6 @@ Iterators and async iterators as producers (reason `iterator`). The compiler's s
 - Local run: three other samples (`version-bump`, `webapi-basic`, `runtime-row-framework-only-change`) fail
   `SamplesEndToEndTests` in this worktree because their `modern/` projects were never restored here. Not this change;
   CI restores every sample.
+- `IlLoweringParityTests` lists the sample's four methods, on both sides, as known differences for the reason
+  `business-layer`'s `ConfirmAsync` is one: an `async` method's IL is its state machine's kickoff, which the IL lowering
+  leaves opaque. They joined the test's scope because their source lowering now holds no opaque.
