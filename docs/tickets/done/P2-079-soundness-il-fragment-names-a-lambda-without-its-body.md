@@ -143,15 +143,15 @@ Turning `--il-fallback` on by default. Lowering lambdas (P2-067). The crash in P
   `PairGenTests.ClosurePairsDifferOnlyInsideALambdaOrALocalFunction` is the generator's test.
 - Criterion 5, the gate before the fix: with `src/` at `bb69554` the new fact fails rule 1 under the il lowering
   (CsCheck seed `0000Sk4jyHq2`, 50 pairs). With the fix it passes at 50 pairs and at the nightly 1,250 (74 s).
-- Finding, filed as P2-125 (not an IL bug, and outside this ticket's files): the same pairs fail rule 1 under the
+- Finding, filed as P2-127 (not an IL bug, and outside this ticket's files): the same pairs fail rule 1 under the
   IOperation lowering. `IrLowerer` lowers a call of a local function as an `IrCall` of `<Type>::<Name>(...)`, the
   same on both sides, and no pair verifies a local function. `compare` with no flag reports `EQ001` for a member
   whose two sides differ only in the local function it calls. The new fact therefore runs under the IL lowering
-  only, which is what criterion 5 asks; P2-125's criterion 3 adds the IOperation lowering. README's sentence on
+  only, which is what criterion 5 asks; P2-127's criterion 3 adds the IOperation lowering. README's sentence on
   what an Equivalent can be relied on for now names that exception.
 - Deviation: the Files list has no `IlLowerer.cs` (criterion 3's check is in `Typed`, beside `Heap.cs`'s `Function`),
   `PairSyntax.cs` (the generator's renderer needs a local function), `PairGenLoweringTests.cs`, `PairGenTests.cs`,
-  README, ROADMAP or the P2-125 ticket. `IlKeys.cs` is unchanged: no key changed.
+  README, ROADMAP or the P2-127 ticket. `IlKeys.cs` is unchanged: no key changed.
 - Criterion 6 (`docs/runs/2026-10-03-il-fragment-soundness.md`, one `full --il-fallback` run at de407df, 1h53m):
   none of the 20 pairs is read from IL any more. Eight are Unknown(opaque: `DelegateCreation`), two are
   Unknown(abstraction) on `delegate:` functions that differ, and ten are Equivalent by congruence of their IOperation

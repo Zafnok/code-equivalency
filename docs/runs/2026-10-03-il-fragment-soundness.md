@@ -104,4 +104,4 @@ forwarder with the `System.String` method it calls, P2-068 (ADR 0047) gives both
 - No pair of the 20 is Equivalent from IL: P2-079's criterion 6 holds.
 - The run still exits 5 on one IL-lowered pair: P2-078 (existing).
 - Found while writing P2-079's generator, not by this run: the IOperation lowering proves a member
-  whose two sides differ only inside a local function it calls by name. P2-125.
+  whose two sides differ only inside a local function it calls by name. P2-127.
