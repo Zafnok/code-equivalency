@@ -776,6 +776,62 @@ Equivalent verdict on a procedure that writes a field around a call, or that tak
 array parameters, rests on an assumption no gate can see; M3-001's soundness harness runs
 over IR and does not cover them.
 
+### Techniques not yet tried (2026-10-03 improvement review)
+
+The review listed eight verification techniques absent from the README, and three priorities: IR
+coverage, conditional equivalence, and trace-guided loop alignment. Checked against the ADRs, two of
+the eight are already here and get no implementation ticket:
+- Differential assertion checking is ADR 0037 and P1-013. What is missing is its measured yield
+  (P1-021).
+- Equivalence modulo uninterpreted calls is ADR 0019 (with the mutual-summary rule for cycles) and
+  P1-010's contracts.
+
+Abstraction refinement was measured by P1-019 at 1.0% of Unknowns and left unscheduled under the 5%
+bar. It was scheduled on 2026-10-03 anyway, as P1-030 and P1-031: six of the seven pairs P1-019
+resolved were real divergences the abstraction hid. New dependencies and ADR changes are acceptable
+for this work where the change is in proportion to what it buys.
+
+Order: P1-028 and P1-029 (coverage, the first priority; no dependency on the rest), then P1-022,
+then P1-023 → P1-024, with P1-020 and P1-021 alongside. Then P1-030 and P1-031. The three spikes
+P1-025 → P1-026 and P1-027 come last and each decides its own future.
+
+- P1-028 (M) Measurement: the opaque reasons with no owner, counted over the three large runs
+  together, by what each unlocks once the open owners land. Files a ticket for each at or above 1% of
+  the 2,246 changed pairs. Needs P2-066.
+- P1-029 (M) `await using` and `await foreach` lower through their awaited calls instead of making
+  the body opaque: 83 bodies per side and 13 changed pairs alone on jellyfin-13023. Needs M4-006,
+  M4-001.
+- P1-022 (L) Conditional equivalence: an EQ002 or an `abstraction` Unknown carries
+  `properties.agreesWhen`, a predicate over the parameters under which Z3 proves the pair Equivalent
+  (`name != null`). The verdict does not change. Starts with a new ADR. Needs P1-013, M3-025.
+- P1-023 (M) Spike: how many of the 89 `unaligned-loop` Unknowns have an iteration pairing that runs
+  in `IrInterpreter` show (unrolled, batched, peeled). Fewer than 10 closes P1-024. Needs P1-009.
+- P1-024 (L) A rung between 3 and 4: a schedule proposed from runs, proved by rung 2's induction on
+  the rewritten loops (`proofMethod: aligned-induction`). Works on loops that make calls, which rung 4
+  does not. Needs P1-023, P1-009.
+- P1-020 (M) A Divergent says whether the modern side only removed failures, added one, or changed a
+  result (`properties.divergenceKind`), from ADR 0037's two queries and a third. Needs P1-013.
+- P1-021 (M) Measurement: what failure refinement answers today, and what it would answer on the 400
+  `timeout` Unknowns that ADR 0037 does not query. Needs P1-013, P2-050.
+- P1-030 (L) Abstraction refinement, part 1: when an `abstraction` Unknown's candidate depends only
+  on interpretable pure functions (`IntPtr` equality, `float` and `double` arithmetic as IEEE), the
+  pair is asked again with them interpreted (`proofMethod` suffix `+refined`). Starts with a new ADR
+  against ADR 0025. Needs P1-019, M3-016, M4-002.
+- P1-031 (L) Abstraction refinement, part 2: a rung 1 query that times out is asked again with
+  multiplication, division and remainder of two unknowns as shared functions, refined by point facts
+  from spurious models (`+abstracted`). Needs P2-050, M3-016.
+- P1-025 (M) Spike: do Bitwuzla, cvc5, Eldarica or Golem decide the queries Z3 gives up on. It writes
+  the ADR that supersedes ADR 0005's "Z3 alone" and the ticket that adds the best of them, unless
+  none decides anything. Needs P2-050.
+- P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
+  gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
+- P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model
+  counting over the parameter bits. Needs P2-047.
+
+Not ticketed from the review's other section: exhaustive invariant enumeration and deeper bounds.
+Rung 5 runs only after a rung 4 timeout, which the three large runs do not report, and P2-050 found
+that 20 times the budget proves no pair.
+
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
 
 Moved from M4 by the 2026-09-24 census (`docs/runs/2026-09-24-census-verdict.md`): each unlocks
@@ -816,6 +872,8 @@ From the 2026-09-24 second-oracle review, unticketed until a result above asks f
   (`IntPtr ==`, `!=`) resolves 7 of 726 Unknowns (1.0%), all to Divergent. That is below ADR 0028's
   5% bar, so it is not scheduled. 195 of the 238 `abstraction` Unknowns hold an opaque fragment, and
   the other 36 need floating point, `string` or operator bodies (`docs/runs/2026-09-30-abstraction-spike.md`).
+  Scheduled 2026-10-03 regardless of the bar, as P1-030 (refine a pure function a candidate depends
+  on) and P1-031 (abstract hard arithmetic on a timeout).
 - Abstract semantic differencing (Partush and Yahav, OOPSLA 2014): relational abstract domains
   for loops where the ladder and CHC time out.
 - Partition verdicts (PASDA, Glock et al., JSS 2024): Equivalent on some input partitions and
