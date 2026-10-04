@@ -33,12 +33,17 @@ public sealed class LadderPropertyTests
     /// </summary>
     private static readonly VerificationOptions CallFreeOptions = new(3, 500, []);
 
+    /// <summary>
+    /// How many procedures <see cref="FirstOf"/> draws for one kept one. About 1 in 8 generated procedures both loops and
+    /// calls, so one batch in 8 has none, and CsCheck's <c>Where</c> gives up only after 100 batches in a row have none.
+    /// </summary>
+    private const int Batch = 16;
+
     /// <summary><c>Verify(P, P)</c> is Equivalent for 200 generated looping procedures, bounded only when a bound covers every loop.</summary>
     [Fact]
     public void ALoopingProcedureIsEquivalentToItself()
     {
-        Gen<IrProcedure> looping = IrGen.Procedure.Where(static p => !IrLoopAnalysis.Of(p).Loops.IsEmpty);
-        looping.Sample(
+        Looping.Sample(
             static p =>
             {
                 Equivalent equivalent = Assert.IsType<Equivalent>(new Z3Backend().Verify(p, p, Options));
@@ -58,18 +63,17 @@ public sealed class LadderPropertyTests
     [Fact]
     public void ALoopingMutantIsNeverEquivalentAndEveryDivergenceReplays()
     {
-        Mutants(CallingLooping).Where(static m => Terminates(m.Original, m.Witness) && Terminates(m.Mutant, m.Witness)).Sample(
-            static m =>
-            {
-                Verdict verdict = new Z3Backend().Verify(m.Original, m.Mutant, Options);
-                Assert.IsNotType<Equivalent>(verdict);
-                if (verdict is Divergent divergent)
-                {
-                    AssertReplays(divergent);
-                }
-            },
-            iter: 200,
-            print: static m => $"{m.Description}\n{IrText.Dump(m.Original)}\n{IrText.Dump(m.Mutant)}");
+        TerminatingCallingMutants.Sample(static m => AssertNeverEquivalent(m), iter: 200, print: Print);
+    }
+
+    /// <summary>
+    /// The seed on which the property above failed with no assertion (ticket P2-129): 100 generated procedures in a row
+    /// did not both loop and call, and CsCheck's <c>Where</c> gave up ("Failing Where max count").
+    /// </summary>
+    [Fact]
+    public void TheCallingMutantGeneratorDoesNotRunOutOnSeedA6AU7haBK73()
+    {
+        TerminatingCallingMutants.Sample(static m => AssertNeverEquivalent(m), iter: 1, seed: "a6-aU7haBK73", print: Print);
     }
 
     /// <summary>
@@ -81,8 +85,8 @@ public sealed class LadderPropertyTests
     public void NoRungRefutesAPairAnotherRungProves()
     {
         Gen<(IrProcedure Old, IrProcedure New)> pairs = Gen.Frequency(
-            (1, IrGen.Procedure.Where(static p => !IrLoopAnalysis.Of(p).Loops.IsEmpty).Select(static p => (p, p))),
-            (1, Mutants(IrGen.Procedure.Where(static p => !IrLoopAnalysis.Of(p).Loops.IsEmpty)).Select(static m => (m.Original, m.Mutant))));
+            (1, Looping.Select(static p => (p, p))),
+            (1, Mutants(Looping).Select(static m => (m.Original, m.Mutant))));
         pairs.Sample(
             static pair =>
             {
@@ -130,10 +134,20 @@ public sealed class LadderPropertyTests
     }
 
     /// <summary>Looping procedures that call or apply a pure function in a reachable block, which rung 4 does not apply to.</summary>
-    private static Gen<IrProcedure> CallingLooping => IrGen.Procedure.Where(static p =>
+    private static Gen<IrProcedure> CallingLooping => FirstOf(IrGen.Procedure, static p =>
         IrLoopAnalysis.Of(p) is { Loops.IsEmpty: false } analysis && analysis.ReversePostorder.SelectMany(static b => b.Instructions).Any(static i => i is IrCall or IrPure));
 
+    private static Gen<IrProcedure> Looping => FirstOf(IrGen.Procedure, static p => !IrLoopAnalysis.Of(p).Loops.IsEmpty);
+
+    /// <summary>
+    /// About 1 in 4 call-free procedures loops, so 100 in a row without a loop is not a risk (ticket P2-129), and
+    /// <see cref="NoRungProvesTheMutantOfSeed4FfExD8adOs4"/> needs this generator's stream as it is.
+    /// </summary>
     private static Gen<IrProcedure> CallFreeLooping => IrGen.CallFreeProcedure.Where(static p => !IrLoopAnalysis.Of(p).Loops.IsEmpty);
+
+    /// <summary>Kept mutants of looping procedures that call or apply a pure function, whose witness makes both runs terminate.</summary>
+    private static Gen<IrMutant> TerminatingCallingMutants =>
+        Mutants(CallingLooping).Where(static m => Terminates(m.Original, m.Witness) && Terminates(m.Mutant, m.Witness));
 
     /// <summary>Call-free looping procedures' kept mutants whose witness makes both runs terminate.</summary>
     private static Gen<IrMutant> TerminatingCallFreeMutants =>
@@ -142,6 +156,25 @@ public sealed class LadderPropertyTests
     private static IReadOnlyList<LoopLadder.Rung> Rungs(IrMutant m) => Independently((m.Original, m.Mutant), CallFreeOptions);
 
     private static string Print(IrMutant m) => $"{m.Description}\n{IrText.Dump(m.Original)}\n{IrText.Dump(m.Mutant)}";
+
+    /// <summary>
+    /// The first of <see cref="Batch"/> draws of <paramref name="procedures"/> that <paramref name="keep"/> holds for:
+    /// the procedures <c>procedures.Where(keep)</c> draws, each as likely as there. CsCheck's <c>Where</c> throws after
+    /// 100 rejections in a row, which a filter that keeps 1 draw in 8 reaches about once in 400 runs of a property
+    /// (ticket P2-129); here a rejection is a whole batch with nothing to keep.
+    /// </summary>
+    private static Gen<IrProcedure> FirstOf(Gen<IrProcedure> procedures, Func<IrProcedure, bool> keep) =>
+        procedures.Array[Batch].Select(batch => batch.FirstOrDefault(keep)).Where(static p => p is not null).Select(static p => p!);
+
+    private static void AssertNeverEquivalent(IrMutant m)
+    {
+        Verdict verdict = new Z3Backend().Verify(m.Original, m.Mutant, Options);
+        Assert.IsNotType<Equivalent>(verdict);
+        if (verdict is Divergent divergent)
+        {
+            AssertReplays(divergent);
+        }
+    }
 
     private static Gen<IrMutant> Mutants(Gen<IrProcedure> procedures) =>
         procedures.SelectMany(IrGen.Mutation).Where(static m => m is not null).Select(static m => m!);

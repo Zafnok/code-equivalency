@@ -846,8 +846,8 @@ A query that neither budget has ended once it has run four times `timeoutMs` is 
 Unknown with reason `timeout` like the others, the ladder goes on to the next rung as it does after a timeout, and
 the detail says `interrupted` in place of a limit. Only the one query is ended: nothing caps a rung, a pair or a run.
 
-Every Unknown other than `unbound` and `timeout` also carries `properties.failureRefinement` (ADR 0037;
-ticket P1-013): `{ newFailures, removedFailures }`, each `{ outcome, model? }`. The backend asks two more
+Every Unknown other than `unbound` also carries `properties.failureRefinement` (ADR 0037; tickets P1-013
+and P1-035): `{ newFailures, removedFailures }`, each `{ outcome, model? }`. The backend asks two more
 queries over rung 1's product (the pair with its shared fragments as calls, unrolled `k` times), comparing
 only whether each side returns or throws, never the value or the heap. `newFailures` asks for an input on
 which the legacy side returns and the modern side throws; `removedFailures` is the same with the sides
@@ -858,7 +858,9 @@ tainted one is `unknown`. Only when that query is unsatisfiable does it ask agai
 return or throw: unsatisfiable is `none-proved`, anything else `unknown`. A query the solver gives up on is
 `unknown`, and so is every answer for a pair rung 1 could not encode. Each query gets the pair's resource limit and timeout.
 A `found` answer needs an input that reaches no unshared opaque node, so on an Unknown it occurs only where
-rung 1's model of the same divergence replayed tainted. The verdict stays EQ003, and neither the rule id, the
+rung 1's model of the same divergence replayed tainted, or, on a `timeout` Unknown, where rung 1's query
+gave up before it found one. A `timeout` Unknown keeps `unknownReason` `timeout` whatever the two queries
+answer, and a `found` on it is not a Divergent. The verdict stays EQ003, and neither the rule id, the
 exit code nor the fingerprint depends on `failureRefinement`. The census reports the Unknown pairs queried
 and the time their queries took, in `loweringCensus.failureRefinement` (`pairs`, `milliseconds`), when
 there was at least one.

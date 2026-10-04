@@ -594,7 +594,8 @@ public sealed partial class SamplesEndToEndTests
     /// <summary>
     /// Ticket P2-050 criterion 5: with a tiny <c>--resource-limit</c> and a ten-minute <c>timeoutMs</c>, the pair of
     /// <c>added-branch</c> that needs the solver is Unknown(timeout) on the resource limit, long before the wall-clock
-    /// backstop, and a second run writes the same bytes: nothing in the result depends on how fast the machine was.
+    /// backstop, and a second run writes the same bytes: nothing in the result depends on how fast the machine was. The one
+    /// measurement in the file, the census's failure-refinement time, is masked: a timeout Unknown is queried (ticket P1-035).
     /// </summary>
     [Fact]
     public void RepeatedRunsAreByteIdentical()
@@ -614,7 +615,10 @@ public sealed partial class SamplesEndToEndTests
             Assert.Equal("EQ003", unknown.RuleId);
             Assert.Equal("timeout", unknown.GetProperty<string>("unknownReason"));
             Assert.Contains("solver returned unknown (canceled): resource limit 1 hit", unknown.Message.Text, StringComparison.Ordinal);
-            Assert.Equal(File.ReadAllBytes(outPaths[0]), File.ReadAllBytes(outPaths[1]));
+            Assert.True(unknown.TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+            string[] texts = [.. outPaths.Select(static outPath => RefinementMilliseconds.Replace(File.ReadAllText(outPath), "${key}0"))];
+            Assert.Matches(RefinementMilliseconds, File.ReadAllText(outPaths[0]));
+            Assert.Equal(texts[0], texts[1]);
         }
         finally
         {
@@ -682,6 +686,10 @@ public sealed partial class SamplesEndToEndTests
 
     [GeneratedRegex(@"Exit code:\s*(?<code>\d+)", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
     private static partial Regex ExitCodePattern { get; }
+
+    /// <summary>The census's <c>failureRefinement.milliseconds</c>: wall-clock time, the one value that differs between two runs.</summary>
+    [GeneratedRegex(@"(?<key>""pairs"":\s*\d+,\s*""milliseconds"":\s*)\d+", RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex RefinementMilliseconds { get; }
 
     private sealed record SampleRun(int ExitCode, string Json, string NormalizedSarif, SarifLog Log);
 

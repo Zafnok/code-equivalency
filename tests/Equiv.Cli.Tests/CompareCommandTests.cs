@@ -1782,11 +1782,11 @@ public sealed class CompareCommandTests
     }
 
     /// <summary>
-    /// Ticket P1-013 (ADR 0037): through the real backend, an unbound pair (decided without the solver) and a pair the solver
-    /// times out on carry no <c>failureRefinement</c>; an opaque Unknown does.
+    /// Tickets P1-013 and P1-035 (ADR 0037): through the real backend, an unbound pair (decided without the solver) carries
+    /// no <c>failureRefinement</c>; a pair the solver times out on and an opaque Unknown do, and the first is still a timeout.
     /// </summary>
     [Fact]
-    public void UnboundAndTimeoutPairs_AreNotQueried()
+    public void UnboundPair_IsNotQueried_TimeoutAndOpaquePairsAre()
     {
         using TempFile legacy = new();
         using TempFile modern = new();
@@ -1828,7 +1828,8 @@ public sealed class CompareCommandTests
         Assert.Equal("unbound", results[unbound.Value].GetProperty<string>("unknownReason"));
         Assert.Equal("timeout", results[hard.Value].GetProperty<string>("unknownReason"));
         Assert.False(results[unbound.Value].TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
-        Assert.False(results[hard.Value].TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+        Assert.Equal("EQ003", results[hard.Value].RuleId);
+        Assert.True(results[hard.Value].TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
         Assert.True(results[opaque.Value].TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
     }
 

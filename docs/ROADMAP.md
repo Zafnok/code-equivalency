@@ -693,6 +693,11 @@ Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
   exits the `--il-fallback` run with code 5. `IlFallback` keeps the IOperation bodies when the IL
   bodies do not validate. Needs P1-016, P1-017.
 
+Found by a CI failure (PR #390, `gates (ubuntu-latest)`):
+- P2-129 (S) A ladder property test fails at random, about once in 400 runs, with no assertion: its
+  generator's filter for procedures that loop and call keeps 1 draw in 8, and CsCheck gives up after
+  100 rejections in a row. Test code only.
+
 Documentation:
 - P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list
   `--bound` and `--timeout-ms`, which the command never had (`bound` and `timeoutMs` come from the
@@ -841,7 +846,10 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   under ADR 0049 they run in thorough mode and quick skips them: P1-035 asks them, P1-032 adds the
   modes.
 - P1-035 (S) A `timeout` Unknown carries `properties.failureRefinement` like any other Unknown,
-  starting with a clarification of ADR 0037. Needs P1-013, P1-021.
+  starting with a clarification of ADR 0037. Needs P1-013, P1-021. Done 2026-10-04: on a `full` run of
+  gitextensions-8522, 19 of the 143 `timeout` Unknowns (13.3%) get an answer from at least one
+  query, 2 of them a `none-proved` `newFailures`, and the queries' time goes from 501 s to 2,306 s
+  (the ticket's Notes).
 - P1-032 (L) `equiv compare --mode thorough|quick` (ADR 0049). Both modes run one first pass
   (`resourceLimit` 2,000,000). Thorough, the default, then verifies what is still Unknown again at
   `bound` 8 and `resourceLimit` 30,000,000 and from IL, asks ADR 0037's queries on `timeout`
@@ -870,10 +878,52 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   counting over the parameter bits. Needs P2-047. Done 2026-10-04: 12 of 80 EQ002 results counted
   (15.0%), every share 1, so no ADR (`docs/runs/2026-10-04-divergent-count-spike.md`).
 
+- P1-036 (M) Spike: cvc5 splits each of the 34 queries it times out on into partitions solved by
+  separate processes (Wilson et al., arXiv 2306.05854). Counts the queries decided and whether two
+  runs agree. Needs P1-025.
+- P1-037 (L) Spike: a rung 1 query Z3 gives up on becomes a Lean theorem over `BitVec`, a scaffold
+  splits it, a model fills the holes and Lean's kernel checks the proof (after Trivet, arXiv
+  2609.19583). Translates the query, not the IR. An ADR against ADR 0005 only if a proof needs the
+  model. Needs P1-025; better after P1-034.
+
 Not ticketed from the review's other section: exhaustive invariant enumeration, since rung 5 runs
 only after a rung 4 timeout, which the three large runs do not report. Deeper bounds and larger
 budgets are thorough mode's budget pass (P1-032): P2-050 found that 20 times the budget proves no
 pair, and that it finds 20 Divergents among 172 timeouts.
+
+### Scoreboard milestone (2026-10-04)
+
+The README's scoreboard (`.claude/skills/equiv-scoreboard`) has two weak rows: Divergent precision
+(3.8% on migrations and upgrades, 0% on cleanups) and the Unknown share of changed pairs (65.5%).
+The fixes for the largest causes of both merged after the runs the scoreboard rests on (P2-113,
+P2-098, P2-068 to P2-071, P2-105, P1-029), so its numbers are behind the engine. The next rerun
+waits for the tickets below, so that one set of runs measures all of it. They come before any other
+open ticket, in this order:
+
+1. P2-127 (M) the one known false-Equivalent path. First, because a scoreboard cannot claim
+   soundness over it.
+2. P2-077 (M) pairs verified in parallel: the run-time row, and it shortens every rerun.
+3. Divergent precision, every open ticket that owns a counted false-positive cause: P2-073 (15 of
+   the migration audit's 50), P2-074 (7), P2-103 (all 5 of PowerShell's), P2-118 (4), P2-075 (2),
+   P2-117 (2). With the merged fixes these cover every cause the three adjudications named.
+4. Unknown, the opaque reasons with a measured share: P2-122 (`switch-pattern`, 6.9% and 6.8% of
+   two pairs' changed pairs), P2-087 (`Binary`, 6.2% of OpenRA's), P2-095 (13 of
+   gitextensions-9860's 16 `Conversion` pairs), P2-093 and P2-104 (pattern forms behind cleanup
+   samples), and P1-028, which counts the unowned tail and needs no run.
+5. P1-032 (the thorough and quick modes, ADR 0049), so the reruns measure the default mode a user
+   gets.
+6. The reruns, each applying `equiv-scoreboard`: P2-124 (two upgrades), P2-110 (three cleanups),
+   then P2-130 (Git Extensions 4.8 to .NET 5, Duplicati, OpenRA), which also writes the scoreboard
+   over all five large pairs and names the next milestone.
+
+- P2-130 (M) Scoreboard rerun: the three migration pairs on one commit, Divergent precision per
+  pair, and the README scoreboard from the latest run of every large pair. Needs every ticket above.
+
+Not on the milestone: `timeout` (400) and `abstraction` (246) are 44% of the scoreboard's Unknowns,
+and no open ticket has a measured yield above 8% of either (P1-033 decided 13 of 164 timeouts and
+proved no pair; P1-019 resolved 1.0% of Unknowns). P2-101 and P1-034 are the measurements that could
+find a larger lever, and are the first candidates for the milestone after this one. That orders
+the work; it leaves none of it out (ADR 0049 decision 7).
 
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
 

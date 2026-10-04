@@ -2,7 +2,7 @@
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: P2-105
+Depends on: P2-105, P2-103, P2-104, P2-093, P2-127, P2-077, P1-032
 
 ## Goal
 `docs/runs/2026-10-02-cleanup-verdict.md` is P2-058's: three cleanup pairs at equiv `46e6636`, all
@@ -32,6 +32,8 @@ with no crashed pair in it.
    it; a new cause is a new `P2-nnn` ticket. A confirmed behaviour change is reported to the user by
    procedure identity before the PR is opened.
 5. `docs/ROADMAP.md` quotes the new totals where it quotes P2-058's.
+6. `equiv-scoreboard` is applied: the README's cleanup numbers whose value changed are rewritten,
+   and no other line of `README.md` is.
 
 ## Tests
 None: no `src/` or `tests/` change. A crash, a load failure or a wrong verdict is a finding and a
@@ -49,3 +51,5 @@ More than the three pairs, or any change under `src/`: stop, that is its own tic
 - Both Git Extensions sides are SDK-style net8.0: restore them with `dotnet restore --force`. The
   skill's `MSBuild -t:restore` fails on them with MSB4018.
 - `gitextensions-11372` took 31 minutes on 2026-10-03 on a shared box, not the 4h43m of 2026-10-02.
+- 2026-10-04: P2-103, P2-104, P2-093, P2-127 and P2-077 were added to `Depends on`. They are the
+  cleanup-relevant part of the scoreboard milestone P2-130 sets, so the rerun measures them too.
