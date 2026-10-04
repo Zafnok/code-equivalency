@@ -68,6 +68,14 @@ what Z3 prints with each `seq.++`, `or` and `and` of one argument written as tha
 Z3 is asked once. For a `divergence` query some solver proves unsatisfiable, rung 1's other queries
 are asked of Z3 and, where Z3 gives up, of the other solvers.
 
+A `--sorts-as-bv` solver is also run on `NNN.bv.smt2`: the positional file with each uninterpreted
+sort (`declare-sort`) defined as a 64-bit vector. Bitwuzla 0.9.1 answers `unknown` to an equality
+over an uninterpreted sort and crashes on an array of one, and the product has both whatever the
+trace is. The rewrite is one line of text and keeps the answer: a model over bit-vectors is a model
+of the sorts, and a quantifier-free query that has a model has one with no more elements of a sort
+than it has terms of it, far fewer than 2^64. It is not the heap re-encoded: every array, function
+and assertion is as printed.
+
 The export, the solver runs and the read-back are P1-025's, compiled in from
 `../solver-portfolio/`.
 
@@ -90,7 +98,8 @@ dotnet build tools/spikes/trace-encoding -c Release
 $spike = 'tools/spikes/trace-encoding/bin/Release/net10.0/Equiv.Tests.Integration.dll'
 dotnet $spike --self-test
 dotnet $spike <legacySolution> <modernSolution> <P1-025 results.tsv> <outDir> --threads 6 `
-  --solver "cvc5=<path>/cvc5.exe|--arrays-exp" --control cvc5 --solver bitwuzla=<path>/bitwuzla.exe
+  --solver "cvc5=<path>/cvc5.exe|--arrays-exp" --control cvc5 --solver bitwuzla=<path>/bitwuzla.exe `
+  --sorts-as-bv bitwuzla
 ```
 
 `--only 3,17` keeps the queries at those positions of the `results.tsv`. `<outDir>` gets the `.smt2`

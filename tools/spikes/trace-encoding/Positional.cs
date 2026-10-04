@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 using Equiv.Core.Ir;
 using Equiv.Verify.Z3;
@@ -215,9 +216,20 @@ internal static class Positional
 }
 
 /// <summary>What Z3 prints that SMT-LIB does not allow, written as SMT-LIB has it.</summary>
-internal static class Smt
+internal static partial class Smt
 {
     private static readonly string[] Heads = ["seq.++", "or", "and"];
+
+    /// <summary>
+    /// <paramref name="script"/> with every uninterpreted sort defined as a 64-bit vector. Bitwuzla 0.9.1 answers
+    /// <c>unknown</c> to an equality over an uninterpreted sort and crashes on an array of one. A model over bit-vectors is
+    /// a model of the sorts, so satisfiable stays right; unsatisfiable does because a quantifier-free query that has a
+    /// model has one with no more elements of a sort than it has terms of it, far fewer than 2^64.
+    /// </summary>
+    public static string SortsAsBitVectors(string script) => DeclareSort().Replace(script, "(define-sort $1 () (_ BitVec 64))");
+
+    [GeneratedRegex(@"^\(declare-sort (\|[^|]*\||\S+) 0\)", RegexOptions.Multiline)]
+    private static partial Regex DeclareSort();
 
     /// <summary>
     /// <paramref name="script"/> with every <c>seq.++</c>, <c>or</c> and <c>and</c> of one argument written as that

@@ -31,6 +31,7 @@ internal static class Program
 {
     public const string Sequence = "sequence";
     public const string Positional = "positional";
+    public const string PositionalBv = "positional, sorts as bv64";
 
     public static int Main(string[] args)
     {
@@ -41,7 +42,7 @@ internal static class Program
 
         if (args.Length < 4)
         {
-            Console.Error.WriteLine("usage: trace-encoding-spike --self-test | <legacy.sln> <modern.sln> <P1-025 results.tsv> <outDir> [--threads n] [--only index,...] [--solver name=path[|option]...]... [--control name]...");
+            Console.Error.WriteLine("usage: trace-encoding-spike --self-test | <legacy.sln> <modern.sln> <P1-025 results.tsv> <outDir> [--threads n] [--only index,...] [--solver name=path[|option]...]... [--control name]... [--sorts-as-bv name]...");
             return 2;
         }
 
@@ -49,6 +50,7 @@ internal static class Program
         HashSet<int>? only = null;
         List<(string Name, string Path)> solvers = [];
         HashSet<string> controls = new(StringComparer.Ordinal);
+        HashSet<string> sortsAsBv = new(StringComparer.Ordinal);
         for (int i = 4; i + 1 < args.Length; i += 2)
         {
             switch (args[i])
@@ -61,6 +63,9 @@ internal static class Program
                     break;
                 case "--control":
                     controls.Add(args[i + 1]);
+                    break;
+                case "--sorts-as-bv":
+                    sortsAsBv.Add(args[i + 1]);
                     break;
                 default:
                     string[] solver = args[i + 1].Split('=', 2);
@@ -93,7 +98,7 @@ internal static class Program
                 Row row;
                 try
                 {
-                    row = Measure(item.Index, item.Identity, item.Query, pairs.GetValueOrDefault(item.Identity), options, args[3], solvers, controls);
+                    row = Measure(item.Index, item.Identity, item.Query, pairs.GetValueOrDefault(item.Identity), options, args[3], solvers, (controls, sortsAsBv));
                 }
                 catch (InvalidOperationException e)
                 {
@@ -112,7 +117,7 @@ internal static class Program
         return 0;
     }
 
-    private static Row Measure(int index, string identity, string query, ProcedurePair? pair, VerificationOptions options, string outDir, List<(string Name, string Path)> solvers, HashSet<string> controls)
+    private static Row Measure(int index, string identity, string query, ProcedurePair? pair, VerificationOptions options, string outDir, List<(string Name, string Path)> solvers, (HashSet<string> Controls, HashSet<string> SortsAsBv) runs)
     {
         Row row = new(index, identity, query);
         if (pair is not { OldBody: { } old, NewBody: { } @new })
@@ -142,12 +147,17 @@ internal static class Program
         File.WriteAllText(stem + ".pos.smt2", Smt.Unwrap(positionalFile.Script()));
         foreach ((string name, string exe) in solvers)
         {
-            if (controls.Contains(name))
+            if (runs.Controls.Contains(name))
             {
                 answers.Add(Ask(Name(name, Sequence), exe, stem + ".seq.smt2", product.Sequence, sequenceFile));
             }
 
             answers.Add(Ask(Name(name, Positional), exe, stem + ".pos.smt2", product.Positional, positionalFile));
+            if (runs.SortsAsBv.Contains(name))
+            {
+                File.WriteAllText(stem + ".bv.smt2", Smt.SortsAsBitVectors(Smt.Unwrap(positionalFile.Script())));
+                answers.Add(Ask(Name(name, PositionalBv), exe, stem + ".bv.smt2", product.Positional, positionalFile));
+            }
         }
 
         Answer Ask(string name, string exe, string script, ProductEncoding encoding, SmtFile file)
@@ -159,7 +169,7 @@ internal static class Program
 
         // A divergence query proved unsatisfiable proves the pair only with rung 1's other queries.
         string rest = query == Rung1.Divergence && answers.Exists(static a => a.Status == "unsat")
-            ? Rest(context, product.Positional, options, rung, stem, solvers)
+            ? Rest(context, product.Positional, options, rung, stem, solvers, runs.SortsAsBv)
             : string.Empty;
         return row with
         {
@@ -211,7 +221,7 @@ internal static class Program
     /// Rung 1's queries after <c>divergence</c>, asked of Z3 as production asks them, and of the other solvers when Z3
     /// gives up. Neither compares the traces, so there is one encoding of each.
     /// </summary>
-    private static string Rest(Context context, ProductEncoding encoding, VerificationOptions options, Rung1 rung, string stem, List<(string Name, string Path)> solvers)
+    private static string Rest(Context context, ProductEncoding encoding, VerificationOptions options, Rung1 rung, string stem, List<(string Name, string Path)> solvers, HashSet<string> sortsAsBv)
     {
         foreach (string name in (string[])[Rung1.Opaque, Rung1.Bound])
         {
@@ -231,10 +241,12 @@ internal static class Program
             if (status == "unknown")
             {
                 string script = $"{stem}.{name}.smt2";
-                File.WriteAllText(script, Smt.Unwrap(SmtFile.Of(context, encoding, name).Script()));
+                string text = Smt.Unwrap(SmtFile.Of(context, encoding, name).Script());
+                File.WriteAllText(script, text);
+                File.WriteAllText(script + ".bv.smt2", Smt.SortsAsBitVectors(text));
                 foreach ((string other, string exe) in solvers)
                 {
-                    string answer = External.Run(exe, script, options.TimeoutMs).Status;
+                    string answer = External.Run(exe, sortsAsBv.Contains(other) ? script + ".bv.smt2" : script, options.TimeoutMs).Status;
                     if (answer is "sat" or "unsat")
                     {
                         (status, by) = (answer, other);
@@ -361,14 +373,20 @@ internal static partial class Report
 
         Console.WriteLine();
         Console.WriteLine("## What the positional encoding decides that the sequence encoding does not");
-        Console.WriteLine("| solver | positional decides, sequence does not | of those, proofs (unsatisfiable) | sequence decides, positional does not | both decide | answers disagree |");
+        Console.WriteLine("| solver, encoding | positional decides, sequence does not | of those, proofs (unsatisfiable) | sequence decides, positional does not | both decide | answers disagree |");
         Console.WriteLine("|---|---|---|---|---|---|");
-        foreach (string solver in solvers.Select(static s => s.Split(", ")[0]).Distinct(StringComparer.Ordinal))
+        foreach (string positional in solvers.Where(static s => !s.EndsWith(", " + Program.Sequence, StringComparison.Ordinal)))
         {
-            List<(Answer? Sequence, Answer Positional)> both = [.. built.Where(r => r.Of(Program.Name(solver, Program.Positional)) is not null).Select(r => (r.Of(Program.Name(solver, Program.Sequence)), r.Of(Program.Name(solver, Program.Positional))!))];
+            string solver = positional.Split(", ")[0];
+            List<(Answer? Sequence, Answer Positional)> both = [.. built.Where(r => r.Of(positional) is not null).Select(r => (r.Of(Program.Name(solver, Program.Sequence)), r.Of(positional)!))];
             List<(Answer? Sequence, Answer Positional)> gained = [.. both.Where(static b => Decided(b.Positional) && !Decided(b.Sequence))];
-            Console.WriteLine($"| {solver}{(both.TrueForAll(static b => b.Sequence is null) ? " (no sequence run: it reads no sequence file)" : string.Empty)} | {gained.Count} | {gained.Count(static b => b.Positional.Status == "unsat")} | {both.Count(static b => Decided(b.Sequence) && !Decided(b.Positional))} | {both.Count(static b => Decided(b.Sequence) && Decided(b.Positional))} | {both.Count(static b => Decided(b.Sequence) && Decided(b.Positional) && b.Sequence!.Status != b.Positional.Status)} |");
+            Console.WriteLine($"| {positional}{(both.TrueForAll(static b => b.Sequence is null) ? " (no sequence run: it reads no sequence file)" : string.Empty)} | {gained.Count} | {gained.Count(static b => b.Positional.Status == "unsat")} | {both.Count(static b => Decided(b.Sequence) && !Decided(b.Positional))} | {both.Count(static b => Decided(b.Sequence) && Decided(b.Positional))} | {both.Count(static b => Decided(b.Sequence) && Decided(b.Positional) && b.Sequence!.Status != b.Positional.Status)} |");
         }
+
+        // Across solvers: a query two solvers answer differently in any encoding is a bug in an encoding or a solver.
+        Console.WriteLine();
+        Console.WriteLine($"queries with both a satisfiable and an unsatisfiable answer: {built.Count(static r => r.Answers.Any(static a => a.Status == "sat") && r.Answers.Any(static a => a.Status == "unsat"))}");
+        Console.WriteLine($"queries some positional run decides: {built.Count(static r => r.Answers.Any(static a => !a.Solver.EndsWith(Program.Sequence, StringComparison.Ordinal) && Decided(a)))}; some sequence run decides: {built.Count(static r => r.Answers.Any(static a => a.Solver.EndsWith(Program.Sequence, StringComparison.Ordinal) && Decided(a)))}; any run decides: {built.Count(static r => r.Answers.Any(Decided))}");
 
         Console.WriteLine();
         Console.WriteLine("## Queries proved unsatisfiable");
