@@ -83,6 +83,20 @@ branch and the legacy commit is its first parent, so the pair's diff is exactly 
    `gen/` folders. Without them `System.Management.Automation` has about 4,000 unresolved names and
    the legacy side skips it.
 
+### Version-upgrade pairs (ticket P2-066)
+
+`human` rows whose PR moves every C# project from one .NET version to a later one, with no feature
+work. Both sides are .NET, so only the runtime changes between the two versions can apply (ADR 0040
+decision 2). They are reported in their own verdict file and take no part in ADR 0028's rule table.
+
+| Slug | PR | Target frameworks | Shape |
+|---|---|---|---|
+| `jellyfin-13023` | <https://github.com/jellyfin/jellyfin/pull/13023>, "Update projects to .NET 9" | `net8.0` to `net9.0`, in all 25 project files | Pure bump. 14 `.cs` files change, each by at most 2 lines: analyzer-driven one-liners. |
+| `gitextensions-9860` | <https://github.com/gitextensions/gitextensions/pull/9860>, "Bump to .NET 6.0" | `net5.0-windows` to `net6.0-windows` | Bump with fixes. 16 `.cs` files: obsolete-API suppressions, replaced cryptography types, a high-DPI call the new version needs, a rewritten serializer call, and test repairs. |
+
+Both repos pin an SDK in `global.json` that rolls forward only within its own major, which a box
+with one newer SDK cannot satisfy. `-Fetch` rewrites the checkout's copy to `latestMajor` (P2-058).
+
 `-Unchanged` matches files by relative path. A migration that renames folders (`eshop-manual`
 renames `eShopLegacyMVC` to `eShop.MVC`) therefore scores 0% even where contents match. Read
 the unchanged share for such pairs with that in mind, and prefer the census's `pairsCongruent`
