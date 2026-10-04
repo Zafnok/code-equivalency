@@ -11,7 +11,7 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0002 | Dependency register (living) |
 | 0003 | Lower from Roslyn's IOperation control-flow graph (superseded in part by 0039) |
 | 0004 | MSBuildWorkspace on Windows for the MVP loader; fact check on "Windows bindings" |
-| 0005 | Direct Z3 encoding; Lean and Boogie rejected for the MVP |
+| 0005 | Direct Z3 encoding; Lean and Boogie rejected for the MVP ("Z3 alone" superseded by 0050) |
 | 0006 | SARIF only, headless only, no UI in the MVP |
 | 0007 | Test and gate stack |
 | 0008 | Loop ladder instead of bounded-only verdicts; runtime-changes table |
@@ -55,3 +55,4 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0046 | A caller file path or line number the compiler supplies is an input both sides share, not a constant |
 | 0047 | A call to a static one-call forwarder is a call to its target (narrows 0019's rejection of inlining) |
 | 0048 | A result that is not Equivalent may carry a proved input condition under which the pair agrees (`properties.agreesWhen`); no verdict, rule id, exit code or fingerprint depends on it |
+| 0050 | cvc5 is asked the rung 1 queries Z3 gives up on (supersedes 0005's "Z3 alone") |
