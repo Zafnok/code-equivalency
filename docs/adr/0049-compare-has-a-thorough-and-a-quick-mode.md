@@ -119,6 +119,11 @@ left are a long tail, so that reading rejects every technique, one at a time.
   verifies pairs one after another; verifying them in parallel is the way to shorten that and is
   not decided here.
 - Corpus runs name their mode in `SUMMARY.md`, and two runs are compared only within one mode.
+  A run whose numbers describe what `equiv` decides over a whole pair uses thorough: scoring ADR
+  0028's criteria, a verdict or Unknown-rate report, seeded recall, a technique's measured yield,
+  and any run later runs are compared against. A run that checks one thing uses quick: a crash is
+  gone, a named pair's result changed, a newly lowered construct is decided. A ticket that asks for
+  a run says which; `equiv-corpus-run` holds the rule.
 - P1-021's measurement no longer decides whether the queries run on `timeout` Unknowns, only whether
   quick asks them too. P1-030 and P1-031 land in thorough and state in their own Notes whether they
   also run in quick.

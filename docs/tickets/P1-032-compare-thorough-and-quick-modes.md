@@ -71,6 +71,20 @@ Pitfalls.
 9. A later pass that throws leaves the earlier result, writes a warning, and the run's exit code is
    what it would have been without that pass.
 10. `tools/corpus/corpus.ps1` takes `-Mode`, passes it through, and `SUMMARY.md` names it.
+    `.claude/skills/equiv-corpus-run/SKILL.md` gains the rule below, calling it the compare mode so
+    it is not confused with the skill's own `census`, `full` and `seeded`:
+    - thorough for a run whose numbers describe what `equiv` decides over a whole pair: scoring ADR
+      0028's criteria, a verdict or Unknown-rate report, a technique's measured yield, and any run
+      that later runs are compared against;
+    - thorough for `seeded` too: a later pass can be where a false Equivalent comes from, so recall
+      is measured with every pass running;
+    - quick for a run that checks one thing: a crash is gone, a named pair's result changed, a newly
+      lowered construct is decided, no result the first pass decides has changed;
+    - `census` (`--lower-only`) verifies nothing, so it takes no compare mode;
+    - a before-and-after comparison uses one compare mode for both runs. A run from before this
+      ticket has none, so the first comparison against one starts with a fresh run;
+    - a ticket that asks for a run names the compare mode in its criterion. Where an open ticket
+      does not, this rule decides and the ticket's Notes says which was used.
 11. Through `equiv-corpus-run` on `gitextensions-8522`, one `full` run in each mode. Notes records,
     per mode: phase times, verdict counts, Unknowns by reason, and for thorough the results each
     later pass decided, by outcome; and the number of results that today's default decides and
@@ -86,7 +100,7 @@ Pitfalls.
 `src/Equiv.Core/Matching/` (`ProcedurePair`), `src/Equiv.Core/Reporting/` (run and result
 properties), `src/Equiv.Cli/CompareCommand.cs`, `CompareOptions.cs`, the MCP `compare` tool,
 `src/Equiv.Verify.Z3/Z3Backend.cs`, `src/Equiv.Frontend.CSharp/` (keeping both lowerings), their
-tests, `action.yml`, `tools/corpus/corpus.ps1`, `docs/ARCHITECTURE.md`,
+tests, `action.yml`, `tools/corpus/corpus.ps1`, `.claude/skills/equiv-corpus-run/SKILL.md`, `docs/ARCHITECTURE.md`,
 `docs/VERIFICATION-MODEL.md`, `README.md`.
 
 ## Tests
