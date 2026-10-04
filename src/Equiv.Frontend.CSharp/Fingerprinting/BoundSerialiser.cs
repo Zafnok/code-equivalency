@@ -319,11 +319,8 @@ internal sealed class BoundSerialiser : OperationWalker
         int start = 0;
         for (int i = 0; i < value.Length; i++)
         {
-            if (char.IsSurrogatePair(value, i))
-            {
-                i++;
-            }
-            else if (char.IsSurrogate(value[i]))
+            // A high surrogate and the low one after it are always a pair, so a surrogate in neither place is alone.
+            if (char.IsSurrogate(value[i]) && !char.IsSurrogatePair(value, i) && (i == 0 || !char.IsSurrogatePair(value, i - 1)))
             {
                 quoted.Append(JsonEncodedText.Encode(value.AsSpan(start, i - start)))
                     .Append(CultureInfo.InvariantCulture, $"\\u{(int)value[i]:X4}");
