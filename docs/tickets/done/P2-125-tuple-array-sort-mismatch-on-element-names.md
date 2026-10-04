@@ -1,5 +1,5 @@
 # P2-125 Verifying crashes on two tuple array types that differ only in tuple element names
-Status: todo
+Status: done (PR #383)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -75,3 +75,37 @@ reported in the SARIF. The run time of `openra-17989` (P2-077, P2-101).
   `contracts` phase. It is not a notification and not an `unverified` entry, so the run's exit code
   does not show it. Its signature shares both parameter types with the failing pair's, which is a
   reason to check for the same cause, not evidence of one.
+- Criterion 1, from the notification in P2-121's SARIF (no new run needed): the two sorts are
+  `|(System.Reflection.Assembly <n1>, string <n2>)[]|` and the same type under two other element names. They meet in
+  one side, not across sides: `Context.MkStore` in `FragmentEncoder.EncodeInstruction`, the `IrMapWrite` of a field
+  assignment. The field is declared as an array of a tuple with explicit element names; the value assigned is the
+  result of an invocation (`ToArray`) whose tuple element names are inferred, so the field's map has one sort for its
+  values and the stored value another. Both sides have the shape.
+- Cause, as the Goal guessed: `TypeMapper.MetadataName` names a non-named type by `ToDisplayString(Unannotated)`, and
+  that format writes a tuple in tuple syntax with its element names.
+- Decision: add `SymbolDisplayMiscellaneousOptions.ExpandValueTuple` to `TypeMapper.Unannotated` rather than strip
+  the names from the symbol. A tuple inside a non-named type is then written as its `System.ValueTuple<...>`, which
+  has no names, at any depth. One line, and the sort of a named tuple type itself (its metadata name) is unchanged.
+- Criterion 3: in a Debug build the unfixed shape stops one step sooner than in the corpus run, at the lowerer's
+  `Debug.Assert` "lowered IR must validate" (`IrValidator` already reports the ill-sorted write); a Release build has
+  no assert and reaches Z3, which is the corpus crash. `TupleArraySortTests.ElementNamesDoNotSplitTheSort` failed on
+  that assert before the fix and returns Equivalent after it.
+- Criterion 4: not specific to arrays of tuples. The gap is every use of `Unannotated`: any non-named type that holds a
+  tuple (an array at any rank or depth, a tuple nested in a tuple, a tuple as a type argument of the element type, a
+  pointer to a tuple) and, through `CallIdentityFactory.Constructed`, a generic callee's type arguments, where
+  `M<(T a, U b)>()` and `M<(T, U)>()` were two functions. The one change covers all of them and
+  `CallIdentityFactory.cs` needed no edit. Tested: arrays, jagged arrays, nested tuples and a tuple type argument
+  inside an array (`TypeMapperTests.TupleArraysMapToOneTypeWhateverTheElementNames`), and the generic call
+  (`TupleArraySortTests.AGenericCallAndItsRenamedTupleTypeArgumentFormAreEquivalent`, not Equivalent before the fix).
+  A pointer to a tuple takes the same arm of `MetadataName` and has no test of its own. Nothing is left to file.
+- Criterion 6: `outcome=failed` in `contracts` is `CompareCommand.UnderContracts` catching an exception from
+  `VerifyUnderContracts`; the pair keeps the verdict it had and a `warning:` line goes to the console, with no
+  notification and no `unverified` entry. For `OpenRA.ModData::.ctor(OpenRA.Manifest,OpenRA.InstalledMods,bool)` the
+  console line carries the same `Z3Exception` with the same two sorts: it calls the failing constructor, and
+  verifying it under callee contracts encodes that callee. Same cause as criterion 1; it changed no result.
+- Criterion 5, `full` run of `openra-17989` on 2026-10-03 at 1b7e650 (this branch): exit 1 (was 5), 4,214 seconds,
+  10,207 results (was 10,206 and one `unverified` entry). No `toolExecutionNotification`, no `properties.unverified`,
+  and no `outcome=failed` line in any phase. `OpenRA.ObjectCreator::.ctor(OpenRA.Manifest,OpenRA.InstalledMods)` is
+  Unknown (EQ003, `unaligned-loop`, method scope) after 3.7 seconds; recorded, not fixed (Out of scope).
+- Criterion 6 in the same run: `OpenRA.ModData::.ctor(OpenRA.Manifest,OpenRA.InstalledMods,bool)` ends its
+  `contracts` item `outcome=unchanged` after 66.6 seconds, where it was `failed`.

@@ -19,11 +19,14 @@ internal static class TypeMapper
     public static readonly Func<string, string> Unmapped = static name => name;
 
     /// <summary>
-    /// The display format for a type with no metadata name, less nullable reference annotations (ticket P2-032); also a
-    /// generic callee's type arguments (ticket P2-042).
+    /// The display format for a type with no metadata name, less nullable reference annotations (ticket P2-032) and with
+    /// a tuple written as its <c>System.ValueTuple</c>, which has no element names (ticket P2-125); also a generic
+    /// callee's type arguments (ticket P2-042).
     /// </summary>
     public static readonly SymbolDisplayFormat Unannotated =
-        SymbolDisplayFormat.CSharpErrorMessageFormat.RemoveMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+        SymbolDisplayFormat.CSharpErrorMessageFormat
+            .RemoveMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier)
+            .AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.ExpandValueTuple);
 
     public static IrType Map(ITypeSymbol type) => Map(type, Unmapped);
 
@@ -144,7 +147,8 @@ internal static class TypeMapper
     /// <c>Namespace.Outer+Inner`1</c> for named types; <c>System.Object</c> for <c>dynamic</c>, which is <c>object</c> at run
     /// time and identity-convertible to it (ticket P2-029); the display string for arrays, pointers and type parameters,
     /// without nullable reference annotations (ticket P2-032), which a named type's metadata name never carries either:
-    /// <c>T[]</c> and <c>T[]?</c> are one sort, and null tracking is the shadow's job.
+    /// <c>T[]</c> and <c>T[]?</c> are one sort, and null tracking is the shadow's job. Nor does it carry a tuple's element
+    /// names (ticket P2-125): <c>(T a, U b)[]</c> and <c>(T, U)[]</c> are one sort.
     /// </summary>
     public static string MetadataName(ITypeSymbol type) => type switch
     {
