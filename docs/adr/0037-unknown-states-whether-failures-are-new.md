@@ -56,3 +56,17 @@ check, and only an untainted one is reported with its model.
 - Unknown pairs other than `unbound` and `timeout` cost two more solver queries each. Each gets
   the pair's timeout, and the census reports the time spent on them.
 - Ticket P1-013.
+
+## Clarifications
+- 2026-10-04 (P1-035). A `timeout` pair is queried. The Decision's sentence "A `timeout` pair is not
+  queried: the weaker query seldom finishes where the full one did not, and it would triple that
+  pair's cost" and the "and `timeout`" of the Consequences no longer hold. ADR 0049 superseded them,
+  and P1-021 measured both reasons on the 164 `timeout` Unknowns of `gitextensions-8522`
+  (`docs/runs/2026-10-04-failure-refinement.md`). Of the 138 still a `timeout` at that commit, 17
+  (12.3%) get an answer from at least one query (19 of 140 in a second run): `newFailures` is
+  `none-proved` on 2, `found` on 14, and the solver gives up on 69 (50%). The two queries add 0.44
+  times the pair's time, not twice it. So the backend runs both queries on an Unknown of any reason;
+  an `unbound` pair still never reaches it. Nothing else in the Decision changes: the verdict stays
+  EQ003, `unknownReason` stays `timeout` whatever the queries answer, the rule id, the exit code and
+  the fingerprint do not change, and a `found` carries the ADR 0026 taint check and is not EQ002.
+  Which mode asks is ADR 0049's decision 2, implemented by P1-032; until that lands every run asks.
