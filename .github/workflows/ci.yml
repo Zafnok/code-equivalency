@@ -65,11 +65,28 @@ jobs:
           path: .z3-feed
           key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
 
+      # ADR 0050 (P1-033): cvc5 is run as a process and never committed or shipped (ADR 0017). The
+      # hash-pinned release archive is fetched into the git-ignored .cvc5/ for Cvc5IntegrationTests
+      # only; it is in no artifact this workflow uploads.
+      - name: Cache the cvc5 release
+        if: runner.os == 'Windows' && steps.pass.outputs.cache-hit != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cvc5
+          key: cvc5-${{ hashFiles('tools/cvc5/*.sha256', 'tools/cvc5/fetch.ps1') }}
+
+      - name: Fetch cvc5
+        if: runner.os == 'Windows' && steps.pass.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./tools/cvc5/fetch.ps1
+
       # -Integration needs VS Build Tools + the .NET Framework 4.8 targeting pack,
       # which only the windows-latest hosted runner has (see README).
       - name: Run gates (Windows, with integration tests)
         if: runner.os == 'Windows' && steps.pass.outputs.cache-hit != 'true'
         shell: pwsh
+        env:
+          EQUIV_CVC5: ${{ github.workspace }}\.cvc5\cvc5-Win64-x86_64-static\bin\cvc5.exe
         run: ./build.ps1 -Integration
 
       - name: Run gates
