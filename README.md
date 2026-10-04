@@ -145,8 +145,10 @@ machine). Before the fix that removed non-solver time from a pair, the same thre
 ([ADR 0028](docs/adr/0028-public-corpus-and-success-criteria.md)) are all met: every project
 loads, more than 40% of pairs are unchanged, and 28 of 28 seeded behaviour changes were caught,
 none reported Equivalent. On the two upgrades, no behaviour change the pull request made was
-reported Equivalent either. With the default options an Equivalent can be relied on today
-(`--il-fallback` has an open soundness bug on methods that hold a lambda). The rest cannot yet:
+reported Equivalent either. An Equivalent can be relied on today, with one known exception: a member
+that calls a local function by name is proved without the local function's body being read
+([P2-125](docs/tickets/P2-125-soundness-local-function-call-is-an-unverified-callee.md)).
+The rest cannot yet:
 
 | What is needed | Today |
 |---|---|

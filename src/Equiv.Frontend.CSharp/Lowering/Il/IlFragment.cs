@@ -50,14 +50,11 @@ internal sealed class IlFragment(IlSymbols symbols, Compilation compilation, Run
         Output text = new();
         text.Write("il:");
         instruction.WriteTo(text, new ILAstWritingOptions());
-        if (text.NamesGeneratedCode || !tree.All(Stable))
-        {
-            return null;
-        }
-
-        return new Fragment(
-            System.Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()))),
-            [.. tree.OfType<LdLoc>().Select(static l => l.Variable).Distinct()]);
+        return text.NamesGeneratedCode || !tree.All(Stable)
+            ? null
+            : new Fragment(
+                System.Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()))),
+                [.. tree.OfType<LdLoc>().Select(static l => l.Variable).Distinct()]);
     }
 
     /// <summary>
