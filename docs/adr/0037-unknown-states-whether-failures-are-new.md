@@ -1,6 +1,6 @@
 # ADR 0037: An Unknown says whether the modern side can fail where the legacy side does not
 
-Status: accepted (2026-09-24)
+Status: accepted (2026-09-24); superseded in part by 0049 (a `timeout` pair is queried in thorough mode)
 
 ## Context
 An Unknown pair claims nothing beyond its residual claim (ADR 0029). The regression migrations

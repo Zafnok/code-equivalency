@@ -1,6 +1,6 @@
 # ADR 0039: A pair that IOperation leaves with an unshared opaque is lowered from ILAst instead; IOperation stays primary
 
-Status: accepted (2026-09-28). Proposed by P1-012 the same day. Acceptance added three things to the
+Status: accepted (2026-09-28); superseded in part by 0049 (in thorough mode the IL bodies are verified as a later pass, on by default). Proposed by P1-012 the same day. Acceptance added three things to the
 proposed text: identities resolved through the loaded compilation (so the lowering lives in
 `Equiv.Frontend.CSharp`), off by default until P1-018, and an IL mode of M0-012's gate. The per-pair, both-sides, IOperation-primary decision is unchanged.
 
