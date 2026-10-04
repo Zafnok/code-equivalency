@@ -96,6 +96,7 @@ public sealed class ConfigEqualityTests
             { baseline, baseline with { LegacyRuntime = TargetRuntime.Parse("net48") } },
             { baseline, baseline with { ModernRuntime = TargetRuntime.Parse("net8.0") } },
             { baseline, baseline with { IlFallback = true } },
+            { baseline, baseline with { Cvc5Path = "tools/cvc5.exe" } },
         };
     }
 

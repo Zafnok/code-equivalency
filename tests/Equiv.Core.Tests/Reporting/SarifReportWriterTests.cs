@@ -688,6 +688,55 @@ public sealed class SarifReportWriterTests
         Assert.Equal("loop counts differ", trace[1]["detail"]);
     }
 
+    /// <summary>
+    /// Ticket P1-033 criterion 4 (ADR 0050 decision 4): a result one of whose queries a second solver answered has
+    /// <c>proofMethod</c> suffixed <c>+cvc5</c>, and the <c>ladderTrace</c> step of that rung names the solver and its version.
+    /// </summary>
+    [Fact]
+    public Task ASecondSolversAnswer_SuffixesTheProofMethodAndNamesTheSolverInItsStep()
+    {
+        SolverUse cvc5 = new("cvc5", "1.4.1");
+        LadderStep answered = new(ProofMethod.Bounded, RungOutcome.Proved, "no loop or self-call; every input checked") { Solver = cvc5 };
+        VerificationResult equivalent = Fixtures.Result(new Equivalent(ProofMethod.Bounded) { Ladder = [answered] });
+
+        Result result = SarifReportWriter.Write([equivalent]).Runs[0].Results[0];
+
+        Assert.Equal("bounded+cvc5", result.GetProperty<string>("proofMethod"));
+        Dictionary<string, string> step = Assert.Single(result.GetProperty<List<Dictionary<string, string>>>("ladderTrace"));
+        Assert.Equal("cvc5 1.4.1", step["solver"]);
+        Assert.Equal(["rung", "outcome", "detail", "solver"], step.Keys, StringComparer.Ordinal);
+        return VerifyJson(Serialize(equivalent));
+    }
+
+    /// <summary>A Divergent or an Unknown a second solver answered a query of names the rung and the solver too; one Z3 decided alone is named as before.</summary>
+    [Fact]
+    public void ASecondSolversAnswer_IsNamedOnEveryVerdictItTouched()
+    {
+        SolverUse cvc5 = new("cvc5", "1.4.1");
+        LadderStep refuted = new(ProofMethod.Bounded, RungOutcome.Refuted, "a divergence within 3 iterations") { Solver = cvc5 };
+        LadderStep inconclusive = new(ProofMethod.Bounded, RungOutcome.Inconclusive, "an input reaches an opaque node: old: Throw") { Solver = cvc5 };
+        LadderStep later = new(ProofMethod.KInduction, RungOutcome.Proved, "p") { Solver = cvc5 };
+        ObservedDivergence observation = new(
+            new ExecutionOutcome(new ExecutionInput(["1"]), "tr-TR", OutcomeKind.Threw, "\"E\""),
+            new ExecutionOutcome(new ExecutionInput(["1"]), "tr-TR", OutcomeKind.Returned, "1"));
+
+        Assert.Equal("bounded+cvc5", Method(new Divergent(Fixtures.Counterexample()) { Ladder = [refuted] }));
+        Assert.Equal("bounded+cvc5", Method(new Unknown(UnknownReason.Opaque, "old: Throw") { Ladder = [inconclusive] }));
+        Assert.Equal("k-induction+cvc5", Method(new Unknown(UnknownReason.Timeout, "t") { Ladder = [inconclusive with { Solver = null }, later] }));
+        Assert.Equal("observed", Method(Equiv.Core.Verdicts.Divergent.Observation(observation) with { Ladder = [refuted] }));
+        Assert.Equal("k-induction+contract+cvc5", Method(new Equivalent(ProofMethod.KInduction) { ContractsUsed = [new ContractUse("N.T::Score(int)", "(= r.old r.new)", "observed-predicates")], Ladder = [inconclusive, later] }));
+        Assert.Equal("bounded+cvc5+other", Method(new Equivalent(ProofMethod.Bounded) { Ladder = [inconclusive, later with { Solver = new SolverUse("other", "2") }, refuted] }));
+        Assert.Null(Method(new Divergent(Fixtures.Counterexample()) { Ladder = [refuted with { Solver = null }] }));
+        Assert.Null(Method(new Unknown(UnknownReason.Timeout, "t") { Ladder = [inconclusive with { Solver = null }] }));
+        Assert.Null(Method(new Added { Ladder = [refuted] }));
+        Result plain = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Bounded) { Ladder = [refuted with { Solver = null }] })]).Runs[0].Results[0];
+        Assert.Equal("bounded", plain.GetProperty<string>("proofMethod"));
+        Assert.Equal(["rung", "outcome", "detail"], Assert.Single(plain.GetProperty<List<Dictionary<string, string>>>("ladderTrace")).Keys, StringComparer.Ordinal);
+
+        static string? Method(Verdict verdict) =>
+            SarifReportWriter.Write([Fixtures.Result(verdict)]).Runs[0].Results[0].TryGetProperty("proofMethod", out string? method) ? method : null;
+    }
+
     [Fact]
     public void ResultWithoutALadderHasNoLadderTrace()
     {
