@@ -867,7 +867,8 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
 - P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
   gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
 - P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model
-  counting over the parameter bits. Needs P2-047.
+  counting over the parameter bits. Needs P2-047. Done 2026-10-04: 12 of 80 EQ002 results counted
+  (15.0%), every share 1, so no ADR (`docs/runs/2026-10-04-divergent-count-spike.md`).
 
 Not ticketed from the review's other section: exhaustive invariant enumeration, since rung 5 runs
 only after a rung 4 timeout, which the three large runs do not report. Deeper bounds and larger
@@ -895,6 +896,7 @@ are unchanged; a later census that shows more changed pairs can move any of thes
 - SonarQube: confirm `sonar.sarifReportPaths` ingestion of EQ* rules; GitHub Code Scanning upload step in `action.yml`.
 - `--il-fallback` on by default (ADR 0039, P1-018): measured on Git Extensions 2026-10-01. Of 1,294 changed pairs it lowers 116 from IL and moves 21 (1.6%) from Unknown(opaque) to Equivalent and 21 to Divergent, none reproduced by replay, with no Equivalent regressed, one crash (P2-078) and one Divergent turned Unknown(timeout). A hand check found 20 of the 21 Equivalents unproved: the IL lowering never reads a lambda's body (soundness, P2-079), so the sound gain is 1 pair (0.1%) (`docs/runs/2026-10-01-il-fallback-verdicts.md`). Under ADR 0049 that yield places it in thorough mode only, as a later pass that cannot turn a decided result into an Unknown or a crash (P1-032); quick leaves it off.
 - Congruence modulo verified rewrites (equality saturation, P1-011): measured on Git Extensions 2026-09-28, 0 of 1,195 changed pairs (0.0%) close under the rule set, so there is nothing to schedule until a rule set closes a pair (`docs/runs/2026-09-28-egraph-spike.md`).
+- The share of inputs a Divergent diverges on, by approximate model counting (P1-027): measured on the three large runs 2026-10-04. Of 80 EQ002 results 18 (22.5%) have a countable parameter space and 12 (15.0%) are counted in time, below the ticket's half; all 12 have share 1, 11 of them with no source parameter. 55 of the 62 others pass a `string` or an object to a call. Not scheduled (`docs/runs/2026-10-04-divergent-count-spike.md`).
 - Trace-guided loop alignment (P1-024; semantic program alignment, Churchill et al., PLDI 2019): measured by P1-023 on the three large runs 2026-10-04. Of their 89 `unaligned-loop` Unknowns, 0 have an unrolled, batched or peeled pairing of iterations that 200 runs of both sides show (0.0% of 2,246 changed pairs), under the ticket's bar of 10; P1-024 is closed unbuilt. 47 of the 89 (2.1% of changed pairs) run in lockstep with equal calls and outcomes on every run and fail rung 2's step or base obligation, so what they lack is a stronger header relation, not a schedule (`docs/runs/2026-10-04-loop-alignment-spike.md`).
 
 From the 2026-09-24 second-oracle review, unticketed until a result above asks for them:
