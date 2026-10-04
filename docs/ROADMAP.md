@@ -682,7 +682,7 @@ Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
   lambdas prove Equivalent (repro in the ticket). 20 of P1-018's 21 new Equivalents rest on it.
   Done: a fragment that names generated code has no fingerprint, and of the 20 pairs none is
   Equivalent from IL (`docs/runs/2026-10-03-il-fragment-soundness.md`). Needs P1-016, P1-017.
-- P2-125 (M) Soundness: a call of a local function is an ordinary call of a callee no pair verifies,
+- P2-127 (M) Soundness: a call of a local function is an ordinary call of a callee no pair verifies,
   so two members that differ only inside a local function prove Equivalent in a default run (repro in
   the ticket; found by P2-079's closure pairs). Needs P2-079.
 - P2-078 (M) Ill-sorted IR from the IL lowering no longer crashes the encoder: one Git Extensions pair

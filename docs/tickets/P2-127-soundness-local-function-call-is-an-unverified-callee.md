@@ -1,4 +1,4 @@
-# P2-125 Soundness: a call of a local function is an ordinary call of a callee nothing verifies, so two different local functions prove Equivalent
+# P2-127 Soundness: a call of a local function is an ordinary call of a callee nothing verifies, so two different local functions prove Equivalent
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
