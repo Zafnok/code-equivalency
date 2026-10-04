@@ -307,7 +307,32 @@ internal sealed class BoundSerialiser : OperationWalker
         _ => Convert.ToString(value, CultureInfo.InvariantCulture)!,
     };
 
-    private static string Quote(string value) => $"\"{JsonEncodedText.Encode(value)}\"";
+    /// <summary>
+    /// <paramref name="value"/> as a JSON string. JSON text cannot be made from a string that is not well-formed UTF-16,
+    /// and the regex source generator writes character sets that hold lone surrogates, so each lone surrogate is written
+    /// as its own <c>\uXXXX</c> escape between the well-formed runs: every code unit survives, and two different
+    /// strings never share a text (ticket P2-116).
+    /// </summary>
+    private static string Quote(string value)
+    {
+        StringBuilder quoted = new("\"");
+        int start = 0;
+        for (int i = 0; i < value.Length; i++)
+        {
+            if (char.IsSurrogatePair(value, i))
+            {
+                i++;
+            }
+            else if (char.IsSurrogate(value[i]))
+            {
+                quoted.Append(JsonEncodedText.Encode(value.AsSpan(start, i - start)))
+                    .Append(CultureInfo.InvariantCulture, $"\\u{(int)value[i]:X4}");
+                start = i + 1;
+            }
+        }
+
+        return quoted.Append(JsonEncodedText.Encode(value.AsSpan(start))).Append('"').ToString();
+    }
 
     private static bool IsFloatingPoint(ITypeSymbol? type) => type is not null && FloatingPoint.Contains(Underlying(type).SpecialType);
 

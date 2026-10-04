@@ -83,6 +83,29 @@ public sealed class BoundSerialiserTests
     public void ARuntimeChangedMemberIsSensitiveOnlyInsideTheInterval(string member, string legacy, string modern, bool expected) =>
         Assert.Equal(expected, Fingerprint(Compile(member), Runtimes.Between(legacy, modern)).RuntimeSensitive);
 
+    /// <summary>
+    /// Ticket P2-116 criterion 2: a string constant that is not well-formed UTF-16 (the regex source generator writes
+    /// character sets that way) is fingerprinted code unit by code unit, so the same constant has the same fingerprint
+    /// and a constant that differs only in a lone surrogate, or holds the pair where the other holds two lone ones, has
+    /// another.
+    /// </summary>
+    [Theory]
+    [InlineData(@"\uD800\uDBFF", @"\uD800\uDBFF", true)]
+    [InlineData(@"\uD800\uDBFF", @"\uD800\uDBFE", false)]
+    [InlineData(@"a\uD800", @"a\uD801", false)]
+    [InlineData(@"\uDC00b", @"\uDC01b", false)]
+    [InlineData(@"\uD800", @"�", false)]
+    [InlineData(@"😀\uD800", @"😀\uD800", true)]
+    [InlineData(@"😀\uD800", @"😁\uD800", false)]
+    [InlineData(@"\uDE00\uD83D", @"😀", false)]
+    public void AConstantHoldingALoneSurrogateIsFingerprintedByItsCodeUnits(string first, string second, bool same)
+    {
+        static string Sha(string literal) =>
+            Fingerprint(Compile($"string M() => \"{literal}\";"), Runtimes.Between("net10.0", "net10.0")).Sha256Hex;
+
+        Assert.Equal(same, string.Equals(Sha(first), Sha(second), StringComparison.Ordinal));
+    }
+
     private static BodyFingerprint Fingerprint(Compilation compilation, SideRuntime runtime) =>
         BodyFingerprinter.Compute(
             compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single(), compilation, EquivConfig.Default, legacy: false, runtime)!;
