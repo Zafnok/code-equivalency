@@ -1,5 +1,5 @@
 # P1-021 Measurement: what failure refinement answers today, and what it would answer on `timeout` Unknowns
-Status: in-progress
+Status: done (PR #393)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-013, P2-050
@@ -65,8 +65,8 @@ User assertions (`Debug.Assert`, contract calls) as checked properties. Changing
   and does not by itself leave a sound gain unbuilt. The measured line is on P1-021's own ROADMAP
   entry, not in the post-MVP list, since the work is scheduled.
 - Decision: the gitextensions-8522 run is P2-076's "after, again" run (164 `timeout` Unknowns). It is
-  the one that makes the ticket's 400 with the other two runs' 98 and 138; the newer `--il-fallback`
-  run has 155 and is not a default-config run.
+  the one that makes the ticket's 400 with the other two runs' 98 and 138; the newer
+  `20261003-2219-full-il-fallback` run has 155.
 - Decision: the share criterion 4 tests is over the pairs still a `timeout` at this commit. Over all
   164 it is 10.4%, but 15 of those 17 pairs are now proved Equivalent by `main`, so the weaker claim
   adds nothing to them.
