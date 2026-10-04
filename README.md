@@ -91,12 +91,26 @@ verdicts it should produce.
 
 ## Where it stands
 
-As of 2026-10-03. Every number is measured on public code. Runs on `main` are in
-[docs/runs/](docs/runs/); the two version-upgrade runs are in pull request
-[Zafnok/code-equivalency#371](https://github.com/Zafnok/code-equivalency/pull/371), and ran on
-`main`'s current engine.
+Every number is measured on public code, and every row says when. The runs are in
+[docs/runs/](docs/runs/). A row changes only when a new run measures a different value.
 
-**The three large runs on the current engine**, each a real pull request:
+<!-- scoreboard:begin (edit only through .claude/skills/equiv-scoreboard) -->
+| Over 3 large real pairs, 42,064 matched procedure pairs | Today | Measured |
+|---|---|---|
+| Proved Equivalent | 95.4% (40,122 of 42,064) | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
+| Equivalent by congruence (no solver) | 94.6% (39,812 of 42,064) | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
+| Changed pairs the solver proves | 13.8% (310 of 2,246) | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
+| Unknown | 3.5% of pairs (1,471), 65.5% of changed pairs. Opaque construct 733, solver budget 400, abstraction 246, unaligned loop 89, recursion 3 | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
+| Divergent | 1.1% of pairs (465), 20.7% of changed pairs | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
+| Divergent precision (a Divergent is a real behaviour change) | Migration 3.8% (2 of 52). Upgrades 3.8% (5 of 131). Cleanups 0% (0 of 51) | [2026-09-30](docs/runs/2026-09-30-divergent-audit.md), [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md), [2026-10-02](docs/runs/2026-10-02-cleanup-verdict.md) |
+| Left for a reviewer (Unknown and Divergent) | 4.6% of pairs (1,936) | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
+| Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. 1 open soundness ticket ([P2-127](docs/tickets/P2-127-soundness-local-function-call-is-an-unverified-callee.md)) | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
+| Large pairs that run to a result | 5 of 5 | 2026-10-03 ([Duplicati](docs/tickets/done/P2-082-pair-weighting-crash-ends-the-run.md), [OpenRA](docs/tickets/done/P2-125-tuple-array-sort-mismatch-on-element-names.md)) |
+| Run time, one large pair | mean 1h36m (1h11m to 2h05m), one pair at a time | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
+| Repeatability | 99.94% (13,734 of 13,742 results equal between two runs) | [2026-10-02](docs/runs/2026-10-02-pair-time.md) |
+<!-- scoreboard:end -->
+
+**The three large runs behind those rows**, each a real pull request:
 
 | | Git Extensions, .NET Framework 4.8 to .NET 5 | Git Extensions, .NET 5 to .NET 6 | Jellyfin, .NET 8 to .NET 9 | All three |
 |---|---|---|---|---|
@@ -125,7 +139,7 @@ Other pairs, for range:
 | Three agent migrations of small repositories (median) | 98.5% | too few changed pairs to say |
 | Three "no functional change" cleanup pull requests (Git Extensions, PowerShell) | 97.6% to 99.6% | 9.9% (57 of 575) |
 | The collection-expression cleanup, on the branch of [Zafnok/code-equivalency#368](https://github.com/Zafnok/code-equivalency/pull/368) | 97.6% | 45.6% (160 of 351), from 2.0% on `main` |
-| Duplicati and OpenRA migrations (69,000 and 131,000 lines) | 85.0% and 95.8% | no verdicts: both runs crashed before the first one |
+| Duplicati and OpenRA migrations (69,000 and 131,000 lines) | 85.0% and 95.8% | both now run to a result (3h26m and 1h10m); their rates are not summarised yet |
 
 **Run time.** Pairs are verified one at a time, and the time follows the number of changed pairs,
 not the number of lines. The mean of the three runs above is 1h36m (the two upgrades shared one
@@ -154,7 +168,7 @@ The rest cannot yet:
 |---|---|
 | A Divergent is usually a real behaviour change | Of those audited and decided: 2 of 52 on the migration (3.8%), 5 of 131 on the upgrades (3.8%), 0 of 51 on cleanups. Counterexample results alone do better on the upgrades (5 of 8). One cause, runtime rules with no version they changed in, is 120 of the upgrades' 126 false positives and is not fixed. Three other causes have fixes in open pull requests; one of them takes the collection-expression cleanup from 25 Divergent to 3 |
 | The solver decides most changed pairs | 13.8% proved on the three large runs, 9.9% on cleanups |
-| Every large pair completes | Three of five. The crash that stops Duplicati and OpenRA is not fixed. Each completed run still loses one to three pairs to a lowering crash |
+| Every large pair completes | Five of five. Duplicati and OpenRA now finish with no crashed pair. The three runs in the table above each lost one to three pairs to a lowering crash, fixed since and not yet run again |
 | The same run gives the same results | 13,734 of 13,742 results agree between two runs |
 | A run fits in a CI job | 1h11m to 2h05m, one pair at a time. Verifying pairs in parallel is not built |
 

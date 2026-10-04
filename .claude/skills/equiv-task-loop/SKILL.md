@@ -60,6 +60,9 @@ description: The only way to implement a ticket in this repo. Use whenever asked
   Test helpers live in the test project that uses them. The one exception is
   `tests/Equiv.TestSupport` (created in M1-002): IR generators and fixture loaders that
   three test projects need. Nothing else goes there without an ADR.
+- Do not edit the README's scoreboard (the table between the `scoreboard` markers) or its "Where it
+  stands" numbers because a fix should move them. Only a PR that adds a measurement under
+  `docs/runs/` does, through `.claude/skills/equiv-scoreboard`, and only for rows whose value changed.
 - No `Console.WriteLine` outside `Equiv.Cli`. Use the abstraction the ticket names.
 - If the toolchain misbehaves for more than about 15 minutes, record what you saw in
   the ticket's Notes and stop.

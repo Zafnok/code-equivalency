@@ -336,6 +336,10 @@ Write `docs/runs/<yyyy-mm-dd>-<mode>-verdict.md`:
   `docs/runs/*-divergent-audit.md` and citing it. Reported only; it sets no threshold (P2-047);
 - one line: **continue**, **re-scope** or **stop**.
 
+Then apply `.claude/skills/equiv-scoreboard`: recompute the README's scoreboard rows from the new
+summaries, rewrite only the rows whose value changed, and leave `README.md` out of the diff when
+none did.
+
 Then do what the ticket in hand says (M3-022: reorder M4 and write `P2` tickets; M4-007: write
 tickets for findings). Show the user the verdict line. A **stop** or **re-scope** is theirs to
 act on, through a new ADR. Never act on it yourself.
