@@ -650,8 +650,8 @@ Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
 - P2-079 (M) Soundness, first: the IL lowering shares an opaque that names a lambda or local function
   without its body, and lowers a runtime-changed method group as a plain constant, so two different
   lambdas prove Equivalent (repro in the ticket). 20 of P1-018's 21 new Equivalents rest on it.
-  Until it lands, no `--il-fallback` verdict on a method that holds a lambda is to be relied on.
-  Needs P1-016, P1-017.
+  Done: a fragment that names generated code has no fingerprint, and of the 20 pairs none is
+  Equivalent from IL (`docs/runs/2026-10-03-il-fragment-soundness.md`). Needs P1-016, P1-017.
 - P2-125 (M) Soundness: a call of a local function is an ordinary call of a callee no pair verifies,
   so two members that differ only inside a local function prove Equivalent in a default run (repro in
   the ticket; found by P2-079's closure pairs). Needs P2-079.

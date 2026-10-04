@@ -152,3 +152,10 @@ Turning `--il-fallback` on by default. Lowering lambdas (P2-067). The crash in P
 - Deviation: the Files list has no `IlLowerer.cs` (criterion 3's check is in `Typed`, beside `Heap.cs`'s `Function`),
   `PairSyntax.cs` (the generator's renderer needs a local function), `PairGenLoweringTests.cs`, `PairGenTests.cs`,
   README, ROADMAP or the P2-125 ticket. `IlKeys.cs` is unchanged: no key changed.
+- Criterion 6 (`docs/runs/2026-10-03-il-fragment-soundness.md`, one `full --il-fallback` run at de407df, 1h53m):
+  none of the 20 pairs is read from IL any more. Eight are Unknown(opaque: `DelegateCreation`), two are
+  Unknown(abstraction) on `delegate:` functions that differ, and ten are Equivalent by congruence of their IOperation
+  bodies, whose fingerprint reads every lambda's and local function's body. So none needs the explanation the
+  criterion asks of a pair still Equivalent from IL. Pairs lowered from IL fell from 116 to 45, and Equivalents from
+  IL from 21 to 1, the pair the hand check found sound. 58 commits separate the two runs, so the drop is not this
+  ticket's alone. The run exits 5 on P2-078's pair, as P1-018's did.
