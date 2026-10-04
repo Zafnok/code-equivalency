@@ -806,7 +806,7 @@ resolved were real divergences the abstraction hid. New dependencies and ADR cha
 for this work where the change is in proportion to what it buys.
 
 Order: P1-028 and P1-029 (coverage, the first priority; no dependency on the rest), then P1-022,
-then P1-023 → P1-024, with P1-020 and P1-021 alongside. Then P1-030 and P1-031. The three spikes
+then P1-023 (which closed P1-024), with P1-020 and P1-021 alongside. Then P1-030 and P1-031. The three spikes
 P1-025 → P1-026 and P1-027 come last and each decides its own future.
 
 - P1-028 (M) Measurement: the opaque reasons with no owner, counted over the three large runs
@@ -879,6 +879,7 @@ are unchanged; a later census that shows more changed pairs can move any of thes
 - SonarQube: confirm `sonar.sarifReportPaths` ingestion of EQ* rules; GitHub Code Scanning upload step in `action.yml`.
 - `--il-fallback` on by default (ADR 0039, P1-018): measured on Git Extensions 2026-10-01. Of 1,294 changed pairs it lowers 116 from IL and moves 21 (1.6%) from Unknown(opaque) to Equivalent and 21 to Divergent, none reproduced by replay; below ADR 0028's 5% bar, with no Equivalent regressed, one crash (P2-078) and one Divergent turned Unknown(timeout). A hand check found 20 of the 21 Equivalents unproved: the IL lowering never reads a lambda's body (soundness, P2-079), so the sound gain is 1 pair (0.1%). The option stays, off by default (`docs/runs/2026-10-01-il-fallback-verdicts.md`).
 - Congruence modulo verified rewrites (equality saturation, P1-011): measured on Git Extensions 2026-09-28, 0 of 1,195 changed pairs (0.0%) close under the rule set, below ADR 0028's 5% bar; not scheduled (`docs/runs/2026-09-28-egraph-spike.md`).
+- Trace-guided loop alignment (P1-024; semantic program alignment, Churchill et al., PLDI 2019): measured by P1-023 on the three large runs 2026-10-04. Of their 89 `unaligned-loop` Unknowns, 0 have an unrolled, batched or peeled pairing of iterations that 200 runs of both sides show (0.0% of 2,246 changed pairs), under the ticket's bar of 10; P1-024 is closed unbuilt. 47 of the 89 (2.1% of changed pairs) run in lockstep with equal calls and outcomes on every run and fail rung 2's step or base obligation, so what they lack is a stronger header relation, not a schedule (`docs/runs/2026-10-04-loop-alignment-spike.md`).
 
 From the 2026-09-24 second-oracle review, unticketed until a result above asks for them:
 - Shadowing the residual in staging or production: generate a Scientist.NET experiment, or a
