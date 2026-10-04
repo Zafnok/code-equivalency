@@ -1,5 +1,5 @@
 # P1-034 Spike: does a call trace encoded without sequences and datatypes make the hard queries easier?
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-025
