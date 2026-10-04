@@ -1,5 +1,5 @@
 # P1-022 Conditional equivalence: a pair that is not Equivalent says under which inputs it is
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-013, M3-025

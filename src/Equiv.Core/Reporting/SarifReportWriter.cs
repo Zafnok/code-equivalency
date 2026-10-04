@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Globalization;
 
 using Equiv.Core.Execution;
@@ -251,7 +251,7 @@ public static class SarifReportWriter
     }
 
     /// <summary>
-    /// The verdict's payload as result properties: a Divergent's counterexample (<c>model</c>), an Equivalent's
+    /// The verdict's payload as result properties: a Divergent's counterexample (<c>model</c>) and <c>agreesWhen</c>, an Equivalent's
     /// <c>proofMethod</c> and, for a bounded proof over a loop, <c>boundedBy</c>, for a rung 4 or 5 proof the coupling
     /// <c>invariant</c> and for rung 5 its <c>proposedBy</c> (ticket P1-002; ADR 0036), the <c>+contract</c> suffix and
     /// <c>contractsUsed</c> of a proof that used callee contracts (ticket P1-010), an Unknown's <c>unknownReason</c> and
@@ -269,6 +269,7 @@ public static class SarifReportWriter
                 break;
             case Divergent divergent:
                 sarifResult.SetProperty("model", CounterexampleText.Dump(divergent.Counterexample));
+                SetAgreesWhenProperty(sarifResult, divergent);
                 break;
             case Equivalent equivalent:
                 // Ticket P1-010 (ADR 0036 decision 2): a proof that used callee contracts says so in its method and lists them.
@@ -316,8 +317,28 @@ public static class SarifReportWriter
     }
 
     /// <summary>
+    /// ADR 0048 (ticket P1-022): the input condition under which a Divergent or an Unknown pair is proved Equivalent, as
+    /// <c>agreesWhen</c>: <c>smt</c>, <c>text</c>, <c>proposedBy</c> and <c>proofMethod</c>. Left out when the backend
+    /// admitted none. Neither the rule id nor the fingerprint reads it.
+    /// </summary>
+    private static void SetAgreesWhenProperty(Result sarifResult, Verdict verdict)
+    {
+        if (ConditionSearch.Of(verdict)?.AgreesWhen is { } agreesWhen)
+        {
+            sarifResult.SetProperty("agreesWhen", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["smt"] = agreesWhen.Smt,
+                ["text"] = agreesWhen.Text,
+                ["proposedBy"] = AgreesWhen.ProposedBy,
+                ["proofMethod"] = Name(AgreesWhen.Method),
+            });
+        }
+    }
+
+    /// <summary>
     /// An Unknown's <c>unknownReason</c> and <c>scope</c>, a line-scoped one's <c>residualClaim</c> (ADR 0029), its
-    /// abstraction properties (ADR 0026) and, when the backend ran ADR 0037's queries, <c>failureRefinement</c> (ticket P1-013).
+    /// abstraction properties (ADR 0026), when the backend ran ADR 0037's queries, <c>failureRefinement</c> (ticket P1-013), and
+    /// its <c>agreesWhen</c> (ADR 0048).
     /// </summary>
     private static void SetUnknownProperties(Result sarifResult, Unknown unknown)
     {
@@ -337,6 +358,8 @@ public static class SarifReportWriter
                 ["removedFailures"] = RefinementProperty(refinement.RemovedFailures),
             });
         }
+
+        SetAgreesWhenProperty(sarifResult, unknown);
     }
 
     /// <summary>
@@ -573,8 +596,18 @@ public static class SarifReportWriter
     /// <paramref name="runtimes"/> (ADR 0040; ticket P2-055). An Equivalent that assumed a
     /// callee pair this run did not prove says so in one more sentence (ADR 0019).
     /// </summary>
-    private static string MessageText(VerificationResult result, RuntimeChange? runtimeChange, RuntimeInterval runtimes) =>
-        result.Testing is { NotConstructible: null } testing ? WithTestedSentence(VerdictText(result, runtimeChange, runtimes), testing) : VerdictText(result, runtimeChange, runtimes);
+    private static string MessageText(VerificationResult result, RuntimeChange? runtimeChange, RuntimeInterval runtimes)
+    {
+        string text = WithAgreesWhenSentence(VerdictText(result, runtimeChange, runtimes), ConditionSearch.Of(result.Verdict)?.AgreesWhen);
+        return result.Testing is { NotConstructible: null } testing ? WithTestedSentence(text, testing) : text;
+    }
+
+    /// <summary>
+    /// Ticket P1-022 criteria 2 and 3: a result with an admitted input condition says <c>Equivalent when &lt;text&gt;.</c> after
+    /// its verdict's text, and one without is unchanged. A tested Unknown's sentence (ticket P1-008) still comes last.
+    /// </summary>
+    private static string WithAgreesWhenSentence(string text, AgreesWhen? agreesWhen) =>
+        agreesWhen is null ? text : $"{text}{(text.EndsWith('.') ? string.Empty : ".")} Equivalent when {agreesWhen.Text}.";
 
     /// <summary>
     /// Ticket P1-008 criterion 3: a tested Unknown's message ends with one sentence stating the input count and the

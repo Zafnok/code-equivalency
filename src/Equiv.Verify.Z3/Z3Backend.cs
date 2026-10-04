@@ -1,10 +1,11 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Globalization;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
+using Equiv.Verify.Z3.Conditions;
 using Equiv.Verify.Z3.Contracts;
 using Equiv.Verify.Z3.Ladder;
 
@@ -24,7 +25,9 @@ namespace Equiv.Verify.Z3;
 /// query gets its own <see cref="Context"/>, disposed on every path. A solver <c>unknown</c> is
 /// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason and the limit it hit, the resource limit
 /// or the wall-clock backstop (<see cref="Limit"/>; ticket P2-050), or neither when the solver gave up for another reason. Any other
-/// Unknown carries <see cref="FailureRefinementQuery"/>'s two answers (ADR 0037).
+/// Unknown carries <see cref="FailureRefinementQuery"/>'s two answers (ADR 0037). A Divergent, and an Unknown whose
+/// divergence rests on an abstraction, carries <see cref="ConditionQuery"/>'s input condition when its pair has no loop
+/// (ADR 0048).
 /// </summary>
 public sealed class Z3Backend : IVerificationBackend
 {
@@ -77,9 +80,19 @@ public sealed class Z3Backend : IVerificationBackend
 
         // ADR 0037 (ticket P1-013): an Unknown other than a timeout says whether either side can fail where the other does
         // not. The verdict stays as it is. An unbound pair never reaches the backend (ADR 0029 decision 2).
-        return verdict is Unknown { Reason: not UnknownReason.Timeout } unknown
+        Verdict refined = verdict is Unknown { Reason: not UnknownReason.Timeout } unknown
             ? unknown with { FailureRefinement = new FailureRefinementQuery(createContext, options).Run(oldBody, newBody, unknown.Ladder[0].Outcome != RungOutcome.NotApplicable) }
             : verdict;
+
+        // ADR 0048 (ticket P1-022): a divergence the solver found, real or resting on an abstraction, says under which
+        // inputs the pair is proved Equivalent. The verdict stays as it is.
+        ConditionQuery conditions = new(createContext, options);
+        return refined switch
+        {
+            Divergent divergent => divergent with { Conditions = conditions.Run(oldBody, newBody, divergent.Counterexample) },
+            Unknown { Reason: UnknownReason.Abstraction } abstraction => abstraction with { Conditions = conditions.Run(oldBody, newBody, abstraction.Candidate) },
+            _ => refined,
+        };
     }
 
     /// <summary>

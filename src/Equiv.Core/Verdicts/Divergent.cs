@@ -16,6 +16,12 @@ public sealed record Divergent(Counterexample Counterexample) : Verdict
 
     public ObservedDivergence? Observed { get; init; }
 
+    /// <summary>
+    /// The backend's search for an input condition under which the pair is Equivalent (ADR 0048; ticket P1-022); null for
+    /// a Divergent it did not search, such as one on a looping pair or an observed one. Not part of the fingerprint.
+    /// </summary>
+    public ConditionSearch? Conditions { get; init; }
+
     /// <summary>The divergence <paramref name="observed"/> showed on the real runtimes.</summary>
     public static Divergent Observation(ObservedDivergence observed) => new(Unmodelled) { Observed = observed };
 }
