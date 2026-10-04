@@ -835,9 +835,15 @@ P1-025 → P1-026 and P1-027 come last and each decides its own future.
 - P1-031 (L) Abstraction refinement, part 2: a rung 1 query that times out is asked again with
   multiplication, division and remainder of two unknowns as shared functions, refined by point facts
   from spurious models (`+abstracted`). Needs P2-050, M3-016.
-- P1-025 (M) Spike: do Bitwuzla, cvc5, Eldarica or Golem decide the queries Z3 gives up on. It writes
-  the ADR that supersedes ADR 0005's "Z3 alone" and the ticket that adds the best of them, unless
-  none decides anything. Needs P2-050.
+- P1-025 (M) Spike: do Bitwuzla, cvc5, Eldarica or Golem decide the queries Z3 gives up on. Done:
+  cvc5 answers 59 of the 142 rung 1 queries Z3 gives up on for gitextensions-8522 (9 Divergent, 27
+  Unknown(abstraction), 4 unsatisfiable) and proves no pair; Bitwuzla reads none; no rung 4 Unknown
+  to give a Horn solver (`docs/runs/2026-10-04-solver-portfolio.md`). ADR 0050.
+- P1-033 (L) cvc5 is asked the rung 1 queries Z3 gives up on, as a process behind `ISmtSolver`, with
+  every satisfiable answer replayed (`+cvc5`; ADR 0050). Needs P1-025.
+- P1-034 (M) Spike: the call trace encoded without sequences and datatypes, asked of Z3, cvc5 and
+  Bitwuzla on the same 142 queries. It decides whether rung 1 changes its trace encoding and whether
+  Bitwuzla is worth adding. Needs P1-025.
 - P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
   gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
 - P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model
