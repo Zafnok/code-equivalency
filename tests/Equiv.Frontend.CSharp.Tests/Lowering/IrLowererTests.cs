@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 
 using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
@@ -20,7 +20,6 @@ public sealed class IrLowererTests
     [Theory]
     [InlineData("static extern int M();", "M", "no-body")]
     [InlineData("static System.Collections.Generic.IEnumerable<int> M() { yield return 1; }", "M", "iterator")]
-    [InlineData("static async System.Threading.Tasks.Task M(IAsyncDisposable d) { await using (d) { } }", "M", "await-using")]
     public void WholeBodyIsOneOpaque(string members, string name, string reason)
     {
         IrProcedure procedure = Method(members, name);

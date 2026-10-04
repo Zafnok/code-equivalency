@@ -152,25 +152,15 @@ internal sealed class IrLowerer
         IMethodSymbol method, IOperation body, ImmutableArray<ControlFlowGraph> graphs, SemanticModel model, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, Catalogue catalogue)
     {
         SourceSpan span = Span(body.Syntax);
-        // An `async` method is its synchronous body, each `await` a call (ticket M4-006). An iterator is checked first: its
-        // state machine is not modelled, whether or not it is also async. `await foreach` and `await using` are only looked
-        // for in an async method, so an async lambda in a sync one leaves it alone; their desugaring awaits calls the CFG
-        // does not show.
+        // An `async` method is its synchronous body, each `await` a call (ticket M4-006). An iterator's state machine is
+        // not modelled, whether or not it is also async.
         // The CFG turns a loop into plain branches with a back edge, which the SSA builder handles, and
-        // desugars `foreach`, `using` and `lock` into calls, conversions and a `finally` (tickets M4-001, M4-011).
+        // desugars `foreach`, `using` and `lock` into calls, conversions and a `finally` (tickets M4-001, M4-011); for
+        // `await foreach` and `await using` it wraps the `MoveNextAsync()` and `DisposeAsync()` calls in awaits (ticket P1-029).
         // A whole-body opaque points at the first offending construct, not the body (ADR 0029 decision 3).
-        (string Reason, SourceSpan Span)? wholeBody = body switch
+        if (method.IsIterator)
         {
-            _ when method.IsIterator => ("iterator", Span(body.Descendants().First(static o => o.Kind is OperationKind.YieldReturn or OperationKind.YieldBreak).Syntax)),
-            _ when method.IsAsync && body.Descendants().FirstOrDefault(static o => o is IForEachLoopOperation { IsAsynchronous: true }) is { } loop =>
-                ("await-foreach", Span(loop.Syntax)),
-            _ when method.IsAsync && body.Descendants().FirstOrDefault(static o => o is IUsingOperation { IsAsynchronous: true } or IUsingDeclarationOperation { IsAsynchronous: true }) is { } @using =>
-                ("await-using", Span(@using.Syntax)),
-            _ => null,
-        };
-        if (wholeBody is { } opaque)
-        {
-            return Opaque(method, renames, catalogue, opaque.Reason, [opaque.Span]);
+            return Opaque(method, renames, catalogue, "iterator", [Span(body.Descendants().First(static o => o.Kind is OperationKind.YieldReturn or OperationKind.YieldBreak).Syntax)]);
         }
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
@@ -810,11 +800,20 @@ internal sealed class IrLowerer
     /// caller-information parameter is the input both sides share (ADR 0046; ticket P2-098).
     /// </summary>
     private IrVar? Lower(IOperation operation, LoweringContext context) =>
-        Supplied(operation) ?? (loops.Of(operation) is { } site ? ForEach(site, context) : Operation(operation, context));
+        Supplied(operation, context) ?? (loops.Of(operation) is { } site ? ForEach(site, context) : Operation(operation, context));
 
-    /// <summary>The shared input <paramref name="operation"/> reads when it is a caller location the compiler supplied, or null.</summary>
-    private IrVar? Supplied(IOperation operation) =>
-        CallerLocation.Of(operation) is { } location ? heap.Inputs.Caller(location, operation.Type!) : null;
+    /// <summary>
+    /// The value of an argument the compiler supplied, or null for any other operation: the shared input a caller location
+    /// reads, and the constant that is the <c>default</c> passed for a parameter <c>GetAsyncEnumerator</c> leaves optional,
+    /// its cancellation token (ticket P1-029). That one's syntax is the loop, so it has no fingerprint to share as an
+    /// opaque; it is its type's one default value on both sides, element 0 of its sort, and only ever that call's argument.
+    /// </summary>
+    private IrVar? Supplied(IOperation operation, LoweringContext context) => operation switch
+    {
+        _ when CallerLocation.Of(operation) is { } location => heap.Inputs.Caller(location, operation.Type!),
+        IDefaultValueOperation { IsImplicit: true, Syntax: CommonForEachStatementSyntax } => Constant(operation.Type!, value: null, context),
+        _ => null,
+    };
 
     private IrVar? Operation(IOperation operation, LoweringContext context)
     {
@@ -2244,12 +2243,17 @@ internal sealed class IrLowerer
     /// <c>await e</c> (ticket M4-006): a call <c>await:&lt;awaiter type&gt;</c> of the awaitable, yielding the awaited value,
     /// whose <c>threw</c> flag branches as any call's. A reference-typed awaitable whose <c>GetAwaiter</c> is an instance
     /// method is null-checked first, as a <c>callvirt</c> receiver is (ticket P2-017). An await whose awaiter is not a named
-    /// type, a dynamic one or a type parameter, is opaque with reason <c>Await</c>.
+    /// type, a dynamic one or a type parameter, is opaque with reason <c>Await</c>. The await the control flow graph makes of
+    /// an <c>await using</c>'s <c>DisposeAsync()</c> or an <c>await foreach</c>'s <c>MoveNextAsync()</c> (ticket P1-029) has
+    /// no await expression to ask the semantic model about: its awaiter is the result of the awaited type's own parameterless
+    /// <c>GetAwaiter</c>, and one found only as an extension is opaque with reason <c>Await</c>.
     /// </summary>
     private IrVar? Await(IAwaitOperation awaited, LoweringContext context)
     {
-        AwaitExpressionSyntax syntax = (AwaitExpressionSyntax)awaited.Syntax;
-        if (compilation.GetSemanticModel(syntax.SyntaxTree).GetAwaitExpressionInfo(syntax).GetAwaiterMethod is not { ReturnType: INamedTypeSymbol awaiter } getAwaiter)
+        IMethodSymbol? found = awaited.Syntax is AwaitExpressionSyntax syntax
+            ? compilation.GetSemanticModel(syntax.SyntaxTree).GetAwaitExpressionInfo(syntax).GetAwaiterMethod
+            : awaited.Operation.Type!.GetMembers(WellKnownMemberNames.GetAwaiter).OfType<IMethodSymbol>().FirstOrDefault(static m => m.Parameters.IsEmpty);
+        if (found is not { ReturnType: INamedTypeSymbol awaiter } getAwaiter)
         {
             return Opaque(awaited, awaited.Kind.ToString(), context);
         }
