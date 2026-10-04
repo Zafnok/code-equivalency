@@ -112,12 +112,16 @@ public sealed class IlLowererTests
     /// The two are Equivalent under Z3 (<c>IlLoweringParityTests</c>). The second is an interpolated string: the IOperation
     /// lowering joins its parts with the two-argument <c>String.Concat</c>, one call for each part after the first (ticket
     /// P2-086), and the compiler emits one call of the three-argument overload. That pair is one of
-    /// <c>IlLoweringParityTests</c>' known differences.
+    /// <c>IlLoweringParityTests</c>' known differences. The last two are a call on a string literal: the IOperation
+    /// lowering null-checks the literal receiver, a path that ends before any call, and the IL lowering does not (ticket
+    /// P2-126). They are known differences of <c>IlLoweringParityTests</c> too.
     /// </summary>
     private static readonly string[] KnownCalleeDifferences =
     [
         "same-runtime-cleanup/modern Equiv.Samples.SameRuntimeCleanup.Report::Rank(int)",
         "cleanup-modern-syntax/modern Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)",
+        "lone-surrogate-constant/legacy Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)",
+        "lone-surrogate-constant/modern Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)",
     ];
 
     /// <summary>The Design's pitfall: the instruction's sign decides the division, not its operands' C# types.</summary>

@@ -470,6 +470,22 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-116 criterion 1: a method whose string constant holds two lone surrogates, the same file on both sides,
+    /// lowers with no notification and is Equivalent by congruence.
+    /// </summary>
+    [Fact]
+    public void LoneSurrogateConstant_LowersWithNoNotificationAndIsCongruent()
+    {
+        SampleRun run = RunSample("lone-surrogate-constant");
+        Result find = Assert.Single(run.Log.Runs[0].Results);
+
+        Assert.Equal("EQ001", find.RuleId);
+        Assert.Equal("congruence", find.GetProperty<string>("proofMethod"));
+        Assert.Empty(run.Log.Runs[0].Invocations?.SelectMany(static i => i.ToolExecutionNotifications ?? []) ?? []);
+        Assert.Equal(ExitCodes.Success, run.ExitCode);
+    }
+
+    /// <summary>
     /// Ticket P2-064 criterion 5: the three methods the same API swap was made in share one review group, which ranks above
     /// the group of the method that changed on its own. The checked-in snapshot is the whole run.
     /// </summary>

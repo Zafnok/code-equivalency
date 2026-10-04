@@ -1,5 +1,5 @@
 # P2-116 A string constant holding a lone surrogate no longer crashes lowering
-Status: todo
+Status: done (PR #377)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-066
@@ -40,3 +40,19 @@ Lowering the generated regex code any further than it lowers today.
 
 ## Notes
 - Found by P2-066: 3 on `jellyfin-13023`, in its census and in its `full` run.
+- The writer was `BoundSerialiser.Quote` (the bound fingerprint, ADR 0024): `JsonEncodedText.Encode` throws on a
+  string that is not well-formed UTF-16. It is the only JSON writer a constant reaches; the census and the SARIF log
+  go through Sarif.Sdk (Newtonsoft), which writes a lone surrogate as it is.
+- Decision: keep `JsonEncodedText` for the well-formed runs and write each lone surrogate as its own `\uXXXX` escape
+  between them, rather than replace the encoder. A well-formed constant keeps the text, and so the fingerprint, it
+  had, and no `expected.sarif.json` changes. The text decodes back to the code units, so two different constants
+  never share one.
+- Decision: the sample is `samples/lone-surrogate-constant`, the ticket's one method in a class, net48 against net10.
+- Locally, `webapi-basic` and `version-bump` wrote no SARIF in this worktree (they need a package restore that the
+  targeted test run does not do); not checked without this change, so CI is the check for those two. The other 24
+  snapshots were unchanged.
+- CI found what the local run did not: `Find` is the first sample method that calls a member on a string literal,
+  and the two lowerings differ there. The IOperation lowering null-checks the literal receiver through
+  `null.System.String`; the IL lowering does not. Both sides of a pair get the same check, so the pair is still
+  congruent. It is a known difference in `IlLowererTests.CallIdentitiesMatchTheOperationLowering` and
+  `IlLoweringParityTests`, owned by P2-126 (out of scope here: this ticket lowers nothing further).

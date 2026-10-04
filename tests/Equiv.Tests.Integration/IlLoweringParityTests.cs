@@ -44,6 +44,8 @@ public sealed class IlLoweringParityTests
         [$"cleanup-modern-syntax/modern {Positives}"] = Lambda,
         [$"cleanup-modern-syntax/modern {Join}"] = InterpolatedString,
         [$"effect-free-bcl-call/modern {Basket}"] = ListFamily,
+        [$"lone-surrogate-constant/legacy {Find}"] = LiteralReceiver,
+        [$"lone-surrogate-constant/modern {Find}"] = LiteralReceiver,
     }.ToImmutableDictionary(StringComparer.Ordinal);
 
     private const string Indent = "Equiv.Samples.BclOverloadRebinding.Paths::Indent(string)";
@@ -63,6 +65,8 @@ public sealed class IlLoweringParityTests
     private const string Join = "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)";
 
     private const string Basket = "Equiv.Samples.EffectFreeBclCall.Basket::.ctor()";
+
+    private const string Find = "Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)";
 
     /// <summary>An <c>async</c> method's IL is its state machine's kickoff, whose ILAst is opaque (out of scope; P1-012).</summary>
     private const string StateMachine = "the IL of an async method is its state machine's kickoff, which is opaque";
@@ -108,6 +112,13 @@ public sealed class IlLoweringParityTests
     /// new <c>Collection&lt;T&gt;</c>.
     /// </summary>
     private const string ListFamily = "IOperation makes a new Collection<T> converted to an interface a new List<T>; the IL keeps it a Collection<T>";
+
+    /// <summary>
+    /// The IOperation lowering null-checks the receiver of a call on a string literal, whose nullness it reads from
+    /// <c>null.System.String</c>, so the call can throw <c>NullReferenceException</c>; the IL lowering makes no null
+    /// check of a <c>ldstr</c>, which is never null (ticket P2-126).
+    /// </summary>
+    private const string LiteralReceiver = "IOperation null-checks a string literal receiver through null.System.String; the IL does not";
 
     private static readonly VerificationOptions Options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, []);
 
