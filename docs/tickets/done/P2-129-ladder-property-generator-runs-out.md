@@ -1,5 +1,5 @@
 # P2-129 A ladder property test fails at random when its generator runs out of procedures that loop and call
-Status: in-progress
+Status: done (PR #397)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
