@@ -1,5 +1,5 @@
 # P2-079 Soundness: the IL lowering shares an opaque that names a lambda without its body, so two different lambdas prove Equivalent
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-016, P1-017
@@ -102,3 +102,7 @@ Turning `--il-fallback` on by default. Lowering lambdas (P2-067). The crash in P
 - P1-017's IL gate did not catch this. Its generated pairs hold no lambda.
 - No matched pair exists for a lambda or a local function: no result in the Git Extensions SARIF names
   one. Their bodies are only ever verified as part of the method that holds them.
+- Decision: criterion 2, refuse or hash the referenced bodies -> refuse outright: a fragment whose text names a
+  compiler-generated method or type gets no fingerprint. Alternatives: hash every body reachable through generated
+  members and apply M3-015's rule to each call in them. Rule: 4 (the smaller change; reading the bodies is P2-067's
+  lowering of them, and a refusal cannot prove a pair wrongly).

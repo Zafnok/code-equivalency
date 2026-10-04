@@ -714,6 +714,31 @@ public sealed class IlLowererTests
     }
 
     /// <summary>
+    /// Ticket P2-079, acceptance criterion 3: the pointer of a method <c>runtime-changes.json</c> names is no constant on a
+    /// pair whose runtimes the change lies between. It is an opaque nothing shares, its receiver lowered first, as the
+    /// IOperation lowering leaves a runtime-sensitive delegate creation; on one runtime it is the constant any method's is.
+    /// </summary>
+    [Theory]
+    [InlineData("static Func<char, bool> M() => new Func<char, bool>(char.IsLetter);", "LdFtn", "net48", "net10.0", true)]
+    [InlineData("static Func<char, bool> M() => new Func<char, bool>(char.IsLetter);", "LdFtn", "net10.0", "net10.0", false)]
+    [InlineData("static Func<byte[], string> M(System.Text.Encoding e) => e.GetString;", "LdVirtFtn", "net48", "net10.0", true)]
+    [InlineData("static Func<byte[], string> M(System.Text.Encoding e) => e.GetString;", "LdVirtFtn", "net10.0", "net10.0", false)]
+    public void ARuntimeChangedMethodGroupIsNotAConstant(string members, string key, string legacy, string modern, bool changed)
+    {
+        Compilation compilation = Compile(members);
+        IMethodSymbol target = (IMethodSymbol)compilation.GetSemanticModel(compilation.SyntaxTrees.Single())
+            .GetSymbolInfo(compilation.SyntaxTrees.Single().GetRoot(TestContext.Current.CancellationToken).DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MemberAccessExpressionSyntax>().Single(), TestContext.Current.CancellationToken).Symbol!;
+        SideRuntime runtime = Runtimes.Between(legacy, modern);
+        IrValue pointer = TypeMapper.Constant(compilation.GetSpecialType(SpecialType.System_IntPtr), CallIdentityFactory.Of(target, compilation, RenameMap.Empty, [], runtime.Interval).Value);
+
+        IrProcedure procedure = IlLowerer.Lower(Method(compilation, "M"), compilation, runtime);
+
+        Assert.Empty(IrValidator.Validate(procedure));
+        Assert.Equal(!changed, procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>().Any(c => c.Value == pointer));
+        Assert.Equal(changed ? [(key, null)] : [], Opaques(procedure).Select(static o => (o.Reason, o.Fingerprint)));
+    }
+
+    /// <summary>
     /// A type test of an operand already of the tested type passes on every non-null operand, with no <c>istype</c> read;
     /// one of an operand that cannot be null reads only <c>istype</c>; one of unrelated types is opaque.
     /// </summary>

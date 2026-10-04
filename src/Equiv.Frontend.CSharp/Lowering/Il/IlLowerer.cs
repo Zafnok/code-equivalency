@@ -356,11 +356,19 @@ internal sealed partial class IlLowerer
         IsInst test => IsTestable(test.Type),
         CastClass test => IsTestable(test.Type),
         LdTypeToken => false,
-        LdFtn function => symbols.Method(function.Method) is not null,
-        LdVirtFtn function => symbols.Method(function.Method) is not null,
+        LdFtn function => IsNamed(function.Method),
+        LdVirtFtn function => IsNamed(function.Method),
         TryCatch region => region.Handlers.All(h => h.Filter is LdcI4 { Value: 1 } or BlockContainer && symbols.Type(h.Variable.Type) is not null),
         _ => true,
     };
+
+    /// <summary>
+    /// Whether a method's pointer is the constant of its call identity: the method resolves, and no runtime change inside
+    /// the pair's interval names it. One a change names is a different function on each side, so it is refused, as the
+    /// IOperation lowering leaves a runtime-sensitive delegate creation an opaque nothing shares (M3-015; ticket P2-079).
+    /// </summary>
+    private bool IsNamed(IMethod target) =>
+        symbols.Method(target) is { } named && !CallIdentityFactory.Of(named, compilation, RenameMap.Empty, [], runtime.Interval).RuntimeChanged;
 
     /// <summary>Whether a type test's type is one M4-005's <c>istype</c> takes: a reference type that is not a type parameter.</summary>
     private bool IsTestable(IType type) => symbols.Type(type) is { IsReferenceType: true, TypeKind: not TypeKind.TypeParameter };
