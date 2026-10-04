@@ -50,9 +50,10 @@ Each pair was lowered again by the production frontend at `a74f2e0`, with the de
   bits, searches for the number of rows that leaves a cell of fewer than 72, and the answer is the
   median of `cell * 2^rows`. One count has the pair's `timeoutMs`; each check has its
   `resourceLimit`.
-- Citation check: the title, authors and venue are confirmed from the proceedings page. The
+- Citation check: the title, authors and venue are as the metadata of the proceedings PDF gives
+  them (ijcai.org/Proceedings/16/Papers/503.pdf); its body could not be read from this box. The
   threshold `1 + 9.84 (1 + e/(1+e)) (1 + 1/e)^2` is confirmed against the reference implementation
-  (`meelgroup/approxmc`, `counter.cpp`). The paper's text could not be read from this box, so the
+  (`meelgroup/approxmc`, `counter.cpp`). The
   bound that one iteration is within tolerance with probability at least 0.6 is from memory. The 17
   iterations follow from it exactly (the least odd count whose majority is right with probability
   0.8). The self-test below is the evidence that the estimates hold.

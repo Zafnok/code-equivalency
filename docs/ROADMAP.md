@@ -841,7 +841,8 @@ P1-025 → P1-026 and P1-027 come last and each decides its own future.
 - P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
   gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
 - P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model
-  counting over the parameter bits. Needs P2-047.
+  counting over the parameter bits. Needs P2-047. Done 2026-10-04: 12 of 80 EQ002 results counted
+  (15.0%), every share 1, so no ADR (`docs/runs/2026-10-04-divergent-count-spike.md`).
 
 Not ticketed from the review's other section: exhaustive invariant enumeration and deeper bounds.
 Rung 5 runs only after a rung 4 timeout, which the three large runs do not report, and P2-050 found
