@@ -1,5 +1,5 @@
 # P1-027 Spike: on what share of inputs does a Divergent pair diverge?
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-047
