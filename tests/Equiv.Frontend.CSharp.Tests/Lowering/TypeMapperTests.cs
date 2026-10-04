@@ -58,6 +58,29 @@ public sealed class TypeMapperTests
     public void ANullableAnnotationIsNotPartOfTheSort(string type, string sort) =>
         Assert.Equal(new IrSort(sort), TypeMapper.Map(TypeOf("#nullable enable\n", type)));
 
+    /// <summary>
+    /// Ticket P2-125: a tuple's element names are not part of the sort of a type that holds it, as they are not part of a
+    /// named type's metadata name: an array of a tuple is one sort whatever its elements are called, and with no names.
+    /// </summary>
+    [Theory]
+    [InlineData("(object First, string Second)[]", "(object, string)[]")]
+    [InlineData("(object a, string b)[]", "(object, string)[]")]
+    [InlineData("(object a, string b)[]", "(object First, string Second)[]")]
+    [InlineData("(object a, (int x, string y) b)[][]", "(object, (int, string))[][]")]
+    [InlineData("System.Collections.Generic.List<(object a, string b)>[]", "System.Collections.Generic.List<(object, string)>[]")]
+    public void TupleArraysMapToOneTypeWhateverTheElementNames(string type, string other)
+    {
+        IrType mapped = TypeMapper.Map(TypeOf(type));
+
+        Assert.IsType<IrSort>(mapped);
+        Assert.Equal(TypeMapper.Map(TypeOf(other)), mapped);
+    }
+
+    /// <summary>Ticket P2-125: dropping the names does not merge arrays of tuples whose element types differ.</summary>
+    [Fact]
+    public void TupleArraysOfOtherElementTypesStayApart() =>
+        Assert.NotEqual(TypeMapper.Map(TypeOf("(object a, string b)[]")), TypeMapper.Map(TypeOf("(string a, object b)[]")));
+
     /// <summary>Ticket P2-001: the element a new array starts with, which is the constant a literal default is.</summary>
     public static TheoryData<string, IrValue> Defaults() => new()
     {
