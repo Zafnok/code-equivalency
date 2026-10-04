@@ -73,9 +73,35 @@ public sealed class VerificationOptionsTests
         Assert.NotEqual((a with { ResourceLimit = 7 }).GetHashCode(), a.GetHashCode());
     }
 
+    /// <summary>Ticket P1-033: no second solver unless one is given, and two options differing in it are unequal, since it can change a verdict.</summary>
+    [Fact]
+    public void SolverIsNoneByDefaultAndPartOfEquality()
+    {
+        VerificationOptions a = new(3, 5000, []);
+        NamedSolver cvc5 = new("cvc5");
+
+        Assert.Null(a.Solver);
+        Assert.NotEqual(a, a with { Solver = cvc5 });
+        Assert.NotEqual(a with { Solver = cvc5 }, a);
+        Assert.NotEqual(a with { Solver = cvc5 }, a with { Solver = new NamedSolver("other") });
+        Assert.Equal(a with { Solver = cvc5 }, new VerificationOptions(3, 5000, []) { Solver = new NamedSolver("cvc5") });
+        Assert.Equal((a with { Solver = cvc5 }).GetHashCode(), new VerificationOptions(3, 5000, []) { Solver = new NamedSolver("cvc5") }.GetHashCode());
+        Assert.NotEqual((a with { Solver = cvc5 }).GetHashCode(), a.GetHashCode());
+        Assert.IsType<SmtUnknown>(cvc5.Ask("(check-sat)", TimeSpan.Zero));
+        Assert.Equal("1", cvc5.Version);
+    }
+
     [Fact]
     public void OptionsAreNotEqualToNull()
     {
         Assert.False(new VerificationOptions(3, 5000, []).Equals(Null.Of<VerificationOptions>()));
+    }
+
+    /// <summary>A solver equal to another of the same name, as a record is.</summary>
+    private sealed record NamedSolver(string Name) : ISmtSolver
+    {
+        public string Version => "1";
+
+        public SmtAnswer Ask(string script, TimeSpan limit) => new SmtUnknown(Name);
     }
 }

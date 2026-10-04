@@ -263,6 +263,14 @@ Unknown (`timeout`) on every run, whatever the machine's speed or load. The conf
 (default 60000) is the wall-clock backstop behind it. The Unknown's message says which of the two
 was hit.
 
+A second solver is optional (ADR 0050). With `"solvers": { "cvc5": { "path": "<cvc5 executable>" } }`
+in the config, a rung 1 query Z3 gives up on is also asked of [cvc5](https://cvc5.github.io), run as
+a process. An `unsat` from it is taken; a `sat` only gives values, from which Z3 completes a model
+that is replayed like any other. Results it helped decide say `proofMethod: bounded+cvc5`. `equiv`
+ships no cvc5: its release binary links LGPL libraries, so you install it yourself
+(`tools/cvc5/fetch.ps1` fetches the release this repo tests against). Without the setting nothing
+changes.
+
 `--il-fallback` (off by default) lowers a matched pair again from IL on both sides when
 it is not congruent and either side holds an opaque the other lacks, and keeps the IL bodies only
 when they hold fewer such opaques. Every result on a matched pair then says which lowering it used,

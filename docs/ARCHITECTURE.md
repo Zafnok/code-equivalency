@@ -17,7 +17,13 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
         Equiv.Cli ------------------> Equiv.Execute
                                   (driver processes live here;
                                    no Roslyn, no Z3; ADR 0035)
+
+        Equiv.Cli --> Equiv.Verify.Cvc5 --> Equiv.Core
+                      (the cvc5 process lives here; no Z3; ADR 0050)
 ```
+
+`Equiv.Verify.Z3` does not reference `Equiv.Verify.Cvc5`: it reaches a second solver only through
+`Equiv.Core`'s `ISmtSolver`, which the CLI hands it in `VerificationOptions`.
 
 `Equiv.Core` is the contract. It owns:
 
@@ -70,6 +76,17 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
   Equivalent, `IVerificationBackend.VerifyUnderContracts` proves the caller again with a
   caller-sufficient contract in place of the shared function (ADR 0036 decision 2;
   VERIFICATION-MODEL.md section 5.2).
+- A second solver (ADR 0050; ticket P1-033). Z3 is the one encoder and the first solver of every query.
+  When `VerificationOptions.Solver` is given, a rung 1 query Z3 gives up on (`divergence`, `opaque`,
+  `bound`) is printed as SMT-LIB 2 text and asked of that `ISmtSolver`. An `unsat` is the query's
+  answer. A `sat` is never a verdict: Z3 completes a model from the values it gives and the model is
+  replayed as Z3's own is. Induction obligations, Horn clauses and contract queries stay with Z3.
+
+`Equiv.Verify.Cvc5` implements `ISmtSolver` by running the `cvc5` executable as a process, once per
+script. cvc5's release binary links LGPL libraries, so it is never linked, committed or shipped (ADR
+0017): `equiv` runs the executable `equiv.config.json` names in `solvers.cvc5.path`, and with none
+configured it asks no second solver and behaves as it did before. `tools/cvc5/fetch.ps1` fetches the
+hash-pinned release for development and for CI's Windows leg.
 
 `Equiv.Execute` runs code on the two real runtimes, the second oracle of ADR 0035: each side on its
 detected runtime (ADR 0040 decision 3; P2-056). It references

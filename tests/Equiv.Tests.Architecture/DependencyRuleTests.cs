@@ -19,6 +19,7 @@ public sealed class DependencyRuleTests
             Assembly.Load("Equiv.Core"),
             Assembly.Load("Equiv.Frontend.CSharp"),
             Assembly.Load("Equiv.Verify.Z3"),
+            Assembly.Load("Equiv.Verify.Cvc5"),
             Assembly.Load("Equiv.Cli"),
             Assembly.Load("Equiv.Execute"))
         .Build();
@@ -80,6 +81,32 @@ public sealed class DependencyRuleTests
             .Because("ADR 0035: Equiv.Execute runs drivers the frontend compiled and depends on Equiv.Core only.");
 
         rule.Check(SystemArchitecture);
+    }
+
+    /// <summary>
+    /// ADR 0050 decision 1 (ticket P1-033): the second solver's contract is in <c>Equiv.Core</c>, cvc5 implements it
+    /// from <c>Equiv.Core</c> alone, and the backend that prints the query does not know which solver answers it.
+    /// </summary>
+    [Fact]
+    public void Cvc5_ReferencesOnlyCore_AndTheZ3BackendDoesNotReferenceIt()
+    {
+        Assert.Equal("Equiv.Core", typeof(Equiv.Core.ISmtSolver).Assembly.GetName().Name);
+        Assert.Equal(
+            ["Equiv.Core"],
+            Assembly.Load("Equiv.Verify.Cvc5").GetReferencedAssemblies().Select(static a => a.Name!).Where(static n => n.StartsWith("Equiv.", StringComparison.Ordinal)),
+            StringComparer.Ordinal);
+        Assert.DoesNotContain("Equiv.Verify.Cvc5", Assembly.Load("Equiv.Verify.Z3").GetReferencedAssemblies().Select(static a => a.Name), StringComparer.Ordinal);
+
+        IArchRule cvc5 = Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Verify\.Cvc5(\.|$)")
+            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(
+                @"^(Equiv\.Frontend|Equiv\.Verify\.Z3|Equiv\.Cli|Equiv\.Execute)(\.|$)|^Microsoft\.CodeAnalysis(\.|$)|^Microsoft\.Z3(\.|$)"))
+            .Because("ADR 0050: Equiv.Verify.Cvc5 runs a solver process behind Equiv.Core's ISmtSolver and depends on Equiv.Core only.");
+        IArchRule z3 = Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Verify\.Z3(\.|$)")
+            .Should().NotDependOnAny(Types(includeReferenced: true).That().ResideInNamespaceMatching(@"^Equiv\.Verify\.Cvc5(\.|$)"))
+            .Because("ADR 0050: Equiv.Verify.Z3 prints the query and reads the answer through ISmtSolver; it does not know which solver is behind it.");
+
+        cvc5.Check(SystemArchitecture);
+        z3.Check(SystemArchitecture);
     }
 
     /// <summary>

@@ -14,6 +14,7 @@ using Equiv.Core.RuntimeChanges;
 using Equiv.Core.Verdicts;
 using Equiv.Execute;
 using Equiv.Execute.Testing;
+using Equiv.Verify.Cvc5;
 
 using Microsoft.CodeAnalysis.Sarif;
 
@@ -531,13 +532,17 @@ internal static class CompareCommand
         return result.Config;
     }
 
-    /// <summary>The backend's knobs for this run: the config's bound, timeout, resource limit and renames, and the command line's rung options.</summary>
+    /// <summary>
+    /// The backend's knobs for this run: the config's bound, timeout, resource limit and renames, the command line's rung
+    /// options, and cvc5 as the second solver when the config names its executable (ADR 0050; ticket P1-033).
+    /// </summary>
     private static VerificationOptions Verification(EquivConfig config, CompareOptions options, IRunLog runLog) =>
         new(config.Bound, config.TimeoutMs, config.CallIdentityRenames)
         {
             ResourceLimit = config.ResourceLimit,
             ChcIntMode = options.ChcIntMode,
             InvariantModel = options.InvariantModel,
+            Solver = config.Cvc5Path is { } cvc5 ? new Cvc5Solver(cvc5) : null,
             Log = runLog,
         };
 

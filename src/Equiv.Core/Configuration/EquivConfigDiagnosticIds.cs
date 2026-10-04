@@ -32,4 +32,7 @@ public static class EquivConfigDiagnosticIds
 
     /// <summary>"resourceLimit" is present but not a positive integer.</summary>
     public const string InvalidResourceLimit = "CFG010";
+
+    /// <summary>"solvers" is present but not an object whose only key, "cvc5", is an object whose only key, "path", is a non-empty string.</summary>
+    public const string InvalidSolvers = "CFG011";
 }

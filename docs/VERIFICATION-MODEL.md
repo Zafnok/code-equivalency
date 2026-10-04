@@ -682,7 +682,12 @@ contracts (section 5.2; ticket P1-010) has `proofMethod` suffixed `+contract` (f
 per callee: `contract` is K in SMT-LIB over `r.old`/`r.new`, `threw.*`, `type.*`, `calls.*` and
 `heap.<map>.*`, and `proposedBy` is `observed-predicates`. Each such callee is left out of
 `unprovenAssumptions`, and its own unproven assumptions are added to the caller's `assumedCallees` and
-`unprovenAssumptions`. A result of a pair where a call to a one-sided helper was resolved in either body
+`unprovenAssumptions`. A result one of whose rung 1 queries a second solver answered (section 6; ADR 0050,
+ticket P1-033) has `proofMethod` suffixed with `+` and the solver's name, after `+contract` when both
+apply: `bounded+cvc5`. That holds for a Divergent and an Unknown too, which otherwise carry no
+`proofMethod`, and names the rung the solver answered for; a Divergent the real runtimes showed stays
+`observed`. The `ladderTrace` step of that rung carries `solver`, the solver's name and version
+(`cvc5 1.4.1`). A result Z3 decided alone is named as before. A result of a pair where a call to a one-sided helper was resolved in either body
 (section 1, ADR 0045) carries `properties.calleesInlined`: one `{ callee, side }` per helper, `side`
 being `legacy` or `modern`, helpers resolved inside helpers included, sorted by callee and then side.
 It is not part of the fingerprint.
@@ -806,6 +811,31 @@ Every solver query has two budgets, both set in `equiv.config.json` as positive 
   result that nothing caused.
 - `timeoutMs` (default 60000) is the wall-clock backstop behind it, for a query that spends long in work Z3
   does not count. A result that ran into it can differ between runs.
+
+A second solver is asked when one is configured (ADR 0050; ticket P1-033): `"solvers": { "cvc5": { "path":
+"<executable>" } }` names a cvc5 executable, which `equiv` runs as a process and never ships. Every query
+goes to Z3 first. A rung 1 query Z3 gives up on (`divergence`, `opaque` or `bound`) is then printed as Z3
+prints it from a plain solver and sent to cvc5, after two rewrites that leave its meaning as it is: a
+`seq.++` of one argument is its argument, and a constant array whose default is not a value becomes a fresh
+array constant, constrained to hold that default at every index the query reads from an array built on it. A
+query in which such an array is used as a whole (passed to a function, compared with another array) has no
+such set of indices and is not sent. cvc5 gets `timeoutMs` of wall-clock time and a resource limit of its own
+(`--rlimit` 2000000, chosen in `docs/runs/2026-10-04-cvc5-budget.md`), so that the limit and not the clock
+ends most of its queries too.
+
+- `unsat` from cvc5 is trusted as Z3's is: the query is unsatisfiable, and rung 1 goes on to its next query,
+  which is asked of Z3 first and of cvc5 if Z3 gives up.
+- `sat` is never a verdict. The values cvc5 gives the query's Bool and bit-vector constants are asserted
+  beside the query, Z3 completes the model under its own limits, and that model is replayed in the
+  interpreter exactly as a model Z3 found itself (sections 1 and 5; ADR 0014, ADR 0026). Only the replay
+  makes a Divergent or an Unknown(abstraction).
+- Anything else leaves the query the timeout it was: an `unknown`, a script cvc5 cannot read, values that
+  are missing or are not literals of the constant's sort, a model Z3 cannot complete, a process that fails.
+
+Induction obligations (rungs 2 and 3), Horn clauses (rungs 4 and 5), contract queries and ADR 0037's
+queries are asked of Z3 alone. With no solver configured nothing above happens and every result is what it
+was. A run with cvc5 configured can therefore differ from one without; the results it touched say so
+(`proofMethod`, above).
 
 A rung 4 Spacer query gets ten times `resourceLimit`. Z3 counts a Spacer step far cheaper than a step
 of the product queries the limit is sized for: the `loop-fusion` sample's proof spends 3 to 5 million

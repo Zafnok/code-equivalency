@@ -49,6 +49,12 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
     /// </summary>
     public bool IlFallback { get; init; }
 
+    /// <summary>
+    /// <c>solvers.cvc5.path</c> (ADR 0050 decision 6; ticket P1-033): the <c>cvc5</c> executable asked the rung 1 queries
+    /// Z3 gives up on. Null when unset, and then no second solver is asked.
+    /// </summary>
+    public string? Cvc5Path { get; init; }
+
     // Deliberate non-short-circuit '&' after the null check, matching Equiv.Core.Ir.IrEquality's
     // documented rationale: '&&' always compiles to a branch per operand, which would need extra
     // tests per field to keep this repo's 100% branch-coverage gate; the operands here are cheap
@@ -64,8 +70,9 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
             & (LegacyRuntime == other.LegacyRuntime) // NOSONAR
             & (ModernRuntime == other.ModernRuntime) // NOSONAR
             & (IlFallback == other.IlFallback) // NOSONAR
-            & (ResourceLimit == other.ResourceLimit); // NOSONAR
+            & (ResourceLimit == other.ResourceLimit) // NOSONAR
+            & string.Equals(Cvc5Path, other.Cvc5Path, StringComparison.Ordinal); // NOSONAR
 
     public override int GetHashCode() =>
-        HashCode.Combine(HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime), IlFallback, ResourceLimit);
+        HashCode.Combine(HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime), IlFallback, ResourceLimit, Cvc5Path);
 }

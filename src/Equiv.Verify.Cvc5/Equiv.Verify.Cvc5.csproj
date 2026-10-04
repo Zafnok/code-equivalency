@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ADR 0050: cvc5 as a process behind Equiv.Core's ISmtSolver. It references Equiv.Core only (Equiv.Tests.Architecture enforces it). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Equiv.Core\Equiv.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Equiv.Verify.Cvc5.Tests" />
+  </ItemGroup>
+
+</Project>

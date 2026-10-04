@@ -4,6 +4,7 @@
     <Project Path="src/Equiv.Core/Equiv.Core.csproj" />
     <Project Path="src/Equiv.Execute/Equiv.Execute.csproj" />
     <Project Path="src/Equiv.Frontend.CSharp/Equiv.Frontend.CSharp.csproj" />
+    <Project Path="src/Equiv.Verify.Cvc5/Equiv.Verify.Cvc5.csproj" />
     <Project Path="src/Equiv.Verify.Z3/Equiv.Verify.Z3.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -14,6 +15,7 @@
     <Project Path="tests/Equiv.Tests.Architecture/Equiv.Tests.Architecture.csproj" />
     <Project Path="tests/Equiv.Tests.Integration/Equiv.Tests.Integration.csproj" />
     <Project Path="tests/Equiv.TestSupport/Equiv.TestSupport.csproj" />
+    <Project Path="tests/Equiv.Verify.Cvc5.Tests/Equiv.Verify.Cvc5.Tests.csproj" />
     <Project Path="tests/Equiv.Verify.Z3.Tests/Equiv.Verify.Z3.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
