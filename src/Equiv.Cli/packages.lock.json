@@ -258,6 +258,12 @@
           "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.9.0, )"
         }
       },
+      "equiv.verify.cvc5": {
+        "type": "Project",
+        "dependencies": {
+          "Equiv.Core": "[1.0.0, )"
+        }
+      },
       "equiv.verify.z3": {
         "type": "Project",
         "dependencies": {

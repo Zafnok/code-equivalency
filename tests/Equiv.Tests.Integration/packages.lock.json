@@ -476,6 +476,7 @@
           "Equiv.Core": "[1.0.0, )",
           "Equiv.Execute": "[1.0.0, )",
           "Equiv.Frontend.CSharp": "[1.0.0, )",
+          "Equiv.Verify.Cvc5": "[1.0.0, )",
           "Equiv.Verify.Z3": "[1.0.0, )",
           "ModelContextProtocol": "[2.2.0, )",
           "System.CommandLine": "[2.0.12, )"
@@ -514,6 +515,12 @@
           "CsCheck": "[4.9.1, )",
           "Equiv.Core": "[1.0.0, )",
           "Equiv.Corpus.Seeder": "[1.0.0, )"
+        }
+      },
+      "equiv.verify.cvc5": {
+        "type": "Project",
+        "dependencies": {
+          "Equiv.Core": "[1.0.0, )"
         }
       },
       "equiv.verify.z3": {

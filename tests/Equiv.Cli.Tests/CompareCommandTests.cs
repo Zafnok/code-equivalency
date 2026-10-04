@@ -885,6 +885,34 @@ public sealed class CompareCommandTests
     }
 
     /// <summary>
+    /// Ticket P1-033 (ADR 0050 decision 6): the backend is given cvc5 as its second solver when the config names the
+    /// executable, and none without it.
+    /// </summary>
+    [Fact]
+    public void Cvc5PathInTheConfig_GivesTheBackendASecondSolver()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        using TempFile config = new();
+        using TempFile outFile = new();
+        File.WriteAllText(config.Path, """{ "solvers": { "cvc5": { "path": "tools/cvc5/cvc5.exe" } } }""");
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
+        Command command = CompareCommand.Create([frontend], backend);
+        string[] paths = ["--legacy", legacy.Path, "--modern", modern.Path, "--out", outFile.Path];
+        List<int> exitCodes = [];
+
+        _ = CaptureStdOut(() => exitCodes.Add(command.Parse(paths).Invoke()));
+        _ = CaptureStdOut(() => exitCodes.Add(command.Parse([.. paths, "--config", config.Path]).Invoke()));
+
+        Assert.Equal([ExitCodes.Success, ExitCodes.Success], exitCodes);
+        Assert.Null(backend.Calls[0].Solver);
+        Equiv.Verify.Cvc5.Cvc5Solver solver = Assert.IsType<Equiv.Verify.Cvc5.Cvc5Solver>(backend.Calls[1].Solver);
+        Assert.Equal("cvc5", solver.Name);
+        Assert.Equal(Equiv.Verify.Cvc5.Cvc5Solver.DefaultResourceLimit, solver.ResourceLimit);
+    }
+
+    /// <summary>
     /// Ticket P2-050 criterion 3: the backend hears the default resource limit, the config's <c>resourceLimit</c> in its
     /// place, and <c>--resource-limit</c> in place of both; a value that is not positive is a usage error.
     /// </summary>
