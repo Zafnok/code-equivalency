@@ -141,6 +141,21 @@ public sealed partial class SamplesEndToEndTests
         Assert.EndsWith(" Equivalent when name != null.", result.Message.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P1-022 criterion 3: a Divergent with no admitted candidate carries no <c>agreesWhen</c>, and its message
+    /// ends with its counterexample as before. <c>callee-changed</c>'s <c>Tax</c> computes no predicate of its argument,
+    /// so its pair is searched and nothing is admitted.
+    /// </summary>
+    [Fact]
+    public void CalleeChanged_HasNoAgreesWhenAndItsMessageIsUnchanged()
+    {
+        Result result = Single("callee-changed", "::Tax(int) diverges");
+
+        Assert.Equal("EQ002", result.RuleId);
+        Assert.False(result.TryGetProperty("agreesWhen", out Dictionary<string, string>? _));
+        Assert.EndsWith(": " + result.GetProperty<string>("model"), result.Message.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void LoopBoundChange_IsDivergentOnRung1()
     {

@@ -188,6 +188,11 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 0,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {

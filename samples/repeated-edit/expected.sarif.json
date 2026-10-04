@@ -189,7 +189,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.RepeatedEdit.Orders::Discount(int) diverges: inputs(bv32 1000) old(returned bv32 0 outs() trace()) new(returned bv32 100 outs() trace())"
+            "text": "Equiv.Samples.RepeatedEdit.Orders::Discount(int) diverges: inputs(bv32 1000) old(returned bv32 0 outs() trace()) new(returned bv32 100 outs() trace()). Equivalent when total > 1000 || total < 1000."
           },
           "locations": [
             {
@@ -214,6 +214,12 @@
           "rank": 60.002,
           "properties": {
             "model": "inputs(bv32 1000) old(returned bv32 0 outs() trace()) new(returned bv32 100 outs() trace())",
+            "agreesWhen": {
+              "smt": "(or (bvsgt in.total (_ bv1000 32)) (not (bvsge in.total (_ bv1000 32))))",
+              "text": "total > 1000 || total < 1000",
+              "proposedBy": "harvested-predicates",
+              "proofMethod": "bounded"
+            },
             "ladderTrace": [
               {
                 "rung": "bounded",
@@ -278,6 +284,11 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "agreesWhen": {
+            "pairs": 4,
+            "admitted": 1,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {

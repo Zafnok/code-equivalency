@@ -114,4 +114,13 @@ differs when"). A new rule id or verdict. Counting how many inputs satisfy the c
 - The counterexample check binds the product's inputs to the decoded counterexample and asks the solver for the
   disjunction. It checks the reported inputs against the reported condition, not the model against itself.
 - `samples/added-branch` now carries `Equivalent when x != 0`: the modern body's own guard is the candidate.
+- The property test runs 200 pairs per pull request (criterion 6). It was also run once locally at the nightly budget
+  (`EQUIV_DIFFERENTIAL_BUDGET=nightly`, 5,000 pairs) and passed. `mutation.yml`'s nightly `differential` job filters to
+  `DifferentialSoundnessTests` alone, so it does not run `ConditionSoundnessTests`; adding the class to that filter is a
+  workflow change outside this ticket's Files.
+- Snapshots: 13 `samples/*/expected.sarif.json` and the two `*.execute.sarif` files changed. Seven results gained
+  `agreesWhen` (`added-branch`, `api-drift`, `bcl-overload-rebinding`, `callee-changed-invisible`,
+  `dependency-rebinding`, `effect-free-bcl-call`, `removed-null-check`, `repeated-edit`); the rest only gained the
+  census entry. Three of the conditions are `<receiver> == null`: both sides throw the same exception there, which is
+  true and of little use to a reviewer.
 - Surprise: `IrBitVec` allows only widths 8, 16, 32 and 64, so the unsigned cast has four cases and no default.

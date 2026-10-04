@@ -1103,4 +1103,9 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   either body holds an error, one test per error kind (`UnboundNeverEquivalentTests`, ticket P2-085). Residual claim (property
   test): for a `line`-scoped Unknown, every generated input on which neither side reaches a listed
   cause gives equal observables in `IrInterpreter`.
+- Input conditions (property test, ADR 0048; `ConditionSoundnessTests`, ticket P1-022): on the pairs of
+  the differential soundness gate, for a pair whose verdict carries `agreesWhen`, every generated
+  input that satisfies the condition gives equal observables on the CLR. The condition is evaluated
+  as the C# its `text` is, so a text that is not a predicate over the modern side's parameters fails
+  too. 200 pairs per PR, with the gate's seed.
 - Every row in the tables above has at least one unit test named after it.

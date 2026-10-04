@@ -288,10 +288,16 @@ one result from `equiv.sarif`'s `runs[0].results`:
   "ruleId": "EQ002",
   "level": "error",
   "message": {
-    "text": "Equiv.Samples.AddedBranch.Doubler::Double(int) diverges: inputs(bv32 0) old(returned bv32 0 outs() trace()) new(returned bv32 4294967295 outs() trace())"
+    "text": "Equiv.Samples.AddedBranch.Doubler::Double(int) diverges: inputs(bv32 0) old(returned bv32 0 outs() trace()) new(returned bv32 4294967295 outs() trace()). Equivalent when x != 0."
   },
   "properties": {
     "model": "inputs(bv32 0) old(returned bv32 0 outs() trace()) new(returned bv32 4294967295 outs() trace())",
+    "agreesWhen": {
+      "smt": "(not (= in.x (_ bv0 32)))",
+      "text": "x != 0",
+      "proposedBy": "harvested-predicates",
+      "proofMethod": "bounded"
+    },
     "ladderTrace": [
       { "rung": "bounded", "outcome": "refuted", "detail": "a divergence within 3 iterations" }
     ]
@@ -300,7 +306,8 @@ one result from `equiv.sarif`'s `runs[0].results`:
 ```
 
 The counterexample is `x = 0` (`bv32 0`): legacy returns `0`, modern returns `-1` (`bv32
-4294967295` two's-complement). The exit code is 1.
+4294967295` two's-complement). `agreesWhen` says that is the only way the pair differs: it is proved
+equivalent for every `x != 0`. The exit code is 1.
 
 An `Unknown` (EQ003) says how far it can be trusted. `properties.scope` is `line` when the pair
 is equivalent unless one of the listed `relatedLocations` is reached, and `method` otherwise.

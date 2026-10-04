@@ -13,8 +13,9 @@ namespace Equiv.Tests.Integration;
 /// The soundness property of ADR 0048 (ticket P1-022 criterion 6), on the pairs of the differential soundness gate
 /// (ticket M0-012): for a pair whose verdict carries <c>agreesWhen</c>, every generated input that satisfies the condition
 /// gives equal observables on the CLR. The condition is evaluated as the C# its <c>text</c> is, so a text that is not a
-/// predicate over the modern side's parameters fails too. The pull-request and nightly budgets and the seed are the
-/// gate's (<see cref="DifferentialSoundnessTests.Budget"/>).
+/// predicate over the modern side's parameters fails too. The pair count and the seed are the gate's
+/// (<see cref="DifferentialSoundnessTests.Budget"/>): 200 pairs per pull request. The nightly job selects the gate's
+/// class alone, so it does not run this one; with its budget set, this runs 5,000 pairs.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class ConditionSoundnessTests
