@@ -2,7 +2,7 @@
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
-Depends on: P2-066, P2-105
+Depends on: P2-066, P2-105, P2-113, P2-117, P2-118, P2-122, P2-095, P2-127, P2-077, P1-032
 
 ## Goal
 P2-066 ran `jellyfin-13023` (net8.0 to net9.0) and `gitextensions-9860` (net5.0 to net6.0). Its
@@ -14,8 +14,9 @@ a table test and a sample; none measures the corpus. Rebinding (P2-070) and effe
 (P2-071) also merged after P2-066's build. Once the runtime-row ticket is done, run both pairs again
 on one commit of `main` and write the verdict again, so the gain is a measured number.
 
-Do not start before the runtime-row ticket is in `docs/tickets/done/`. It is not on this ticket's
-`Depends on` line only because its file was not on `main` when this was written.
+The other tickets on the `Depends on` line are the scoreboard milestone P2-130 sets (2026-10-04):
+the upgrades' remaining false-positive causes, the opaque reasons with a measured share, the open
+soundness ticket and parallel verification.
 
 ## Spec references
 ADR 0040 (pair kinds, the interval rule), ADR 0034 (changed pairs), ADR 0028;
@@ -33,7 +34,8 @@ ADR 0040 (pair kinds, the interval rule), ADR 0034 (changed pairs), ADR 0028;
    proved, Unknown or Divergent.
 5. Each crash, and each false-positive cause or opaque reason at or above 5% of a pair's changed
    pairs with no open ticket, is filed as a ticket.
-6. `README.md`'s "Where it stands" tables carry the new numbers for the two pairs.
+6. `equiv-scoreboard` is applied: the scoreboard rows and "Where it stands" numbers whose value
+   changed are rewritten, and no other line of `README.md` is.
 
 ## Files
 `docs/runs/`, `README.md`, `docs/ROADMAP.md`, new ticket files (criterion 5). Nothing under `src/`
