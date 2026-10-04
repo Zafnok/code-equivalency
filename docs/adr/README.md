@@ -54,4 +54,5 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0045 | A call to a private helper that exists on one side only is replaced by the helper's body (narrows 0019's rejection of inlining) |
 | 0046 | A caller file path or line number the compiler supplies is an input both sides share, not a constant |
 | 0047 | A call to a static one-call forwarder is a call to its target (narrows 0019's rejection of inlining) |
+| 0048 | A result that is not Equivalent may carry a proved input condition under which the pair agrees (`properties.agreesWhen`); no verdict, rule id, exit code or fingerprint depends on it |
 | 0050 | cvc5 is asked the rung 1 queries Z3 gives up on (supersedes 0005's "Z3 alone") |
