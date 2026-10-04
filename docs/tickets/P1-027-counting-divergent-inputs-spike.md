@@ -59,3 +59,24 @@ Unknown results.
 - From the 2026-10-03 improvement review ("Counting divergent inputs").
 - A share is over the parameter bit space, uniformly. It is not a probability that production
   traffic diverges; the report and any later property must say so.
+- Result: 12 of 80 EQ002 results counted in time (15.0%), all with share 1, 11 with no source
+  parameter. Below half, so ROADMAP's post-MVP line and no ADR
+  (`docs/runs/2026-10-04-divergent-count-spike.md`).
+- Decision: the ticket's three blockers are read as uses of a `Sort` source parameter: an argument
+  of a call (`call-result`), a key of a field, array or length map (`heap-map`), any other read of
+  its value (`sort-by-value`). Heap maps and call results that no source parameter reaches are
+  existential and block nothing, as criterion 2 says.
+- Decision: 17 iterations, the least odd count whose majority is within tolerance with probability
+  0.8 when one iteration is with probability 0.6. The 0.6 is the paper's bound from memory; the PDF
+  could not be read here. The threshold formula was checked against the reference implementation.
+- Decision: parity rows go to Z3 in reduced echelon form, and the count uses the incremental solver
+  with the verdict's tactic pipeline as the fallback. Without the first, every 32-bit self-test pair
+  gave up; without the second, two zero-parameter corpus pairs did.
+- Decision: the `gitextensions-8522` SARIF read is `20261002-1839-full-after-again` (68 EQ002), the
+  latest plain full run on the box; the 2026-09-29 run of the audit (84 EQ002) is no longer on disk.
+  The audit's rows are measured by identity.
+- Surprise: this worktree has no `.corpus/`. The runs and checkouts were read in place from the
+  `sad-maxwell-71be44` and `version-upgrade-pairs-corpus-1c9943` worktrees, with
+  `TargetFrameworkRootPath` pointed at that worktree's `refasm`.
+- Limit: a divergence that relates two parameters (`a == b`) is a dense GF(2) system under parity
+  rows and Z3 gives up on it. The self-test prints it as an eleventh, non-failing pair.
