@@ -39,3 +39,25 @@ are in `docs/runs/2026-10-02-cleanup-powershell-19687/SUMMARY.md`); `docs/ARCHIT
 A catch-all around the lowerer. P2-082 owns a crash that ends the run.
 
 ## Notes
+- One cause, not five. All five stacks are `IrLowerer.Branch` -> `Operation` -> `CaptureRead` -> `TypeMapper.Map`, with a
+  null type. It is not P2-083's fix missing a case: that one was a `Binary` with a typeless `null` literal.
+- The construct: an interpolated string passed to a parameter whose handler type's constructor ends in `out bool`, the
+  flag by which the handler declines the string. `System.Diagnostics.Debug.Assert(bool, ref AssertInterpolatedStringHandler)`
+  is in four of the five procedures and `Debug.WriteLineIf(bool, ref WriteIfInterpolatedStringHandler)` in the fifth
+  (`RevisionGraph::LoadingCompleted()`). Operation kinds: the control flow graph passes a `FlowCaptureReference` with
+  `IsInitialization` true as the constructor's `out` argument, then branches on a second `FlowCaptureReference` to the
+  same capture to skip the appends. That second reference has a null `Type`, and no `FlowCapture` ever stores the capture.
+- Decision: lowered, not opaque. The constructor's `ObjectCreation` was already opaque with reason `ref-argument`, because
+  the capture was not a writable target; making the capture the call's `refout` turns it into the call it is, and the
+  branch reads what the call wrote. A typeless read of a capture is read as `bool`, which is what the language requires
+  of that parameter. Had the constructor stayed opaque for another reason, the read would be the existing `undefined`
+  opaque, not an exception.
+- Not changed: the `Debug.Assert` and `Debug.WriteLineIf` calls themselves are still opaque with reason `ref-argument`,
+  since they take the handler by `ref` and it lives in a capture.
+- Criterion 1: `IrLowererTests.AnInterpolatedStringHandlerThatCanDeclineLowersOrIsOpaque` (`Debug.Assert` and
+  `Debug.WriteLineIf`). On `main` both cases throw the `NullReferenceException` with the stack above.
+- Criterion 2: `--lower-only` reruns at 38d9db4, against the P2-058 worktree's checkouts (already restored, and
+  PowerShell's three load steps already done). `powershell-19687` exit 0 in 220s, `gitextensions-11372` exit 0 in 117s,
+  `gitextensions-11284` exit 0 in 115s; each has 0 notifications and no `run.properties.unverified`. Deviation: the
+  reruns are `--lower-only`, not `full`, as P2-083's were: the crash is in lowering, and a full run of
+  `gitextensions-11372` takes 31 minutes for no further evidence.
