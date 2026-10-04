@@ -1,5 +1,5 @@
 # P2-116 A string constant holding a lone surrogate no longer crashes lowering
-Status: in-progress
+Status: done (PR #377)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-066
@@ -49,4 +49,5 @@ Lowering the generated regex code any further than it lowers today.
   never share one.
 - Decision: the sample is `samples/lone-surrogate-constant`, the ticket's one method in a class, net48 against net10.
 - Locally, `webapi-basic` and `version-bump` wrote no SARIF in this worktree (they need a package restore that the
-  targeted test run does not do), with or without this change. The other 24 snapshots were unchanged.
+  targeted test run does not do); not checked without this change, so CI is the check for those two. The other 24
+  snapshots were unchanged.
