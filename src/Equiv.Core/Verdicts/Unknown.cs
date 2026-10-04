@@ -40,9 +40,9 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
     public ImmutableArray<Abstraction> Abstractions { get; init; } = [];
 
     /// <summary>
-    /// Whether the modern side can fail where the legacy side does not, and the reverse (ADR 0037; ticket P1-013); null for
-    /// an Unknown the backend did not query, such as <see cref="UnknownReason.Unbound"/> and <see cref="UnknownReason.Timeout"/>.
-    /// Not part of the fingerprint.
+    /// Whether the modern side can fail where the legacy side does not, and the reverse (ADR 0037; tickets P1-013 and
+    /// P1-035); null for an Unknown the backend did not query, such as <see cref="UnknownReason.Unbound"/>. Not part of the
+    /// fingerprint.
     /// </summary>
     public FailureRefinement? FailureRefinement { get; init; }
 

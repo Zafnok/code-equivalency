@@ -99,8 +99,8 @@ public sealed class Z3BackendTests
 
         Verdict verdict = new Z3Backend(() => Track(contexts)).Verify(fixture.Old, fixture.New, Options with { TimeoutMs = 50 });
 
-        // An Unknown other than a timeout also runs ADR 0037's failure-refinement queries in a context of their own (P1-013).
-        Assert.Equal(verdict is Unknown { Reason: not UnknownReason.Timeout } ? 2 : 1, contexts.Count);
+        // An Unknown, a timeout included, also runs ADR 0037's failure-refinement queries in a context of their own (P1-013, P1-035).
+        Assert.Equal(verdict is Unknown ? 2 : 1, contexts.Count);
         Assert.All(contexts, static c => Assert.Equal(1, c.Disposals));
     }
 
@@ -172,7 +172,6 @@ public sealed class Z3BackendTests
         Assert.Equal(UnknownReason.Timeout, unknown.Reason);
         Assert.Equal("solver returned unknown (canceled): resource limit 1000 hit", unknown.Detail);
         Assert.Equal(UnknownScope.Method, unknown.Scope);
-        Assert.Null(unknown.FailureRefinement);
         Assert.Equal(verdict, new Z3Backend().Verify(fixture.Old, fixture.New, options));
     }
 

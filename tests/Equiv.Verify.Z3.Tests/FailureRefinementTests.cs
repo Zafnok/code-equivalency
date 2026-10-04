@@ -1,7 +1,11 @@
 using Equiv.Core;
 using Equiv.Core.Ir;
+using Equiv.Core.Reporting;
 using Equiv.Core.Verdicts;
 
+using Equiv.Verify.Z3.Ladder;
+
+using Microsoft.CodeAnalysis.Sarif;
 using Microsoft.Z3;
 
 using Xunit;
@@ -16,6 +20,25 @@ namespace Equiv.Verify.Z3.Tests;
 public sealed class FailureRefinementTests
 {
     private static readonly VerificationOptions Options = new(3, 10_000, []);
+
+    /// <summary>A resource limit the 64-bit division identity exhausts on every run, with the wall clock out of the way (ticket P2-050).</summary>
+    private static readonly VerificationOptions HardMultiplicationTimesOut = Options with { TimeoutMs = 600_000, ResourceLimit = 1_000 };
+
+    /// <summary>Throws unless <c>(a / b) * b + a % b</c> is <c>a</c>, which it always is: deciding the throw needs the hard arithmetic.</summary>
+    private const string HardGuard = """
+        proc "T::M(ulong,ulong)" (%a: bv64, %b: bv64) -> bv64 entry B0
+        B0:
+          %q: bv64 = udiv %a, %b
+          %m: bv64 = mul %q, %b
+          %r: bv64 = urem %a, %b
+          %s: bv64 = add %m, %r
+          %same: bool = eq %s, %a
+          br %same, B1, B2
+        B1:
+          ret %a
+        B2:
+          throw "System.Exception"
+        """;
 
     /// <summary>The legacy side returns 0 for a zero divisor; the modern side dropped that guard and divides.</summary>
     [Fact]
@@ -149,16 +172,63 @@ public sealed class FailureRefinementTests
         Assert.Equal(new FailureRefinement(RefinementResult.Unknown, RefinementResult.NoneProved), unknown.FailureRefinement);
     }
 
-    /// <summary>A timeout pair is not queried (ADR 0037): the verdict carries no refinement.</summary>
+    /// <summary>
+    /// A timeout pair is queried like any other Unknown (ADR 0037's clarification of 2026-10-04; ticket P1-035). The full
+    /// query has to bit-blast a 64-bit multiplier and divider and gives up; neither side throws on any input, which the two
+    /// weaker queries prove.
+    /// </summary>
     [Fact]
-    public void TimeoutPair_IsNotQueried()
+    public void TimeoutUnknown_CarriesFailureRefinement()
     {
         Fixture fixture = Fixture.Load("hard-multiplication");
 
-        Unknown unknown = Assert.IsType<Unknown>(new Z3Backend().Verify(fixture.Old, fixture.New, Options with { TimeoutMs = 50 }));
+        Unknown unknown = Assert.IsType<Unknown>(new Z3Backend().Verify(fixture.Old, fixture.New, HardMultiplicationTimesOut));
 
         Assert.Equal(UnknownReason.Timeout, unknown.Reason);
-        Assert.Null(unknown.FailureRefinement);
+        Assert.Equal(new FailureRefinement(RefinementResult.NoneProved, RefinementResult.NoneProved), unknown.FailureRefinement);
+    }
+
+    /// <summary>
+    /// Ticket P1-035 criterion 3: apart from the refinement, a timeout Unknown is the verdict the ladder gave, with its
+    /// reason, detail, scope and ladder, and its SARIF result has the same rule id and fingerprints as the unrefined one.
+    /// </summary>
+    [Fact]
+    public void TimeoutUnknown_KeepsItsReasonAndFingerprint()
+    {
+        Fixture fixture = Fixture.Load("hard-multiplication");
+        Verdict unrefined = new LoopLadder(static () => new Context(), HardMultiplicationTimesOut).Verify(fixture.Old, fixture.New);
+
+        Unknown unknown = Assert.IsType<Unknown>(new Z3Backend().Verify(fixture.Old, fixture.New, HardMultiplicationTimesOut));
+
+        Assert.NotNull(unknown.FailureRefinement);
+        Assert.Equal(UnknownReason.Timeout, unknown.Reason);
+        Assert.Equal(UnknownScope.Method, unknown.Scope);
+        Assert.Equal(unrefined, unknown with { FailureRefinement = null });
+        Result before = Sarif(fixture, unrefined);
+        Result after = Sarif(fixture, unknown);
+        Assert.Equal("EQ003", after.RuleId);
+        Assert.Equal(before.RuleId, after.RuleId);
+        Assert.Equal(before.PartialFingerprints.OrderBy(static p => p.Key, StringComparer.Ordinal), after.PartialFingerprints.OrderBy(static p => p.Key, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// A timeout pair whose modern throw depends on the hard arithmetic: the query for a new failure gives up as the full
+    /// one did, so its answer is Unknown, and the reason stays timeout. The legacy side never throws, so no failure was removed.
+    /// </summary>
+    [Fact]
+    public void TimeoutUnknown_RefinementThatGivesUpIsUnknown()
+    {
+        Unknown unknown = Assert.IsType<Unknown>(new Z3Backend().Verify(
+            IrText.Parse("""
+                proc "T::M(ulong,ulong)" (%a: bv64, %b: bv64) -> bv64 entry B0
+                B0:
+                  ret %a
+                """),
+            IrText.Parse(HardGuard),
+            HardMultiplicationTimesOut));
+
+        Assert.Equal(UnknownReason.Timeout, unknown.Reason);
+        Assert.Equal(new FailureRefinement(RefinementResult.Unknown, RefinementResult.NoneProved), unknown.FailureRefinement);
     }
 
     /// <summary>
@@ -248,20 +318,7 @@ public sealed class FailureRefinementTests
                 B0:
                   ret %a
                 """),
-            IrText.Parse("""
-                proc "T::M(ulong,ulong)" (%a: bv64, %b: bv64) -> bv64 entry B0
-                B0:
-                  %q: bv64 = udiv %a, %b
-                  %m: bv64 = mul %q, %b
-                  %r: bv64 = urem %a, %b
-                  %s: bv64 = add %m, %r
-                  %same: bool = eq %s, %a
-                  br %same, B1, B2
-                B1:
-                  ret %a
-                B2:
-                  throw "System.Exception"
-                """),
+            IrText.Parse(HardGuard),
             encodable: true);
 
         Assert.Equal(RefinementResult.Unknown, refinement.NewFailures);
@@ -282,6 +339,9 @@ public sealed class FailureRefinementTests
         Assert.Equal(new FailureRefinement(RefinementResult.Unknown, RefinementResult.Unknown), refinement);
         Assert.True(refinement.Elapsed >= TimeSpan.Zero);
     }
+
+    private static Result Sarif(Fixture fixture, Verdict verdict) =>
+        SarifReportWriter.Write([new VerificationResult(fixture.Old.Identity, verdict)]).Runs[0].Results[0];
 
     private static FailureRefinement Query(string old, string @new) =>
         new FailureRefinementQuery(static () => new Context(), Options).Run(IrText.Parse(old), IrText.Parse(@new), encodable: true);
