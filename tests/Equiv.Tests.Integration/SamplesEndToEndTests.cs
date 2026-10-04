@@ -123,6 +123,24 @@ public sealed partial class SamplesEndToEndTests
         Assert.Contains("NullReferenceException", result.Message.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P1-022 criterion 2 (ADR 0048): the pair diverges only on a null argument, so its EQ002 says it is Equivalent
+    /// when <c>name</c> is not null, in the property and at the end of the message.
+    /// </summary>
+    [Fact]
+    public void RemovedNullCheck_AgreesWhenTheNameIsNotNull()
+    {
+        Result result = Single("removed-null-check", "::Greet(");
+
+        Dictionary<string, string> agreesWhen = result.GetProperty<Dictionary<string, string>>("agreesWhen");
+        Assert.Equal("EQ002", result.RuleId);
+        Assert.Equal("name != null", agreesWhen["text"]);
+        Assert.Equal("(not (select in.null.System.String in.name))", agreesWhen["smt"]);
+        Assert.Equal("harvested-predicates", agreesWhen["proposedBy"]);
+        Assert.Equal("bounded", agreesWhen["proofMethod"]);
+        Assert.EndsWith(" Equivalent when name != null.", result.Message.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void LoopBoundChange_IsDivergentOnRung1()
     {

@@ -155,10 +155,10 @@ public sealed class DifferentialSoundnessTests
 
         """;
 
-    private static int Pairs =>
+    internal static int Pairs =>
         string.Equals(Environment.GetEnvironmentVariable("EQUIV_DIFFERENTIAL_BUDGET"), "nightly", StringComparison.OrdinalIgnoreCase) ? Budget.Nightly : Budget.PullRequest;
 
-    private static string Seed => Environment.GetEnvironmentVariable("EQUIV_DIFFERENTIAL_SEED") is { Length: > 0 } seed ? seed : Budget.Seed;
+    internal static string Seed => Environment.GetEnvironmentVariable("EQUIV_DIFFERENTIAL_SEED") is { Length: > 0 } seed ? seed : Budget.Seed;
 
     /// <summary>Rules 1 to 3, under the IOperation lowering and under the IL lowering.</summary>
     [Fact]

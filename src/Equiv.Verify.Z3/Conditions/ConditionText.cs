@@ -11,8 +11,11 @@ namespace Equiv.Verify.Z3.Conditions;
 /// <summary>
 /// The two renderings of an admitted condition (ADR 0048 decision 4; ticket P1-022), both from the one
 /// <see cref="ConditionTerm"/>, so neither depends on how Z3 prints a term. <see cref="Smt"/> is SMT-LIB over the product's
-/// inputs, named as the product names them (<see cref="SharedParameter.InputName"/>). <see cref="Source"/> is the source
-/// spelling, with each parameter's name on the modern side.
+/// inputs, named as the product names them (<see cref="SharedParameter.InputName"/>), and is the exact statement.
+/// <see cref="Source"/> is the source spelling, with each parameter's name on the modern side. It reads as C# when the
+/// parameters are <c>int</c>, <c>long</c>, <c>bool</c> or references: an unsigned operation casts its operands, and a
+/// widening that C# makes implicitly is not written. The IR does not say whether a parameter was declared unsigned or
+/// narrower than <c>int</c>, so for such a parameter the text can read differently from the SMT-LIB.
 /// </summary>
 internal static class ConditionText
 {
@@ -58,9 +61,15 @@ internal static class ConditionText
         [IrBinaryOp.Uge] = IrBinaryOp.Ult,
     }.ToFrozenDictionary();
 
-    /// <summary>The operations that read their operands as unsigned, so a constant operand is spelled unsigned.</summary>
+    /// <summary>
+    /// The operations that read their operands as unsigned and have a signed twin with the same spelling: a constant
+    /// operand is spelled unsigned, and any other is cast to the unsigned type of its width, which is what makes the
+    /// source operator the unsigned one.
+    /// </summary>
     private static readonly FrozenSet<IrBinaryOp> Unsigned =
-        new[] { IrBinaryOp.UDiv, IrBinaryOp.URem, IrBinaryOp.LShr, IrBinaryOp.Ult, IrBinaryOp.Ule, IrBinaryOp.Ugt, IrBinaryOp.Uge }.ToFrozenSet();
+        new[] { IrBinaryOp.UDiv, IrBinaryOp.URem, IrBinaryOp.Ult, IrBinaryOp.Ule, IrBinaryOp.Ugt, IrBinaryOp.Uge }.ToFrozenSet();
+
+    private static readonly FrozenSet<IrBinaryOp> Shifts = new[] { IrBinaryOp.Shl, IrBinaryOp.AShr, IrBinaryOp.LShr }.ToFrozenSet();
 
     /// <summary>The disjunction of <paramref name="disjuncts"/> in SMT-LIB: the one term, or <c>(or ...)</c> of them.</summary>
     public static string Smt(ImmutableArray<ConditionTerm> disjuncts, ImmutableArray<SharedParameter> shared) =>
@@ -93,7 +102,7 @@ internal static class ConditionText
         ConditionTerm.Not not => "!" + Operand(not.A, shared, unsigned: false),
         ConditionTerm.Unary { Op: IrUnaryOp.Neg } unary => "-" + Operand(unary.A, shared, unsigned: false),
         ConditionTerm.Unary { Op: IrUnaryOp.Not } unary => "~" + Operand(unary.A, shared, unsigned: false),
-        ConditionTerm.Unary { Op: IrUnaryOp.ZExt } unary => Source(unary.A, shared, unsigned: true),
+        ConditionTerm.Unary { Op: IrUnaryOp.ZExt } unary => UnsignedCast(unary.A.Type) + Operand(unary.A, shared, unsigned: false),
         ConditionTerm.Unary unary => Source(unary.A, shared, unsigned),
         _ => SourceBinary((ConditionTerm.Binary)term, shared),
     };
@@ -120,15 +129,31 @@ internal static class ConditionText
     private static string SourceBinary(ConditionTerm.Binary binary, ImmutableArray<SharedParameter> shared)
     {
         bool unsigned = Unsigned.Contains(binary.Op);
-        return $"{Operand(binary.A, shared, unsigned)} {Operators[binary.Op].Source} {Operand(binary.B, shared, unsigned)}";
+        return $"{Operand(binary.A, shared, unsigned)} {Operators[binary.Op].Source} {Operand(Shifts.Contains(binary.Op) ? Count(binary.B) : binary.B, shared, unsigned)}";
     }
+
+    /// <summary>
+    /// A shift's count as the source has it: an <c>int</c>, which the IR widens to the width of the shifted value. The
+    /// widening is not part of the spelling, and a cast would make the count a type C# does not shift by.
+    /// </summary>
+    private static ConditionTerm Count(ConditionTerm count) => count is ConditionTerm.Unary { Op: IrUnaryOp.ZExt or IrUnaryOp.SExt } widened ? widened.A : count;
 
     /// <summary>A term as an operand: in parentheses when its spelling has an operator between two operands.</summary>
     private static string Operand(ConditionTerm term, ImmutableArray<SharedParameter> shared, bool unsigned)
     {
         string text = Source(term, shared, unsigned);
-        return text.Contains(' ', StringComparison.Ordinal) ? $"({text})" : text;
+        string operand = text.Contains(' ', StringComparison.Ordinal) ? $"({text})" : text;
+        return unsigned && term is not ConditionTerm.Constant ? UnsignedCast(term.Type) + operand : operand;
     }
+
+    /// <summary>The cast to the unsigned C# type as wide as <paramref name="type"/>, one of the four widths a bitvector has.</summary>
+    private static string UnsignedCast(IrType type) => ((IrBitVec)type).Width switch
+    {
+        8 => "(byte)",
+        16 => "(ushort)",
+        32 => "(uint)",
+        _ => "(ulong)",
+    };
 
     /// <summary>An SMT-LIB symbol: <paramref name="name"/> as it is when it is a simple symbol, else quoted with bars.</summary>
     private static string Symbol(string name) =>

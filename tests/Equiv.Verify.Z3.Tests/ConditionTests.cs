@@ -562,7 +562,7 @@ public sealed class ConditionTests
         Assert.Equal(
             new AgreesWhen(
                 "(or (bvsgt (bvneg ((_ sign_extend 24) in.a)) (_ bv0 32)) (bvugt (bvnot ((_ zero_extend 24) in.b)) (_ bv4294967040 32)))",
-                "-a > 0 || ~b > 4294967040"),
+                "-a > 0 || (uint)~(byte)b > 4294967040"),
             divergent.Conditions?.AgreesWhen);
     }
 
@@ -578,6 +578,9 @@ public sealed class ConditionTests
             Shared("items", "items", new IrSort("int[]")),
             Shared("null.int[]", "null.int[]", new IrMap(new IrSort("int[]"), new IrBool())),
             Shared("other", "other", new IrBool()),
+            Shared("wide", "wide", new IrBitVec(64)),
+            Shared("tiny", "tiny", new IrBitVec(8)),
+            Shared("short", "short", new IrBitVec(16)),
         ];
 
         Assert.Equal(smt, ConditionText.Smt([Terms[term]], shared));
@@ -601,20 +604,24 @@ public sealed class ConditionTests
             ("(not (= in.flag in.other))", "flag != other"),
             ("(distinct in.a (_ bv4294967295 32))", "x != -1"),
             ("(not (distinct in.a (_ bv4294967295 32)))", "x == -1"),
-            ("(bvult in.a (_ bv4294967295 32))", "x < 4294967295"),
-            ("(not (bvult in.a (_ bv4294967295 32)))", "x >= 4294967295"),
-            ("(not (bvule in.a (_ bv1 32)))", "x > 1"),
-            ("(not (bvugt in.a (_ bv1 32)))", "x <= 1"),
-            ("(not (bvuge in.a (_ bv1 32)))", "x < 1"),
+            ("(bvult in.a (_ bv4294967295 32))", "(uint)x < 4294967295"),
+            ("(not (bvult in.a (_ bv4294967295 32)))", "(uint)x >= 4294967295"),
+            ("(not (bvule in.a (_ bv1 32)))", "(uint)x > 1"),
+            ("(not (bvugt in.a (_ bv1 32)))", "(uint)x <= 1"),
+            ("(not (bvuge in.a (_ bv1 32)))", "(uint)x < 1"),
             ("(not (bvsle in.a (_ bv1 32)))", "x > 1"),
             ("(not (bvsgt in.a (_ bv1 32)))", "x <= 1"),
             ("(not (bvsge in.a (_ bv1 32)))", "x < 1"),
             ("(= (bvand (bvor (bvxor in.a (_ bv1 32)) (_ bv1 32)) (_ bv1 32)) (_ bv1 32))", "(((x ^ 1) | 1) & 1) == 1"),
             ("(= (bvsub (bvmul (bvadd in.a (_ bv1 32)) (_ bv1 32)) (_ bv1 32)) (_ bv1 32))", "(((x + 1) * 1) - 1) == 1"),
             ("(= (bvsrem (bvsdiv in.a (_ bv4294967295 32)) (_ bv4294967295 32)) (_ bv1 32))", "((x / -1) % -1) == 1"),
-            ("(= (bvurem (bvudiv in.a (_ bv4294967295 32)) (_ bv4294967295 32)) (_ bv1 32))", "((x / 4294967295) % 4294967295) == 1"),
-            ("(= (bvlshr (bvashr (bvshl in.a (_ bv1 32)) (_ bv4294967295 32)) (_ bv4294967295 32)) (_ bv1 32))", "(((x << 1) >> -1) >>> 4294967295) == 1"),
-            ("(= ((_ sign_extend 32) in.a) ((_ zero_extend 32) in.a))", "x == x"),
+            ("(= (bvurem (bvudiv in.a (_ bv4294967295 32)) (_ bv4294967295 32)) (_ bv1 32))", "((uint)((uint)x / 4294967295) % 4294967295) == 1"),
+            ("(= (bvlshr (bvashr (bvshl in.a (_ bv1 32)) (_ bv4294967295 32)) (_ bv4294967295 32)) (_ bv1 32))", "(((x << 1) >> -1) >>> -1) == 1"),
+            ("(= ((_ sign_extend 32) in.a) ((_ zero_extend 32) in.a))", "x == (uint)x"),
+            ("(bvult in.wide ((_ zero_extend 56) in.tiny))", "(ulong)wide < (ulong)(byte)tiny"),
+            ("(bvuge ((_ zero_extend 48) in.short) ((_ zero_extend 32) in.a))", "(ulong)(ushort)short >= (ulong)(uint)x"),
+            ("(= (bvshl in.wide ((_ zero_extend 32) in.a)) (bvashr in.wide ((_ sign_extend 32) in.a)))", "(wide << x) == (wide >> x)"),
+            ("(= (bvlshr in.wide ((_ zero_extend 32) in.a)) (bvadd in.wide ((_ zero_extend 32) in.a)))", "(wide >>> x) == (wide + (uint)x)"),
         ];
         TheoryData<string, string, int> data = [];
         for (int i = 0; i < expected.Length; i++)
@@ -669,6 +676,16 @@ public sealed class ConditionTests
                 EqualsOne(Binary(IrBinaryOp.URem, Binary(IrBinaryOp.UDiv, a, minusOne), minusOne)),
                 EqualsOne(Binary(IrBinaryOp.LShr, Binary(IrBinaryOp.AShr, Binary(IrBinaryOp.Shl, a, one), minusOne), minusOne)),
                 Binary(IrBinaryOp.Eq, new ConditionTerm.Unary(IrUnaryOp.SExt, a, bv64), new ConditionTerm.Unary(IrUnaryOp.ZExt, a, bv64)),
+                Binary(IrBinaryOp.Ult, new ConditionTerm.Input(5, bv64), new ConditionTerm.Unary(IrUnaryOp.ZExt, new ConditionTerm.Input(6, new IrBitVec(8)), bv64)),
+                Binary(IrBinaryOp.Uge, new ConditionTerm.Unary(IrUnaryOp.ZExt, new ConditionTerm.Input(7, new IrBitVec(16)), bv64), new ConditionTerm.Unary(IrUnaryOp.ZExt, a, bv64)),
+                Binary(
+                    IrBinaryOp.Eq,
+                    Binary(IrBinaryOp.Shl, new ConditionTerm.Input(5, bv64), new ConditionTerm.Unary(IrUnaryOp.ZExt, a, bv64)),
+                    Binary(IrBinaryOp.AShr, new ConditionTerm.Input(5, bv64), new ConditionTerm.Unary(IrUnaryOp.SExt, a, bv64))),
+                Binary(
+                    IrBinaryOp.Eq,
+                    Binary(IrBinaryOp.LShr, new ConditionTerm.Input(5, bv64), new ConditionTerm.Unary(IrUnaryOp.ZExt, a, bv64)),
+                    Binary(IrBinaryOp.Add, new ConditionTerm.Input(5, bv64), new ConditionTerm.Unary(IrUnaryOp.ZExt, a, bv64))),
             ];
         }
     }

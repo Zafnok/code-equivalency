@@ -99,23 +99,17 @@ internal static class CandidateHarvest
             return term;
         }
 
-        private ConditionTerm? Compute(IrVar variable)
+        /// <summary>A variable nothing harvestable defines is a term only when it is a source parameter both sides have.</summary>
+        private ConditionTerm? Compute(IrVar variable) => definitions.GetValueOrDefault(variable.Name) switch
         {
-            if (inputs.TryGetValue(variable.Name, out (int Index, IrType Type) input))
-            {
-                return IrParameterNames.IsSynthesised(variable.Name) ? null : new ConditionTerm.Input(input.Index, input.Type);
-            }
-
-            return definitions.GetValueOrDefault(variable.Name) switch
-            {
-                IrConst { Value: IrBoolValue or IrBitVecValue } constant => new ConditionTerm.Constant(constant.Value),
-                IrBinary binary when Resolve(binary.A) is { } a && Resolve(binary.B) is { } b => new ConditionTerm.Binary(binary.Op, a, b),
-                IrUnary { Op: IrUnaryOp.BoolNot } unary when Resolve(unary.A) is { } a => new ConditionTerm.Not(a),
-                IrUnary { Op: not (IrUnaryOp.BoolNot or IrUnaryOp.Trunc) } unary when Resolve(unary.A) is { } a => new ConditionTerm.Unary(unary.Op, a, unary.Target.Type),
-                IrMapRead read when IsNullShadow(read, out int map) && Resolve(read.Key) is ConditionTerm.Input reference => new ConditionTerm.Null(map, reference),
-                _ => null,
-            };
-        }
+            null when inputs.TryGetValue(variable.Name, out (int Index, IrType Type) input) && !IrParameterNames.IsSynthesised(variable.Name) => new ConditionTerm.Input(input.Index, input.Type),
+            IrConst { Value: IrBoolValue or IrBitVecValue } constant => new ConditionTerm.Constant(constant.Value),
+            IrBinary binary when Resolve(binary.A) is { } a && Resolve(binary.B) is { } b => new ConditionTerm.Binary(binary.Op, a, b),
+            IrUnary { Op: IrUnaryOp.BoolNot } unary when Resolve(unary.A) is { } a => new ConditionTerm.Not(a),
+            IrUnary { Op: not (IrUnaryOp.BoolNot or IrUnaryOp.Trunc) } unary when Resolve(unary.A) is { } a => new ConditionTerm.Unary(unary.Op, a, unary.Target.Type),
+            IrMapRead read when IsNullShadow(read, out int map) && Resolve(read.Key) is ConditionTerm.Input reference => new ConditionTerm.Null(map, reference),
+            _ => null,
+        };
 
         /// <summary>Whether <paramref name="read"/> reads a <c>null.&lt;Sort&gt;</c> input both sides have, at index <paramref name="map"/>.</summary>
         private bool IsNullShadow(IrMapRead read, out int map)

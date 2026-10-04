@@ -121,6 +121,53 @@ public sealed class BackendProgressTests
             details[(opaque + 1)..(opaque + 10)]);
     }
 
+    /// <summary>
+    /// Ticket P1-022: the search for an input condition is a step after the ladder. Each candidate is its proof query and,
+    /// when that is unsatisfiable, its query for an input that meets it; then the one admitted candidate is checked
+    /// against the counterexample.
+    /// </summary>
+    [Fact]
+    public void The_Condition_Search_Is_A_Step()
+    {
+        (Equiv.Core.Ir.IrProcedure old, Equiv.Core.Ir.IrProcedure @new) = Fixture.Pair("""
+            proc "T::M(int)" (%a: bv32) -> bv32 entry B0
+            B0:
+              %zero: bv32 = const bv32 0
+              %negative: bool = slt %a, %zero
+              br %negative, B1, B2
+            B1:
+              ret %zero
+            B2:
+              %one: bv32 = const bv32 1
+              ret %one
+            ---
+            proc "T::M(int)" (%a: bv32) -> bv32 entry B0
+            B0:
+              %zero: bv32 = const bv32 0
+              %negative: bool = slt %a, %zero
+              br %negative, B1, B2
+            B1:
+              ret %zero
+            B2:
+              %two: bv32 = const bv32 2
+              ret %two
+            """);
+        RecordingRunLog log = new(isDebug: true);
+
+        new Z3Backend().Verify(old, @new, Options with { Log = log });
+
+        string[] details = Details(log);
+        int rung = Array.IndexOf(details, "rung:bounded=sat");
+        Assert.Equal(
+            [
+                "encode",
+                "assert", "inline", "check:condition-proof=unsat", "assert", "inline", "check:condition-met=sat",
+                "assert", "inline", "check:condition-proof=sat",
+                "check:condition-counterexample=unsat", "dispose", "step:conditions",
+            ],
+            details[(rung + 1)..]);
+    }
+
     [Fact]
     public void A_Proof_Spacer_Finds_Is_Certified_In_A_Stage_Of_Its_Own()
     {

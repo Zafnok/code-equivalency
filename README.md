@@ -308,6 +308,14 @@ is equivalent unless one of the listed `relatedLocations` is reached, and `metho
 modern side throws where the legacy side returns (`newFailures`), and the reverse
 (`removedFailures`), each as `found`, `none-proved` or `unknown`.
 
+A result that is not Equivalent can also say where the pair does agree. A `Divergent` (EQ002), or
+an `Unknown` whose divergence rests on an abstraction, carries `properties.agreesWhen` when the
+solver proved the pair equivalent under a condition on its inputs, and its message ends with
+`Equivalent when <text>.` For the dropped guard of `samples/removed-null-check` that is
+`name != null`, so the only question left for the reviewer is whether `null` can arrive. The
+condition is a predicate one of the two bodies already computes; the verdict and the exit code stay
+what they were, and nothing is claimed about the inputs outside it.
+
 ## Use from a coding agent
 
 `equiv mcp` runs the same pipeline as `equiv compare` as a [Model Context Protocol](https://modelcontextprotocol.io)
