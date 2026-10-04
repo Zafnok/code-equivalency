@@ -261,6 +261,23 @@ public sealed class IrValidatorTests
         Assert.Equal([expected], Ids(WithTerminator(terminator)));
     }
 
+    /// <summary>
+    /// Ticket P2-082 criterion 3: a block with no terminator is a diagnostic, not a <see cref="NullReferenceException"/>
+    /// from the first rule that reads it, and it is the only one: every other rule needs the terminator.
+    /// </summary>
+    [Fact]
+    public void IR014ABlockWithoutATerminator()
+    {
+        IrProcedure valid = IrText.Parse(Diamond);
+        IrProcedure broken = valid with { Blocks = [.. valid.Blocks.Select(static b => b.Id.Value == 1 ? b with { Terminator = null! } : b)] };
+
+        IrDiagnostic diagnostic = Assert.Single(IrValidator.Validate(broken));
+
+        Assert.Equal(IrDiagnosticIds.MissingTerminator, diagnostic.Id);
+        Assert.Equal(new IrBlockId(1), diagnostic.Block);
+        Assert.Equal("block B1 has no terminator", diagnostic.Message);
+    }
+
     [Theory]
     [InlineData("br %c, B1, B1")]
     [InlineData("switch %a [bv32 1 -> B1] default B1")]

@@ -45,6 +45,12 @@ public static class IrValidator
         public ImmutableArray<IrDiagnostic> Run()
         {
             IndexBlocks();
+            if (MissingTerminators())
+            {
+                // Every later rule reads a block's terminator, so there is nothing more to check (ticket P2-082).
+                return diagnostics.ToImmutable();
+            }
+
             CheckTargets();
             CollectDefinitions();
             CheckPhis();
@@ -77,6 +83,18 @@ public static class IrValidator
 
                 predecessors.TryAdd(block.Id, []);
             }
+        }
+
+        /// <summary>Reports each block built without a terminator; true when there is one.</summary>
+        private bool MissingTerminators()
+        {
+            List<IrBlockId> missing = [.. procedure.Blocks.Where(static b => b.Terminator is null).Select(static b => b.Id)];
+            foreach (IrBlockId block in missing)
+            {
+                Report(IrDiagnosticIds.MissingTerminator, block, $"block {IrText.Block(block)} has no terminator");
+            }
+
+            return missing.Count > 0;
         }
 
         private void CheckTargets()

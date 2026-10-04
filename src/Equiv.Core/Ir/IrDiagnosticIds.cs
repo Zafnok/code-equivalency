@@ -41,4 +41,7 @@ public static class IrDiagnosticIds
 
     /// <summary>A closed <see cref="IrCall"/> has heap pairs, though it reaches no heap map (ADR 0041; ticket P2-060).</summary>
     public const string ClosedCallHeap = "IR013";
+
+    /// <summary>A block has no terminator, so control falls off its end (ticket P2-082).</summary>
+    public const string MissingTerminator = "IR014";
 }
