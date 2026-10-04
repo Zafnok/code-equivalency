@@ -796,8 +796,7 @@ over IR and does not cover them.
 The review listed eight verification techniques absent from the README, and three priorities: IR
 coverage, conditional equivalence, and trace-guided loop alignment. Checked against the ADRs, two of
 the eight are already here and get no implementation ticket:
-- Differential assertion checking is ADR 0037 and P1-013. What is missing is its measured yield
-  (P1-021).
+- Differential assertion checking is ADR 0037 and P1-013. Its yield was measured by P1-021.
 - Equivalence modulo uninterpreted calls is ADR 0019 (with the mutual-summary rule for cycles) and
   P1-010's contracts.
 
@@ -807,7 +806,7 @@ resolved were real divergences the abstraction hid. New dependencies and ADR cha
 for this work where the change is in proportion to what it buys.
 
 Order: P1-028 and P1-029 (coverage, the first priority; no dependency on the rest), then P1-022,
-then P1-023 → P1-024, with P1-020 and P1-021 alongside. Then P1-030 and P1-031. The three spikes
+then P1-023 (which closed P1-024), with P1-020 and P1-021 alongside. Then P1-030 and P1-031. The three spikes
 P1-025 → P1-026 and P1-027 come last and each decides its own future.
 
 - P1-028 (M) Measurement: the opaque reasons with no owner, counted over the three large runs
@@ -827,7 +826,13 @@ P1-025 → P1-026 and P1-027 come last and each decides its own future.
 - P1-020 (M) A Divergent says whether the modern side only removed failures, added one, or changed a
   result (`properties.divergenceKind`), from ADR 0037's two queries and a third. Needs P1-013.
 - P1-021 (M) Measurement: what failure refinement answers today, and what it would answer on the 400
-  `timeout` Unknowns that ADR 0037 does not query. Needs P1-013, P2-050.
+  `timeout` Unknowns that ADR 0037 does not query. Needs P1-013, P2-050. Done 2026-10-04: today 11
+  of the 1,072 queried Unknowns (1.0%) have a `none-proved` `newFailures` and 30 a `found` one. Asked
+  on gitextensions-8522's `timeout` Unknowns, 2 of the 138 still a `timeout` (1.4%) would be
+  `none-proved`, below ADR 0028's 5%, and 17 (12.3%) get some answer, at 0.44 times the pair's time
+  (`docs/runs/2026-10-04-failure-refinement.md`). P1-035 is filed regardless of the bar.
+- P1-035 (S) A `timeout` Unknown carries `properties.failureRefinement` like any other Unknown,
+  starting with a clarification of ADR 0037. Needs P1-013, P1-021.
 - P1-030 (L) Abstraction refinement, part 1: when an `abstraction` Unknown's candidate depends only
   on interpretable pure functions (`IntPtr` equality, `float` and `double` arithmetic as IEEE), the
   pair is asked again with them interpreted (`proofMethod` suffix `+refined`). Starts with a new ADR
@@ -835,9 +840,15 @@ P1-025 → P1-026 and P1-027 come last and each decides its own future.
 - P1-031 (L) Abstraction refinement, part 2: a rung 1 query that times out is asked again with
   multiplication, division and remainder of two unknowns as shared functions, refined by point facts
   from spurious models (`+abstracted`). Needs P2-050, M3-016.
-- P1-025 (M) Spike: do Bitwuzla, cvc5, Eldarica or Golem decide the queries Z3 gives up on. It writes
-  the ADR that supersedes ADR 0005's "Z3 alone" and the ticket that adds the best of them, unless
-  none decides anything. Needs P2-050.
+- P1-025 (M) Spike: do Bitwuzla, cvc5, Eldarica or Golem decide the queries Z3 gives up on. Done:
+  cvc5 answers 59 of the 142 rung 1 queries Z3 gives up on for gitextensions-8522 (9 Divergent, 27
+  Unknown(abstraction), 4 unsatisfiable) and proves no pair; Bitwuzla reads none; no rung 4 Unknown
+  to give a Horn solver (`docs/runs/2026-10-04-solver-portfolio.md`). ADR 0050.
+- P1-033 (L) cvc5 is asked the rung 1 queries Z3 gives up on, as a process behind `ISmtSolver`, with
+  every satisfiable answer replayed (`+cvc5`; ADR 0050). Needs P1-025.
+- P1-034 (M) Spike: the call trace encoded without sequences and datatypes, asked of Z3, cvc5 and
+  Bitwuzla on the same 142 queries. It decides whether rung 1 changes its trace encoding and whether
+  Bitwuzla is worth adding. Needs P1-025.
 - P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
   gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
 - P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model
@@ -870,6 +881,7 @@ are unchanged; a later census that shows more changed pairs can move any of thes
 - `--il-fallback` on by default (ADR 0039, P1-018): measured on Git Extensions 2026-10-01. Of 1,294 changed pairs it lowers 116 from IL and moves 21 (1.6%) from Unknown(opaque) to Equivalent and 21 to Divergent, none reproduced by replay; below ADR 0028's 5% bar, with no Equivalent regressed, one crash (P2-078) and one Divergent turned Unknown(timeout). A hand check found 20 of the 21 Equivalents unproved: the IL lowering never reads a lambda's body (soundness, P2-079), so the sound gain is 1 pair (0.1%). The option stays, off by default (`docs/runs/2026-10-01-il-fallback-verdicts.md`).
 - Congruence modulo verified rewrites (equality saturation, P1-011): measured on Git Extensions 2026-09-28, 0 of 1,195 changed pairs (0.0%) close under the rule set, below ADR 0028's 5% bar; not scheduled (`docs/runs/2026-09-28-egraph-spike.md`).
 - The share of inputs a Divergent diverges on, by approximate model counting (P1-027): measured on the three large runs 2026-10-04. Of 80 EQ002 results 18 (22.5%) have a countable parameter space and 12 (15.0%) are counted in time, below the ticket's half; all 12 have share 1, 11 of them with no source parameter. 55 of the 62 others pass a `string` or an object to a call. Not scheduled (`docs/runs/2026-10-04-divergent-count-spike.md`).
+- Trace-guided loop alignment (P1-024; semantic program alignment, Churchill et al., PLDI 2019): measured by P1-023 on the three large runs 2026-10-04. Of their 89 `unaligned-loop` Unknowns, 0 have an unrolled, batched or peeled pairing of iterations that 200 runs of both sides show (0.0% of 2,246 changed pairs), under the ticket's bar of 10; P1-024 is closed unbuilt. 47 of the 89 (2.1% of changed pairs) run in lockstep with equal calls and outcomes on every run and fail rung 2's step or base obligation, so what they lack is a stronger header relation, not a schedule (`docs/runs/2026-10-04-loop-alignment-spike.md`).
 
 From the 2026-09-24 second-oracle review, unticketed until a result above asks for them:
 - Shadowing the residual in staging or production: generate a Scientist.NET experiment, or a
