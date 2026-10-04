@@ -796,8 +796,7 @@ over IR and does not cover them.
 The review listed eight verification techniques absent from the README, and three priorities: IR
 coverage, conditional equivalence, and trace-guided loop alignment. Checked against the ADRs, two of
 the eight are already here and get no implementation ticket:
-- Differential assertion checking is ADR 0037 and P1-013. What is missing is its measured yield
-  (P1-021).
+- Differential assertion checking is ADR 0037 and P1-013. Its yield was measured by P1-021.
 - Equivalence modulo uninterpreted calls is ADR 0019 (with the mutual-summary rule for cycles) and
   P1-010's contracts.
 
@@ -827,7 +826,13 @@ P1-025 → P1-026 and P1-027 come last and each decides its own future.
 - P1-020 (M) A Divergent says whether the modern side only removed failures, added one, or changed a
   result (`properties.divergenceKind`), from ADR 0037's two queries and a third. Needs P1-013.
 - P1-021 (M) Measurement: what failure refinement answers today, and what it would answer on the 400
-  `timeout` Unknowns that ADR 0037 does not query. Needs P1-013, P2-050.
+  `timeout` Unknowns that ADR 0037 does not query. Needs P1-013, P2-050. Done 2026-10-04: today 11
+  of the 1,072 queried Unknowns (1.0%) have a `none-proved` `newFailures` and 30 a `found` one. Asked
+  on gitextensions-8522's `timeout` Unknowns, 2 of the 138 still a `timeout` (1.4%) would be
+  `none-proved`, below ADR 0028's 5%, and 17 (12.3%) get some answer, at 0.44 times the pair's time
+  (`docs/runs/2026-10-04-failure-refinement.md`). P1-032 is filed regardless of the bar.
+- P1-032 (S) A `timeout` Unknown carries `properties.failureRefinement` like any other Unknown,
+  starting with a clarification of ADR 0037. Needs P1-013, P1-021.
 - P1-030 (L) Abstraction refinement, part 1: when an `abstraction` Unknown's candidate depends only
   on interpretable pure functions (`IntPtr` equality, `float` and `double` arithmetic as IEEE), the
   pair is asked again with them interpreted (`proofMethod` suffix `+refined`). Starts with a new ADR

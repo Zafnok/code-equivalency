@@ -129,7 +129,14 @@ internal static class TimeoutQueries
         int both = queried.Count(static r => r.Queries!.NewFailures.Outcome == "none-proved" && r.Queries.RemovedFailures.Outcome == "none-proved");
         Console.WriteLine();
         Console.WriteLine(Program.Invariant($"baseline pair seconds (sum) {baselineSeconds:F0}; added by the two queries (sum of pair seconds) {addedSeconds:F0}, of which solver checks {checkSeconds:F0}; added / baseline {addedSeconds / Math.Max(baselineSeconds, 1):F2}"));
-        Console.WriteLine($"timeout Unknowns that would have a none-proved newFailures: {noneProved} of {rows.Count} ({Program.Share(noneProved, rows.Count)}); with both none-proved: {both} ({Program.Share(both, rows.Count)}) (ADR 0028's bar: 5%)");
+        Console.WriteLine($"the run's timeout Unknowns with a none-proved newFailures at this commit: {noneProved} of {rows.Count} ({Program.Share(noneProved, rows.Count)}); with both none-proved: {both} ({Program.Share(both, rows.Count)})");
+
+        // A pair the full query now decides is no longer a timeout Unknown, so the share criterion 4 asks for is over the rest.
+        List<Row> still = [.. queried.Where(static r => r.Baseline == Measured.Timeout)];
+        int stillNoneProved = still.Count(static r => r.Queries!.NewFailures.Outcome == "none-proved");
+        int stillAnswered = still.Count(static r => new[] { r.Queries!.NewFailures.Outcome, r.Queries.RemovedFailures.Outcome }.Any(static o => o is "none-proved" or "found"));
+        Console.WriteLine($"of the {still.Count} still timeout at this commit: none-proved newFailures {stillNoneProved} ({Program.Share(stillNoneProved, still.Count)}); either query none-proved or found {stillAnswered} ({Program.Share(stillAnswered, still.Count)}) (ADR 0028's bar: 5%)");
+        Console.WriteLine(Program.Invariant($"of those {still.Count}: baseline pair seconds {still.Sum(static r => r.BaselineSeconds):F0}, added by the two queries {still.Sum(static r => r.Queries!.ElapsedSeconds):F0}"));
 
         Console.WriteLine();
         Console.WriteLine("## Pairs with a none-proved or found answer (procedure identity, baseline, newFailures, removedFailures)");
