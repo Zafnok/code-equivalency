@@ -693,6 +693,11 @@ Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
   exits the `--il-fallback` run with code 5. `IlFallback` keeps the IOperation bodies when the IL
   bodies do not validate. Needs P1-016, P1-017.
 
+Found by a CI failure (PR #390, `gates (ubuntu-latest)`):
+- P2-129 (S) A ladder property test fails at random, about once in 400 runs, with no assertion: its
+  generator's filter for procedures that loop and call keeps 1 draw in 8, and CsCheck gives up after
+  100 rejections in a row. Test code only.
+
 Documentation:
 - P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list
   `--bound` and `--timeout-ms`, which the command never had (`bound` and `timeoutMs` come from the
