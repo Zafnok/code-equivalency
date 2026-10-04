@@ -1,0 +1,349 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.AsyncDisposal.Journal::FlushAsync(System.IAsyncDisposable,int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Journal.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 28,
+                  "endLine": 9,
+                  "endColumn": 38
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.AsyncDisposal.Journal::FlushAsync(System.IAsyncDisposable,int)",
+            "resultFingerprint/v1": "e782019856171ada6f567343a9b1c9a7d5a14998c2c2f50f3e645e82b9c91a6d"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.AsyncDisposal.Journal::CloseAsync(System.IAsyncDisposable,int) diverges: inputs(sort \"System.IAsyncDisposable\" 0, bv32 2147483646, map<sort \"System.IAsyncDisposable\", bool> [] default bool false) old(returned bv32 2147483647 outs() trace(\"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.IAsyncDisposable\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0))) new(returned bv32 2147483648 outs() trace(\"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.IAsyncDisposable\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Journal.cs"
+                },
+                "region": {
+                  "startLine": 20,
+                  "startColumn": 28,
+                  "endLine": 20,
+                  "endColumn": 38
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.AsyncDisposal.Journal::CloseAsync(System.IAsyncDisposable,int)",
+            "resultFingerprint/v1": "6ca8cd4f447cfed0d1dc23b8e002693c6753c64aa2f41df7fd8f932d780424a5"
+          },
+          "baselineState": "new",
+          "rank": 60.004,
+          "properties": {
+            "model": "inputs(sort \"System.IAsyncDisposable\" 0, bv32 2147483646, map<sort \"System.IAsyncDisposable\", bool> [] default bool false) old(returned bv32 2147483647 outs() trace(\"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.IAsyncDisposable\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0))) new(returned bv32 2147483648 outs() trace(\"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.IAsyncDisposable\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "reviewGroup": "proofMethod:none"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.AsyncDisposal.Journal::LastAsync(System.Collections.Generic.IAsyncEnumerable<int>) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Journal.cs"
+                },
+                "region": {
+                  "startLine": 26,
+                  "startColumn": 28,
+                  "endLine": 26,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.AsyncDisposal.Journal::LastAsync(System.Collections.Generic.IAsyncEnumerable<int>)",
+            "resultFingerprint/v1": "add56209bb2d25d435cb988e2f234f492fb2aaa40e11f2e5c885ba38e448801a"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "lockstep-induction",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "no divergence within the bound 3, and some input goes past it"
+              },
+              {
+                "rung": "lockstep-induction",
+                "outcome": "proved",
+                "detail": "base and 1 step obligations hold"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.AsyncDisposal.Journal::FirstAsync(System.Collections.Generic.IAsyncEnumerable<int>) diverges: inputs(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, map<sort \"System.Collections.Generic.IAsyncEnumerable`1\", bool> [] default bool false, map<sort \"System.Collections.Generic.IAsyncEnumerator`1\", bool> [] default bool false) old(returned bv32 3221225473 outs() trace(\"System.Collections.Generic.IAsyncEnumerable`1::GetAsyncEnumerator(System.Threading.CancellationToken)<int>\"(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, sort \"System.Threading.CancellationToken\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::MoveNextAsync()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter`1<bool>\"(sort \"System.Threading.Tasks.ValueTask`1\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::get_Current()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0))) new(returned bv32 3221225471 outs() trace(\"System.Collections.Generic.IAsyncEnumerable`1::GetAsyncEnumerator(System.Threading.CancellationToken)<int>\"(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, sort \"System.Threading.CancellationToken\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::MoveNextAsync()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter`1<bool>\"(sort \"System.Threading.Tasks.ValueTask`1\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::get_Current()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Journal.cs"
+                },
+                "region": {
+                  "startLine": 37,
+                  "startColumn": 28,
+                  "endLine": 37,
+                  "endColumn": 38
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.AsyncDisposal.Journal::FirstAsync(System.Collections.Generic.IAsyncEnumerable<int>)",
+            "resultFingerprint/v1": "63297c25e97b253325131136693ba8306f735966c366e9ffa35b6bc8aff79f46"
+          },
+          "baselineState": "new",
+          "rank": 60.004,
+          "properties": {
+            "model": "inputs(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, map<sort \"System.Collections.Generic.IAsyncEnumerable`1\", bool> [] default bool false, map<sort \"System.Collections.Generic.IAsyncEnumerator`1\", bool> [] default bool false) old(returned bv32 3221225473 outs() trace(\"System.Collections.Generic.IAsyncEnumerable`1::GetAsyncEnumerator(System.Threading.CancellationToken)<int>\"(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, sort \"System.Threading.CancellationToken\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::MoveNextAsync()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter`1<bool>\"(sort \"System.Threading.Tasks.ValueTask`1\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::get_Current()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0))) new(returned bv32 3221225471 outs() trace(\"System.Collections.Generic.IAsyncEnumerable`1::GetAsyncEnumerator(System.Threading.CancellationToken)<int>\"(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, sort \"System.Threading.CancellationToken\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::MoveNextAsync()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter`1<bool>\"(sort \"System.Threading.Tasks.ValueTask`1\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::get_Current()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "reviewGroup": "proofMethod:none"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 4,
+            "modern": 4
+          },
+          "matchedPairs": 4,
+          "pairsWithoutOpaque": 4,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 0,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 4,
+          "changedPairsWithoutOpaque": 4,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 4
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.IAsyncDisposable::DisposeAsync()",
+                "callSites": 9
+              },
+              {
+                "member": "System.Collections.Generic.IAsyncEnumerable`1::GetAsyncEnumerator(System.Threading.CancellationToken)<int>",
+                "callSites": 2
+              },
+              {
+                "member": "System.Collections.Generic.IAsyncEnumerator`1::MoveNextAsync()<int>",
+                "callSites": 2
+              },
+              {
+                "member": "System.Collections.Generic.IAsyncEnumerator`1::get_Current()<int>",
+                "callSites": 2
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.IAsyncDisposable::DisposeAsync()",
+                "callSites": 9
+              },
+              {
+                "member": "System.Collections.Generic.IAsyncEnumerable`1::GetAsyncEnumerator(System.Threading.CancellationToken)<int>",
+                "callSites": 2
+              },
+              {
+                "member": "System.Collections.Generic.IAsyncEnumerator`1::MoveNextAsync()<int>",
+                "callSites": 2
+              },
+              {
+                "member": "System.Collections.Generic.IAsyncEnumerator`1::get_Current()<int>",
+                "callSites": 2
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 50,
+          "modern": 50
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.AsyncDisposal",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.AsyncDisposal",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "reviewList": [
+          {
+            "group": "proofMethod:none",
+            "ruleId": "EQ002",
+            "rank": 60.004,
+            "count": 2,
+            "identities": [
+              "Equiv.Samples.AsyncDisposal.Journal::CloseAsync(System.IAsyncDisposable,int)",
+              "Equiv.Samples.AsyncDisposal.Journal::FirstAsync(System.Collections.Generic.IAsyncEnumerable<int>)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

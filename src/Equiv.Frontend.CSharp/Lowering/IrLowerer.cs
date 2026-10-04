@@ -162,10 +162,6 @@ internal sealed class IrLowerer
         (string Reason, SourceSpan Span)? wholeBody = body switch
         {
             _ when method.IsIterator => ("iterator", Span(body.Descendants().First(static o => o.Kind is OperationKind.YieldReturn or OperationKind.YieldBreak).Syntax)),
-            _ when method.IsAsync && body.Descendants().FirstOrDefault(static o => o is IForEachLoopOperation { IsAsynchronous: true }) is { } loop =>
-                ("await-foreach", Span(loop.Syntax)),
-            _ when method.IsAsync && body.Descendants().FirstOrDefault(static o => o is IUsingOperation { IsAsynchronous: true } or IUsingDeclarationOperation { IsAsynchronous: true }) is { } @using =>
-                ("await-using", Span(@using.Syntax)),
             _ => null,
         };
         if (wholeBody is { } opaque)
@@ -810,11 +806,20 @@ internal sealed class IrLowerer
     /// caller-information parameter is the input both sides share (ADR 0046; ticket P2-098).
     /// </summary>
     private IrVar? Lower(IOperation operation, LoweringContext context) =>
-        Supplied(operation) ?? (loops.Of(operation) is { } site ? ForEach(site, context) : Operation(operation, context));
+        Supplied(operation, context) ?? (loops.Of(operation) is { } site ? ForEach(site, context) : Operation(operation, context));
 
-    /// <summary>The shared input <paramref name="operation"/> reads when it is a caller location the compiler supplied, or null.</summary>
-    private IrVar? Supplied(IOperation operation) =>
-        CallerLocation.Of(operation) is { } location ? heap.Inputs.Caller(location, operation.Type!) : null;
+    /// <summary>
+    /// The value of an argument the compiler supplied, or null for any other operation: the shared input a caller location
+    /// reads, and the constant that is the <c>default</c> passed for a parameter <c>GetAsyncEnumerator</c> leaves optional,
+    /// its cancellation token (ticket P1-029). That one's syntax is the loop, so it has no fingerprint to share as an
+    /// opaque; it is its type's one default value on both sides, element 0 of its sort, and only ever that call's argument.
+    /// </summary>
+    private IrVar? Supplied(IOperation operation, LoweringContext context) => operation switch
+    {
+        _ when CallerLocation.Of(operation) is { } location => heap.Inputs.Caller(location, operation.Type!),
+        IDefaultValueOperation { IsImplicit: true, Syntax: CommonForEachStatementSyntax } => Constant(operation.Type!, value: null, context),
+        _ => null,
+    };
 
     private IrVar? Operation(IOperation operation, LoweringContext context)
     {
@@ -2248,8 +2253,10 @@ internal sealed class IrLowerer
     /// </summary>
     private IrVar? Await(IAwaitOperation awaited, LoweringContext context)
     {
-        AwaitExpressionSyntax syntax = (AwaitExpressionSyntax)awaited.Syntax;
-        if (compilation.GetSemanticModel(syntax.SyntaxTree).GetAwaitExpressionInfo(syntax).GetAwaiterMethod is not { ReturnType: INamedTypeSymbol awaiter } getAwaiter)
+        IMethodSymbol? found = awaited.Syntax is AwaitExpressionSyntax syntax
+            ? compilation.GetSemanticModel(syntax.SyntaxTree).GetAwaitExpressionInfo(syntax).GetAwaiterMethod
+            : awaited.Operation.Type!.GetMembers(WellKnownMemberNames.GetAwaiter).OfType<IMethodSymbol>().FirstOrDefault(static m => m.Parameters.IsEmpty);
+        if (found is not { ReturnType: INamedTypeSymbol awaiter } getAwaiter)
         {
             return Opaque(awaited, awaited.Kind.ToString(), context);
         }

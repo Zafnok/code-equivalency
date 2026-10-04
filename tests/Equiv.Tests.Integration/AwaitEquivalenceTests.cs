@@ -78,6 +78,31 @@ public sealed class AwaitEquivalenceTests
         Assert.IsType<Divergent>(verdict);
     }
 
+    /// <summary>
+    /// Ticket P1-029, criterion 4: <c>using</c> calls <c>Dispose()</c> and <c>await using</c> calls <c>DisposeAsync()</c> and
+    /// awaits it, so the two sides make different calls.
+    /// </summary>
+    [Fact]
+    public void UsingAgainstAwaitUsing_IsNotEquivalent()
+    {
+        Verdict verdict = Verify(
+            $"class C {{ static async {Tasks}.Task<int> M(System.IO.Stream s, {Tasks}.Task<int> t) {{ using (s) {{ return await t; }} }} }}",
+            $"class C {{ static async {Tasks}.Task<int> M(System.IO.Stream s, {Tasks}.Task<int> t) {{ await using (s) {{ return await t; }} }} }}");
+
+        Assert.IsType<Divergent>(verdict);
+    }
+
+    /// <summary>Ticket P1-029, criterion 3: a pair with the same <c>await using</c> or <c>await foreach</c> is compared on the statement inside.</summary>
+    [Theory]
+    [InlineData(
+        $"class C {{ static async {Tasks}.Task<int> M(IAsyncDisposable d, int k) {{ await using (d) {{ return k + k; }} }} }}",
+        $"class C {{ static async {Tasks}.Task<int> M(IAsyncDisposable d, int k) {{ await using IAsyncDisposable held = d; return k * 2; }} }}")]
+    [InlineData(
+        $"class C {{ static async {Tasks}.Task<int> M(System.Collections.Generic.IAsyncEnumerable<int> xs) {{ int last = 0; await foreach (int x in xs) {{ last = x + x; }} return last; }} }}",
+        $"class C {{ static async {Tasks}.Task<int> M(System.Collections.Generic.IAsyncEnumerable<int> xs) {{ int last = 0; await foreach (int x in xs) {{ last = x * 2; }} return last; }} }}")]
+    public void AnUnchangedAsyncDisposalIsEquivalent(string legacy, string modern) =>
+        Assert.IsType<Equivalent>(Verify(legacy, modern));
+
     /// <summary>Criterion 5: <c>ConfirmAsync</c> lowers with no opaque on either side.</summary>
     [Fact]
     public void BusinessLayerConfirmAsyncHasNoOpaque()
