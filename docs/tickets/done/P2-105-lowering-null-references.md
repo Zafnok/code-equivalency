@@ -1,5 +1,5 @@
 # P2-105 Five procedures make the lowerer throw a null reference
-Status: in-progress
+Status: done (PR #379)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-058
