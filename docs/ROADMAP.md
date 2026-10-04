@@ -509,6 +509,11 @@ of how much of the cleanup result each explains:
   (`docs/runs/2026-10-03-cleanup-gitextensions-11372/SUMMARY.md`).
 - P2-120 (L) A collection expression whose elements are evaluated ahead of it, and the targets
   P2-099 left opaque: 3 false Divergent and 104 changed pairs on gitextensions-11372. Needs P2-071.
+  Done 2026-10-03: the 3 are Equivalent, `CollectionExpression` is in 11 reason sets, and the solver
+  proves 240 of 319 changed pairs (75.2%)
+  (`docs/runs/2026-10-03-cleanup-gitextensions-11372-p2-120/SUMMARY.md`).
+- P2-125 (M) A collection expression with a spread, or for a class that does not add through one
+  `Add`: the 11 changed pairs P2-120 leaves opaque on gitextensions-11372. Needs P2-120.
 - P2-103 (M) `x as T` followed by a null check equals `x is T t`. All 5 of powershell-19687's
   Divergent, and none of its 12 edited pairs is proved.
 - P2-104 (S) `x is not T t` lowers as the negation of its inner pattern, not as an opaque.
