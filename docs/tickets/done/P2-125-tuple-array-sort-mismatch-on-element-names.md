@@ -1,5 +1,5 @@
 # P2-125 Verifying crashes on two tuple array types that differ only in tuple element names
-Status: in-progress
+Status: done (PR #383)
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -103,3 +103,9 @@ reported in the SARIF. The run time of `openra-17989` (P2-077, P2-101).
   notification and no `unverified` entry. For `OpenRA.ModData::.ctor(OpenRA.Manifest,OpenRA.InstalledMods,bool)` the
   console line carries the same `Z3Exception` with the same two sorts: it calls the failing constructor, and
   verifying it under callee contracts encodes that callee. Same cause as criterion 1; it changed no result.
+- Criterion 5, `full` run of `openra-17989` on 2026-10-03 at 1b7e650 (this branch): exit 1 (was 5), 4,214 seconds,
+  10,207 results (was 10,206 and one `unverified` entry). No `toolExecutionNotification`, no `properties.unverified`,
+  and no `outcome=failed` line in any phase. `OpenRA.ObjectCreator::.ctor(OpenRA.Manifest,OpenRA.InstalledMods)` is
+  Unknown (EQ003, `unaligned-loop`, method scope) after 3.7 seconds; recorded, not fixed (Out of scope).
+- Criterion 6 in the same run: `OpenRA.ModData::.ctor(OpenRA.Manifest,OpenRA.InstalledMods,bool)` ends its
+  `contracts` item `outcome=unchanged` after 66.6 seconds, where it was `failed`.
