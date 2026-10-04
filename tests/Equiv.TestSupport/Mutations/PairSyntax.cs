@@ -77,6 +77,9 @@ internal static class PairSyntax
                     RenderBlock(loop.Body, text, indent + 1, ref loops);
                     text.Append(pad).Append("}\n");
                     break;
+                case LocalFunction function:
+                    text.Append(pad).Append("int ").Append(function.Name).Append("(int v) => ").Append(function.Body.Render()).Append(";\n");
+                    break;
                 case Guard guard:
                     text.Append(pad).Append("if (").Append(guard.Condition.Render()).Append(")\n");
                     Nested(guard.Then, text, indent, ref loops);
@@ -239,6 +242,19 @@ internal static class PairSyntax
         public string Render() => $"((System.Func<int, int>)(v => {Body.Render()}))({Argument.Render()})";
     }
 
+    /// <summary>
+    /// A call of the local function <see cref="Function"/> (ticket P2-079): <c>Function(Argument)</c>, or, as a method
+    /// group converted to a delegate, <c>((System.Func&lt;int, int&gt;)Function)(Argument)</c>.
+    /// </summary>
+    public sealed record Invoke(string Function, IExpr Argument, bool AsDelegate) : IExpr
+    {
+        public Type Type => typeof(int);
+
+        public bool CannotThrow => false;
+
+        public string Render() => AsDelegate ? $"((System.Func<int, int>){Function})({Argument.Render()})" : $"{Function}({Argument.Render()})";
+    }
+
     /// <summary>A <c>string</c> literal of plain characters (ticket P2-048).</summary>
     public sealed record Text(string Value) : IExpr
     {
@@ -273,6 +289,9 @@ internal static class PairSyntax
 
     /// <summary>Declares a local: <c>x</c>, <c>y</c> and <c>z</c> at the top, or the temporary <c>t</c>.</summary>
     public sealed record Declare(string Local, IExpr Value) : IStmt;
+
+    /// <summary><c>int Name(int v) =&gt; Body;</c>: a local function, declared with the locals (ticket P2-079).</summary>
+    public sealed record LocalFunction(string Name, IExpr Body) : IStmt;
 
     /// <summary>Assigns a local or the field <c>F</c>.</summary>
     public sealed record Assign(string Target, IExpr Value) : IStmt;

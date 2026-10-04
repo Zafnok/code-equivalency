@@ -66,10 +66,88 @@ public sealed class IlFallbackSampleTests
         await VerifyXunit.Verifier.Verify(stdout);
     }
 
-    private static (string Json, string StdOut) Compare(string sample, bool ilFallback)
+    /// <summary>
+    /// Ticket P2-079, acceptance criterion 1. Two .NET Framework 4.8 projects differ only inside a lambda: one that a
+    /// setter passes to a <c>Lazy</c>, and one a method passes to its argument. Read from IL, each lambda is a function
+    /// pointer named by an ordinal, the same on both sides, and the fingerprint of that name made the two one shared call,
+    /// so both members were Equivalent from IL. Neither is now. Each member also holds a lifted <c>int?</c> operator the
+    /// legacy side spells out, as <c>samples/il-fallback</c> does: since ticket P2-067 the IOperation lowering has no
+    /// opaque for a lambda, and without one the pair is never read from IL.
+    /// </summary>
+    [Fact]
+    public void ALambdaWhoseBodyDiffersIsNotEquivalent()
     {
-        string legacy = Directory.GetFiles(Path.Combine(SamplesRoot, sample, "legacy"), "*.sln").Single();
-        string modern = Directory.GetFiles(Path.Combine(SamplesRoot, sample, "modern"), "*.slnx").Single();
+        string root = Path.Combine(Path.GetTempPath(), $"equiv-P2-079-{Guid.NewGuid():N}");
+        try
+        {
+            (string json, _) = Compare(Holder(Path.Combine(root, "legacy"), modern: false), Holder(Path.Combine(root, "modern"), modern: true), ilFallback: true);
+
+            SarifLog log = SarifLog.Load(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json)));
+            Result[] lambdas = [.. log.Runs[0].Results.Where(static r => r.Message.Text.Contains("::set_X(", StringComparison.Ordinal) || r.Message.Text.Contains("::Subscribe(", StringComparison.Ordinal))];
+            Assert.Equal(2, lambdas.Length);
+            Assert.All(lambdas, static r => Assert.Equal("EQ003", r.RuleId));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// A copy of <c>samples/il-fallback/legacy</c>'s project in <paramref name="directory"/> whose one class is the
+    /// ticket's repro; the solution's path. The <paramref name="modern"/> side's two lambdas read <c>_x + 2</c> where the
+    /// legacy side's read <c>_x + 1</c>, and it writes <c>value + 1</c> where the legacy side spells the lifted operator out.
+    /// </summary>
+    private static string Holder(string directory, bool modern)
+    {
+        string source = Path.Combine(SamplesRoot, "il-fallback", "legacy");
+        Directory.CreateDirectory(Path.Combine(directory, "Properties"));
+        foreach (string file in (string[])["Properties/AssemblyInfo.cs", "Equiv.Samples.IlFallback.Legacy.csproj", "Equiv.Samples.IlFallback.Legacy.sln"])
+        {
+            File.Copy(Path.Combine(source, file), Path.Combine(directory, file));
+        }
+
+        string addend = modern ? "2" : "1";
+        string setter = modern ? "_y = value + 1;" : "if (value.HasValue) { _y = new int?(value.GetValueOrDefault() + 1); } else { _y = null; }";
+        string result = modern ? "return a + 1;" : "if (a.HasValue) { return new int?(a.GetValueOrDefault() + 1); } return null;";
+        File.WriteAllText(
+            Path.Combine(directory, "Nullables.cs"),
+            $$"""
+            using System;
+
+            namespace Equiv.Samples.IlFallback
+            {
+                public sealed class Holder
+                {
+                    private int _x;
+                    private int? _y;
+
+                    public Lazy<int> Value { get; private set; }
+
+                    public int? X
+                    {
+                        get => _y;
+                        set { {{setter}} Value = new Lazy<int>(() => _x + {{addend}}); }
+                    }
+
+                    public int? Subscribe(Action<Func<int>> register, int? a)
+                    {
+                        register(() => _x + {{addend}});
+                        {{result}}
+                    }
+                }
+            }
+            """);
+        return Path.Combine(directory, "Equiv.Samples.IlFallback.Legacy.sln");
+    }
+
+    private static (string Json, string StdOut) Compare(string sample, bool ilFallback) => Compare(
+        Directory.GetFiles(Path.Combine(SamplesRoot, sample, "legacy"), "*.sln").Single(),
+        Directory.GetFiles(Path.Combine(SamplesRoot, sample, "modern"), "*.slnx").Single(),
+        ilFallback);
+
+    private static (string Json, string StdOut) Compare(string legacy, string modern, bool ilFallback)
+    {
         string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P1-016-{Guid.NewGuid():N}.sarif");
         TextWriter original = Console.Out;
         using StringWriter stdout = new();

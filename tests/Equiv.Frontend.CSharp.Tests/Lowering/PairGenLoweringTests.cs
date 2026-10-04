@@ -68,6 +68,32 @@ public sealed class PairGenLoweringTests
             iter: IlPairs,
             print: static pair => $"{pair.Operator}\n{pair.LegacySource}\n{pair.ModernSource}");
 
+    /// <summary>
+    /// Ticket P2-079: both sides of every pair that differs only inside a lambda or a local function lower from IL to valid
+    /// IR, and no opaque that stands for the lambda's pointer or the local function's call has a fingerprint, so the other
+    /// side cannot share it.
+    /// </summary>
+    [Fact]
+    public void NoClosurePairSideSharesItsClosure() =>
+        PairGen.ClosurePair.Sample(
+            static pair =>
+            {
+                foreach (string source in (string[])[pair.LegacySource, pair.ModernSource])
+                {
+                    Compilation compilation = RoslynTestCompilations.Compile(source);
+                    Assert.DoesNotContain(compilation.GetDiagnostics(TestContext.Current.CancellationToken), static d => d.Severity == DiagnosticSeverity.Error);
+                    IMethodSymbol method = compilation.GetTypeByMetadataName("Oracle")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+                    IrProcedure procedure = IlLowerer.Lower(method, compilation, Runtimes.Migration);
+                    Assert.Empty(IrValidator.Validate(procedure));
+                    Assert.DoesNotContain(
+                        procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>(),
+                        static o => o.Fingerprint is not null && (o.Reason.Contains("[lambda]", StringComparison.Ordinal) || o.Reason.Contains("[local function]", StringComparison.Ordinal)));
+                }
+            },
+            seed: Seed,
+            iter: IlPairs,
+            print: static pair => $"{pair.Operator}\n{pair.LegacySource}\n{pair.ModernSource}");
+
     /// <summary>Every input renders as the arguments a failure prints.</summary>
     [Fact]
     public void EveryInputPrintsEachArgument() =>
