@@ -1,5 +1,5 @@
 # P1-024 Trace-guided loop alignment: runs propose a pairing of iterations, relational induction proves it
-Status: closed (not built; P1-023 measured 0 pairs against a bar of 10)
+Status: closed (not built; P1-023 measured 0 pairs against a bar of 10, PR #392)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-023, P1-009
