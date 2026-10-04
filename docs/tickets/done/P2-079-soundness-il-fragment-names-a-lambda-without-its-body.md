@@ -1,5 +1,5 @@
 # P2-079 Soundness: the IL lowering shares an opaque that names a lambda without its body, so two different lambdas prove Equivalent
-Status: in-progress
+Status: done (PR #381)
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-016, P1-017
