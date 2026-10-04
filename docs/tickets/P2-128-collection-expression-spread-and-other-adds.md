@@ -1,4 +1,4 @@
-# P2-125 A collection expression with a spread, or for a class that does not add through one `Add`
+# P2-128 A collection expression with a spread, or for a class that does not add through one `Add`
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
