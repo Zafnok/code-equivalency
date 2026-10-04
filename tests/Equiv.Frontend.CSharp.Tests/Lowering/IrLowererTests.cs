@@ -563,6 +563,26 @@ public sealed class IrLowererTests
     public void AComparisonOfANullableValueWithNullStaysOpaque(string members) =>
         Assert.Contains(Opaques(Method(members)), static o => o.Reason is "Binary");
 
+    /// <summary>
+    /// Ticket P2-105: an interpolated string handler whose constructor can decline the string through a trailing
+    /// <c>out bool</c>. The control flow graph branches on that flag to skip the appends, and the capture it reads there has
+    /// no type. The constructor is a call that writes the flag, and the branch reads what it wrote.
+    /// </summary>
+    [Theory]
+    [InlineData("static void M(int a) { System.Diagnostics.Debug.Assert(a > 0, $\"a is {a}\"); }")]
+    [InlineData("static void M(int a) { System.Diagnostics.Debug.WriteLineIf(a > 0, $\"a is {a}\"); }")]
+    public void AnInterpolatedStringHandlerThatCanDeclineLowersOrIsOpaque(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        IrCall constructor = Assert.Single(
+            procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>(),
+            static c => c.Callee.Value.EndsWith("InterpolatedStringHandler::.ctor(int,int,bool,out bool)", StringComparison.Ordinal));
+        IrVar flag = Assert.Single(constructor.RefOuts);
+        Assert.Contains(procedure.Blocks, b => b.Terminator is IrBranch branch && branch.Cond == flag);
+        Assert.DoesNotContain(Opaques(procedure), static o => o.Reason is "undefined");
+    }
+
     [Theory]
     [InlineData(true, true)]
     [InlineData(false, false)]
