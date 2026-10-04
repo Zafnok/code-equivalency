@@ -52,12 +52,14 @@ internal sealed class IrLowerer
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
     private readonly Dictionary<IOperation, IrVar> tryCastNulls = [];
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> indices = [];
+    private readonly Dictionary<ICollectionExpressionOperation, SsaBuilder.Variable> collections = [];
     private readonly Dictionary<string, List<SyntaxNode>> lambdaSites = new(StringComparer.Ordinal);
     private int selects;
     private HeapLowerer heap = null!;
     private ExceptionLowerer exceptions = null!;
     private SwitchChains chains = null!;
     private ArrayForEachLoops loops = null!;
+    private SpilledCollections spilled = null!;
     private CSharpCompilation compilation = null!;
     private ControlFlowGraph cfg = null!;
     private SourceSpan bodySpan = null!;
@@ -393,6 +395,7 @@ internal sealed class IrLowerer
         cfg = graph;
         chains = SwitchChains.Find(cfg);
         loops = ArrayForEachLoops.Find(cfg);
+        spilled = SpilledCollections.Find(cfg, collection => Built(collection) is { Add: not null });
         exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, loops, bodySpan, Fill);
         captures.Clear();
         captureTargets.Clear();
@@ -467,7 +470,13 @@ internal sealed class IrLowerer
 
         foreach (IOperation operation in block.Operations)
         {
+            StartElements(operation, context);
             Statement(operation, context);
+        }
+
+        if (block.BranchValue is { } value)
+        {
+            StartElements(value, context);
         }
 
         Terminate(block, context);
@@ -1988,11 +1997,13 @@ internal sealed class IrLowerer
     /// A collection expression (ticket P2-099) is the construct it replaces; it has no type of its own, so the conversion
     /// around it is to the type it already builds, and is the collection expression. For an array it is <see cref="CreateArray"/>'s
     /// creation of its elements, and with no element the call <c>System.Array::Empty&lt;T&gt;()</c> the compiler emits. For
-    /// a <c>List&lt;T&gt;</c> it is a new list, as <c>new List&lt;T&gt;()</c> is, and then one <c>Add</c> call per element, as
-    /// a collection initializer is. For <c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyCollection&lt;T&gt;</c> or
-    /// <c>IReadOnlyList&lt;T&gt;</c> it is the array, read through the <c>cast</c> map the array's conversion reads. Each
-    /// element is evaluated, then stored or added, before the next. Anything else (<see cref="Built"/>) is opaque with
-    /// reason <c>CollectionExpression</c>.
+    /// a class it is a new object, as <c>new T()</c> is, and then one <c>Add</c> call per element, as a collection
+    /// initializer is. For <c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyCollection&lt;T&gt;</c> or <c>IReadOnlyList&lt;T&gt;</c> it
+    /// is the array, and for <c>IList&lt;T&gt;</c> or <c>ICollection&lt;T&gt;</c> the <c>List&lt;T&gt;</c> the compiler
+    /// builds (ticket P2-120), read through the <c>cast</c> map the old form's conversion reads. Each element is evaluated,
+    /// then stored or added, before the next; one the CFG evaluated ahead of the collection expression was added where the
+    /// next one started (<see cref="StartElements"/>). Anything else (<see cref="Built"/>) is opaque with reason
+    /// <c>CollectionExpression</c>.
     /// </summary>
     private IrVar? Collection(ICollectionExpressionOperation collection, LoweringContext context)
     {
@@ -2001,39 +2012,82 @@ internal sealed class IrLowerer
             return Opaque(collection, collection.Kind.ToString(), context);
         }
 
-        IrVar built = plan.Factory is { } factory
-            ? Made(factory, plan.Type, collection, context)
-            : heap.Allocate((IrSort)Map(plan.Type), Map(((IArrayTypeSymbol)plan.Type).ElementType), Const(new IrBitVecValue(32, (ulong)collection.Elements.Length), context), plan.Initial!, context);
-        for (int i = 0; i < collection.Elements.Length; i++)
+        int? resume = spilled.Resume(collection);
+        IrVar built = resume is null ? Make(plan, collection, context) : ssa.Load(context.Current, Building(collection, plan));
+        AddElements(plan, collection, built, resume ?? 0, collection.Elements.Length, context);
+        return plan.ThroughCast ? heap.MapRead(heap.Inputs.Cast(plan.Type, collection.Type!), built, context) : built;
+    }
+
+    /// <summary>
+    /// What happens where an element of a collection expression starts ahead of it (ticket P2-120;
+    /// <see cref="SpilledCollections"/>): the object is made if this is its first such element, and the elements already
+    /// evaluated are added, so each <c>Add</c> follows its element as it does in a collection initializer.
+    /// </summary>
+    private void StartElements(IOperation operation, LoweringContext context)
+    {
+        foreach (SpilledCollections.Start start in spilled.At(operation))
+        {
+            CollectionPlan plan = Built(start.Collection)!;
+            SsaBuilder.Variable building = Building(start.Collection, plan);
+            if (start.Makes)
+            {
+                ssa.Store(context.Current, building, Make(plan, start.Collection, context));
+            }
+
+            AddElements(plan, start.Collection, ssa.Load(context.Current, building), start.From, start.Element, context);
+        }
+    }
+
+    /// <summary>The variable that holds the object of <paramref name="collection"/> from where it is made to the collection expression.</summary>
+    private SsaBuilder.Variable Building(ICollectionExpressionOperation collection, CollectionPlan plan)
+    {
+        if (!collections.TryGetValue(collection, out SsaBuilder.Variable? building))
+        {
+            building = new SsaBuilder.Variable(new IrVar($"$collection{collections.Count.ToString(CultureInfo.InvariantCulture)}", Map(plan.Type)));
+            collections[collection] = building;
+        }
+
+        return building;
+    }
+
+    /// <summary>
+    /// The new collection of <paramref name="plan"/>, with no element yet: an array of the expression's length, or what
+    /// its factory yields, which is a call's result, or, for a constructor in the effect-free catalogue (ADR 0043), the
+    /// next new object of its sort, as <see cref="Create"/> makes a <c>new</c>.
+    /// </summary>
+    private IrVar Make(CollectionPlan plan, ICollectionExpressionOperation collection, LoweringContext context) =>
+        plan.Factory is not { } factory
+            ? heap.Allocate((IrSort)Map(plan.Type), Map(((IArrayTypeSymbol)plan.Type).ElementType), Const(new IrBitVecValue(32, (ulong)collection.Elements.Length), context), plan.Initial!, context)
+            : EffectFreeMembers.Allocates(factory)
+                ? heap.Fresh((IrSort)Map(plan.Type), context)
+                : Call(Called(factory, collection), [], Map(plan.Type), [], context)!;
+
+    /// <summary>
+    /// Evaluates the elements of <paramref name="collection"/> from <paramref name="from"/> up to <paramref name="to"/>,
+    /// each passed to the plan's <c>Add</c>, or stored in the array, before the next.
+    /// </summary>
+    private void AddElements(CollectionPlan plan, ICollectionExpressionOperation collection, IrVar built, int from, int to, LoweringContext context)
+    {
+        for (int i = from; i < to; i++)
         {
             IrVar element = Value(collection.Elements[i], context);
             if (plan.Add is { } add)
             {
-                _ = Call(Called(add, collection.Elements[i]), [built, element], returns: null, [], context);
+                _ = Call(Bound(add, collection.Elements[i]), [built, element], add.ReturnsVoid ? null : Map(add.ReturnType), [], context);
             }
             else
             {
                 heap.Initialize(built, i, element, context);
             }
         }
-
-        return plan.ThroughCast ? heap.MapRead(heap.Inputs.Cast(plan.Type, collection.Type!), built, context) : built;
     }
 
     /// <summary>
-    /// The <paramref name="type"/> <paramref name="factory"/> yields for <paramref name="collection"/>: a call's result, or, for a constructor in
-    /// the effect-free catalogue (ADR 0043), the next new object of its sort, as <see cref="Create"/> makes a <c>new</c>.
-    /// </summary>
-    private IrVar Made(IMethodSymbol factory, ITypeSymbol type, ICollectionExpressionOperation collection, LoweringContext context) =>
-        EffectFreeMembers.Allocates(factory)
-            ? heap.Fresh((IrSort)Map(type), context)
-            : Call(Called(factory, collection), [], Map(type), [], context)!;
-
-    /// <summary>
     /// What <see cref="Collection"/> builds, or null, with nothing emitted, for a collection expression that stays opaque:
-    /// one with a spread element, a target that is a span, <c>IList&lt;T&gt;</c> or <c>ICollection&lt;T&gt;</c>, a type
-    /// built through a <c>CollectionBuilder</c> method, any class other than <c>List&lt;T&gt;</c>, and an array
-    /// <see cref="CreateArray"/> would not create.
+    /// one with a spread element, a target that is a span or a type parameter, a type built through a
+    /// <c>CollectionBuilder</c> method, a struct, a class whose constructor takes an argument, a class with an element and
+    /// not exactly one <c>Add</c> of the elements' type (<see cref="Adder"/>), and an array <see cref="CreateArray"/> would
+    /// not create.
     /// </summary>
     private CollectionPlan? Built(ICollectionExpressionOperation collection) => collection switch
     {
@@ -2047,10 +2101,43 @@ internal sealed class IrLowerer
                     or SpecialType.System_Collections_Generic_IReadOnlyList_T,
             } target,
         } => ArrayPlan(compilation.CreateArrayTypeSymbol(target.TypeArguments[0]), collection.Elements.IsEmpty, throughCast: true),
-        { ConstructMethod: { } constructor } when SymbolEqualityComparer.Default.Equals(constructor.ContainingType.OriginalDefinition, compilation.GetTypeByMetadataName("System.Collections.Generic.List`1")) =>
-            new CollectionPlan(constructor.ContainingType, constructor, constructor.ContainingType.GetMembers("Add").OfType<IMethodSymbol>().Single(), Initial: null, ThroughCast: false),
+        {
+            Type: INamedTypeSymbol
+            {
+                OriginalDefinition.SpecialType: SpecialType.System_Collections_Generic_IList_T or SpecialType.System_Collections_Generic_ICollection_T,
+            } target,
+        } when compilation.GetTypeByMetadataName(EffectFreeMembers.List)?.Construct(target.TypeArguments[0]).InstanceConstructors.FirstOrDefault(static c => c.Parameters.IsEmpty) is { } constructor =>
+            ClassPlan(constructor, collection, throughCast: true),
+        { ConstructMethod: { MethodKind: MethodKind.Constructor, Parameters.IsEmpty: true, ContainingType.IsReferenceType: true } constructor } =>
+            ClassPlan(constructor, collection, throughCast: false),
         _ => null,
     };
+
+    /// <summary>
+    /// A class is built by its parameterless <paramref name="constructor"/> and its one <c>Add</c>, as its collection
+    /// initializer is (ticket P2-120). With no element nothing is added, so it is <c>new T()</c> whatever the class adds with.
+    /// </summary>
+    private static CollectionPlan? ClassPlan(IMethodSymbol constructor, ICollectionExpressionOperation collection, bool throughCast)
+    {
+        IMethodSymbol? add = Adder(constructor.ContainingType, collection);
+        return add is null && !collection.Elements.IsEmpty ? null : new CollectionPlan(constructor.ContainingType, constructor, add, Initial: null, throughCast);
+    }
+
+    /// <summary>
+    /// The <c>Add</c> every element of <paramref name="collection"/> is passed to: the only method of that name with one
+    /// parameter that <paramref name="type"/> or a base type declares, when its parameter is of the elements' type. With
+    /// two, or one of another type, the operation does not say which binds or how the element converts, and there is none.
+    /// </summary>
+    private static IMethodSymbol? Adder(INamedTypeSymbol type, ICollectionExpressionOperation collection)
+    {
+        List<IMethodSymbol> candidates = [];
+        for (INamedTypeSymbol? declaring = type; declaring is not null; declaring = declaring.BaseType)
+        {
+            candidates.AddRange(declaring.GetMembers("Add").OfType<IMethodSymbol>().Where(static m => m.Parameters.Length == 1));
+        }
+
+        return candidates.Count == 1 && collection.Elements.All(e => SymbolEqualityComparer.Default.Equals(e.Type, candidates[0].Parameters[0].Type)) ? candidates[0] : null;
+    }
 
     /// <summary>
     /// An array with no element is <c>Array.Empty&lt;T&gt;()</c>'s where the framework has it (.NET Framework 4.6 on), as
@@ -2085,7 +2172,24 @@ internal sealed class IrLowerer
             return Opaque(invocation, "ref-argument", context);
         }
 
-        IMethodSymbol target = invocation.TargetMethod;
+        Callee called = Bound(invocation.TargetMethod, invocation);
+        IrType? returns = invocation.TargetMethod.ReturnsVoid ? null : Map(invocation.Type!);
+        if (written.IsEmpty && catalogue.Members.TryGetValue(called.Identity.Value, out ApiEquivalence? entry) && Adapt(entry, invocation, context) is { } adapted)
+        {
+            catalogue.Applied.Add(entry.Id);
+            return Call(new Callee(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), Closed: false, invocation, invocation.TargetMethod.Name), adapted, returns, [], context);
+        }
+
+        return Dispatch(invocation.Instance, called, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
+    }
+
+    /// <summary>
+    /// The call <paramref name="site"/> makes when it binds to <paramref name="method"/>. A call to a forwarder is the same
+    /// call to its target (ADR 0047; ticket P2-068), which is then the callee everything reads.
+    /// </summary>
+    private Callee Bound(IMethodSymbol method, IOperation site)
+    {
+        IMethodSymbol target = method;
         CallIdentity callee = Identity(target);
         if (!catalogue.Sites.KeptForwarders.Contains(callee.Value) && Forwarders.Resolve(target, compilation) is { } resolved)
         {
@@ -2094,15 +2198,7 @@ internal sealed class IrLowerer
             (target, callee) = (resolved.Target, forwarded);
         }
 
-        IrType? returns = invocation.TargetMethod.ReturnsVoid ? null : Map(invocation.Type!);
-        if (written.IsEmpty && catalogue.Members.TryGetValue(callee.Value, out ApiEquivalence? entry) && Adapt(entry, invocation, context) is { } adapted)
-        {
-            catalogue.Applied.Add(entry.Id);
-            return Call(new Callee(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), Closed: false, invocation, invocation.TargetMethod.Name), adapted, returns, [], context);
-        }
-
-        Callee called = new(callee, ClosedCalls.IsClosed(target), invocation, invocation.TargetMethod.Name);
-        return Dispatch(invocation.Instance, called, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
+        return new Callee(callee, ClosedCalls.IsClosed(target), site, method.Name);
     }
 
     /// <summary>
@@ -2422,12 +2518,13 @@ internal sealed class IrLowerer
     /// <summary>
     /// How a collection expression is built (ticket P2-099): the type built; the call that yields it, a constructor or
     /// <c>Array.Empty</c>, or null for an array creation, whose elements start at <paramref name="Initial"/>; the
-    /// <c>Add</c> each element is passed to, or null when it is stored; and whether the target reads it through a
-    /// <c>cast</c> map. It is known not to be null where the old form is: a creation or a <c>new</c>, read through no map.
+    /// <c>Add</c> each element is passed to, or null when it is stored or there is none to pass; and whether the target
+    /// reads it through a <c>cast</c> map. It is known not to be null where the old form is: a creation or a <c>new</c>,
+    /// read through no map.
     /// </summary>
     private sealed record CollectionPlan(ITypeSymbol Type, IMethodSymbol? Factory, IMethodSymbol? Add, IrValue? Initial, bool ThroughCast)
     {
-        public bool NeverNull => !ThroughCast && (Factory is null || Add is not null);
+        public bool NeverNull => !ThroughCast && Factory?.MethodKind is null or MethodKind.Constructor;
     }
 
     /// <summary>What a call's <c>ref</c> or <c>out</c> output is stored to, null for a discard, and its type (ticket M4-003).</summary>
