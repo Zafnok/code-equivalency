@@ -898,7 +898,13 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
 
 - P1-036 (M) Spike: cvc5 splits each of the 34 queries it times out on into partitions solved by
   separate processes (Wilson et al., arXiv 2306.05854). Counts the queries decided and whether two
-  runs agree. Needs P1-025.
+  runs agree. Needs P1-025. Done 2026-10-04: it decides 9 of the 34, all satisfiable (3 replay to
+  Unknown(abstraction), 6 are not read back), proves none and refutes none; 4 of the 34 get a
+  different answer the second time, and in place of plain cvc5 it loses 10 of 59 answers
+  (`docs/runs/2026-10-04-cvc5-partitioning.md`). P1-039.
+- P1-039 (M) In thorough mode, with `solvers.cvc5.partitions` set, cvc5 splits a rung 1 query it
+  has given up on and the partitions are solved a process each; never in quick (ADR 0049 decision
+  7). Needs P1-033, P1-032. Blocked by P2-100: the answers must repeat first.
 - P1-037 (L) Spike: a rung 1 query Z3 gives up on becomes a Lean theorem over `BitVec`, a scaffold
   splits it, a model fills the holes and Lean's kernel checks the proof (after Trivet, arXiv
   2609.19583). Translates the query, not the IR. An ADR against ADR 0005 only if a proof needs the

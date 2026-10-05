@@ -1,5 +1,5 @@
 # P1-036 Spike: does cvc5 decide more of the hard queries when it partitions them?
-Status: todo
+Status: done (PR #405)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-025
@@ -69,3 +69,37 @@ lemmas between partitions.
   time by default; with a 60-second budget the start trigger has to be set far lower. Record what
   was used.
 - Requested 2026-10-04 after the paper review, which had ranked this a drop.
+- Result (2026-10-04, `docs/runs/2026-10-04-cvc5-partitioning.md`): partitioning decides 9 of the
+  34, all satisfiable: 3 replay to Unknown(abstraction), 6 cannot be read back (Z3 cannot complete
+  the model). No proof, no Divergent. 4 of the 34 get a different answer the second time. The
+  control loses 10 of 59. A query is decided and answers differ, so criterion 6 gives P1-039,
+  blocked by P2-100.
+- Used: the check-count trigger at the first check (`--checks-before-partition=1`,
+  `--checks-between-partitions=1`), `--partition-check` and `--partition-conflict-size` left at
+  their defaults, each partition and the splitting run given `timeoutMs` of wall-clock, no
+  `--rlimit`.
+- Decision: P1-025's files and the cvc5 binary were read from the P1-025 worktree's `.corpus/`,
+  where they were; nothing was fetched again.
+- Decision: the six strategies `--partition-strategy=help` lists were all run. Asked for 24, a
+  cube strategy writes 16 partitions; those rows are reported under 24 with the count made beside it.
+- Decision: a query is unsatisfiable only if every partition is and a further cvc5 process finds
+  the negation of the partitions' disjunction unsatisfiable. cvc5's own `unsat` after it writes
+  partitions is printed whatever the query is, so it is never taken.
+- Decision: "best strategy" for the control is the one deciding the most of the 34 at 8 partitions
+  over both runs: `decision-scatter` (7 answers against `decision-cube`'s 6).
+- Decision: "summed process seconds" is processor time of every cvc5 process, and wall-clock is
+  summed a query, from the start of splitting to the answer.
+- Decision: the blocker criterion 6 names is P2-100. The differences measured come from the
+  wall-clock ending a partition, which P2-100 does not cover, so P1-039 carries a repeatability
+  criterion of its own as well.
+- Deviation: the self-test's samples are written as SMT-LIB text (pigeons in holes over an
+  uninterpreted sort), not exported from a sample pair. cvc5 writes no partition for a query its
+  bit-vector solver settles alone or one with no theory atom, which is what the small samples are.
+  The heap and, on the satisfiable sample, lemma strategies write none there either and are printed
+  as "not split".
+- A first full run was discarded after 276 of 816 query runs: the driver blocked every thread-pool
+  thread, so the continuation that stops a process at `timeoutMs` ran minutes late. Workers now have
+  threads of their own and a late process is counted (none in the run reported). Its output is under
+  `.corpus/`, renamed, and is of no use.
+- Toolchain: `--write-partitions-to=<file>` takes a path; without it the partitions go to stdout
+  mixed with the answer. The 816 query runs took 5.1 hours at 24 processes.
