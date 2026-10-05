@@ -1,5 +1,5 @@
 # P2-127 Soundness: a call of a local function is an ordinary call of a callee nothing verifies, so two different local functions prove Equivalent
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-079
@@ -77,3 +77,12 @@ The IL lowering, which P2-079 fixed. Inlining local functions.
   pair whose local function read `v - 5` on one side and `v - 6` on the other.
 - Until this lands, an Equivalent verdict on a member that calls a local function by name does not
   cover the local function's body.
+- Decision: what a call of a local function lowers to -> an opaque with reason `LocalFunction`, shared only on
+  `FragmentFingerprinter`'s terms (so never, for a call in the member's own body: the local function is declared outside
+  the call). Alternatives: a callee identity that carries the fingerprint of the local function's bound body. Rule: 4.
+  The fingerprinted identity is the larger change and is not sound by the fingerprint alone: a local function reads and
+  writes the locals it captures, which a call's arguments and heap pairs do not carry, so `int a = 1; int L() => a;` and
+  the same with `a = 2` would be one call. Making it sound means passing the captures and writing them back, which is
+  most of the way to the inlining the Size guard excludes.
+- The cost: a member that calls a local function by name is Unknown (abstraction, `opaque LocalFunction`) even when
+  the local function is the same on both sides, unless the pair is congruent. Proving those is the inlining ticket.
