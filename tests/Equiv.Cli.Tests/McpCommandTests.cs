@@ -50,7 +50,7 @@ public sealed class McpCommandTests
             ["legacy", "modern"],
             compare.ProtocolTool.InputSchema.GetProperty("required").EnumerateArray().Select(static e => e.GetString()).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         Assert.Equal(
-            ["baseline", "bound", "config", "ilFallback", "legacy", "modern", "timeoutMs"],
+            ["baseline", "bound", "config", "ilFallback", "legacy", "mode", "modern", "timeoutMs"],
             compare.ProtocolTool.InputSchema.GetProperty("properties").EnumerateObject().Select(static p => p.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
         McpClientTool lowerOnly = tools.Single(static t => string.Equals(t.Name, "lower_only", StringComparison.Ordinal));
         Assert.Equal("Lower two solutions without verifying", lowerOnly.ProtocolTool.Title);
@@ -307,6 +307,33 @@ public sealed class McpCommandTests
 
         Assert.False(off);
         Assert.True(frontend.LastConfig!.IlFallback);
+    }
+
+    /// <summary>
+    /// Ticket P1-032 criterion 1 (ADR 0049 decision 1): <c>compare</c> takes <c>mode</c> as <c>--mode</c> does, thorough
+    /// unless given, and any other value is a tool error, not a run.
+    /// </summary>
+    [Fact]
+    public async Task Compare_ModeSelectsTheModeAndAnyOtherValueIsAToolError()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
+        using Session session = await Session.StartAsync(frontend, EquivalentBackend()).ConfigureAwait(true);
+        Dictionary<string, object?> Mode(string mode) => new(Args(legacy: legacy.Path, modern: modern.Path), StringComparer.Ordinal) { ["mode"] = mode };
+
+        await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
+        CompareMode byDefault = frontend.LastConfig!.Mode;
+        CallToolResult quick = await session.CallAsync("compare", Mode("quick")).ConfigureAwait(true);
+        CompareMode asked = frontend.LastConfig!.Mode;
+        CallToolResult other = await session.CallAsync("compare", Mode("fast")).ConfigureAwait(true);
+
+        Assert.Equal((CompareMode.Thorough, CompareMode.Quick), (byDefault, asked));
+        Assert.NotEqual(true, quick.IsError);
+        Assert.Contains("\"name\":\"quick\"", Assert.IsType<TextContentBlock>(quick.Content[1]).Text, StringComparison.Ordinal);
+        Assert.True(other.IsError);
+        Assert.Equal("error: mode must be thorough or quick, not 'fast'", Assert.IsType<TextContentBlock>(Assert.Single(other.Content)).Text);
+        Assert.Equal(2, frontend.AnalyzeCallCount);
     }
 
     /// <summary><c>baseline</c> works as <c>--baseline</c> does: a result already in the baseline is unchanged, so the run exits 0 and says so.</summary>

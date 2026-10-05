@@ -69,15 +69,60 @@
       },
       results: [
         {
-          ruleId: EQ001,
-          kind: pass,
+          ruleId: EQ003,
+          kind: open,
           level: none,
           message: {
-            text: T::A() is equivalent.
+            text: T::A() is unknown (Timeout): solver returned unknown (canceled): resource limit 2000000 hit
           },
           partialFingerprints: {
             procedureIdentity/v1: T::A(),
-            resultFingerprint/v1: a3eadbc917958316d0a6054d009da0913e993153302dfbaeb4b4d49f322aafef
+            resultFingerprint/v1: 7f4fbf662a4a967fd984d57cc2489d66d163b712b79b820f225fd5c61069cec4
+          },
+          baselineState: new,
+          rank: 0.002,
+          properties: {
+            unknownReason: timeout,
+            scope: method,
+            ladderTrace: [
+              {
+                rung: bounded,
+                outcome: timeout,
+                detail: solver returned unknown (canceled): resource limit 2000000 hit
+              }
+            ],
+            reviewGroup: timeout
+          }
+        },
+        {
+          ruleId: EQ003,
+          kind: open,
+          level: none,
+          message: {
+            text: T::G() is unknown (Opaque): old: InterpolatedString
+          },
+          partialFingerprints: {
+            procedureIdentity/v1: T::G(),
+            resultFingerprint/v1: 9502e7b7306653e44407609503885f894456458e9e7920961a6f65d1dacc2b93
+          },
+          baselineState: new,
+          rank: 0.002,
+          properties: {
+            unknownReason: opaque,
+            scope: method,
+            reviewGroup: opaque
+          }
+        },
+        {
+          ruleId: EQ001,
+          kind: pass,
+          level: none,
+          message: {
+            text: T::D() is equivalent.
+          },
+          partialFingerprints: {
+            procedureIdentity/v1: T::D(),
+            resultFingerprint/v1: d3aae1b4ef8e0192c11f26d62df8df15069c06769c993668106c3d7280ca6f2a
           },
           baselineState: new,
           properties: {
@@ -89,64 +134,38 @@
           kind: pass,
           level: none,
           message: {
-            text: T::B() is equivalent.
+            text: T::FromIl() is equivalent.
           },
           partialFingerprints: {
-            procedureIdentity/v1: T::B(),
-            resultFingerprint/v1: b68f19e583445d0a0fe006061da72ff054ec88a523fc97e2c99d61ef6901570d
+            procedureIdentity/v1: T::FromIl(),
+            resultFingerprint/v1: 00030914b3a5c773fbb1d52db6fd8a6b8f7688d138a76497c60b4f5d4d0d964b
           },
           baselineState: new,
           properties: {
             proofMethod: bounded
           }
-        },
-        {
-          ruleId: EQ004,
-          kind: informational,
-          level: none,
-          message: {
-            text: T::Added() was added.
-          },
-          partialFingerprints: {
-            procedureIdentity/v1: T::Added(),
-            resultFingerprint/v1: 6ec68a8e53658f50aa8f9dc33bb4d16b726c9a1c90327c59f80fc5cc0a26f38c
-          },
-          baselineState: new
-        },
-        {
-          ruleId: EQ005,
-          kind: informational,
-          level: none,
-          message: {
-            text: T::Removed() was removed.
-          },
-          partialFingerprints: {
-            procedureIdentity/v1: T::Removed(),
-            resultFingerprint/v1: 8b86785fcf7449c53c766f4b53488bb4d2de0cdfbb7a02cccbb890f91e0fd5e3
-          },
-          baselineState: new
         }
       ],
       columnKind: utf16CodeUnits,
       properties: {
         loweringCensus: {
           procedures: {
-            legacy: 3,
-            modern: 3
+            legacy: 4,
+            modern: 4
           },
-          matchedPairs: 2,
-          pairsWithoutOpaque: 2,
+          matchedPairs: 4,
+          pairsWithoutOpaque: 4,
           pairsWholeBodyOpaque: 0,
           pairsCongruent: 0,
           projectsSkipped: {
             legacy: 0,
             modern: 0
           },
-          changedPairs: 2,
-          changedPairsWithoutOpaque: 2,
+          changedPairs: 4,
+          changedPairsWithoutOpaque: 4,
           changedPairsWholeBodyOpaque: 0,
           changedReasonSets: {
-            : 2
+            : 4
           },
           runtimeChangeCalls: {
             callSites: {
@@ -165,55 +184,45 @@
           externalCallees: {},
           unknownByScope: {
             line: 0,
-            method: 0
+            method: 2
           }
         },
         analysedLinesOfCode: {
-          legacy: 120,
-          modern: 135
+          legacy: 0,
+          modern: 0
         },
         projectsNotBuilt: {},
-        runtimes: {
-          legacy: [
-            {
-              project: App,
-              runtime: net48,
-              source: attribute
-            },
-            {
-              project: Shared,
-              runtime: net48,
-              source: host
-            }
-          ],
-          modern: [
-            {
-              project: App,
-              runtime: net8.0,
-              source: attribute
-            },
-            {
-              project: Shared,
-              runtime: netstandard2.0,
-              source: unhosted
-            }
-          ]
-        },
+        runtimes: {},
         mode: {
-          name: thorough,
+          name: quick,
           bound: 3,
           resourceLimit: 2000000,
-          timeoutMs: 60000,
-          escalation: {
-            bound: 8,
-            resourceLimit: 30000000,
-            timeoutMs: 600000
-          }
+          timeoutMs: 60000
         },
         queryEndings: {
-          resourceLimit: 0,
+          resourceLimit: 1,
           wallClock: 0
-        }
+        },
+        reviewList: [
+          {
+            group: opaque,
+            ruleId: EQ003,
+            rank: 0.002,
+            count: 1,
+            identities: [
+              T::G()
+            ]
+          },
+          {
+            group: timeout,
+            ruleId: EQ003,
+            rank: 0.002,
+            count: 1,
+            identities: [
+              T::A()
+            ]
+          }
+        ]
       }
     }
   ]

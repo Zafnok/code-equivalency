@@ -21,7 +21,11 @@ public sealed class BackendProgressTests
     private const string Proved = "encode assert inline check:obligation=unsat dispose ";
     private const string Failed = "encode assert inline check:obligation=sat dispose ";
 
-    private static readonly VerificationOptions Options = new(3, 10_000, []);
+    /// <summary>
+    /// Pinned to 5,000,000 on purpose (ticket P1-032): at the first pass's 2,000,000 the second k-induction obligation of
+    /// <c>loops/late-divergence-beyond</c> gives up, and these tests are about which stages run, not about the budget.
+    /// </summary>
+    private static readonly VerificationOptions Options = new(3, 10_000, []) { ResourceLimit = 5_000_000 };
 
     [Theory]
     [InlineData("loops/counter-shape", "bounded:unknown lockstep-induction:unknown k-induction:not-applicable chc:unsat")]

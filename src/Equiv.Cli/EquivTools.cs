@@ -75,8 +75,9 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
         [Description("Path to a previous SARIF log; results already in it are reported as unchanged.")] string? baseline = null,
         [Description("Loop unrolling bound; overrides the config's, must be positive.")] int? bound = null,
         [Description("Solver timeout per procedure pair in milliseconds; overrides the config's, must be positive.")] int? timeoutMs = null,
-        [Description(IlFallbackDescription)] bool ilFallback = false) =>
-        Run(new CompareOptions(legacy, modern, NoOutPath, baseline, config, FailOn: null, DryRun: false) { Bound = bound, TimeoutMs = timeoutMs, IlFallback = ilFallback });
+        [Description(IlFallbackDescription)] bool ilFallback = false,
+        [Description("\"thorough\" (the default) verifies again, with more budget and from IL, the pairs a first pass leaves Unknown; \"quick\" stops after the first pass (--mode). Overrides the config's.")] string? mode = null) =>
+        Run(new CompareOptions(legacy, modern, NoOutPath, baseline, config, FailOn: null, DryRun: false) { Bound = bound, TimeoutMs = timeoutMs, IlFallback = ilFallback, Mode = mode });
 
     public CallToolResult LowerOnly(
         [Description(LegacyDescription)] string legacy,

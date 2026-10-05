@@ -308,7 +308,7 @@ public sealed class CSharpFrontendTests
             : new LoadedSolution(null!, [modernCompilation], [], []));
         CSharpFrontend frontend = new(loader, new StableIdentityMatcher());
 
-        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = true }, NullRunLog.Instance, CancellationToken.None).Match;
+        MatchResult result = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = true, Mode = CompareMode.Quick }, NullRunLog.Instance, CancellationToken.None).Match;
         MatchResult plain = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         ProcedurePair add = result.Pairs.Single(static p => p.New.Value.Contains("::Add(", StringComparison.Ordinal));
@@ -318,6 +318,43 @@ public sealed class CSharpFrontendTests
         Assert.Equal(("operation", false), (has.Lowering, has.IlFallbackTried));
         Assert.Equal(["bcl.string-contains-char"], has.EquivalencesApplied);
         Assert.All(plain.Pairs, static p => Assert.Equal((null, false), (p.Lowering, p.IlFallbackTried)));
+    }
+
+    /// <summary>
+    /// ADR 0049 decision 2 (ticket P1-032): in thorough mode, with or without <c>--il-fallback</c>, the pair ADR 0039 would
+    /// lower from IL keeps its IOperation bodies and carries the IL ones beside them for the IL pass; a pair that does not
+    /// meet ADR 0039's condition carries none. In quick mode without the flag no pair is read from IL.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Thorough_KeepsBothLoweringsOfAPairTheIlFallbackWouldReplace(bool ilFallback)
+    {
+        const string Contains = "public bool Has(string s, char c) => System.Linq.Enumerable.Contains(s, c);";
+        Compilation legacyCompilation = RoslynTestCompilations.Compile(
+            $"namespace N {{ public class C {{ {Contains} public int? Add(int? a, int b) {{ if (a.HasValue) {{ return new int?(a.GetValueOrDefault() + b); }} return null; }} }} }}");
+        Compilation modernCompilation = RoslynTestCompilations.Compile($"namespace N {{ public class C {{ {Contains} public int? Add(int? a, int b) => a + b; }} }}");
+        CSharpFrontend frontend = new(
+            new StubLoader(path => new LoadedSolution(null!, [string.Equals(path, "legacy.sln", StringComparison.Ordinal) ? legacyCompilation : modernCompilation], [], [])),
+            new StableIdentityMatcher());
+
+        MatchResult thorough = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = ilFallback }, NullRunLog.Instance, CancellationToken.None).Match;
+        MatchResult replaced = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = true, Mode = CompareMode.Quick }, NullRunLog.Instance, CancellationToken.None).Match;
+        MatchResult quick = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Mode = CompareMode.Quick }, NullRunLog.Instance, CancellationToken.None).Match;
+
+        ProcedurePair add = thorough.Pairs.Single(static p => p.New.Value.Contains("::Add(", StringComparison.Ordinal));
+        ProcedurePair has = thorough.Pairs.Single(static p => p.New.Value.Contains("::Has(", StringComparison.Ordinal));
+        ProcedurePair fromIl = replaced.Pairs.Single(static p => p.New.Value.Contains("::Add(", StringComparison.Ordinal));
+        ProcedurePair fromOperations = quick.Pairs.Single(static p => p.New.Value.Contains("::Add(", StringComparison.Ordinal));
+        IlBodies il = Assert.IsType<IlBodies>(add.Il);
+        Assert.Equal((fromIl.OldBody, fromIl.NewBody), (il.Old, il.New));
+        Assert.Equal(fromIl.ForwardersResolved, il.ForwardersResolved);
+        Assert.Equal((fromOperations.OldBody, fromOperations.NewBody), (add.OldBody, add.NewBody));
+        Assert.Equal((null, false), (add.Lowering, add.IlFallbackTried));
+        Assert.Null(has.Il);
+        Assert.Equal(["bcl.string-contains-char"], has.EquivalencesApplied);
+        Assert.All(quick.Pairs, static p => Assert.Null(p.Il));
+        Assert.All(replaced.Pairs, static p => Assert.Null(p.Il));
     }
 
     /// <summary>
@@ -404,7 +441,7 @@ public sealed class CSharpFrontendTests
     {
         StubLoader loader = new(path => new LoadedSolution(null!, [string.Equals(path, "legacy.sln", StringComparison.Ordinal) ? legacy : modern], [], []));
         return new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = ilFallback }, NullRunLog.Instance, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = ilFallback, Mode = CompareMode.Quick }, NullRunLog.Instance, CancellationToken.None).Match;
     }
 
     /// <summary>
@@ -465,7 +502,7 @@ public sealed class CSharpFrontendTests
         StubLoader loader = ReboundLoader(out Compilation legacy, out Compilation modern);
 
         MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
-            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = true }, NullRunLog.Instance, CancellationToken.None).Match;
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = true, Mode = CompareMode.Quick }, NullRunLog.Instance, CancellationToken.None).Match;
 
         ProcedurePair has = result.Pairs.Single(static p => p.New.Value.Contains("::Has(", StringComparison.Ordinal));
         Assert.Equal(("operation", true), (has.Lowering, has.IlFallbackTried));
