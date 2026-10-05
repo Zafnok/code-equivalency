@@ -654,7 +654,15 @@ rung, a pair or a run.
   5000 ms timeout after 126.5 minutes. Non-solver work is made cheaper, never skipped. The contracts
   pass (2h07m, unlogged) becomes a phase. Two full runs must agree on every decided result.
 - P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
-  and no query ended sooner by contention. Needs P2-050, P2-076.
+  and no query ended sooner by contention. Needs P2-050, P2-076. Done 2026-10-05: `--jobs 4` takes a
+  Git Extensions run from 7,935 s to 2,815 s; the default stays 1 (2 of 13,742 results differ, as two runs
+  on one thread also do; `docs/runs/2026-10-05-parallel-verify.md`); P2-131 and P2-132 filed.
+- P2-131 (S) The backend counts how every query ended, and `run.properties.queryEndings` is filled
+  from that count: P2-077 counts timed-out rungs from their detail text in the CLI, which misses the
+  queries outside a rung. Needs P2-077.
+- P2-132 (M) Find what blocks the pair workers past four threads, and raise the default `jobs` from
+  one: four threads make a Git Extensions run 2.8 times faster with no query slowed, and 24 threads are
+  slower than four, with 16 of the 24 workers waiting inside one native Z3 call. Needs P2-077, P2-100.
 - P2-112 (S) An interrupt that throws on the timer thread can no longer end the process.
   `Context.Interrupt()` threw `Z3Exception: canceled` on P2-076's timer and killed a CI test host
   (PR #368); the same crash would end a corpus run with no SARIF.
@@ -688,7 +696,8 @@ Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
   Equivalent from IL (`docs/runs/2026-10-03-il-fragment-soundness.md`). Needs P1-016, P1-017.
 - P2-127 (M) Soundness: a call of a local function is an ordinary call of a callee no pair verifies,
   so two members that differ only inside a local function prove Equivalent in a default run (repro in
-  the ticket; found by P2-079's closure pairs). Needs P2-079.
+  the ticket; found by P2-079's closure pairs). Done: the call is an opaque with reason `LocalFunction`
+  that no side shares; on `gitextensions-8522` 29 results now name it, 26 of them Equivalent before. Needs P2-079.
 - P2-078 (M) Ill-sorted IR from the IL lowering no longer crashes the encoder: one Git Extensions pair
   exits the `--il-fallback` run with code 5. `IlFallback` keeps the IOperation bodies when the IL
   bodies do not validate. Needs P1-016, P1-017.
@@ -889,7 +898,13 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
 
 - P1-036 (M) Spike: cvc5 splits each of the 34 queries it times out on into partitions solved by
   separate processes (Wilson et al., arXiv 2306.05854). Counts the queries decided and whether two
-  runs agree. Needs P1-025.
+  runs agree. Needs P1-025. Done 2026-10-04: it decides 9 of the 34, all satisfiable (3 replay to
+  Unknown(abstraction), 6 are not read back), proves none and refutes none; 4 of the 34 get a
+  different answer the second time, and in place of plain cvc5 it loses 10 of 59 answers
+  (`docs/runs/2026-10-04-cvc5-partitioning.md`). P1-039.
+- P1-039 (M) In thorough mode, with `solvers.cvc5.partitions` set, cvc5 splits a rung 1 query it
+  has given up on and the partitions are solved a process each; never in quick (ADR 0049 decision
+  7). Needs P1-033, P1-032. Blocked by P2-100: the answers must repeat first.
 - P1-037 (L) Spike: a rung 1 query Z3 gives up on becomes a Lean theorem over `BitVec`, a scaffold
   splits it, a model fills the holes and Lean's kernel checks the proof (after Trivet, arXiv
   2609.19583). Translates the query, not the IR. An ADR against ADR 0005 only if a proof needs the

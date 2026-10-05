@@ -315,6 +315,10 @@
             }
           ]
         },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
         "reviewList": [
           {
             "group": "calls:System.Convert::ToInt32(string)|System.Int32::Parse(string)",

@@ -227,6 +227,10 @@
             }
           ]
         },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
         "reviewList": [
           {
             "group": "runtime-change:System.IO.BinaryReader::ReadString(",

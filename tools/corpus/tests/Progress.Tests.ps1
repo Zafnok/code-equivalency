@@ -41,11 +41,42 @@ Describe 'corpus.ps1 -Progress' {
         )
     }
 
+    # Ticket P2-077 criterion 3: with pairs verified in parallel a heartbeat is one line for each item in flight.
+    It 'Progress_Reports_Every_Item_In_Flight' {
+        $dir = Join-Path $script:RunDir 'parallel'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $lines = @(Get-Content -LiteralPath $script:Log) + @(
+            'equiv: +00:01:02 verify detail: stage=check:divergence took=1.5s result=unknown item=Contoso.Widgets.Sprocket.Rest()'
+            'equiv: +00:01:12 verify 3/6 (40%) item=Contoso.Widgets.Sprocket.Rest() took=26.800 eta=00:00:40.500 worst=00:02:30.000 rate=0.1/s slow'
+            'equiv: +00:01:12 verify 3/6 (40%) item=Contoso.Widgets.Cog.Mesh(int, int) took=3.250 eta=00:00:40.500 worst=00:02:30.000 rate=0.1/s'
+        )
+        Set-Content -LiteralPath (Join-Path $dir 'progress.log') -Value $lines -Encoding utf8
+        $out = @(& $script:Corpus -Progress $dir)
+        Assert-Lines $out[0..3] @(
+            'phase: verify 3/6 (40%)'
+            'eta: 00:00:40.500 worst: 00:02:30.000 (at +00:01:12)'
+            'current: Contoso.Widgets.Sprocket.Rest() running 26.800s slow'
+            'current: Contoso.Widgets.Cog.Mesh(int, int) running 3.250s'
+        )
+    }
+
+    It 'Progress_Between_Items_Reports_None_In_Flight' {
+        $dir = Join-Path $script:RunDir 'between'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Set-Content -LiteralPath (Join-Path $dir 'progress.log') -Value @(Get-Content -LiteralPath $script:Log | Select-Object -First 26) -Encoding utf8
+        $out = @(& $script:Corpus -Progress $dir)
+        Assert-Lines $out[0..2] @(
+            'phase: verify 3/6 (40%)'
+            'eta: 00:00:15.000 worst: 00:02:30.000 (at +00:00:45)'
+            'current: none reported since the last item finished'
+        )
+    }
+
     It 'Progress_Never_Touches_The_Equiv_Process' {
         $tokens = $null
         $errors = $null
         $ast = [Management.Automation.Language.Parser]::ParseFile($script:Corpus, [ref]$tokens, [ref]$errors)
-        $names = 'Read-ProgressLog', 'Get-ProgressReport', 'Get-PhaseTimes'
+        $names = 'Read-ProgressLog', 'Get-InFlight', 'Get-ProgressReport', 'Get-PhaseTimes'
         $bodies = $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $names -contains $n.Name }, $true)
         if (@($bodies).Count -ne $names.Count) { throw 'progress functions not found in corpus.ps1' }
         foreach ($body in $bodies) {

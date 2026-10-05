@@ -4,7 +4,9 @@ namespace Equiv.Core.Progress;
 /// Where a run reports its progress (ADR 0038): a phase of <c>total</c> items weighing <c>totalWeight</c> together, each
 /// item started and finished in turn, and free-text details at <c>debug</c>. Every call returns at once and never
 /// changes a result; <see cref="NullRunLog"/> ignores them all. A caller builds a costly <see cref="Detail"/> string only
-/// when <see cref="IsDebug"/> is true. Calls come from one thread at a time.
+/// when <see cref="IsDebug"/> is true. A phase starts and ends on one thread. Its items may be in flight on several
+/// threads at once, one item to a thread (ticket P2-077): <see cref="Item"/>, the <see cref="Detail"/>s about that item
+/// and its <see cref="ItemDone"/> come from the thread that works on it, which is how a log tells the items apart.
 /// </summary>
 public interface IRunLog
 {
@@ -17,10 +19,10 @@ public interface IRunLog
     /// </summary>
     void Phase(string name, int total, long totalWeight, PhaseBound? bound = null);
 
-    /// <summary>Starts the next item of the phase.</summary>
+    /// <summary>Starts an item of the phase on the calling thread.</summary>
     void Item(string identity, long weight);
 
-    /// <summary>Finishes the item <see cref="Item"/> started, with a one-word <paramref name="outcome"/>.</summary>
+    /// <summary>Finishes the item <see cref="Item"/> started on the calling thread, with a one-word <paramref name="outcome"/>.</summary>
     void ItemDone(string outcome);
 
     /// <summary>A line written only at <c>debug</c>.</summary>

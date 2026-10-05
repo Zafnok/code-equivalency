@@ -2163,10 +2163,19 @@ internal sealed class IrLowerer
     /// API-equivalence entry's legacy member whose arguments its adapter addresses, and that has no <c>ref</c> or
     /// <c>out</c> argument, is a call to the entry's modern member instead, and the entry is recorded as applied (ADR 0020;
     /// ticket M3-009). A call to a forwarder is the same call to its target (ADR 0047; ticket P2-068), which is then the
-    /// callee everything here reads: the catalogue, the runtime-changes table and whether the call is closed.
+    /// callee everything here reads: the catalogue, the runtime-changes table and whether the call is closed. A call of a
+    /// local function is no call at all but an opaque with reason <c>LocalFunction</c> (ticket P2-127): a local function
+    /// is not a matched procedure, so no pair of its own reads its body, and it reads and writes the locals it captures,
+    /// which a call does not. <see cref="FragmentFingerprinter"/> gives a fragment that calls a local function declared
+    /// outside it no fingerprint, so the opaque is never shared.
     /// </summary>
     private IrVar? Invoke(IInvocationOperation invocation, LoweringContext context)
     {
+        if (invocation.TargetMethod.MethodKind == MethodKind.LocalFunction)
+        {
+            return Opaque(invocation, nameof(MethodKind.LocalFunction), context);
+        }
+
         if (RefOuts(invocation.Arguments) is not { } written)
         {
             return Opaque(invocation, "ref-argument", context);

@@ -14,6 +14,7 @@ namespace Equiv.Cli.Tests;
 /// be chosen, e.g. <see cref="OperationCanceledException"/> or <see cref="OutOfMemoryException"/>).
 /// <see cref="Contracts"/> gives a caller's canned result under callee contracts (ticket P1-010), null when missing, and
 /// <see cref="ContractFailure"/> is thrown from that call instead when set; <see cref="ContractCalls"/> records each call.
+/// Calls may come from several threads at once (ticket P2-077), so each is recorded under a lock.
 /// </summary>
 internal sealed class FakeBackend(IReadOnlyDictionary<string, Verdict> verdictByIdentity, IReadOnlyDictionary<string, Exception>? throwByIdentity = null) : IVerificationBackend
 {
@@ -27,7 +28,11 @@ internal sealed class FakeBackend(IReadOnlyDictionary<string, Verdict> verdictBy
 
     public Verdict Verify(IrProcedure oldBody, IrProcedure newBody, VerificationOptions options)
     {
-        Calls.Add(options);
+        lock (Calls)
+        {
+            Calls.Add(options);
+        }
+
         return throwByIdentity is not null && throwByIdentity.TryGetValue(newBody.Identity.Value, out Exception? exception)
             ? throw exception
             : verdictByIdentity[newBody.Identity.Value];
@@ -35,7 +40,11 @@ internal sealed class FakeBackend(IReadOnlyDictionary<string, Verdict> verdictBy
 
     public Equivalent? VerifyUnderContracts(IrProcedure oldBody, IrProcedure newBody, ImmutableArray<CalleePair> callees, VerificationOptions options)
     {
-        ContractCalls.Add((newBody.Identity.Value, [.. callees.Select(static c => c.Identity)]));
+        lock (ContractCalls)
+        {
+            ContractCalls.Add((newBody.Identity.Value, [.. callees.Select(static c => c.Identity)]));
+        }
+
         return ContractFailure is { } failure ? throw failure : Contracts.GetValueOrDefault(newBody.Identity.Value);
     }
 }

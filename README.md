@@ -104,7 +104,7 @@ Every number is measured on public code, and every row says when. The runs are i
 | Divergent | 1.1% of pairs (465), 20.7% of changed pairs | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
 | Divergent precision (a Divergent is a real behaviour change) | Migration 3.8% (2 of 52). Upgrades 3.8% (5 of 131). Cleanups 0% (0 of 51) | [2026-09-30](docs/runs/2026-09-30-divergent-audit.md), [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md), [2026-10-02](docs/runs/2026-10-02-cleanup-verdict.md) |
 | Left for a reviewer (Unknown and Divergent) | 4.6% of pairs (1,936) | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
-| Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. 1 open soundness ticket ([P2-127](docs/tickets/P2-127-soundness-local-function-call-is-an-unverified-callee.md)) | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
+| Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. 1 open soundness ticket ([P2-127](docs/tickets/done/P2-127-soundness-local-function-call-is-an-unverified-callee.md)) | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
 | Large pairs that run to a result | 5 of 5 | 2026-10-03 ([Duplicati](docs/tickets/done/P2-082-pair-weighting-crash-ends-the-run.md), [OpenRA](docs/tickets/done/P2-125-tuple-array-sort-mismatch-on-element-names.md)) |
 | Run time, one large pair | mean 1h36m (1h11m to 2h05m), one pair at a time | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
 | Repeatability | 99.94% (13,734 of 13,742 results equal between two runs) | [2026-10-02](docs/runs/2026-10-02-pair-time.md) |
@@ -161,7 +161,7 @@ loads, more than 40% of pairs are unchanged, and 28 of 28 seeded behaviour chang
 none reported Equivalent. On the two upgrades, no behaviour change the pull request made was
 reported Equivalent either. An Equivalent can be relied on today, with one known exception: a member
 that calls a local function by name is proved without the local function's body being read
-([P2-127](docs/tickets/P2-127-soundness-local-function-call-is-an-unverified-callee.md)).
+([P2-127](docs/tickets/done/P2-127-soundness-local-function-call-is-an-unverified-callee.md)).
 The rest cannot yet:
 
 | What is needed | Today |
@@ -220,7 +220,7 @@ equiv compare --legacy <solution.sln|.slnx> --modern <solution.sln|.slnx>
               [--dry-run] [--lower-only]
               [--execute [--test-target 0.001] [--test-budget <inputs>[,<seconds>]]]
               [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback]
-              [--resource-limit <n>]
+              [--resource-limit <n>] [--jobs <n>]
               [--verbosity quiet|normal|debug] [--log <path>]
 equiv mcp [--execute]
 ```
@@ -262,6 +262,12 @@ solver query in Z3's own step count. It is deterministic, so a pair that runs ou
 Unknown (`timeout`) on every run, whatever the machine's speed or load. The config's `timeoutMs`
 (default 60000) is the wall-clock backstop behind it. The Unknown's message says which of the two
 was hit.
+
+`--jobs <n>` overrides the config's `jobs` (default 1), the number of matched
+pairs verified at once. It changes how long a run takes, not its results: they are written in the
+order `--jobs 1` writes them, and on `n` threads each query gets `n` times `timeoutMs` on the clock,
+so threads sharing a processor do not time out a query that one thread would finish.
+`run.properties.queryEndings` counts the queries each of the two limits ended.
 
 A second solver is optional (ADR 0050). With `"solvers": { "cvc5": { "path": "<cvc5 executable>" } }`
 in the config, a rung 1 query Z3 gives up on is also asked of [cvc5](https://cvc5.github.io), run as

@@ -309,6 +309,10 @@
             }
           ]
         },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
         "reviewList": [
           {
             "group": "calls:System.Collections.Generic.List`1::Clear()<int>",

@@ -609,6 +609,10 @@
             }
           ]
         },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
         "reviewList": [
           {
             "group": "calls:System.String::Concat(string,string)|System.String::Format(string,object,object)",

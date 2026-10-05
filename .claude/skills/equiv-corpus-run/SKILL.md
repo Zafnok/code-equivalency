@@ -170,6 +170,12 @@ $t = Measure-Command {
 Every `equiv compare` here, in every mode, passes `--verbosity debug --log "$run/progress.log"`
 (ADR 0038): corpus runs are the long ones, and the log is the only way to see inside one.
 
+A verdict run may pass `--jobs 4` (ticket P2-077): on `gitextensions-8522` it takes 47 minutes against 2h12m
+on one thread and no query runs slower. Do not pass more than 4 until P2-132 lands; 24 threads were slower
+than four. Record the `--jobs` value in SUMMARY.md, and compare two runs only when both used the same value
+or the comparison says so: a handful of results at the edge of the resource limit differ between any two runs
+(P2-100).
+
 Two runs on the same pair must not overlap their load phase (they collide on MSBuild's
 `obj/**/*.AssemblyReference.cache`, "being used by another process"), so start the second only
 after the first's `progress.log` has its `load-modern` line, and treat a run that exits 4 with
@@ -177,7 +183,7 @@ skipped projects as void: discard it and run it again.
 
 **Watching a run.** From a second terminal, without touching the `equiv` process:
 `./tools/corpus/corpus.ps1 -Progress $run` prints the current phase, done/total, the last ETA and
-worst-case bound, the item in flight and how long it has run (`slow` once that is ten times the
+worst-case bound, each item in flight and how long it has run (`slow` once that is ten times the
 phase's median), and the five slowest items so far. It only reads `progress.log`, shared for
 writing, so it never blocks the run. To follow the raw lines instead:
 `Get-Content "$run/progress.log" -Wait -Tail 20`. A pair stuck in the solver shows as heartbeats

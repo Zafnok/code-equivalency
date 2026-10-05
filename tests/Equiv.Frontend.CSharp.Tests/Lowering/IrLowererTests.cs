@@ -153,6 +153,28 @@ public sealed class IrLowererTests
     public void ADynamicInvocationIsOpaqueByDesign() =>
         Assert.Equal("DynamicInvocation", Assert.Single(Opaques(Method("static object CallIt(dynamic d) => d.DoSomething();", "CallIt"))).Reason);
 
+    /// <summary>
+    /// Ticket P2-127: a local function is not a matched procedure, so nothing verifies its body. Its call is an opaque no
+    /// other side shares, not a call of a name both sides have, so two members that differ only inside it are not one IR
+    /// that proves.
+    /// </summary>
+    [Theory]
+    [InlineData("int L(int v) => v + ")]
+    [InlineData("static int L(int v) => v + ")]
+    public void ACallOfALocalFunctionIsNotACallOfASharedName(string local)
+    {
+        static IrProcedure Bump(string local) =>
+            Source("public sealed class C { private int _x; public void Bump() { " + local + "; _x = L(_x); } }", "Bump");
+
+        Assert.All<IrProcedure>([Bump(local + "1"), Bump(local + "2")], static side =>
+        {
+            Assert.DoesNotContain(Calls(side), static c => c.Callee.Value.Contains("::L(", StringComparison.Ordinal));
+            IrOpaque call = Assert.Single(Opaques(side));
+            Assert.Equal("LocalFunction", call.Reason);
+            Assert.Null(call.Fingerprint);
+        });
+    }
+
     [Theory]
     [InlineData("int M() => p;")]
     [InlineData("void M() { p = 1; }")]

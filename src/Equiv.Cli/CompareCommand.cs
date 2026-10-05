@@ -69,11 +69,12 @@ internal static class CompareCommand
         Option<string?> logOption = new("--log");
         Option<bool> ilFallbackOption = new("--il-fallback");
         Option<int?> resourceLimitOption = new("--resource-limit");
+        Option<int?> jobsOption = new("--jobs");
 
         Command command = new("compare")
         {
             legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption,
-            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption, ilFallbackOption, resourceLimitOption,
+            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption, ilFallbackOption, resourceLimitOption, jobsOption,
         };
 
         command.SetAction(parseResult => RunLogged(
@@ -95,6 +96,7 @@ internal static class CompareCommand
                 LogPath = parseResult.GetValue(logOption),
                 IlFallback = parseResult.GetValue(ilFallbackOption),
                 ResourceLimit = parseResult.GetValue(resourceLimitOption),
+                Jobs = parseResult.GetValue(jobsOption),
             },
             frontends,
             backend,
@@ -167,9 +169,9 @@ internal static class CompareCommand
             return ExitCodes.UsageError;
         }
 
-        if (options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0)
+        if (options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0 || options.Jobs is <= 0)
         {
-            streams.Error.WriteLine("error: bound, timeoutMs and resourceLimit must be positive integers");
+            streams.Error.WriteLine("error: bound, timeoutMs, resourceLimit and jobs must be positive integers");
             return ExitCodes.UsageError;
         }
 
@@ -190,7 +192,7 @@ internal static class CompareCommand
             return inputErrorExitCode;
         }
 
-        EquivConfig config = loaded with { Bound = options.Bound ?? loaded.Bound, TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs, ResourceLimit = options.ResourceLimit ?? loaded.ResourceLimit, IlFallback = options.IlFallback };
+        EquivConfig config = loaded with { Bound = options.Bound ?? loaded.Bound, TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs, ResourceLimit = options.ResourceLimit ?? loaded.ResourceLimit, Jobs = options.Jobs ?? loaded.Jobs, IlFallback = options.IlFallback };
         FrontendAnalysis? analysis = Loaded(frontend, options, config, runLog, streams.Error);
         if (analysis is null)
         {
@@ -247,12 +249,13 @@ internal static class CompareCommand
         List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(f => PairFailure("Lowering", f.Old, f.New, f.Exception, error))];
         List<ProcedureIdentity> unverifiedPairs = [.. matchResult.LoweringFailures.Select(static f => f.New)];
         (List<VerificationResult> verified, List<Notification> verifyFailures, List<ProcedureIdentity> unverifiedVerified) =
-            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, Verification(config, options, runLog), runLog, error);
+            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, Verification(config, options, runLog), config.Jobs, error);
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
         List<VerificationResult> results = Executed(
-            WithContracts(WithAssumptions(verified, lowered, matchResult), lowered, backend, Verification(config, options, runLog), error), lowered, analysis.Replay, execution, options.Testing, runLog);
-        if (!options.LowerOnly)
+            WithContracts(WithAssumptions(verified, lowered, matchResult), lowered, backend, Verification(config, options, runLog), config.Jobs, error), lowered, analysis.Replay, execution, options.Testing, runLog);
+        QueryEndings? endings = options.LowerOnly ? null : QueryEndings.Of(results);
+        if (endings is not null)
         {
             census = census with { UnknownByScope = ScopeCounts.Of(results), FailureRefinement = RefinementTime.Of(results), AgreesWhen = ConditionTime.Of(results) };
         }
@@ -267,7 +270,7 @@ internal static class CompareCommand
         SarifLog log = SarifReportWriter.Write(
             results,
             baseline,
-            RunProperties(analysis, census),
+            RunProperties(analysis, census, endings),
             notifications,
             unverified,
             reviewList: !options.LowerOnly);
@@ -290,7 +293,21 @@ internal static class CompareCommand
         };
     }
 
-    /// <summary>The run's property bag (ADR 0027; tickets M3-014, P2-013, P2-053).</summary>
+    /// <summary>
+    /// The run's property bag (ADR 0027; tickets M3-014, P2-013, P2-053), with <c>queryEndings</c> last on a run that
+    /// verifies (ticket P2-077).
+    /// </summary>
+    private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census, QueryEndings? endings)
+    {
+        Dictionary<string, object> properties = RunProperties(analysis, census);
+        if (endings is not null)
+        {
+            properties["queryEndings"] = endings.ToProperty();
+        }
+
+        return properties;
+    }
+
     private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census) =>
         new(StringComparer.Ordinal)
         {
@@ -587,11 +604,14 @@ internal static class CompareCommand
     /// verified. <see cref="OperationCanceledException"/> and <see cref="OutOfMemoryException"/> propagate unchanged.
     /// Each pair is one item of the <c>verify</c> phase, weighed by <see cref="PairWeight"/>, and the phase is bounded by
     /// the pairs the solver decides (ADR 0038). A pair whose deciding or weighing throws fails the same way, before the
-    /// backend sees it, and weighs 1 (ticket P2-082).
+    /// backend sees it, and weighs 1 (ticket P2-082). Up to <paramref name="jobs"/> pairs are verified at once
+    /// (<see cref="PairWorkers"/>; ticket P2-077), never more than the solver decides, and the results, the notifications,
+    /// the unverified identities and the lines on stderr are in the pairs' order whatever order they finished in.
     /// </summary>
     private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) Verified(
-        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, VerificationOptions options, IRunLog runLog, TextWriter error)
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, VerificationOptions options, int jobs, TextWriter error)
     {
+        IRunLog runLog = options.Log;
         if (options.InvariantModel is { } model)
         {
             // Ticket P1-002 criterion 4: rung 5 sends loop IR text to the model, so say so before any pair is verified.
@@ -605,52 +625,69 @@ internal static class CompareCommand
         List<Weighing> pairs = [.. lowered.Select(static p => Weighed(p.Pair, p.Old, p.New))];
         List<int> solverRungs = [.. pairs.Where(static p => p.Rungs > 0).Select(static p => p.Rungs)];
         runLog.Phase("verify", pairs.Count, pairs.Sum(static p => p.Weight), new PhaseBound(solverRungs.Count, options.TimeoutMs, solverRungs.DefaultIfEmpty(1).Max()));
-        foreach ((ProcedurePair pair, IrProcedure old, IrProcedure @new, Decision? decided, long weight, _, Exception? crash) in pairs)
+        int workers = PairWorkers.Count(jobs, solverRungs.Count);
+        VerificationOptions shared = PairWorkers.Sharing(options, workers);
+        PairOutcome[] outcomes = PairWorkers.Run(pairs.Count, workers, i => VerifiedPair(pairs[i], backend, shared));
+        runLog.PhaseDone();
+        foreach ((PairOutcome outcome, ProcedurePair pair) in outcomes.Zip(pairs.Select(static p => p.Pair)))
         {
-            runLog.Item(pair.New.Value, weight);
-            if (crash is not null)
+            if (outcome.Result is { } result)
             {
-                failures.Add(PairFailure("Weighing", pair.Old, pair.New, crash, error));
+                results.Add(result);
+            }
+            else
+            {
+                failures.Add(PairFailure(outcome.Stage, pair.Old, pair.New, outcome.Crash!, error));
                 unverified.Add(pair.New);
-                runLog.ItemDone("failed");
-                continue;
-            }
-
-            if (decided is not null)
-            {
-                results.Add(decided.Result with { Lowering = pair.Lowering, Runtimes = pair.Runtimes, ReboundCalls = pair.ReboundCalls, ForwardersResolved = pair.ForwardersResolved });
-                runLog.ItemDone(decided.Outcome);
-                continue;
-            }
-
-            try
-            {
-                Verdict verdict = backend.Verify(old, @new, options);
-                results.Add(new VerificationResult(pair.New, verdict)
-                {
-                    EquivalencesApplied = pair.EquivalencesApplied,
-                    Lowering = pair.Lowering,
-                    Runtimes = pair.Runtimes,
-                    ReboundCalls = pair.ReboundCalls,
-                    ForwardersResolved = pair.ForwardersResolved,
-                });
-                runLog.ItemDone(verdict switch
-                {
-                    Equivalent => "equivalent",
-                    Divergent => "divergent",
-                    _ => "unknown",
-                });
-            }
-            catch (Exception exception) when (IsPairFailure(exception))
-            {
-                failures.Add(PairFailure("Verifying", pair.Old, pair.New, exception, error));
-                unverified.Add(pair.New);
-                runLog.ItemDone("failed");
             }
         }
 
-        runLog.PhaseDone();
         return (results, failures, unverified);
+    }
+
+    /// <summary>
+    /// One item of the <c>verify</c> phase, on the thread that calls it: the pair's result, or the exception that failed
+    /// it and the stage it failed in. It writes nothing but the run log, so pairs verified at once cannot interleave on stderr.
+    /// </summary>
+    private static PairOutcome VerifiedPair(Weighing weighing, IVerificationBackend backend, VerificationOptions options)
+    {
+        (ProcedurePair pair, IrProcedure old, IrProcedure @new, Decision? decided, long weight, _, Exception? crash) = weighing;
+        options.Log.Item(pair.New.Value, weight);
+        if (crash is not null)
+        {
+            options.Log.ItemDone("failed");
+            return new PairOutcome(Result: null, "Weighing", crash);
+        }
+
+        if (decided is not null)
+        {
+            options.Log.ItemDone(decided.Outcome);
+            return new PairOutcome(decided.Result with { Lowering = pair.Lowering, Runtimes = pair.Runtimes, ReboundCalls = pair.ReboundCalls, ForwardersResolved = pair.ForwardersResolved });
+        }
+
+        try
+        {
+            Verdict verdict = backend.Verify(old, @new, options);
+            options.Log.ItemDone(verdict switch
+            {
+                Equivalent => "equivalent",
+                Divergent => "divergent",
+                _ => "unknown",
+            });
+            return new PairOutcome(new VerificationResult(pair.New, verdict)
+            {
+                EquivalencesApplied = pair.EquivalencesApplied,
+                Lowering = pair.Lowering,
+                Runtimes = pair.Runtimes,
+                ReboundCalls = pair.ReboundCalls,
+                ForwardersResolved = pair.ForwardersResolved,
+            });
+        }
+        catch (Exception exception) when (IsPairFailure(exception))
+        {
+            options.Log.ItemDone("failed");
+            return new PairOutcome(Result: null, "Verifying", exception);
+        }
     }
 
     /// <summary>
@@ -755,10 +792,11 @@ internal static class CompareCommand
     /// caller's assumed and unproven ones, since the contract's proof assumed them. Otherwise, and when the backend throws,
     /// the result stays as it was; a throw is written to stderr as a warning, because the verdict it leaves is still sound.
     /// Each result that goes back is one item of the <c>contracts</c> phase, weighed by <see cref="PairWeight"/> (ADR 0038;
-    /// ticket P2-076); a run in which none does has no such phase.
+    /// ticket P2-076); a run in which none does has no such phase. Up to <paramref name="jobs"/> results go back at once
+    /// (<see cref="PairWorkers"/>; ticket P2-077), and the results and the warnings keep the order they came in.
     /// </summary>
     private static List<VerificationResult> WithContracts(
-        List<VerificationResult> results, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, VerificationOptions options, TextWriter error)
+        List<VerificationResult> results, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, IVerificationBackend backend, VerificationOptions options, int jobs, TextWriter error)
     {
         Dictionary<string, (IrProcedure Old, IrProcedure New)> bodies = lowered.ToDictionary(static p => p.Pair.New.Value, static p => (p.Old, p.New), StringComparer.Ordinal);
         Dictionary<string, VerificationResult> byIdentity = results.ToDictionary(static r => r.Identity.Value, StringComparer.Ordinal);
@@ -773,21 +811,28 @@ internal static class CompareCommand
         }
 
         options.Log.Phase("contracts", candidates.Count, candidates.Values.Sum(static c => c.Weight));
-        List<VerificationResult> contracted =
-        [
-            .. results.Select(result => candidates.TryGetValue(result.Identity.Value, out ContractCandidate? candidate) ? UnderContracts(result, candidate, byIdentity, backend, options, error) : result),
-        ];
+        int workers = PairWorkers.Count(jobs, candidates.Count);
+        VerificationOptions shared = PairWorkers.Sharing(options, workers);
+        (VerificationResult Result, string? Warning)[] contracted = PairWorkers.Run(
+            results.Count,
+            workers,
+            i => candidates.TryGetValue(results[i].Identity.Value, out ContractCandidate? candidate) ? UnderContracts(results[i], candidate, byIdentity, backend, shared) : (results[i], null));
         options.Log.PhaseDone();
-        return contracted;
+        foreach (string warning in contracted.Select(static c => c.Warning).OfType<string>())
+        {
+            error.WriteLine(warning);
+        }
+
+        return [.. contracted.Select(static c => c.Result)];
     }
 
-    private static VerificationResult UnderContracts(
+    /// <summary>One item of the <c>contracts</c> phase, on the thread that calls it: the result, and the warning to write when the backend threw.</summary>
+    private static (VerificationResult Result, string? Warning) UnderContracts(
         VerificationResult result,
         ContractCandidate candidate,
         Dictionary<string, VerificationResult> byIdentity,
         IVerificationBackend backend,
-        VerificationOptions options,
-        TextWriter error)
+        VerificationOptions options)
     {
         (IrProcedure old, IrProcedure @new, ImmutableArray<CalleePair> callees) = candidate;
         options.Log.Item(result.Identity.Value, candidate.Weight);
@@ -798,26 +843,25 @@ internal static class CompareCommand
         }
         catch (Exception exception) when (IsPairFailure(exception))
         {
-            error.WriteLine($"warning: Verifying {result.Identity.Value} under callee contracts failed, so it keeps its verdict: {exception.Message}");
             options.Log.ItemDone("failed");
-            return result;
+            return (result, $"warning: Verifying {result.Identity.Value} under callee contracts failed, so it keeps its verdict: {exception.Message}");
         }
 
         if (proved is null)
         {
             options.Log.ItemDone("unchanged");
-            return result;
+            return (result, null);
         }
 
         options.Log.ItemDone("proved");
         HashSet<string> contracted = new(proved.ContractsUsed.Select(static c => c.Callee), StringComparer.Ordinal);
         string[] inherited = [.. contracted.SelectMany(c => byIdentity.TryGetValue(c, out VerificationResult? callee) ? callee.UnprovenAssumptions : [])];
-        return result with
+        return (result with
         {
             Verdict = proved,
             AssumedCallees = [.. result.AssumedCallees.Concat(inherited).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
             UnprovenAssumptions = [.. result.UnprovenAssumptions.Where(c => !contracted.Contains(c)).Concat(inherited).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
-        };
+        }, null);
     }
 
     private static IEnumerable<string> Callees(IrProcedure body) =>
@@ -905,6 +949,9 @@ internal static class CompareCommand
     {
         public long Weight { get; } = PairWeight.Of(Old, New, solver: true);
     }
+
+    /// <summary>What the verify phase made of one pair: its result, or the exception that failed it and the stage it failed in (<c>Weighing</c>, <c>Verifying</c>).</summary>
+    private sealed record PairOutcome(VerificationResult? Result, string Stage = "", Exception? Crash = null);
 
     /// <summary>A pair's result decided without the solver, and the outcome the verify phase logs for it.</summary>
     private sealed record Decision(VerificationResult Result, string Outcome);

@@ -203,6 +203,10 @@
             }
           ]
         },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
         "reviewList": [
           {
             "group": "calls:System.ArgumentNullException::.ctor(string)",

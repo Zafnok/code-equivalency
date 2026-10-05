@@ -285,6 +285,10 @@
             }
           ]
         },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
         "reviewList": [
           {
             "group": "calls:Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)|System.String::IsNullOrWhiteSpace(string)",

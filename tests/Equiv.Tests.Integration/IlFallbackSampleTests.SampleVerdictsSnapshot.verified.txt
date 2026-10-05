@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
   "version": "2.1.0",
   "runs": [
@@ -243,6 +243,10 @@
               "source": "attribute"
             }
           ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
         },
         "reviewList": []
       }
