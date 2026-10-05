@@ -26,7 +26,8 @@ says what cvc5 answered on each. It compiles that spike's `Rung1.cs` for the rea
   the 59 it answers) at each count, strategy and run, and appends one line a query to
   `partitioned.tsv`; started again, it skips what is there. At most `--slots` processes run at
   once (24, the box's cores): a query's partitions take their places together, so three queries
-  run side by side at 8 partitions and one at 24. `--read-back` loads the pair through the
+  run side by side at 8 partitions and one at 24. A process that outlives its limit by more than
+  five seconds is counted as `late` in the line. `--read-back` loads the pair through the
   production frontend and, for each satisfiable answer, runs P1-025's `ReadBack` (the values
   asserted beside the query, Z3 completes the model, `ModelDecoder.Replay` decides); for each
   unsatisfiable `divergence` query it asks Z3 rung 1's later queries, since only all of them prove
