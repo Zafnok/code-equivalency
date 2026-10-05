@@ -304,8 +304,9 @@ public sealed partial class CompareCommandProgressTests
         return new ProcedurePair(new ProcedureIdentity(identity), new ProcedureIdentity(identity), body, body);
     }
 
+    /// <summary>One pair at a time, so the events are in the pairs' order.</summary>
     private static CompareOptions Options(string legacy, string modern) =>
-        new(legacy, modern, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false);
+        new(legacy, modern, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { Jobs = 1 };
 
     /// <summary>One pair for each way the verify phase decides it: three without the solver, five with it.</summary>
     private static FakeFrontend Frontend() => new(

@@ -179,6 +179,10 @@
             }
           ]
         },
+        "queryEndings": {
+          "resourceLimit": 1,
+          "wallClock": 0
+        },
         "reviewList": [
           {
             "group": "timeout",

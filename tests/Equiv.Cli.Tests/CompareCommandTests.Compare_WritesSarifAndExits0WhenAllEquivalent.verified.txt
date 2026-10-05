@@ -198,6 +198,10 @@
               source: unhosted
             }
           ]
+        },
+        queryEndings: {
+          resourceLimit: 0,
+          wallClock: 0
         }
       }
     }

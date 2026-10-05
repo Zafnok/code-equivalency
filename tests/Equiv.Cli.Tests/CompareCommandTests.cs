@@ -28,7 +28,7 @@ namespace Equiv.Cli.Tests;
 /// <see cref="ProgramTests"/>, which redirects the console too.
 /// </summary>
 [Collection("Console")]
-public sealed class CompareCommandTests
+public sealed partial class CompareCommandTests
 {
     private static readonly ProcedureIdentity PairIdentity = new("T::Pair()");
     private static readonly ImmutableDictionary<string, Verdict> NoVerdicts = [];
@@ -937,7 +937,7 @@ public sealed class CompareCommandTests
 
         Assert.Equal([ExitCodes.Success, ExitCodes.Success, ExitCodes.Success, ExitCodes.UsageError], exitCodes);
         Assert.Equal([EquivConfig.DefaultResourceLimit, 9000, 42], backend.Calls.Select(static o => o.ResourceLimit));
-        Assert.Equal($"error: bound, timeoutMs and resourceLimit must be positive integers{Environment.NewLine}", error, StringComparer.Ordinal);
+        Assert.Equal($"error: bound, timeoutMs, resourceLimit and jobs must be positive integers{Environment.NewLine}", error, StringComparer.Ordinal);
     }
 
     [Fact]
@@ -1919,7 +1919,7 @@ public sealed class CompareCommandTests
     }
 
     /// <summary>A pair whose bodies call each of <paramref name="callees"/> once, in order, and return nothing.</summary>
-    private static ProcedurePair Caller(string identity, params string[] callees)
+    internal static ProcedurePair Caller(string identity, params string[] callees)
     {
         string calls = string.Concat(callees.Select(static (callee, i) => $"  %c{i.ToString(System.Globalization.CultureInfo.InvariantCulture)}: bv32 = call \"{callee}\"()\n"));
         IrProcedure body = IrText.Parse($"proc \"{identity}\" () entry B0\nB0:\n{calls}  ret\n");
@@ -1933,7 +1933,7 @@ public sealed class CompareCommandTests
         [new IrBlock(new IrBlockId(0), [new IrOpaque(Target: null, Unknown.AsyncMismatchReason, span) { WholeBody = true }], new IrReturn(Value: null, []))],
         new IrBlockId(0));
 
-    private static IrProcedure UnboundBody(ProcedureIdentity identity, string path = "a.cs") => new(
+    internal static IrProcedure UnboundBody(ProcedureIdentity identity, string path = "a.cs") => new(
         identity,
         [],
         ReturnType: null,
@@ -2086,13 +2086,13 @@ public sealed class CompareCommandTests
 
     private static RuntimeInterval Interval(string first, string second) => new(TargetRuntime.Parse(first)!, TargetRuntime.Parse(second)!);
 
-    private static ProcedurePair Pair(ProcedureIdentity identity)
+    internal static ProcedurePair Pair(ProcedureIdentity identity)
     {
         IrProcedure body = IrText.Parse($"proc \"{identity.Value}\" () entry B0 B0: ret");
         return new ProcedurePair(identity, identity, body, body);
     }
 
-    private static Counterexample Counterexample() =>
+    internal static Counterexample Counterexample() =>
         new(new IrInputs([new IrBitVecValue(32, 0)]), Run(1), Run(2));
 
     private static IrRun Run(int returned) => new(new IrReturned(new IrBitVecValue(32, (ulong)returned)), [], []);
@@ -2131,7 +2131,7 @@ public sealed class CompareCommandTests
         return writer.ToString();
     }
 
-    private static string Serialize(SarifLog log)
+    internal static string Serialize(SarifLog log)
     {
         string path = Path.GetTempFileName();
         try

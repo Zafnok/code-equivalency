@@ -193,6 +193,10 @@
             }
           ]
         },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
         "reviewList": []
       }
     }

@@ -1297,6 +1297,10 @@
             }
           ]
         },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
         "reviewList": [
           {
             "group": "calls:System.Math::Round(decimal,int)|System.Math::Round(decimal,int,System.MidpointRounding)",

@@ -1,5 +1,5 @@
 # P2-077 Matched pairs are verified in parallel, with the same results as one at a time
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-050, P2-076
@@ -61,3 +61,41 @@ between runs. Any cap on a rung, a pair or a run.
 
 ## Notes
 - Found 2026-09-30 while P1-018's runs were in progress. See P2-076 for where the sequential time goes.
+- Decision: how threads are kept from shortening a query -> a phase that verifies on `n` threads gives the backend
+  `n` times `timeoutMs` (`PairWorkers.Sharing`), `n` being the lesser of `jobs` and the pairs of the phase that reach
+  the backend. A fair scheduler gives each of `n` threads at least a share of one processor, so a query that ends
+  within the backstop alone ends within `n` times it. Alternatives: the backstop times `jobs / processors` (leaves
+  out two threads on one core's two hardware threads, and gives a different SARIF on a machine with fewer cores), a
+  backstop measured in the thread's processor time (a change inside `Equiv.Verify.Z3`, which the size guard keeps
+  out). Rule: 4.
+- Decision: where `queryEndings` is counted -> in `Equiv.Cli`, from the ladders of the run's results: a query a limit
+  ends times its rung out, and the rung's detail names the limit (P2-050 criterion 4). So it counts the timed-out
+  rungs of the results the run reports, by limit. A query outside a rung (reachable opaques, failure refinement,
+  contract search), and the ladder of a contract attempt that proved nothing, are not counted. Alternatives: a
+  counter the backend reports through `VerificationOptions` (a change inside `Equiv.Verify.Z3` that is not thread
+  safety; the size guard makes it a ticket, P2-131). Rule: 4.
+- Decision: `queryEndings` is written on every run that verifies, zeros included, and not on `--lower-only` -> as
+  `unknownByScope` is. Alternatives: only when a count is not zero (a missing key would then mean either zero or an
+  older `equiv`). Rule: 3.
+- Decision: how the log tells items in flight apart -> an item belongs to the thread that started it
+  (`ChannelRunLog` keeps each thread's item), so `IRunLog` keeps its five calls and no caller or test double changes.
+  Alternatives: an identity parameter on `ItemDone` and `Detail`, a per-item log object handed to the backend.
+  Rule: 4.
+- Decision: a `detail:` line ends in ` item=<identity>` when its thread has an item in flight -> the stage lines of
+  pairs verified at once interleave, and P2-076's per-pair stage totals need to know whose each is. At the end of
+  the line because an identity holds spaces and brackets. Alternatives: a worker number on each line. Rule: 3.
+- Decision: the workers are threads of their own with a 16 MB stack, and one worker runs on the calling thread ->
+  the solver recurses on the thread that calls it, and a new thread's default stack is smaller than the main
+  thread's on Linux, so a pair that fits under `--jobs 1` must fit on a worker. Alternatives: `Parallel.For`
+  (thread-pool threads, default stack, slow to reach the degree asked for when every body blocks). Rule: 4.
+- Decision: `EquivConfig.Jobs` is an `int` defaulting to `Environment.ProcessorCount` -> the loader validates it as
+  it does `timeoutMs`. Alternatives: a nullable with the default applied in the CLI. Rule: 4.
+- Decision: a pair's `error:` line and a contract step's `warning:` line are written when the phase ends, in the
+  pairs' order -> lines written from the workers would be in the order the pairs finished. Rule: 3.
+- Observed: `Equiv.Verify.Z3` and `Equiv.Verify.Cvc5` needed no change. Their static state is three frozen
+  dictionaries, a `SearchValues`, a shared `HttpClient` and a `Lazy` prompt template, all safe to share, and every
+  query builds its own `Context`.
+- Observed: the wall-clock detail names the backstop the query had (`wall-clock limit 240000 ms hit` on four
+  threads), and the detail is part of `resultFingerprint/v1`. So a result the backstop ended is `new` against a
+  baseline written with another number of threads. Such a result already differs between runs (P2-050's notes);
+  the rule id and the reason do not change.
