@@ -894,7 +894,9 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   (`docs/runs/2026-10-04-trace-encoding.md`). P1-038.
 - P1-038 (M) Rung 1 compares the call traces by position, without sequences, so Z3 itself answers
   the queries P1-034 measured. A full run before and after shows no decided result becomes a
-  timeout. Needs P1-034.
+  timeout. Needs P1-034. Done 2026-10-05: on `gitextensions-8522` Z3 answers 106 of the 210 rung 1
+  queries it gave up on (48 Divergent, 54 Unknown(abstraction), 4 unsatisfiable), `timeout` Unknowns
+  fall from 148 to 80, and no pair is proved (`docs/runs/2026-10-05-positional-trace.md`).
 - P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
   gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
 - P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model
