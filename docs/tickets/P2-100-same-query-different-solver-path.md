@@ -1,5 +1,5 @@
 # P2-100 The same query under the same resource limit ends the same way, whenever the garbage collector runs
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-050
@@ -64,3 +64,47 @@ The pairs the wall-clock backstop ends (their time is P2-076's). The value of th
   all three runs; no pair over 1.6 times in the first two, and four pairs swing by up to 6.6 times in
   the third. The first run in a process, before many collections have happened, tends to match the
   rare-collection runs. This points at collection timing and does not prove it; criterion 1 settles it.
+- Measured (criterion 1): the cause is term ids. Each fixture's divergence query was encoded and checked four
+  times in one process: twice in an untouched context, once after 200 terms had been made and two thirds of them
+  disposed, and once after 200 unreferenced terms had been made and a collection had finalised them. The two
+  untouched runs spent the same `rlimit count` on all 60 fixtures. A disturbed run reached the same answer after a
+  different count on 18 of them: `call-closed-mixed` 1,830 untouched, 1,152 after the disposals and 1,143 after the
+  collection; `loops/chc-uncertified` 35,795 and 44,380 after the collection. A Spacer query differs the same way:
+  `loops/fusion` is proved after 2,588,749 units untouched and 1,759,358 after the disposals, which is the count
+  that "moves from run to run" in P2-050's notes. Nothing else was found on the way.
+- Decision: how a check gets term ids that do not depend on collection -> its assertions are translated into a
+  fresh `Context` that holds nothing else (`SolverQuery` for a solver, the same inside `ChcEncoder.Query` for a
+  fixedpoint). Alternatives: keep every wrapper of a context alive until it is disposed (the binding makes
+  wrappers inside its own calls, for the sorts and declarations of a `Mk` call and for every `Args`, and hands no
+  one a way to hold them, so it cannot be done from outside the binding). Rule: 3.
+- Deviation: criterion 2's first way says "translate the model back". The .NET binding has no `Model.Translate`
+  (the C API's `Z3_model_translate` is not exposed, and a `Model` cannot be constructed). The model stays in the
+  fresh context and is read through translation: `SolverModel.Eval` translates the term in and the value out, and
+  `SolverModel.Map` does the same for a function's interpretation. So `Model` became `SolverModel` wherever a
+  model is read, and the change touches more files than the ticket lists: `SolverQuery.cs` and `SolverModel.cs`
+  (new), `ModelDecoder.cs`, `SecondSolver.cs`, `LoopLadder.cs`, `FailureRefinementQuery.cs`,
+  `Contracts/ContractVerifier.cs`, and the tests that hand a decoder a model.
+- Decision: how the assertions move -> as one conjunction per batch (`MkAnd`, `Translate`, then its `Args`), so
+  shared subterms are walked once, and the conjunction's wrapper is held until the query is disposed so that no
+  finalizer frees a term of the fresh context while it is in use. Alternatives: `Solver.Translate`, which moves a
+  solver in one native call (Z3 5.1 dies with an access violation checking the translated tactic solver, on
+  `loops/recursion-unaligned` here, and the translated solver has lost its `rlimit` and `timeout`); one `Translate` per assertion (walks the
+  shared subterms of the inlined query once per assertion). Rule: 4.
+- Decision: the two batches of `Z3Backend.Query` stay two stages in their old order, `assert` (the encoding) then
+  `inline` (the query), each now including its translation. Alternatives: one batch, which swaps the two lines in
+  every progress log. Rule: 4.
+- Decision: `ChcAnswer.Spent`, the `rlimit count` of a fixedpoint's statistics -> the Spacer test needs the number
+  and nothing else carried it. Alternatives: finding the count by bisecting the limit in the test. Rule: 3.
+- Decision: `SecondSolver.Asked` makes the queries it holds (`Ask`, `ReadBack`, `Refuted`) -> CA2000 does not take
+  a constructor argument as handed over, with or without `dispose_ownership_transfer_at_constructor`, and
+  `SolverQuery` is this repo's own disposable, which the rule follows where it did not follow Z3's `Solver`.
+  Alternatives: a `try`/`catch` that disposes and rethrows (a branch no test reaches). Rule: 4.
+- Observed: the fixture snapshots of the assertions Z3 receives are unchanged, and now print the fresh context's
+  solver, which is the one that is checked.
+- Observed: each query now holds a second copy of its assertions for as long as it lives. Cost in time on the
+  corpus pairs is in the run file.
+- Observed: `main` is red without this change, on `SecondSolverLadderTests.TheSolversQueriesAreStages` and one
+  `Equiv.Tests.Integration` snapshot (P1-035 and P1-033 each changed what the other pins). Not touched here.
+- Observed: three harness processes loading the same two solutions at once each loaded a different part of them
+  (7,057, 13,168 and 13,460 of 13,541 pairs). One load at a time
+  gives 13,541. A measurement that needs the same pairs in every run loads once.
