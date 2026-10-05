@@ -74,7 +74,7 @@ Congruent results that call another matched procedure list it in `properties.ass
 | `OrderService.ParseQuantity(string)` | `int.TryParse(s, out var n)` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-003 |
 | `OrderService.ConfirmAsync(Task<Order>)` | `async`/`await` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-006 |
 | `OrderService.QuantityOf(object)` | `is T t` pattern | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-005 |
-| `OrderService.Describe(Order)` | interpolated string | binding only | Unknown | Equivalent | none yet: not congruent, see above | none yet |
+| `OrderService.Describe(Order)` | interpolated string | binding only | Divergent in thorough mode (`decidedBy: il-pass`, a precision bug); Unknown in quick | Equivalent | none yet: not congruent, see above | P2-133 |
 | `OrderService.Export(Order)` | `using` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-001 |
 | `OrderService.Record()` | `lock` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-011 |
 | `OrderService.IsLarge(int)` | integer comparison | unchanged | Equivalent (congruence) | Equivalent | M3-001 | M3-001 |
@@ -86,4 +86,9 @@ Congruent results that call another matched procedure list it in `properties.ass
 | `OrderService.RoundTotal(decimal)` | `Math.Round` overloads | real divergence | Divergent | Divergent | M3-001 | stays Divergent through M4-002: `Math.Round` is a call, not a pure function, so the divergence is untainted (M3-016) |
 | 14 auto-property accessors of `Order` and `OrderLine` | auto-property | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M3-010 |
 
-Exit code: 1 (`RoundTotal`'s Divergent result; `Describe`'s Unknown does not by itself change the exit code).
+Exit code: 1 (`RoundTotal`'s Divergent result, and in thorough mode `Describe`'s).
+
+`Describe` is Unknown after the first pass, which is what `--mode quick` reports. Thorough mode, the default
+(ADR 0049, ticket P1-032), then reads both sides from IL, where the interpolated string is no longer opaque: the
+legacy body calls `String::Format` and the modern one the `DefaultInterpolatedStringHandler` members, two different
+call traces, so its IL pass reports a Divergent that is not one. `expected.sarif.json` is the thorough run.

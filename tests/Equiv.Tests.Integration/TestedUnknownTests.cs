@@ -82,9 +82,14 @@ public sealed class TestedUnknownTests
         }
 
         Assert.Equal(ExitCodes.Divergent, exitCode);
-        Result describe = log.Runs[0].Results.Single(static r => string.Equals(r.RuleId, "EQ003", StringComparison.Ordinal));
-        Assert.Equal("target", describe.GetProperty<Dictionary<string, object>>("differentialTesting")["stoppedBy"]);
-        Assert.EndsWith("(equiv generators, not a proof).", describe.Message.Text, StringComparison.Ordinal);
+
+        // Ticket P1-032 (ADR 0049): the sample's one Unknown, Describe, is Unknown after the first pass only. Thorough's
+        // IL pass reads both sides from IL, where string.Format and the interpolated string are different calls, and
+        // finds them Divergent, so --execute replays it and no Unknown is left for it to test.
+        Assert.DoesNotContain(log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ003", StringComparison.Ordinal));
+        Result describe = log.Runs[0].Results.Single(static r => r.Message.Text.Contains("::Describe(", StringComparison.Ordinal));
+        Assert.Equal(("EQ002", "il-pass", "il"), (describe.RuleId, describe.GetProperty<string>("decidedBy"), describe.GetProperty<string>("lowering")));
+        Assert.True(describe.TryGetProperty("replay", out string? _));
         Assert.All(
             log.Runs[0].Results.Where(static r => string.Equals(r.RuleId, "EQ001", StringComparison.Ordinal)),
             static r => Assert.False(r.TryGetProperty("differentialTesting", out Dictionary<string, object>? _)));

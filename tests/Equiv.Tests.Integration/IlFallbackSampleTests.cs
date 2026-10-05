@@ -35,6 +35,33 @@ public sealed class IlFallbackSampleTests
     }
 
     /// <summary>
+    /// ADR 0049's table, the IL lowering row, on a real sample (ticket P1-032): in thorough mode, with or without the
+    /// flag, both pairs of <c>samples/il-fallback</c> are Unknown after the first pass, which verifies their IOperation
+    /// bodies, and the IL pass proves both from their IL bodies. They are the results <c>--il-fallback</c> gives in quick
+    /// mode, where the IL bodies replace the others, and quick without the flag leaves both Unknown.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Thorough_TheIlPassDecidesWhatTheFlagDecidesInQuick(bool ilFallback)
+    {
+        SarifLog thorough = Load(Compare("il-fallback", ilFallback, mode: "thorough").Json);
+        SarifLog replaced = Load(Compare("il-fallback", ilFallback: true).Json);
+        SarifLog quick = Load(Compare("il-fallback", ilFallback: false, mode: "quick").Json);
+
+        Assert.Equal(2, thorough.Runs[0].Results.Count);
+        Assert.All(thorough.Runs[0].Results, static r => Assert.Equal(("EQ001", "il-pass", "il"), (r.RuleId, r.GetProperty<string>("decidedBy"), r.GetProperty<string>("lowering"))));
+        Assert.Equal(
+            replaced.Runs[0].Results.Select(static r => (r.RuleId, r.PartialFingerprints["resultFingerprint/v1"])),
+            thorough.Runs[0].Results.Select(static r => (r.RuleId, r.PartialFingerprints["resultFingerprint/v1"])));
+        Assert.All(replaced.Runs[0].Results, static r => Assert.False(r.TryGetProperty("decidedBy", out string? _)));
+        Assert.All(quick.Runs[0].Results, static r => Assert.Equal("EQ003", r.RuleId));
+        Assert.All(quick.Runs[0].Results, static r => Assert.False(r.TryGetProperty("lowering", out string? _)));
+
+        static SarifLog Load(string json) => SarifLog.Load(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json)));
+    }
+
+    /// <summary>
     /// ADR 0042 (ticket P2-069): a rebound call is the same opaque when a pair is read from IL, so under <c>--il-fallback</c>
     /// <c>samples/dependency-rebinding</c> keeps its verdicts: <c>Has</c> keeps its IOperation bodies and stays
     /// Unknown, and <c>Clear</c> stays Divergent.
@@ -141,12 +168,19 @@ public sealed class IlFallbackSampleTests
         return Path.Combine(directory, "Equiv.Samples.IlFallback.Legacy.sln");
     }
 
-    private static (string Json, string StdOut) Compare(string sample, bool ilFallback) => Compare(
+    /// <summary>
+    /// One run at the samples' pinned resource limit. The flag's replacement is quick mode's (ADR 0049), so a run with
+    /// the flag is a quick one unless <paramref name="mode"/> says otherwise, and a run without it is the default, thorough.
+    /// </summary>
+    private static (string Json, string StdOut) Compare(string sample, bool ilFallback, string? mode = null) => Compare(
         Directory.GetFiles(Path.Combine(SamplesRoot, sample, "legacy"), "*.sln").Single(),
         Directory.GetFiles(Path.Combine(SamplesRoot, sample, "modern"), "*.slnx").Single(),
-        ilFallback);
+        ilFallback,
+        mode ?? (ilFallback ? "quick" : null));
 
-    private static (string Json, string StdOut) Compare(string legacy, string modern, bool ilFallback)
+    private static (string Json, string StdOut) Compare(string legacy, string modern, bool ilFallback) => Compare(legacy, modern, ilFallback, ilFallback ? "quick" : null);
+
+    private static (string Json, string StdOut) Compare(string legacy, string modern, bool ilFallback, string? mode)
     {
         string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P1-016-{Guid.NewGuid():N}.sarif");
         TextWriter original = Console.Out;
@@ -155,7 +189,7 @@ public sealed class IlFallbackSampleTests
         try
         {
             CompareCommand.Run(
-                new CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { IlFallback = ilFallback },
+                new CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { IlFallback = ilFallback, Mode = mode, ResourceLimit = 5_000_000 },
                 [new CSharpFrontend()],
                 new Z3Backend(),
                 new FileReportSink(outPath),

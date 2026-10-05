@@ -7,7 +7,8 @@ Both sides target .NET 10.
   its two arguments, each greater than 1, is 4503597865762987. That number is 16777213 times 268435399, both
   prime, so exactly two inputs differ, and finding one is factoring a 52-bit number through a 64-bit multiplier.
 
-Z3 runs out of its resource limit (`resourceLimit`, 5,000,000) on rung 1's `divergence` query, so without a
+Z3 runs out of its resource limit on rung 1's `divergence` query: at the first pass's (`resourceLimit`, which the
+sample tests pin to 5,000,000) and again at thorough mode's budget pass (30,000,000; ADR 0049). So without a
 second solver the pair is Unknown(timeout). That is what `expected.sarif.json` pins, and what every run without
 `solvers.cvc5.path` in `equiv.config.json` gives.
 

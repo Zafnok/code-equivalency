@@ -1,6 +1,6 @@
 # il-fallback
 
-The IL fallback (ADR 0039, ticket P1-016). Each method pair is one the IOperation lowering leaves
+The IL lowering (ADR 0039, ticket P1-016; as a pass of thorough mode, ADR 0049, ticket P1-032). Each method pair is one the IOperation lowering leaves
 with an opaque on the modern side only, and whose two sides compile to the same IL:
 
 - `Nullables.Add(int?, int)`: the legacy side spells out the lifted `+` (`HasValue`, then
@@ -9,18 +9,23 @@ with an opaque on the modern side only, and whose two sides compile to the same 
 - `Nullables.Wrap(int)`: the legacy side writes `new int?(x)`, the modern side the implicit
   nullable `Conversion` of `x`, which the IOperation lowering leaves opaque.
 
-Without `--il-fallback` both pairs are Unknown (`opaque`), from the modern side's opaque nodes;
-`expected.sarif.json` is that run. With `--il-fallback`, neither pair is congruent and each holds
-an opaque the other side lacks, so both sides of both pairs are lowered again from IL. The IL bodies
-hold no opaque, so both pairs keep them (`lowering: il`) and the solver proves both. The census
-counts `pairsIlFallbackTried: 2` and `pairsLoweredFromIl: 2`. `IlFallbackSampleTests`'s snapshot
-is that run.
+From their IOperation bodies both pairs are Unknown (`opaque`), from the modern side's opaque nodes.
+That is the first pass's result, and what `--mode quick` reports. Neither pair is congruent and each
+holds an opaque the other side lacks, so both sides of both pairs are also lowered from IL, and the
+IL bodies hold no opaque.
+
+- In thorough mode, the default, the pairs keep both lowerings. The IL pass verifies the two that
+  are still Unknown from their IL bodies and proves both (`decidedBy: il-pass`, `lowering: il`).
+  `expected.sarif.json` is that run.
+- With `--mode quick --il-fallback` the IL bodies replace the IOperation ones (`lowering: il`) and
+  the first pass proves both. The census counts `pairsIlFallbackTried: 2` and
+  `pairsLoweredFromIl: 2`. `IlFallbackSampleTests`'s snapshot is that run.
 
 ## Expected verdicts
 
-| Procedure | Without `--il-fallback` | With `--il-fallback` |
+| Procedure | `--mode quick` | thorough (default), or quick with `--il-fallback` |
 |---|---|---|
 | `Nullables.Add(int?, int)` | Unknown (`opaque`) | Equivalent (`lowering: il`) |
 | `Nullables.Wrap(int)` | Unknown (`opaque`) | Equivalent (`lowering: il`) |
 
-Exit code: 0 (Unknown does not fail the run without `--fail-on unknown`).
+Exit code: 0 (both pairs are Equivalent).

@@ -203,6 +203,18 @@
             }
           ]
         },
+        "mode": {
+          "name": "thorough",
+          "bound": 3,
+          "resourceLimit": 2000000,
+          "timeoutMs": 60000,
+          "escalation": {
+            "bound": 8,
+            "resourceLimit": 30000000,
+            "timeoutMs": 600000
+          },
+          "explicit": []
+        },
         "queryEndings": {
           "resourceLimit": 0,
           "wallClock": 0

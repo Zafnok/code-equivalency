@@ -107,103 +107,48 @@
           }
         },
         {
-          "ruleId": "EQ003",
-          "kind": "open",
+          "ruleId": "EQ001",
+          "kind": "pass",
           "level": "none",
           "message": {
-            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int) is unknown (Opaque): new: switch-pattern. It is equivalent on every input that reaches none of the related locations."
+            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int) is equivalent."
           },
           "locations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
+                  "uri": "file:///legacy/Tidy.cs"
                 },
                 "region": {
-                  "startLine": 12,
-                  "startColumn": 13,
-                  "endLine": 12,
-                  "endColumn": 23
+                  "startLine": 7,
+                  "startColumn": 20,
+                  "endLine": 7,
+                  "endColumn": 25
                 }
               }
             }
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int)",
-            "resultFingerprint/v1": "053e86cb5e71b02537da73f306242c1188933e480b278be6ff89f7e3d29e51d2"
+            "resultFingerprint/v1": "febf1270901fd62c633417994364ec5629cee7552d3a0ad387a6b28908702993"
           },
-          "relatedLocations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
-                },
-                "region": {
-                  "startLine": 12,
-                  "startColumn": 13,
-                  "endLine": 12,
-                  "endColumn": 23
-                }
-              },
-              "message": {
-                "text": "switch-pattern"
-              }
-            },
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
-                },
-                "region": {
-                  "startLine": 13,
-                  "startColumn": 13,
-                  "endLine": 13,
-                  "endColumn": 23
-                }
-              },
-              "message": {
-                "text": "switch-pattern"
-              }
-            },
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
-                },
-                "region": {
-                  "startLine": 14,
-                  "startColumn": 13,
-                  "endLine": 14,
-                  "endColumn": 23
-                }
-              },
-              "message": {
-                "text": "switch-pattern"
-              }
-            }
-          ],
           "baselineState": "new",
-          "rank": 20.002,
           "properties": {
-            "unknownReason": "opaque",
-            "scope": "line",
-            "residualClaim": "equivalent unless a relatedLocation is reached",
-            "failureRefinement": {
-              "newFailures": {
-                "outcome": "unknown"
-              },
-              "removedFailures": {
-                "outcome": "none-proved"
-              }
-            },
+            "proofMethod": "bounded",
             "ladderTrace": [
               {
                 "rung": "bounded",
                 "outcome": "inconclusive",
                 "detail": "an input reaches an opaque node: new: switch-pattern"
+              },
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
               }
             ],
-            "reviewGroup": "opaque:switch-pattern"
+            "lowering": "il",
+            "decidedBy": "il-pass"
           }
         },
         {
@@ -246,103 +191,48 @@
           }
         },
         {
-          "ruleId": "EQ003",
-          "kind": "open",
+          "ruleId": "EQ001",
+          "kind": "pass",
           "level": "none",
           "message": {
-            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::LengthOf(string) is unknown (Opaque): old: Conversion; new: DefaultValue; new: Conversion. It is equivalent on every input that reaches none of the related locations."
+            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::LengthOf(string) is equivalent."
           },
           "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
-                },
-                "region": {
-                  "startLine": 26,
-                  "startColumn": 16,
-                  "endLine": 26,
-                  "endColumn": 17
-                }
-              }
-            }
-          ],
-          "partialFingerprints": {
-            "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Tidy::LengthOf(string)",
-            "resultFingerprint/v1": "487f80bac5cc1c4f9e9a608fb22dd8807bc74d3f2570a8cf6a3cfa7eaef9c4c0"
-          },
-          "relatedLocations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
                   "uri": "file:///legacy/Tidy.cs"
                 },
                 "region": {
-                  "startLine": 34,
-                  "startColumn": 45,
-                  "endLine": 34,
-                  "endColumn": 53
+                  "startLine": 32,
+                  "startColumn": 21,
+                  "endLine": 32,
+                  "endColumn": 29
                 }
-              },
-              "message": {
-                "text": "Conversion"
-              }
-            },
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
-                },
-                "region": {
-                  "startLine": 26,
-                  "startColumn": 16,
-                  "endLine": 26,
-                  "endColumn": 17
-                }
-              },
-              "message": {
-                "text": "DefaultValue"
-              }
-            },
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
-                },
-                "region": {
-                  "startLine": 26,
-                  "startColumn": 18,
-                  "endLine": 26,
-                  "endColumn": 25
-                }
-              },
-              "message": {
-                "text": "Conversion"
               }
             }
           ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Tidy::LengthOf(string)",
+            "resultFingerprint/v1": "7a18575c917492a09ef9896d9d7590c0492adf015c3eee472670dda355ae6aca"
+          },
           "baselineState": "new",
-          "rank": 20.002,
           "properties": {
-            "unknownReason": "opaque",
-            "scope": "line",
-            "residualClaim": "equivalent unless a relatedLocation is reached",
-            "failureRefinement": {
-              "newFailures": {
-                "outcome": "unknown"
-              },
-              "removedFailures": {
-                "outcome": "unknown"
-              }
-            },
+            "proofMethod": "bounded",
             "ladderTrace": [
               {
                 "rung": "bounded",
                 "outcome": "inconclusive",
                 "detail": "an input reaches an opaque node: old: Conversion; new: DefaultValue; new: Conversion"
+              },
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
               }
             ],
-            "reviewGroup": "opaque:Conversion+DefaultValue"
+            "lowering": "il",
+            "decidedBy": "il-pass"
           }
         },
         {
@@ -572,11 +462,11 @@
             ]
           },
           "unknownByScope": {
-            "line": 2,
+            "line": 0,
             "method": 1
           },
           "failureRefinement": {
-            "pairs": 3,
+            "pairs": 1,
             "milliseconds": 0
           },
           "agreesWhen": {
@@ -609,6 +499,20 @@
             }
           ]
         },
+        "mode": {
+          "name": "thorough",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "escalation": {
+            "bound": 8,
+            "resourceLimit": 30000000,
+            "timeoutMs": 600000
+          },
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
         "queryEndings": {
           "resourceLimit": 0,
           "wallClock": 0
@@ -621,24 +525,6 @@
             "count": 1,
             "identities": [
               "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)"
-            ]
-          },
-          {
-            "group": "opaque:Conversion+DefaultValue",
-            "ruleId": "EQ003",
-            "rank": 20.002,
-            "count": 1,
-            "identities": [
-              "Equiv.Samples.CleanupModernSyntax.Tidy::LengthOf(string)"
-            ]
-          },
-          {
-            "group": "opaque:switch-pattern",
-            "ruleId": "EQ003",
-            "rank": 20.002,
-            "count": 1,
-            "identities": [
-              "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int)"
             ]
           },
           {

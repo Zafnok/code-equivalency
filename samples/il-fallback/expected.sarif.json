@@ -69,155 +69,93 @@
       },
       "results": [
         {
-          "ruleId": "EQ003",
-          "kind": "open",
+          "ruleId": "EQ001",
+          "kind": "pass",
           "level": "none",
           "message": {
-            "text": "Equiv.Samples.IlFallback.Nullables::Add(int?,int) is unknown (Opaque): new: Binary; new: Conversion. It is equivalent on every input that reaches none of the related locations."
+            "text": "Equiv.Samples.IlFallback.Nullables::Add(int?,int) is equivalent."
           },
           "locations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///modern/Nullables.cs"
+                  "uri": "file:///legacy/Nullables.cs"
                 },
                 "region": {
                   "startLine": 5,
-                  "startColumn": 50,
+                  "startColumn": 28,
                   "endLine": 5,
-                  "endColumn": 55
+                  "endColumn": 31
                 }
               }
             }
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.IlFallback.Nullables::Add(int?,int)",
-            "resultFingerprint/v1": "39b90d70817387cb6fa32bb6fdede32cb04691827697e84ad3a1a998d9c6ec34"
+            "resultFingerprint/v1": "fd18ba307271f0776be744ef0131d9ea3a83f283d0954e783f2d5a7879f063ce"
           },
-          "relatedLocations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Nullables.cs"
-                },
-                "region": {
-                  "startLine": 5,
-                  "startColumn": 50,
-                  "endLine": 5,
-                  "endColumn": 55
-                }
-              },
-              "message": {
-                "text": "Binary"
-              }
-            },
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Nullables.cs"
-                },
-                "region": {
-                  "startLine": 5,
-                  "startColumn": 54,
-                  "endLine": 5,
-                  "endColumn": 55
-                }
-              },
-              "message": {
-                "text": "Conversion"
-              }
-            }
-          ],
           "baselineState": "new",
-          "rank": 20.002,
           "properties": {
-            "unknownReason": "opaque",
-            "scope": "line",
-            "residualClaim": "equivalent unless a relatedLocation is reached",
-            "failureRefinement": {
-              "newFailures": {
-                "outcome": "unknown"
-              },
-              "removedFailures": {
-                "outcome": "unknown"
-              }
-            },
+            "proofMethod": "bounded",
             "ladderTrace": [
               {
                 "rung": "bounded",
                 "outcome": "inconclusive",
                 "detail": "an input reaches an opaque node: new: Binary; new: Conversion"
+              },
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
               }
             ],
-            "reviewGroup": "opaque:Binary+Conversion"
+            "lowering": "il",
+            "decidedBy": "il-pass"
           }
         },
         {
-          "ruleId": "EQ003",
-          "kind": "open",
+          "ruleId": "EQ001",
+          "kind": "pass",
           "level": "none",
           "message": {
-            "text": "Equiv.Samples.IlFallback.Nullables::Wrap(int) is unknown (Opaque): new: Conversion. It is equivalent on every input that reaches none of the related locations."
+            "text": "Equiv.Samples.IlFallback.Nullables::Wrap(int) is equivalent."
           },
           "locations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///modern/Nullables.cs"
+                  "uri": "file:///legacy/Nullables.cs"
                 },
                 "region": {
-                  "startLine": 7,
-                  "startColumn": 43,
-                  "endLine": 7,
-                  "endColumn": 44
+                  "startLine": 15,
+                  "startColumn": 28,
+                  "endLine": 15,
+                  "endColumn": 32
                 }
               }
             }
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.IlFallback.Nullables::Wrap(int)",
-            "resultFingerprint/v1": "79fe691358ce662d001127c6ce13065ca59db8eb2897cbdc0af5be5b3750c5ea"
+            "resultFingerprint/v1": "588f3404fb481e0821db6b7278f52d55ea4b0bde070984b865f40d2e7883da96"
           },
-          "relatedLocations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Nullables.cs"
-                },
-                "region": {
-                  "startLine": 7,
-                  "startColumn": 43,
-                  "endLine": 7,
-                  "endColumn": 44
-                }
-              },
-              "message": {
-                "text": "Conversion"
-              }
-            }
-          ],
           "baselineState": "new",
-          "rank": 20.002,
           "properties": {
-            "unknownReason": "opaque",
-            "scope": "line",
-            "residualClaim": "equivalent unless a relatedLocation is reached",
-            "failureRefinement": {
-              "newFailures": {
-                "outcome": "unknown"
-              },
-              "removedFailures": {
-                "outcome": "unknown"
-              }
-            },
+            "proofMethod": "bounded",
             "ladderTrace": [
               {
                 "rung": "bounded",
                 "outcome": "inconclusive",
                 "detail": "an input reaches an opaque node: new: Conversion"
+              },
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
               }
             ],
-            "reviewGroup": "opaque:Conversion"
+            "lowering": "il",
+            "decidedBy": "il-pass"
           }
         }
       ],
@@ -285,12 +223,8 @@
             "modern": []
           },
           "unknownByScope": {
-            "line": 2,
+            "line": 0,
             "method": 0
-          },
-          "failureRefinement": {
-            "pairs": 2,
-            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {
@@ -317,30 +251,25 @@
             }
           ]
         },
+        "mode": {
+          "name": "thorough",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "escalation": {
+            "bound": 8,
+            "resourceLimit": 30000000,
+            "timeoutMs": 600000
+          },
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
         "queryEndings": {
           "resourceLimit": 0,
           "wallClock": 0
         },
-        "reviewList": [
-          {
-            "group": "opaque:Binary+Conversion",
-            "ruleId": "EQ003",
-            "rank": 20.002,
-            "count": 1,
-            "identities": [
-              "Equiv.Samples.IlFallback.Nullables::Add(int?,int)"
-            ]
-          },
-          {
-            "group": "opaque:Conversion",
-            "ruleId": "EQ003",
-            "rank": 20.002,
-            "count": 1,
-            "identities": [
-              "Equiv.Samples.IlFallback.Nullables::Wrap(int)"
-            ]
-          }
-        ]
+        "reviewList": []
       }
     }
   ]
