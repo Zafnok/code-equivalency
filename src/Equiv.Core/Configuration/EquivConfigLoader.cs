@@ -14,7 +14,7 @@ namespace Equiv.Core.Configuration;
 public static class EquivConfigLoader
 {
     private static readonly FrozenSet<string> KnownProperties =
-        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "resourceLimit", "jobs", "suppressRuntimeChanges", "suppressApiEquivalences", "runtimes", "solvers" }.ToFrozenSet(StringComparer.Ordinal);
+        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "resourceLimit", "jobs", "suppressRuntimeChanges", "suppressApiEquivalences", "runtimes", "solvers", "mode", "escalation" }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Parses <paramref name="json"/> and validates it against the schema. Throws <see cref="EquivConfigParseException"/>
@@ -58,7 +58,14 @@ public static class EquivConfigLoader
             ResourceLimit = resourceLimit,
             Jobs = jobs,
             Cvc5Path = ReadCvc5Path(root, diagnostics),
+            Mode = ReadMode(root, diagnostics),
+            Escalation = ReadEscalation(root, diagnostics),
         };
+        config = config
+            .WithExplicit(EquivConfig.BoundSetting, root.TryGetProperty(EquivConfig.BoundSetting, out _))
+            .WithExplicit(EquivConfig.ResourceLimitSetting, root.TryGetProperty(EquivConfig.ResourceLimitSetting, out _))
+            .WithExplicit(EquivConfig.TimeoutSetting, root.TryGetProperty(EquivConfig.TimeoutSetting, out _))
+            .WithExplicit(EquivConfig.EscalationSetting, root.TryGetProperty(EquivConfig.EscalationSetting, out _));
         return new EquivConfigResult(config, diagnostics.ToImmutable());
     }
 
@@ -267,7 +274,65 @@ public static class EquivConfigLoader
         return path;
     }
 
-    private static int ReadPositiveInt(JsonElement root, string property, int defaultValue, string diagnosticId, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    /// <summary>
+    /// <c>"mode": "thorough" | "quick"</c> (ADR 0049 decision 1; ticket P1-032), or null for any other name. The names are
+    /// the ones <c>--mode</c> takes.
+    /// </summary>
+    public static CompareMode? ParseMode(string? name) => name switch
+    {
+        "thorough" => CompareMode.Thorough,
+        "quick" => CompareMode.Quick,
+        _ => null,
+    };
+
+    private static CompareMode ReadMode(JsonElement root, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    {
+        const string Property = "mode";
+        if (!root.TryGetProperty(Property, out JsonElement element))
+        {
+            return EquivConfig.Default.Mode;
+        }
+
+        CompareMode? mode = element.ValueKind == JsonValueKind.String ? ParseMode(element.GetString()) : null;
+        if (mode is null)
+        {
+            diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidMode, Property, $"\"{Property}\" must be \"thorough\" or \"quick\""));
+        }
+
+        return mode ?? EquivConfig.Default.Mode;
+    }
+
+    /// <summary>
+    /// <c>"escalation": { "bound": n, "resourceLimit": n, "timeoutMs": n }</c> (ADR 0049 decision 4; ticket P1-032). A key
+    /// that is absent keeps ADR 0049's value; one that is not a positive integer, or not one of the three, is a diagnostic.
+    /// </summary>
+    private static Escalation ReadEscalation(JsonElement root, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    {
+        const string Property = "escalation";
+        Escalation defaults = Escalation.Default;
+        if (!root.TryGetProperty(Property, out JsonElement element))
+        {
+            return defaults;
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidEscalation, Property, $"\"{Property}\" must be an object with \"bound\", \"resourceLimit\" and/or \"timeoutMs\""));
+            return defaults;
+        }
+
+        foreach (string name in element.EnumerateObject().Select(static entry => entry.Name).Where(static name => name is not (EquivConfig.BoundSetting or EquivConfig.ResourceLimitSetting or EquivConfig.TimeoutSetting)))
+        {
+            diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidEscalation, $"{Property}/{name}", $"unknown property \"{name}\""));
+        }
+
+        return new Escalation(
+            ReadPositiveInt(element, EquivConfig.BoundSetting, defaults.Bound, EquivConfigDiagnosticIds.InvalidEscalation, diagnostics, Property + "/"),
+            ReadPositiveInt(element, EquivConfig.ResourceLimitSetting, defaults.ResourceLimit, EquivConfigDiagnosticIds.InvalidEscalation, diagnostics, Property + "/"),
+            ReadPositiveInt(element, EquivConfig.TimeoutSetting, defaults.TimeoutMs, EquivConfigDiagnosticIds.InvalidEscalation, diagnostics, Property + "/"));
+    }
+
+    private static int ReadPositiveInt(JsonElement root, string property, int defaultValue, string diagnosticId, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics, string within = "")
     {
         if (!root.TryGetProperty(property, out JsonElement element))
         {
@@ -276,19 +341,19 @@ public static class EquivConfigLoader
 
         if (element.ValueKind != JsonValueKind.Number)
         {
-            diagnostics.Add(Diagnostic(diagnosticId, property, $"\"{property}\" must be a positive integer"));
+            diagnostics.Add(Diagnostic(diagnosticId, within + property, $"\"{property}\" must be a positive integer"));
             return defaultValue;
         }
 
         if (!element.TryGetInt32(out int value))
         {
-            diagnostics.Add(Diagnostic(diagnosticId, property, $"\"{property}\" must be a positive integer"));
+            diagnostics.Add(Diagnostic(diagnosticId, within + property, $"\"{property}\" must be a positive integer"));
             return defaultValue;
         }
 
         if (value <= 0)
         {
-            diagnostics.Add(Diagnostic(diagnosticId, property, $"\"{property}\" must be a positive integer"));
+            diagnostics.Add(Diagnostic(diagnosticId, within + property, $"\"{property}\" must be a positive integer"));
             return defaultValue;
         }
 

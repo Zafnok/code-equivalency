@@ -26,7 +26,8 @@ namespace Equiv.Verify.Z3;
 /// (<see cref="SolverQuery"/>; ticket P2-100). A solver <c>unknown</c> is
 /// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason and the limit it hit, the resource limit
 /// or the wall-clock backstop (<see cref="Limit"/>; ticket P2-050), or neither when the solver gave up for another reason. Every
-/// Unknown, a timeout included, carries <see cref="FailureRefinementQuery"/>'s two answers (ADR 0037; ticket P1-035). A
+/// Unknown carries <see cref="FailureRefinementQuery"/>'s two answers (ADR 0037; ticket P1-035), a timeout included unless
+/// <see cref="VerificationOptions.RefineTimeouts"/> is off, as it is in quick mode (ADR 0049; ticket P1-032). A
 /// Divergent, and an Unknown whose divergence rests on an abstraction, carries <see cref="ConditionQuery"/>'s input
 /// condition when its pair has no loop (ADR 0048).
 /// </summary>
@@ -81,8 +82,8 @@ public sealed class Z3Backend : IVerificationBackend
 
         // ADR 0037 (tickets P1-013 and P1-035): an Unknown of any reason, a timeout included, says whether either side can
         // fail where the other does not. The verdict stays as it is. An unbound pair never reaches the backend (ADR 0029
-        // decision 2).
-        Verdict refined = verdict is Unknown unknown
+        // decision 2). ADR 0049 (ticket P1-032): a pass that does not refine timeouts leaves a timeout as the ladder gave it.
+        Verdict refined = verdict is Unknown unknown && (options.RefineTimeouts || unknown.Reason != UnknownReason.Timeout)
             ? unknown with { FailureRefinement = new FailureRefinementQuery(createContext, options).Run(oldBody, newBody, unknown.Ladder[0].Outcome != RungOutcome.NotApplicable) }
             : verdict;
 

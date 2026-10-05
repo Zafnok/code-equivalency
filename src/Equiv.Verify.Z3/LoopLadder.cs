@@ -52,9 +52,10 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
 
     /// <summary>
     /// The local proposer rung 5 asks first, on by default because it runs in process and sends nothing (ticket P1-009);
-    /// a test sets it to null to run the model's proposer alone.
+    /// a test sets it to null to run the model's proposer alone, and so does a pass of <c>equiv compare</c> that turns
+    /// <see cref="VerificationOptions.LocalProposer"/> off (ADR 0049; ticket P1-032).
     /// </summary>
-    public IInvariantProposer? Traces { get; init; } = new TraceInvariantProposer();
+    public IInvariantProposer? Traces { get; init; } = options.LocalProposer ? new TraceInvariantProposer() : null;
 
     /// <summary>
     /// The callee contracts a caller's product relates its calls by (ticket P1-010; <see cref="ProductEncoder.Encode"/>), or

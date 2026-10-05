@@ -38,4 +38,10 @@ public static class EquivConfigDiagnosticIds
 
     /// <summary>"jobs" is present but not a positive integer.</summary>
     public const string InvalidJobs = "CFG012";
+
+    /// <summary>"mode" is present but not "thorough" or "quick". <c>equiv compare</c> ends with exit 3 on it (ADR 0049 decision 1).</summary>
+    public const string InvalidMode = "CFG013";
+
+    /// <summary>"escalation" is present but not an object whose only keys, "bound", "resourceLimit" and "timeoutMs", are positive integers.</summary>
+    public const string InvalidEscalation = "CFG014";
 }

@@ -98,6 +98,9 @@ public sealed class ConfigEqualityTests
             { baseline, baseline with { ModernRuntime = TargetRuntime.Parse("net8.0") } },
             { baseline, baseline with { IlFallback = true } },
             { baseline, baseline with { Cvc5Path = "tools/cvc5.exe" } },
+            { baseline, baseline with { Mode = CompareMode.Quick } },
+            { baseline, baseline with { Escalation = new Escalation(9, 30_000_000, 600_000) } },
+            { baseline, baseline with { Explicit = [EquivConfig.BoundSetting] } },
         };
     }
 
