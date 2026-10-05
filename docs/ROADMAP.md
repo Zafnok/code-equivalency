@@ -655,6 +655,9 @@ rung, a pair or a run.
   pass (2h07m, unlogged) becomes a phase. Two full runs must agree on every decided result.
 - P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
   and no query ended sooner by contention. Needs P2-050, P2-076.
+- P2-131 (S) The backend counts how every query ended, and `run.properties.queryEndings` is filled
+  from that count: P2-077 counts timed-out rungs from their detail text in the CLI, which misses the
+  queries outside a rung. Needs P2-077.
 - P2-112 (S) An interrupt that throws on the timer thread can no longer end the process.
   `Context.Interrupt()` threw `Z3Exception: canceled` on P2-076's timer and killed a CI test host
   (PR #368); the same crash would end a corpus run with no SARIF.
