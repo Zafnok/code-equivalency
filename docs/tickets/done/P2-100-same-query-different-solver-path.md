@@ -1,5 +1,5 @@
 # P2-100 The same query under the same resource limit ends the same way, whenever the garbage collector runs
-Status: in-progress
+Status: done (PR #404)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-050
@@ -101,10 +101,20 @@ The pairs the wall-clock backstop ends (their time is P2-076's). The value of th
   Alternatives: a `try`/`catch` that disposes and rethrows (a branch no test reaches). Rule: 4.
 - Observed: the fixture snapshots of the assertions Z3 receives are unchanged, and now print the fresh context's
   solver, which is the one that is checked.
-- Observed: each query now holds a second copy of its assertions for as long as it lives. Cost in time on the
-  corpus pairs is in the run file.
+- Observed: each query now holds a second copy of its assertions for as long as it lives. What that costs in
+  time on the corpus pairs is not measured: the machine had no idle core during the runs.
 - Observed: `main` is red without this change, on `SecondSolverLadderTests.TheSolversQueriesAreStages` and one
   `Equiv.Tests.Integration` snapshot (P1-035 and P1-033 each changed what the other pins). Not touched here.
 - Observed: three harness processes loading the same two solutions at once each loaded a different part of them
   (7,057, 13,168 and 13,460 of 13,541 pairs). One load at a time
   gives 13,541. A measurement that needs the same pairs in every run loads once.
+- Observed: P1-022's `ConditionQuery` reached `main` while this branch was open. Its three checks go through
+  `SolverQuery` too.
+- Observed: `tools/spikes/solver-portfolio` and `tools/spikes/trace-encoding`, both finished and outside
+  `Equiv.slnx`, call `Z3Backend.Query` and `Z3Backend.Check` as they were and no longer build. Not changed.
+- Result (criterion 3): `docs/runs/2026-10-04-solver-repeatability.md`. Four runs of the 184 pairs at the default
+  budget, two on four threads and two on one, side by side in one process: 137 pairs were ended by the resource
+  limit or decided in all four, and all 137 have the same outcome, ladder and detail in all four. 47 met the
+  wall-clock backstop in at least one run (the machine was fully loaded) and are listed apart; on each, the runs
+  that did not meet it agree. Scoreboard unchanged: its Repeatability row rests on two full `compare` runs of a
+  pair, which this is not.
