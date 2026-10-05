@@ -215,9 +215,8 @@ class Translator:
                 self.asserts.append(self.term(form[1], {}))
             elif cmd == 'set-logic':
                 self.logic = form[1]
-            elif cmd in ('set-option', 'set-info', 'check-sat', 'get-value', 'get-model', 'exit'):
-                pass
-            else:
+            elif cmd not in ('set-option', 'set-info', 'check-sat', 'get-value', 'get-model',
+                             'exit'):
                 raise Unsupported('command ' + cmd)
         return self
 

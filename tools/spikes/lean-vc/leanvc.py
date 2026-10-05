@@ -72,9 +72,11 @@ def verdict(statement, proof, path, limit):
     if re.search(r'\berror\b', out) or 'sorry' in out:
         return 'rejected', secs, out
     m = re.search(r"'q' depends on axioms: \[([^\]]*)\]", out)
-    used = set() if "'q' does not depend on any axioms" in out else \
-        {a.strip() for a in m.group(1).split(',')} if m else None
-    if used is None:
+    if "'q' does not depend on any axioms" in out:
+        used = set()
+    elif m:
+        used = {a.strip() for a in m.group(1).split(',')}
+    else:
         return 'rejected', secs, 'no axiom report: ' + out
     extra = used - STANDARD
     if not extra:
@@ -146,7 +148,7 @@ def model_loop(statement, stem, hint):
         proof = blocks[-1] if blocks else text
         with open('%s.round%d.txt' % (stem, rnd), 'w', encoding='utf-8') as f:
             f.write(text)
-        kind, secs, detail = verdict(statement, proof, '%s.round%d.lean' % (stem, rnd), PROOF_S)
+        kind, _, detail = verdict(statement, proof, '%s.round%d.lean' % (stem, rnd), PROOF_S)
         if kind in ('kernel', 'bv_decide'):
             return {'closed': kind, 'rounds': rnd, 'seconds': time.time() - start,
                     'tokensIn': tin, 'tokensOut': tout}
@@ -185,7 +187,10 @@ def control():
 def best_answer(row):
     """What P1-034's run says of the positional query: some solver's `sat` or `unsat`, else none."""
     answers = [c.split('=', 1)[1].split('/')[0] for c in row[8:] if 'positional' in c]
-    return 'unsat' if 'unsat' in answers else 'sat' if 'sat' in answers else 'undecided'
+    for answer in ('unsat', 'sat'):
+        if answer in answers:
+            return answer
+    return 'undecided'
 
 
 def one(smt_dir, out, row, use_model):
@@ -314,6 +319,17 @@ def report(out):
     return 0
 
 
+def in_corpus(path):
+    """The path, resolved, when it is under this checkout's `.corpus/`; the run stops otherwise.
+    What is read and written holds text from the analysed code, which lives nowhere else."""
+    base = os.path.realpath(os.path.join(ROOT, '.corpus'))
+    real = os.path.realpath(path)
+    if not real.startswith(base + os.sep):
+        print('%s is not under %s' % (path, base), file=sys.stderr)
+        raise SystemExit(2)
+    return real
+
+
 def main():
     sys.setrecursionlimit(1_000_000)
     ap = argparse.ArgumentParser()
@@ -332,17 +348,18 @@ def main():
         return control()
     if a.run:
         only = {int(x) for x in a.only.split(',') if x}
-        return run(a.run[0], a.run[1], a.run[2], a.threads, not a.no_model, only)
+        smt, results, out = (in_corpus(p) for p in a.run)
+        return run(smt, results, out, a.threads, not a.no_model, only)
     if a.report:
-        return report(a.report)
+        return report(in_corpus(a.report))
     ap.print_help()
     return 2
 
 
 if __name__ == '__main__':
     threading.stack_size(255 * 1024 * 1024)
-    box = []
-    t = threading.Thread(target=lambda: box.append(main()))
+    done = {'code': 1}                 # what the process exits with if `main` raises
+    t = threading.Thread(target=lambda: done.update(code=main()))
     t.start()
     t.join()
-    sys.exit(box[0] if box else 1)
+    sys.exit(done['code'])

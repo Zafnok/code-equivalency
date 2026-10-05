@@ -110,7 +110,8 @@ python -m venv .corpus\lean-vc\venv
 $py = '.corpus\lean-vc\venv\Scripts\python'
 & $py tools/spikes/lean-vc/leanvc.py --self-test
 & $py tools/spikes/lean-vc/leanvc.py --control
-# <smt> is P1-034's output directory: NNN.pos.smt2 and results.tsv
+# <smt> is P1-034's output directory: NNN.pos.smt2 and results.tsv. It and the output
+# directory must be under this checkout's .corpus/; the tool refuses any other path.
 & $py tools/spikes/lean-vc/leanvc.py --run <smt> <smt>/results.tsv .corpus/lean-vc/run --threads 8
 ```
 
