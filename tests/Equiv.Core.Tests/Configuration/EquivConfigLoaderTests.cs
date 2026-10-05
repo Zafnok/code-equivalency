@@ -101,7 +101,7 @@ public sealed class EquivConfigLoaderTests
         Assert.Equal(1, EquivConfigLoader.Load("""{ "resourceLimit": 1 }""").Config.ResourceLimit);
     }
 
-    /// <summary>Ticket P2-077 criterion 1: <c>jobs</c> is a positive integer, validated as <c>timeoutMs</c> is, and the processor count unless set.</summary>
+    /// <summary>Ticket P2-077 criterion 1: <c>jobs</c> is a positive integer, validated as <c>timeoutMs</c> is, and one unless set.</summary>
     [Theory]
     [InlineData("""{ "jobs": "many" }""")]
     [InlineData("""{ "jobs": 1.5 }""")]
@@ -112,8 +112,8 @@ public sealed class EquivConfigLoaderTests
     {
         EquivConfigResult result = EquivConfigLoader.Load(json);
         Assert.Equal(new EquivConfigDiagnostic("CFG012", "/jobs", "\"jobs\" must be a positive integer"), Assert.Single(result.Diagnostics));
-        Assert.Equal(Environment.ProcessorCount, result.Config.Jobs);
-        Assert.Equal(Environment.ProcessorCount, EquivConfig.Default.Jobs);
+        Assert.Equal(1, result.Config.Jobs);
+        Assert.Equal(1, EquivConfig.Default.Jobs);
         Assert.Equal(3, EquivConfigLoader.Load("""{ "jobs": 3 }""").Config.Jobs);
     }
 

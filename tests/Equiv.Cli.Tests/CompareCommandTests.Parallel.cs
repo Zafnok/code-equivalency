@@ -24,9 +24,9 @@ public sealed partial class CompareCommandTests
     private const string Identity = "procedureIdentity/v1";
 
     /// <summary>
-    /// Criterion 1: the config's <c>jobs</c> replaces the processor count and <c>--jobs</c> replaces both; a value that is
-    /// not positive is a usage error. Three pairs reach the backend, so the backstop it hears, the configured timeout
-    /// times the threads, says how many threads there were.
+    /// Criterion 1: the config's <c>jobs</c> replaces the default of one thread and <c>--jobs</c> replaces both; a value
+    /// that is not positive is a usage error. Three pairs reach the backend, so the backstop it hears, the configured
+    /// timeout times the threads, says how many threads there were, and never more than the pairs.
     /// </summary>
     [Fact]
     public void JobsOptionIsValidated()
@@ -45,13 +45,13 @@ public sealed partial class CompareCommandTests
 
         _ = CaptureStdOut(() => exitCodes.Add(command.Parse(paths).Invoke()));
         _ = CaptureStdOut(() => exitCodes.Add(command.Parse([.. paths, "--config", config.Path]).Invoke()));
-        _ = CaptureStdOut(() => exitCodes.Add(command.Parse([.. paths, "--config", config.Path, "--jobs", "1"]).Invoke()));
+        _ = CaptureStdOut(() => exitCodes.Add(command.Parse([.. paths, "--config", config.Path, "--jobs", "8"]).Invoke()));
         string error = CaptureStdErr(() => exitCodes.Add(command.Parse([.. paths, "--jobs", "0"]).Invoke()));
 
         Assert.Equal([ExitCodes.Success, ExitCodes.Success, ExitCodes.Success, ExitCodes.UsageError], exitCodes);
         int timeout = EquivConfig.Default.TimeoutMs;
         Assert.Equal(
-            [.. Enumerable.Repeat(timeout * Math.Min(Environment.ProcessorCount, 3), 3), .. Enumerable.Repeat(timeout * 2, 3), .. Enumerable.Repeat(timeout, 3)],
+            [.. Enumerable.Repeat(timeout, 3), .. Enumerable.Repeat(timeout * 2, 3), .. Enumerable.Repeat(timeout * 3, 3)],
             backend.Calls.Select(static o => o.TimeoutMs));
         Assert.Equal($"error: bound, timeoutMs, resourceLimit and jobs must be positive integers{Environment.NewLine}", error, StringComparer.Ordinal);
         Assert.NotEmpty(command.Parse([.. paths, "--jobs", "many"]).Errors);

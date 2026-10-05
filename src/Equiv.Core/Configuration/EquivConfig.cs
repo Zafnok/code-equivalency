@@ -23,10 +23,12 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
     public int ResourceLimit { get; init; } = DefaultResourceLimit;
 
     /// <summary>
-    /// <c>jobs</c> (ticket P2-077): how many matched pairs are verified at once, the processor count unless set. It
-    /// changes how long a run takes and never a result.
+    /// <c>jobs</c> (ticket P2-077): how many matched pairs are verified at once. One unless set: on
+    /// <c>gitextensions-8522</c> a run on several threads gave two or three results of 13,742 that a run on one did not
+    /// (<c>docs/runs/2026-10-05-parallel-verify.md</c>), which is what two runs on one thread also do (ticket P2-100),
+    /// and the ticket keeps the default at one until none differs (ticket P2-132).
     /// </summary>
-    public int Jobs { get; init; } = Environment.ProcessorCount;
+    public int Jobs { get; init; } = 1;
 
     /// <summary>
     /// Runtime-changed-API member prefixes (ticket M2-006) whose

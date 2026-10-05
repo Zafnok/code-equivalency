@@ -99,3 +99,30 @@ between runs. Any cap on a rung, a pair or a run.
   threads), and the detail is part of `resultFingerprint/v1`. So a result the backstop ended is `new` against a
   baseline written with another number of threads. Such a result already differs between runs (P2-050's notes);
   the rule id and the reason do not change.
+- Decision: the default `jobs` is 1, not the processor count -> criterion 6: on `gitextensions-8522` the
+  `--jobs 4` run gives 2 results of 13,742 that the `--jobs 1` run does not, and the 24-thread run 3. Each is a
+  query the resource limit ends in one run and not in the other, none was ended by the backstop, and two
+  `--jobs 1` logs differ from each other as much (P2-100). The criterion does not ask why a result differs, so
+  the default stays 1 and P2-132 is filed to raise it. Criterion 1's default is the one criterion 6 overrides.
+  Alternatives: the processor count with a Deviation, as P2-076 read its own criterion 5 (24 threads are also
+  slower than four on this box); four. Rule: the ticket's own rule.
+- Result, criterion 6 (`docs/runs/2026-10-05-parallel-verify.md`): `--jobs 1` 7,935 s and 6,484 MB peak working
+  set; `--jobs 4` 2,815 s and 7,616 MB; 24 threads 5,088 s and 9,245 MB. Rungs ended by the backstop: 22, 3 and 18.
+- Observed: 24 threads are slower than four. A check that answers takes 4.2 times as long at the median on 24
+  threads (0.99 on four) and up to 28 times, with four of 24 cores busy and 16 of 24 workers inside one native
+  Z3 call. The server garbage collector (a probe run with `DOTNET_gcServer=1`) brings the run to 3,135 s and
+  the median to 1.9, so the collector is part of it. Not fixed here: what the rest is needs native stacks
+  (P2-132).
+- Observed: the backstop's multiplier is needed and costly. On 24 threads three checks answered after 99 s,
+  115 s and 277 s that take under 54 s alone, and 171 checks ran past 60 s, 18 of them to the 24-minute
+  backstop, for 69,500 s between them.
+- Observed: the first `--jobs 1` run was started as a background command of the session, whose longest time
+  limit is two hours, and was stopped six minutes before its end. It wrote no SARIF. The rerun was started
+  detached. A corpus run that can pass two hours must be started that way.
+- Observed: `main` was red at the commit this branch started from
+  (`SecondSolverLadderTests.TheSolversQueriesAreStages`, fixed on `main` since and merged in), and
+  `ContractSoundnessTests.SharedFunctionUnderContractWouldBeUnsound` failed once on the Windows leg and passed
+  on a rerun; it calls the backend directly and nothing it uses is changed here.
+- Scoreboard unchanged: the report holds no `full` summary in the default mode and no two runs of one
+  configuration with SARIF.
+- Result: tickets P2-131 and P2-132.

@@ -654,10 +654,15 @@ rung, a pair or a run.
   5000 ms timeout after 126.5 minutes. Non-solver work is made cheaper, never skipped. The contracts
   pass (2h07m, unlogged) becomes a phase. Two full runs must agree on every decided result.
 - P2-077 (M) Matched pairs are verified in parallel (`--jobs`), with the same results as one at a time
-  and no query ended sooner by contention. Needs P2-050, P2-076.
+  and no query ended sooner by contention. Needs P2-050, P2-076. Done 2026-10-05: `--jobs 4` takes a
+  Git Extensions run from 7,935 s to 2,815 s; the default stays 1 (2 of 13,742 results differ, as two runs
+  on one thread also do; `docs/runs/2026-10-05-parallel-verify.md`); P2-131 and P2-132 filed.
 - P2-131 (S) The backend counts how every query ended, and `run.properties.queryEndings` is filled
   from that count: P2-077 counts timed-out rungs from their detail text in the CLI, which misses the
   queries outside a rung. Needs P2-077.
+- P2-132 (M) Find what blocks the pair workers past four threads, and raise the default `jobs` from
+  one: four threads make a Git Extensions run 2.8 times faster with no query slowed, and 24 threads are
+  slower than four, with 16 of the 24 workers waiting inside one native Z3 call. Needs P2-077, P2-100.
 - P2-112 (S) An interrupt that throws on the timer thread can no longer end the process.
   `Context.Interrupt()` threw `Z3Exception: canceled` on P2-076's timer and killed a CI test host
   (PR #368); the same crash would end a corpus run with no SARIF.

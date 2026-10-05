@@ -123,7 +123,7 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
 - `--resource-limit` overrides the config's `resourceLimit`, Z3's deterministic `rlimit` for each
   query; the config's `timeoutMs` is the wall-clock backstop (VERIFICATION-MODEL.md section 6;
   ticket P2-050). A value that is not positive is exit 3.
-- `--jobs` overrides the config's `jobs` (default: the processor count): the `verify` and `contracts`
+- `--jobs` overrides the config's `jobs` (default 1): the `verify` and `contracts`
   phases run up to that many pairs at once, each backend call on a thread of its own, and write their
   results in the pairs' order. On `n` threads the backend is given `n` times `timeoutMs`, so the
   resource limit, not the clock, is what ends a query (VERIFICATION-MODEL.md section 6; ticket
