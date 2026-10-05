@@ -67,3 +67,14 @@ checked against real runs.
 - Tickets: M4-012 (contract, writer, ETA, CLI phases), M4-013 (frontend events), M4-014 (backend
   events), M4-015 (corpus skill and script). None blocks M4-007, and the run in progress is not
   affected.
+
+## Clarifications
+- 2026-10-04 (P2-077). **One item in flight became several.** The `verify` and `contracts` phases run up
+  to `--jobs` pairs at once, so a phase has several items in flight. `IRunLog` keeps its five calls: an
+  item belongs to the thread that started it, and that thread sends the item's details and its end. A
+  heartbeat is one line for each item in flight, the one started first written first, all with the same
+  stamp, and `corpus.ps1 -Progress` lists each as `current:`. A `detail:` line ends in ` item=<identity>`
+  when its thread has an item in flight, since the details of pairs verified at once interleave. The
+  snapshot is swapped with a compare-and-swap, and a call still never waits. An item's start is no longer
+  an event; its end carries when it started. `worst=` is still the phase on one thread: threads divide
+  the time and the backstop given to each query is multiplied by them.

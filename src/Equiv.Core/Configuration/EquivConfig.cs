@@ -23,6 +23,14 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
     public int ResourceLimit { get; init; } = DefaultResourceLimit;
 
     /// <summary>
+    /// <c>jobs</c> (ticket P2-077): how many matched pairs are verified at once. One unless set: on
+    /// <c>gitextensions-8522</c> a run on several threads gave two or three results of 13,742 that a run on one did not
+    /// (<c>docs/runs/2026-10-05-parallel-verify.md</c>), which is what two runs on one thread also do (ticket P2-100),
+    /// and the ticket keeps the default at one until none differs (ticket P2-132).
+    /// </summary>
+    public int Jobs { get; init; } = 1;
+
+    /// <summary>
     /// Runtime-changed-API member prefixes (ticket M2-006) whose
     /// <see cref="Equiv.Core.RuntimeChanges.RuntimeChangeTable"/> match is suppressed.
     /// </summary>
@@ -71,8 +79,9 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
             & (ModernRuntime == other.ModernRuntime) // NOSONAR
             & (IlFallback == other.IlFallback) // NOSONAR
             & (ResourceLimit == other.ResourceLimit) // NOSONAR
+            & (Jobs == other.Jobs) // NOSONAR
             & string.Equals(Cvc5Path, other.Cvc5Path, StringComparison.Ordinal); // NOSONAR
 
     public override int GetHashCode() =>
-        HashCode.Combine(HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime), IlFallback, ResourceLimit, Cvc5Path);
+        HashCode.Combine(HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime), IlFallback, ResourceLimit, Cvc5Path, Jobs);
 }

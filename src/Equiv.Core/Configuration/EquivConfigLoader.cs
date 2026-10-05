@@ -14,7 +14,7 @@ namespace Equiv.Core.Configuration;
 public static class EquivConfigLoader
 {
     private static readonly FrozenSet<string> KnownProperties =
-        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "resourceLimit", "suppressRuntimeChanges", "suppressApiEquivalences", "runtimes", "solvers" }.ToFrozenSet(StringComparer.Ordinal);
+        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "resourceLimit", "jobs", "suppressRuntimeChanges", "suppressApiEquivalences", "runtimes", "solvers" }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Parses <paramref name="json"/> and validates it against the schema. Throws <see cref="EquivConfigParseException"/>
@@ -44,6 +44,7 @@ public static class EquivConfigLoader
         int bound = ReadPositiveInt(root, "bound", EquivConfig.Default.Bound, EquivConfigDiagnosticIds.InvalidBound, diagnostics);
         int timeoutMs = ReadPositiveInt(root, "timeoutMs", EquivConfig.Default.TimeoutMs, EquivConfigDiagnosticIds.InvalidTimeout, diagnostics);
         int resourceLimit = ReadPositiveInt(root, "resourceLimit", EquivConfig.DefaultResourceLimit, EquivConfigDiagnosticIds.InvalidResourceLimit, diagnostics);
+        int jobs = ReadPositiveInt(root, "jobs", EquivConfig.Default.Jobs, EquivConfigDiagnosticIds.InvalidJobs, diagnostics);
         ImmutableArray<string> suppressRuntimeChanges = ReadStringArray(root, "suppressRuntimeChanges", EquivConfigDiagnosticIds.InvalidSuppressRuntimeChangesEntry, diagnostics);
         ImmutableArray<string> suppressApiEquivalences = ReadStringArray(root, "suppressApiEquivalences", EquivConfigDiagnosticIds.InvalidSuppressApiEquivalencesEntry, diagnostics);
         (TargetRuntime? legacyRuntime, TargetRuntime? modernRuntime) = ReadRuntimes(root, diagnostics);
@@ -55,6 +56,7 @@ public static class EquivConfigLoader
             LegacyRuntime = legacyRuntime,
             ModernRuntime = modernRuntime,
             ResourceLimit = resourceLimit,
+            Jobs = jobs,
             Cvc5Path = ReadCvc5Path(root, diagnostics),
         };
         return new EquivConfigResult(config, diagnostics.ToImmutable());

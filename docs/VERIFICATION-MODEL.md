@@ -838,6 +838,16 @@ Every solver query has two budgets, both set in `equiv.config.json` as positive 
 - `timeoutMs` (default 60000) is the wall-clock backstop behind it, for a query that spends long in work Z3
   does not count. A result that ran into it can differ between runs.
 
+Matched pairs are verified on up to `jobs` threads at once (default 1; `compare --jobs <n>`
+overrides the config's `jobs`; ticket P2-077). The results are written in the order one thread writes them, and
+threads never end a query sooner than one thread would: `resourceLimit` does not depend on what else is running,
+and a phase that verifies on `n` threads gives each query `n` times `timeoutMs` on the clock, since threads that
+share a processor each get a share of it. The default stays 1 until a run on several threads gives no result a
+run on one does not (tickets P2-100, P2-132). A verifying run counts the
+rungs a limit timed out in `run.properties.queryEndings`: `resourceLimit` for those the resource limit ended and
+`wallClock` for those the backstop ended, over the ladders of the run's results. A run on several threads must
+not have more `wallClock` endings than the same run on one.
+
 A second solver is asked when one is configured (ADR 0050; ticket P1-033): `"solvers": { "cvc5": { "path":
 "<executable>" } }` names a cvc5 executable, which `equiv` runs as a process and never ships. Every query
 goes to Z3 first. A rung 1 query Z3 gives up on (`divergence`, `opaque` or `bound`) is then printed as Z3

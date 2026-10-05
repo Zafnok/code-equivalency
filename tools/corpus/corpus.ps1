@@ -353,6 +353,7 @@ function Select-PmbRoot([string]$Roots) {
 # ADR 0038 (M4-015): a run's progress.log, parsed without touching the equiv process. The grammar is RunLogLine's in
 # src/Equiv.Cli/Progress/RunLogLine.cs; an item identity may contain spaces, so item= is matched lazily up to the
 # fields that follow it. Anything else (a line cut short mid-write, stderr noise) is skipped.
+# A detail line (`<phase> detail: <text> [item=<identity>]`) is not read here.
 $ProgressLine = '^equiv: \+(?<at>\d+:\d\d:\d\d) (?<phase>\S+) (?<rest>.*)$'
 $ProgressItem = '^(?<done>\d+)/(?<total>\d+) \((?<pct>\d+)%\)(?: item=(?<item>.*?))?(?: outcome=(?<outcome>\S+))?(?: took=(?<took>[\d.]+))? eta=(?<eta>\S+)(?: worst=(?<worst>\S+))?(?: rate=\S+/s)?(?<slow> slow)?$'
 $ProgressEnd = '^done in (?<took>\S+); eta@25%=\S+ eta@50%=(?<eta50>\S+) eta@75%=\S+ dropped=(?<dropped>\d+)$'
@@ -403,7 +404,21 @@ function Read-ProgressLog([string]$Path) {
     }
 }
 
-# Where the run is: its phase, done/total, the last ETA and bound, the item in flight, and the five slowest so far.
+# The items in flight: the unfinished-item lines that end the log and share the last line's stamp.
+function Get-InFlight([object[]]$Lines) {
+    $last = $Lines[-1]
+    $current = @()
+    for ($i = $Lines.Count - 1; $i -ge 0; $i--) {
+        $line = $Lines[$i]
+        if ($line.Kind -ne 'progress' -or $line.At -ne $last.At -or -not $line.Item -or $line.Outcome) { break }
+        $current = @($line) + $current
+    }
+    $current
+}
+
+# Where the run is: its phase, done/total, the last ETA and bound, every item in flight, and the five slowest so far.
+# A heartbeat is one line for each item in flight, all with the same stamp (ticket P2-077), so the items in flight are
+# the unfinished-item lines that end the log and share the last line's stamp.
 function Get-ProgressReport([object[]]$Lines) {
     $last = $Lines | Select-Object -Last 1
     if ($null -eq $last) { return 'phase: none yet (progress.log has no progress lines)' }
@@ -415,12 +430,13 @@ function Get-ProgressReport([object[]]$Lines) {
         $worst = 'n/a'
         if ($last.Worst) { $worst = $last.Worst }
         "eta: $($last.Eta) worst: $worst (at +$(Format-Stamp $last.At))"
-        if ($last.Item -and -not $last.Outcome) {
+        $current = @(Get-InFlight $Lines)
+        if ($current.Count -eq 0) { 'current: none reported since the last item finished' }
+        foreach ($line in $current) {
             $slow = ''
-            if ($last.Slow) { $slow = ' slow' }
-            "current: $($last.Item) running $(Format-Seconds $last.Took)s$slow"
+            if ($line.Slow) { $slow = ' slow' }
+            "current: $($line.Item) running $(Format-Seconds $line.Took)s$slow"
         }
-        else { 'current: none reported since the last item finished' }
     }
     'slowest:'
     $Lines | Where-Object { $_.Kind -eq 'progress' -and $_.Outcome } |

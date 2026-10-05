@@ -112,7 +112,7 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
 - `equiv compare --legacy <path.sln> --modern <path.sln> [--baseline prev.sarif]
   [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
   [--dry-run] [--lower-only] [--execute] [--test-target 0.001] [--test-budget 10000[,60]]
-  [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback] [--resource-limit <n>]`.
+  [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback] [--resource-limit <n>] [--jobs <n>]`.
 - `--legacy` and `--modern` mean before and after the change, on any runtime pair; `--before` and
   `--after` are aliases, and both spellings of one option are a usage error (ADR 0040 decision 4).
 - `--chc-int-mode` (default true) lets loop-ladder rung 4 ask Z3 Spacer over the integers first
@@ -123,6 +123,11 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
 - `--resource-limit` overrides the config's `resourceLimit`, Z3's deterministic `rlimit` for each
   query; the config's `timeoutMs` is the wall-clock backstop (VERIFICATION-MODEL.md section 6;
   ticket P2-050). A value that is not positive is exit 3.
+- `--jobs` overrides the config's `jobs` (default 1): the `verify` and `contracts`
+  phases run up to that many pairs at once, each backend call on a thread of its own, and write their
+  results in the pairs' order. On `n` threads the backend is given `n` times `timeoutMs`, so the
+  resource limit, not the clock, is what ends a query (VERIFICATION-MODEL.md section 6; ticket
+  P2-077). A value that is not positive is exit 3.
 - `--il-fallback` (off by default until P1-018's corpus run decides otherwise; ADR 0039) turns on
   the frontend's IL fallback (step 5 above).
 - Every run prints the analysed line count of each codebase and writes both to

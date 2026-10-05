@@ -220,7 +220,7 @@ equiv compare --legacy <solution.sln|.slnx> --modern <solution.sln|.slnx>
               [--dry-run] [--lower-only]
               [--execute [--test-target 0.001] [--test-budget <inputs>[,<seconds>]]]
               [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback]
-              [--resource-limit <n>]
+              [--resource-limit <n>] [--jobs <n>]
               [--verbosity quiet|normal|debug] [--log <path>]
 equiv mcp [--execute]
 ```
@@ -262,6 +262,12 @@ solver query in Z3's own step count. It is deterministic, so a pair that runs ou
 Unknown (`timeout`) on every run, whatever the machine's speed or load. The config's `timeoutMs`
 (default 60000) is the wall-clock backstop behind it. The Unknown's message says which of the two
 was hit.
+
+`--jobs <n>` overrides the config's `jobs` (default 1), the number of matched
+pairs verified at once. It changes how long a run takes, not its results: they are written in the
+order `--jobs 1` writes them, and on `n` threads each query gets `n` times `timeoutMs` on the clock,
+so threads sharing a processor do not time out a query that one thread would finish.
+`run.properties.queryEndings` counts the queries each of the two limits ended.
 
 A second solver is optional (ADR 0050). With `"solvers": { "cvc5": { "path": "<cvc5 executable>" } }`
 in the config, a rung 1 query Z3 gives up on is also asked of [cvc5](https://cvc5.github.io), run as

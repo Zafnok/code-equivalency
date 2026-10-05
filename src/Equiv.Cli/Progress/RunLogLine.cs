@@ -43,8 +43,13 @@ internal sealed record RunLogLine(TimeSpan At, string Phase, int Done, int Total
             $"{Prefix}{Stamp(at)} {phase} done in {Duration(took)}; eta@25%={Maybe(estimator.At25)} eta@50%={Maybe(estimator.At50)} eta@75%={Maybe(estimator.At75)} dropped={dropped}");
     }
 
-    /// <summary><c>equiv: +HH:MM:SS &lt;phase&gt; detail: &lt;text&gt;</c>.</summary>
-    public static string Detail(TimeSpan at, string phase, string text) => $"{Prefix}{Stamp(at)} {phase} detail: {text}";
+    /// <summary>
+    /// <c>equiv: +HH:MM:SS &lt;phase&gt; detail: &lt;text&gt; [item=&lt;identity&gt;]</c>. <paramref name="item"/> is the item
+    /// the detail is about, which runs to the end of the line; with several items in flight their details interleave
+    /// (ticket P2-077).
+    /// </summary>
+    public static string Detail(TimeSpan at, string phase, string text, string? item = null) =>
+        $"{Prefix}{Stamp(at)} {phase} detail: {text}{(item is null ? string.Empty : $" item={item}")}";
 
     /// <summary><c>+HH:MM:SS</c>, the hours not wrapping at a day.</summary>
     public static string Stamp(TimeSpan at) =>

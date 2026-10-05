@@ -35,4 +35,7 @@ public static class EquivConfigDiagnosticIds
 
     /// <summary>"solvers" is present but not an object whose only key, "cvc5", is an object whose only key, "path", is a non-empty string.</summary>
     public const string InvalidSolvers = "CFG011";
+
+    /// <summary>"jobs" is present but not a positive integer.</summary>
+    public const string InvalidJobs = "CFG012";
 }
