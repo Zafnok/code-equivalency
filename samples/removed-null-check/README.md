@@ -10,6 +10,6 @@ sides throw.
 
 | Procedure | Verdict |
 |---|---|
-| `Greeter.Greet(string)` | Divergent — counterexample `name = null` (legacy throws `ArgumentNullException`, modern throws `NullReferenceException`) |
+| `Greeter.Greet(string)` | Divergent — counterexample `name = null` (legacy throws `ArgumentNullException`, modern throws `NullReferenceException`); `agreesWhen.text` is `name != null` (ADR 0048): the pair is proved equivalent for every other argument |
 
 Exit code: 1 (a new Divergent result).

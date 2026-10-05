@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 
@@ -99,8 +99,9 @@ public sealed class Z3BackendTests
 
         Verdict verdict = new Z3Backend(() => Track(contexts)).Verify(fixture.Old, fixture.New, Options with { TimeoutMs = 50 });
 
-        // An Unknown, a timeout included, also runs ADR 0037's failure-refinement queries in a context of their own (P1-013, P1-035).
-        Assert.Equal(verdict is Unknown ? 2 : 1, contexts.Count);
+        // An Unknown, a timeout included, also runs ADR 0037's failure-refinement queries in a context of their own (P1-013, P1-035),
+        // and a pair searched for an input condition runs that search in another (ADR 0048; P1-022).
+        Assert.Equal(1 + (verdict is Unknown ? 1 : 0) + (ConditionSearch.Of(verdict) is null ? 0 : 1), contexts.Count);
         Assert.All(contexts, static c => Assert.Equal(1, c.Disposals));
     }
 

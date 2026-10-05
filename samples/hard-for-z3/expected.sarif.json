@@ -99,6 +99,14 @@
           "properties": {
             "unknownReason": "timeout",
             "scope": "method",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "none-proved"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              }
+            },
             "ladderTrace": [
               {
                 "rung": "bounded",
@@ -153,6 +161,10 @@
           "unknownByScope": {
             "line": 0,
             "method": 1
+          },
+          "failureRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {

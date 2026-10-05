@@ -1,5 +1,5 @@
 # P1-022 Conditional equivalence: a pair that is not Equivalent says under which inputs it is
-Status: todo
+Status: done (PR #394)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-013, M3-025
@@ -85,3 +85,42 @@ differs when"). A new rule id or verdict. Counting how many inputs satisfy the c
 
 ## Notes
 - From the 2026-10-03 improvement review (its second priority).
+- The citation was checked: Logozzo, Lahiri, Fähndrich and Blackshear, "Verification modulo versions: towards usable
+  verification", PLDI 2014, doi 10.1145/2594291.2594326.
+- Decision: ADR 0048 is its own pull request (#387), as `equiv-adr` says, and this ticket's branch is stacked on it, so
+  the ADR merges first (criterion 1).
+- Decision: an admitted candidate that implies another is the one dropped. The Design says "drop a candidate another
+  admitted one implies", which read literally keeps `a < 0` and drops `a < 5`. The condition is a disjunction, so the
+  weaker candidate covers the stronger one's inputs and the stronger one is the redundant disjunct.
+- Decision: "do not query EQ006" is decided in the backend, which has no runtime-change table: a pair whose model's
+  call trace holds a callee flagged `RuntimeChanged` is not searched. The frontend sets that flag only for a row inside
+  the pair's runtime interval, so this is every EQ006.
+- Decision: `agreesWhen` also carries `proposedBy: harvested-predicates` and `proofMethod: bounded`. ADR 0036 decision 1
+  requires every result that uses an admitted hypothesis to name its proposer and its checker.
+- Decision: both renderings are printed from the harvested term, not by Z3. Z3 wraps and `let`-binds long terms, and the
+  `parity` job compares result properties between Windows and Linux.
+- Decision: a value through `trunc` is not harvested. A truncation has no one source spelling: the IR does not say
+  whether the narrow type is signed. A value more than 8 operations deep is not harvested either: a term is the body's
+  value graph as a tree, which can double in size per level.
+- Decision: the size guard's "three or more inputs" is applied as a filter. Such a value is skipped, not checked. None
+  was needed for a criterion, so the guard did not trip.
+- Decision: in `text`, an unsigned comparison, division or remainder casts its operands (`(uint)x < 3`), a zero
+  extension is a cast to the unsigned type of the operand's width, and a shift count is written without its widening.
+  The first run of the property test found the last one: `c >> ((uint)(a & 63))` is not C#. With these, `text` compiles
+  and evaluates as C# for `int`, `long`, `bool` and reference parameters, which is what the property test relies on.
+  For a parameter declared unsigned or narrower than `int` the text can still read differently from `smt`, because
+  `IrVar` carries no signedness. `smt` is the exact statement. A ticket that gives `IrParameter` its declared type
+  would close that.
+- The counterexample check binds the product's inputs to the decoded counterexample and asks the solver for the
+  disjunction. It checks the reported inputs against the reported condition, not the model against itself.
+- `samples/added-branch` now carries `Equivalent when x != 0`: the modern body's own guard is the candidate.
+- The property test runs 200 pairs per pull request (criterion 6). It was also run once locally at the nightly budget
+  (`EQUIV_DIFFERENTIAL_BUDGET=nightly`, 5,000 pairs) and passed. `mutation.yml`'s nightly `differential` job filters to
+  `DifferentialSoundnessTests` alone, so it does not run `ConditionSoundnessTests`; adding the class to that filter is a
+  workflow change outside this ticket's Files.
+- Snapshots: 13 `samples/*/expected.sarif.json` and the two `*.execute.sarif` files changed. Eight results gained
+  `agreesWhen` (`added-branch`, `api-drift`, `bcl-overload-rebinding`, `callee-changed-invisible`,
+  `dependency-rebinding`, `effect-free-bcl-call`, `removed-null-check`, `repeated-edit`); the rest only gained the
+  census entry. Three of the conditions are `<receiver> == null`: both sides throw the same exception there, which is
+  true and of little use to a reviewer.
+- Surprise: `IrBitVec` allows only widths 8, 16, 32 and 64, so the unsigned cast has four cases and no default.

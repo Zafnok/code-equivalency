@@ -113,7 +113,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.ApiDrift.Text::HasX(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())"
+            "text": "Equiv.Samples.ApiDrift.Text::HasX(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace()). Equivalent when s != null."
           },
           "locations": [
             {
@@ -138,6 +138,12 @@
           "rank": 60.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())",
+            "agreesWhen": {
+              "smt": "(not (select in.null.System.String in.s))",
+              "text": "s != null",
+              "proposedBy": "harvested-predicates",
+              "proofMethod": "bounded"
+            },
             "ladderTrace": [
               {
                 "rung": "bounded",
@@ -204,6 +210,11 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 1,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {
