@@ -1,5 +1,5 @@
 # P1-037 Spike: can a model write a Lean proof, checked by Lean's kernel, for a query the solvers give up on?
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-025
@@ -109,3 +109,38 @@ Shipping Lean in any artifact.
   is likely to shrink them.
 - Requested 2026-10-04. The paper review had ranked Trivet a drop because it needs a Lean
   semantics of the IR; translating the query instead is this ticket's answer to that.
+- Result: `docs/runs/2026-10-04-lean-vc.md`. 139 of 142 translate, 121 elaborate, the scaffold
+  alone closes none, the model closes 2 of the 5 it was asked (one kernel-checked, one through
+  `bv_decide`). No pair becomes Equivalent. Criterion 7's first branch applies: ADR 0051
+  (proposed) and P1-039.
+- Deviation: the ticket admits a proof with "no axiom beyond Lean's standard three" and also says
+  a proof `bv_decide` finds counts. In Lean 4.34.1 those cannot both hold: a `bv_decide` proof
+  depends on a fourth axiom, `q._native.bv_decide.ax_...`, because its certificate is checked by
+  compiled code. Such a proof is admitted, counted apart, and not called kernel-checked.
+- Deviation: three queries (SMT-LIB files of 38, 151 and 152 MB) did not finish translating in two
+  hours, twice. They are reported as not translated; the cause is the translator's speed on deep
+  `let` nesting, not an operator.
+- Decision: the translator is Python, not C#. It reads text files and needs nothing internal, and
+  no gate builds a spike.
+- Decision: the 142 positional files of P1-034's run are read as that run left them (equiv
+  `ab66987`), per the note above; the sequence form, and so `List` and an inductive trace type, is
+  not translated.
+- Decision: the theorem is curried, one hypothesis `A = true` an assertion and `False` as the
+  conclusion, in place of one `not (and ...)`. It says the same and needs no introduction step.
+- Decision: `grind` joins the scaffold's tactics (congruence over uninterpreted functions, which
+  `bv_decide` lacks), and the scaffold has no separate case-split step: `grind` and `bv_decide`
+  split per path themselves, and a probe of explicit substitution and splitting on the smallest
+  known theorem closed nothing.
+- Decision: the model is called through the `claude` command line with no tools, since the box has
+  no `ANTHROPIC_API_KEY`. Tokens are what it reports.
+- Decision: the model is not asked about a query some solver answers satisfiable (110), nor about
+  a statement over 1,500,000 characters (6).
+- Decision: ADR 0051 and P1-039 carry a gate. Criterion 7 asks for them whenever a query closes
+  with the model, and the evidence is that both closed queries are ones Z3 proves in the
+  positional form.
+- Surprising: `grind` does not finish in ten minutes on 1,088 hypotheses even with case splits,
+  E-matching and arithmetic off. The cost is the size of the context, not the search.
+- Surprising: on the three undecided queries it read, the model refused to write a proof and
+  argued the query is satisfiable. Unchecked.
+- The scaffold pass and the model pass each ran past the two-hour limit on a background command
+  and were continued on the positions not yet reached; results are appended per query.
