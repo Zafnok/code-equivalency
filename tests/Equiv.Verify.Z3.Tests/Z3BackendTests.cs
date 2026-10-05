@@ -136,7 +136,7 @@ public sealed class Z3BackendTests
     }
 
     /// <summary>
-    /// Ticket P2-050 criterion 2: the solver <see cref="Z3Backend.Query"/> returns, which every query of the product goes
+    /// Ticket P2-050 criterion 2: the query <see cref="Z3Backend.Query"/> returns, which every query of the product goes
     /// through, stops when it has spent <see cref="VerificationOptions.ResourceLimit"/>, long before the timeout.
     /// </summary>
     [Theory]
@@ -149,12 +149,75 @@ public sealed class Z3BackendTests
         using Context context = new();
         ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, fixture.Old, fixture.New, options.CallIdentityMap);
 
-        using Solver solver = Z3Backend.Query(context, encoding, options, encoding.Differs);
+        using SolverQuery solver = Z3Backend.Query(context, encoding, options, encoding.Differs);
 
-        Assert.Equal(Status.UNKNOWN, solver.Check());
+        Assert.Equal(Status.UNKNOWN, solver.Check(options, "limited"));
         Assert.Equal("canceled", solver.ReasonUnknown);
-        Assert.Equal((uint)resourceLimit, solver.Statistics.Entries.Single(static e => string.Equals(e.Key, "rlimit count", StringComparison.Ordinal)).UIntValue);
+        Assert.Equal((uint)resourceLimit, Spent(solver));
     }
+
+    /// <summary>
+    /// Ticket P2-100 criteria 1 and 2. Z3 gives a freed term's number to the next term it builds, so terms freed before a
+    /// query is encoded, by <c>Dispose</c> or by a garbage collection that finalises their wrappers, change the numbers of
+    /// the query's terms in the encoder's context. Checked there, each of these queries reached its answer after a different
+    /// <c>rlimit count</c> (<c>call-closed-mixed</c>: 1,830 undisturbed, 1,152 and 1,143 disturbed). Checked in a context
+    /// of its own, each spends the same whatever was freed, and Z3 receives the same assertions.
+    /// </summary>
+    [Theory]
+    [InlineData("array-alias")]
+    [InlineData("call-closed-mixed")]
+    [InlineData("call-reads-heap")]
+    [InlineData("loops/chc-uncertified")]
+    [InlineData("loops/recursion-unaligned")]
+    public void TheSameQuerySpendsTheSameResourceWhateverWasCollected(string name)
+    {
+        Fixture fixture = Fixture.Load(name);
+
+        (Status Status, uint Spent, string Assertions) undisturbed = Spend(fixture, static _ => { });
+        (Status Status, uint Spent, string Assertions) disposed = Spend(fixture, static context =>
+        {
+            Expr[] freed = [.. Enumerable.Range(0, 200).Select(i => context.MkBVConst("freed" + i.ToString(CultureInfo.InvariantCulture), 32))];
+            foreach (Expr term in freed.Where(static (_, i) => i % 3 != 2))
+            {
+                term.Dispose();
+            }
+        });
+        (Status Status, uint Spent, string Assertions) collected = Spend(fixture, static context =>
+        {
+            Unreferenced(context);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        });
+
+        Assert.NotEqual(Status.UNKNOWN, undisturbed.Status);
+        Assert.Equal(undisturbed, disposed);
+        Assert.Equal(undisturbed, collected);
+    }
+
+    /// <summary>The fixture's divergence query, encoded after <paramref name="disturb"/> has had the context: its answer, the <c>rlimit count</c> at it, and what Z3 received.</summary>
+    private static (Status Status, uint Spent, string Assertions) Spend(Fixture fixture, Action<Context> disturb)
+    {
+        using Context context = new();
+        disturb(context);
+        ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, fixture.Old, fixture.New, Options.CallIdentityMap);
+        using SolverQuery solver = Z3Backend.Query(context, encoding, Options with { TimeoutMs = 600_000 }, encoding.Differs);
+
+        Status status = solver.Check(Options, "spend");
+
+        return (status, Spent(solver), solver.Solver.ToString());
+    }
+
+    /// <summary>Terms nothing refers to once this returns, for a collection to free.</summary>
+    private static void Unreferenced(Context context)
+    {
+        for (int i = 0; i < 200; i++)
+        {
+            context.MkBVAdd(context.MkBVConst("freed" + i.ToString(CultureInfo.InvariantCulture), 32), context.MkBV(i, 32));
+        }
+    }
+
+    private static uint Spent(SolverQuery solver) =>
+        solver.Solver.Statistics.Entries.Single(static e => string.Equals(e.Key, "rlimit count", StringComparison.Ordinal)).UIntValue;
 
     /// <summary>
     /// Ticket P2-050 criteria 4 and 5: a query that exhausts the resource limit is Unknown with reason <c>timeout</c>, as a
@@ -195,7 +258,7 @@ public sealed class Z3BackendTests
 
     /// <summary>
     /// A solver with no limit of its own, on a query it cannot answer: the check runs until it is interrupted, four
-    /// timeouts in and no sooner, and answers unknown with Z3's reason for an interrupt. The context goes on working.
+    /// timeouts in and no sooner, and answers unknown with Z3's reason for an interrupt. The next query is checked as ever.
     /// </summary>
     [Fact]
     public void ACheckNoLimitEndsIsInterruptedAfterTheSlackAndAnswersUnknown()
@@ -205,20 +268,18 @@ public sealed class Z3BackendTests
         RecordingRunLog log = new(isDebug: true);
         using Context context = new();
         ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, hard.Old, hard.New, options.CallIdentityMap);
-        using Solver unlimited = context.MkSolver();
-        unlimited.Add(encoding.Assertions);
-        unlimited.Add(encoding.Differs);
-        using Solver easy = context.MkSolver();
+        using SolverQuery unlimited = new(context, static solving => solving.MkSolver(), [.. encoding.Assertions, encoding.Differs]);
+        using SolverQuery easy = new(context, static solving => solving.MkSolver(), [context.MkTrue()]);
         long started = TimeProvider.System.GetTimestamp();
 
-        Status status = Z3Backend.Check(context, unlimited, options with { Log = log }, "hard");
+        Status status = unlimited.Check(options with { Log = log }, "hard");
 
         Assert.InRange(TimeProvider.System.GetElapsedTime(started).TotalMilliseconds, 400, 60_000);
         Assert.Equal(Status.UNKNOWN, status);
         Assert.Equal("interrupted", unlimited.ReasonUnknown);
         Assert.Equal("solver returned unknown (interrupted)", Z3Backend.Timeout(unlimited, options));
         Assert.Equal(["check:hard=unknown"], BackendProgressTests.Details(log));
-        Assert.Equal(Status.SATISFIABLE, Z3Backend.Check(context, easy, options, "easy"));
+        Assert.Equal(Status.SATISFIABLE, easy.Check(options, "easy"));
     }
 
     /// <summary>

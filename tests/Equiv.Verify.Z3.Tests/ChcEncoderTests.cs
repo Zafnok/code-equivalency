@@ -1,3 +1,5 @@
+﻿using System.Globalization;
+
 using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.TestSupport;
@@ -131,5 +133,61 @@ public sealed class ChcEncoderTests
         Assert.Equal(uint.MaxValue, ChcEncoder.SpacerResourceLimit(Options with { ResourceLimit = int.MaxValue }));
         Assert.Equal(Status.UNKNOWN, integers.Query(overflows: false, Options with { TimeoutMs = 600_000, ResourceLimit = 10_000 }).Status);
         Assert.Equal(Status.UNSATISFIABLE, integers.Query(overflows: false, Options with { TimeoutMs = 600_000, ResourceLimit = 1_000_000 }).Status);
+    }
+
+    /// <summary>
+    /// Ticket P2-100 criterion 2: a Spacer query spends the same <c>rlimit</c> and gives the same answer whatever terms
+    /// were freed in the encoder's context before it was encoded, by <c>Dispose</c> or by a garbage collection. Freed
+    /// terms change the numbers of the encoder's terms, and Spacer run in that context spent a different amount.
+    /// </summary>
+    [Theory]
+    [InlineData("loops/fusion")]
+    [InlineData("loops/nesting-changed")]
+    [InlineData("loops/trip-count-changed")]
+    public void TheSameQuerySpendsTheSameResourceWhateverWasCollected(string name)
+    {
+        Fixture fixture = Fixture.Load(name);
+
+        (Status Status, uint Spent, string Answer) undisturbed = Spend(fixture, static _ => { });
+        (Status Status, uint Spent, string Answer) disposed = Spend(fixture, static context =>
+        {
+            Expr[] freed = [.. Enumerable.Range(0, 200).Select(i => context.MkIntConst("freed" + i.ToString(CultureInfo.InvariantCulture)))];
+            foreach (Expr term in freed.Where(static (_, i) => i % 3 != 2))
+            {
+                term.Dispose();
+            }
+        });
+        (Status Status, uint Spent, string Answer) collected = Spend(fixture, static context =>
+        {
+            Unreferenced(context);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        });
+
+        Assert.NotEqual(Status.UNKNOWN, undisturbed.Status);
+        Assert.NotEqual(0u, undisturbed.Spent);
+        Assert.Equal(undisturbed, disposed);
+        Assert.Equal(undisturbed, collected);
+    }
+
+    /// <summary>The fixture's divergence query over the integers, encoded after <paramref name="disturb"/> has had the context.</summary>
+    private static (Status Status, uint Spent, string Answer) Spend(Fixture fixture, Action<Context> disturb)
+    {
+        using Context context = new();
+        disturb(context);
+        ChcEncoder integers = new(context, fixture.Old, fixture.New, ChcArithmetic.Integers, []);
+
+        ChcEncoder.ChcAnswer answer = integers.Query(overflows: false, Options with { TimeoutMs = 600_000 });
+
+        return (answer.Status, answer.Spent, answer.Answer.ToString());
+    }
+
+    /// <summary>Terms nothing refers to once this returns, for a collection to free.</summary>
+    private static void Unreferenced(Context context)
+    {
+        for (int i = 0; i < 200; i++)
+        {
+            context.MkAdd(context.MkIntConst("freed" + i.ToString(CultureInfo.InvariantCulture)), context.MkInt(i));
+        }
     }
 }

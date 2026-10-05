@@ -1,4 +1,4 @@
-using Equiv.Core;
+﻿using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
@@ -56,9 +56,9 @@ internal sealed class FailureRefinementQuery(Func<Context> createContext, Verifi
     {
         (Context context, ProductEncoding encoding, IrProcedure old, IrProcedure @new, bool looping) = pair;
         BoolExpr[] withinBound = [context.MkNot(encoding.Old.Unreachable), context.MkNot(encoding.New.Unreachable)];
-        using Solver modelled = Z3Backend.Query(
+        using SolverQuery modelled = Z3Backend.Query(
             context, encoding, options, [returns.Terms.Returned, fails.Terms.Threw, context.MkNot(returns.Opaque), context.MkNot(fails.Opaque), .. withinBound]);
-        switch (Z3Backend.Check(context, modelled, options, "failure-modelled"))
+        switch (modelled.Check(options, "failure-modelled"))
         {
             case Status.SATISFIABLE:
                 Counterexample runs = Stages.Timed(options, Stages.Replay, () => ModelDecoder.Runs(context, modelled.Model, encoding, old, @new));
@@ -68,12 +68,12 @@ internal sealed class FailureRefinementQuery(Func<Context> createContext, Verifi
         }
 
         // Unsatisfiable on every modelled input: now let a side past an unshared opaque node, or past the bound, do either.
-        using Solver resolved = Z3Backend.Query(
+        using SolverQuery resolved = Z3Backend.Query(
             context,
             encoding,
             options,
             [context.MkOr(returns.Terms.Returned, returns.Opaque, returns.Terms.Unreachable), context.MkOr(fails.Terms.Threw, fails.Opaque, fails.Terms.Unreachable), .. looping ? [] : withinBound]);
-        return Z3Backend.Check(context, resolved, options, "failure-resolved") == Status.UNSATISFIABLE ? RefinementResult.NoneProved : RefinementResult.Unknown;
+        return resolved.Check(options, "failure-resolved") == Status.UNSATISFIABLE ? RefinementResult.NoneProved : RefinementResult.Unknown;
     }
 
     /// <summary>The product both queries share, the unrolled procedures its models replay through, and whether the pair loops.</summary>

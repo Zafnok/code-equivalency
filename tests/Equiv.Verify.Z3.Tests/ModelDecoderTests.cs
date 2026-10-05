@@ -150,7 +150,7 @@ public sealed class ModelDecoderTests
         using Solver solver = context.MkSolver();
         solver.Assert(context.MkEq(fresh, lit5));
         Assert.Equal(Status.SATISFIABLE, solver.Check());
-        ModelDecoder decoder = new(context, solver.Model, encoding);
+        ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), encoding);
 
         IrValue decoded = decoder.Decode(solver.Model.Eval(fresh, completion: true), new IrSort("S"));
 
@@ -169,7 +169,7 @@ public sealed class ModelDecoderTests
         using Solver solver = context.MkSolver();
         solver.Assert(context.MkDistinct(fresh, lit0, lit5));
         Assert.Equal(Status.SATISFIABLE, solver.Check());
-        ModelDecoder decoder = new(context, solver.Model, encoding);
+        ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), encoding);
 
         IrValue decoded = decoder.Decode(solver.Model.Eval(fresh, completion: true), new IrSort("S"));
 
@@ -187,7 +187,7 @@ public sealed class ModelDecoderTests
         ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
         using Solver solver = context.MkSolver();
         Assert.Equal(Status.SATISFIABLE, solver.Check());
-        ModelDecoder decoder = new(context, solver.Model, encoding);
+        ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), encoding);
 
         IrCallResult result = decoder.Oracle(ProductEncoder.Side.Old).Answer(new CallIdentity("F"), [], resultType: null, 0, [new IrHeapSlice("field.C.x", Heap)], []);
 
@@ -200,7 +200,7 @@ public sealed class ModelDecoderTests
         using Context context = new();
         using Solver solver = context.MkSolver();
         Assert.Equal(Status.SATISFIABLE, solver.Check());
-        ModelDecoder decoder = new(context, solver.Model, ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []));
+        ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []));
         using BitVecSort bv32 = context.MkBitVecSort(32);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
@@ -228,7 +228,7 @@ public sealed class ModelDecoderTests
             context.MkEq(context.MkApp(f, context.MkBV(3, 32)), context.MkBV(4, 32)),
             context.MkEq(context.MkApp(g, context.MkBV(5, 32)), context.MkStore(context.MkConstArray(bv32, context.MkBV(0, 32)), context.MkBV(1, 32), context.MkBV(2, 32))));
         Assert.Equal(Status.SATISFIABLE, solver.Check());
-        ModelDecoder decoder = new(context, solver.Model, ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []));
+        ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []));
         IrMap nested = new(new IrBitVec(32), Heap.MapType);
 
         IrMapValue map = Assert.IsType<IrMapValue>(decoder.Decode(asF, Heap.MapType));
@@ -250,7 +250,7 @@ public sealed class ModelDecoderTests
         (Expr asF, _) = AsArrays(context, f, context.MkFuncDecl("g", bv32, bv32));
         using Solver solver = context.MkSolver();
         Assert.Equal(Status.SATISFIABLE, solver.Check());
-        ModelDecoder decoder = new(context, solver.Model, ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []));
+        ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []));
 
         InvalidOperationException uninterpreted = Assert.Throws<InvalidOperationException>(() => decoder.Decode(asF, Heap.MapType));
         InvalidOperationException modelless = Assert.Throws<InvalidOperationException>(() => new ModelDecoder.Values().Decode(asF, Heap.MapType));
@@ -281,7 +281,7 @@ public sealed class ModelDecoderTests
         solver.Add(encoding.Assertions);
         solver.Add(context.MkNot(context.MkEq(other, u)), context.MkEq(context.MkSelect(lengths, u), context.MkBV(3, 32)), context.MkEq(context.MkSelect(lengths, other), context.MkBV(-1, 32)));
         Assert.Equal(Status.SATISFIABLE, solver.Check());
-        ModelDecoder decoder = new(context, solver.Model, encoding);
+        ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), encoding);
         IrValue raw = decoder.Decode(solver.Model.Eval(lengths, completion: true), encoding.Inputs[1].Shared.Type);
 
         IrInputs inputs = decoder.Inputs();
@@ -302,7 +302,7 @@ public sealed class ModelDecoderTests
         Assert.Equal(Status.SATISFIABLE, solver.Check());
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            ModelDecoder.Replay(context, solver.Model, encoding, WithoutHeap, WithoutHeap));
+            ModelDecoder.Replay(context, new SolverModel(solver.Model, context, context), encoding, WithoutHeap, WithoutHeap));
 
         Assert.StartsWith("Encoder bug:", exception.Message, StringComparison.Ordinal);
     }
@@ -341,7 +341,7 @@ public sealed class ModelDecoderTests
         solver.Add(encoding.Assertions);
         Assert.Equal(Status.SATISFIABLE, solver.Check());
 
-        ModelDecoder decoder = new(context, solver.Model, encoding);
+        ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), encoding);
         Expr literal = encoding.Sorts.Literal(new IrSortValue("S", 5));
         IrValue decoded = decoder.Decode(solver.Model.Eval(literal, completion: true), new IrSort("S"));
 
@@ -364,7 +364,7 @@ public sealed class ModelDecoderTests
         solver.Add(encoding.Assertions);
         Assert.Equal(Status.SATISFIABLE, solver.Check());
 
-        Counterexample? counterexample = ModelDecoder.TryReplay(context, solver.Model, encoding, oldOriginal, newOriginal, stepBudget: 10);
+        Counterexample? counterexample = ModelDecoder.TryReplay(context, new SolverModel(solver.Model, context, context), encoding, oldOriginal, newOriginal, stepBudget: 10);
 
         Assert.NotNull(counterexample);
         IrValue passed = Assert.Single(counterexample.Old.Trace).Arguments[1];
@@ -405,7 +405,7 @@ public sealed class ModelDecoderTests
         ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
         using Solver solver = context.MkSolver();
         Assert.Equal(Status.SATISFIABLE, solver.Check());
-        ModelDecoder decoder = new(context, solver.Model, encoding);
+        ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), encoding);
 
         Sort sort = context.MkUninterpretedSort("S");
         Expr value = context.MkConst("v0", sort);
@@ -423,7 +423,7 @@ public sealed class ModelDecoderTests
         ProductEncoder.ProductEncoding encoding = ProductEncoder.Encode(context, WithoutHeap, WithoutHeap, []);
         using Solver solver = context.MkSolver();
         Assert.Equal(Status.SATISFIABLE, solver.Check());
-        ModelDecoder decoder = new(context, solver.Model, encoding);
+        ModelDecoder decoder = new(context, new SolverModel(solver.Model, context, context), encoding);
 
         Sort sort = context.MkUninterpretedSort("S");
         Expr v0 = context.MkConst("v0", sort);

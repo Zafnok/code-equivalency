@@ -210,8 +210,8 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         {
             (BoolExpr premise, BoolExpr violation) = terms?.Invoke(context, encoding) ?? (context.MkTrue(), context.MkFalse());
             BoolExpr opaque = context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew);
-            using Solver solver = Z3Backend.Query(context, encoding, options, [premise, context.MkOr(encoding.Differs, opaque, violation), .. Reachable(context, encoding)]);
-            Status status = Z3Backend.Check(context, solver, options, "obligation", InterruptAfterMs);
+            using SolverQuery solver = Z3Backend.Query(context, encoding, options, [premise, context.MkOr(encoding.Differs, opaque, violation), .. Reachable(context, encoding)]);
+            Status status = solver.Check(options, "obligation", InterruptAfterMs);
             return status switch
             {
                 Status.SATISFIABLE => new Obligation(
@@ -310,7 +310,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         {
             return divergence.Status == Status.SATISFIABLE
                 ? Found(Stages.Timed(options, Stages.Replay, () => ModelDecoder.Replay(context, divergence.Model, encoding, unrolled.Old, unrolled.New)), bound)
-                : TimedOut(divergence.Timeout(options));
+                : TimedOut(divergence.Timeout());
         }
 
         using SecondSolver.Asked opaque = solvers.Check("opaque", [context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew), .. reachable]);
@@ -318,7 +318,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         {
             if (opaque.Status == Status.UNKNOWN)
             {
-                return TimedOut(opaque.Timeout(options));
+                return TimedOut(opaque.Timeout());
             }
 
             ImmutableArray<UnknownCause> causes = Z3Backend.ReachableOpaques(context, encoding, options, opaque.Model, reachable, InterruptAfterMs);
@@ -350,7 +350,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         {
             Status.UNSATISFIABLE => Proved(ProofMethod.Bounded, $"no input goes past the bound {bound}", new Equivalent(ProofMethod.Bounded, options.Bound)),
             Status.SATISFIABLE => new Rung(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"no divergence within the bound {bound}, and some input goes past it")),
-            _ => TimedOut(cut.Timeout(options)),
+            _ => TimedOut(cut.Timeout()),
         };
     }
 
