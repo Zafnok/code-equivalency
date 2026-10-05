@@ -578,6 +578,11 @@
           "failureRefinement": {
             "pairs": 3,
             "milliseconds": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 0,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {

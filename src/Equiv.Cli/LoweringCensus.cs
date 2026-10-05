@@ -21,7 +21,7 @@ namespace Equiv.Cli;
 /// runtime interval (ADR 0040; ticket P2-055), or inside the table's whole coverage when the pair has none. <see cref="ExternalCallees"/> is every BCL member a lowered body calls, not only the
 /// ones <see cref="RuntimeChangeTable"/> already lists (ADR 0035; ticket M3-033). <see cref="UnknownByScope"/> is set
 /// only by a run that produced verdicts (ADR 0029 decision 4; ticket M3-025), and so is <see cref="FailureRefinement"/>
-/// (ADR 0037; ticket P1-013). <see cref="IlFallback"/> is set only by a run with <c>--il-fallback</c>: the pairs lowered again from IL,
+/// (ADR 0037; ticket P1-013) and <see cref="AgreesWhen"/> (ADR 0048; ticket P1-022). <see cref="IlFallback"/> is set only by a run with <c>--il-fallback</c>: the pairs lowered again from IL,
 /// and the pairs that kept the IL bodies (ADR 0039; ticket P1-016); every per-body count is of the lowering each pair kept.
 /// </summary>
 internal sealed record LoweringCensus(
@@ -40,6 +40,12 @@ internal sealed record LoweringCensus(
 
     /// <summary>The Unknown pairs ADR 0037's queries ran on and their total time (ticket P1-013); written only when some pair ran them.</summary>
     public RefinementTime? FailureRefinement { get; init; }
+
+    /// <summary>
+    /// The pairs ADR 0048's search for an input condition ran on, those with a condition and the searches' total time
+    /// (ticket P1-022); written only when some pair ran it.
+    /// </summary>
+    public ConditionTime? AgreesWhen { get; init; }
 
     /// <summary><c>pairsIlFallbackTried</c> and <c>pairsLoweredFromIl</c> (ticket P1-016); written only under <c>--il-fallback</c>.</summary>
     public (int Tried, int LoweredFromIl)? IlFallback { get; init; }
@@ -60,7 +66,7 @@ internal sealed record LoweringCensus(
 
     /// <summary>
     /// The census as the SARIF run property: camel-cased keys, <c>opaqueByReason</c> sorted by reason, and the IL fallback's
-    /// counts, <c>unknownByScope</c> and then <c>failureRefinement</c> last, when set.
+    /// counts, <c>unknownByScope</c>, <c>failureRefinement</c> and then <c>agreesWhen</c> last, when set.
     /// </summary>
     public Dictionary<string, object> ToProperty()
     {
@@ -86,6 +92,16 @@ internal sealed record LoweringCensus(
             {
                 ["pairs"] = refinement.Pairs,
                 ["milliseconds"] = refinement.Milliseconds,
+            };
+        }
+
+        if (AgreesWhen is { Pairs: > 0 } conditions)
+        {
+            property["agreesWhen"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["pairs"] = conditions.Pairs,
+                ["admitted"] = conditions.Admitted,
+                ["milliseconds"] = conditions.Milliseconds,
             };
         }
 

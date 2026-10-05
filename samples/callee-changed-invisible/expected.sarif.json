@@ -120,7 +120,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.CalleeChangedInvisible.Grading::Score(int) diverges: inputs(bv32 11) old(returned bv32 11 outs() trace()) new(returned bv32 10 outs() trace())"
+            "text": "Equiv.Samples.CalleeChangedInvisible.Grading::Score(int) diverges: inputs(bv32 11) old(returned bv32 11 outs() trace()) new(returned bv32 10 outs() trace()). Equivalent when a <= 10."
           },
           "locations": [
             {
@@ -145,6 +145,12 @@
           "rank": 60.002,
           "properties": {
             "model": "inputs(bv32 11) old(returned bv32 11 outs() trace()) new(returned bv32 10 outs() trace())",
+            "agreesWhen": {
+              "smt": "(not (bvsgt in.a (_ bv10 32)))",
+              "text": "a <= 10",
+              "proposedBy": "harvested-predicates",
+              "proofMethod": "bounded"
+            },
             "ladderTrace": [
               {
                 "rung": "bounded",
@@ -199,6 +205,11 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 1,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {

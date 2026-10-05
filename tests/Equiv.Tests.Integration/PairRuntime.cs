@@ -165,6 +165,34 @@ internal static class PairRuntime
 
         public (string Legacy, string Modern) Observe(PairInput input) => (Observe(legacy, input), Observe(modern, input));
 
+        /// <summary>
+        /// <paramref name="text"/>, an <c>agreesWhen.text</c> (ticket P1-022), compiled as a C# predicate over the pair's
+        /// parameters and loaded beside both sides. A text that does not compile is not a source spelling, and fails.
+        /// </summary>
+        public MethodInfo Condition(string text)
+        {
+            CSharpCompilation compilation = Compile(
+                $"public static class Condition {{ public static bool Holds(int a, int b, long c, long d, bool e, string s, int[] u) => {text}; }}", "Condition");
+            using MemoryStream image = new();
+            EmitResult emitted = compilation.Emit(image, cancellationToken: TestContext.Current.CancellationToken);
+            Assert.True(emitted.Success, $"agreesWhen.text '{text}' is not C#: {string.Join('\n', emitted.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error))}");
+            image.Position = 0;
+            return context.LoadFromStream(image).GetType("Condition")!.GetMethod("Holds")!;
+        }
+
+        /// <summary>Whether <paramref name="condition"/> holds on <paramref name="input"/>; one that throws there does not.</summary>
+        public static bool Holds(MethodInfo condition, PairInput input)
+        {
+            try
+            {
+                return (bool)condition.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s", input.U is { } elements ? elements.ToArray() : null])!;
+            }
+            catch (TargetInvocationException)
+            {
+                return false;
+            }
+        }
+
         public void Dispose() => context.Unload();
 
         /// <summary>The observables of one run: the return value or exception type, then <c>F</c> and <c>u</c> afterwards.</summary>

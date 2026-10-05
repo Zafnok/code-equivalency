@@ -10,7 +10,7 @@ namespace Equiv.Tests.Integration;
 /// directory's own file URI is the prefix, so a Linux <c>/home/...</c> root and an escaped space both match), and a
 /// bare path becomes <c>legacy/Foo.cs</c>; and
 /// <c>invocations[].startTimeUtc</c>/<c>endTimeUtc</c> and the tool driver's <c>version</c> are removed, and the census's
-/// <c>failureRefinement.milliseconds</c> (ticket P1-013) becomes 0, since none of the four is deterministic across machines
+/// <c>failureRefinement.milliseconds</c> (ticket P1-013) and <c>agreesWhen.milliseconds</c> (ticket P1-022) become 0, since none of the five is deterministic across machines
 /// or SDK builds. Only string <em>values</em> are rewritten
 /// (never property names), so this cannot corrupt the JSON structure.
 /// </summary>
@@ -33,6 +33,11 @@ internal static class SarifNormalizer
             if (run.SelectToken("properties.loweringCensus.failureRefinement") is JObject refinement)
             {
                 refinement["milliseconds"] = 0;
+            }
+
+            if (run.SelectToken("properties.loweringCensus.agreesWhen") is JObject conditions)
+            {
+                conditions["milliseconds"] = 0;
             }
 
             foreach (JObject invocation in (run["invocations"] as JArray)?.OfType<JObject>() ?? [])

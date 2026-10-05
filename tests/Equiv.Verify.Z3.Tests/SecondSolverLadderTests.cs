@@ -304,7 +304,9 @@ public sealed class SecondSolverLadderTests
         new Z3Backend().Verify(old, @new, Starved with { Solver = new ScriptedSolver(static _ => new SmtUnsat()), Log = log });
         new Z3Backend().Verify(old, @new, Starved with { Solver = new ScriptedSolver(static _ => new SmtUnknown("gave up")), Log = log });
 
-        string[] checks = [.. log.Events.Where(static e => e.Contains("stage=check:", StringComparison.Ordinal)).Select(static e => e[..e.IndexOf(" took=", StringComparison.Ordinal)] + e[e.IndexOf(" result=", StringComparison.Ordinal)..])];
+        // Rung 1's queries only. After the ladder a Divergent is searched for an input condition (ADR 0048) and a timeout
+        // Unknown is asked ADR 0037's two questions (ticket P1-035); their queries are stages of those steps.
+        string[] checks = [.. log.Events.Where(static e => e.Contains("stage=check:divergence", StringComparison.Ordinal) || e.Contains("stage=check:opaque", StringComparison.Ordinal)).Select(static e => e[..e.IndexOf(" took=", StringComparison.Ordinal)] + e[e.IndexOf(" result=", StringComparison.Ordinal)..])];
         Assert.Equal(
             [
                 "detail stage=check:divergence result=unknown",

@@ -179,7 +179,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.EffectFreeBclCall.Lengths::Reset(string,System.Collections.Generic.List<int>) diverges: inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 2 outs() trace()) new(threw \"System.Exception\" outs() trace(\"System.Collections.Generic.List`1::Clear()<int>\"(sort \"System.Collections.Generic.List`1\" 0)))"
+            "text": "Equiv.Samples.EffectFreeBclCall.Lengths::Reset(string,System.Collections.Generic.List<int>) diverges: inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 2 outs() trace()) new(threw \"System.Exception\" outs() trace(\"System.Collections.Generic.List`1::Clear()<int>\"(sort \"System.Collections.Generic.List`1\" 0))). Equivalent when a == null."
           },
           "locations": [
             {
@@ -204,6 +204,12 @@
           "rank": 60.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 2 outs() trace()) new(threw \"System.Exception\" outs() trace(\"System.Collections.Generic.List`1::Clear()<int>\"(sort \"System.Collections.Generic.List`1\" 0)))",
+            "agreesWhen": {
+              "smt": "(select in.null.System.String in.a)",
+              "text": "a == null",
+              "proposedBy": "harvested-predicates",
+              "proofMethod": "bounded"
+            },
             "ladderTrace": [
               {
                 "rung": "bounded",
@@ -272,6 +278,11 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 1,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {

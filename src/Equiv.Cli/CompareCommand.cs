@@ -36,6 +36,9 @@ internal static class CompareCommand
     /// <summary>The descriptor id of the notification <see cref="UncoveredRuntimes"/> writes (ADR 0040; ticket P2-055).</summary>
     internal const string UncoveredRuntimeRange = "uncovered-runtime-range";
 
+    /// <summary>The descriptor id of the notification <see cref="ContradictedConditions"/> writes (ADR 0048; ticket P1-022).</summary>
+    internal const string ContradictedCondition = "contradicted-condition";
+
     /// <summary>How many times <see cref="DeleteTemporary"/> tries before it leaves the folder behind.</summary>
     internal const int DeleteAttempts = 5;
 
@@ -251,7 +254,7 @@ internal static class CompareCommand
             WithContracts(WithAssumptions(verified, lowered, matchResult), lowered, backend, Verification(config, options, runLog), error), lowered, analysis.Replay, execution, options.Testing, runLog);
         if (!options.LowerOnly)
         {
-            census = census with { UnknownByScope = ScopeCounts.Of(results), FailureRefinement = RefinementTime.Of(results) };
+            census = census with { UnknownByScope = ScopeCounts.Of(results), FailureRefinement = RefinementTime.Of(results), AgreesWhen = ConditionTime.Of(results) };
         }
 
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));
@@ -259,7 +262,7 @@ internal static class CompareCommand
         results.AddRange(matchResult.Ambiguous.Select(static identity => new VerificationResult(identity, new Unknown(UnknownReason.UnmatchedOverload, AmbiguousDetail(identity)))));
 
         (List<Notification> skippedProjectNotifications, List<ProcedureIdentity> skippedProjectProcedures) = SkippedProjects(matchResult, error);
-        List<Notification> notifications = [.. pairFailures, .. skippedProjectNotifications, .. UncoveredRuntimes(matchResult, error)];
+        List<Notification> notifications = [.. pairFailures, .. skippedProjectNotifications, .. UncoveredRuntimes(matchResult, error), .. ContradictedConditions(results, error)];
         List<ProcedureIdentity> unverified = [.. unverifiedPairs, .. skippedProjectProcedures];
         SarifLog log = SarifReportWriter.Write(
             results,
@@ -325,6 +328,25 @@ internal static class CompareCommand
             $"runtime-changes.json lists no runtime changes between {gaps.Min(static g => g.Older)} and {gaps.Max(static g => g.Newer)}, which {gaps.Count} matched pair(s) cross; a behaviour that changed in that range is not flagged");
         error.WriteLine($"warning: {text}");
         return [new Notification { Level = FailureLevel.Warning, Message = new Message { Text = text }, Descriptor = new ReportingDescriptorReference { Id = UncoveredRuntimeRange } }];
+    }
+
+    /// <summary>
+    /// ADR 0048 decision 7: one <c>warning</c> notification, on stderr as well as in the SARIF, per result whose own
+    /// counterexample satisfied the input condition the solver had proved for its pair (ticket P1-022). That is a bug in
+    /// the tool, so the result carries no <c>agreesWhen</c>; its verdict and the exit code are what they were. It carries
+    /// the descriptor <see cref="ContradictedCondition"/>.
+    /// </summary>
+    private static List<Notification> ContradictedConditions(List<VerificationResult> results, TextWriter error)
+    {
+        List<Notification> notifications = [];
+        foreach (VerificationResult result in results.Where(static r => ConditionSearch.Of(r.Verdict) is { Contradicted: true }))
+        {
+            string text = $"{result.Identity.Value}: the counterexample satisfies the input condition proved for the pair; agreesWhen is left out (a bug in equiv, please report it)";
+            error.WriteLine($"warning: {text}");
+            notifications.Add(new Notification { Level = FailureLevel.Warning, Message = new Message { Text = text }, Descriptor = new ReportingDescriptorReference { Id = ContradictedCondition } });
+        }
+
+        return notifications;
     }
 
     /// <summary>The <c>write</c> phase (ADR 0038): one item, the SARIF log.</summary>
