@@ -1,5 +1,5 @@
 # P1-038 Rung 1 compares the call traces by position, without sequences
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-034

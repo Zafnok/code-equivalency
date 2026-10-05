@@ -41,6 +41,8 @@ internal sealed class FragmentEncoder
     private readonly Dictionary<string, Expr> literals = new(StringComparer.Ordinal);
     private readonly Dictionary<IrBlockId, BoolExpr> reach = [];
     private readonly Dictionary<IrBlockId, BitVecExpr> countOut = [];
+    private readonly Dictionary<IrBlockId, (int Min, int Max)> countRange = [];
+    private readonly List<IrBlockId> ends = [];
     private readonly ImmutableArray<Expr> heapInputs;
     private readonly Dictionary<IrBlockId, Expr[]> heapOut = [];
     private readonly Dictionary<IrBlockId, List<(IrBlockId From, BoolExpr Taken)>> incoming = [];
@@ -86,11 +88,10 @@ internal sealed class FragmentEncoder
 
         Returned = Any(exits.Where(static e => e.Exit is IrReturn));
         Threw = Any(exits.Where(static e => e.Exit is IrThrow));
-        ExceptionType = exits
-            .Where(static e => e.Exit is IrThrow)
-            .Reverse()
-            .Aggregate((IntExpr)context.MkInt(0), (rest, e) => (IntExpr)context.MkITE(reach[e.Block], context.MkInt(Intern(exceptionTypes, ((IrThrow)e.Exit).ExceptionType)), rest));
+        ExceptionType = (IntExpr)Thrown(exceptionTypes, id => context.MkInt(id));
+        ExceptionBits = (BitVecExpr)Thrown(exceptionTypes, id => context.MkBV(id, 32));
         Trace = calls?.Trace(events);
+        Length = calls is null ? null : ends.SkipLast(1).Reverse().Aggregate(countOut[ends[^1]], (rest, end) => (BitVecExpr)context.MkITE(reach[end], countOut[end], rest));
         BoolExpr[] opaqueDisjuncts = [context.MkFalse(), .. opaques.Select(static o => o.Reach).Distinct()];
         Opaque = context.MkOr(opaqueDisjuncts);
         BoolExpr[] unreachableDisjuncts = [context.MkFalse(), .. unreachable];
@@ -124,8 +125,18 @@ internal sealed class FragmentEncoder
 
     public IntExpr ExceptionType { get; }
 
+    /// <summary><see cref="ExceptionType"/> as a bv32, with the same ids, for a query that holds no integer (ticket P1-038).</summary>
+    public BitVecExpr ExceptionBits { get; }
+
     /// <summary>The call trace, or null for a fragment encoded without call encoders.</summary>
     public SeqExpr? Trace { get; }
+
+    /// <summary>
+    /// How many calls the path taken makes, which is how long <see cref="Trace"/> is (ticket P1-038): the count out of the
+    /// block the path ends in, a return, a throw or an <see cref="IrUnreachable"/>. Null for a fragment encoded without
+    /// call encoders.
+    /// </summary>
+    public BitVecExpr? Length { get; }
 
     public BoolExpr Opaque { get; }
 
@@ -170,6 +181,13 @@ internal sealed class FragmentEncoder
     private Expr Threaded(IrBlockId block, int index, Expr rest) => index < 0 ? rest : context.MkITE(reach[block], heapOut[block][index], rest);
 
     private static ImmutableArray<IrOut> Outs(IrTerminator exit) => exit is IrReturn ret ? ret.Outs : ((IrThrow)exit).Outs;
+
+    /// <summary>The id of the exception type thrown as <paramref name="literal"/> writes it, 0 when no throw is reached.</summary>
+    private Expr Thrown(Dictionary<string, int> exceptionTypes, Func<int, Expr> literal) =>
+        exits
+            .Where(static e => e.Exit is IrThrow)
+            .Reverse()
+            .Aggregate(literal(0), (rest, e) => context.MkITE(reach[e.Block], literal(Intern(exceptionTypes, ((IrThrow)e.Exit).ExceptionType)), rest));
 
     private static int Intern(Dictionary<string, int> table, string name)
     {
@@ -223,6 +241,9 @@ internal sealed class FragmentEncoder
         reach.Add(block.Id, reached);
         List<(IrBlockId From, BoolExpr Taken)> predecessors = incoming.GetValueOrDefault(block.Id, []);
         Expr[] heap = [.. Heap.Select((m, i) => context.MkConst(Name($"heap.{i.ToString(CultureInfo.InvariantCulture)}.{Label(block.Id)}"), sorts.Sort(m.Type)))];
+
+        // The fewest and the most calls made before the block on any path of the control-flow graph, whatever the branches read.
+        (int Min, int Max) made = entry ? (0, 0) : (predecessors.Min(p => countRange[p.From].Min), predecessors.Max(p => countRange[p.From].Max));
         if (entry)
         {
             Assert(reached);
@@ -239,10 +260,11 @@ internal sealed class FragmentEncoder
         List<Expr> blockEvents = [];
         foreach (IrInstruction instruction in block.Instructions)
         {
-            EncodeInstruction(instruction, predecessors, reached, count, blockEvents, heap);
+            EncodeInstruction(instruction, predecessors, reached, new Count(count, made.Min, made.Max), blockEvents, heap);
         }
 
         events.Add((reached, blockEvents));
+        countRange.Add(block.Id, (made.Min + blockEvents.Count, made.Max + blockEvents.Count));
         if (count is not null)
         {
             countOut.Add(block.Id, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)));
@@ -267,7 +289,7 @@ internal sealed class FragmentEncoder
     /// the version of each heap map a call reads when it does not pair it; a call replaces every entry with its new version
     /// (ticket P1-005).
     /// </summary>
-    private void EncodeInstruction(IrInstruction instruction, List<(IrBlockId From, BoolExpr Taken)> predecessors, BoolExpr reached, BitVecExpr? count, List<Expr> blockEvents, Expr[] heap)
+    private void EncodeInstruction(IrInstruction instruction, List<(IrBlockId From, BoolExpr Taken)> predecessors, BoolExpr reached, Count count, List<Expr> blockEvents, Expr[] heap)
     {
         switch (instruction)
         {
@@ -287,7 +309,7 @@ internal sealed class FragmentEncoder
                 Define(phi.Target, Merge([.. predecessors.Where(p => phi.Incoming.Any(i => i.From == p.From))], p => Var(phi.Incoming.First(i => i.From == p.From).Value)));
                 break;
             case IrCall call:
-                blockEvents.Add(EncodeCall(call, Functions(call.Callee.Value).Calls, reached, context.MkBVAdd(count!, context.MkBV(blockEvents.Count, 32)), heap));
+                blockEvents.Add(EncodeCall(call, Functions(call.Callee.Value).Calls, reached, count.After(context, blockEvents.Count), heap));
                 break;
             case IrPure pure:
                 {
@@ -404,14 +426,19 @@ internal sealed class FragmentEncoder
     /// Defines a call's result, <c>threw</c> flag, ref outputs (ticket M4-003) and the <c>after</c> of each heap pair, replaces every entry of
     /// <paramref name="heap"/> with the call's new version of that map (ticket P1-005), and returns its trace event.
     /// </summary>
-    private Expr EncodeCall(IrCall call, TraceEncoder trace, BoolExpr reached, BitVecExpr position, Expr[] heap)
+    private Expr EncodeCall(IrCall call, TraceEncoder trace, BoolExpr reached, Count position, Expr[] heap)
     {
         IrHeapPair?[] pairs = [.. trace.Heap.Select(m => call.Heap.FirstOrDefault(h => string.Equals(h.Map, m.Name, StringComparison.Ordinal) && h.Before.Type == m.Type))];
         ImmutableArray<Expr> read = [.. pairs.Select((p, i) => p is null ? heap[i] : Var(p.Before))];
         ImmutableArray<(IrType Type, Expr Term)> args = [.. call.Args.Select(a => (a.Type, Var(a)))];
         (Expr? result, BoolExpr threw, Expr @event, ImmutableArray<Expr> written, ImmutableArray<Expr> refOuts) =
-            trace.Call(side, call, args, position, read);
-        callSites.Add(new CallSite(call, reached, position, args, read, result, threw, written));
+            trace.Call(side, call, args, position.Term!, read);
+        callSites.Add(new CallSite(call, reached, position.Term!, args, read, result, threw, written)
+        {
+            Event = trace.Read(side, call.Callee, args, read),
+            MinPosition = position.Min,
+            MaxPosition = position.Max,
+        });
         if (call.Target is not null)
         {
             Define(call.Target, result!);
@@ -525,9 +552,11 @@ internal sealed class FragmentEncoder
 
             case IrUnreachable:
                 unreachable.Add(reached);
+                ends.Add(block.Id);
                 break;
             default:
                 exits.Add((block.Id, block.Terminator));
+                ends.Add(block.Id);
                 break;
         }
 
@@ -557,5 +586,25 @@ internal sealed class FragmentEncoder
         ImmutableArray<Expr> HeapIn,
         Expr? Result,
         BoolExpr Threw,
-        ImmutableArray<Expr> HeapOut);
+        ImmutableArray<Expr> HeapOut)
+    {
+        /// <summary>What the call's trace event holds beside its callee (<see cref="TraceEncoder.Read"/>; ticket P1-038).</summary>
+        public required ImmutableArray<(IrType Type, Expr Term)> Event { get; init; }
+
+        /// <summary>The least value <see cref="Position"/> has on any path of the control-flow graph to the call.</summary>
+        public required int MinPosition { get; init; }
+
+        /// <summary>The greatest value <see cref="Position"/> has on any path of the control-flow graph to the call.</summary>
+        public required int MaxPosition { get; init; }
+    }
+
+    /// <summary>
+    /// The call position at the start of a block: its <c>cnt</c> term, null without call encoders, and the least and
+    /// greatest value it has on any path of the control-flow graph to the block.
+    /// </summary>
+    private readonly record struct Count(BitVecExpr? Term, int Min, int Max)
+    {
+        /// <summary>The position of the call that <paramref name="calls"/> calls of the block come before.</summary>
+        public Count After(Context context, int calls) => new(context.MkBVAdd(Term, context.MkBV(calls, 32)), Min + calls, Max + calls);
+    }
 }

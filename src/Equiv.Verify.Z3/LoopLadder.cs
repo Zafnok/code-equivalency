@@ -265,11 +265,11 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             _ => UnknownReason.Timeout,
         };
 
-    private T Session<T>(IrProcedure old, IrProcedure @new, Func<Context, ProductEncoding, T> body) =>
+    private T Session<T>(IrProcedure old, IrProcedure @new, Func<Context, ProductEncoding, T> body, ProductEncoder.TraceComparison traces = ProductEncoder.TraceComparison.Sequence) =>
         Stages.WithContext(
             options,
             createContext,
-            context => body(context, Stages.Timed(options, Stages.Encode, () => ProductEncoder.Encode(context, old, @new, options.CallIdentityMap, Contracts, Relation))));
+            context => body(context, Stages.Timed(options, Stages.Encode, () => ProductEncoder.Encode(context, old, @new, options.CallIdentityMap, Contracts, Relation, traces))));
 
     /// <summary>
     /// Rung 1. Not applicable to irreducible control flow, or to a self-recursive side that cannot be inlined
@@ -277,7 +277,8 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// Three queries on the unrolled pair, each on inputs that reach no bound: a divergence reaching no opaque, then
     /// any opaque, then (for a looping pair) whether any input reaches the bound at all. Each is asked of Z3 and, when Z3
     /// gives up and a second solver is configured, of that solver (<see cref="SecondSolver"/>; ADR 0050); the step names
-    /// the solver when it answered one.
+    /// the solver when it answered one. The product compares the call traces by position (<see cref="PositionalTrace"/>;
+    /// ticket P1-038); every other rung's compares them as sequences.
     /// </summary>
     private Rung Bounded(IrProcedure old, IrProcedure @new, bool looping, bool reducible)
     {
@@ -293,11 +294,15 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         }
 
         (IrProcedure oldUnrolled, IrProcedure newUnrolled) = Stages.Timed(options, Stages.Unroll, () => (IrUnroller.Unroll(old, k), IrUnroller.Unroll(@new, k)));
-        return Session(oldUnrolled, newUnrolled, (context, encoding) =>
-        {
-            SecondSolver solvers = new(context, encoding, options, InterruptAfterMs);
-            return solvers.Tagged(Bounded(context, encoding, solvers, (oldUnrolled, newUnrolled), looping));
-        });
+        return Session(
+            oldUnrolled,
+            newUnrolled,
+            (context, encoding) =>
+            {
+                SecondSolver solvers = new(context, encoding, options, InterruptAfterMs);
+                return solvers.Tagged(Bounded(context, encoding, solvers, (oldUnrolled, newUnrolled), looping));
+            },
+            ProductEncoder.TraceComparison.Positional);
     }
 
     /// <summary>Rung 1's queries on the encoding of the <paramref name="unrolled"/> pair, in order.</summary>

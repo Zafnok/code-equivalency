@@ -84,3 +84,12 @@ silent false Equivalent.
   keeps it `In`; a pair where one side creates and the other only reads compares the creating
   side's final length map against the shared input, as for any one-sided `Ref`. `null.*` is
   unchanged: a new array's nullness is its shadow (false), not a write to `null.<Sort>`.
+- 2026-10-05 (P1-038). The call trace is the observable it was: the calls a side makes, in order,
+  each with its canonical callee, its arguments and the heap it reads (none for a closed callee, ADR
+  0041). What changed is how rung 1 writes "the two traces are equal". It compares them by position,
+  call site against call site, where every other rung and query compares two sequences
+  (VERIFICATION-MODEL.md section 5, which also says why the two are one relation on an acyclic
+  product). No verdict's meaning changes, and the position that keys a call's functions ("Calls are stateful")
+  is the position the comparison uses. Z3 gave up on 142 rung 1 queries of `gitextensions-8522` in
+  the sequence form and answered 72 of them in the positional one
+  (`docs/runs/2026-10-04-trace-encoding.md`).
