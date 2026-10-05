@@ -166,7 +166,7 @@ public sealed class IrLowererTests
         static IrProcedure Bump(string local) =>
             Source("public sealed class C { private int _x; public void Bump() { " + local + "; _x = L(_x); } }", "Bump");
 
-        Assert.All(new[] { Bump(local + "1"), Bump(local + "2") }, static side =>
+        Assert.All<IrProcedure>([Bump(local + "1"), Bump(local + "2")], static side =>
         {
             Assert.DoesNotContain(Calls(side), static c => c.Callee.Value.Contains("::L(", StringComparison.Ordinal));
             IrOpaque call = Assert.Single(Opaques(side));
