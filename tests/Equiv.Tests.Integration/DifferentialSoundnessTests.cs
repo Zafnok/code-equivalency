@@ -165,14 +165,14 @@ public sealed class DifferentialSoundnessTests
     public void GeneratedPairsAreSoundUnderBothLowerings() => Assert.Null(Failed(BothLowerings, Rules, Seed));
 
     /// <summary>
-    /// Ticket P2-079: rules 1 to 3, under the IL lowering, on pairs that differ only inside a lambda or a local function.
-    /// The IL lowering names such a closure by an ordinal that is the same on both sides; while it shared the fragment
-    /// that held the name, these pairs were Equivalent and rule 1 failed here. The IOperation lowering fails rule 1 on
-    /// the pairs that call a local function by name, which is ticket P2-125; that ticket adds it here.
+    /// Rules 1 to 3, under both lowerings, on pairs that differ only inside a lambda or a local function. Ticket P2-079:
+    /// the IL lowering names such a closure by an ordinal that is the same on both sides; while it shared the fragment
+    /// that held the name, these pairs were Equivalent and rule 1 failed here. Ticket P2-127: the IOperation lowering
+    /// called a local function by a name that is the same on both sides, and failed rule 1 the same way.
     /// </summary>
     [Fact]
-    public void PairsThatDifferOnlyInsideAClosureAreSoundUnderTheIlLowering() =>
-        Assert.Null(Record.Exception(() => Sample(PairGen.ClosurePair, [PairRuntime.Lowering.Il], Rules, Seed, Pairs / ClosureShare)));
+    public void PairsThatDifferOnlyInsideAClosureAreSoundUnderBothLowerings() =>
+        Assert.Null(Record.Exception(() => Sample(PairGen.ClosurePair, BothLowerings, Rules, Seed, Pairs / ClosureShare)));
 
     /// <summary>A deliberately broken IL mapping fails rule 1 within the pull-request budget, and the failure prints its seed.</summary>
     [Fact]
