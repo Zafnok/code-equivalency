@@ -1,5 +1,5 @@
 # P2-127 Soundness: a call of a local function is an ordinary call of a callee nothing verifies, so two different local functions prove Equivalent
-Status: in-progress
+Status: done (PR #402)
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-079
@@ -86,3 +86,23 @@ The IL lowering, which P2-079 fixed. Inlining local functions.
   most of the way to the inlining the Size guard excludes.
 - The cost: a member that calls a local function by name is Unknown (abstraction, `opaque LocalFunction`) even when
   the local function is the same on both sides, unless the pair is congruent. Proving those is the inlining ticket.
+- Criterion 5: one `full` run of `gitextensions-8522` before (`2627bf9f`, 11597 s) and after (the same commit with this
+  fix, 10661 s), both exit 1, the two run at the same time on one box. 13742 results each; 35 changed rule:
+  | before | after | results | names `LocalFunction` |
+  |---|---|---|---|
+  | EQ001 (bounded 21, lockstep-induction 5) | EQ003 `opaque` | 26 | yes |
+  | EQ006 | EQ003 `opaque` | 3 | yes |
+  | EQ001 (bounded) | EQ003 `timeout` | 4 | no |
+  | EQ003 `abstraction` | EQ006 | 2 | no |
+
+  By rule: EQ001 12757 -> 12727, EQ003 575 -> 606, EQ006 207 -> 206; EQ002 21, EQ004 15 and EQ005 167 unchanged. Another
+  13 results were EQ003 before and are EQ003 naming `LocalFunction` now. The 29 that name it are this ticket's. Of the
+  4 timeouts, `GitUI.BranchTreePanel.RepoObjectsTree::.ctor()` and `GitUI.CommitInfo.CommitInfo::ReloadCommitInfo()`
+  call a local function, so their query changed; the other 2, and the 2 `abstraction` -> EQ006, do not name one and
+  were not attributed (two runs sharing the box's solver time).
+- Not checked: in how many of the 26 lost Equivalents the two sides' local functions really differ. Each was a proof
+  that did not read the local function's body, whichever way that count falls.
+- The frontend's `FragmentLoweringTests.ANestedFromClauseLowersWithoutThrowing` asserted every opaque of a body that
+  calls a local function has a fingerprint; the call's opaque is now the one that has none.
+- CI on this PR also failed once on `SecondSolverPrintTests.Z3AnswersTheRewrittenTextAsItAnswersTheOriginal`
+  (CsCheck seed `b1l7BGrSxcc1`), a Z3 test this change does not reach; it passed on the re-run. No ticket yet.
