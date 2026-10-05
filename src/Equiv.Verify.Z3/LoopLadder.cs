@@ -275,12 +275,13 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// Rung 1. Not applicable to irreducible control flow, or to a self-recursive side that cannot be inlined
     /// (<see cref="IrUnroller.InliningObstacle"/>).
     /// Three queries on the unrolled pair, each on inputs that reach no bound: a divergence reaching no opaque, then
-    /// any opaque, then (for a looping pair) whether any input reaches the bound at all.
+    /// any opaque, then (for a looping pair) whether any input reaches the bound at all. Each is asked of Z3 and, when Z3
+    /// gives up and a second solver is configured, of that solver (<see cref="SecondSolver"/>; ADR 0050); the step names
+    /// the solver when it answered one.
     /// </summary>
     private Rung Bounded(IrProcedure old, IrProcedure @new, bool looping, bool reducible)
     {
         int k = options.Bound;
-        string bound = k.ToString(CultureInfo.InvariantCulture);
         if (!reducible)
         {
             return NotApplicable(ProofMethod.Bounded, "a side's control flow is irreducible", UnknownReason.UnalignedLoop);
@@ -294,36 +295,42 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         (IrProcedure oldUnrolled, IrProcedure newUnrolled) = Stages.Timed(options, Stages.Unroll, () => (IrUnroller.Unroll(old, k), IrUnroller.Unroll(@new, k)));
         return Session(oldUnrolled, newUnrolled, (context, encoding) =>
         {
-            BoolExpr[] reachable = Reachable(context, encoding);
-            using Solver divergence = Z3Backend.Query(context, encoding, options, [encoding.Differs, context.MkNot(encoding.OpaqueOld), context.MkNot(encoding.OpaqueNew), .. reachable]);
-            Status diverges = Z3Backend.Check(context, divergence, options, "divergence", InterruptAfterMs);
-            if (diverges != Status.UNSATISFIABLE)
-            {
-                return diverges == Status.SATISFIABLE
-                    ? Found(Stages.Timed(options, Stages.Replay, () => ModelDecoder.Replay(context, divergence.Model, encoding, oldUnrolled, newUnrolled)), bound)
-                    : TimedOut(Z3Backend.Timeout(divergence, options));
-            }
-
-            using Solver opaque = Z3Backend.Query(context, encoding, options, [context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew), .. reachable]);
-            Status opaqueReached = Z3Backend.Check(context, opaque, options, "opaque", InterruptAfterMs);
-            if (opaqueReached != Status.UNSATISFIABLE)
-            {
-                if (opaqueReached == Status.UNKNOWN)
-                {
-                    return TimedOut(Z3Backend.Timeout(opaque, options));
-                }
-
-                ImmutableArray<UnknownCause> causes = Z3Backend.ReachableOpaques(context, encoding, options, opaque.Model, reachable, InterruptAfterMs);
-                string reasons = Z3Backend.OpaqueReasons(causes);
-                return new Rung(
-                    new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"an input reaches an opaque node: {reasons}"),
-                    new Unknown(UnknownReason.Opaque, reasons) { Causes = causes, Scope = OpaqueScope(encoding, looping) });
-            }
-
-            return looping
-                ? WithinBound(context, encoding, k, bound)
-                : Proved(ProofMethod.Bounded, "no loop or self-call; every input checked", new Equivalent(ProofMethod.Bounded));
+            SecondSolver solvers = new(context, encoding, options, InterruptAfterMs);
+            return solvers.Tagged(Bounded(context, encoding, solvers, (oldUnrolled, newUnrolled), looping));
         });
+    }
+
+    /// <summary>Rung 1's queries on the encoding of the <paramref name="unrolled"/> pair, in order.</summary>
+    private Rung Bounded(Context context, ProductEncoding encoding, SecondSolver solvers, (IrProcedure Old, IrProcedure New) unrolled, bool looping)
+    {
+        string bound = options.Bound.ToString(CultureInfo.InvariantCulture);
+        BoolExpr[] reachable = Reachable(context, encoding);
+        using SecondSolver.Asked divergence = solvers.Check("divergence", [encoding.Differs, context.MkNot(encoding.OpaqueOld), context.MkNot(encoding.OpaqueNew), .. reachable]);
+        if (divergence.Status != Status.UNSATISFIABLE)
+        {
+            return divergence.Status == Status.SATISFIABLE
+                ? Found(Stages.Timed(options, Stages.Replay, () => ModelDecoder.Replay(context, divergence.Model, encoding, unrolled.Old, unrolled.New)), bound)
+                : TimedOut(divergence.Timeout(options));
+        }
+
+        using SecondSolver.Asked opaque = solvers.Check("opaque", [context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew), .. reachable]);
+        if (opaque.Status != Status.UNSATISFIABLE)
+        {
+            if (opaque.Status == Status.UNKNOWN)
+            {
+                return TimedOut(opaque.Timeout(options));
+            }
+
+            ImmutableArray<UnknownCause> causes = Z3Backend.ReachableOpaques(context, encoding, options, opaque.Model, reachable, InterruptAfterMs);
+            string reasons = Z3Backend.OpaqueReasons(causes);
+            return new Rung(
+                new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"an input reaches an opaque node: {reasons}"),
+                new Unknown(UnknownReason.Opaque, reasons) { Causes = causes, Scope = OpaqueScope(encoding, looping) });
+        }
+
+        return looping
+            ? WithinBound(solvers, context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable), bound)
+            : Proved(ProofMethod.Bounded, "no loop or self-call; every input checked", new Equivalent(ProofMethod.Bounded));
     }
 
     /// <summary>
@@ -336,14 +343,14 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         looping || encoding.Opaques.Any(static o => o.Node.WholeBody) ? UnknownScope.Method : UnknownScope.Line;
 
     /// <summary>Rung 1's last query: the unrolled pair agrees, so it is a proof exactly when no input reaches the bound.</summary>
-    private Rung WithinBound(Context context, ProductEncoding encoding, int k, string bound)
+    private Rung WithinBound(SecondSolver solvers, BoolExpr pastTheBound, string bound)
     {
-        using Solver cut = Z3Backend.Query(context, encoding, options, context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable));
-        return Z3Backend.Check(context, cut, options, "bound", InterruptAfterMs) switch
+        using SecondSolver.Asked cut = solvers.Check("bound", pastTheBound);
+        return cut.Status switch
         {
-            Status.UNSATISFIABLE => Proved(ProofMethod.Bounded, $"no input goes past the bound {bound}", new Equivalent(ProofMethod.Bounded, k)),
+            Status.UNSATISFIABLE => Proved(ProofMethod.Bounded, $"no input goes past the bound {bound}", new Equivalent(ProofMethod.Bounded, options.Bound)),
             Status.SATISFIABLE => new Rung(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"no divergence within the bound {bound}, and some input goes past it")),
-            _ => TimedOut(Z3Backend.Timeout(cut, options)),
+            _ => TimedOut(cut.Timeout(options)),
         };
     }
 

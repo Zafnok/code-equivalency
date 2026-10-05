@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    P1-033 criterion 7: a throwaway measurement, not a product. It is not in Equiv.slnx, so no CI gate builds it.
+    It uses only the public surface of the frontend, the backend and Equiv.Verify.Cvc5, and adds no package, so it
+    has no lock file. cvc5 is run as a process, never referenced. Style analyzers are off: this is measurement
+    code, not product code; compiler warnings stay errors.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Cvc5Budget</RootNamespace>
+    <AssemblyName>cvc5-budget</AssemblyName>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Equiv.Frontend.CSharp\Equiv.Frontend.CSharp.csproj" />
+    <ProjectReference Include="..\..\..\src\Equiv.Verify.Cvc5\Equiv.Verify.Cvc5.csproj" />
+  </ItemGroup>
+
+  <!--
+    Microsoft.Z3 restores only from the local .z3-feed that tools/z3-feed/fetch.ps1 fills (ADR 0030), or from the global
+    packages folder once some restore has put it there. GitHub's automatic dependency submission restores every project
+    outside Equiv.slnx on a clean runner without running fetch.ps1, so with neither present the reference is left out and
+    that restore succeeds. Building the tool needs one of them, as every Equiv.Verify.Z3 build does.
+  -->
+  <PropertyGroup>
+    <SpikeGlobalPackages>$(NUGET_PACKAGES)</SpikeGlobalPackages>
+    <SpikeGlobalPackages Condition="'$(SpikeGlobalPackages)' == '' and '$(USERPROFILE)' != ''">$(USERPROFILE)\.nuget\packages</SpikeGlobalPackages>
+    <SpikeGlobalPackages Condition="'$(SpikeGlobalPackages)' == ''">$(HOME)/.nuget/packages</SpikeGlobalPackages>
+  </PropertyGroup>
+
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\..\.z3-feed') or Exists('$(SpikeGlobalPackages)/microsoft.z3')">
+    <ProjectReference Include="..\..\..\src\Equiv.Verify.Z3\Equiv.Verify.Z3.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -29,6 +29,7 @@ jobs:
           - { src: Equiv.Frontend.CSharp, test: Equiv.Frontend.CSharp.Tests }
           - { src: Equiv.Verify.Z3, test: Equiv.Verify.Z3.Tests }
           - { src: Equiv.Execute, test: Equiv.Execute.Tests }
+          - { src: Equiv.Verify.Cvc5, test: Equiv.Verify.Cvc5.Tests }
     env:
       PASS_KEY_PREFIX: ci-pass-stryker-${{ matrix.project.src }}
     steps:

@@ -243,6 +243,39 @@ public sealed class EquivConfigLoaderTests
         Assert.Equal(TargetRuntime.Parse("net10.0"), invalid.Config.ModernRuntime);
     }
 
+    /// <summary>Ticket P1-033 (ADR 0050 decision 6): <c>solvers.cvc5.path</c> names the executable; absent, no solver is configured.</summary>
+    [Fact]
+    public void Cvc5Path_IsRead()
+    {
+        EquivConfigResult set = EquivConfigLoader.Load("""{ "solvers": { "cvc5": { "path": "tools/cvc5/cvc5.exe" } } }""");
+        Assert.True(set.IsValid);
+        Assert.Equal("tools/cvc5/cvc5.exe", set.Config.Cvc5Path);
+        Assert.Equal(set.Config, EquivConfig.Default with { Cvc5Path = "tools/cvc5/cvc5.exe" });
+        Assert.Equal(set.Config.GetHashCode(), (EquivConfig.Default with { Cvc5Path = "tools/cvc5/cvc5.exe" }).GetHashCode());
+        Assert.NotEqual(set.Config.GetHashCode(), EquivConfig.Default.GetHashCode());
+
+        Assert.Null(EquivConfigLoader.Load("{}").Config.Cvc5Path);
+        Assert.Null(EquivConfig.Default.Cvc5Path);
+        EquivConfigResult empty = EquivConfigLoader.Load("""{ "solvers": { "cvc5": {} } }""");
+        Assert.True(empty.IsValid);
+        Assert.Null(empty.Config.Cvc5Path);
+        Assert.True(EquivConfigLoader.Load("""{ "solvers": {} }""").IsValid);
+    }
+
+    /// <summary>Anything under <c>solvers</c> but <c>cvc5.path</c> as a non-empty string is CFG011, and what is valid beside it is kept.</summary>
+    [Fact]
+    public void Solvers_AreValidated()
+    {
+        EquivConfigResult invalid = EquivConfigLoader.Load("""{ "solvers": { "bitwuzla": { "path": "b" }, "cvc5": { "rlimit": 5, "path": "cvc5" } } }""");
+
+        Assert.Equal(
+            [new EquivConfigDiagnostic("CFG011", "/solvers/bitwuzla", "unknown solver \"bitwuzla\" (expected \"cvc5\")"),
+             new EquivConfigDiagnostic("CFG011", "/solvers/cvc5/rlimit", "unknown property \"rlimit\" (expected \"path\")")],
+            invalid.Diagnostics);
+        Assert.Equal("cvc5", invalid.Config.Cvc5Path);
+        Assert.Equal("CFG011", EquivConfigDiagnosticIds.InvalidSolvers);
+    }
+
     /// <summary>Every diagnostic's exact id, JSON-pointer path and message, so a report names the offending entry.</summary>
     [Theory]
     [InlineData("""[]""", "CFG001", "/", "equiv.config.json must contain a JSON object")]
@@ -258,6 +291,10 @@ public sealed class EquivConfigLoaderTests
     [InlineData("""{ "bound": 1.5 }""", "CFG002", "/bound", "\"bound\" must be a positive integer")]
     [InlineData("""{ "runtimes": "net48" }""", "CFG009", "/runtimes", "\"runtimes\" must be an object with \"legacy\" and/or \"modern\"")]
     [InlineData("""{ "runtimes": { "modern": 8 } }""", "CFG009", "/runtimes/modern", "value must be a .NET Framework or .NET target framework, such as \"net48\" or \"net8.0\"")]
+    [InlineData("""{ "solvers": "cvc5" }""", "CFG011", "/solvers", "\"solvers\" must be an object with \"cvc5\"")]
+    [InlineData("""{ "solvers": { "cvc5": "cvc5.exe" } }""", "CFG011", "/solvers/cvc5", "\"cvc5\" must be an object with \"path\"")]
+    [InlineData("""{ "solvers": { "cvc5": { "path": 5 } } }""", "CFG011", "/solvers/cvc5/path", "value must be a non-empty string")]
+    [InlineData("""{ "solvers": { "cvc5": { "path": " " } } }""", "CFG011", "/solvers/cvc5/path", "value must be a non-empty string")]
     [InlineData("""{ "timeoutMs": 0 }""", "CFG003", "/timeoutMs", "\"timeoutMs\" must be a positive integer")]
     public void EachDiagnosticNamesItsPathAndProblem(string json, string id, string path, string message) =>
         Assert.Equal(new EquivConfigDiagnostic(id, path, message), Assert.Single(EquivConfigLoader.Load(json).Diagnostics));

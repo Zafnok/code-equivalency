@@ -85,3 +85,7 @@ secrets.json
 
 # Local NuGet feed for Microsoft.Z3, filled by tools/z3-feed/fetch.ps1 (ADR 0030).
 .z3-feed/
+
+# The cvc5 release executable, fetched by tools/cvc5/fetch.ps1 for development and CI (ADR 0050).
+# cvc5 links LGPL libraries and is never committed or shipped (ADR 0017).
+.cvc5/

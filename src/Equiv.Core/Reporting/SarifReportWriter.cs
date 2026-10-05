@@ -273,7 +273,7 @@ public static class SarifReportWriter
                 break;
             case Equivalent equivalent:
                 // Ticket P1-010 (ADR 0036 decision 2): a proof that used callee contracts says so in its method and lists them.
-                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix));
+                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix) + SolverSuffix(verdict));
                 if (!equivalent.ContractsUsed.IsEmpty)
                 {
                     sarifResult.SetProperty("contractsUsed", equivalent.ContractsUsed.Select(ContractProperty).ToList());
@@ -300,20 +300,43 @@ public static class SarifReportWriter
                 break;
         }
 
+        // ADR 0050 decision 4 (ticket P1-033): a Divergent or an Unknown a second solver answered a query of names the rung
+        // and the solver, as an Equivalent does. One the real runtimes showed stays observed.
+        if (verdict is Unknown or Divergent { Observed: null } && verdict.Ladder.FirstOrDefault(static s => s.Solver is not null) is { } answered)
+        {
+            sarifResult.SetProperty("proofMethod", Name(answered.Rung) + SolverSuffix(verdict));
+        }
+
         if (!verdict.Ladder.IsEmpty)
         {
-            sarifResult.SetProperty("ladderTrace", verdict.Ladder.Select(static s => new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["rung"] = Name(s.Rung),
-                ["outcome"] = Name(s.Outcome),
-                ["detail"] = s.Detail,
-            }).ToList());
+            sarifResult.SetProperty("ladderTrace", verdict.Ladder.Select(LadderProperty).ToList());
         }
 
         if (verdict.Ladder.FirstOrDefault(static s => s.Mode is not null)?.Mode is { } mode)
         {
             sarifResult.SetProperty("chcMode", Name(mode));
         }
+    }
+
+    /// <summary><c>+name</c> for each second solver that answered a query of one of <paramref name="verdict"/>'s rungs, each once.</summary>
+    private static string SolverSuffix(Verdict verdict) =>
+        string.Concat(verdict.Ladder.Select(static s => s.Solver?.Name).OfType<string>().Distinct(StringComparer.Ordinal).Select(static n => "+" + n));
+
+    /// <summary>One <c>ladderTrace</c> entry; its <c>solver</c> is the second solver that answered a query of the rung, with its version.</summary>
+    private static Dictionary<string, string> LadderProperty(LadderStep step)
+    {
+        Dictionary<string, string> entry = new(StringComparer.Ordinal)
+        {
+            ["rung"] = Name(step.Rung),
+            ["outcome"] = Name(step.Outcome),
+            ["detail"] = step.Detail,
+        };
+        if (step.Solver is { } solver)
+        {
+            entry["solver"] = $"{solver.Name} {solver.Version}";
+        }
+
+        return entry;
     }
 
     /// <summary>

@@ -14,7 +14,7 @@ namespace Equiv.Core.Configuration;
 public static class EquivConfigLoader
 {
     private static readonly FrozenSet<string> KnownProperties =
-        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "resourceLimit", "suppressRuntimeChanges", "suppressApiEquivalences", "runtimes" }.ToFrozenSet(StringComparer.Ordinal);
+        new[] { "namespaceRenames", "typeRenames", "callIdentityRenames", "bound", "timeoutMs", "resourceLimit", "suppressRuntimeChanges", "suppressApiEquivalences", "runtimes", "solvers" }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Parses <paramref name="json"/> and validates it against the schema. Throws <see cref="EquivConfigParseException"/>
@@ -55,6 +55,7 @@ public static class EquivConfigLoader
             LegacyRuntime = legacyRuntime,
             ModernRuntime = modernRuntime,
             ResourceLimit = resourceLimit,
+            Cvc5Path = ReadCvc5Path(root, diagnostics),
         };
         return new EquivConfigResult(config, diagnostics.ToImmutable());
     }
@@ -197,6 +198,71 @@ public static class EquivConfigLoader
         }
 
         return (legacy, modern);
+    }
+
+    /// <summary>
+    /// <c>"solvers": { "cvc5": { "path": "&lt;executable&gt;" } }</c> (ADR 0050 decision 6; ticket P1-033). Anything else
+    /// under <c>solvers</c> is a diagnostic and configures no solver.
+    /// </summary>
+    private static string? ReadCvc5Path(JsonElement root, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    {
+        const string Property = "solvers";
+        const string Solver = "cvc5";
+        const string Path = "path";
+        if (!root.TryGetProperty(Property, out JsonElement solvers))
+        {
+            return null;
+        }
+
+        if (solvers.ValueKind != JsonValueKind.Object)
+        {
+            diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSolvers, Property, $"\"{Property}\" must be an object with \"{Solver}\""));
+            return null;
+        }
+
+        string? path = null;
+        foreach (JsonProperty solver in solvers.EnumerateObject())
+        {
+            string at = $"{Property}/{solver.Name}";
+            if (!string.Equals(solver.Name, Solver, StringComparison.Ordinal))
+            {
+                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSolvers, at, $"unknown solver \"{solver.Name}\" (expected \"{Solver}\")"));
+            }
+            else if (solver.Value.ValueKind != JsonValueKind.Object)
+            {
+                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSolvers, at, $"\"{Solver}\" must be an object with \"{Path}\""));
+            }
+            else
+            {
+                path = ReadSolverPath(solver.Value, at, diagnostics);
+            }
+        }
+
+        return path;
+    }
+
+    private static string? ReadSolverPath(JsonElement solver, string at, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
+    {
+        const string Path = "path";
+        string? path = null;
+        foreach (JsonProperty entry in solver.EnumerateObject())
+        {
+            string? value = entry.Value.ValueKind == JsonValueKind.String ? entry.Value.GetString() : null;
+            if (!string.Equals(entry.Name, Path, StringComparison.Ordinal))
+            {
+                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSolvers, $"{at}/{entry.Name}", $"unknown property \"{entry.Name}\" (expected \"{Path}\")"));
+            }
+            else if (string.IsNullOrWhiteSpace(value))
+            {
+                diagnostics.Add(Diagnostic(EquivConfigDiagnosticIds.InvalidSolvers, $"{at}/{Path}", "value must be a non-empty string"));
+            }
+            else
+            {
+                path = value;
+            }
+        }
+
+        return path;
     }
 
     private static int ReadPositiveInt(JsonElement root, string property, int defaultValue, string diagnosticId, ImmutableArray<EquivConfigDiagnostic>.Builder diagnostics)
