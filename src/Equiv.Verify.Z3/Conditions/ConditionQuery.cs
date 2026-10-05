@@ -74,14 +74,14 @@ internal sealed class ConditionQuery(Func<Context> createContext, VerificationOp
     {
         BoolExpr holds = (BoolExpr)candidate.ToExpr(context, encoding);
         BoolExpr[] reachable = [context.MkNot(encoding.Old.Unreachable), context.MkNot(encoding.New.Unreachable)];
-        using Solver proof = Z3Backend.Query(context, encoding, options, [holds, context.MkOr(encoding.Differs, encoding.OpaqueOld, encoding.OpaqueNew), .. reachable]);
-        if (Z3Backend.Check(context, proof, options, "condition-proof") != Status.UNSATISFIABLE)
+        using SolverQuery proof = Z3Backend.Query(context, encoding, options, [holds, context.MkOr(encoding.Differs, encoding.OpaqueOld, encoding.OpaqueNew), .. reachable]);
+        if (proof.Check(options, "condition-proof") != Status.UNSATISFIABLE)
         {
             return false;
         }
 
-        using Solver met = Z3Backend.Query(context, encoding, options, [holds, .. reachable]);
-        return Z3Backend.Check(context, met, options, "condition-met") == Status.SATISFIABLE;
+        using SolverQuery met = Z3Backend.Query(context, encoding, options, [holds, .. reachable]);
+        return met.Check(options, "condition-met") == Status.SATISFIABLE;
     }
 
     /// <summary>
@@ -122,9 +122,7 @@ internal sealed class ConditionQuery(Func<Context> createContext, VerificationOp
     /// <summary>Whether <paramref name="constraints"/>, which are over the inputs alone, are unsatisfiable together.</summary>
     private bool Refuted(Context context, string query, BoolExpr[] constraints)
     {
-        using Solver solver = context.MkSolver();
-        Z3Backend.Limit(solver, options);
-        solver.Add(constraints);
-        return Z3Backend.Check(context, solver, options, query) == Status.UNSATISFIABLE;
+        using SolverQuery solver = SolverQuery.Plain(context, options, constraints);
+        return solver.Check(options, query) == Status.UNSATISFIABLE;
     }
 }
