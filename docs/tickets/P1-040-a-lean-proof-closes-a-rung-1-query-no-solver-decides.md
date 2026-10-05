@@ -1,4 +1,4 @@
-# P1-039 A Lean proof a model writes closes a rung 1 query no solver decides
+# P1-040 A Lean proof a model writes closes a rung 1 query no solver decides
 Status: todo
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.

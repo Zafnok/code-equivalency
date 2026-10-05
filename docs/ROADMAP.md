@@ -911,8 +911,8 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   model. Needs P1-025; better after P1-034. Done 2026-10-04: 121 of 142 elaborate, the scaffold alone
   closes none, and a model closes 2 of the 5 it could be asked (one kernel-checked, one through
   `bv_decide`), both queries Z3 proves in the positional form; no pair becomes Equivalent
-  (`docs/runs/2026-10-04-lean-vc.md`). ADR 0051 is proposed and P1-039 holds its gate.
-- P1-039 (L) A Lean proof a model writes closes a rung 1 query no solver decides (ADR 0051,
+  (`docs/runs/2026-10-04-lean-vc.md`). ADR 0051 is proposed and P1-040 holds its gate.
+- P1-040 (L) A Lean proof a model writes closes a rung 1 query no solver decides (ADR 0051,
   proposed). Starts with a gate: on the queries still undecided after P1-038 and P1-033, does a
   proof close one? If none, the ADR is withdrawn. Needs P1-038, P1-033. Not scheduled.
 

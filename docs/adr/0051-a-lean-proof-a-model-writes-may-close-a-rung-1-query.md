@@ -41,8 +41,8 @@ proof, when the user turns that on.
    constants from the analysed code. By ADR 0049 decision 3 neither mode turns it on: it has its
    own option, `--proof-model`, as `--invariant-model` does. Lean is Apache-2.0 and is run as a
    process the config names (`provers.lean.path`); `equiv` ships no Lean (ADR 0017).
-7. **It is not built until it decides something a solver does not.** P1-039 starts by measuring
-   the queries still undecided after P1-038 and P1-033 are in. If no such query is closed, P1-039
+7. **It is not built until it decides something a solver does not.** P1-040 starts by measuring
+   the queries still undecided after P1-038 and P1-033 are in. If no such query is closed, P1-040
    stops there and this ADR is withdrawn.
 
 ## Why
@@ -66,7 +66,7 @@ proof, when the user turns that on.
   for a component, a translator and a third executable.
 
 ## Consequences
-- P1-039 holds the gate and, past it, the build. Nothing is scheduled before P1-038 and P1-033.
+- P1-040 holds the gate and, past it, the build. Nothing is scheduled before P1-038 and P1-033.
 - If built: ARCHITECTURE.md's dependency rule gains `Equiv.Verify.Lean --> Equiv.Core`,
   VERIFICATION-MODEL.md's `proofMethod` text gains the two suffixes, and ADR 0002 gains a row for
   the Lean executable.

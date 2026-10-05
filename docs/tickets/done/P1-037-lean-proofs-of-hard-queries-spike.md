@@ -112,7 +112,7 @@ Shipping Lean in any artifact.
 - Result: `docs/runs/2026-10-04-lean-vc.md`. 139 of 142 translate, 121 elaborate, the scaffold
   alone closes none, the model closes 2 of the 5 it was asked (one kernel-checked, one through
   `bv_decide`). No pair becomes Equivalent. Criterion 7's first branch applies: ADR 0051
-  (proposed) and P1-039.
+  (proposed) and P1-040.
 - Deviation: the ticket admits a proof with "no axiom beyond Lean's standard three" and also says
   a proof `bv_decide` finds counts. In Lean 4.34.1 those cannot both hold: a `bv_decide` proof
   depends on a fourth axiom, `q._native.bv_decide.ax_...`, because its certificate is checked by
@@ -135,7 +135,7 @@ Shipping Lean in any artifact.
   no `ANTHROPIC_API_KEY`. Tokens are what it reports.
 - Decision: the model is not asked about a query some solver answers satisfiable (110), nor about
   a statement over 1,500,000 characters (6).
-- Decision: ADR 0051 and P1-039 carry a gate. Criterion 7 asks for them whenever a query closes
+- Decision: ADR 0051 and P1-040 carry a gate. Criterion 7 asks for them whenever a query closes
   with the model, and the evidence is that both closed queries are ones Z3 proves in the
   positional form.
 - Surprising: `grind` does not finish in ten minutes on 1,088 hypotheses even with case splits,
