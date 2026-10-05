@@ -118,3 +118,8 @@ The pairs the wall-clock backstop ends (their time is P2-076's). The value of th
   wall-clock backstop in at least one run (the machine was fully loaded) and are listed apart; on each, the runs
   that did not meet it agree. Scoreboard unchanged: its Repeatability row rests on two full `compare` runs of a
   pair, which this is not.
+- Observed: a satisfiable query can now give another model than it gave in the encoder's context, since Z3
+  takes another path to it. One checked-in sample shows it: `api-drift`'s Divergent for `Text::HasX(string)` has
+  the legacy side throw from `Contains` where it returned before, against the same `NullReferenceException` on
+  the modern side. The verdict, rule and exit code are the same. The counterexample is part of
+  `resultFingerprint/v1`, so a baseline written before this change reports such a Divergent as `new` once.

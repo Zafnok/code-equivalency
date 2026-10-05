@@ -113,7 +113,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.ApiDrift.Text::HasX(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace()). Equivalent when s != null."
+            "text": "Equiv.Samples.ApiDrift.Text::HasX(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(threw \"System.Exception\" outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace()). Equivalent when s != null."
           },
           "locations": [
             {
@@ -132,12 +132,12 @@
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.ApiDrift.Text::HasX(string)",
-            "resultFingerprint/v1": "abef246bad2517d8d4dfe9581bb196daee2635833c121b11111ed2789f59385a"
+            "resultFingerprint/v1": "7143b0f6fc780fb4aa40b44ddb9b01b27cb2eb491ee860a6ebea1766541f6796"
           },
           "baselineState": "new",
           "rank": 60.002,
           "properties": {
-            "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool true outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())",
+            "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(threw \"System.Exception\" outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())",
             "agreesWhen": {
               "smt": "(not (select in.null.System.String in.s))",
               "text": "s != null",
