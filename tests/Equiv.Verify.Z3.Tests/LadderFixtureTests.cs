@@ -253,8 +253,8 @@ public sealed class LadderFixtureTests
         StringBuilder text = new();
         foreach (BoolExpr[] query in queries)
         {
-            using Solver solver = Z3Backend.Query(context, encoding, options, query);
-            foreach (BoolExpr assertion in solver.Assertions)
+            using SolverQuery solver = Z3Backend.Query(context, encoding, options, query);
+            foreach (BoolExpr assertion in solver.Solver.Assertions)
             {
                 text.Append(assertion).Append('\n');
             }

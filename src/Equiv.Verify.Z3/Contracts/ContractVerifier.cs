@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 using Equiv.Core;
 using Equiv.Core.Ir;
@@ -34,8 +34,8 @@ internal sealed class ContractVerifier(Func<Context> createContext, Verification
         {
             ProductEncoding encoding = Stages.Timed(options, Stages.Encode, () => ProductEncoder.Encode(context, oldUnrolled, newUnrolled, options.CallIdentityMap, relation: contract));
             BoolExpr[] reachable = [context.MkNot(encoding.Old.Unreachable), context.MkNot(encoding.New.Unreachable)];
-            using Solver broken = Z3Backend.Query(context, encoding, options, [encoding.Differs, .. reachable]);
-            return Z3Backend.Check(context, broken, options, "contract") switch
+            using SolverQuery broken = Z3Backend.Query(context, encoding, options, [encoding.Differs, .. reachable]);
+            return broken.Check(options, "contract") switch
             {
                 Status.SATISFIABLE => new ContractCheck.Rejected(new ContractModel(
                     [.. encoding.Conjuncts.Select((c, i) => (c, i)).Where(t => broken.Model.Eval(t.c, completion: true).IsFalse).Select(static t => t.i)],

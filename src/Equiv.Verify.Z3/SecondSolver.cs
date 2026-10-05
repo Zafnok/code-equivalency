@@ -1,4 +1,4 @@
-using System.Buffers;
+﻿using System.Buffers;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
@@ -30,11 +30,10 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
     /// <summary>Asks the query <paramref name="name"/>: Z3 first, the second solver if Z3 gives up.</summary>
     public Asked Check(string name, params BoolExpr[] query)
     {
-        Solver asked = Z3Backend.Query(context, encoding, options, query);
-        Status status = Z3Backend.Check(context, asked, options, name, interruptAfterMs);
-        if (status != Status.UNKNOWN || options.Solver is not { } second)
+        Asked asked = new(context, encoding, options, query);
+        if (asked.AskZ3(name, interruptAfterMs) != Status.UNKNOWN || options.Solver is not { } second)
         {
-            return new Asked(status, asked, readBack: null);
+            return asked;
         }
 
         long started = Stages.Start();
@@ -44,22 +43,14 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
         if (answer is SmtUnsat)
         {
             Answered = true;
-            return new Asked(Status.UNSATISFIABLE, asked, readBack: null);
+            asked.Refuted();
         }
-
-        if (answer is SmtSat sat && printed?.Pins(sat.Values) is { } pins)
+        else if (answer is SmtSat sat && printed?.Pins(sat.Values) is { } pins)
         {
-            Solver readBack = Z3Backend.Query(context, encoding, options, [.. query, .. context.ParseSMTLIB2String(pins)]);
-            if (Z3Backend.Check(context, readBack, options, name + "-read-back", interruptAfterMs) == Status.SATISFIABLE)
-            {
-                Answered = true;
-                return new Asked(Status.SATISFIABLE, asked, readBack);
-            }
-
-            readBack.Dispose();
+            Answered |= asked.ReadBack(name + "-read-back", context.ParseSMTLIB2String(pins), interruptAfterMs);
         }
 
-        return new Asked(Status.UNKNOWN, asked, readBack: null);
+        return asked;
     }
 
     /// <summary><paramref name="rung"/>, its step naming the second solver and its version when that solver answered one of its queries.</summary>
@@ -395,17 +386,38 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
     }
 
     /// <summary>
-    /// One query's answer: its status, and for a satisfiable one the model, Z3's own or the one Z3 completed from the
-    /// second solver's values. Disposes the solvers it holds.
+    /// One query and its answer: its status, and for a satisfiable one the model, Z3's own or the one Z3 completed from
+    /// the second solver's values. It makes the queries it asks Z3, and disposes them.
     /// </summary>
-    internal sealed class Asked(Status status, Solver asked, Solver? readBack) : IDisposable
+    internal sealed class Asked(Context context, ProductEncoding encoding, VerificationOptions options, BoolExpr[] query) : IDisposable
     {
-        public Status Status => status;
+        private readonly SolverQuery asked = Z3Backend.Query(context, encoding, options, query);
+        private SolverQuery? readBack;
 
-        public Model Model => (readBack ?? asked).Model;
+        public Status Status { get; private set; } = Status.UNKNOWN;
+
+        public SolverModel Model => (readBack ?? asked).Model;
 
         /// <summary>The detail of a query left a timeout: Z3's reason for giving up and the limit it hit.</summary>
-        public string Timeout(VerificationOptions options) => Z3Backend.Timeout(asked, options);
+        public string Timeout() => Z3Backend.Timeout(asked, options);
+
+        /// <summary>Z3's own answer to the query, as the stage <paramref name="name"/>.</summary>
+        public Status AskZ3(string name, long? interruptAfterMs) => Status = asked.Check(options, name, interruptAfterMs);
+
+        /// <summary>The second solver answered unsat.</summary>
+        public void Refuted() => Status = Status.UNSATISFIABLE;
+
+        /// <summary>
+        /// Asks Z3 the query again beside <paramref name="pins"/>, the second solver's values. Whether Z3 satisfies it:
+        /// then the query is satisfiable and that model is its model. If not, it stays the unknown it was.
+        /// </summary>
+        public bool ReadBack(string name, BoolExpr[] pins, long? interruptAfterMs)
+        {
+            readBack = Z3Backend.Query(context, encoding, options, [.. query, .. pins]);
+            bool satisfied = readBack.Check(options, name, interruptAfterMs) == Status.SATISFIABLE;
+            Status = satisfied ? Status.SATISFIABLE : Status.UNKNOWN;
+            return satisfied;
+        }
 
         public void Dispose()
         {

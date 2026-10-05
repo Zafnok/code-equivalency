@@ -31,11 +31,11 @@ internal sealed class ModelDecoder
     public const string OpaquePrefix = "opaque:";
 
     private readonly Context context;
-    private readonly Model model;
+    private readonly SolverModel model;
     private readonly ProductEncoding encoding;
     private readonly Values values;
 
-    public ModelDecoder(Context context, Model model, ProductEncoding encoding)
+    public ModelDecoder(Context context, SolverModel model, ProductEncoding encoding)
     {
         this.context = context;
         this.model = model;
@@ -65,7 +65,7 @@ internal sealed class ModelDecoder
     /// only in tainted observables is <see cref="UnknownReason.Abstraction"/>, carrying the replay as its candidate
     /// counterexample; no difference fails loudly (an encoder bug).
     /// </summary>
-    public static Verdict Replay(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
+    public static Verdict Replay(Context context, SolverModel model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
     {
         (Counterexample counterexample, ModelOracle oldOracle, ModelOracle newOracle) = ReplayBoth(context, model, encoding, old, @new);
         (IrInputs inputs, IrRun oldRun, IrRun newRun) = counterexample;
@@ -79,10 +79,10 @@ internal sealed class ModelDecoder
     /// Both acyclic sides replayed with taint from the model's inputs and call answers, whatever they observe: ADR 0037's
     /// queries compare only whether each side threw, so the caller reads the outcomes and their taint (ticket P1-013).
     /// </summary>
-    public static Counterexample Runs(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new) =>
+    public static Counterexample Runs(Context context, SolverModel model, ProductEncoding encoding, IrProcedure old, IrProcedure @new) =>
         ReplayBoth(context, model, encoding, old, @new).Counterexample;
 
-    private static (Counterexample Counterexample, ModelOracle Old, ModelOracle New) ReplayBoth(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
+    private static (Counterexample Counterexample, ModelOracle Old, ModelOracle New) ReplayBoth(Context context, SolverModel model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
     {
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
@@ -103,7 +103,7 @@ internal sealed class ModelDecoder
     /// when this replay completes on both sides within <paramref name="stepBudget"/> steps without reaching an
     /// <see cref="IrOpaque"/> and diverges in an untainted observable; otherwise it returns null.
     /// </summary>
-    public static Counterexample? TryReplay(Context context, Model model, ProductEncoding encoding, IrProcedure old, IrProcedure @new, int stepBudget)
+    public static Counterexample? TryReplay(Context context, SolverModel model, ProductEncoding encoding, IrProcedure old, IrProcedure @new, int stepBudget)
     {
         ModelDecoder decoder = new(context, model, encoding);
         IrInputs inputs = decoder.Inputs();
@@ -253,7 +253,7 @@ internal sealed class ModelDecoder
     /// and then denotes its bits modulo its width. A map given as <c>as-array</c> is read from <paramref name="model"/>'s
     /// interpretation of its function (ticket P2-041); without a model, it cannot be.
     /// </summary>
-    internal sealed class Values(Model? model = null)
+    internal sealed class Values(SolverModel? model = null)
     {
         private readonly Dictionary<string, Dictionary<string, int>> ids = new(StringComparer.Ordinal);
         private readonly Dictionary<IrSortValue, Expr> elements = [];
@@ -323,9 +323,9 @@ internal sealed class ModelDecoder
         {
             { IsStore: true } => DecodeMap(value.Args[0], type).Write(Decode(value.Args[1], type.Key), Decode(value.Args[2], type.Value)),
             { IsConstantArray: true } => new IrMapValue(type, Decode(value.Args[0], type.Value), []),
-            { IsAsArray: true } when model?.FuncInterp(value.FuncDecl.Parameters[0].FuncDecl) is { } interpretation => interpretation.Entries.Aggregate(
+            { IsAsArray: true } when model?.Map(value.FuncDecl.Parameters[0].FuncDecl) is { } interpretation => interpretation.Entries.Aggregate(
                 new IrMapValue(type, Decode(interpretation.Else, type.Value), []),
-                (map, e) => map.Write(Decode(e.Args[0], type.Key), Decode(e.Value, type.Value))),
+                (map, e) => map.Write(Decode(e.Key, type.Key), Decode(e.Value, type.Value))),
             _ => throw new InvalidOperationException($"Encoder bug: the model gives a map in a shape the decoder does not read (store chain over a constant array expected): {value}"),
         };
     }

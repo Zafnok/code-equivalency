@@ -834,7 +834,11 @@ Every solver query has two budgets, both set in `equiv.config.json` as positive 
 - `resourceLimit` (default 5000000; `compare --resource-limit <n>` overrides it) is Z3's `rlimit`, a count of
   the solver's own steps. It is the budget that ends a query. It does not depend on how fast or how loaded the
   machine is, so the same inputs give the same results on every run, and a baseline comparison shows no `new`
-  result that nothing caused.
+  result that nothing caused. For that the steps Z3 takes must not depend on anything else either, and in the
+  context an encoder builds its terms in they did: Z3 numbers its terms, reuses the number of a freed term, and
+  orders terms by number, and the .NET binding frees a term when the garbage collector gets to it. So every
+  check and every Spacer query runs in a Z3 context of its own, into which its assertions are translated and
+  which holds nothing else (ticket P2-100; `docs/runs/2026-10-04-solver-repeatability.md`).
 - `timeoutMs` (default 60000) is the wall-clock backstop behind it, for a query that spends long in work Z3
   does not count. A result that ran into it can differ between runs.
 
@@ -875,7 +879,8 @@ was. A run with cvc5 configured can therefore differ from one without; the resul
 
 A rung 4 Spacer query gets ten times `resourceLimit`. Z3 counts a Spacer step far cheaper than a step
 of the product queries the limit is sized for: the `loop-fusion` sample's proof spends 3 to 5 million
-units in under two seconds, and the count moves from run to run.
+units in under two seconds, and the count moved from run to run when the limit was chosen (it no longer
+does; ticket P2-100).
 
 A query that exhausts either is Unknown with reason `timeout` (`chc-timeout` on rung 4), and the detail ends
 with the limit that was hit: `resource limit <n> hit` or `wall-clock limit <n> ms hit`. The budgets are per

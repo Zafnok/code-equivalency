@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Globalization;
 
 using Equiv.Core;
@@ -102,11 +102,18 @@ internal sealed class ChcEncoder
     /// always false), and slicing replaces a relation by a copy without the inputs no rule reads. A timeout is
     /// <see cref="Status.UNKNOWN"/>: Z3 reports it by throwing an exception, whose message says "canceled", or under global
     /// guidance sometimes "unreachable" (after printing an assertion violation); any exception Z3 throws gives up the same way.
+    /// <para>
+    /// The query runs in a context of its own, into which the relations, the rules and <c>bad</c> are translated, and its
+    /// answer is translated back (ticket P2-100): in this encoder's context the numbers Z3 gives the terms depend on when
+    /// the garbage collector ran, and Spacer's path, and so what it spends of its limit, depends on those numbers
+    /// (<see cref="SolverQuery"/>).
+    /// </para>
     /// </summary>
     public ChcAnswer Query(bool overflows, VerificationOptions options)
     {
-        using Fixedpoint fixedpoint = context.MkFixedpoint();
-        using Params parameters = context.MkParams();
+        using Context solving = new();
+        using Fixedpoint fixedpoint = solving.MkFixedpoint();
+        using Params parameters = solving.MkParams();
         parameters.Add("engine", "spacer");
         parameters.Add(Z3Backend.ResourceLimitParameter, SpacerResourceLimit(options));
         parameters.Add(Z3Backend.TimeoutParameter, (uint)options.TimeoutMs);
@@ -119,27 +126,40 @@ internal sealed class ChcEncoder
         parameters.Add("xform.inline_linear", value: false);
         parameters.Add("xform.slice", value: false);
         fixedpoint.Parameters = parameters;
-        foreach (FuncDecl relation in system.Relations.Values.Append(bad))
+        FuncDecl[] relations = [.. system.Relations.Values.Append(bad).Select(r => r.Translate(solving))];
+        foreach (FuncDecl relation in relations)
         {
             fixedpoint.RegisterRelation(relation);
         }
 
-        foreach (BoolExpr rule in system.Rules)
+        Expr[] rules = [.. system.Rules.Select(rule => context.MkForall(Constants(rule), rule).Translate(solving))];
+        foreach (Expr rule in rules)
         {
-            fixedpoint.AddRule(context.MkForall(Constants(rule), rule));
+            fixedpoint.AddRule((BoolExpr)rule);
         }
 
+        BoolExpr goal = (BoolExpr)Bad.Translate(solving);
         long started = Stages.Start();
         try
         {
-            Status status = Z3Backend.Interruptible(context, Z3Backend.InterruptAfterMs(options), () => fixedpoint.Query(Bad));
+            Status status = Z3Backend.Interruptible(solving, Z3Backend.InterruptAfterMs(options), () => fixedpoint.Query(goal));
             Stages.Checked(options, "spacer", started, status);
-            return new ChcAnswer(status, fixedpoint.GetAnswer(), fixedpoint.GetReasonUnknown());
+            return new ChcAnswer(status, fixedpoint.GetAnswer().Translate(context), fixedpoint.GetReasonUnknown())
+            {
+                Spent = fixedpoint.Statistics.Entries.Single(static e => string.Equals(e.Key, "rlimit count", StringComparison.Ordinal)).UIntValue,
+            };
         }
         catch (Z3Exception exception)
         {
             Stages.Checked(options, "spacer", started, Status.UNKNOWN);
             return new ChcAnswer(Status.UNKNOWN, context.MkTrue(), exception.Message);
+        }
+        finally
+        {
+            // Until the query is over the garbage collector frees none of the terms it was given (ticket P2-100).
+            GC.KeepAlive(relations);
+            GC.KeepAlive(rules);
+            GC.KeepAlive(goal);
         }
     }
 
@@ -181,16 +201,14 @@ internal sealed class ChcEncoder
         while (true)
         {
             BoolExpr[] counterexamples = [.. divergence.Rules.Select(rule => context.MkNot(Read(rule, definitions, reachable)))];
-            using Solver solver = context.MkSolver();
-            Z3Backend.Limit(solver, options);
-            solver.Add(context.MkOr(counterexamples));
-            Status status = Z3Backend.Check(context, solver, options, "certificate");
+            using SolverQuery solver = SolverQuery.Plain(context, options, context.MkOr(counterexamples));
+            Status status = solver.Check(options, "certificate");
             if (status != Status.SATISFIABLE)
             {
                 return status == Status.UNSATISFIABLE;
             }
 
-            Model model = solver.Model;
+            SolverModel model = solver.Model;
             FuncDecl[] concluded = [.. divergence.Rules.Where((_, i) => model.Eval(counterexamples[i], completion: true).IsTrue).Select(static r => r.Args[1].FuncDecl)];
 
             if (concluded.Any(r => definitions.ContainsKey(r) || reachable.Contains(r) || r.Equals(bad)))
@@ -221,34 +239,31 @@ internal sealed class ChcEncoder
     /// also the refutation's <see cref="InvariantRequest.Rejection.Premise"/> and <see cref="InvariantRequest.Rejection.Conclusion"/>
     /// (ticket P1-009).
     /// </summary>
-    public Refutation? Refutes(IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, VerificationOptions options)
+    public Refutation? Refutes(IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, VerificationOptions options) =>
+        Obligations().Select(o => Refutes(o.Name, o.Rules, definitions, options)).FirstOrDefault(static r => r is not null);
+
+    /// <summary>The refutation of the obligation <paramref name="name"/>, or null when no rule of it has a counterexample.</summary>
+    private Refutation? Refutes(string name, BoolExpr[] rules, IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, VerificationOptions options)
     {
-        foreach ((string name, BoolExpr[] rules) in Obligations())
+        BoolExpr[] counterexamples = [.. rules.Select(rule => context.MkNot(Define(rule, definitions)))];
+        using SolverQuery solver = SolverQuery.Plain(context, options, context.MkOr(counterexamples));
+        Status status = solver.Check(options, "invariant");
+        if (status == Status.UNSATISFIABLE)
         {
-            BoolExpr[] counterexamples = [.. rules.Select(rule => context.MkNot(Define(rule, definitions)))];
-            using Solver solver = context.MkSolver();
-            Z3Backend.Limit(solver, options);
-            solver.Add(context.MkOr(counterexamples));
-            Status status = Z3Backend.Check(context, solver, options, "invariant");
-            if (status == Status.UNSATISFIABLE)
-            {
-                continue;
-            }
-
-            if (status == Status.UNKNOWN)
-            {
-                return new Refutation($"Z3 gave up on the {name} obligation: {solver.ReasonUnknown}");
-            }
-
-            Model model = solver.Model;
-            BoolExpr broken = rules.Where((_, i) => model.Eval(counterexamples[i], completion: true).IsTrue).First();
-            Expr? premise = Applications(broken.Args[0]).FirstOrDefault(a => divergence.Relations.ContainsValue(a.FuncDecl));
-            InvariantRequest.Fact? before = premise is null ? null : Fact(premise, definitions, model);
-            InvariantRequest.Fact? after = broken.Args[1].FuncDecl.Equals(bad) ? null : Fact(broken.Args[1], definitions, model);
-            return new Refutation($"the {name} obligation fails: {Describe(before)} -> {Describe(after, "bad")}") { Premise = before, Conclusion = after };
+            return null;
         }
 
-        return null;
+        if (status == Status.UNKNOWN)
+        {
+            return new Refutation($"Z3 gave up on the {name} obligation: {solver.ReasonUnknown}");
+        }
+
+        SolverModel model = solver.Model;
+        BoolExpr broken = rules.Where((_, i) => model.Eval(counterexamples[i], completion: true).IsTrue).First();
+        Expr? premise = Applications(broken.Args[0]).FirstOrDefault(a => divergence.Relations.ContainsValue(a.FuncDecl));
+        InvariantRequest.Fact? before = premise is null ? null : Fact(premise, definitions, model);
+        InvariantRequest.Fact? after = broken.Args[1].FuncDecl.Equals(bad) ? null : Fact(broken.Args[1], definitions, model);
+        return new Refutation($"the {name} obligation fails: {Describe(before)} -> {Describe(after, "bad")}") { Premise = before, Conclusion = after };
     }
 
     /// <summary>The divergence query's rules as the three obligations <see cref="Refutes"/> checks, in order.</summary>
@@ -273,7 +288,7 @@ internal sealed class ChcEncoder
     }
 
     /// <summary>A relation's atom in a broken rule, with the model's value of every argument.</summary>
-    private static InvariantRequest.Fact Fact(Expr atom, IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, Model model) =>
+    private static InvariantRequest.Fact Fact(Expr atom, IReadOnlyDictionary<FuncDecl, (Expr[] Parameters, BoolExpr Body)> definitions, SolverModel model) =>
         new(atom.FuncDecl.Name.ToString(), [.. definitions[atom.FuncDecl].Parameters.Zip(atom.Args, (p, a) => new InvariantRequest.Binding(p.ToString(), model.Eval(a, completion: true).ToString()))]);
 
     /// <summary>One side of a broken rule as <c>R(a = v, ...)</c>, or <paramref name="none"/> for no relation.</summary>
@@ -294,11 +309,9 @@ internal sealed class ChcEncoder
             return Decode(fact.Args[..Inputs.Length], fact.Args[Inputs.Length..(Inputs.Length + literals.Length)]);
         }
 
-        using Solver solver = context.MkSolver();
-        Z3Backend.Limit(solver, options);
-        solver.Add(context.MkOr(entryDivergence));
-        Z3Backend.Check(context, solver, options, "derivation");
-        Model model = solver.Model;
+        using SolverQuery solver = SolverQuery.Plain(context, options, context.MkOr(entryDivergence));
+        solver.Check(options, "derivation");
+        SolverModel model = solver.Model;
         return Decode([.. Inputs.Select(i => model.Eval(i.Term, completion: true))], [.. literals.Select(l => model.Eval(l, completion: true))]);
     }
 
@@ -582,7 +595,11 @@ internal sealed class ChcEncoder
     /// A query's status and answer: a refutation when satisfiable, the relations' definitions when unsatisfiable, and
     /// otherwise nothing of use and the reason it gave up.
     /// </summary>
-    public sealed record ChcAnswer(Status Status, Expr Answer, string Reason);
+    public sealed record ChcAnswer(Status Status, Expr Answer, string Reason)
+    {
+        /// <summary>The <c>rlimit</c> the query had spent when it answered (ticket P2-100); 0 when Z3 threw instead.</summary>
+        public uint Spent { get; init; }
+    }
 
     /// <summary>
     /// Why definitions do not solve the divergence query (<see cref="Refutes"/>): the reason, and for a broken rule the

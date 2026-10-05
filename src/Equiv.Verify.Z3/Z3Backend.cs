@@ -22,7 +22,8 @@ namespace Equiv.Verify.Z3;
 /// M3-001 product query on the pair with its loops unrolled: some observable differs on an input where neither side
 /// reaches an <see cref="IrOpaque"/> gives <see cref="Divergent"/>, with a counterexample replayed in
 /// <see cref="IrInterpreter"/>; if not, an input reaching an opaque gives <see cref="UnknownReason.Opaque"/>. Each
-/// query gets its own <see cref="Context"/>, disposed on every path. A solver <c>unknown</c> is
+/// query's terms are built in a <see cref="Context"/> of its own, disposed on every path, and each check runs in another
+/// (<see cref="SolverQuery"/>; ticket P2-100). A solver <c>unknown</c> is
 /// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason and the limit it hit, the resource limit
 /// or the wall-clock backstop (<see cref="Limit"/>; ticket P2-050), or neither when the solver gave up for another reason. Every
 /// Unknown, a timeout included, carries <see cref="FailureRefinementQuery"/>'s two answers (ADR 0037; ticket P1-035). A
@@ -138,7 +139,8 @@ public sealed class Z3Backend : IVerificationBackend
     private IInvariantProposer? Proposer(VerificationOptions options) => options.InvariantModel is { } model ? proposers(model) : null;
 
     /// <summary>
-    /// A fresh solver holding the encoding and <paramref name="query"/>. It runs <c>solve-eqs</c> first,
+    /// A fresh query holding the encoding and <paramref name="query"/>, in a context of its own
+    /// (<see cref="SolverQuery"/>; ticket P2-100). Its solver runs <c>solve-eqs</c> first,
     /// which substitutes the definitional equalities away so that both sides' copies of an unchanged
     /// computation become one term, then <c>simplify</c>, <c>propagate-values</c> and <c>solve-eqs</c>
     /// again before <c>smt</c>. The order matters: <c>simplify</c> rewrites <c>(= r (not x))</c> to
@@ -146,11 +148,23 @@ public sealed class Z3Backend : IVerificationBackend
     /// multiplier left behind a <c>reach</c> variable time out. Z3's default solver is worse here: in
     /// incremental mode it skips preprocessing, and its non-incremental default tactic times out on a
     /// plain diamond. The query itself is added with the definitions already <see cref="Inline"/>d. Making the solver
-    /// and inlining the query are a stage each (<see cref="Stages"/>).
+    /// with the encoding translated into its context, and inlining the query and adding it, are a stage each
+    /// (<see cref="Stages"/>).
     /// </summary>
-    internal static Solver Query(Context context, ProductEncoding encoding, VerificationOptions options, params BoolExpr[] query)
+    internal static SolverQuery Query(Context context, ProductEncoding encoding, VerificationOptions options, params BoolExpr[] query)
     {
         long started = Stages.Start();
+        SolverQuery asked = new(context, solving => Pipeline(solving, options), encoding.Assertions);
+        Stages.Done(options, Stages.Assert, started);
+        started = Stages.Start();
+        asked.Add(Inline(context, encoding.Assertions, query));
+        Stages.Done(options, Stages.Inline, started);
+        return asked;
+    }
+
+    /// <summary>The solver of <see cref="Query"/> in <paramref name="context"/>, within <paramref name="options"/>' limits.</summary>
+    private static Solver Pipeline(Context context, VerificationOptions options)
+    {
         using Tactic solveEqs = context.MkTactic("solve-eqs");
         using Tactic simplify = context.MkTactic("simplify");
         using Tactic propagate = context.MkTactic("propagate-values");
@@ -158,25 +172,7 @@ public sealed class Z3Backend : IVerificationBackend
         using Tactic pipeline = context.AndThen(solveEqs, simplify, propagate, solveEqs, smt);
         Solver solver = context.MkSolver(pipeline);
         Limit(solver, options);
-        solver.Add(encoding.Assertions);
-        Stages.Done(options, Stages.Assert, started);
-        started = Stages.Start();
-        solver.Add(Inline(context, encoding.Assertions, query));
-        Stages.Done(options, Stages.Inline, started);
         return solver;
-    }
-
-    /// <summary>
-    /// Checks <paramref name="solver"/>, as the stage <c>check:</c><paramref name="query"/> (<see cref="Stages"/>). A check
-    /// still running after <paramref name="interruptAfterMs"/> (<see cref="InterruptAfterMs"/> unless a test gives another)
-    /// is interrupted (<see cref="Interruptible"/>).
-    /// </summary>
-    internal static Status Check(Context context, Solver solver, VerificationOptions options, string query, long? interruptAfterMs = null)
-    {
-        long started = Stages.Start();
-        Status status = Interruptible(context, interruptAfterMs ?? InterruptAfterMs(options), () => solver.Check());
-        Stages.Checked(options, query, started, status);
-        return status;
     }
 
     /// <summary>
@@ -275,7 +271,7 @@ public sealed class Z3Backend : IVerificationBackend
         solver.Set(TimeoutParameter, (uint)options.TimeoutMs);
     }
 
-    internal static string Timeout(Solver solver, VerificationOptions options) =>
+    internal static string Timeout(SolverQuery solver, VerificationOptions options) =>
         $"solver returned unknown ({solver.ReasonUnknown}){LimitHit(solver.ReasonUnknown, SolverTimedOut, (uint)options.ResourceLimit, options.TimeoutMs)}";
 
     /// <summary>
@@ -299,14 +295,14 @@ public sealed class Z3Backend : IVerificationBackend
     /// reaches. A query that is unsatisfiable or gives up ends the search with what it has.
     /// </summary>
     internal static ImmutableArray<UnknownCause> ReachableOpaques(
-        Context context, ProductEncoding encoding, VerificationOptions options, Model model, BoolExpr[] constraints, long? interruptAfterMs = null)
+        Context context, ProductEncoding encoding, VerificationOptions options, SolverModel model, BoolExpr[] constraints, long? interruptAfterMs = null)
     {
         long started = Stages.Start();
         HashSet<int> reached = [.. Reached(model, encoding)];
         for (BoolExpr[] rest = Unreached(); rest.Length > 0; rest = Unreached())
         {
-            using Solver solver = Query(context, encoding, options, [context.MkOr(rest), .. constraints]);
-            if (Check(context, solver, options, "reachable-opaque", interruptAfterMs) != Status.SATISFIABLE)
+            using SolverQuery solver = Query(context, encoding, options, [context.MkOr(rest), .. constraints]);
+            if (solver.Check(options, "reachable-opaque", interruptAfterMs) != Status.SATISFIABLE)
             {
                 break;
             }
@@ -335,7 +331,7 @@ public sealed class Z3Backend : IVerificationBackend
             .ThenBy(static c => c.Span.StartColumn)];
 
     /// <summary>The indices of the opaque nodes <paramref name="model"/> reaches.</summary>
-    internal static IEnumerable<int> Reached(Model model, ProductEncoding encoding) =>
+    internal static IEnumerable<int> Reached(SolverModel model, ProductEncoding encoding) =>
         Enumerable.Range(0, encoding.Opaques.Length).Where(i => model.Eval(encoding.Opaques[i].Reach, completion: true).IsTrue);
 
     /// <summary>
