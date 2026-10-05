@@ -404,6 +404,18 @@ function Read-ProgressLog([string]$Path) {
     }
 }
 
+# The items in flight: the unfinished-item lines that end the log and share the last line's stamp.
+function Get-InFlight([object[]]$Lines) {
+    $last = $Lines[-1]
+    $current = @()
+    for ($i = $Lines.Count - 1; $i -ge 0; $i--) {
+        $line = $Lines[$i]
+        if ($line.Kind -ne 'progress' -or $line.At -ne $last.At -or -not $line.Item -or $line.Outcome) { break }
+        $current = @($line) + $current
+    }
+    $current
+}
+
 # Where the run is: its phase, done/total, the last ETA and bound, every item in flight, and the five slowest so far.
 # A heartbeat is one line for each item in flight, all with the same stamp (ticket P2-077), so the items in flight are
 # the unfinished-item lines that end the log and share the last line's stamp.
@@ -418,12 +430,7 @@ function Get-ProgressReport([object[]]$Lines) {
         $worst = 'n/a'
         if ($last.Worst) { $worst = $last.Worst }
         "eta: $($last.Eta) worst: $worst (at +$(Format-Stamp $last.At))"
-        $current = @()
-        for ($i = $Lines.Count - 1; $i -ge 0; $i--) {
-            $line = $Lines[$i]
-            if ($line.Kind -ne 'progress' -or $line.At -ne $last.At -or -not $line.Item -or $line.Outcome) { break }
-            $current = @($line) + $current
-        }
+        $current = @(Get-InFlight $Lines)
         if ($current.Count -eq 0) { 'current: none reported since the last item finished' }
         foreach ($line in $current) {
             $slow = ''

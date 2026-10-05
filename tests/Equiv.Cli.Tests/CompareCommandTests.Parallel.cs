@@ -58,7 +58,7 @@ public sealed partial class CompareCommandTests
     }
 
     /// <summary>
-    /// Criterion 2: eight pairs on four threads, four of them in the backend at once, the later ones answering first. The
+    /// Criterion 2: eight pairs on four threads, the first four in the backend at once and answering last started first. The
     /// results, the unverified identities, the notifications and the lines on stderr are in the pairs' order all the same.
     /// </summary>
     [Fact]
@@ -70,7 +70,7 @@ public sealed partial class CompareCommandTests
         {
             together.Meet();
             int index = Index(identity);
-            Thread.Sleep((8 - index) * 5);
+            together.Leave(index);
             return index switch
             {
                 1 or 6 => throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"bug {index}")),
@@ -104,7 +104,7 @@ public sealed partial class CompareCommandTests
             {
                 together.Meet();
                 int index = Index(identity);
-                Thread.Sleep((4 - index) * 5);
+                together.Leave(index);
                 return index % 2 == 1
                     ? throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"contract bug {index}"))
                     : new Equivalent(ProofMethod.Bounded) { ContractsUsed = [new ContractUse("T::F()", "true", "observed-predicates")] };

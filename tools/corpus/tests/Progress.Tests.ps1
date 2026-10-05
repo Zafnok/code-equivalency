@@ -76,7 +76,7 @@ Describe 'corpus.ps1 -Progress' {
         $tokens = $null
         $errors = $null
         $ast = [Management.Automation.Language.Parser]::ParseFile($script:Corpus, [ref]$tokens, [ref]$errors)
-        $names = 'Read-ProgressLog', 'Get-ProgressReport', 'Get-PhaseTimes'
+        $names = 'Read-ProgressLog', 'Get-InFlight', 'Get-ProgressReport', 'Get-PhaseTimes'
         $bodies = $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $names -contains $n.Name }, $true)
         if (@($bodies).Count -ne $names.Count) { throw 'progress functions not found in corpus.ps1' }
         foreach ($body in $bodies) {

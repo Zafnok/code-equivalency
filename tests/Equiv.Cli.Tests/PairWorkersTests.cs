@@ -71,7 +71,7 @@ public sealed class PairWorkersTests
                 threads.Add(Environment.CurrentManagedThreadId);
             }
 
-            Thread.Sleep(40 - i);
+            together.Leave(i);
             return i * i;
         });
 
