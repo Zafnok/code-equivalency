@@ -39,6 +39,9 @@ internal static class CompareCommand
     /// <summary>The descriptor id of the notification <see cref="ContradictedConditions"/> writes (ADR 0048; ticket P1-022).</summary>
     internal const string ContradictedCondition = "contradicted-condition";
 
+    /// <summary>The one word the run log ends an item with when the pass threw on its pair.</summary>
+    private const string Failed = "failed";
+
     /// <summary>How many times <see cref="DeleteTemporary"/> tries before it leaves the folder behind.</summary>
     internal const int DeleteAttempts = 5;
 
@@ -215,20 +218,14 @@ internal static class CompareCommand
     /// <c>--baseline</c> or <c>--fail-on</c>, a budget or <c>jobs</c> that is not positive, or a mode that is neither
     /// <c>thorough</c> nor <c>quick</c> (ADR 0049 decision 1; ticket P1-032).
     /// </summary>
-    private static string? UsageError(CompareOptions options)
-    {
-        if (options.LowerOnly && (options.BaselinePath is not null || options.FailOn is not null))
-        {
-            return "error: --lower-only cannot be combined with --baseline or --fail-on";
-        }
-
-        if (options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0 || options.Jobs is <= 0)
-        {
-            return "error: bound, timeoutMs, resourceLimit and jobs must be positive integers";
-        }
-
-        return options.Mode is { } mode && EquivConfigLoader.ParseMode(mode) is null ? $"error: mode must be {Passes.ThoroughName} or {Passes.QuickName}, not '{mode}'" : null;
-    }
+    private static string? UsageError(CompareOptions options) =>
+        options.LowerOnly && (options.BaselinePath is not null || options.FailOn is not null)
+            ? "error: --lower-only cannot be combined with --baseline or --fail-on"
+            : options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0 || options.Jobs is <= 0
+                ? "error: bound, timeoutMs, resourceLimit and jobs must be positive integers"
+                : options.Mode is { } mode && EquivConfigLoader.ParseMode(mode) is null
+                    ? $"error: mode must be {Passes.ThoroughName} or {Passes.QuickName}, not '{mode}'"
+                    : null;
 
     /// <summary>
     /// The run's config: the file's, with the command line's settings over it, each one named as explicit (ADR 0049
@@ -484,7 +481,7 @@ internal static class CompareCommand
         }
         catch (Exception exception) when (IsPairFailure(exception))
         {
-            options.Log.ItemDone("failed");
+            options.Log.ItemDone(Failed);
             return (earlier, $"warning: Verifying {earlier.Identity.Value} again in the {phase} pass failed, so it keeps its result: {exception.Message}");
         }
 
@@ -870,7 +867,7 @@ internal static class CompareCommand
         options.Log.Item(pair.New.Value, weight);
         if (crash is not null)
         {
-            options.Log.ItemDone("failed");
+            options.Log.ItemDone(Failed);
             return new PairOutcome(Result: null, "Weighing", crash);
         }
 
@@ -895,7 +892,7 @@ internal static class CompareCommand
         }
         catch (Exception exception) when (IsPairFailure(exception))
         {
-            options.Log.ItemDone("failed");
+            options.Log.ItemDone(Failed);
             return new PairOutcome(Result: null, "Verifying", exception);
         }
     }
@@ -1053,7 +1050,7 @@ internal static class CompareCommand
         }
         catch (Exception exception) when (IsPairFailure(exception))
         {
-            options.Log.ItemDone("failed");
+            options.Log.ItemDone(Failed);
             return (result, $"warning: Verifying {result.Identity.Value} under callee contracts failed, so it keeps its verdict: {exception.Message}");
         }
 
