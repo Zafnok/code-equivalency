@@ -20,9 +20,10 @@ namespace Equiv.Tests.Integration;
 /// solution's own <c>Strings.IsNullOrEmpty</c> wrapper and the modern side through <c>string.IsNullOrEmpty</c>. The wrapper
 /// is a forwarder, so its call is the call to its target and the two bodies are one (ADR 0047; ticket P2-068). Before
 /// that, and still when the wrapper is kept as a callee because its two sides do not agree, the call traces differ at
-/// their first event, which is a real observable (ADR 0018), so the pair is Divergent; the legacy run's <c>threw</c> is
-/// only the answer the solver chose for the wrapper's <c>threw</c> edge once the traces had split, which no real run need
-/// share. That is why M4-007's replay saw both runtimes return.
+/// their first event, which is a real observable (ADR 0018), so the pair is Divergent; whether the legacy run then throws
+/// is only the answer the solver chose for the wrapper's <c>threw</c> edge once the traces had split, which no real run
+/// need share. That is why M4-007's replay saw both runtimes return where the solver's model then had a throw. The model
+/// is the solver's choice, and since rung 1 compares the traces by position (ticket P1-038) it has none, so no test pins it.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class SetSshDivergenceTests
@@ -83,7 +84,7 @@ public sealed class SetSshDivergenceTests
     }
 
     [Fact]
-    public void SetSsh_IsDivergentInTheCallTrace_AndItsOutcomeRestsOnAnAnswerAfterTheSplit()
+    public void SetSsh_IsDivergentInTheCallTrace()
     {
         Divergent divergent = Assert.IsType<Divergent>(
             new Z3Backend().Verify(Lower(Legacy, isLegacy: true, new CallSites { KeptForwarders = [Wrapper] }), Lower(Modern, isLegacy: false, new CallSites()), Options));
@@ -92,8 +93,6 @@ public sealed class SetSshDivergenceTests
         IrRun modern = divergent.Counterexample.New;
         Assert.Equal(Wrapper, legacy.Trace[0].Callee.Value);
         Assert.NotEqual(legacy.Trace.FirstOrDefault(), modern.Trace.FirstOrDefault());
-        Assert.Equal(new IrThrew("System.Exception"), legacy.Outcome);
-        Assert.IsType<IrReturned>(modern.Outcome);
     }
 
     private static IrProcedure Lower(string source, bool isLegacy, CallSites sites, SideRuntime? runtime = null)

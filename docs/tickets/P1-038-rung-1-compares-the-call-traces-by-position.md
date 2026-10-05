@@ -109,3 +109,8 @@ Rungs 2 to 5 and the contract queries. Bitwuzla, and writing the sorts as bit-ve
   six each way: another model of the same query replays differently. Not a timeout, so not the size guard's.
 - Decision: the scoreboard is unchanged. Its rows for this pair rest on the pair's latest `full` SUMMARY, and
   the ticket's Files hold a report, not a SUMMARY; `2026-10-05-parallel-verify.md` set the precedent.
+- Criterion 3 holds for verdicts, not for the counterexample a Divergent carries: the positional query leads Z3
+  to another model. Eight sample snapshots and `removed-null-check.execute.sarif` are regenerated (rule ids as
+  before; message, model, fingerprint and two review groups differ), and `SetSshDivergenceTests` no longer
+  pins the outcome the solver chose after the traces split. The Z3 test project does not show this; only the
+  Windows integration leg does.
