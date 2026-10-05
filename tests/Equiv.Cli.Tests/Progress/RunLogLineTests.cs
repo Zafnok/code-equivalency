@@ -63,6 +63,9 @@ public sealed class RunLogLineTests
     public void Detail_Is_Prefixed_With_Its_Phase()
     {
         Assert.Equal("equiv: +26:03:04 verify detail: rung=direct took=0.001 result=unsat", RunLogLine.Detail(At, "verify", "rung=direct took=0.001 result=unsat"));
+        Assert.Equal(
+            "equiv: +26:03:04 verify detail: rung=direct took=0.001 result=unsat item=T::M(int, string)",
+            RunLogLine.Detail(At, "verify", "rung=direct took=0.001 result=unsat", "T::M(int, string)"));
     }
 
     [Fact]
