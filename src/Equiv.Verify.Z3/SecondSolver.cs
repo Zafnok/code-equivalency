@@ -31,7 +31,7 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
     public Asked Check(string name, params BoolExpr[] query)
     {
         Asked asked = new(context, encoding, options, query);
-        if (asked.Ask(name, interruptAfterMs) != Status.UNKNOWN || options.Solver is not { } second)
+        if (asked.AskZ3(name, interruptAfterMs) != Status.UNKNOWN || options.Solver is not { } second)
         {
             return asked;
         }
@@ -402,7 +402,7 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
         public string Timeout() => Z3Backend.Timeout(asked, options);
 
         /// <summary>Z3's own answer to the query, as the stage <paramref name="name"/>.</summary>
-        public Status Ask(string name, long? interruptAfterMs) => Status = asked.Check(options, name, interruptAfterMs);
+        public Status AskZ3(string name, long? interruptAfterMs) => Status = asked.Check(options, name, interruptAfterMs);
 
         /// <summary>The second solver answered unsat.</summary>
         public void Refuted() => Status = Status.UNSATISFIABLE;
