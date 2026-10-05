@@ -1,5 +1,5 @@
 # P1-037 Spike: can a model write a Lean proof, checked by Lean's kernel, for a query the solvers give up on?
-Status: in-progress
+Status: done (PR #406)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-025
