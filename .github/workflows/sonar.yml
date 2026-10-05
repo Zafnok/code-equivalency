@@ -51,6 +51,8 @@ jobs:
       # Coverage is a src/ measure (QUALITY-GATES.md, Coverage row): PowerShell scripts and
       # Bicep have no test harness, so they are left out of coverage only. Sonar still
       # analyses them for bugs and vulnerabilities (M6-001: its .ps1 files tripped new-code coverage).
+      # The same holds for tools/spikes/: throwaway measurement tools no gate builds or tests
+      # (P1-037: its Python files tripped new-code coverage).
       - name: Sonar begin
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -61,7 +63,7 @@ jobs:
           /d:sonar.host.url="https://sonarcloud.io"
           /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
           /d:sonar.exclusions="samples/**,**/bin/**,**/obj/**"
-          /d:sonar.coverage.exclusions="samples/**,**/*.ps1,**/*.bicep"
+          /d:sonar.coverage.exclusions="samples/**,**/*.ps1,**/*.bicep,tools/spikes/**"
           /d:sonar.cs.opencover.reportsPaths="TestResults/**/*.opencover.*.xml"
           /d:sonar.coverageReportPaths="TestResults/pester-coverage.xml"
 
