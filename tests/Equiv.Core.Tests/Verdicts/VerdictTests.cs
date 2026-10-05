@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
@@ -130,6 +130,40 @@ public sealed class VerdictTests
         Assert.NotEqual(first, second with { Ladder = [] });
         Assert.NotEqual<Verdict>(new Added(), new Removed());
         Assert.False(first.Equals(Null.Of<Verdict>()));
+    }
+
+    /// <summary>
+    /// Ticket P1-022 (ADR 0048): a condition search compares by what it found; the time it took is a measurement. A
+    /// Divergent and an Unknown each carry theirs, and no other verdict has one.
+    /// </summary>
+    [Fact]
+    public void ConditionSearchComparesByConditionNotByTime()
+    {
+        ConditionSearch search = new(new AgreesWhen("(= in.a in.b)", "a == b"));
+        ConditionSearch later = search with { Elapsed = TimeSpan.FromSeconds(3) };
+        Unknown unknown = new(UnknownReason.Abstraction, "d") { Conditions = search };
+        Divergent divergent = new(new Counterexample(new IrInputs([]), SampleRun, SampleRun)) { Conditions = search };
+
+        Assert.Equal(search, later);
+        Assert.Equal(search.GetHashCode(), later.GetHashCode());
+        Assert.NotEqual(search, new ConditionSearch(AgreesWhen: null));
+        Assert.NotEqual(search, new ConditionSearch(new AgreesWhen("(= in.a in.b)", "b == a")));
+        Assert.NotEqual(new ConditionSearch(AgreesWhen: null), new ConditionSearch(AgreesWhen: null) { Contradicted = true });
+        Assert.NotEqual(new ConditionSearch(AgreesWhen: null).GetHashCode(), new ConditionSearch(AgreesWhen: null) { Contradicted = true }.GetHashCode());
+        Assert.NotEqual(search.GetHashCode(), new ConditionSearch(AgreesWhen: null).GetHashCode());
+        Assert.False(search.Equals(Null.Of<ConditionSearch>()));
+        Assert.Equal(unknown, unknown with { Conditions = later });
+        Assert.Equal(unknown.GetHashCode(), (unknown with { Conditions = later }).GetHashCode());
+        Assert.NotEqual(unknown, unknown with { Conditions = null });
+        Assert.NotEqual(unknown.GetHashCode(), (unknown with { Conditions = null }).GetHashCode());
+        Assert.Equal(divergent, divergent with { Conditions = later });
+        Assert.NotEqual(divergent, divergent with { Conditions = null });
+        Assert.Same(search, ConditionSearch.Of(unknown));
+        Assert.Same(search, ConditionSearch.Of(divergent));
+        Assert.Null(ConditionSearch.Of(new Equivalent(ProofMethod.Bounded)));
+        Assert.Null(ConditionSearch.Of(new Added()));
+        Assert.Equal("harvested-predicates", AgreesWhen.ProposedBy);
+        Assert.Equal(ProofMethod.Bounded, AgreesWhen.Method);
     }
 
     /// <summary>

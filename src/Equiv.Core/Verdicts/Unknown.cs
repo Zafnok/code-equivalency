@@ -47,6 +47,13 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
     public FailureRefinement? FailureRefinement { get; init; }
 
     /// <summary>
+    /// The backend's search for an input condition under which the pair is Equivalent (ADR 0048; ticket P1-022); null for
+    /// an Unknown it did not search, which is every reason but <see cref="UnknownReason.Abstraction"/> and every looping
+    /// pair. Not part of the fingerprint.
+    /// </summary>
+    public ConditionSearch? Conditions { get; init; }
+
+    /// <summary>
     /// A divergence the replay found only in tainted observables (ADR 0026): <see cref="UnknownReason.Abstraction"/>,
     /// whose detail names the tainting identities, with <paramref name="candidate"/> and <paramref name="abstractions"/>
     /// attached, and each abstraction with a span as a cause.
@@ -68,8 +75,9 @@ public sealed record Unknown(UnknownReason Reason, string Detail) : Verdict
             & (Scope == other.Scope)
             & (Candidate == other.Candidate)
             & IrEquality.SequenceEqual(Abstractions, other.Abstractions)
-            & (FailureRefinement == other.FailureRefinement);
+            & (FailureRefinement == other.FailureRefinement)
+            & (Conditions == other.Conditions);
 
     public override int GetHashCode() =>
-        HashCode.Combine(base.GetHashCode(), Reason, Detail, IrEquality.Hash(Causes), Scope, Candidate, IrEquality.Hash(Abstractions), FailureRefinement);
+        HashCode.Combine(base.GetHashCode(), Reason, Detail, IrEquality.Hash(Causes), Scope, HashCode.Combine(Candidate, IrEquality.Hash(Abstractions), FailureRefinement, Conditions));
 }

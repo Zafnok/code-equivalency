@@ -1692,6 +1692,124 @@ public sealed partial class CompareCommandTests
     }
 
     /// <summary>
+    /// Ticket P1-022 criterion 4 (ADR 0048): the census reports how many pairs were searched for an input condition, how
+    /// many have one, and the searches' total time; a run where none was searched has no such entry.
+    /// </summary>
+    [Fact]
+    public void CensusReportsTheConditionSearches()
+    {
+        ProcedureIdentity first = new("T::First()");
+        ProcedureIdentity second = new("T::Second()");
+        ConditionSearch admitted = new(new AgreesWhen("(= in.a in.b)", "a == b")) { Elapsed = TimeSpan.FromMilliseconds(250) };
+        ConditionSearch none = new(AgreesWhen: null) { Elapsed = TimeSpan.FromMilliseconds(100) };
+
+        string searched = Census(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+        {
+            [PairIdentity.Value] = new Divergent(Counterexample()) { Conditions = admitted },
+            [first.Value] = new Unknown(UnknownReason.Abstraction, "opaque:f") { Conditions = none },
+            [second.Value] = new Divergent(Counterexample()),
+        });
+        string unsearched = Census(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+        {
+            [PairIdentity.Value] = new Divergent(Counterexample()),
+            [first.Value] = new Unknown(UnknownReason.Opaque, "new: Await"),
+            [second.Value] = new Equivalent(ProofMethod.Bounded),
+        });
+
+        Assert.EndsWith("\"agreesWhen\":{\"pairs\":2,\"admitted\":1,\"milliseconds\":350}}", searched, StringComparison.Ordinal);
+        Assert.DoesNotContain("agreesWhen", unsearched, StringComparison.Ordinal);
+
+        string Census(Dictionary<string, Verdict> verdicts)
+        {
+            using TempFile legacy = new();
+            using TempFile modern = new();
+            InMemoryReportSink sink = new();
+            _ = CaptureStdOut(() => CompareCommand.Run(
+                new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+                [new FakeFrontend("csharp", _ => true, new MatchResult([Pair(PairIdentity), Pair(first), Pair(second)], [], [], []))], new FakeBackend(verdicts), sink, NullRunLog.Instance));
+            Assert.True(sink.Log!.Runs[0].TryGetSerializedPropertyValue("loweringCensus", out string? census));
+            return census!;
+        }
+    }
+
+    /// <summary>
+    /// Ticket P1-022 (ADR 0048 decision 5): a result with an input condition has the exit code, the rule id and the
+    /// fingerprints it has without one, under every <c>--fail-on</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("divergent", false)]
+    [InlineData("unknown", false)]
+    [InlineData("divergent", true)]
+    [InlineData("unknown", true)]
+    public void AgreesWhen_ChangesNoFingerprintOrExitCode(string failOn, bool unknown)
+    {
+        ConditionSearch search = new(new AgreesWhen("(= in.a in.b)", "a == b"));
+        (Verdict plain, Verdict conditional) = unknown
+            ? ((Verdict)new Unknown(UnknownReason.Abstraction, "opaque:f"), (Verdict)new Unknown(UnknownReason.Abstraction, "opaque:f") { Conditions = search })
+            : ((Verdict)new Divergent(Counterexample()), (Verdict)new Divergent(Counterexample()) { Conditions = search });
+
+        (int plainExit, Result plainResult, _) = Compare(plain);
+        (int exit, Result result, IList<Invocation>? invocations) = Compare(conditional);
+
+        Assert.Equal(plainExit, exit);
+        Assert.Contains(exit, new[] { ExitCodes.Success, ExitCodes.Divergent, ExitCodes.UnknownPresent });
+        Assert.Equal(plainResult.RuleId, result.RuleId);
+        Assert.Equal(plainResult.PartialFingerprints, result.PartialFingerprints);
+        Assert.Equal("a == b", result.GetProperty<Dictionary<string, string>>("agreesWhen")["text"]);
+        Assert.Null(invocations);
+
+        (int ExitCode, Result Result, IList<Invocation>? Invocations) Compare(Verdict verdict)
+        {
+            using TempFile legacy = new();
+            using TempFile modern = new();
+            InMemoryReportSink sink = new();
+            int exitCode = ExitCodes.InternalError;
+            _ = CaptureStdOut(() => exitCode = CompareCommand.Run(
+                new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, failOn, DryRun: false),
+                [new FakeFrontend("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []))],
+                new FakeBackend(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = verdict }),
+                sink,
+                NullRunLog.Instance));
+            return (exitCode, Assert.Single(sink.Log!.Runs[0].Results), sink.Log.Runs[0].Invocations);
+        }
+    }
+
+    /// <summary>
+    /// ADR 0048 decision 7: a result whose counterexample satisfied the condition proved for its pair is a bug in the tool.
+    /// The run says so in one <c>warning</c> notification per such result, on stderr too, and the exit code is the verdict's.
+    /// </summary>
+    [Fact]
+    public void AContradictedConditionIsNotified()
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        ProcedureIdentity fine = new("T::Fine()");
+        FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal)
+        {
+            [PairIdentity.Value] = new Divergent(Counterexample()) { Conditions = new ConditionSearch(AgreesWhen: null) { Contradicted = true } },
+            [fine.Value] = new Divergent(Counterexample()) { Conditions = new ConditionSearch(AgreesWhen: null) },
+        });
+        InMemoryReportSink sink = new();
+        int exitCode = ExitCodes.InternalError;
+
+        string errorOutput = CaptureStdErr(() => exitCode = CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, "divergent", DryRun: false),
+            [new FakeFrontend("csharp", _ => true, new MatchResult([Pair(PairIdentity), Pair(fine)], [], [], []))], backend, sink, NullRunLog.Instance));
+
+        const string Text = "T::Pair(): the counterexample satisfies the input condition proved for the pair; agreesWhen is left out (a bug in equiv, please report it)";
+        Assert.Equal(ExitCodes.Divergent, exitCode);
+        Invocation invocation = Assert.Single(sink.Log!.Runs[0].Invocations);
+        Assert.True(invocation.ExecutionSuccessful);
+        Notification notification = Assert.Single(invocation.ToolExecutionNotifications);
+        Assert.Equal(FailureLevel.Warning, notification.Level);
+        Assert.Equal(Text, notification.Message.Text);
+        Assert.Equal(CompareCommand.ContradictedCondition, notification.Descriptor.Id);
+        Assert.Equal("contradicted-condition", CompareCommand.ContradictedCondition);
+        Assert.Contains($"warning: {Text}", errorOutput, StringComparison.Ordinal);
+        Assert.All(sink.Log.Runs[0].Results, static r => Assert.False(r.TryGetProperty("agreesWhen", out Dictionary<string, string>? _)));
+    }
+
+    /// <summary>
     /// Tickets P1-013 and P1-035 (ADR 0037): through the real backend, an unbound pair (decided without the solver) carries
     /// no <c>failureRefinement</c>; a pair the solver times out on and an opaque Unknown do, and the first is still a timeout.
     /// </summary>

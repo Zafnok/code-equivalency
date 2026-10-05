@@ -56,6 +56,9 @@ internal static class Stages
     /// <summary>ADR 0037's two answers on an Unknown pair (<see cref="FailureRefinementQuery"/>).</summary>
     public const string FailureRefinement = "failure-refinement";
 
+    /// <summary>ADR 0048's input condition on a pair that is not Equivalent (<see cref="Conditions.ConditionQuery"/>).</summary>
+    public const string Conditions = "conditions";
+
     /// <summary>The contracts admitted for a caller's callee pairs (<see cref="Contracts.ContractSearch"/>).</summary>
     public const string ContractSearch = "contract-search";
 

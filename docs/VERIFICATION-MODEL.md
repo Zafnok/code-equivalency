@@ -549,6 +549,32 @@ arguments and the position only, it leaves every map, threaded or not, as it was
 leaves its own side's maps unchanged, and it reads and writes the threaded maps as that open call
 does.
 
+A pair that is not Equivalent is then asked under which inputs it is (ADR 0048; ticket P1-022). This
+runs on rung 1's product of a pair without a loop or a self-call, for a Divergent the solver found
+and for an Unknown with reason `abstraction`. A pair whose model calls a runtime-changed member is
+left out, which is every EQ006, since that callee's functions are each side's own. The condition is
+a hypothesis under ADR 0036:
+- **Candidates.** The Bool values either body computes from shared inputs alone. A shared input is
+  a source parameter both sides have, such a reference parameter's `null.<Sort>` shadow, or a Bool
+  or bitvector constant. A value reaches them through `IrBinary` and `IrUnary` only. A call, a read
+  of any other map, an `IrPure`, a phi, an opaque node, a parameter one side lacks or a truncation
+  in between leaves the value out. So does a value that reads no parameter, or three or more. Each
+  value `c` gives two candidates, `c` and `not c`. A pair has at most 16, the shallowest values
+  first, and no value more than 8 operations deep. Nothing is synthesised.
+- **Check 1, the proof.** `p` together with "some observable differs or a side reaches an unshared
+  opaque node" is unsatisfiable. This is ADR 0014's second query restricted to `p`, so it is the
+  proof an Equivalent rests on, for the inputs `p` holds on.
+- **Check 2, not vacuous.** `p` is satisfiable together with the product's own assertions, so some
+  input meets it.
+
+A candidate that passes both is admitted. A query the solver gives up on admits nothing. The
+condition is the disjunction of the admitted candidates, since each is proved alone. An admitted
+candidate that implies another is dropped, because the other covers its inputs; that costs one
+query per ordered pair and is skipped above 6 admitted candidates. Each query gets the pair's
+resource limit and timeout. The result's own counterexample satisfies "some observable differs" on
+the same product, so it must make the condition false. The backend checks that, and a failure is a
+bug in the tool: the condition is not reported (section 6).
+
 ### 5.1 Loop ladder
 
 Loops and recursion are tried on each rung in order; the first rung that proves
@@ -878,6 +904,30 @@ exit code nor the fingerprint depends on `failureRefinement`. The census reports
 and the time their queries took, in `loweringCensus.failureRefinement` (`pairs`, `milliseconds`), when
 there was at least one.
 
+An EQ002 the solver found, and an Unknown with reason `abstraction`, carries `properties.agreesWhen`
+when the search of section 5 admitted a candidate (ADR 0048; ticket P1-022):
+`{ smt, text, proposedBy, proofMethod }`. It is a predicate over the pair's shared inputs under
+which the pair is proved Equivalent. `smt` is the exact statement, in SMT-LIB over the product's
+inputs (`in.<legacy parameter name>`, and `in.null.<Sort>` for a null shadow), for example
+`(not (select in.null.System.String in.name))`. `text` is the same in source spelling with the
+modern side's parameter names (`name != null`, `count >= 0`); several admitted candidates are
+joined by `||`. An unsigned operation casts its operands in `text`, and a widening C# makes
+implicitly is not written, so `text` reads as C# for `int`, `long`, `bool` and reference
+parameters. The IR does not record that a parameter was declared unsigned or narrower than `int`,
+and for such a parameter `text` can read differently from `smt`. `proposedBy` is
+`harvested-predicates` and `proofMethod` is `bounded` (ADR 0036). The message ends with
+`Equivalent when <text>.`, ahead of a tested Unknown's sentence. A result with no admitted
+candidate carries no `agreesWhen` and its message is unchanged. The claim is as modular as an
+Equivalent's (ADR 0019): it holds under the `assumedCallees` and `unprovenAssumptions` the result
+lists. It says nothing about the inputs outside the condition: not that the pair differs there,
+and not that the condition is the weakest one. The verdict, the rule id, the level, the exit code,
+the fingerprint, `baselineState`, the review group and the rank do not depend on it. If a result's
+counterexample satisfies the condition proved for its pair, the result carries no `agreesWhen` and
+the run carries one `warning` notification with the descriptor `contradicted-condition`. The census
+reports the pairs searched, the pairs with a condition and the time the searches took, in
+`loweringCensus.agreesWhen` (`pairs`, `admitted`, `milliseconds`), when at least one pair was
+searched.
+
 The IR text spells a whole-body opaque `opaque body "reason"` (`IrOpaque.WholeBody`), so scope is
 read from the IR rather than guessed from the span.
 
@@ -1108,4 +1158,9 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   either body holds an error, one test per error kind (`UnboundNeverEquivalentTests`, ticket P2-085). Residual claim (property
   test): for a `line`-scoped Unknown, every generated input on which neither side reaches a listed
   cause gives equal observables in `IrInterpreter`.
+- Input conditions (property test, ADR 0048; `ConditionSoundnessTests`, ticket P1-022): on the pairs of
+  the differential soundness gate, for a pair whose verdict carries `agreesWhen`, every generated
+  input that satisfies the condition gives equal observables on the CLR. The condition is evaluated
+  as the C# its `text` is, so a text that is not a predicate over the modern side's parameters fails
+  too. 200 pairs per PR, with the gate's seed.
 - Every row in the tables above has at least one unit test named after it.

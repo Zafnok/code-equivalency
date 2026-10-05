@@ -188,7 +188,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.BclOverloadRebinding.Paths::StripOther(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 47))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46)))"
+            "text": "Equiv.Samples.BclOverloadRebinding.Paths::StripOther(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 47))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46))). Equivalent when s == null."
           },
           "locations": [
             {
@@ -213,6 +213,12 @@
           "rank": 60.002,
           "properties": {
             "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 47))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46)))",
+            "agreesWhen": {
+              "smt": "(select in.null.System.String in.s)",
+              "text": "s == null",
+              "proposedBy": "harvested-predicates",
+              "proofMethod": "bounded"
+            },
             "ladderTrace": [
               {
                 "rung": "bounded",
@@ -283,6 +289,11 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 1,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {

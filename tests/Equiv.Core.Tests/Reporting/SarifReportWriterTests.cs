@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 
 using Equiv.Core.Execution;
 using Equiv.Core.Ir;
@@ -608,6 +608,66 @@ public sealed class SarifReportWriterTests
 
         Assert.Equal(Fingerprint(plain), Fingerprint(tested));
         return VerifyJson(Serialize(tested));
+    }
+
+    /// <summary>
+    /// Ticket P1-022 criteria 2 and 3 (ADR 0048): an admitted input condition is <c>properties.agreesWhen</c> and one more
+    /// sentence of the message, on a Divergent and on an Unknown alike, and it changes neither the rule id, the level, the
+    /// kind nor a fingerprint. A search that admitted nothing leaves the result as it was.
+    /// </summary>
+    [Theory]
+    [InlineData(false, " diverges: ", "). Equivalent when name != null.")]
+    [InlineData(true, " is unknown (Abstraction): ", " opaque:f. Equivalent when name != null.")]
+    public void AgreesWhenIsAPropertyAndASentenceAndNeverMovesTheFingerprint(bool unknown, string verdictText, string ending)
+    {
+        Verdict verdict = unknown ? new Unknown(UnknownReason.Abstraction, "the divergence depends on opaque:f.") : new Divergent(Fixtures.Counterexample());
+        ConditionSearch search = new(new AgreesWhen("(not (select in.null.string in.name))", "name != null")) { Elapsed = TimeSpan.FromSeconds(2) };
+
+        Result plain = SarifReportWriter.Write([Fixtures.Result(verdict)]).Runs[0].Results[0];
+        Result result = SarifReportWriter.Write([Fixtures.Result(WithConditions(verdict, search))]).Runs[0].Results[0];
+        Result none = SarifReportWriter.Write([Fixtures.Result(WithConditions(verdict, new ConditionSearch(AgreesWhen: null) { Contradicted = true }))]).Runs[0].Results[0];
+
+        Assert.Equal(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["smt"] = "(not (select in.null.string in.name))",
+                ["text"] = "name != null",
+                ["proposedBy"] = "harvested-predicates",
+                ["proofMethod"] = "bounded",
+            },
+            result.GetProperty<Dictionary<string, string>>("agreesWhen"));
+        Assert.Contains(verdictText, plain.Message.Text, StringComparison.Ordinal);
+        Assert.Equal(plain.Message.Text.TrimEnd('.') + ". Equivalent when name != null.", result.Message.Text);
+        Assert.EndsWith(ending, result.Message.Text, StringComparison.Ordinal);
+        Assert.False(plain.TryGetProperty("agreesWhen", out Dictionary<string, string>? _));
+        Assert.False(none.TryGetProperty("agreesWhen", out Dictionary<string, string>? _));
+        Assert.Equal(plain.Message.Text, none.Message.Text);
+        Assert.All([result, none], r =>
+        {
+            Assert.Equal(plain.RuleId, r.RuleId);
+            Assert.Equal(plain.Level, r.Level);
+            Assert.Equal(plain.Kind, r.Kind);
+            Assert.Equal(plain.PartialFingerprints, r.PartialFingerprints);
+            Assert.Equal(plain.Rank, r.Rank);
+        });
+
+        static Verdict WithConditions(Verdict verdict, ConditionSearch search) =>
+            verdict is Unknown u ? u with { Conditions = search } : (Divergent)verdict with { Conditions = search };
+    }
+
+    /// <summary>A tested Unknown's sentence (ticket P1-008) still ends the message, after the input condition's.</summary>
+    [Fact]
+    public void Message_SaysTheInputConditionBeforeTheTestedSentence()
+    {
+        VerificationResult tested = Fixtures.Result(new Unknown(UnknownReason.Abstraction, "the divergence depends on opaque:f") { Conditions = new ConditionSearch(new AgreesWhen("(= in.a in.b)", "a == b")) }) with
+        {
+            Testing = DifferentialTesting.Tested(2_500, 9, 3, 3 / 2_500d, TestingStop.Budget),
+        };
+
+        Assert.EndsWith(
+            "opaque:f. Equivalent when a == b. Tested on 2500 inputs; estimated chance the next input shows new behaviour: 0.0012 (equiv generators, not a proof).",
+            SarifReportWriter.Write([tested]).Runs[0].Results[0].Message.Text,
+            StringComparison.Ordinal);
     }
 
     [Theory]
