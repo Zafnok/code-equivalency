@@ -101,8 +101,9 @@ The pairs the wall-clock backstop ends (their time is P2-076's). The value of th
   Alternatives: a `try`/`catch` that disposes and rethrows (a branch no test reaches). Rule: 4.
 - Observed: the fixture snapshots of the assertions Z3 receives are unchanged, and now print the fresh context's
   solver, which is the one that is checked.
-- Observed: each query now holds a second copy of its assertions for as long as it lives. What that costs in
-  time on the corpus pairs is not measured: the machine had no idle core during the runs.
+- Observed: each query now holds a second copy of its assertions for as long as it lives. The one-thread runs
+  took 4,355 and 4,380 pair seconds against P2-050's 4,438 and 4,377 on the same pairs, which do not do the same
+  work as then; no large cost shows.
 - Observed: `main` is red without this change, on `SecondSolverLadderTests.TheSolversQueriesAreStages` and one
   `Equiv.Tests.Integration` snapshot (P1-035 and P1-033 each changed what the other pins). Not touched here.
 - Observed: three harness processes loading the same two solutions at once each loaded a different part of them
@@ -113,11 +114,12 @@ The pairs the wall-clock backstop ends (their time is P2-076's). The value of th
 - Observed: `tools/spikes/solver-portfolio` and `tools/spikes/trace-encoding`, both finished and outside
   `Equiv.slnx`, call `Z3Backend.Query` and `Z3Backend.Check` as they were and no longer build. Not changed.
 - Result (criterion 3): `docs/runs/2026-10-04-solver-repeatability.md`. Four runs of the 184 pairs at the default
-  budget, two on four threads and two on one, side by side in one process: 137 pairs were ended by the resource
-  limit or decided in all four, and all 137 have the same outcome, ladder and detail in all four. 47 met the
-  wall-clock backstop in at least one run (the machine was fully loaded) and are listed apart; on each, the runs
-  that did not meet it agree. Scoreboard unchanged: its Repeatability row rests on two full `compare` runs of a
-  pair, which this is not.
+  budget, two on four threads and two on one, side by side in one process on a quiet machine: 153 pairs were
+  ended by the resource limit or decided in all four, and all 153 have the same outcome, ladder and detail in all
+  four. 31 met the wall-clock backstop in at least one run and are listed apart; on each, the runs that did not
+  meet it agree. The same measurement the night before, on a machine at 100% CPU: 137 of 137, and 47 that met the
+  backstop. Scoreboard unchanged: its Repeatability row rests on two full `compare` runs of a pair, which this is
+  not.
 - Observed: a satisfiable query can now give another model than it gave in the encoder's context, since Z3
   takes another path to it. One checked-in sample shows it: `api-drift`'s Divergent for `Text::HasX(string)` has
   the legacy side throw from `Contains` where it returned before, against the same `NullReferenceException` on
