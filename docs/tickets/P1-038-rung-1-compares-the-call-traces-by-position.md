@@ -90,3 +90,22 @@ Rungs 2 to 5 and the contract queries. Bitwuzla, and writing the sorts as bit-ve
   adopted here.
 - P1-034's read-back could not complete 49 satisfiable answers of the other solvers. Z3's own
   satisfiable answers need no read-back, so that loss does not apply to this ticket.
+- Decision: `ProductEncoder.TraceComparison` is an enum beside `Side`, and the cap is a parameter of
+  `PositionalTrace.Equal` that defaults to `MaxPairs`, so a unit test reaches it with two calls.
+- Decision: the cap counts the pairs of sites that can meet, which is what the spike's 10,000 and
+  325,266 counted, not old sites times new sites.
+- Decision: rung 1 passes the positional comparison whatever the ladder's `Relation` is. Only
+  `ContractVerifier` sets one, and it asks rung 1's query itself through `ProductEncoder.Encode` with the
+  default, so it is as before; its ladder runs rungs 2 and 3 only.
+- Decision: `FragmentEncoder.CallSite` carries its event's values (`TraceEncoder.Read`, which `Call` boxes
+  too) and its least and greatest position; `FragmentEncoder` has `Length` and `ExceptionBits`.
+- Decision: criterion 4's "before" is `main` at this branch's base and "after" is the branch, which differ
+  by this ticket alone; the product has no switch a run could flip on one commit.
+- Reverse postorder visits a branch's `else` target first, so call sites are listed in that order, not in
+  block-number order. Nothing depends on it; the pinned test strings show it.
+- Criterion 4 (`docs/runs/2026-10-05-positional-trace.md`): rung 1 timeouts 210 to 104, `timeout` Unknowns 148
+  to 80, no answered query lost, so the size guard's count is 0 and the cap stays at 10,000.
+- Twelve pairs rung 1 answered satisfiable in both runs moved between Divergent and Unknown(`abstraction`),
+  six each way: another model of the same query replays differently. Not a timeout, so not the size guard's.
+- Decision: the scoreboard is unchanged. Its rows for this pair rest on the pair's latest `full` SUMMARY, and
+  the ticket's Files hold a report, not a SUMMARY; `2026-10-05-parallel-verify.md` set the precedent.
