@@ -50,12 +50,14 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 4. Lowering: `ControlFlowGraph.Create(IOperation)` -> IR. Unsupported operations produce
    `IrOpaque` nodes, never exceptions. Coverage of the IOperation surface is tracked in
    `docs/tickets/IOPERATION-COVERAGE.md` and grows ticket by ticket.
-5. IL fallback (ADR 0039; tickets P1-014 to P1-018): with `--il-fallback`, a matched pair that is
+5. IL lowering (ADR 0039, ADR 0049; tickets P1-014 to P1-018, P1-032): in thorough mode, and in quick mode
+   with `--il-fallback`, a matched pair that is
    not congruent and holds an opaque the other side does not share is lowered again, on both sides,
    from ILSpy's ILAst of the side's compilation emitted in memory (`Lowering/Il/`; no other project
    references `ICSharpCode.Decompiler`). Every type and member the ILAst names is resolved to the
    loaded compilation's symbol and goes through step 4's own `TypeMapper` and
-   `CallIdentityFactory`, so identities and sorts come from the same code. The IL bodies replace the IOperation ones only when they hold fewer unshared opaques.
+   `CallIdentityFactory`, so identities and sorts come from the same code. The IL bodies are used only when they hold fewer unshared opaques. In thorough mode
+   `ProcedurePair` then carries both lowerings (`ProcedurePair.Il`), for the CLI's IL pass; in quick mode with `--il-fallback` the IL bodies replace the IOperation ones.
    Coverage is tracked in `docs/tickets/IL-COVERAGE.md`.
 
 `Equiv.Verify.Z3` implements `IVerificationBackend`:
@@ -110,11 +112,19 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
 `Equiv.Cli`:
 
 - `equiv compare --legacy <path.sln> --modern <path.sln> [--baseline prev.sarif]
-  [--out result.sarif] [--bound 3] [--timeout-ms 5000] [--fail-on divergent|unknown]
+  [--out result.sarif] [--mode thorough|quick] [--fail-on divergent|unknown]
   [--dry-run] [--lower-only] [--execute] [--test-target 0.001] [--test-budget 10000[,60]]
   [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback] [--resource-limit <n>] [--jobs <n>]`.
 - `--legacy` and `--modern` mean before and after the change, on any runtime pair; `--before` and
   `--after` are aliases, and both spellings of one option are a usage error (ADR 0040 decision 4).
+- `--mode` (default `thorough`; ADR 0049, ticket P1-032) overrides the config's `mode`; any other value is exit 3.
+  `CompareCommand` runs the passes (VERIFICATION-MODEL.md section 6 has the table): the first pass over every matched
+  pair, the same in both modes; then, in thorough only, the budget pass and the IL pass, each over the results that are
+  still Unknown; then each result's assumptions; the contracts pass, in thorough only; and `--execute`.
+  `CompareCommand.Standing` is the one place that says which of a pair's earlier and later result stands. A later
+  pass that throws on a pair leaves its earlier result with a warning on stderr, never exit 5. `Passes` holds each
+  pass's `VerificationOptions`, including whether the backend asks rung 5's local proposer and refines a `timeout`
+  Unknown, and writes `run.properties.mode`. A mode never turns on `--execute` or `--invariant-model`.
 - `--chc-int-mode` (default true) lets loop-ladder rung 4 ask Z3 Spacer over the integers first
   (VERIFICATION-MODEL.md section 5.1); `false` keeps it to the bitvectors.
 - `--invariant-model <id>` (off by default) turns on rung 5: when rung 4 times out, the Claude model `<id>` is asked
@@ -123,13 +133,13 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
 - `--resource-limit` overrides the config's `resourceLimit`, Z3's deterministic `rlimit` for each
   query; the config's `timeoutMs` is the wall-clock backstop (VERIFICATION-MODEL.md section 6;
   ticket P2-050). A value that is not positive is exit 3.
-- `--jobs` overrides the config's `jobs` (default 1): the `verify` and `contracts`
+- `--jobs` overrides the config's `jobs` (default 1): the `verify`, `budget`, `il` and `contracts`
   phases run up to that many pairs at once, each backend call on a thread of its own, and write their
   results in the pairs' order. On `n` threads the backend is given `n` times `timeoutMs`, so the
   resource limit, not the clock, is what ends a query (VERIFICATION-MODEL.md section 6; ticket
   P2-077). A value that is not positive is exit 3.
-- `--il-fallback` (off by default until P1-018's corpus run decides otherwise; ADR 0039) turns on
-  the frontend's IL fallback (step 5 above).
+- `--il-fallback` (off by default) adds the frontend's IL lowering (step 5 above) to quick mode, where the IL
+  bodies replace the IOperation ones (ADR 0039). Thorough mode lowers from IL without it, as a pass (ADR 0049).
 - Every run prints the analysed line count of each codebase and writes both to
   `run.properties.analysedLinesOfCode`: two numbers, never a total (README "Licence"). The frontend
   counts them from the files it loaded. `--dry-run` loads both sides, prints the route and the
@@ -148,8 +158,8 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
   projects it loaded; the C# one emits them and compiles a driver per side for that side's project's
   detected runtime, so a same-runtime pair runs both sides on one runtime, and `Equiv.Execute`'s
   `Replayer` runs them. The result gains `properties.replay` (VERIFICATION-MODEL.md section 6);
-  the verdict, rule id, fingerprint and exit code never change. It also tests every Unknown pair on
-  generated inputs (decision 3; ticket P1-008): the factory's `Plan` builds the same two drivers,
+  the verdict, rule id, fingerprint and exit code never change. In thorough mode it also tests every Unknown pair on
+  generated inputs (decision 3; ticket P1-008; quick mode still replays every Divergent and tests no Unknown, ADR 0049): the factory's `Plan` builds the same two drivers,
   and `Equiv.Execute`'s `DifferentialTester` streams inputs through them until the Good-Turing
   discovery probability falls below `--test-target` or `--test-budget` (inputs, and optionally
   seconds, per pair) runs out. Both options are validated (exit 3) and do nothing without
@@ -159,7 +169,7 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
   has two read-only tools that call `CompareCommand.Run`, the pipeline `equiv compare` runs, with an
   in-memory sink, so nothing is written to disk. `compare` takes `legacy`, `modern`, and optionally
   `config`, `baseline`, `bound`, `timeoutMs` (these two override the config's values and must be
-  positive) and `ilFallback` (`--il-fallback`); it returns a short summary (`Equivalent n, Divergent n, Unknown n, skipped projects n,
+  positive), `ilFallback` (`--il-fallback`) and `mode` (`--mode`; any value but `thorough` or `quick` is a tool error); it returns a short summary (`Equivalent n, Divergent n, Unknown n, skipped projects n,
   exit code k`, then the review list's lines; ticket P2-064), then the SARIF log as JSON text. `lower_only` takes `legacy`, `modern`, `config` and `ilFallback` and
   is `compare --lower-only`. An input error that `compare` maps to exit 3, or to exit 4 with no SARIF log,
   is a tool error (`isError: true`) with the message `equiv compare` prints on stderr. stdout carries

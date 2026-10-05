@@ -24,6 +24,11 @@ inputs:
   fail-on:
     description: 'Verdict that fails the action: "divergent" (default) or "unknown".'
     required: false
+  mode:
+    description: >-
+      "thorough" (default) verifies again, with more budget and from IL, the pairs a first pass
+      leaves Unknown; "quick" stops after the first pass. Any other value fails the action (exit 3).
+    required: false
 
 outputs:
   sarif:
@@ -39,3 +44,4 @@ runs:
     - ${{ inputs.config }}
     - ${{ inputs.baseline }}
     - ${{ inputs.fail-on }}
+    - ${{ inputs.mode }}

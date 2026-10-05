@@ -5,8 +5,7 @@ using Equiv.Core.Ir;
 namespace Equiv.Core.Configuration;
 
 /// <summary>
-/// Parsed and defaulted <c>equiv.config.json</c> (VERIFICATION-MODEL.md section 3; ARCHITECTURE.md's
-/// <c>--bound</c>/<c>--timeout-ms</c> CLI defaults). <see cref="CallIdentityRenames"/> maps a legacy-side
+/// Parsed and defaulted <c>equiv.config.json</c> (VERIFICATION-MODEL.md sections 3 and 6). <see cref="CallIdentityRenames"/> maps a legacy-side
 /// <c>CallIdentity.Value</c> to its modern-side counterpart so matched calls unify (ticket M3-001).
 /// </summary>
 public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, string> CallIdentityRenames, int Bound, int TimeoutMs)

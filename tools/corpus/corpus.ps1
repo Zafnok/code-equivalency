@@ -37,6 +37,9 @@
     ./tools/corpus/corpus.ps1 -Packages gitextensions-8522    # after both sides are restored
     ./tools/corpus/corpus.ps1 -SeedMechanical gitextensions-8522 -Count 300 -Seed 1
     ./tools/corpus/corpus.ps1 -Env | Invoke-Expression     # before any restore or run of equiv
+    ./tools/corpus/corpus.ps1 -Compare gitextensions-8522 -Mode thorough   # one verifying run, into a new run directory
+    ./tools/corpus/corpus.ps1 -Compare gitextensions-8522 -Mode quick -CompareArgs '--jobs', '4'
+    ./tools/corpus/corpus.ps1 -Compare gitextensions-8522 -LowerOnly       # the census; it takes no compare mode
     ./tools/corpus/corpus.ps1 -Progress $run               # where a run in progress is, from $run/progress.log
     ./tools/corpus/corpus.ps1 -Progress $run -Summary      # SUMMARY.md's "## Phase times" table
     ./tools/corpus/corpus.ps1 -Refresh                     # dry run against upstream main
@@ -75,6 +78,18 @@ param(
     # Prints the environment block (SDK resolver, reference assemblies, restore warnings) that a
     # restore or an `equiv` run against .corpus/ needs, for `... | Invoke-Expression`.
     [Parameter(ParameterSetName = 'Env', Mandatory)] [switch]$Env,
+
+    # Ticket P1-032 (ADR 0049): one `equiv compare` on a fetched pair, into a new run directory under
+    # .corpus/pairs/<slug>/runs/, run as the equiv-corpus-run skill's section 5 says. -Mode is the compare mode,
+    # passed through as --mode, and a verifying run must name it; -LowerOnly is the census, which verifies nothing
+    # and takes none. -Modern names another modern solution (a seeded copy), -Tag ends the run directory's name,
+    # and -CompareArgs are passed through as given (--jobs 4, --fail-on unknown). Prints the run directory.
+    [Parameter(ParameterSetName = 'Compare', Mandatory)] [string]$Compare,
+    [Parameter(ParameterSetName = 'Compare')] [ValidateSet('thorough', 'quick')] [string]$Mode,
+    [Parameter(ParameterSetName = 'Compare')] [switch]$LowerOnly,
+    [Parameter(ParameterSetName = 'Compare')] [string]$Modern,
+    [Parameter(ParameterSetName = 'Compare')] [string]$Tag,
+    [Parameter(ParameterSetName = 'Compare')] [string[]]$CompareArgs = @(),
 
     # Reads one equiv SARIF log and prints the numbers a SUMMARY.md needs (never source text).
     [Parameter(ParameterSetName = 'Metrics', Mandatory)] [string]$Metrics,
@@ -295,6 +310,19 @@ function Read-PairJson([string]$Slug) {
     $path = Join-Path (Get-PairDir $Slug) 'pair.json'
     if (-not (Test-Path -LiteralPath $path)) { throw "No pair.json for '$Slug'. Run -Fetch first." }
     Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+}
+
+# The arguments of one corpus run of `equiv compare` (ticket P1-032; ADR 0049). A verifying run names its compare
+# mode, so its SUMMARY.md can and two runs are compared only within one; the census (--lower-only) verifies nothing
+# and takes none. Every run writes the debug progress log (ADR 0038).
+function Get-CompareArguments {
+    param([string]$Legacy, [string]$ModernSolution, [string]$RunDir, [string]$CompareMode, [bool]$Census, [string[]]$Extra)
+    if ($Census -and $CompareMode) { throw '-LowerOnly verifies nothing, so it takes no -Mode.' }
+    if (-not $Census -and -not $CompareMode) { throw 'A verifying run names its compare mode: -Mode thorough or -Mode quick (equiv-corpus-run, section 5).' }
+    $arguments = @('compare', '--legacy', $Legacy, '--modern', $ModernSolution, '--out', (Join-Path $RunDir 'equiv.sarif'),
+        '--verbosity', 'debug', '--log', (Join-Path $RunDir 'progress.log'))
+    if ($Census) { $arguments += '--lower-only' } else { $arguments += @('--mode', $CompareMode) }
+    return @($arguments) + @($Extra | Where-Object { $_ })
 }
 
 function Resolve-Slug([string]$Id) {
@@ -694,6 +722,16 @@ switch ($PSCmdlet.ParameterSetName) {
             if ($null -eq $p) { return $null }
             return $p.Value
         }
+        # ADR 0049 decision 6 (P1-032): SUMMARY.md names the compare mode, and two runs are compared only within one.
+        $written = Get-Bag (Get-Bag $run 'properties') 'mode'
+        Show-Step "== compare mode (ADR 0049)"
+        if ($null -eq $written) { Show-Step "n/a (no run.properties.mode: a --lower-only census, or a run from before P1-032)" }
+        else {
+            Show-Step ("  {0}: bound {1}, resourceLimit {2}, timeoutMs {3}" -f $written.name, $written.bound, $written.resourceLimit, $written.timeoutMs)
+            $escalation = Get-Bag $written 'escalation'
+            if ($null -ne $escalation) { Show-Step ("  budget pass: bound {0}, resourceLimit {1}, timeoutMs {2}" -f $escalation.bound, $escalation.resourceLimit, $escalation.timeoutMs) }
+            Show-Step ("  set explicitly: {0}" -f (@(Get-Bag $written 'explicit' | Where-Object { $_ }) -join ', '))
+        }
         $census = Get-Bag (Get-Bag $run 'properties') 'loweringCensus'
         Show-Step "== census"
         if ($null -eq $census) { Show-Step "n/a (no run.properties.loweringCensus; needs M3-014)" }
@@ -750,6 +788,11 @@ switch ($PSCmdlet.ParameterSetName) {
                 if ($null -eq $value) { 'n/a' } else { [string]$value }
             } | Group-Object | Sort-Object Name | ForEach-Object { Show-Step ("  {0} {1}" -f $_.Name, $_.Count) }
         }
+        Show-Step "== results a later pass produced (decidedBy), by rule"
+        $results | ForEach-Object {
+            $pass = Get-Bag (Get-Bag $_ 'properties') 'decidedBy'
+            if ($null -ne $pass) { '{0} {1}' -f $pass, $_.ruleId }
+        } | Group-Object | Sort-Object Name | ForEach-Object { Show-Step ("  {0} {1}" -f $_.Name, $_.Count) }
         Show-Step "== Unknown (EQ003) by unknownReason, and by scope within it"
         $results | Where-Object { $_.ruleId -eq 'EQ003' } | ForEach-Object {
             $row = [ordered]@{}
@@ -855,6 +898,27 @@ switch ($PSCmdlet.ParameterSetName) {
         $dir = Get-PairDir $slug
         if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force; Show-Step "removed $dir" }
         Show-Step "note    shared checkouts under .corpus/repos are kept; delete them by hand if needed"
+    }
+
+    'Compare' {
+        $slug = Resolve-Slug $Compare
+        $pair = Read-PairJson $slug
+        $kind = if ($LowerOnly) { 'census' } else { "full-$Mode" }
+        if ($Tag) { $kind = "$kind-$Tag" }
+        $runDir = Join-Path (Join-Path (Get-PairDir $slug) 'runs') ('{0}-{1}' -f (Get-Date -Format 'yyyyMMdd-HHmm'), $kind)
+        $modernSolution = if ($Modern) { $Modern } else { $pair.modernSolution }
+        $arguments = Get-CompareArguments -Legacy $pair.legacySolution -ModernSolution $modernSolution -RunDir $runDir -CompareMode $Mode -Census ([bool]$LowerOnly) -Extra $CompareArgs
+        New-Item -ItemType Directory -Force -Path $runDir | Out-Null
+        Show-Step "run     $runDir"
+        Show-Step "equiv   $($arguments -join ' ')"
+        $cli = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'src/Equiv.Cli'
+        $watch = [Diagnostics.Stopwatch]::StartNew()
+        & dotnet run --project $cli -c Release --no-build -- @arguments *> (Join-Path $runDir 'console.txt')
+        $exit = $LASTEXITCODE
+        $named = if ($LowerOnly) { 'n/a' } else { $Mode }
+        "exit=$exit seconds=$([int]$watch.Elapsed.TotalSeconds) compareMode=$named" | Set-Content -LiteralPath (Join-Path $runDir 'exit.txt')
+        Show-Step "exit    $exit after $([int]$watch.Elapsed.TotalSeconds) s (compare mode $named)"
+        Write-Output $runDir
     }
 
     'Env' {

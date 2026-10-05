@@ -215,13 +215,20 @@ internal static class CompareCommand
     /// <c>--baseline</c> or <c>--fail-on</c>, a budget or <c>jobs</c> that is not positive, or a mode that is neither
     /// <c>thorough</c> nor <c>quick</c> (ADR 0049 decision 1; ticket P1-032).
     /// </summary>
-    private static string? UsageError(CompareOptions options) => options switch
+    private static string? UsageError(CompareOptions options)
     {
-        { LowerOnly: true } when options.BaselinePath is not null || options.FailOn is not null => "error: --lower-only cannot be combined with --baseline or --fail-on",
-        _ when options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0 || options.Jobs is <= 0 => "error: bound, timeoutMs, resourceLimit and jobs must be positive integers",
-        { Mode: { } mode } when EquivConfigLoader.ParseMode(mode) is null => $"error: mode must be {Passes.ThoroughName} or {Passes.QuickName}, not '{mode}'",
-        _ => null,
-    };
+        if (options.LowerOnly && (options.BaselinePath is not null || options.FailOn is not null))
+        {
+            return "error: --lower-only cannot be combined with --baseline or --fail-on";
+        }
+
+        if (options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0 || options.Jobs is <= 0)
+        {
+            return "error: bound, timeoutMs, resourceLimit and jobs must be positive integers";
+        }
+
+        return options.Mode is { } mode && EquivConfigLoader.ParseMode(mode) is null ? $"error: mode must be {Passes.ThoroughName} or {Passes.QuickName}, not '{mode}'" : null;
+    }
 
     /// <summary>
     /// The run's config: the file's, with the command line's settings over it, each one named as explicit (ADR 0049
@@ -396,8 +403,8 @@ internal static class CompareCommand
         }
 
         Dictionary<string, (ProcedurePair Pair, IrProcedure Old, IrProcedure New)> pairs = lowered.ToDictionary(static p => p.Pair.New.Value, StringComparer.Ordinal);
-        (ProcedurePair Pair, IrProcedure Old, IrProcedure New)? Undecided(VerificationResult result) =>
-            result.Verdict is Unknown && pairs[result.Identity.Value] is var (pair, old, @new) && Decide(pair, old, @new) is null ? (pair, old, @new) : null;
+        (Unknown Earlier, ProcedurePair Pair, IrProcedure Old, IrProcedure New)? Undecided(VerificationResult result) =>
+            result.Verdict is Unknown unknown && pairs[result.Identity.Value] is var (pair, old, @new) && Decide(pair, old, @new) is null ? (unknown, pair, old, @new) : null;
 
         List<VerificationResult> results = verified;
         if (passes.Budget is { } budget)
@@ -405,7 +412,7 @@ internal static class CompareCommand
             results = LaterPass(
                 Passes.BudgetPhase,
                 results,
-                result => Undecided(result) is var (pair, old, @new) && (HitABudget(result.Verdict) || LoopsOrCallsItself(old, @new)) ? new PassCandidate(pair, old, @new, FromIl: false) : null,
+                result => Undecided(result) is var (unknown, pair, old, @new) && (HitABudget(unknown) || LoopsOrCallsItself(old, @new)) ? new PassCandidate(unknown, pair, old, @new, FromIl: false) : null,
                 budget,
                 verifying);
         }
@@ -413,7 +420,7 @@ internal static class CompareCommand
         results = LaterPass(
             Passes.IlPhase,
             results,
-            result => Undecided(result) is ({ Il: { } il } pair, _, _) ? new PassCandidate(pair, il.Old, il.New, FromIl: true) : null,
+            result => Undecided(result) is (var unknown, { Il: { } il } pair, _, _) ? new PassCandidate(unknown, pair, il.Old, il.New, FromIl: true) : null,
             passes.Budget ?? passes.Whole,
             verifying);
         HashSet<string> fromIl = [.. results.Where(static r => string.Equals(r.DecidedBy, VerificationResult.IlPass, StringComparison.Ordinal)).Select(static r => r.Identity.Value)];
@@ -484,8 +491,8 @@ internal static class CompareCommand
         options.Log.ItemDone(Outcome(verdict));
         VerificationResult later = candidate.Over(earlier) with { Verdict = verdict with { Ladder = [.. earlier.Verdict.Ladder, .. verdict.Ladder] }, DecidedBy = $"{phase}-pass" };
         VerificationResult standing = Standing(earlier, later);
-        return (standing.Verdict, later.Verdict) is (Unknown { FailureRefinement: null } kept, Unknown { FailureRefinement: { } refinement })
-            ? (standing with { Verdict = kept with { FailureRefinement = refinement } }, null)
+        return candidate.Earlier.FailureRefinement is null && verdict is Unknown { FailureRefinement: { } refinement } && ReferenceEquals(standing, earlier)
+            ? (earlier with { Verdict = candidate.Earlier with { FailureRefinement = refinement } }, null)
             : (standing, null);
     }
 
@@ -1154,10 +1161,10 @@ internal static class CompareCommand
     }
 
     /// <summary>
-    /// A pair a later pass verifies again, with the bodies it verifies: the pair's own in the budget pass, its IL bodies in
-    /// the IL pass (<paramref name="FromIl"/>). As an item of the pass's phase it weighs what a pair of <c>verify</c> does.
+    /// A pair a later pass verifies again, with the Unknown it has and the bodies the pass verifies: the pair's own in the
+    /// budget pass, its IL bodies in the IL pass (<paramref name="FromIl"/>). As an item of the pass's phase it weighs what a pair of <c>verify</c> does.
     /// </summary>
-    private sealed record PassCandidate(ProcedurePair Pair, IrProcedure Old, IrProcedure New, bool FromIl)
+    private sealed record PassCandidate(Unknown Earlier, ProcedurePair Pair, IrProcedure Old, IrProcedure New, bool FromIl)
     {
         public long Weight { get; } = PairWeight.Of(Old, New, solver: true);
 
