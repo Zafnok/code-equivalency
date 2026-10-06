@@ -188,7 +188,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.BclOverloadRebinding.Paths::StripOther(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 47))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46))). Equivalent when s == null."
+            "text": "Equiv.Samples.BclOverloadRebinding.Paths::StripOther(string) diverges: inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 1 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 47))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46))). Equivalent when s == null."
           },
           "locations": [
             {
@@ -207,12 +207,12 @@
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.BclOverloadRebinding.Paths::StripOther(string)",
-            "resultFingerprint/v1": "d2af89651a31aff9eb35c68c0c8d041fc6c6f35e5ec19e881906379888641daf"
+            "resultFingerprint/v1": "040d5c35a9e366469968fcaa354d1e43d520f9271ac05638e8b482558320f145"
           },
           "baselineState": "new",
           "rank": 60.002,
           "properties": {
-            "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 47))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46)))",
+            "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 1 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 47))) new(returned sort \"System.String\" 2 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46)))",
             "agreesWhen": {
               "smt": "(select in.null.System.String in.s)",
               "text": "s == null",

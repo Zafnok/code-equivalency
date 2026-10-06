@@ -108,8 +108,7 @@ internal sealed class TraceEncoder
         Expr[] applied = [.. args.Select(static a => a.Term), position, .. reads];
         Expr? result = call.Target is null ? null : context.MkApp(ResultFunction(side, call.Callee, types, call.Target.Type), applied);
         BoolExpr threw = (BoolExpr)context.MkApp(ThrewFunction(side, call.Callee, types), applied);
-        IEnumerable<(IrType Type, Expr Term)> read = args.Concat(Heap.Zip(reads, static (m, term) => (m.Type, term)));
-        SeqExpr boxed = context.MkConcat([context.MkEmptySeq(values), .. read.Select(a => context.MkUnit(context.MkApp(boxes[SortMapper.Name(a.Type)], a.Term)))]);
+        SeqExpr boxed = context.MkConcat([context.MkEmptySeq(values), .. Read(side, call.Callee, args, heap).Select(a => context.MkUnit(context.MkApp(boxes[SortMapper.Name(a.Type)], a.Term)))]);
         Expr @event = context.MkApp(eventConstructor, context.MkInt(Callee(Canonical(side, call.Callee))), boxed);
         return (
             result,
@@ -118,6 +117,15 @@ internal sealed class TraceEncoder
             closedCall ? heap : [.. Heap.Select((_, i) => context.MkApp(HeapFunction(side, call.Callee, types, i), applied))],
             [.. call.RefOuts.Select((r, i) => context.MkApp(RefOutFunction(side, call.Callee, types, i, r.Type), applied))]);
     }
+
+    /// <summary>
+    /// What the event of a call to <paramref name="callee"/> on <paramref name="side"/> holds beside the callee, in order:
+    /// the arguments, then the heap read, one value per <see cref="Heap"/> map, unless the callee is closed (ADR 0041).
+    /// <see cref="Call"/> boxes these and <see cref="PositionalTrace"/> compares them one by one, so the two ways of
+    /// comparing traces cannot disagree on what an event is (ticket P1-038).
+    /// </summary>
+    public ImmutableArray<(IrType Type, Expr Term)> Read(Side side, CallIdentity callee, ImmutableArray<(IrType Type, Expr Term)> args, ImmutableArray<Expr> heap) =>
+        IsClosed(side, callee) ? args : [.. args, .. Heap.Zip(heap, static (m, term) => (m.Type, term))];
 
     /// <summary>
     /// The trace of one side: its blocks' events in reverse postorder, each block's only when it is reached. However many

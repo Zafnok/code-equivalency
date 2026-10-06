@@ -162,7 +162,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.DependencyRebinding.Probe::Clear(Equiv.Samples.DependencyRebinding.Files.IFs,string) diverges: inputs(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0, sort \"System.String\" 0, map<sort \"Equiv.Samples.DependencyRebinding.Files.FileBase\", bool> [] default bool true, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFs\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFile\", bool> [] default bool false) old(threw \"System.NullReferenceException\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0))) new(threw \"System.Exception\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0), \"Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFile\" 0, sort \"System.String\" 0))). Equivalent when fs == null."
+            "text": "Equiv.Samples.DependencyRebinding.Probe::Clear(Equiv.Samples.DependencyRebinding.Files.IFs,string) diverges: inputs(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0, sort \"System.String\" 0, map<sort \"Equiv.Samples.DependencyRebinding.Files.FileBase\", bool> [] default bool false, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFs\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFile\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0), \"Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)\"(sort \"Equiv.Samples.DependencyRebinding.Files.FileBase\" 0, sort \"System.String\" 0))) new(returned bool false outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0), \"Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFile\" 0, sort \"System.String\" 0))). Equivalent when fs == null."
           },
           "locations": [
             {
@@ -181,12 +181,12 @@
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.DependencyRebinding.Probe::Clear(Equiv.Samples.DependencyRebinding.Files.IFs,string)",
-            "resultFingerprint/v1": "bd7037aba4fb09f04a01dd3abf33030d5307401d7af1679e75bd84d25a488fd5"
+            "resultFingerprint/v1": "f1562d8b62bc1b3824542d10eb9ce72b0b095b4e7efd0bdd4e50b373543ff4f5"
           },
           "baselineState": "new",
           "rank": 60.002,
           "properties": {
-            "model": "inputs(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0, sort \"System.String\" 0, map<sort \"Equiv.Samples.DependencyRebinding.Files.FileBase\", bool> [] default bool true, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFs\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFile\", bool> [] default bool false) old(threw \"System.NullReferenceException\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0))) new(threw \"System.Exception\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0), \"Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFile\" 0, sort \"System.String\" 0)))",
+            "model": "inputs(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0, sort \"System.String\" 0, map<sort \"Equiv.Samples.DependencyRebinding.Files.FileBase\", bool> [] default bool false, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFs\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false, map<sort \"Equiv.Samples.DependencyRebinding.Files.IFile\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0), \"Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)\"(sort \"Equiv.Samples.DependencyRebinding.Files.FileBase\" 0, sort \"System.String\" 0))) new(returned bool false outs() trace(\"Equiv.Samples.DependencyRebinding.Files.IFs::get_File()\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFs\" 0), \"Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)\"(sort \"Equiv.Samples.DependencyRebinding.Files.IFile\" 0, sort \"System.String\" 0)))",
             "agreesWhen": {
               "smt": "(select in.null.Equiv.Samples.DependencyRebinding.Files.IFs in.fs)",
               "text": "fs == null",
@@ -200,7 +200,7 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
-            "reviewGroup": "calls:Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)"
+            "reviewGroup": "calls:Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)|Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)"
           }
         },
         {
@@ -366,7 +366,7 @@
         },
         "reviewList": [
           {
-            "group": "calls:Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)",
+            "group": "calls:Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)|Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)",
             "ruleId": "EQ002",
             "rank": 60.002,
             "count": 1,
