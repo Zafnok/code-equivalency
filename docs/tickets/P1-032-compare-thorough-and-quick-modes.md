@@ -158,6 +158,16 @@ queries on `unbound` Unknowns. Fixing P2-078 (criterion 9 makes its crash harmle
 - Decision: `tools/corpus/corpus.ps1` had no command that runs `equiv compare` (the skill's section 5 was a snippet),
   so criterion 10's `-Mode` had nothing to pass through. `-Compare <slug> -Mode thorough|quick` is that snippet as a
   command; a verifying run must name its mode, `-LowerOnly` takes none, and `-Metrics` prints the mode a log names.
+- Deviation: `src/Equiv.Core/Ir/IrUnroller.cs`, `LoopLadder`, `ContractVerifier` and `FailureRefinementQuery` are
+  outside the Files list. Criterion 11's first thorough run did not finish: after 254 of the budget pass's 255 pairs,
+  `GitUI.CommandsDialogs.FormCommit::FormatAllText(int)` never left the unroll stage at bound 8 (4.7 s for the whole
+  pair at bound 3). After 11.5 hours the process held 89 GB on a 63 GB machine, and the user had it stopped
+  (2026-10-06). Unrolling is outside every solver budget, so thorough as the default could hang on real code.
+  `IrUnroller.UnrollWithin` now refuses a side that would pass 25,000 blocks, before it makes the copy; rung 1 is
+  then not applicable and the other rungs run.
+- Decision: the limit is 25,000 blocks. The loop analysis overflowed a one-megabyte stack between 30,000 and 50,000
+  blocks of a nest of loops, and the largest pair the tests verify unrolls to 13,497 (P2-121). It is a constant, not
+  a setting: nothing has asked for another value yet.
 - The samples are pinned to `--resource-limit 5000000` in `SamplesEndToEndTests` and `IlFallbackSampleTests`, as
   the pitfall says, and `BackendProgressTests` is too: at 2,000,000 the second k-induction obligation of
   `loops/late-divergence-beyond` gives up (rung 4 still decides the pair). No other Z3 fixture test moved.

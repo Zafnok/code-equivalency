@@ -601,7 +601,11 @@ instead, so its counterexamples are real. Mutual recursion needs no rung: a call
 shared (section 1, ADR 0019), so `Recursion` means only a self-call that no rung decided.
 
 Rung 1's result is a proof only when no input reaches the bound; otherwise it only refutes, and rungs 2 and 3
-decide. A pair with loops or a self-call that no rung decides is Unknown: `Opaque` when a failed obligation reaches
+decide. Rung 1 does not apply to a pair either side of which, unrolled `k` times, would hold more than 25,000 blocks
+(ticket P1-032): loops nested `d` deep unroll to the body times `k` to the power `d`, work that no solver budget
+bounds, and at thorough mode's bound of 8 one real pair never finished it. The unroller refuses before it makes the
+copy that would pass the limit, the step says so in `ladderTrace`, and the other rungs still run. The contract check
+(section 5.2) and ADR 0037's queries (section 6), which need the same product, answer unknown for such a pair. A pair with loops or a self-call that no rung decides is Unknown: `Opaque` when a failed obligation reaches
 an `IrOpaque`, `Recursion` when a side calls itself, `UnalignedLoop` when the loops do not align or neither
 induction proves them and rung 4 does not apply, `ChcTimeout` when Spacer gave up, `ChcSpurious` when Spacer's
 derivation does not replay to a divergence or its invariant does not solve the clauses, `Timeout` when only the solver gave up. A header's state is its phis plus every other value
