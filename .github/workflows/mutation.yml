@@ -128,22 +128,35 @@ jobs:
           CsCheck_Threads: 1
           FILES: ${{ matrix.files }}
           SINCE: ${{ github.event_name != 'schedule' && format('--config-file {0}/.github/stryker-pr-config.json --since:{1}', github.workspace, needs.plan.outputs.base) || '' }}
+        # Every shard repeats the initial test run, so a project with four shards meets a test
+        # host that dies in it four times as often as one runner did (P2-133's first sharded
+        # run lost a shard that way after five minutes). A run that ends without a report has
+        # scored nothing, so it is started once more; a second failure fails the shard.
         run: |
           mutate=()
           for file in $FILES; do mutate+=(--mutate "**/${{ matrix.src }}/$file"); done
-          dotnet stryker \
-            --test-runner mtp \
-            --project ${{ matrix.src }}.csproj \
-            --target-framework net10.0 \
-            --concurrency 4 \
-            --break-at 0 \
-            $SINCE \
-            "${mutate[@]}" \
-            --skip-version-check \
-            --reporter html \
-            --reporter json \
-            --reporter progress \
-            --output "$GITHUB_WORKSPACE/StrykerOutput/${{ matrix.src }}"
+          output="$GITHUB_WORKSPACE/StrykerOutput/${{ matrix.src }}"
+          for attempt in 1 2; do
+            if dotnet stryker \
+              --test-runner mtp \
+              --project ${{ matrix.src }}.csproj \
+              --target-framework net10.0 \
+              --concurrency 4 \
+              --break-at 0 \
+              $SINCE \
+              "${mutate[@]}" \
+              --skip-version-check \
+              --reporter html \
+              --reporter json \
+              --reporter progress \
+              --output "$output"; then
+              exit 0
+            fi
+            if [[ -f "$output/reports/mutation-report.json" || "$attempt" = 2 ]]; then
+              exit 1
+            fi
+            echo "::warning::Stryker ended without a report on its first attempt (see the log above); starting it once more."
+          done
 
       # The JSON report is what the `stryker` job counts; a shard without one fails here.
       - name: Upload mutation report (${{ matrix.src }}, shard ${{ matrix.shard }})

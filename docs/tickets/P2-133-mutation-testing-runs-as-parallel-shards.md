@@ -28,7 +28,8 @@ the shards up under the existing required check name, and wall-clock is about th
 2. A `stryker-shard` job runs over that matrix and passes Stryker one `--mutate` glob per file, with the existing
    `--test-runner mtp`, `CsCheck_Threads: 1`, `--concurrency 4` and, off `schedule`, `--since` and
    `--config-file`. It uses `--break-at 0`, adds `--reporter json`, uploads the JSON report as an artifact and
-   has `timeout-minutes: 180`.
+   has `timeout-minutes: 180`. A Stryker run that ends without a report is started once more, because every shard
+   repeats the initial test run and a test host that dies in it is the usual way a leg fails.
 3. The final job keeps the check names exactly: `stryker (Equiv.Core, Equiv.Core.Tests)` and the five others
    `docs/QUALITY-GATES.md` lists. It sums Killed, Timeout, Survived and NoCoverage over the project's shard
    reports, computes Stryker's score (detected over detected plus undetected) and fails below 90. It fails when
@@ -80,6 +81,13 @@ then run against every mutant).
   did in two and five minutes.
 - Decision: deleted files -> left out of the plan (`--diff-filter=d`). The old scope step counted a deletion as
   a change and started Stryker with nothing to mutate.
+- Decision: a shard whose Stryker run ends without a report -> started once more, then failed. Alternatives:
+  fail at once and leave it to a manual re-run; retry any number of times. Rule: 4. The first sharded run lost
+  shard 3 of 4 five minutes in to "Initial testrun has more than 50% failing tests" (one test, `State: error`),
+  while the three other shards passed the same initial run on the same commit. Three of the last four failed
+  `mutation.yml` runs before this ticket ended with that message (`Equiv.Verify.Z3` once, `Equiv.Frontend.CSharp`
+  twice), so four shards meet it about four times as often as one runner. Nothing is scored without a report,
+  so the retry cannot hide a low score. Why the test host dies in the initial run is not looked into here.
 - Checked in Stryker.NET's source at tag `dotnet-stryker@5.0.0`, before any run:
   - `--mutate` with `--since`: `MutantFilter`'s enum order is the order filters run in, and `FilePattern` comes
     before `Since`. `BroadcastMutantFilter` hands each filter only the mutants the one before kept, and marks
