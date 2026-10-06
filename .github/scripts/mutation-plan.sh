@@ -35,7 +35,7 @@ shift 2
 
 case "$event" in
   pull_request)
-    git rev-parse --verify --quiet HEAD^2 > /dev/null || { echo "::error::HEAD is not the PR merge commit"; exit 1; }
+    git rev-parse --verify --quiet HEAD^2 > /dev/null || { echo "::error::HEAD is not the PR merge commit" >&2; exit 1; }
     base=$(git rev-parse HEAD^1)
     ;;
   schedule)
@@ -47,13 +47,14 @@ case "$event" in
 esac
 
 pass_recorded() {
+  local project=$1
   local count
   count=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/caches" \
-    -f key="ci-pass-stryker-$1-$HASH" -f ref="$GITHUB_REF" --jq '.total_count') || {
-    echo "::warning::Could not look up an earlier pass for $1; planning it as not yet passed."
+    -f key="ci-pass-stryker-$project-$HASH" -f ref="$GITHUB_REF" --jq '.total_count') || {
+    echo "::warning::Could not look up an earlier pass for $project; planning it as not yet passed."
     return 1
   }
-  [ "$count" -gt 0 ]
+  [[ "$count" -gt 0 ]]
 }
 
 include='[]'
@@ -64,20 +65,20 @@ for pair in "$@"; do
   reused=false
   shards='[]'
 
-  if [ "$event" = pull_request ] && pass_recorded "$src"; then
+  if [[ "$event" = pull_request ]] && pass_recorded "$src"; then
     reused=true
     echo "::notice::Stryker ($src) already passed on code fingerprint $HASH; this push changed only prose, so it is not re-run."
   else
-    if [ -n "$base" ]; then
+    if [[ -n "$base" ]]; then
       files=$(git diff --name-only --diff-filter=d "$base" HEAD -- "src/$src/*.cs")
     else
       files=$(git ls-files -- "src/$src/*.cs")
     fi
     if grep -q '[[:space:]]' <<< "${files//$'\n'/}"; then
-      echo "::error::A .cs path under src/$src contains whitespace, which the shard matrix cannot carry."
+      echo "::error::A .cs path under src/$src contains whitespace, which the shard matrix cannot carry." >&2
       exit 1
     fi
-    if [ -n "$files" ]; then
+    if [[ -n "$files" ]]; then
       shards=$(
         while IFS= read -r file; do
           printf '%s\t%s\n' "$(wc -c < "$file")" "${file#"src/$src/"}"

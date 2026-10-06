@@ -23,13 +23,16 @@ break_at=$3
 dir=$4
 
 mapfile -t reports < <(find "$dir" -name mutation-report.json | sort)
-if [ "${#reports[@]}" -ne "$expected" ]; then
-  echo "::error::Stryker ($src): $expected shards were planned and ${#reports[@]} reported. A shard failed, was cancelled, or ran into its time limit; see the stryker-shard ($src, n/$expected) jobs."
+if [[ "${#reports[@]}" -ne "$expected" ]]; then
+  echo "::error::Stryker ($src): $expected shards were planned and ${#reports[@]} reported. A shard failed, was cancelled, or ran into its time limit; see the stryker-shard ($src, n/$expected) jobs." >&2
   exit 1
 fi
 
 counts=$(jq -cs '[.[].files[].mutants[].status] | group_by(.) | map({ (.[0]): length }) | add // {}' "${reports[@]}")
-count() { jq --arg s "$1" '.[$s] // 0' <<< "$counts"; }
+count() {
+  local status=$1
+  jq --arg s "$status" '.[$s] // 0' <<< "$counts"
+}
 killed=$(count Killed)
 timeout=$(count Timeout)
 survived=$(count Survived)
@@ -47,7 +50,7 @@ summary=${GITHUB_STEP_SUMMARY:-/dev/stdout}
   echo
 } >> "$summary"
 
-if [ "$valid" -eq 0 ]; then
+if [[ "$valid" -eq 0 ]]; then
   echo "No mutants were tested, so there is no score." >> "$summary"
   echo "::notice::Stryker ($src): the shards tested no mutants, so there is no score; it passes."
   exit 0
@@ -56,7 +59,7 @@ fi
 score=$(jq -n --argjson d "$detected" --argjson v "$valid" '$d * 10000 / $v | floor / 100')
 {
   echo "Mutation score: $score% ($detected of $valid), break at $break_at%."
-  if [ $((survived + no_coverage)) -gt 0 ]; then
+  if [[ $((survived + no_coverage)) -gt 0 ]]; then
     echo
     echo "Not detected (the first 200):"
     echo
@@ -70,7 +73,7 @@ score=$(jq -n --argjson d "$detected" --argjson v "$valid" '$d * 10000 / $v | fl
 } >> "$summary"
 
 echo "Stryker ($src): killed $killed, timeout $timeout, survived $survived, no coverage $no_coverage; score $score%."
-if [ $((detected * 100)) -lt $((break_at * valid)) ]; then
-  echo "::error::Stryker ($src): mutation score $score% is below the break threshold of $break_at%."
+if [[ $((detected * 100)) -lt $((break_at * valid)) ]]; then
+  echo "::error::Stryker ($src): mutation score $score% is below the break threshold of $break_at%." >&2
   exit 1
 fi
