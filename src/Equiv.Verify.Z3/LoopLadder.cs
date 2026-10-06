@@ -293,13 +293,29 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             return NotApplicable(ProofMethod.Bounded, $"self-recursion is not inlined: {obstacle}", cause: null);
         }
 
-        (IrProcedure oldUnrolled, IrProcedure newUnrolled) = Stages.Timed(options, Stages.Unroll, () => (IrUnroller.Unroll(old, k), IrUnroller.Unroll(@new, k)));
+        if (Stages.Timed(options, Stages.Unroll, () => Unrolled(old, @new, k)) is not var (oldUnrolled, newUnrolled))
+        {
+            return NotApplicable(ProofMethod.Bounded, TooLargeToUnroll(k), UnknownReason.UnalignedLoop);
+        }
+
         return Session(oldUnrolled, newUnrolled, (context, encoding) =>
         {
             SecondSolver solvers = new(context, encoding, options, InterruptAfterMs);
             return solvers.Tagged(Bounded(context, encoding, solvers, (oldUnrolled, newUnrolled), looping));
         });
     }
+
+    /// <summary>
+    /// Both sides unrolled <paramref name="bound"/> times, or null when either would hold more than
+    /// <see cref="IrUnroller.MaxBlocks"/> blocks (ticket P1-032): rung 1, the contract check and the failure-refinement
+    /// queries then have no product to ask about, and say so instead of unrolling without end.
+    /// </summary>
+    internal static (IrProcedure Old, IrProcedure New)? Unrolled(IrProcedure old, IrProcedure @new, int bound) =>
+        IrUnroller.UnrollWithin(old, bound) is { } oldUnrolled && IrUnroller.UnrollWithin(@new, bound) is { } newUnrolled ? (oldUnrolled, newUnrolled) : null;
+
+    /// <summary>Why a pair <see cref="Unrolled"/> refused has no rung 1.</summary>
+    internal static string TooLargeToUnroll(int bound) =>
+        string.Create(CultureInfo.InvariantCulture, $"a side unrolled {bound} times holds more than {IrUnroller.MaxBlocks} blocks");
 
     /// <summary>Rung 1's queries on the encoding of the <paramref name="unrolled"/> pair, in order.</summary>
     private Rung Bounded(Context context, ProductEncoding encoding, SecondSolver solvers, (IrProcedure Old, IrProcedure New) unrolled, bool looping)

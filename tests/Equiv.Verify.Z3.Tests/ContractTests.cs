@@ -149,6 +149,17 @@ public sealed class ContractTests
         Assert.Contains("solver returned unknown", Assert.IsType<ContractCheck.Unknown>(check).Reason, StringComparison.Ordinal);
     }
 
+    /// <summary>Ticket P1-032: a callee pair too large to unroll has no product to check a contract on, so the check is Unknown.</summary>
+    [Fact]
+    public void ContractVerifier_APairTooLargeToUnrollIsUnknown()
+    {
+        IrProcedure deep = IrText.Parse(DeepLoops.Nested(depth: 12));
+
+        ContractCheck check = Verifier().Verify(deep, deep, new CalleeContract([Threw]));
+
+        Assert.Equal(new ContractCheck.Unknown("a side unrolled 3 times holds more than 25000 blocks"), check);
+    }
+
     [Theory]
     [InlineData("loops/recursion-aligned")]
     [InlineData("loops/irreducible")]

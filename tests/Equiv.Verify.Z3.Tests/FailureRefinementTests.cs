@@ -350,6 +350,28 @@ public sealed class FailureRefinementTests
         Assert.Equal(RefinementResult.Unknown, refinement.NewFailures);
     }
 
+    /// <summary>
+    /// Ticket P1-032: a side whose loops unroll past <see cref="IrUnroller.MaxBlocks"/> blocks is not unrolled. Rung 1
+    /// does not apply and says why, the ladder goes on to its other rungs, and the failure-refinement queries, which
+    /// need the same product, answer Unknown even when asked. One side past the limit is enough.
+    /// </summary>
+    [Fact]
+    public void PairTooLargeToUnroll_HasNoRungOneAndNoRefinementAnswers()
+    {
+        IrProcedure deep = IrText.Parse(DeepLoops.Nested(depth: 12));
+        IrProcedure shallow = IrText.Parse(DeepLoops.Nested(depth: 2));
+        VerificationOptions options = Options with { TimeoutMs = 2_000 };
+
+        Verdict verdict = new LoopLadder(static () => new Context(), options).Verify(deep, deep);
+        FailureRefinement refinement = new FailureRefinementQuery(static () => new Context(), options).Run(deep, deep, encodable: true);
+
+        Assert.Equal(new LadderStep(ProofMethod.Bounded, RungOutcome.NotApplicable, "a side unrolled 3 times holds more than 25000 blocks"), verdict.Ladder[0]);
+        Assert.True(verdict.Ladder.Length > 1);
+        Assert.Equal(new FailureRefinement(RefinementResult.Unknown, RefinementResult.Unknown), refinement);
+        Assert.Null(LoopLadder.Unrolled(shallow, deep, 3));
+        Assert.NotNull(LoopLadder.Unrolled(shallow, shallow, 3));
+    }
+
     /// <summary>A pair rung 1 could not encode has no product, so both answers are Unknown, and the time is still measured.</summary>
     [Fact]
     public void UnencodablePair_IsUnknown()

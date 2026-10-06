@@ -29,7 +29,11 @@ internal sealed class ContractVerifier(Func<Context> createContext, Verification
         }
 
         bool looping = !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
-        (IrProcedure oldUnrolled, IrProcedure newUnrolled) = Stages.Timed(options, Stages.Unroll, () => (IrUnroller.Unroll(old, options.Bound), IrUnroller.Unroll(@new, options.Bound)));
+        if (Stages.Timed(options, Stages.Unroll, () => LoopLadder.Unrolled(old, @new, options.Bound)) is not var (oldUnrolled, newUnrolled))
+        {
+            return new ContractCheck.Unknown(LoopLadder.TooLargeToUnroll(options.Bound));
+        }
+
         return Stages.WithContext<ContractCheck>(options, createContext, context =>
         {
             ProductEncoding encoding = Stages.Timed(options, Stages.Encode, () => ProductEncoder.Encode(context, oldUnrolled, newUnrolled, options.CallIdentityMap, relation: contract));
