@@ -243,7 +243,7 @@ internal sealed class FragmentEncoder
         Expr[] heap = [.. Heap.Select((m, i) => context.MkConst(Name($"heap.{i.ToString(CultureInfo.InvariantCulture)}.{Label(block.Id)}"), sorts.Sort(m.Type)))];
 
         // The fewest and the most calls made before the block on any path of the control-flow graph, whatever the branches read.
-        (int Min, int Max) made = entry ? (0, 0) : (predecessors.Min(p => countRange[p.From].Min), predecessors.Max(p => countRange[p.From].Max));
+        (int fewest, int most) = entry ? (0, 0) : (predecessors.Min(p => countRange[p.From].Min), predecessors.Max(p => countRange[p.From].Max));
         if (entry)
         {
             Assert(reached);
@@ -260,11 +260,11 @@ internal sealed class FragmentEncoder
         List<Expr> blockEvents = [];
         foreach (IrInstruction instruction in block.Instructions)
         {
-            EncodeInstruction(instruction, predecessors, reached, new Count(count, made.Min, made.Max), blockEvents, heap);
+            EncodeInstruction(instruction, predecessors, reached, new Count(count, fewest, most), blockEvents, heap);
         }
 
         events.Add((reached, blockEvents));
-        countRange.Add(block.Id, (made.Min + blockEvents.Count, made.Max + blockEvents.Count));
+        countRange.Add(block.Id, (fewest + blockEvents.Count, most + blockEvents.Count));
         if (count is not null)
         {
             countOut.Add(block.Id, context.MkBVAdd(count, context.MkBV(blockEvents.Count, 32)));

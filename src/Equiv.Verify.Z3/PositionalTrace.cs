@@ -59,24 +59,32 @@ internal static class PositionalTrace
                     return null;
                 }
 
-                BoolExpr meet = a.MinPosition == a.MaxPosition && b.MinPosition == b.MaxPosition
-                    ? context.MkAnd(a.Reach, b.Reach)
-                    : context.MkAnd(a.Reach, b.Reach, context.MkEq(a.Position, b.Position));
-                if (!string.Equals(oldShapes[i], newShapes[j], StringComparison.Ordinal))
+                if (SameEvent(context, a, b, string.Equals(oldShapes[i], newShapes[j], StringComparison.Ordinal)) is { } conjunct)
                 {
-                    conjuncts.Add(context.MkNot(meet));
-                    continue;
-                }
-
-                BoolExpr[] equalities = [.. a.Event.Zip(b.Event).Where(static v => !v.First.Term.Equals(v.Second.Term)).Select(v => context.MkEq(v.First.Term, v.Second.Term))];
-                if (equalities.Length > 0)
-                {
-                    conjuncts.Add(context.MkImplies(meet, context.MkAnd(equalities)));
+                    conjuncts.Add(conjunct);
                 }
             }
         }
 
         return context.MkAnd(conjuncts);
+    }
+
+    /// <summary>
+    /// What one pair of sites whose positions can meet adds: where both are made at one position they are the same event,
+    /// which two of different shapes never are. Null when their values are the same terms, which says nothing.
+    /// </summary>
+    private static BoolExpr? SameEvent(Context context, FragmentEncoder.CallSite a, FragmentEncoder.CallSite b, bool sameShape)
+    {
+        BoolExpr meet = a.MinPosition == a.MaxPosition && b.MinPosition == b.MaxPosition
+            ? context.MkAnd(a.Reach, b.Reach)
+            : context.MkAnd(a.Reach, b.Reach, context.MkEq(a.Position, b.Position));
+        if (!sameShape)
+        {
+            return context.MkNot(meet);
+        }
+
+        BoolExpr[] equalities = [.. a.Event.Zip(b.Event).Where(static v => !v.First.Term.Equals(v.Second.Term)).Select(v => context.MkEq(v.First.Term, v.Second.Term))];
+        return equalities.Length > 0 ? context.MkImplies(meet, context.MkAnd(equalities)) : null;
     }
 
     /// <summary>What two events must share to be equal whatever their values: the canonical callee and each value's type.</summary>
