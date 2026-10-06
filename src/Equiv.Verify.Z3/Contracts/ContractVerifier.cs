@@ -31,6 +31,7 @@ internal sealed class ContractVerifier(Func<Context> createContext, Verification
         bool looping = !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
         if (Stages.Timed(options, Stages.Unroll, () => LoopLadder.Unrolled(old, @new, options.Bound)) is not var (oldUnrolled, newUnrolled))
         {
+            // No product to check the contract on, so the caller keeps its verdict without one.
             return new ContractCheck.Unknown(LoopLadder.TooLargeToUnroll(options.Bound));
         }
 

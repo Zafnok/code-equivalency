@@ -295,6 +295,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
 
         if (Stages.Timed(options, Stages.Unroll, () => Unrolled(old, @new, k)) is not var (oldUnrolled, newUnrolled))
         {
+            // No product to ask about: the loops are left to the rungs that do not unroll them k times.
             return NotApplicable(ProofMethod.Bounded, TooLargeToUnroll(k), UnknownReason.UnalignedLoop);
         }
 
