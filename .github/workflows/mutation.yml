@@ -16,9 +16,154 @@ permissions:
   contents: read
 
 jobs:
+  # P2-133: Stryker runs as shards. `plan` splits each project's files into groups,
+  # `stryker-shard` mutates one group per runner, and `stryker` adds the shards' reports up and
+  # applies the break threshold. Wall-clock is the slowest shard, not the sum: one runner took
+  # over five hours on a PR that changed five central files of Equiv.Verify.Z3, where nearly
+  # every test covers every mutant.
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The earlier-pass lookup lists this PR's cache entries.
+      actions: read
+    outputs:
+      hash: ${{ steps.fp.outputs.hash }}
+      base: ${{ steps.plan.outputs.base }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      any: ${{ steps.plan.outputs.any }}
+      projects: ${{ steps.plan.outputs.projects }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The plan diffs against the base commit (the merge ref's first parent), so it must be
+          # in the clone.
+          fetch-depth: 0
+
+      # A PR push whose code inputs (everything but prose; see the script) match an earlier
+      # passing run of a project in the same PR plans no shard for it, and the project's
+      # `stryker` job reports that pass, same as ci.yml's gates. The nightly full sweep never
+      # reuses or records a pass.
+      - name: Fingerprint code inputs
+        id: fp
+        shell: bash
+        run: echo "hash=$(bash .github/scripts/code-fingerprint.sh)" >> "$GITHUB_OUTPUT"
+
+      # A PR run diffs against the merge commit's first parent: the base this run's merge ref
+      # was built on. origin/<base> at job time is wrong whenever the base has moved since
+      # (another PR merged while this one queued, or a re-run), because Stryker diffs that
+      # commit's tree against the working tree, so the base's own new changes count as this
+      # PR's: an M3-013 re-run mutated 25 IR files the PR never touched. Stryker only mutates
+      # changed .cs files of the project (test paths are ignored, see
+      # .github/stryker-pr-config.json), so a project the PR changes no .cs file of has no
+      # mutants and gets no shard: it passes without paying for the build, the initial test
+      # run and coverage. A dispatched run has no merge ref: it checks out the branch head, so
+      # its base is where the branch left main.
+      #
+      # At most 4 shards per project on a PR or a dispatched run, 8 on the nightly sweep,
+      # which mutates every file. The projects are the `stryker` job's matrix; keep the two
+      # lists the same.
+      - name: Plan the shards
+        id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HASH: ${{ steps.fp.outputs.hash }}
+        run: >
+          bash .github/scripts/mutation-plan.sh
+          "${{ github.event_name }}"
+          ${{ github.event_name == 'schedule' && 8 || 4 }}
+          Equiv.Core=Equiv.Core.Tests
+          Equiv.Cli=Equiv.Cli.Tests
+          Equiv.Frontend.CSharp=Equiv.Frontend.CSharp.Tests
+          Equiv.Verify.Z3=Equiv.Verify.Z3.Tests
+          Equiv.Execute=Equiv.Execute.Tests
+          Equiv.Verify.Cvc5=Equiv.Verify.Cvc5.Tests
+
+  stryker-shard:
+    name: stryker-shard (${{ matrix.src }}, ${{ matrix.shard }}/${{ matrix.of }})
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    # A shard that runs away fails here, with the job's "exceeded the maximum execution time"
+    # message, long before GitHub's six-hour limit cancels the whole run.
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # --since diffs against the base commit, so it must be in the clone.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .z3-feed
+          key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
+      - name: Fetch Microsoft.Z3 (ADR 0030)
+        shell: pwsh
+        run: ./tools/z3-feed/fetch.ps1
+      - run: dotnet restore --locked-mode
+      - run: dotnet tool restore
+
+      # --mutate holds the shard to its own files; every other mutant of the project is
+      # Ignored in its report. Stryker applies it before --since (the order of its MutantFilter
+      # enum), so on a PR a shard tests the changed files it was given and nothing else.
+      # PRs mutate only the src files they changed (diff target and ignored test paths: see the
+      # plan job and .github/stryker-pr-config.json); the nightly run is a full sweep.
+      # --break-at 0: a shard never judges the score; the `stryker` job does, over all shards.
+      # CsCheck_Threads=1: CsCheck samples on every core by default, so four Stryker workers
+      # each running a property test on four threads oversubscribe the 4-vCPU runner, and a
+      # starved run can be cut off as a Timeout, which costs a full timeout plus a test-server
+      # restart on the MTP runner.
+      - name: Run Stryker (${{ matrix.src }}, shard ${{ matrix.shard }} of ${{ matrix.of }})
+        working-directory: tests/${{ matrix.test }}
+        shell: bash
+        env:
+          CsCheck_Threads: 1
+          FILES: ${{ matrix.files }}
+          SINCE: ${{ github.event_name != 'schedule' && format('--config-file {0}/.github/stryker-pr-config.json --since:{1}', github.workspace, needs.plan.outputs.base) || '' }}
+        run: |
+          mutate=()
+          for file in $FILES; do mutate+=(--mutate "**/${{ matrix.src }}/$file"); done
+          dotnet stryker \
+            --test-runner mtp \
+            --project ${{ matrix.src }}.csproj \
+            --target-framework net10.0 \
+            --concurrency 4 \
+            --break-at 0 \
+            $SINCE \
+            "${mutate[@]}" \
+            --skip-version-check \
+            --reporter html \
+            --reporter json \
+            --reporter progress \
+            --output "$GITHUB_WORKSPACE/StrykerOutput/${{ matrix.src }}"
+
+      # The JSON report is what the `stryker` job counts; a shard without one fails here.
+      - name: Upload mutation report (${{ matrix.src }}, shard ${{ matrix.shard }})
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stryker-report-${{ matrix.src }}-${{ matrix.shard }}
+          path: |
+            StrykerOutput/${{ matrix.src }}/reports/mutation-report.json
+            StrykerOutput/${{ matrix.src }}/reports/mutation-report.html
+          if-no-files-found: error
+          overwrite: true
+
   stryker:
-    # Blocking since M0-011: --break-at below fails the job, and each matrix leg is a
-    # required check (see QUALITY-GATES.md). A leg with no mutants (no score) still passes.
+    # Blocking since M0-011: each matrix leg is a required check (see QUALITY-GATES.md), and
+    # its name must not change, because the ruleset lists `stryker (<src>, <test>)`. Since
+    # P2-133 a leg runs no Stryker itself. It fails when the project's shards together score
+    # below 90 or when one of them did not report, and passes when the project has no mutants
+    # (no score) or an earlier pass on the same code.
+    needs: [plan, stryker-shard]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -31,128 +176,58 @@ jobs:
           - { src: Equiv.Execute, test: Equiv.Execute.Tests }
           - { src: Equiv.Verify.Cvc5, test: Equiv.Verify.Cvc5.Tests }
     env:
-      PASS_KEY_PREFIX: ci-pass-stryker-${{ matrix.project.src }}
+      PASS_KEY: ci-pass-stryker-${{ matrix.project.src }}-${{ needs.plan.outputs.hash }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # --since diffs against the base commit (the merge ref's first parent), so it must be in
-          # the clone.
-          fetch-depth: 0
-
-      # A PR push whose code inputs (everything but prose; see the script) match an earlier
-      # passing run of this leg in the same PR skips Stryker and reports that pass, same as
-      # ci.yml's gates. The nightly full sweep never reuses or records a pass.
-      - name: Fingerprint code inputs
-        id: fp
+      - name: Read the plan for ${{ matrix.project.src }}
+        id: plan
         shell: bash
-        run: echo "hash=$(bash .github/scripts/code-fingerprint.sh)" >> "$GITHUB_OUTPUT"
-
-      - name: Look up an earlier pass on the same code
-        id: pass
-        if: github.event_name == 'pull_request'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/ci-pass
-          key: ${{ env.PASS_KEY_PREFIX }}-${{ steps.fp.outputs.hash }}
-          lookup-only: true
-
-      - name: Reuse the earlier pass
-        if: steps.pass.outputs.cache-hit == 'true'
-        run: echo "::notice::Stryker (${{ matrix.project.src }}) already passed on code fingerprint ${{ steps.fp.outputs.hash }}; this push changed only prose, so it is not re-run."
-
-      # A PR run diffs against the merge commit's first parent: the base this run's merge ref
-      # was built on. origin/<base> at job time is wrong whenever the base has moved since
-      # (another PR merged while this one queued, or a re-run), because Stryker diffs that
-      # commit's tree against the working tree, so the base's own new changes count as this
-      # PR's: an M3-013 re-run mutated 25 IR files the PR never touched. Stryker only mutates
-      # changed .cs files of the leg's own project (test paths are ignored, see
-      # .github/stryker-pr-config.json), so a PR that changes none has no mutants, and the
-      # leg reports a pass without paying for the build, the initial test run and coverage.
-      # A dispatched run has no merge ref: it checks out the branch head, so its base is where
-      # the branch left main.
-      - name: Scope the incremental run
-        id: scope
-        if: github.event_name != 'schedule' && steps.pass.outputs.cache-hit != 'true'
-        shell: bash
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          PROJECTS: ${{ needs.plan.outputs.projects }}
+          SRC: ${{ matrix.project.src }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git rev-parse --verify --quiet HEAD^2 > /dev/null || { echo "::error::HEAD is not the PR merge commit"; exit 1; }
-            base=$(git rev-parse HEAD^1)
-          else
-            base=$(git merge-base origin/main HEAD)
+          if [ "$PLAN_RESULT" != success ]; then
+            echo "::error::The plan job ended as $PLAN_RESULT, so no shard ran and there is no result to report."
+            exit 1
           fi
-          echo "base=$base" >> "$GITHUB_OUTPUT"
-          if git diff --quiet "$base" HEAD -- 'src/${{ matrix.project.src }}/*.cs'; then
-            echo "mutants=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::This PR changes no .cs file in src/${{ matrix.project.src }}, so Stryker has no mutants to test on this leg; it passes without running."
-          else
-            echo "mutants=true" >> "$GITHUB_OUTPUT"
-            git diff --name-only "$base" HEAD -- 'src/${{ matrix.project.src }}/*.cs'
+          reused=$(jq -r --arg src "$SRC" '.[$src].reused' <<< "$PROJECTS")
+          shards=$(jq -r --arg src "$SRC" '.[$src].shards' <<< "$PROJECTS")
+          echo "reused=$reused" >> "$GITHUB_OUTPUT"
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+          if [ "$reused" = true ]; then
+            echo "::notice::Stryker ($SRC) already passed on code fingerprint ${{ needs.plan.outputs.hash }}; this push changed only prose, so it is not re-run."
+          elif [ "$shards" = 0 ]; then
+            echo "::notice::This run changes no .cs file in src/$SRC, so Stryker has no mutants to test on this leg; it passes without running."
           fi
 
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.plan.outputs.shards != '0'
         with:
-          global-json-file: global.json
+          sparse-checkout: .github/scripts
 
-      - if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: steps.plan.outputs.shards != '0'
         with:
-          path: .z3-feed
-          key: z3-feed-${{ hashFiles('tools/z3-feed/*.sha256') }}
-      - name: Fetch Microsoft.Z3 (ADR 0030)
-        if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
-        shell: pwsh
-        run: ./tools/z3-feed/fetch.ps1
-      - if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
-        run: dotnet restore --locked-mode
-      - if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
-        run: dotnet tool restore
+          pattern: stryker-report-${{ matrix.project.src }}-*
+          path: ${{ runner.temp }}/stryker-reports
 
-      # PRs mutate only the src files they changed (diff target and ignored test paths: see the
-      # scope step and .github/stryker-pr-config.json); the nightly run is a full sweep.
-      # CsCheck_Threads=1: CsCheck samples on every core by default, so four Stryker workers
-      # each running a property test on four threads oversubscribe the 4-vCPU runner, and a
-      # starved run can be cut off as a Timeout, which costs a full timeout plus a test-server
-      # restart on the MTP runner.
-      - name: Run Stryker (${{ matrix.project.src }})
-        if: steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
-        working-directory: tests/${{ matrix.project.test }}
-        env:
-          CsCheck_Threads: 1
-        run: >
-          dotnet stryker
-          --test-runner mtp
-          --project ${{ matrix.project.src }}.csproj
-          --target-framework net10.0
-          --concurrency 4
-          --break-at 90
-          ${{ github.event_name != 'schedule' && format('--config-file {0}/.github/stryker-pr-config.json --since:{1}', github.workspace, steps.scope.outputs.base) || '' }}
-          --skip-version-check
-          --reporter html
-          --reporter progress
-          --output ${{ github.workspace }}/StrykerOutput/${{ matrix.project.src }}
-
-      - name: Upload mutation report (${{ matrix.project.src }})
-        if: always() && steps.pass.outputs.cache-hit != 'true' && steps.scope.outputs.mutants != 'false'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: stryker-report-${{ matrix.project.src }}
-          path: StrykerOutput/${{ matrix.project.src }}/**/reports/*.html
-          if-no-files-found: warn
+      - name: Score the shards (${{ matrix.project.src }})
+        if: steps.plan.outputs.shards != '0'
+        shell: bash
+        run: bash .github/scripts/mutation-score.sh "${{ matrix.project.src }}" "${{ steps.plan.outputs.shards }}" 90 "$RUNNER_TEMP/stryker-reports"
 
       - name: Record the pass for this code
-        if: github.event_name == 'pull_request' && steps.pass.outputs.cache-hit != 'true'
+        if: github.event_name == 'pull_request' && steps.plan.outputs.reused != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/ci-pass"
           echo "${{ github.sha }}" > "$RUNNER_TEMP/ci-pass/marker"
 
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: github.event_name == 'pull_request' && steps.pass.outputs.cache-hit != 'true'
+        if: github.event_name == 'pull_request' && steps.plan.outputs.reused != 'true'
         with:
           path: ${{ runner.temp }}/ci-pass
-          key: ${{ env.PASS_KEY_PREFIX }}-${{ steps.fp.outputs.hash }}
+          key: ${{ env.PASS_KEY }}
 
   # The differential soundness gate's nightly budget (VERIFICATION-MODEL.md section 7, M0-012): the
   # same DifferentialSoundnessTests every PR runs with 200 pairs in the Windows gates leg, run with

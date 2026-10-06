@@ -707,6 +707,11 @@ Found by a CI failure (PR #390, `gates (ubuntu-latest)`):
   generator's filter for procedures that loop and call keeps 1 draw in 8, and CsCheck gives up after
   100 rejections in a row. Test code only.
 
+Found by CI run times (PR #414, `stryker (Equiv.Verify.Z3, Equiv.Verify.Z3.Tests)`, over five hours):
+- P2-133 (M) Mutation testing runs as parallel shards: `mutation.yml` splits a project's files over up
+  to 4 runners on a PR (8 on the nightly sweep), and a final job per project adds the shards up under
+  the unchanged required check name. Workflow and scripts only. Needs M0-011.
+
 Documentation:
 - P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list
   `--bound` and `--timeout-ms`, which the command never had (`bound` and `timeoutMs` come from the
