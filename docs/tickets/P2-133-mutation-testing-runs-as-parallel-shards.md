@@ -1,5 +1,5 @@
 # P2-133 Mutation testing runs as parallel shards, so a project takes as long as its slowest shard
-Status: in-progress
+Status: done (PR #416)
 Effort: M
 Model: Sonnet, high effort. If you are not Sonnet, Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: M0-011
@@ -101,3 +101,37 @@ then run against every mutant).
     NoCoverage. `StrykerRunResult` breaks when the score is under `break / 100` and never on NaN.
   - No mutants to test (`StrykerRunner`): the "all mutants were ignored" path still calls
     `reporters.OnAllMutantsTested`, so the report is written. The upload step fails a shard that has none.
+- Measured 2026-10-06 on PR #414's head (`9aff42da`: `FragmentEncoder.cs`, `LoopLadder.cs`, `PositionalTrace.cs`,
+  `ProductEncoder.cs`, `TraceEncoder.cs`; 655 tests, 2,607 mutants created, 439 to test).
+  Before, one runner (run 37384383087): 15.5 min from job start to the first mutant, then cancelled by GitHub at
+  6 h 01 min with the 439 unfinished. At least 361 runner minutes and no result.
+  After, four shards (run 37413115577, a dispatch on a branch holding this workflow and that head):
+
+  | Shard | Files | Mutants tested | Job start to first mutant | Whole job |
+  |---|---|---|---|---|
+  | 1/4 | `FragmentEncoder.cs` | 161 | 8.3 min | 84 min |
+  | 2/4 | `LoopLadder.cs` | 102 | 15.4 min | 92 min |
+  | 3/4 | `ProductEncoder.cs` | 84 | 6.7 min | 48 min |
+  | 4/4 | `TraceEncoder.cs`, `PositionalTrace.cs` | 92 | 8.6 min | 56 min |
+
+  Wall-clock is the slowest shard, 92 min. The four jobs are 280 runner minutes, of which 39 are the build, the
+  initial test run and the coverage capture, repeated per shard (build about 30 s, initial run 3 to 4 min,
+  capture 4 to 10 min): 23.5 min more than the one runner paid. The sum: killed 382, timeout 54, survived 0, no
+  coverage 0, score 100%. Each shard's log has about 2,100 mutants "Removed by mutate filter" and its own "will be
+  tested because: Mutant changed compared to target commit", and 161 + 102 + 84 + 92 is the one runner's 439, so
+  `--mutate` and `--since` hold together under the MTP runner as the source says.
+- Shard 3 is the second attempt. Its first died five minutes in (the retry Decision above), and the project's
+  `stryker` job failed with "4 shards were planned and 3 reported" while the five other `stryker` jobs passed.
+  "Re-run failed jobs" then ran shard 3 and that one job again, and the job found all four reports: a re-run
+  reads the earlier attempt's artifacts.
+- 54 of the 436 detected mutants are timeouts, each costing a full timeout and a test-server restart. That is the
+  larger part of every shard's time and is not touched here.
+- A project's `stryker` job needs the whole `stryker-shard` matrix, so a project with no shard reports when the
+  slowest shard of any project ends, where its leg used to pass in a minute. A job cannot need part of a matrix.
+- The skipped `stryker-shard` job of a run with no shard is listed under its unexpanded name
+  (`stryker-shard (${{ matrix.src }}, ...)`). It is not a required check.
+- The workflow and scripts as merged (the retry and the Sonar edits came after the measurement) ran in run
+  37511521916: a dispatch with a one-comment edit in each of `Equiv.Verify.Cvc5`'s three files. Three shards
+  tested 9, 0 and 15 mutants. The shard with none (`Cvc5Process.cs`, excluded from coverage) logged "all mutants
+  with tests were ignored" and still wrote its JSON report, as the source says. The sum was killed 22, survived 2,
+  score 91.66%, and the check passed. The retry itself has not fired in a run yet.
