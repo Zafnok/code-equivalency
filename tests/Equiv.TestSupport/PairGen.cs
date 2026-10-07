@@ -203,7 +203,9 @@ public static class PairGen
                 FloatStatement.Array[0, 3],
                 Gen.Bool,
                 RealExpr(t.real, 1),
-                (site, before, plain, operand) => FloatSources(t.real, t.relational, site, [.. before], plain, operand)));
+                (site, before, plain, operand) => FloatSources(t.real, t.relational, site, [.. before], plain, operand)))
+            // Commuting two operands that are one expression changes nothing; such a draw is no pair.
+            .Where(static pair => !string.Equals(pair.LegacySource, pair.ModernSource, StringComparison.Ordinal));
 
     /// <summary>An input of a <see cref="FloatPair"/> method: <see cref="Input"/>, with <c>g</c> and <c>h</c> drawn from NaN, both zeros, the infinities, subnormals and the extremes as often as not.</summary>
     public static Gen<PairInput> FloatInput =>

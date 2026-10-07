@@ -79,12 +79,21 @@ public sealed class PureOperatorTests
         Assert.IsType<Equivalent>(Verify(legacy, modern));
     }
 
+    /// <summary>
+    /// Swapped <c>double</c> operands were Unknown(Abstraction) until ADR 0053 (ticket P1-030): the candidate depends on
+    /// <c>f64.add</c> alone, which is interpretable, and IEEE addition commutes. Swapped <c>decimal</c> operands still
+    /// are: <c>dec.add</c> has no meaning a backend may give it.
+    /// </summary>
     [Fact]
-    public void SwappedDoubleOperandsAreUnknownAbstraction()
+    public void SwappedDoubleOperandsAreEquivalentAfterRefinementAndSwappedDecimalOperandsStayUnknown()
     {
-        Verdict verdict = Verify("class C { static double M(double a, double b) => a + b; }", "class C { static double M(double a, double b) => b + a; }");
+        Verdict doubles = Verify("class C { static double M(double a, double b) => a + b; }", "class C { static double M(double a, double b) => b + a; }");
+        Verdict decimals = Verify("class C { static decimal M(decimal a, decimal b) => a + b; }", "class C { static decimal M(decimal a, decimal b) => b + a; }");
 
-        Assert.Equal(UnknownReason.Abstraction, Assert.IsType<Unknown>(verdict).Reason);
+        Assert.IsType<Equivalent>(doubles);
+        Assert.Equal(["f64.add"], doubles.Ladder[^1].Refined);
+        Assert.Equal(UnknownReason.Abstraction, Assert.IsType<Unknown>(decimals).Reason);
+        Assert.Single(decimals.Ladder);
     }
 
     [Fact]
