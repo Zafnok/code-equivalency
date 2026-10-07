@@ -324,7 +324,7 @@ public sealed class ArithmeticRefinementTests
         (IrProcedure old, IrProcedure @new) = Fixture.Pair(MovedBranch);
         ArithmeticAbstraction arithmetic = new(context);
 
-        ProductEncoding encoding = ProductEncoder.Encode(context, old, @new, [], arithmetic: arithmetic);
+        ProductEncoding encoding = ProductEncoder.EncodeAbstracted(context, old, @new, [], arithmetic);
 
         Assert.Same(arithmetic, encoding.Arithmetic);
         Assert.Equal(6, arithmetic.Applications.Count);
@@ -349,7 +349,7 @@ public sealed class ArithmeticRefinementTests
         IrProcedure procedure = IrText.Parse(EveryOperator);
         ArithmeticAbstraction arithmetic = new(context);
 
-        ProductEncoder.Encode(context, procedure, procedure, [], arithmetic: arithmetic);
+        ProductEncoder.EncodeAbstracted(context, procedure, procedure, [], arithmetic);
 
         string[] names = ["arith.Mul.64", "arith.SDiv.64", "arith.SRem.64", "arith.UDiv.64", "arith.URem.64", "arith.Mul.32", "arith.overflows.SMul.32", "arith.overflows.UMul.32"];
         Assert.Equal([.. names, .. names], arithmetic.Applications.Select(static a => a.Function.Name.ToString()), StringComparer.Ordinal);
@@ -370,12 +370,12 @@ public sealed class ArithmeticRefinementTests
         IrProcedure procedure = IrText.Parse(ConstantOperands);
         ArithmeticAbstraction arithmetic = new(context);
 
-        ProductEncoding encoding = ProductEncoder.Encode(context, procedure, procedure, [], arithmetic: arithmetic);
+        ProductEncoding encoding = ProductEncoder.EncodeAbstracted(context, procedure, procedure, [], arithmetic);
 
         Assert.Empty(arithmetic.Applications);
         Assert.False(ArithmeticAbstraction.AppliesTo(procedure));
         Assert.Equal(
-            ProductEncoder.Encode(context, procedure, procedure, []).Assertions.Select(static a => a.ToString()),
+            ProductEncoder.Encode(context, procedure, procedure, [], traces: ProductEncoder.TraceComparison.Positional).Assertions.Select(static a => a.ToString()),
             encoding.Assertions.Select(static a => a.ToString()),
             StringComparer.Ordinal);
     }
@@ -423,7 +423,7 @@ public sealed class ArithmeticRefinementTests
         IrProcedure guarded = IrText.Parse(GuardedDivision);
         ArithmeticAbstraction arithmetic = new(context);
 
-        ProductEncoding encoding = ProductEncoder.Encode(context, guarded, guarded, [], arithmetic: arithmetic);
+        ProductEncoding encoding = ProductEncoder.EncodeAbstracted(context, guarded, guarded, [], arithmetic);
 
         Assert.Equal(["arith.SDiv.32", "arith.SDiv.32"], arithmetic.Applications.Select(static a => a.Function.Name.ToString()), StringComparer.Ordinal);
         string text = string.Join('\n', encoding.Assertions.Select(static a => a.ToString()));
@@ -764,7 +764,7 @@ public sealed class ArithmeticRefinementTests
         public Refining(IrProcedure old, IrProcedure @new, bool wrong, bool distinctOperands = false)
         {
             Arithmetic = new ArithmeticAbstraction(Context);
-            ProductEncoding encoding = ProductEncoder.Encode(Context, old, @new, [], arithmetic: Arithmetic);
+            ProductEncoding encoding = ProductEncoder.EncodeAbstracted(Context, old, @new, [], Arithmetic);
             Refinement = new ArithmeticRefinement(Context, encoding, Arithmetic, Options);
             ArithmeticAbstraction.Application first = Arithmetic.Applications[0];
             solver = Context.MkSolver();

@@ -65,28 +65,29 @@ internal sealed class FragmentEncoder
     /// <param name="side">Names the constants <c>old.</c> or <c>new.</c> and picks the side's runtime-sensitive functions.</param>
     /// <param name="procedure">An acyclic procedure.</param>
     /// <param name="sorts">The sorts and literals of the context the terms live in.</param>
-    /// <param name="functions">The call and pure-function encoders both sides share, or null for a fragment without either.</param>
+    /// <param name="functions">
+    /// The call and pure-function encoders both sides share, with the functions that stand for their hard arithmetic or
+    /// null to encode it exactly; null for a fragment without calls or pure functions, whose arithmetic is exact.
+    /// </param>
     /// <param name="inputs">The term each parameter of <paramref name="procedure"/> is bound to, by name.</param>
     /// <param name="heapInputs">The shared input of each map <see cref="TraceEncoder.Heap"/> ranges over, in its order.</param>
     /// <param name="exceptionTypes">Exception type names to the ids both sides use for them; new names are added.</param>
-    /// <param name="arithmetic">The functions both sides share for their hard arithmetic, or null to encode it exactly.</param>
     /// <exception cref="InvalidOperationException">The fragment calls or applies a pure function and <paramref name="functions"/> is null.</exception>
     public FragmentEncoder(
         Side side,
         IrProcedure procedure,
         SortMapper sorts,
-        (TraceEncoder Calls, PureEncoder Pures)? functions,
+        (TraceEncoder Calls, PureEncoder Pures, ArithmeticAbstraction? Arithmetic)? functions,
         IReadOnlyDictionary<string, Expr> inputs,
         ImmutableArray<Expr> heapInputs,
-        Dictionary<string, int> exceptionTypes,
-        ArithmeticAbstraction? arithmetic = null)
+        Dictionary<string, int> exceptionTypes)
     {
         this.side = side;
         this.sorts = sorts;
         calls = functions?.Calls;
         pures = functions?.Pures;
         integers = sorts.Integers;
-        this.arithmetic = arithmetic;
+        arithmetic = functions?.Arithmetic;
         this.inputs = inputs;
         this.heapInputs = heapInputs;
         Procedure = procedure;

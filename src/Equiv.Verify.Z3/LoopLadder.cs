@@ -343,7 +343,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         ProductEncoding encoding = Stages.Timed(
             options,
             Stages.Encode,
-            () => ProductEncoder.Encode(context, unrolled.Old, unrolled.New, options.CallIdentityMap, Contracts, Relation, ProductEncoder.TraceComparison.Positional, arithmetic));
+            () => ProductEncoder.EncodeAbstracted(context, unrolled.Old, unrolled.New, options.CallIdentityMap, arithmetic, Contracts, Relation));
         ArithmeticRefinement refinement = new(context, encoding, arithmetic, options);
         return refinement.Rounds(() => Asked(context, encoding, unrolled, looping, refinement));
     }
@@ -352,7 +352,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     private Rung Asked(Context context, ProductEncoding encoding, (IrProcedure Old, IrProcedure New) unrolled, bool looping, ArithmeticRefinement? refinement)
     {
         SecondSolver solvers = new(context, encoding, options, InterruptAfterMs);
-        return solvers.Tagged(Bounded(context, encoding, solvers, unrolled, looping, refinement));
+        return solvers.Tagged(Queries(context, encoding, solvers, unrolled, looping, refinement));
     }
 
     /// <summary>
@@ -361,7 +361,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// model is read as the exact product's only when it is one (<see cref="ArithmeticRefinement.Spurious"/>). The opaque
     /// nodes listed are then those some input reaches under the abstraction, which are at least those one really reaches.
     /// </summary>
-    private Rung Bounded(Context context, ProductEncoding encoding, SecondSolver solvers, (IrProcedure Old, IrProcedure New) unrolled, bool looping, ArithmeticRefinement? refinement)
+    private Rung Queries(Context context, ProductEncoding encoding, SecondSolver solvers, (IrProcedure Old, IrProcedure New) unrolled, bool looping, ArithmeticRefinement? refinement)
     {
         string bound = options.Bound.ToString(CultureInfo.InvariantCulture);
         string stage = refinement is null ? string.Empty : "abstracted-";

@@ -476,7 +476,7 @@ public sealed partial class PositionalTraceTests
             side,
             procedure,
             encoding.Sorts,
-            (encoding.Calls, encoding.Pures),
+            (encoding.Calls, encoding.Pures, Arithmetic: null),
             encoding.Inputs.Where(i => parameter(i.Shared) is not null).ToDictionary(i => parameter(i.Shared)!.Var.Name, static i => i.Term, StringComparer.Ordinal),
             [],
             exceptionTypes);
