@@ -1,5 +1,5 @@
 # P1-028 Measurement: the opaque reasons no ticket owns, counted over the three large runs together
-Status: in-progress
+Status: done (PR #418)
 Effort: M
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-066
