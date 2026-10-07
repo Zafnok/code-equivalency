@@ -4,6 +4,7 @@ using System.Text;
 using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
+using Equiv.Verify.Z3.Refinement;
 
 using Microsoft.Z3;
 
@@ -146,12 +147,23 @@ public sealed class LadderFixtureTests
     [Fact]
     public void TimeoutsOnEveryRungAreUnknownTimeout()
     {
-        Unknown unknown = Assert.IsType<Unknown>(Verify(Fixture.Load("loops/loop-hard")));
+        Fixture fixture = Fixture.Load("loops/loop-hard");
+        VerificationOptions options = new(3, 50, []);
+
+        Unknown unknown = Assert.IsType<Unknown>(new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(fixture.Old, fixture.New, options));
 
         Assert.StartsWith("the step obligation of loop 1: solver returned unknown (", unknown.Detail, StringComparison.Ordinal);
         Assert.Equal(
             [RungOutcome.Timeout, RungOutcome.Timeout, RungOutcome.NotApplicable],
             unknown.Ladder.Select(static s => s.Outcome));
+
+        // Ticket P1-031: by default rung 1's timeout is followed by its rounds on the abstracted product, which changes
+        // neither the reason nor the detail, and the other rungs run as they did.
+        Unknown refined = Assert.IsType<Unknown>(new Z3Backend().Verify(fixture.Old, fixture.New, options));
+        Assert.Equal((unknown.Reason, unknown.Detail), (refined.Reason, refined.Detail));
+        Assert.Equal(unknown.Ladder[0], refined.Ladder[0]);
+        Assert.All(refined.Ladder.Skip(1).SkipLast(2), static s => Assert.Equal((ProofMethod.Bounded, true), (s.Rung, s.FactsAdded is not null)));
+        Assert.Equal(unknown.Ladder.Skip(1).Select(static s => (s.Rung, s.Outcome)), refined.Ladder.TakeLast(2).Select(static s => (s.Rung, s.Outcome)));
     }
 
     /// <summary>
@@ -166,7 +178,7 @@ public sealed class LadderFixtureTests
         Fixture fixture = Fixture.Load("loops/loop-hard");
         VerificationOptions unlimited = new(3, 3_600_000, []) { ResourceLimit = int.MaxValue };
 
-        Verdict verdict = new LoopLadder(static () => new Context(), unlimited) { InterruptAfterMs = 1_000 }.Verify(fixture.Old, fixture.New);
+        Verdict verdict = new LoopLadder(static () => new Context(), unlimited) { InterruptAfterMs = 1_000, Arithmetic = ArithmeticMode.Off }.Verify(fixture.Old, fixture.New);
 
         Unknown unknown = Assert.IsType<Unknown>(verdict);
         Assert.Equal(UnknownReason.Timeout, unknown.Reason);

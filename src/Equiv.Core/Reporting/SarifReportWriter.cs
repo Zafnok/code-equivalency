@@ -34,6 +34,12 @@ public static class SarifReportWriter
     /// <summary>What a <c>proofMethod</c> ends with when the result was decided after abstraction refinement (ADR 0053 decision 8; ticket P1-030).</summary>
     private const string RefinedSuffix = "+refined";
 
+    /// <summary>
+    /// What a <c>proofMethod</c> ends with when a round of rung 1 asked with its hard arithmetic abstracted proved or refuted
+    /// the pair (ADR 0025, clarification of 2026-10-07; ticket P1-031).
+    /// </summary>
+    internal const string AbstractedSuffix = "+abstracted";
+
     /// <summary>The <c>proofMethod</c> of a Divergent the real runtimes showed (ADR 0035 decision 3); never an Equivalent's.</summary>
     internal const string ObservedProofMethod = "observed";
 
@@ -289,7 +295,7 @@ public static class SarifReportWriter
                 break;
             case Equivalent equivalent:
                 // Ticket P1-010 (ADR 0036 decision 2): a proof that used callee contracts says so in its method and lists them.
-                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix) + Suffixes(verdict));
+                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix) + Suffixes(verdict) + Abstracted(verdict));
                 if (!equivalent.ContractsUsed.IsEmpty)
                 {
                     sarifResult.SetProperty("contractsUsed", equivalent.ContractsUsed.Select(ContractProperty).ToList());
@@ -323,11 +329,12 @@ public static class SarifReportWriter
     private static void SetLadderProperties(Result sarifResult, Verdict verdict)
     {
         // ADR 0050 decision 4 (ticket P1-033): a Divergent or an Unknown a second solver answered a query of names the rung
-        // and the solver, as an Equivalent does, and so does one decided after refinement (ADR 0053 decision 8). One the
-        // real runtimes showed stays observed.
-        if (verdict is Unknown or Divergent { Observed: null } && verdict.Ladder.FirstOrDefault(static s => s.Solver is not null || !s.Refined.IsEmpty) is { } answered)
+        // and the solver, as an Equivalent does, and so does one decided after refinement (ADR 0053 decision 8) or by an
+        // abstracted round of rung 1 (ticket P1-031). One the real runtimes showed stays observed.
+        if (verdict is Unknown or Divergent { Observed: null }
+            && verdict.Ladder.FirstOrDefault(static s => s.Solver is not null || !s.Refined.IsEmpty || s.DecidedAbstracted) is { } answered)
         {
-            sarifResult.SetProperty("proofMethod", Name(answered.Rung) + Suffixes(verdict));
+            sarifResult.SetProperty("proofMethod", Name(answered.Rung) + Suffixes(verdict) + Abstracted(verdict));
         }
 
         if (verdict.Ladder.LastOrDefault(static s => !s.Refined.IsEmpty) is { } refined)
@@ -354,7 +361,13 @@ public static class SarifReportWriter
         (verdict.Ladder.Any(static s => !s.Refined.IsEmpty) ? RefinedSuffix : string.Empty)
         + string.Concat(verdict.Ladder.Select(static s => s.Solver?.Name).OfType<string>().Distinct(StringComparer.Ordinal).Select(static n => "+" + n));
 
-    /// <summary>One <c>ladderTrace</c> entry; its <c>solver</c> is the second solver that answered a query of the rung, with its version.</summary>
+    /// <summary><see cref="AbstractedSuffix"/> when an abstracted round of rung 1 proved or refuted the pair, else nothing.</summary>
+    private static string Abstracted(Verdict verdict) => verdict.Ladder.Any(static s => s.DecidedAbstracted) ? AbstractedSuffix : string.Empty;
+
+    /// <summary>
+    /// One <c>ladderTrace</c> entry; its <c>solver</c> is the second solver that answered a query of the rung, with its version,
+    /// and its <c>factsAdded</c> the facts an abstracted round of rung 1 added (ticket P1-031).
+    /// </summary>
     private static Dictionary<string, string> LadderProperty(LadderStep step)
     {
         Dictionary<string, string> entry = new(StringComparer.Ordinal)
@@ -366,6 +379,11 @@ public static class SarifReportWriter
         if (step.Solver is { } solver)
         {
             entry["solver"] = $"{solver.Name} {solver.Version}";
+        }
+
+        if (step.FactsAdded is { } facts)
+        {
+            entry["factsAdded"] = facts.ToString(CultureInfo.InvariantCulture);
         }
 
         return entry;

@@ -799,6 +799,43 @@ public sealed class SarifReportWriterTests
         }
     }
 
+    /// <summary>
+    /// Ticket P1-031 criterion 2: a result an abstracted round of rung 1 proved or refuted has <c>proofMethod</c> suffixed
+    /// <c>+abstracted</c>, after the other suffixes, and each round's <c>ladderTrace</c> step carries its <c>factsAdded</c>. A
+    /// round that decided nothing names nothing.
+    /// </summary>
+    [Fact]
+    public void AnAbstractedRound_IsNamedWhenItDecidedThePair()
+    {
+        LadderStep timedOut = new(ProofMethod.Bounded, RungOutcome.Timeout, "t");
+        LadderStep spurious = new(ProofMethod.Bounded, RungOutcome.Inconclusive, "round 1") { FactsAdded = 2 };
+        LadderStep proved = new(ProofMethod.Bounded, RungOutcome.Proved, "round 2") { FactsAdded = 0 };
+        LadderStep refuted = new(ProofMethod.Bounded, RungOutcome.Refuted, "round 2") { FactsAdded = 0 };
+        LadderStep gaveUp = new(ProofMethod.Bounded, RungOutcome.Timeout, "round 2") { FactsAdded = 0 };
+
+        Assert.Equal("bounded+abstracted", Method(new Equivalent(ProofMethod.Bounded) { Ladder = [timedOut, spurious, proved] }));
+        Assert.Equal("bounded+abstracted", Method(new Divergent(Fixtures.Counterexample()) { Ladder = [timedOut, spurious, refuted] }));
+        Assert.Equal(
+            "bounded+contract+cvc5+abstracted",
+            Method(new Equivalent(ProofMethod.Bounded)
+            {
+                ContractsUsed = [new ContractUse("N.T::Score(int)", "(= r.old r.new)", "observed-predicates")],
+                Ladder = [timedOut with { Solver = new SolverUse("cvc5", "1.4.1") }, proved],
+            }));
+        Assert.Equal("lockstep-induction", Method(new Equivalent(ProofMethod.LockstepInduction) { Ladder = [timedOut, spurious, gaveUp, new LadderStep(ProofMethod.LockstepInduction, RungOutcome.Proved, "p")] }));
+        Assert.Null(Method(new Unknown(UnknownReason.Timeout, "t") { Ladder = [timedOut, spurious, gaveUp] }));
+        Assert.Null(Method(new Divergent(Fixtures.Counterexample()) { Ladder = [new LadderStep(ProofMethod.Bounded, RungOutcome.Refuted, "d")] }));
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Bounded) { Ladder = [timedOut, spurious, proved] })]).Runs[0].Results[0];
+        List<Dictionary<string, string>> trace = result.GetProperty<List<Dictionary<string, string>>>("ladderTrace");
+        Assert.Equal(["rung", "outcome", "detail"], trace[0].Keys, StringComparer.Ordinal);
+        Assert.Equal("2", trace[1]["factsAdded"]);
+        Assert.Equal("0", trace[2]["factsAdded"]);
+
+        static string? Method(Verdict verdict) =>
+            SarifReportWriter.Write([Fixtures.Result(verdict)]).Runs[0].Results[0].TryGetProperty("proofMethod", out string? method) ? method : null;
+    }
+
     /// <summary>A Divergent or an Unknown a second solver answered a query of names the rung and the solver too; one Z3 decided alone is named as before.</summary>
     [Fact]
     public void ASecondSolversAnswer_IsNamedOnEveryVerdictItTouched()

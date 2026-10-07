@@ -8,6 +8,7 @@ using Equiv.Core.Verdicts;
 using Equiv.Verify.Z3.Conditions;
 using Equiv.Verify.Z3.Contracts;
 using Equiv.Verify.Z3.Ladder;
+using Equiv.Verify.Z3.Refinement;
 
 using Microsoft.Z3;
 
@@ -25,7 +26,9 @@ namespace Equiv.Verify.Z3;
 /// query's terms are built in a <see cref="Context"/> of its own, disposed on every path, and each check runs in another
 /// (<see cref="SolverQuery"/>; ticket P2-100). A solver <c>unknown</c> is
 /// <see cref="UnknownReason.Timeout"/>; the detail carries the solver's own reason and the limit it hit, the resource limit
-/// or the wall-clock backstop (<see cref="Limit"/>; ticket P2-050), or neither when the solver gave up for another reason. Every
+/// or the wall-clock backstop (<see cref="Limit"/>; ticket P2-050), or neither when the solver gave up for another reason. A
+/// rung 1 query that gave up is first asked again with the pair's hard arithmetic abstracted
+/// (<see cref="ArithmeticRefinement"/>; ticket P1-031). Every
 /// Unknown carries <see cref="FailureRefinementQuery"/>'s two answers (ADR 0037; ticket P1-035), a timeout included unless
 /// <see cref="VerificationOptions.RefineTimeouts"/> is off, as it is in quick mode (ADR 0049; ticket P1-032). A
 /// Divergent, and an Unknown whose divergence rests on an abstraction, carries <see cref="ConditionQuery"/>'s input
@@ -78,7 +81,7 @@ public sealed class Z3Backend : IVerificationBackend
         ArgumentNullException.ThrowIfNull(oldBody);
         ArgumentNullException.ThrowIfNull(newBody);
         ArgumentNullException.ThrowIfNull(options);
-        Verdict verdict = new LoopLadder(createContext, options, Proposer(options)).Verify(oldBody, newBody);
+        Verdict verdict = new LoopLadder(createContext, options, Proposer(options)) { Arithmetic = Arithmetic }.Verify(oldBody, newBody);
 
         // ADR 0037 (tickets P1-013 and P1-035): an Unknown of any reason, a timeout included, says whether either side can
         // fail where the other does not. The verdict stays as it is. An unbound pair never reaches the backend (ADR 0029
@@ -121,7 +124,7 @@ public sealed class Z3Backend : IVerificationBackend
             return null;
         }
 
-        LoopLadder ladder = new(createContext, options, Proposer(options)) { Contracts = new CallerContracts(admitted.ToImmutableDictionary(StringComparer.Ordinal), ContractEncoding) };
+        LoopLadder ladder = new(createContext, options, Proposer(options)) { Contracts = new CallerContracts(admitted.ToImmutableDictionary(StringComparer.Ordinal), ContractEncoding), Arithmetic = Arithmetic };
         if (ladder.Verify(oldBody, newBody) is not Equivalent equivalent)
         {
             return null;
@@ -136,6 +139,12 @@ public sealed class Z3Backend : IVerificationBackend
     /// heap (ADR 0036 decision 2). Only a test sets another, to show what sharing the call functions would prove.
     /// </summary>
     internal ICalleeContractEncoding ContractEncoding { get; init; } = FreshPerSideEncoding.Instance;
+
+    /// <summary>
+    /// When rung 1 asks its queries with the pair's hard arithmetic abstracted (ticket P1-031): by default after one hit
+    /// its budget. Only a test sets another, to pin the timeout the path replaces or to force it on every pair.
+    /// </summary>
+    internal ArithmeticMode Arithmetic { get; init; }
 
     private IInvariantProposer? Proposer(VerificationOptions options) => options.InvariantModel is { } model ? proposers(model) : null;
 
