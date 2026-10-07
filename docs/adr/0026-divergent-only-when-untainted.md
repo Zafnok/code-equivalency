@@ -73,3 +73,15 @@ untainted observables agree while the solver said they differ remains an encoder
   threw on one side before a statement the other side runs first. No real call throws there. So rule
   2 keeps excusing a model whose run records any call, closed or open. Rules 1 and 3 are unchanged.
   A Divergent that rests on an answer the real member cannot give is P2-081.
+- 2026-10-07 (P1-031). **A model through an abstracted integer operator is decided by replay, not by
+  taint.** ADR 0025's clarification of the same date lets rung 1 encode `mul`, `sdiv`, `srem`, `udiv`
+  and `urem` of two unknowns as shared functions. The Decision taints an `IrPure` result because the
+  replay has no meaning for it but the solver's. These operators have one: `IrInterpreter` computes
+  them exactly, so their results are untainted, and the replay of a model's inputs is a real run
+  whatever the solver chose for the functions. A model that gives every application the value the
+  real operator gives is a model of the exact product and is decided as before. For any other model
+  of the divergence query, a replay that ends on both sides and differs in an untainted observable is
+  Divergent, by the Decision's own rule; one that does not is not an encoder bug and not
+  Unknown(Abstraction) either, since nothing in it is abstract: the model is spurious, and the values
+  it got wrong become facts of the next round. The taint rules for `IrPure` and `opaque:` calls are
+  unchanged, and apply to these replays as to any other.

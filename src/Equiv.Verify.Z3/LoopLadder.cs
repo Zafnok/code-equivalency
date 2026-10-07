@@ -7,6 +7,7 @@ using Equiv.Core.Verdicts;
 
 using Equiv.Verify.Z3.Contracts;
 using Equiv.Verify.Z3.Ladder;
+using Equiv.Verify.Z3.Refinement;
 
 using Microsoft.Z3;
 
@@ -30,6 +31,8 @@ namespace Equiv.Verify.Z3;
 /// whenever neither side calls. When rung 4 times out, rung 5 (<see cref="LlmInvariantRung"/>) asks <see cref="Traces"/>
 /// for the invariant (ticket P1-009), and then, unless that proved the pair, <paramref name="proposer"/> when it is given
 /// (<c>--invariant-model</c>), one ladder step per round. Every verdict lists the rungs it ran in <see cref="Verdict.Ladder"/>.
+/// A rung 1 query that hits its budget is asked again with the pair's hard arithmetic abstracted
+/// (<see cref="ArithmeticRefinement"/>; ticket P1-031), one ladder step per round.
 /// </summary>
 internal sealed class LoopLadder(Func<Context> createContext, VerificationOptions options, IInvariantProposer? proposer = null)
 {
@@ -69,6 +72,9 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// </summary>
     public CalleeContract? Relation { get; init; }
 
+    /// <summary>When rung 1 abstracts the pair's hard arithmetic (ticket P1-031); only a test sets another than on a timeout.</summary>
+    public ArithmeticMode Arithmetic { get; init; }
+
     /// <summary>
     /// Runs the ladder on the pair with its shared fragments encoded as calls (<see cref="ProductEncoder.ShareFragments"/>).
     /// An Unknown that depends on one points at that fragment's line on each side (ADR 0027 decision 4).
@@ -91,7 +97,9 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         (IrLoopAnalysis oldShape, IrLoopAnalysis newShape) = Stages.Timed(options, Stages.Shape, () => (IrLoopAnalysis.Of(old), IrLoopAnalysis.Of(@new)));
         bool recursive = oldShape.IsSelfRecursive || newShape.IsSelfRecursive;
         bool looping = recursive || !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
-        List<Rung> rungs = [Timed(() => Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible))];
+        long started = TimeProvider.System.GetTimestamp();
+        List<Rung> rungs = [.. Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible)];
+        LogRung(rungs[^1].Step, started);
         if (looping && rungs[^1].Verdict is null)
         {
             LockstepInduction lockstep = Stages.Timed(options, Stages.Couple, () => new LockstepInduction(this, old, @new, oldShape, newShape));
@@ -191,7 +199,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         IrLoopAnalysis newShape = IrLoopAnalysis.Of(@new);
         bool looping = oldShape.IsSelfRecursive || newShape.IsSelfRecursive || !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
         LockstepInduction lockstep = new(this, old, @new, oldShape, newShape);
-        yield return Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible);
+        yield return Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible)[^1];
         yield return lockstep.Prove();
         yield return new KInduction(this, lockstep).Prove(force: true);
         yield return new SpacerRung(createContext, options).Prove(old, @new);
@@ -246,7 +254,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// <summary>A step that did not apply to the pair; <paramref name="cause"/> is why the pair stays undecided.</summary>
     public static Rung NotApplicable(ProofMethod rung, string detail, UnknownReason? cause) => new(new LadderStep(rung, RungOutcome.NotApplicable, detail), Cause: cause);
 
-    private static BoolExpr[] Reachable(Context context, ProductEncoding encoding) =>
+    internal static BoolExpr[] Reachable(Context context, ProductEncoding encoding) =>
         [context.MkNot(encoding.Old.Unreachable), context.MkNot(encoding.New.Unreachable)];
 
     private static Unknown Undecided(List<Rung> rungs, bool recursive)
@@ -279,57 +287,106 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// any opaque, then (for a looping pair) whether any input reaches the bound at all. Each is asked of Z3 and, when Z3
     /// gives up and a second solver is configured, of that solver (<see cref="SecondSolver"/>; ADR 0050); the step names
     /// the solver when it answered one. The product compares the call traces by position (<see cref="PositionalTrace"/>;
-    /// ticket P1-038); every other rung's compares them as sequences.
+    /// ticket P1-038); every other rung's compares them as sequences. The step is one, unless a query hit its budget and
+    /// the pair holds hard arithmetic (<see cref="Abstracts"/>): then a step per round of <see cref="ArithmeticRefinement"/>
+    /// follows it, the same queries on the product with that arithmetic abstracted, and the last one is the rung's result.
     /// </summary>
-    private Rung Bounded(IrProcedure old, IrProcedure @new, bool looping, bool reducible)
+    private ImmutableArray<Rung> Bounded(IrProcedure old, IrProcedure @new, bool looping, bool reducible)
     {
         int k = options.Bound;
         if (!reducible)
         {
-            return NotApplicable(ProofMethod.Bounded, "a side's control flow is irreducible", UnknownReason.UnalignedLoop);
+            return [NotApplicable(ProofMethod.Bounded, "a side's control flow is irreducible", UnknownReason.UnalignedLoop)];
         }
 
         if ((IrUnroller.InliningObstacle(old) ?? IrUnroller.InliningObstacle(@new)) is { } obstacle)
         {
-            return NotApplicable(ProofMethod.Bounded, $"self-recursion is not inlined: {obstacle}", cause: null);
+            return [NotApplicable(ProofMethod.Bounded, $"self-recursion is not inlined: {obstacle}", cause: null)];
         }
 
-        if (Stages.Timed(options, Stages.Unroll, () => Unrolled(old, @new, k)) is not var (oldUnrolled, newUnrolled))
+        if (Stages.Timed(options, Stages.Unroll, () => Unrolled(old, @new, k)) is not { } unrolled)
         {
             // No product to ask about: the loops are left to the rungs that do not unroll them k times.
-            return NotApplicable(ProofMethod.Bounded, TooLargeToUnroll(k), UnknownReason.UnalignedLoop);
+            return [NotApplicable(ProofMethod.Bounded, TooLargeToUnroll(k), UnknownReason.UnalignedLoop)];
         }
 
         return Session(
-            oldUnrolled,
-            newUnrolled,
+            unrolled.Old,
+            unrolled.New,
             (context, encoding) =>
             {
-                SecondSolver solvers = new(context, encoding, options, InterruptAfterMs);
-                return solvers.Tagged(Bounded(context, encoding, solvers, (oldUnrolled, newUnrolled), looping));
+                ImmutableArray<Rung> exact = Arithmetic == ArithmeticMode.Forced ? [] : [Asked(context, encoding, unrolled, looping, refinement: null)];
+                return Abstracts(exact, unrolled) ? [.. exact, .. Abstracted(context, unrolled, looping)] : exact;
             },
             ProductEncoder.TraceComparison.Positional);
     }
 
-    /// <summary>Rung 1's queries on the encoding of the <paramref name="unrolled"/> pair, in order.</summary>
-    private Rung Bounded(Context context, ProductEncoding encoding, SecondSolver solvers, (IrProcedure Old, IrProcedure New) unrolled, bool looping)
+    /// <summary>
+    /// Whether rung 1 goes on to the abstracted product after <paramref name="exact"/>, its step on the exact one: by
+    /// default when that step is a timeout and a side holds an operation the abstraction replaces, since without one the
+    /// abstracted product is the exact product over again.
+    /// </summary>
+    private bool Abstracts(ImmutableArray<Rung> exact, (IrProcedure Old, IrProcedure New) unrolled) => Arithmetic switch
+    {
+        ArithmeticMode.Forced => true,
+        ArithmeticMode.Off => false,
+        _ => exact[0].Step.Outcome == RungOutcome.Timeout && (ArithmeticAbstraction.AppliesTo(unrolled.Old) || ArithmeticAbstraction.AppliesTo(unrolled.New)),
+    };
+
+    /// <summary>
+    /// The rounds of <see cref="ArithmeticRefinement"/> on the <paramref name="unrolled"/> pair, encoded again in
+    /// <paramref name="context"/> with its hard arithmetic abstracted and otherwise as the exact product is.
+    /// </summary>
+    private ImmutableArray<Rung> Abstracted(Context context, (IrProcedure Old, IrProcedure New) unrolled, bool looping)
+    {
+        ArithmeticAbstraction arithmetic = new(context);
+        ProductEncoding encoding = Stages.Timed(
+            options,
+            Stages.Encode,
+            () => ProductEncoder.Encode(context, unrolled.Old, unrolled.New, options.CallIdentityMap, Contracts, Relation, ProductEncoder.TraceComparison.Positional, arithmetic));
+        ArithmeticRefinement refinement = new(context, encoding, arithmetic, options);
+        return refinement.Rounds(() => Asked(context, encoding, unrolled, looping, refinement));
+    }
+
+    /// <summary>Rung 1's queries on <paramref name="encoding"/>, its step naming the second solver when that answered one.</summary>
+    private Rung Asked(Context context, ProductEncoding encoding, (IrProcedure Old, IrProcedure New) unrolled, bool looping, ArithmeticRefinement? refinement)
+    {
+        SecondSolver solvers = new(context, encoding, options, InterruptAfterMs);
+        return solvers.Tagged(Bounded(context, encoding, solvers, unrolled, looping, refinement));
+    }
+
+    /// <summary>
+    /// Rung 1's queries on the encoding of the <paramref name="unrolled"/> pair, in order. With
+    /// <paramref name="refinement"/> the encoding is the abstracted one: every query assumes the refinement's facts, and a
+    /// model is read as the exact product's only when it is one (<see cref="ArithmeticRefinement.Spurious"/>). The opaque
+    /// nodes listed are then those some input reaches under the abstraction, which are at least those one really reaches.
+    /// </summary>
+    private Rung Bounded(Context context, ProductEncoding encoding, SecondSolver solvers, (IrProcedure Old, IrProcedure New) unrolled, bool looping, ArithmeticRefinement? refinement)
     {
         string bound = options.Bound.ToString(CultureInfo.InvariantCulture);
-        BoolExpr[] reachable = Reachable(context, encoding);
-        using SecondSolver.Asked divergence = solvers.Check("divergence", [encoding.Differs, context.MkNot(encoding.OpaqueOld), context.MkNot(encoding.OpaqueNew), .. reachable]);
+        string stage = refinement is null ? string.Empty : "abstracted-";
+        BoolExpr[] facts = [.. refinement?.Facts ?? []];
+        BoolExpr[] reachable = [.. Reachable(context, encoding), .. facts];
+        using SecondSolver.Asked divergence = solvers.Check(stage + "divergence", [encoding.Differs, context.MkNot(encoding.OpaqueOld), context.MkNot(encoding.OpaqueNew), .. reachable]);
         if (divergence.Status != Status.UNSATISFIABLE)
         {
             return divergence.Status == Status.SATISFIABLE
-                ? Found(Stages.Timed(options, Stages.Replay, () => ModelDecoder.Replay(context, divergence.Model, encoding, unrolled.Old, unrolled.New)), bound)
+                ? refinement?.Spurious(divergence.Model, unrolled)
+                    ?? Found(Stages.Timed(options, Stages.Replay, () => ModelDecoder.Replay(context, divergence.Model, encoding, unrolled.Old, unrolled.New)), bound)
                 : TimedOut(divergence.Timeout());
         }
 
-        using SecondSolver.Asked opaque = solvers.Check("opaque", [context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew), .. reachable]);
+        using SecondSolver.Asked opaque = solvers.Check(stage + "opaque", [context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew), .. reachable]);
         if (opaque.Status != Status.UNSATISFIABLE)
         {
             if (opaque.Status == Status.UNKNOWN)
             {
                 return TimedOut(opaque.Timeout());
+            }
+
+            if (refinement?.Spurious(opaque.Model, replay: null) is { } spurious)
+            {
+                return spurious;
             }
 
             ImmutableArray<UnknownCause> causes = Z3Backend.ReachableOpaques(context, encoding, options, opaque.Model, reachable, InterruptAfterMs);
@@ -340,7 +397,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         }
 
         return looping
-            ? WithinBound(solvers, context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable), bound)
+            ? WithinBound(solvers, stage + "bound", [context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable), .. facts], bound, refinement)
             : Proved(ProofMethod.Bounded, "no loop or self-call; every input checked", new Equivalent(ProofMethod.Bounded));
     }
 
@@ -366,13 +423,14 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         looping || encoding.Opaques.Any(static o => o.Node.WholeBody) ? UnknownScope.Method : UnknownScope.Line;
 
     /// <summary>Rung 1's last query: the unrolled pair agrees, so it is a proof exactly when no input reaches the bound.</summary>
-    private Rung WithinBound(SecondSolver solvers, BoolExpr pastTheBound, string bound)
+    private Rung WithinBound(SecondSolver solvers, string stage, BoolExpr[] pastTheBound, string bound, ArithmeticRefinement? refinement)
     {
-        using SecondSolver.Asked cut = solvers.Check("bound", pastTheBound);
+        using SecondSolver.Asked cut = solvers.Check(stage, pastTheBound);
         return cut.Status switch
         {
             Status.UNSATISFIABLE => Proved(ProofMethod.Bounded, $"no input goes past the bound {bound}", new Equivalent(ProofMethod.Bounded, options.Bound)),
-            Status.SATISFIABLE => new Rung(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"no divergence within the bound {bound}, and some input goes past it")),
+            Status.SATISFIABLE => refinement?.Spurious(cut.Model, replay: null)
+                ?? new Rung(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, $"no divergence within the bound {bound}, and some input goes past it")),
             _ => TimedOut(cut.Timeout()),
         };
     }

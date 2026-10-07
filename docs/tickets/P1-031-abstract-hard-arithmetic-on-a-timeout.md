@@ -1,5 +1,5 @@
 # P1-031 Abstraction refinement, part 2: a query that times out is asked again with its hard arithmetic abstracted
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-050, M3-016

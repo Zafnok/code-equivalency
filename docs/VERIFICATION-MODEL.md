@@ -581,6 +581,20 @@ same types (each type has its own constructor) and equal. A loop segment's cut e
 are events of an acyclic product too, so the argument covers them, but rungs 2 to 5 still compare
 sequences.
 
+Rung 1 has a second encoding of the same product, which it asks only after a query of the first hit its
+budget (ADR 0025 and ADR 0026, clarifications of 2026-10-07; ticket P1-031; after ARDiff, Badihi et al.,
+ESEC/FSE 2020). In it an `IrBinary` `mul`, `sdiv`, `srem`, `udiv` or `urem` neither operand of which an
+`IrConst` defines, and an `IrOverflows` `smul` or `umul` of two such operands, is an uninterpreted function
+of its two operands: one function per operator and width (`arith.Mul.64`, `arith.overflows.SMul.32`), shared
+by both sides and never side-specific. Everything else is encoded as before. That includes an operator with
+a constant operand, and a division's zero test and `MinValue / -1` test, which are an `IrBinary` `eq` and an
+`IrOverflows` `sdiv` of their own, so no exception is abstracted away. These are the operators a
+bit-blasting solver is worst at, and in a migrated pair both sides nearly always apply them to the same
+operands; the functions say exactly that equal operands give equal results. Every run of the pair is a run
+of this product with the functions being the real operators, so a query that is unsatisfiable on it is
+unsatisfiable on the exact product. A model of it is not yet a model of the exact product, and section 5.1
+says how one is decided.
+
 A pair that is not Equivalent is then asked under which inputs it is (ADR 0048; ticket P1-022). This
 runs on rung 1's product of a pair without a loop or a self-call, for a Divergent the solver found
 and for an Unknown with reason `abstraction`. A pair whose model calls a runtime-changed member is
@@ -630,7 +644,32 @@ decide. Rung 1 does not apply to a pair either side of which, unrolled `k` times
 (ticket P1-032): loops nested `d` deep unroll to the body times `k` to the power `d`, work that no solver budget
 bounds, and at thorough mode's bound of 8 one real pair never finished it. The unroller refuses before it makes the
 copy that would pass the limit, the step says so in `ladderTrace`, and the other rungs still run. The contract check
-(section 5.2) and ADR 0037's queries (section 6), which need the same product, answer unknown for such a pair. A pair with loops or a self-call that no rung decides is Unknown: `Opaque` when a failed obligation reaches
+(section 5.2) and ADR 0037's queries (section 6), which need the same product, answer unknown for such a pair.
+
+When one of rung 1's queries hits its budget, on Z3 and on the second solver if one is configured, and either side
+holds an operation section 5's second encoding replaces, rung 1 asks its queries again on that encoding (ticket
+P1-031): the divergence query, then the opaque query of ADR 0014, then the bound query, each with the same budgets,
+so an Equivalent still rests on all of them. It does so in rounds, at most 8:
+- A query that is unsatisfiable is unsatisfiable on the exact product, and rung 1 goes on as it does there. With
+  all of them unsatisfiable the pair is Equivalent, `boundedBy: k` when it has a loop.
+- A model in which every application has the value the real operator gives its operands is a model of the exact
+  product. Rung 1 reads it as it reads any other: a divergence is replayed and is Divergent or
+  Unknown(abstraction), an opaque node reached is `Opaque`, an input past the bound leaves the pair to rungs 2 to 5.
+  The opaque nodes listed are those some input reaches on this encoding, which are at least those one reaches.
+- Any other model of the divergence query is replayed in `IrInterpreter`, which computes the real arithmetic. If
+  both runs end and differ in an untainted observable the pair is Divergent with that replay, exactly as a model
+  of the exact product would make it (ADR 0026).
+- Otherwise the model is spurious. For each application it got wrong, the fact `f(a, b) = a op b`, with the
+  model's `a` and `b` as constants, is assumed by every query of the next round.
+
+The facts are point facts, so a pair that needs an operator's algebra, `x * y` against `y * x` once Z3 has
+given up on the exact product, never runs out of spurious models. The round limit ends it; no commutativity or
+distributivity lemma is added (ADR 0025's Rejected). A pair no round decides, by running out of rounds or by a
+query of a round hitting its budget, is what it was before the rounds: rungs 2 to 5 run as they do after any rung 1
+timeout, and an Unknown keeps the reason and the detail of the exact product's timeout. Each round is a step of
+`ladderTrace` (section 6). Rungs 2 to 5, the contract check and ADR 0037's queries encode the arithmetic exactly.
+
+A pair with loops or a self-call that no rung decides is Unknown: `Opaque` when a failed obligation reaches
 an `IrOpaque`, `Recursion` when a side calls itself, `UnalignedLoop` when the loops do not align or neither
 induction proves them and rung 4 does not apply, `ChcTimeout` when Spacer gave up, `ChcSpurious` when Spacer's
 derivation does not replay to a divergence or its invariant does not solve the clauses, `Timeout` when only the solver gave up. A header's state is its phis plus every other value
@@ -750,7 +789,12 @@ ticket P1-033) has `proofMethod` suffixed with `+` and the solver's name, after 
 apply: `bounded+cvc5`. That holds for a Divergent and an Unknown too, which otherwise carry no
 `proofMethod`, and names the rung the solver answered for; a Divergent the real runtimes showed stays
 `observed`. The `ladderTrace` step of that rung carries `solver`, the solver's name and version
-(`cvc5 1.4.1`). A result Z3 decided alone is named as before. A result of a pair where a call to a one-sided helper was resolved in either body
+(`cvc5 1.4.1`). A result Z3 decided alone is named as before. An Equivalent or a Divergent that a round of rung 1 on
+the product with its hard arithmetic abstracted decided (section 5.1; ticket P1-031) has `proofMethod` suffixed
+`+abstracted`, after the other suffixes: `bounded+abstracted`. Each such round is a `ladderTrace` step of rung
+`bounded` whose detail starts `arithmetic abstracted, round <n>:` and which carries `factsAdded`, the number of
+facts the round added for the next one, `0` for the round that ended the refinement. A result those rounds did
+not decide carries the steps and no suffix. A result of a pair where a call to a one-sided helper was resolved in either body
 (section 1, ADR 0045) carries `properties.calleesInlined`: one `{ callee, side }` per helper, `side`
 being `legacy` or `modern`, helpers resolved inside helpers included, sorted by callee and then side.
 It is not part of the fingerprint.
@@ -969,7 +1013,9 @@ of the product queries the limit is sized for: the `loop-fusion` sample's proof 
 units in under two seconds, and the count moved from run to run when the limit was chosen (it no longer
 does; ticket P2-100).
 
-A query that exhausts either is Unknown with reason `timeout` (`chc-timeout` on rung 4), and the detail ends
+A rung 1 query that exhausts either is first asked again on the product with its hard arithmetic abstracted, when
+the pair holds any (section 5.1; ticket P1-031), which can decide the pair. Otherwise a query that exhausts either
+is Unknown with reason `timeout` (`chc-timeout` on rung 4), and the detail ends
 with the limit that was hit: `resource limit <n> hit` or `wall-clock limit <n> ms hit`. The budgets are per
 query, and a pair asks several (section 5.1), so neither bounds the time a pair takes. The defaults come from
 `docs/runs/2026-10-01-timeout-budget.md`: against 5,000,000, the first pass's 2,000,000 gives up 5 answers on its 184

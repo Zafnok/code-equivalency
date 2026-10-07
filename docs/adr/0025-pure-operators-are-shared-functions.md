@@ -65,3 +65,19 @@ the heap or on position.
   date), so both sides share it exactly when their bound trees are equal, and two different lambdas
   are Unknown(Abstraction) under ADR 0026, as rewritten arithmetic is. It is never side-specific: a
   runtime-sensitive lambda has no fingerprint and stays opaque.
+- 2026-10-07 (P1-031). **Integer multiplication, division and remainder may be shared functions when
+  a query needs it.** The Decision shares a function for an operator the solver has no theory for.
+  Bitvector `mul`, `sdiv`, `srem`, `udiv` and `urem` of two unknowns, and the overflow test of such a
+  `mul`, have a theory, but one a bit-blasting solver often cannot decide within its budget, and in a
+  migrated pair they are nearly always the same on both sides. So when a rung 1 query hits its
+  budget, rung 1 asks its queries again on the product with each of those operators encoded as one
+  uninterpreted function per operator and width, shared by both sides and never side-specific. The
+  first Why bullet is the argument: equal operands give equal results, and every real run is a run
+  of that product, so an unsatisfiable query is a proof. Unlike an `IrPure`, the operator stays an
+  `IrBinary` or `IrOverflows` in the IR and is abstracted only in that one encoding; an operator with
+  a constant operand, the zero test and the `MinValue / -1` test of a division, and every query of
+  rungs 2 to 5 stay exact. A model is decided as ADR 0026's clarification of the same date says.
+  "Adding axioms such as commutativity" stays rejected: a spurious model adds only the fact
+  `f(a, b) = a op b` at the operands it used, as constants, for at most 8 rounds. A result decided
+  this way has `proofMethod` suffixed `+abstracted`, and each round is a `ladderTrace` step with its
+  `factsAdded`, in the way `+contract` and `+cvc5` already mark a proof (ADRs 0036 and 0050).

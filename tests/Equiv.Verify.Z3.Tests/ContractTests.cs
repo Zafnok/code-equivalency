@@ -6,6 +6,7 @@ using Equiv.Core.Verdicts;
 using Equiv.TestSupport;
 
 using Equiv.Verify.Z3.Contracts;
+using Equiv.Verify.Z3.Refinement;
 
 using Microsoft.Z3;
 
@@ -210,6 +211,13 @@ public sealed class ContractTests
             "(and (= threw.old threw.new) (=> (and threw.old threw.new) (= type.old type.new)) (= calls.old calls.new) "
             + "(or threw.old threw.new (= (bvsgt r.old #x00000000) (bvsgt r.new #x00000000))))",
             contract.Contract);
+
+        // Ticket P1-031: the caller's ladder under contracts asks rung 1 as the backend is set to, and the abstracted
+        // product relates the calls by the same contracts.
+        Equivalent abstracted = new Z3Backend { Arithmetic = ArithmeticMode.Forced }.VerifyUnderContracts(caller, caller, [new CalleePair("T::Score(int)", old, @new)], Options)!;
+        Assert.Equal(proved.ContractsUsed, abstracted.ContractsUsed);
+        Assert.Null(Assert.Single(proved.Ladder).FactsAdded);
+        Assert.Equal(proved.Ladder[0] with { Detail = "arithmetic abstracted, round 1: " + proved.Ladder[0].Detail, FactsAdded = 0 }, Assert.Single(abstracted.Ladder));
     }
 
     /// <summary>

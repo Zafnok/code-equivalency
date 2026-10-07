@@ -69,36 +69,34 @@
       },
       "results": [
         {
-          "ruleId": "EQ003",
-          "kind": "open",
+          "ruleId": "EQ001",
+          "kind": "pass",
           "level": "none",
           "message": {
-            "text": "Equiv.Samples.HardForZ3.Vault::Opens(uint,uint) is unknown (Timeout): solver returned unknown (canceled): resource limit 5000000 hit"
+            "text": "Equiv.Samples.HardArithmetic.Crate::Volume(bool,long,long,long,long) is equivalent."
           },
           "locations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///legacy/Vault.cs"
+                  "uri": "file:///legacy/Crate.cs"
                 },
                 "region": {
                   "startLine": 5,
                   "startColumn": 17,
                   "endLine": 5,
-                  "endColumn": 22
+                  "endColumn": 23
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "procedureIdentity/v1": "Equiv.Samples.HardForZ3.Vault::Opens(uint,uint)",
-            "resultFingerprint/v1": "dde4f093256c688f6a9ef132732caa0345822ddfdb85226464bb228f55991ace"
+            "procedureIdentity/v1": "Equiv.Samples.HardArithmetic.Crate::Volume(bool,long,long,long,long)",
+            "resultFingerprint/v1": "c938f222da6dcbd45bfff8e1b414195d9757afc5eb5f636504fc97542bd64cb0"
           },
           "baselineState": "new",
-          "rank": 0.002,
           "properties": {
-            "unknownReason": "timeout",
-            "scope": "method",
+            "proofMethod": "bounded+abstracted",
             "ladderTrace": [
               {
                 "rung": "bounded",
@@ -107,54 +105,56 @@
               },
               {
                 "rung": "bounded",
-                "outcome": "inconclusive",
-                "detail": "arithmetic abstracted, round 1: the model is spurious; operator results it gets wrong: 1",
-                "factsAdded": "1"
-              },
+                "outcome": "proved",
+                "detail": "arithmetic abstracted, round 1: no loop or self-call; every input checked",
+                "factsAdded": "0"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.HardArithmetic.Crate::Weight(bool,long,long,long,long) diverges: inputs(bool false, bv64 2, bv64 144308702155898912, bv64 18014398511579139, bv64 1) old(returned bv64 1009457227582406752 outs() trace()) new(returned bv64 4758105783579705632 outs() trace()). Equivalent when metric."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Crate.cs"
+                },
+                "region": {
+                  "startLine": 11,
+                  "startColumn": 17,
+                  "endLine": 11,
+                  "endColumn": 23
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.HardArithmetic.Crate::Weight(bool,long,long,long,long)",
+            "resultFingerprint/v1": "8b69e797fa646ed504fb51f821fabb7d9d637c967bc64e86459293269daa6b6b"
+          },
+          "baselineState": "new",
+          "rank": 60.002,
+          "properties": {
+            "model": "inputs(bool false, bv64 2, bv64 144308702155898912, bv64 18014398511579139, bv64 1) old(returned bv64 1009457227582406752 outs() trace()) new(returned bv64 4758105783579705632 outs() trace())",
+            "agreesWhen": {
+              "smt": "in.metric",
+              "text": "metric",
+              "proposedBy": "harvested-predicates",
+              "proofMethod": "bounded"
+            },
+            "ladderTrace": [
               {
                 "rung": "bounded",
-                "outcome": "inconclusive",
-                "detail": "arithmetic abstracted, round 2: the model is spurious; operator results it gets wrong: 1",
-                "factsAdded": "1"
-              },
-              {
-                "rung": "bounded",
-                "outcome": "inconclusive",
-                "detail": "arithmetic abstracted, round 3: the model is spurious; operator results it gets wrong: 1",
-                "factsAdded": "1"
-              },
-              {
-                "rung": "bounded",
-                "outcome": "inconclusive",
-                "detail": "arithmetic abstracted, round 4: the model is spurious; operator results it gets wrong: 1",
-                "factsAdded": "1"
-              },
-              {
-                "rung": "bounded",
-                "outcome": "inconclusive",
-                "detail": "arithmetic abstracted, round 5: the model is spurious; operator results it gets wrong: 1",
-                "factsAdded": "1"
-              },
-              {
-                "rung": "bounded",
-                "outcome": "inconclusive",
-                "detail": "arithmetic abstracted, round 6: the model is spurious; operator results it gets wrong: 1",
-                "factsAdded": "1"
-              },
-              {
-                "rung": "bounded",
-                "outcome": "inconclusive",
-                "detail": "arithmetic abstracted, round 7: the model is spurious; operator results it gets wrong: 1",
-                "factsAdded": "1"
-              },
-              {
-                "rung": "bounded",
-                "outcome": "inconclusive",
-                "detail": "arithmetic abstracted, round 8: the model is spurious; operator results it gets wrong: 1",
-                "factsAdded": "1"
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
               }
             ],
-            "reviewGroup": "timeout"
+            "reviewGroup": "proofMethod:none"
           }
         }
       ],
@@ -162,11 +162,11 @@
       "properties": {
         "loweringCensus": {
           "procedures": {
-            "legacy": 1,
-            "modern": 1
+            "legacy": 2,
+            "modern": 2
           },
-          "matchedPairs": 1,
-          "pairsWithoutOpaque": 1,
+          "matchedPairs": 2,
+          "pairsWithoutOpaque": 2,
           "pairsWholeBodyOpaque": 0,
           "pairsCongruent": 0,
           "projectsSkipped": {
@@ -174,11 +174,11 @@
             "modern": 0
           },
           "opaqueByReason": {},
-          "changedPairs": 1,
-          "changedPairsWithoutOpaque": 1,
+          "changedPairs": 2,
+          "changedPairsWithoutOpaque": 2,
           "changedPairsWholeBodyOpaque": 0,
           "changedReasonSets": {
-            "": 1
+            "": 2
           },
           "runtimeChangeCalls": {
             "callSites": {
@@ -200,12 +200,17 @@
           },
           "unknownByScope": {
             "line": 0,
-            "method": 1
+            "method": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 1,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {
-          "legacy": 20,
-          "modern": 20
+          "legacy": 26,
+          "modern": 34
         },
         "projectsNotBuilt": {
           "legacy": [],
@@ -214,14 +219,14 @@
         "runtimes": {
           "legacy": [
             {
-              "project": "Equiv.Samples.HardForZ3",
+              "project": "Equiv.Samples.HardArithmetic",
               "runtime": "net10.0",
               "source": "attribute"
             }
           ],
           "modern": [
             {
-              "project": "Equiv.Samples.HardForZ3",
+              "project": "Equiv.Samples.HardArithmetic",
               "runtime": "net10.0",
               "source": "attribute"
             }
@@ -242,12 +247,12 @@
         },
         "reviewList": [
           {
-            "group": "timeout",
-            "ruleId": "EQ003",
-            "rank": 0.002,
+            "group": "proofMethod:none",
+            "ruleId": "EQ002",
+            "rank": 60.002,
             "count": 1,
             "identities": [
-              "Equiv.Samples.HardForZ3.Vault::Opens(uint,uint)"
+              "Equiv.Samples.HardArithmetic.Crate::Weight(bool,long,long,long,long)"
             ]
           }
         ]

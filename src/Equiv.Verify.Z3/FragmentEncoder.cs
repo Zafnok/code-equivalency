@@ -3,6 +3,8 @@ using System.Globalization;
 
 using Equiv.Core.Ir;
 
+using Equiv.Verify.Z3.Refinement;
+
 using Microsoft.Z3;
 
 using Side = Equiv.Verify.Z3.ProductEncoder.Side;
@@ -27,6 +29,11 @@ namespace Equiv.Verify.Z3;
 /// as such and its overflow condition, where the block holding it is reached, joins <see cref="Overflow"/>; any other
 /// result, and every bitvector read from a map, is only assumed within its bounds.
 /// </para>
+/// <para>
+/// Given an <see cref="ArithmeticAbstraction"/> (ticket P1-031), a multiplication, division or remainder of two operands
+/// neither of which an <see cref="IrConst"/> defines, and the overflow test of such a multiplication, is that
+/// abstraction's function of the operands instead of the operator.
+/// </para>
 /// </summary>
 internal sealed class FragmentEncoder
 {
@@ -35,6 +42,7 @@ internal sealed class FragmentEncoder
     private readonly TraceEncoder? calls;
     private readonly PureEncoder? pures;
     private readonly IntModeTranslator? integers;
+    private readonly ArithmeticAbstraction? arithmetic;
     private readonly Context context;
     private readonly IReadOnlyDictionary<string, Expr> inputs;
     private readonly Dictionary<string, Expr> constants = new(StringComparer.Ordinal);
@@ -61,6 +69,7 @@ internal sealed class FragmentEncoder
     /// <param name="inputs">The term each parameter of <paramref name="procedure"/> is bound to, by name.</param>
     /// <param name="heapInputs">The shared input of each map <see cref="TraceEncoder.Heap"/> ranges over, in its order.</param>
     /// <param name="exceptionTypes">Exception type names to the ids both sides use for them; new names are added.</param>
+    /// <param name="arithmetic">The functions both sides share for their hard arithmetic, or null to encode it exactly.</param>
     /// <exception cref="InvalidOperationException">The fragment calls or applies a pure function and <paramref name="functions"/> is null.</exception>
     public FragmentEncoder(
         Side side,
@@ -69,13 +78,15 @@ internal sealed class FragmentEncoder
         (TraceEncoder Calls, PureEncoder Pures)? functions,
         IReadOnlyDictionary<string, Expr> inputs,
         ImmutableArray<Expr> heapInputs,
-        Dictionary<string, int> exceptionTypes)
+        Dictionary<string, int> exceptionTypes,
+        ArithmeticAbstraction? arithmetic = null)
     {
         this.side = side;
         this.sorts = sorts;
         calls = functions?.Calls;
         pures = functions?.Pures;
         integers = sorts.Integers;
+        this.arithmetic = arithmetic;
         this.inputs = inputs;
         this.heapInputs = heapInputs;
         Procedure = procedure;
@@ -354,6 +365,10 @@ internal sealed class FragmentEncoder
         {
             Integer(binary.Target, integers.Binary(binary.Op, Operand(binary.A), Operand(binary.B), width), reached);
         }
+        else if (arithmetic is not null && ArithmeticAbstraction.Abstracts(binary.Op) && Unknowns(binary.A, binary.B))
+        {
+            Define(binary.Target, arithmetic.Binary(binary.Op, (BitVecExpr)Var(binary.A), (BitVecExpr)Var(binary.B)));
+        }
         else
         {
             Define(binary.Target, Binary(binary.Op, Var(binary.A), Var(binary.B)));
@@ -363,7 +378,11 @@ internal sealed class FragmentEncoder
     /// <summary>A checked operation's overflow flag; in integer mode a product of two unknowns leaves the flag free.</summary>
     private void EncodeOverflows(IrOverflows check)
     {
-        if (integers is null)
+        if (arithmetic is not null && ArithmeticAbstraction.Abstracts(check.Op) && Unknowns(check.A, check.B))
+        {
+            Define(check.Target, arithmetic.Overflows(check.Op, (BitVecExpr)Var(check.A), (BitVecExpr)Var(check.B)));
+        }
+        else if (integers is null)
         {
             Define(check.Target, context.MkNot(ProductEncoder.NoOverflow[check.Op](context, (BitVecExpr)Var(check.A), (BitVecExpr)Var(check.B))));
         }
@@ -372,6 +391,9 @@ internal sealed class FragmentEncoder
             Define(check.Target, overflowed);
         }
     }
+
+    /// <summary>Whether neither operand is a constant: an <see cref="IrConst"/> defines its variable before any use of it.</summary>
+    private bool Unknowns(IrVar a, IrVar b) => !literals.ContainsKey(a.Name) && !literals.ContainsKey(b.Name);
 
     private void EncodeUnary(IrUnary unary, BoolExpr reached)
     {
