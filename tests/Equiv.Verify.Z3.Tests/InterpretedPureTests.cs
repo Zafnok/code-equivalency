@@ -65,10 +65,12 @@ public sealed class InterpretedPureTests
     {
         using Context context = new();
         Applications.Sample(
-            application => { AssertAgrees(context, application.Function, application.Arguments); },
+            Agrees,
             iter: 20_000,
             threads: 1,
             print: static a => $"{a.Function}({string.Join(", ", a.Arguments)})");
+
+        void Agrees((string Function, ImmutableArray<IrValue> Arguments) application) => AssertAgrees(context, application.Function, application.Arguments);
     }
 
     /// <summary>

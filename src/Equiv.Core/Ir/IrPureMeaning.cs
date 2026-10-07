@@ -24,7 +24,8 @@ public static class IrPureMeaning
 {
     private const string OperatorPrefix = "op:";
 
-    private static readonly ImmutableArray<(string Code, int Width, bool Signed)> Integers =
+    /// <summary>The integer type codes a conversion's name uses, with each type's width and signedness. Declared first: the meanings are built from it.</summary>
+    public static ImmutableArray<(string Code, int Width, bool Signed)> IntegerCodes { get; } =
     [
         ("i8", 8, true), ("u8", 8, false), ("i16", 16, true), ("u16", 16, false), ("char", 16, false),
         ("i32", 32, true), ("u32", 32, false), ("i64", 64, true), ("u64", 64, false),
@@ -34,9 +35,6 @@ public static class IrPureMeaning
 
     /// <summary>Every function name that has a meaning, in ordinal order.</summary>
     public static ImmutableArray<string> Functions { get; } = [.. Meanings.Keys.Order(StringComparer.Ordinal)];
-
-    /// <summary>The integer type codes a conversion's name uses, with each type's width and signedness.</summary>
-    public static ImmutableArray<(string Code, int Width, bool Signed)> IntegerCodes => Integers;
 
     /// <summary>
     /// Whether <paramref name="pure"/> may be given its meaning: its function has one, the application is not
@@ -84,7 +82,7 @@ public static class IrPureMeaning
         meanings["f64.neg"] = static a => IrFloat.Of(-F64(a[0]));
         meanings["conv.f32.f64"] = static a => IrFloat.Of((double)F32(a[0]));
         meanings["conv.f64.f32"] = static a => IrFloat.Of((float)F64(a[0]));
-        foreach ((string code, int width, bool signed) in Integers)
+        foreach ((string code, int width, bool signed) in IntegerCodes)
         {
             meanings[$"conv.f32.{code}"] = a => Truncated(F32(a[0]), width, signed);
             meanings[$"conv.f64.{code}"] = a => Truncated(F64(a[0]), width, signed);
@@ -126,11 +124,12 @@ public static class IrPureMeaning
     {
         double whole = Math.Truncate(value);
         double limit = Math.ScaleB(1.0, signed ? width - 1 : width);
-        if (!(whole < limit && whole >= (signed ? -limit : 0.0)))
+        bool fits = whole < limit && whole >= (signed ? -limit : 0.0);
+        return (fits, signed) switch
         {
-            return null;
-        }
-
-        return signed ? IrBitVecValue.FromSigned(width, (long)whole) : new IrBitVecValue(width, (ulong)whole);
+            (false, _) => null,
+            (true, true) => IrBitVecValue.FromSigned(width, (long)whole),
+            _ => new IrBitVecValue(width, (ulong)whole),
+        };
     }
 }
