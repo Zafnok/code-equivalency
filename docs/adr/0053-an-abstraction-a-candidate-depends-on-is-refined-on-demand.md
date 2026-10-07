@@ -32,8 +32,11 @@ by a hash of its text, so the IR does not hold the number `2.0`, and nothing cou
      on, a further abstraction that is not interpretable, a fourth round, a loop the bound does not cover. A
      refined query that times out is never Unknown(timeout).
 
-   Each refined query has the pair's resource limit and timeout. Refined queries go to Z3 alone (ADR 0050's second
-   solver is not asked). A pair whose candidate depends on anything that is not interpretable is not touched.
+   Each refined query has the pair's timeout and ten times the pair's resource limit. The limit was set on
+   bit-vector queries (P2-050), and the simplest identity here, `a * 2.0 = a + a` on `double`, needs 3.2 million
+   against the default 2 million; `a * 0.5 = a / 2.0` needs 6.8 million. Refined queries go to Z3 alone (ADR 0050's
+   second solver is not asked). A pair whose candidate depends on anything that is not interpretable is not
+   touched.
 2. **Interpretable functions.** These, and nothing else:
 
    | Function | Meaning |
@@ -49,7 +52,10 @@ by a hash of its text, so the IR does not hold the number `2.0`, and nothing cou
    Z3's `(_ FloatingPoint 8 24)` and `(_ FloatingPoint 11 53)`, inputs, call arguments, call results and map
    elements included, and a shared input is one term. Each operation above is correctly rounded in its own format
    on every runtime this tool compares, except x87 (decision 4): the CLR computes `float` in binary32 and `double`
-   in binary64 on SSE2 and on ARM64, and does not fuse a multiply and an add.
+   in binary64 on SSE2 and on ARM64, and does not fuse a multiply and an add. A refined query's solver turns
+   floating point into bit-vectors and those into propositional logic before `smt` (`fpa2bv`, `simplify`,
+   `bit-blast`): left to `smt`'s own floating-point theory the same queries cost ten times as much (4.3 s against
+   0.33 s for the doubling above).
    - There is one NaN. A NaN's payload and sign are not observables: two values are equal when they are the same
      number, with `+0` and `-0` different and NaN equal to NaN, which is what `Equals` says and what the bits say up
      to a NaN's payload. This is the equality the encoder already uses for every observable (`=` on the sort), so
@@ -73,7 +79,8 @@ by a hash of its text, so the IR does not hold the number `2.0`, and nothing cou
    value's IEEE bits (binary32 zero-extended), with every NaN the one quiet NaN. A sort element's id is 64 bits
    wide for this. In an unrefined query such a constant is still a designated element, distinct from every other
    constant of its sort, as before; equal constants are still the same element on both sides. In a refined query
-   it is its number.
+   it is its number. A report writes a floating-point value of a model as that number (`f64 0.1`), not as its
+   bits.
 6. **How ADR 0025's shared-function rule reads.** An interpreted function is still one function of its arguments
    that both sides share: its real one. Sharing proved "equal arguments, equal results"; the meaning adds what the
    result is. Nothing an unrefined query proved is lost, because the real function is one of the functions the
@@ -115,6 +122,8 @@ by a hash of its text, so the IR does not hold the number `2.0`, and nothing cou
 - **Taking .NET 9's saturating conversion as the meaning out of range.** Wrong for every pair before .NET 9.
 - **Asking the second solver a refined query.** Its script printer and logic selection know no floating point,
   and a refined query that Z3 gives up on already keeps a sound result.
+- **The pair's own resource limit for a refined query.** Measured: at the default limit no floating-point
+  identity is proved, not even doubling, so refinement would only ever find divergences.
 - **Marking two x87 sides runtime-sensitive.** It would stop them from sharing, and an unchanged computation on
   two x87 sides would no longer be provable.
 
