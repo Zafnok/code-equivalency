@@ -53,58 +53,59 @@ def unlocked(sets, removed):
     return sum(v for s, v in sets.items() if s <= removed)
 
 
-def main(args):
-    runs = {}
-    for a in args:
-        slug, path = a.split('=', 1)
-        runs[slug] = load(path)
-    slugs = list(runs)
-    total = sum(c['changedPairs'] for c, _ in runs.values())
-    merged = Counter()
-    for _, sets in runs.values():
-        merged.update(sets)
+def rule(columns):
+    return '|' + '---|' * columns
 
-    reasons = sorted({r for s in merged for r in s})
-    owner = lambda r: OWNED.get(r) or BY_DECISION.get(r) or PARTIAL.get(r) or 'none'
-    is_in = lambda sets, r: sum(v for s, v in sets.items() if r in s)
-    alone = lambda sets, r: sets.get(frozenset([r]), 0)
-    reasons.sort(key=lambda r: (-is_in(merged, r), r))
 
-    print(f'changed pairs: ' + ', '.join(f'{s} {runs[s][0]["changedPairs"]}' for s in slugs) + f', total {total}\n')
+def is_in(sets, r):
+    return sum(v for s, v in sets.items() if r in s)
 
+
+def alone(sets, r):
+    return sets.get(frozenset([r]), 0)
+
+
+def owner(r):
+    return OWNED.get(r) or BY_DECISION.get(r) or PARTIAL.get(r) or 'none'
+
+
+def bodies(census, r):
+    b = {'legacy': 0, 'modern': 0}
+    for k, v in census['opaqueByReason'].items():
+        if k.split(':')[0] == r:
+            b = {side: b[side] + v[side] for side in b}
+    return b
+
+
+def table1(runs, merged, total, reasons):
     print('## Table 1\n')
-    print('| Reason | ' + ' | '.join(f'{s}: bodies (legacy / modern), in, alone' for s in slugs)
+    print('| Reason | ' + ' | '.join(f'{s}: bodies (legacy / modern), in, alone' for s in runs)
           + ' | Sum: bodies | Sum: in | Sum: alone | Open owner |')
-    print('|---|' + '---|' * (len(slugs) + 4))
+    print(rule(len(runs) + 5))
     for r in reasons:
         cells, bl, bm = [], 0, 0
-        for s in slugs:
-            c, sets = runs[s]
-            b = {'legacy': 0, 'modern': 0}
-            for k, v in c['opaqueByReason'].items():
-                if k.split(':')[0] == r:
-                    b = {side: b[side] + v[side] for side in b}
+        for census, sets in runs.values():
+            b = bodies(census, r)
             bl += b['legacy']
             bm += b['modern']
             cells.append(f'{b["legacy"]} / {b["modern"]}, {is_in(sets, r)}, {alone(sets, r)}')
         print(f'| `{r}` | ' + ' | '.join(cells)
               + f' | {bl} / {bm} | {is_in(merged, r)} | {alone(merged, r)} ({pct(alone(merged, r), total)}) | {owner(r)} |')
 
-    owned = frozenset(OWNED)
-    tail = [r for r in reasons if r not in OWNED and r not in BY_DECISION]
-    base = unlocked(merged, owned)
 
+def table2(runs, merged, total, owned, tail):
+    base = unlocked(merged, owned)
     print('\n## Table 2\n')
-    print('| Unowned reason | ' + ' | '.join(slugs) + ' | Sum (marginal unlock) | Share of ' + str(total) + ' | Sum: in |')
-    print('|---|' + '---|' * (len(slugs) + 3))
+    print('| Unowned reason | ' + ' | '.join(runs) + f' | Sum (marginal unlock) | Share of {total} | Sum: in |')
+    print(rule(len(runs) + 4))
     marginal = {r: unlocked(merged, owned | {r}) - base for r in tail}
     for r in sorted(tail, key=lambda r: (-marginal[r], -is_in(merged, r), r)):
-        per = [unlocked(runs[s][1], owned | {r}) - unlocked(runs[s][1], owned) for s in slugs]
+        per = [unlocked(sets, owned | {r}) - unlocked(sets, owned) for _, sets in runs.values()]
         print(f'| `{r}` | ' + ' | '.join(map(str, per)) + f' | {marginal[r]} | {pct(marginal[r], total)} | {is_in(merged, r)} |')
 
     print('\n### Pairs of unowned reasons (unlock beyond the two marginals), top 10\n')
     print('| Two reasons landed together | Changed pairs unlocked | Of which need both |')
-    print('|---|---|---|')
+    print(rule(3))
     both = []
     for a, b in combinations(tail, 2):
         n = unlocked(merged, owned | {a, b}) - base
@@ -112,10 +113,12 @@ def main(args):
     for extra, n, a, b in sorted(both, reverse=True)[:10]:
         print(f'| `{a}` + `{b}` | {n} ({pct(n, total)}) | {extra} |')
 
+
+def greedy(merged, total, owned, tail):
     print('\n### Greedy order (each step lands the reason that unlocks most, given all before it)\n')
-    print('| Step | Reason | Changed pairs this step unlocks | Cumulative lowerable | Share of ' + str(total) + ' |')
-    print('|---|---|---|---|---|')
-    done, left, at = set(owned), set(tail), base
+    print(f'| Step | Reason | Changed pairs this step unlocks | Cumulative lowerable | Share of {total} |')
+    print(rule(5))
+    done, left, at = set(owned), set(tail), unlocked(merged, owned)
     step = 0
     while left:
         best = max(sorted(left), key=lambda r: unlocked(merged, frozenset(done | {r})))
@@ -129,23 +132,48 @@ def main(args):
         print(f'| {step} | `{best}` | {gain} | {at} | {pct(at, total)} |')
     print(f'\nleft after the greedy order, each unlocking nothing more: {", ".join(sorted(left)) or "none"}')
 
+
+def table3(runs, merged, total, owned, tail):
     print('\n## Table 3\n')
     print('| Run | Changed pairs | Lowerable today | With every owner landed | With the whole tail landed |')
-    print('|---|---|---|---|---|')
+    print(rule(5))
     everything = owned | frozenset(tail)
-    rows = [(s, runs[s][0]['changedPairs'], runs[s][1]) for s in slugs] + [('Sum', total, merged)]
+    rows = [(s, c['changedPairs'], sets) for s, (c, sets) in runs.items()] + [('Sum', total, merged)]
     for s, n, sets in rows:
         a, b, c = unlocked(sets, frozenset()), unlocked(sets, owned), unlocked(sets, everything)
         print(f'| {s} | {n} | {a} ({pct(a, n)}) | {b} ({pct(b, n)}) | {c} ({pct(c, n)}) |')
 
+
+def reason_sets(runs, merged, owned):
     print('\n## Reason sets with no owned subset reading: top 25 sets holding an unowned reason\n')
-    print('| Reason set | ' + ' | '.join(slugs) + ' | Sum |')
-    print('|---|' + '---|' * (len(slugs) + 1))
+    print('| Reason set | ' + ' | '.join(runs) + ' | Sum |')
+    print(rule(len(runs) + 2))
     held = [(v, s) for s, v in merged.items() if s - owned]
     for v, s in sorted(held, key=lambda t: (-t[0], sorted(t[1])))[:25]:
-        per = [str(runs[x][1].get(s, 0)) for x in slugs]
+        per = [str(sets.get(s, 0)) for _, sets in runs.values()]
         print(f'| `{"+".join(sorted(s))}` | ' + ' | '.join(per) + f' | {v} |')
     print(f'\nsets holding an unowned reason: {len(held)} sets, {sum(v for v, _ in held)} changed pairs')
+
+
+def main(args):
+    runs = {}
+    for a in args:
+        slug, path = a.split('=', 1)
+        runs[slug] = load(path)
+    total = sum(c['changedPairs'] for c, _ in runs.values())
+    merged = Counter()
+    for _, sets in runs.values():
+        merged.update(sets)
+    reasons = sorted({r for s in merged for r in s}, key=lambda r: (-is_in(merged, r), r))
+    owned = frozenset(OWNED)
+    tail = [r for r in reasons if r not in OWNED and r not in BY_DECISION]
+
+    print('changed pairs: ' + ', '.join(f'{s} {c["changedPairs"]}' for s, (c, _) in runs.items()) + f', total {total}\n')
+    table1(runs, merged, total, reasons)
+    table2(runs, merged, total, owned, tail)
+    greedy(merged, total, owned, tail)
+    table3(runs, merged, total, owned, tail)
+    reason_sets(runs, merged, owned)
 
 
 if __name__ == '__main__':
