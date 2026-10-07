@@ -1,5 +1,5 @@
 # P1-032 `equiv compare --mode thorough|quick`: thorough is quick plus further passes over what is still Unknown
-Status: in-progress
+Status: done (PR #415)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-013, P1-016, P1-010, P1-035, P2-050, P2-076
