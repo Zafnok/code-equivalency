@@ -986,7 +986,11 @@ are unchanged; a later census that shows more changed pairs can move any of thes
 - M4-008 (M) The remaining whole-body opaques: arrow-bodied and auto-property accessors, `catch`
   filters and bare `catch` (ADR 0029). 3 changed pairs (1.0%). Needs P1-003, M3-010, M3-025.
 
-- Floating point as IEEE sorts; `decimal`; string theory for common `string` ops.
+- Floating point as IEEE sorts: done on demand by P1-030 (ADR 0053), for a pair whose rung 1 candidate depends
+  only on `float` and `double` arithmetic, comparisons and conversions. What remains: `%` (C#'s is not IEEE
+  remainder); a conversion from a 64-bit integer; a floating-point to integer conversion out of range, which needs
+  the side of .NET 9 a pair is on; x87; floating point in rungs 2 to 5; and refining a candidate that also depends
+  on something not interpretable. `decimal`; string theory for common `string` ops.
 - Boogie backend behind `IVerificationBackend` for invariant-driven unbounded loops.
 - Java frontend (Eclipse JDT sidecar) reusing Core, Verify, Cli unchanged.
 - Web UI: SARIF viewer + CFG split pane (React Flow). Only after users ask.

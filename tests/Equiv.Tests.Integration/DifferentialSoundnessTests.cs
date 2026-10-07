@@ -67,6 +67,13 @@ public sealed class DifferentialSoundnessTests
     /// </summary>
     private const int ClosureShare = 4;
 
+    /// <summary>
+    /// How many of <see cref="PairGen.FloatPair"/> the gate draws for each four of <see cref="Generated"/> (ticket P1-030
+    /// criterion 5): 50 per pull request and 1,250 nightly. Each is refined (ADR 0053), which costs a floating-point
+    /// query, so they are fewer than the others, and drawn apart from them for <see cref="BrokenIlSeed"/>'s sake.
+    /// </summary>
+    private const int FloatShare = 4;
+
     private static readonly ImmutableArray<PairRuntime.Lowering> BothLowerings = [PairRuntime.Lowering.Operation, PairRuntime.Lowering.Il];
 
     private static readonly ImmutableArray<Rule> Rules = [new(1, Soundness), new(2, Decoding), new(3, Precision)];
@@ -174,6 +181,43 @@ public sealed class DifferentialSoundnessTests
     public void PairsThatDifferOnlyInsideAClosureAreSoundUnderBothLowerings() =>
         Assert.Null(Record.Exception(() => Sample(PairGen.ClosurePair, BothLowerings, Rules, Seed, Pairs / ClosureShare)));
 
+    /// <summary>
+    /// Rules 1 to 3, under both lowerings, on pairs over <c>float</c> and <c>double</c> that differ by an identity of IEEE
+    /// arithmetic or by a rewrite that is not one (ticket P1-030 criterion 5; ADR 0053 decision 3). Every such pair is
+    /// Unknown(abstraction) until it is refined, so a verdict here is a refined one: rule 1 holds the floating-point
+    /// encoding to the CLR on NaN, both zeros, the infinities and subnormals, where a wrong encoding would be a false
+    /// Equivalent, and rule 2 runs each Divergent's numbers.
+    /// </summary>
+    [Fact]
+    public void FloatingPointPairsAreSoundUnderBothLowerings() =>
+        Assert.Null(Record.Exception(() => Sample(PairGen.FloatPair, BothLowerings, Rules, Seed, Pairs / FloatShare, PairGen.FloatInput)));
+
+    /// <summary>
+    /// The floating-point pairs do get decided: were refinement to stop running, every one of them would be Unknown and
+    /// the three rules would hold of nothing. Of 40 pairs, at least 10 are Equivalent after refinement and at least 10
+    /// Divergent. (A pair whose two operands happen to be one expression is decided without it.)
+    /// </summary>
+    [Fact]
+    public void FloatingPointPairsAreDecidedAfterRefinement()
+    {
+        int equivalent = 0;
+        int divergent = 0;
+        PairGen.FloatPair.Sample(
+            pair =>
+            {
+                Verdict verdict = PairRuntime.Analyse(pair.LegacySource, pair.ModernSource).Verdict;
+                Assert.False(verdict is Divergent && PairGen.IsPreserving(pair.Operator), pair.LegacySource + pair.ModernSource);
+                if (verdict is Equivalent or Divergent && verdict.Ladder.Any(static s => !s.Refined.IsEmpty))
+                {
+                    Interlocked.Increment(ref verdict is Equivalent ? ref equivalent : ref divergent);
+                }
+            },
+            seed: Seed,
+            iter: 40);
+
+        Assert.True(equivalent >= 10 && divergent >= 10, string.Create(CultureInfo.InvariantCulture, $"{equivalent} Equivalent and {divergent} Divergent of 40"));
+    }
+
     /// <summary>A deliberately broken IL mapping fails rule 1 within the pull-request budget, and the failure prints its seed.</summary>
     [Fact]
     public void ABrokenIlMappingIsCaught()
@@ -244,8 +288,13 @@ public sealed class DifferentialSoundnessTests
         Record.Exception(() => Sample(Generated, lowerings, rules, seed, Pairs));
 
     private static void Sample(
-        Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> pairs, ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules, string seed, int count) =>
-        Gen.Select(pairs, PairGen.Input.Array[InputsPerPair], static (pair, inputs) => new Case(pair.LegacySource, pair.ModernSource, pair.Operator, inputs))
+        Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> pairs,
+        ImmutableArray<PairRuntime.Lowering> lowerings,
+        ImmutableArray<Rule> rules,
+        string seed,
+        int count,
+        Gen<PairInput>? inputs = null) =>
+        Gen.Select(pairs, (inputs ?? PairGen.Input).Array[InputsPerPair], static (pair, inputs) => new Case(pair.LegacySource, pair.ModernSource, pair.Operator, inputs))
             .Sample(c => Check(c, lowerings, rules) is null, seed: seed, iter: count, print: c => Check(c, lowerings, rules)?.Describe(c) ?? string.Empty);
 
     /// <summary>The first failure of <paramref name="c"/> that no <see cref="Skips"/> entry tolerates, lowering by lowering and rule by rule.</summary>

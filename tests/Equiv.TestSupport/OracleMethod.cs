@@ -15,6 +15,8 @@ public sealed record OracleMethod(Type ReturnType, string Body)
         _ when type == typeof(long) => "long",
         _ when type == typeof(void) => "void",
         _ when type == typeof(decimal) => "decimal",
+        _ when type == typeof(float) => "float",
+        _ when type == typeof(double) => "double",
         _ => "bool",
     };
 }

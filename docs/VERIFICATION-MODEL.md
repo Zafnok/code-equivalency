@@ -102,7 +102,12 @@ Types: `Bool`; `BitVec(n)` for integral types (n in 8, 16, 32, 64, signedness ke
 the operation, not the type); `Sort(name)` for everything else (strings, objects,
 decimals, floats), treated as uninterpreted with equality only; `Map(key, value)` for
 SSA heap slices (one map per field, one per array sort) encoded as SMT arrays. Floating
-point is a `Sort` in the MVP (not IEEE-modelled); a post-MVP ticket exists. Operators on
+point is a `Sort` too: `float` is `Sort("System.Single")` and `double` is `Sort("System.Double")`,
+uninterpreted in every query but a refined one (section 5; ADR 0053). A floating-point number is the
+element of its sort whose id is its IEEE 754 bits, binary32 zero-extended, which is why an element's id
+is 64 bits; every NaN is the one quiet NaN, so equal numbers are equal elements, `+0` and `-0` are two
+and NaN is one (`IrFloat` holds the spelling; ticket P1-030). A literal is therefore its number, not a
+hash of its text. Operators on
 floating point, `decimal` and user-defined operators are `IrPure` applications of named
 functions both sides share (ADR 0025, ticket M4-002), so unchanged arithmetic is provable
 without modelling its semantics. A value tuple of two or three `bool` or integral elements is the
@@ -129,7 +134,7 @@ Instructions:
 | `IrPhi(var, [(block, var)])` | SSA merge |
 | `IrCall(var?, threw?, callee identity, args, refouts, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `refouts` are the new versions of the call's `ref` and `out` arguments, in parameter order, each a definition; a `ref` argument's value at the call is also one of `args`, an `out` one's is not (M4-003). `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005), except at a `closed` call (section 1), which has no heap pairs (ADR 0041; P2-060). Result, `threw`, each ref output (one function per output index) and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018); a closed call's are functions of callee, arguments and position |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
-| `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`, `delegate:<fingerprint>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025) |
+| `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`, `delegate:<fingerprint>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025). Uninterpreted, except that a refined query gives an interpretable function its real meaning (section 5; ADR 0053) |
 | `IrOpaque(var?, reason, sourceSpan, fingerprint?, reads, threw?, heap)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024). A fingerprinted fragment has what that call needs: a `threw` flag the frontend branches on and the heap pairs an `IrCall` has; `reads` and each pair's `before` are uses, `threw` and each `after` definitions (M4-004) |
 
 Terminators: `IrGoto`, `IrBranch(cond, then, else)`, `IrSwitch`, `IrReturn(var?, outs)`,
@@ -393,7 +398,10 @@ and `catch (DivideByZeroException)` does not. A floating-point to integer conver
 runtime-sensitive when the pair's runtime interval crosses .NET 9, where it began to saturate. Every
 function taking or yielding floating point is runtime-sensitive on the side whose floating point alone
 runs on x87: its project is on .NET Framework with a 32-bit platform and the other side's is not (ADR
-0040 decision 2; P2-055). A .NET (Core) project is never x87, and two x87 sides agree. Lifted (nullable)
+0040 decision 2; P2-055). A .NET (Core) project is never x87, and two x87 sides agree. A side whose
+floating point may run on x87, whatever the other side's does, names each such function behind `x87.`
+(`x87.f64.add`, `x87.conv.i32.f64`): two x87 sides still share the function, and no backend reads it as
+IEEE arithmetic (ADR 0053 decision 4; ticket P1-030). Lifted (nullable)
 operators, compound assignment and `++`/`--` on these types stay `IrOpaque`.
 
 Migration-specific normalisations (applied to both sides before matching):
@@ -581,6 +589,34 @@ same types (each type has its own constructor) and equal. A loop segment's cut e
 are events of an acyclic product too, so the argument covers them, but rungs 2 to 5 still compare
 sequences.
 
+**Abstraction refinement** (ADR 0053; ticket P1-030). When rung 1 (section 5.1) ends Unknown(abstraction) and
+every abstraction its candidate depends on is an interpretable pure function, rung 1's product is encoded again
+with exactly those functions interpreted, and rung 1's queries are asked again. A function is interpretable in a
+pair when it is one of the following and no application of it on either side is runtime-sensitive or can raise:
+
+| Function | Meaning |
+|---|---|
+| `op:` `==` and `!=` of `System.IntPtr` and of `System.UIntPtr` | equality of the sort's elements and its negation; the flag an `op:` carries is false |
+| `f32.<op>`, `f64.<op>` for `add sub mul div neg` | IEEE 754 binary32 and binary64, round to nearest even |
+| `f32.<op>`, `f64.<op>` for `eq ne lt le gt ge` | IEEE comparison: false with a NaN operand, except `ne`, which is the negation of `eq`; `+0` equals `-0` |
+| `conv.f32.f64`, `conv.f64.f32` | exact widening; narrowing rounded to nearest even |
+| `conv.<int>.<float>` from `i8 u8 i16 u16 char i32 u32` | the integer's value, rounded to nearest even |
+| unchecked `conv.<float>.<int>` | truncation toward zero where the truncated value fits the target; on any other argument (out of range, infinite, NaN) still the shared function |
+
+Nothing else is: `%` on floating point, every `dec.*`, a checked conversion, a conversion from a 64-bit integer,
+any other `op:`, every `delegate:` and `get:`, and every `x87.` function. In a refined query `System.Single` and
+`System.Double` are Z3's `(_ FloatingPoint 8 24)` and `(_ FloatingPoint 11 53)`, for inputs, call arguments and
+results and map elements alike, so a shared input is one term; `=` on them is the equality of section 2 (one NaN,
+two zeros), and a literal is its number. A function that is not interpreted stays the function both sides share,
+now over those sorts. The solver turns floating point into bit-vectors and those into propositional logic before
+`smt` (`fpa2bv`, `simplify`, `bit-blast`), a tenth of the cost of `smt`'s own floating-point theory. A refined
+query has ten times the pair's resource limit, which was set on bit-vector queries (bit-blasted,
+`a * 2.0 = a + a` on `double` needs 3.2 million against the default 2 million), the pair's own timeout, and goes
+to Z3 alone. `IrInterpreter` computes an interpreted function itself, with .NET's `float` and `double` arithmetic
+(`IrPureMeaning`), and a property test holds it to Z3's terms on every interpreted function
+(`InterpretedPureTests`). A candidate of a refined query that depends on a further interpretable function refines
+again, three rounds at most. The outcome is section 5.1's.
+
 A pair that is not Equivalent is then asked under which inputs it is (ADR 0048; ticket P1-022). This
 runs on rung 1's product of a pair without a loop or a self-call, for a Divergent the solver found
 and for an Unknown with reason `abstraction`. A pair whose model calls a runtime-changed member is
@@ -626,7 +662,14 @@ instead, so its counterexamples are real. Mutual recursion needs no rung: a call
 shared (section 1, ADR 0019), so `Recursion` means only a self-call that no rung decided.
 
 Rung 1's result is a proof only when no input reaches the bound; otherwise it only refutes, and rungs 2 and 3
-decide. Rung 1 does not apply to a pair either side of which, unrolled `k` times, would hold more than 25,000 blocks
+decide. A rung 1 that ends Unknown(abstraction) on an interpretable candidate is asked again, refined (section 5;
+ADR 0053). A refined round that finds no divergence and no input past the bound is Equivalent; one whose model
+replays to an untainted divergence is Divergent; one that finds no divergence and an input that reaches an opaque
+node is Unknown(opaque), with section 6's residual claim, since ADR 0014's first query is then unsatisfiable under
+the real meaning. Each of those results keeps rung 1's first step in `ladderTrace` and adds one step per refined
+round. Anything else leaves the pair the Unknown(abstraction) it was, with its first candidate and its one step: a
+query the solver gives up on (never Unknown(timeout)), a candidate that depends on something not interpretable, a
+fourth round, a loop the bound does not cover. Rungs 2 to 5 are never refined. Rung 1 does not apply to a pair either side of which, unrolled `k` times, would hold more than 25,000 blocks
 (ticket P1-032): loops nested `d` deep unroll to the body times `k` to the power `d`, work that no solver budget
 bounds, and at thorough mode's bound of 8 one real pair never finished it. The unroller refuses before it makes the
 copy that would pass the limit, the step says so in `ladderTrace`, and the other rungs still run. The contract check
@@ -745,7 +788,10 @@ contracts (section 5.2; ticket P1-010) has `proofMethod` suffixed `+contract` (f
 per callee: `contract` is K in SMT-LIB over `r.old`/`r.new`, `threw.*`, `type.*`, `calls.*` and
 `heap.<map>.*`, and `proposedBy` is `observed-predicates`. Each such callee is left out of
 `unprovenAssumptions`, and its own unproven assumptions are added to the caller's `assumedCallees` and
-`unprovenAssumptions`. A result one of whose rung 1 queries a second solver answered (section 6; ADR 0050,
+`unprovenAssumptions`. A result decided after abstraction refinement (section 5; ADR 0053, ticket P1-030) has
+`proofMethod` suffixed `+refined`, after `+contract` and before a solver's name (`bounded+refined`), whether it is
+Equivalent, Divergent or Unknown(opaque), and carries `properties.refined`: the function names its last refined
+round interpreted, sorted. A result one of whose rung 1 queries a second solver answered (section 6; ADR 0050,
 ticket P1-033) has `proofMethod` suffixed with `+` and the solver's name, after `+contract` when both
 apply: `bounded+cvc5`. That holds for a Divergent and an Unknown too, which otherwise carry no
 `proofMethod`, and names the rung the solver answered for; a Divergent the real runtimes showed stays
@@ -762,7 +808,16 @@ untainted on both sides. Otherwise it is Unknown with reason `Abstraction`, carr
 as `properties.candidateCounterexample` and the abstractions it depends on as
 `properties.abstractions`. Each entry has an `identity` (an `IrPure` function name, such as `f64.add` or
 `delegate:<fingerprint>#0`, or `opaque:<fingerprint>`), a `side` and, when known, a `span`; an `opaque:` entry also has `reason`, the
-fragment's `IrOpaque` reason, for example `DelegateCreation` (ticket P2-062).
+fragment's `IrOpaque` reason, for example `DelegateCreation` (ticket P2-062). In the replay of a refined query's
+model (section 5; ADR 0053) the result of an interpreted function is no abstraction: the interpreter computes it,
+so it is tainted only if an argument is, and a divergence that depends on it is real. A floating-point to integer
+conversion of an argument outside its meaning is answered from the model and tainted, as any `IrPure` is.
+
+A model, in `properties.model`, `properties.candidateCounterexample` and the message, writes a `float` or
+`double` value as its number: `f64 0.1`, `f32 -0`, `f64 NaN`, the shortest text that reads back to the same
+bits. In a model of an unrefined query, a floating-point value the solver made up is the number its element's id
+happens to spell, distinct from every other value of the model; such a model does not depend on which numbers
+they are.
 
 With `equiv compare --execute`, every Divergent is also replayed on the two real runtimes, the
 second oracle of ADR 0035 (decision 2; ticket M4-009). Its model's inputs are bound back to each
@@ -1245,6 +1300,21 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   call's outputs, which no C# argument can (ADR 0026, clarifications of 2026-09-30). So rule 2
   does not count a replay of such a model that fails to diverge. That includes a closed call
   (ADR 0041): it writes no heap, but its result and `threw` flag are still the model's choice.
+  A fourth family, `PairGen.FloatPair` (ticket P1-030; ADR 0053), is drawn apart from those: methods that also
+  take `float g, double h` and differ in one expression, by an identity of IEEE arithmetic (the preserving
+  family: commuted `+`, `*` and comparisons, `e * 2` for `e + e`, `e / 2` for `e * 0.5`, `e - f` for `e + -f`) or
+  by a rewrite that is not one (`!(e < f)` for `e >= f`, `e + 0` for `e`, a regrouped sum). Every such pair is
+  Unknown(abstraction) until it is refined, so the rules there are about refined verdicts; inputs give `g` and `h`
+  NaN, both zeros, the infinities, subnormals and the extremes as often as not. 50 pairs per PR, 1,250 nightly.
+- Interpreted functions (property test, ADR 0053; `InterpretedPureTests` in `Equiv.Verify.Z3.Tests`): for every
+  interpretable function and generated arguments, and for every pair of a fixed set of edge values, Z3's term
+  simplifies to the value `IrInterpreter` computes with .NET's arithmetic, and to the shared function where the
+  interpreter has no meaning.
+- Refined verdicts (property test, ADR 0053; `RefinementSoundnessTests`): the first obligation above with
+  refinement on. Its generator's pure functions have no meaning, so no pair of it is ever refined; this one
+  generates straight-line `double` procedures over the interpretable functions and a second one an edit away. An
+  Equivalent pair agrees on every input tried under .NET's arithmetic, and a Divergent's model gives different
+  results when both sides run on it.
 - Snapshot tests (Verify): IR dump and SARIF for every sample in `samples/`.
 - Congruence (property test, ADR 0024): whenever congruence reports Equivalent on a
   generated or sample pair, the solver on the same pair never reports Divergent.

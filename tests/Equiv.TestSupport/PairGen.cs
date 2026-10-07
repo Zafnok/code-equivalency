@@ -169,6 +169,144 @@ public static class PairGen
 
     private static Method Insert(Method method, int at, IStmt statement) => method with { Body = method.Body.Insert(at, statement) };
 
+    private static readonly float[] SingleEdges =
+    [
+        0f, -0f, 1f, -1f, 2f, 0.5f, 0.1f, 3f, float.NaN, float.PositiveInfinity, float.NegativeInfinity, float.Epsilon, -float.Epsilon,
+        1.17549421E-38f, float.MaxValue, float.MinValue, 16777216f, 16777218f,
+    ];
+
+    private static readonly double[] DoubleEdges =
+    [
+        0.0, -0.0, 1.0, -1.0, 2.0, 0.5, 0.1, 3.0, double.NaN, double.PositiveInfinity, double.NegativeInfinity, double.Epsilon, -double.Epsilon,
+        2.2250738585072009E-308, double.MaxValue, double.MinValue, 16777217.0, 9007199254740992.0, 9007199254740994.0, 1e300,
+    ];
+
+    private static readonly ImmutableArray<IStmt> FloatLocals =
+        [.. Locals, new Declare("p", new Name(typeof(double), "h")), new Declare("q", new Name(typeof(float), "g"))];
+
+    /// <summary>
+    /// A floating-point pair (ADR 0053; ticket P1-030): a method over the usual parameters and <c>float g, double h</c>,
+    /// with the locals <c>double p = h; float q = g;</c>, and a second one that differs from it in one expression, by an
+    /// identity of IEEE arithmetic or by a rewrite that is not one. The identities are in the preserving family
+    /// (commuted <c>+</c>, <c>*</c> and comparisons, <c>e * 2</c> for <c>e + e</c>, <c>e / 2</c> for <c>e * 0.5</c>, a
+    /// double negation, <c>e - f</c> for <c>e + -f</c>, <c>e * 1</c> for <c>e</c>, <c>!(e == f)</c> for <c>e != f</c>);
+    /// the others are changing, and several differ only on a NaN, a signed zero or a rounding (<c>!(e &lt; f)</c> for
+    /// <c>e &gt;= f</c>, <c>e + 0</c> for <c>e</c>, a regrouped sum). The expression is assigned to a local the method
+    /// returns, or decides what it returns. Operands are the parameters, the locals, conversions between the two formats
+    /// and from <c>int</c>, and a few literals; multiplication and division are rare, since each costs the solver a
+    /// multiplier. The operator names only the family.
+    /// </summary>
+    public static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> FloatPair { get; } =
+        Gen.Select(Gen.OneOfConst(typeof(double), typeof(float)), Gen.Bool, static (real, relational) => (real, relational))
+            .SelectMany(static t => Gen.Select(
+                t.relational ? RelationSite(t.real) : ArithmeticSite(t.real),
+                FloatStatement.Array[0, 3],
+                Gen.Bool,
+                RealExpr(t.real, 1),
+                (site, before, plain, operand) => FloatSources(t.real, t.relational, site, [.. before], plain, operand)));
+
+    /// <summary>An input of a <see cref="FloatPair"/> method: <see cref="Input"/>, with <c>g</c> and <c>h</c> drawn from NaN, both zeros, the infinities, subnormals and the extremes as often as not.</summary>
+    public static Gen<PairInput> FloatInput =>
+        Gen.Select(
+            Input,
+            Gen.Frequency((3, Gen.OneOfConst(SingleEdges)), (1, Gen.Single[-8, 8]), (1, Gen.UInt.Select(BitConverter.UInt32BitsToSingle))),
+            Gen.Frequency((3, Gen.OneOfConst(DoubleEdges)), (1, Gen.Double[-8, 8]), (1, Gen.ULong.Select(BitConverter.UInt64BitsToDouble))),
+            static (input, g, h) => input with { Floats = (g, h) });
+
+    private static (string LegacySource, string ModernSource, MutationOperator Operator) FloatSources(Type real, bool relational, Site site, ImmutableArray<IStmt> before, bool plain, IExpr operand)
+    {
+        string target = relational ? "z" : LocalName(real);
+        Name held = new(relational ? typeof(bool) : real, target);
+        Type returned = (relational, plain) switch
+        {
+            (true, true) => typeof(bool),
+            (true, false) => typeof(int),
+            _ => real,
+        };
+        IExpr result = (relational, plain) switch
+        {
+            (_, true) => held,
+            (true, false) => new Conditional(held, new Name(typeof(int), "a"), new Name(typeof(int), "b")),
+            _ => new Binary("+", held, operand, IsChecked: false),
+        };
+        Method legacy = new(returned, FloatLocals, [.. before, new Assign(target, site.Legacy), new Return(result)]) { Floats = true };
+        Method modern = legacy with { Body = [.. before, new Assign(target, site.Modern), new Return(result)] };
+        return (RenderMethod(legacy), RenderMethod(modern), site.Preserving ? MutationOperator.Commute : MutationOperator.ChangeConstant);
+    }
+
+    /// <summary>A statement before the differing one: a new value for <c>p</c> or <c>q</c>, or one chosen by a comparison.</summary>
+    private static Gen<IStmt> FloatStatement =>
+        Gen.Frequency(
+            (2, RealExpr(typeof(double), 2).Select(static v => (IStmt)new Assign("p", v))),
+            (2, RealExpr(typeof(float), 2).Select(static v => (IStmt)new Assign("q", v))),
+            (1, Gen.Select(Gen.OneOfConst(Relations), RealExpr(typeof(double), 1), RealExpr(typeof(double), 1), RealExpr(typeof(double), 1), RealExpr(typeof(float), 1), static (op, l, r, then, otherwise) =>
+                (IStmt)new If(new Relation(op, l, r), [new Assign("p", then)], [new Assign("q", otherwise)]))));
+
+    private static Gen<Site> ArithmeticSite(Type real) =>
+        Gen.Select(RealExpr(real, 1), RealExpr(real, 1), RealExpr(real, 1), Gen.Int[0, 13], (e, f, g, kind) => kind switch
+        {
+            0 => new Site(Op("+", e, f), Op("+", f, e), Preserving: true),
+            1 => new Site(Op("*", e, f), Op("*", f, e), Preserving: true),
+            2 => new Site(Op("*", e, new Real(real, 2)), Op("+", e, e), Preserving: true),
+            3 => new Site(Op("/", e, new Real(real, 2)), Op("*", e, new Real(real, 0.5)), Preserving: true),
+            4 => new Site(Negated(Negated(e)), e, Preserving: true),
+            5 => new Site(Op("-", e, f), Op("+", e, Negated(f)), Preserving: true),
+            6 => new Site(Op("*", e, new Real(real, 1)), e, Preserving: true),
+            7 => new Site(Op("+", e, f), Op("-", e, f), Preserving: false),
+            8 => new Site(Op("*", e, f), Op("/", e, f), Preserving: false),
+            9 => new Site(Op("+", Op("+", e, f), g), Op("+", e, Op("+", f, g)), Preserving: false),
+            10 => new Site(Op("+", e, new Real(real, 0)), e, Preserving: false),
+            11 => new Site(Op("-", e, e), new Real(real, 0), Preserving: false),
+            12 => new Site(Op("*", e, new Real(real, 3)), Op("*", e, new Real(real, 4)), Preserving: false),
+            _ => new Site(Op("*", Op("/", e, f), f), e, Preserving: false),
+        });
+
+    private static Gen<Site> RelationSite(Type real) =>
+        Gen.Select(RealExpr(real, 1), RealExpr(real, 1), Gen.Int[0, 8], static (e, f, kind) => kind switch
+        {
+            0 => new Site(new Relation("<", e, f), new Relation(">", f, e), Preserving: true),
+            1 => new Site(new Relation("<=", e, f), new Relation(">=", f, e), Preserving: true),
+            2 => new Site(new Relation("==", e, f), new Relation("==", f, e), Preserving: true),
+            3 => new Site(new Relation("!=", e, f), new Relation("!=", f, e), Preserving: true),
+            4 => new Site(Not(new Relation("==", e, f)), new Relation("!=", e, f), Preserving: true),
+            5 => new Site(new Relation("<", e, f), new Relation("<=", e, f), Preserving: false),
+            6 => new Site(Not(new Relation("<", e, f)), new Relation(">=", e, f), Preserving: false),
+            7 => new Site(new Relation("<", e, f), Not(new Relation(">=", e, f)), Preserving: false),
+            _ => new Site(new Relation("==", e, f), new Relation("<=", e, f), Preserving: false),
+        });
+
+    private static Binary Op(string op, IExpr left, IExpr right) => new(op, left, right, IsChecked: false);
+
+    private static Unary Negated(IExpr operand) => new("-", operand, IsChecked: false);
+
+    private static Unary Not(IExpr operand) => new("!", operand, IsChecked: false);
+
+    /// <summary>A <c>float</c> or <c>double</c> expression: a variable, a conversion, a literal, or arithmetic over them.</summary>
+    private static Gen<IExpr> RealExpr(Type real, int depth)
+    {
+        bool wide = real == typeof(double);
+        Type other = wide ? typeof(float) : typeof(double);
+        Gen<IExpr> leaf = Gen.Frequency(
+            (5, Gen.OneOfConst<IExpr>(new Name(real, wide ? "h" : "g"), new Name(real, wide ? "p" : "q"))),
+            (1, Gen.OneOfConst<IExpr>(new Name(other, wide ? "g" : "h"), new Name(other, wide ? "q" : "p")).Select(o => (IExpr)new Conversion(real, o, IsChecked: false))),
+            (1, Gen.OneOfConst<IExpr>(new Name(typeof(int), "a"), new Name(typeof(int), "x")).Select(o => (IExpr)new Conversion(real, o, IsChecked: false))),
+            (2, Gen.OneOfConst(0.0, 1.0, 2.0, 0.5, -1.0, 3.0, 0.1).Select(v => (IExpr)new Real(real, v))));
+        if (depth == 0)
+        {
+            return leaf;
+        }
+
+        Gen<IExpr> binary = Gen.Select(
+            Gen.Frequency((4, Gen.Const("+")), (4, Gen.Const("-")), (1, Gen.Const("*")), (1, Gen.Const("/"))),
+            RealExpr(real, depth - 1),
+            RealExpr(real, depth - 1),
+            static (op, left, right) => (IExpr)Op(op, left, right));
+        return Gen.Frequency((3, leaf), (4, binary), (1, RealExpr(real, depth - 1).Select(static o => (IExpr)Negated(o))));
+    }
+
+    /// <summary>The one expression a <see cref="FloatPair"/>'s two methods differ in, and whether the two agree on every input.</summary>
+    private sealed record Site(IExpr Legacy, IExpr Modern, bool Preserving);
+
     private static bool IsCleanup(MutationOperator op) => op is >= MutationOperator.IfToConditional and <= MutationOperator.ForToForeach;
 
     private static Gen<(string LegacySource, string ModernSource, MutationOperator Operator)> Pairs(Gen<Method> methods) =>
@@ -269,6 +407,8 @@ public static class PairGen
     {
         _ when type == typeof(int) => "x",
         _ when type == typeof(long) => "y",
+        _ when type == typeof(double) => "p",
+        _ when type == typeof(float) => "q",
         _ => "z",
     };
 
