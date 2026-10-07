@@ -19,7 +19,8 @@ namespace Equiv.Core.Matching;
 /// <see cref="ReboundCalls"/> are the callee pairs the bodies treat as possibly the same
 /// function, sorted by legacy and then modern identity (ADR 0042; ticket P2-069). <see cref="ForwardersResolved"/> are the
 /// forwarders either body calls, each with the callee its calls were lowered as calls to, sorted by forwarder and then
-/// target (ADR 0047; ticket P2-068).
+/// target (ADR 0047; ticket P2-068). <see cref="Il"/> is the pair lowered from IL as well, which the frontend keeps in
+/// thorough mode for a pair that meets ADR 0039's condition, for the IL pass (ADR 0049; ticket P1-032); null otherwise.
 /// </summary>
 public sealed record ProcedurePair(
     ProcedureIdentity Old,
@@ -42,4 +43,6 @@ public sealed record ProcedurePair(
     public ImmutableArray<ReboundCall> ReboundCalls { get; init; } = [];
 
     public ImmutableArray<ResolvedForwarder> ForwardersResolved { get; init; } = [];
+
+    public IlBodies? Il { get; init; }
 }

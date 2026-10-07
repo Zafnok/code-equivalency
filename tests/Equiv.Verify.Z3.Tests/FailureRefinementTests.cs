@@ -82,10 +82,13 @@ public sealed class FailureRefinementTests
 
     /// <summary>
     /// The pair is Unknown only because a shared fragment is read with other arguments, so only the returned values differ;
-    /// neither side throws on any input, so neither query finds a failure. The verdict is unchanged.
+    /// neither side throws on any input, so neither query finds a failure. The verdict is unchanged. The same in a pass
+    /// that refines timeouts (thorough) and one that does not (quick): ADR 0049 changes the rule for a timeout alone.
     /// </summary>
-    [Fact]
-    public void NoNewFailure_Proved_WhenOnlyValuesDiffer()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NoNewFailure_Proved_WhenOnlyValuesDiffer(bool refineTimeouts)
     {
         Verdict verdict = new Z3Backend().Verify(
             IrText.Parse("""
@@ -100,7 +103,7 @@ public sealed class FailureRefinementTests
                   %r: bv32 = opaque "DelegateCreation" at "New.cs" 3:9-3:30 fragment "f1" reads(%b)
                   ret %r
                 """),
-            Options);
+            Options with { RefineTimeouts = refineTimeouts });
 
         Unknown unknown = Assert.IsType<Unknown>(verdict);
         Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
@@ -109,13 +112,16 @@ public sealed class FailureRefinementTests
 
     /// <summary>
     /// A side that branches on the second answer of a shared fragment throws only through that abstraction, so a model of the
-    /// failure replays tainted and the answer is Unknown, never Found. Either side may be the tainted one.
+    /// failure replays tainted and the answer is Unknown, never Found. Either side may be the tainted one, in either mode's pass.
     /// </summary>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void TaintedFailureModel_IsUnknown(bool legacyBranches)
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    public void TaintedFailureModel_IsUnknown(bool legacyBranches, bool refineTimeouts)
     {
+        VerificationOptions options = Options with { RefineTimeouts = refineTimeouts };
         string branches = """
             proc "T::M(int)" (%a: bv32) -> bv32 entry B0
             B0:
@@ -135,8 +141,8 @@ public sealed class FailureRefinementTests
             """;
 
         Unknown unknown = Assert.IsType<Unknown>(legacyBranches
-            ? new Z3Backend().Verify(IrText.Parse(branches), IrText.Parse(returns), Options)
-            : new Z3Backend().Verify(IrText.Parse(returns), IrText.Parse(branches), Options));
+            ? new Z3Backend().Verify(IrText.Parse(branches), IrText.Parse(returns), options)
+            : new Z3Backend().Verify(IrText.Parse(returns), IrText.Parse(branches), options));
 
         FailureRefinement refinement = Assert.IsType<FailureRefinement>(unknown.FailureRefinement);
         (RefinementResult tainted, RefinementResult impossible) = legacyBranches
@@ -148,10 +154,12 @@ public sealed class FailureRefinementTests
 
     /// <summary>
     /// The modern side reaches an unshared opaque node on every input, whose outcome is unknown (ADR 0014): it may throw, so
-    /// no new failure is not proved. The legacy side never throws, so no removed failure is.
+    /// no new failure is not proved. The legacy side never throws, so no removed failure is. The same in either mode's pass.
     /// </summary>
-    [Fact]
-    public void ModernReachesOpaque_IsNotNoneProved()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ModernReachesOpaque_IsNotNoneProved(bool refineTimeouts)
     {
         Verdict verdict = new Z3Backend().Verify(
             IrText.Parse("""
@@ -165,7 +173,7 @@ public sealed class FailureRefinementTests
                   %s: sort "string" = opaque "InterpolatedString" at "New.cs" 5:9-5:30
                   ret %a
                 """),
-            Options);
+            Options with { RefineTimeouts = refineTimeouts });
 
         Unknown unknown = Assert.IsType<Unknown>(verdict);
         Assert.Equal(UnknownReason.Opaque, unknown.Reason);
@@ -173,12 +181,30 @@ public sealed class FailureRefinementTests
     }
 
     /// <summary>
-    /// A timeout pair is queried like any other Unknown (ADR 0037's clarification of 2026-10-04; ticket P1-035). The full
+    /// ADR 0049's table, the row "Failure refinement (ADR 0037) on a timeout Unknown", quick: a pass that does not refine
+    /// timeouts returns the timeout the ladder gave, with no <c>failureRefinement</c> (ticket P1-032 criterion 8).
+    /// </summary>
+    [Fact]
+    public void Quick_TimeoutUnknown_CarriesNoFailureRefinement()
+    {
+        Fixture fixture = Fixture.Load("hard-multiplication");
+        VerificationOptions quick = HardMultiplicationTimesOut with { RefineTimeouts = false };
+
+        Unknown unknown = Assert.IsType<Unknown>(new Z3Backend().Verify(fixture.Old, fixture.New, quick));
+
+        Assert.Equal(UnknownReason.Timeout, unknown.Reason);
+        Assert.Null(unknown.FailureRefinement);
+        Assert.Equal(new LoopLadder(static () => new Context(), quick).Verify(fixture.Old, fixture.New), unknown);
+    }
+
+    /// <summary>
+    /// A timeout pair is queried like any other Unknown (ADR 0037's clarification of 2026-10-04; ticket P1-035), which is
+    /// thorough's row of ADR 0049's table (ticket P1-032). The full
     /// query has to bit-blast a 64-bit multiplier and divider and gives up; neither side throws on any input, which the two
     /// weaker queries prove.
     /// </summary>
     [Fact]
-    public void TimeoutUnknown_CarriesFailureRefinement()
+    public void Thorough_TimeoutUnknown_CarriesFailureRefinement()
     {
         Fixture fixture = Fixture.Load("hard-multiplication");
 
@@ -322,6 +348,28 @@ public sealed class FailureRefinementTests
             encodable: true);
 
         Assert.Equal(RefinementResult.Unknown, refinement.NewFailures);
+    }
+
+    /// <summary>
+    /// Ticket P1-032: a side whose loops unroll past <see cref="IrUnroller.MaxBlocks"/> blocks is not unrolled. Rung 1
+    /// does not apply and says why, the ladder goes on to its other rungs, and the failure-refinement queries, which
+    /// need the same product, answer Unknown even when asked. One side past the limit is enough.
+    /// </summary>
+    [Fact]
+    public void PairTooLargeToUnroll_HasNoRungOneAndNoRefinementAnswers()
+    {
+        IrProcedure deep = IrText.Parse(DeepLoops.Nested(depth: 12));
+        IrProcedure shallow = IrText.Parse(DeepLoops.Nested(depth: 2));
+        VerificationOptions options = Options with { TimeoutMs = 2_000 };
+
+        Verdict verdict = new LoopLadder(static () => new Context(), options).Verify(deep, deep);
+        FailureRefinement refinement = new FailureRefinementQuery(static () => new Context(), options).Run(deep, deep, encodable: true);
+
+        Assert.Equal(new LadderStep(ProofMethod.Bounded, RungOutcome.NotApplicable, "a side unrolled 3 times holds more than 25000 blocks"), verdict.Ladder[0]);
+        Assert.True(verdict.Ladder.Length > 1);
+        Assert.Equal(new FailureRefinement(RefinementResult.Unknown, RefinementResult.Unknown), refinement);
+        Assert.Null(LoopLadder.Unrolled(shallow, deep, 3));
+        Assert.NotNull(LoopLadder.Unrolled(shallow, shallow, 3));
     }
 
     /// <summary>A pair rung 1 could not encode has no product, so both answers are Unknown, and the time is still measured.</summary>

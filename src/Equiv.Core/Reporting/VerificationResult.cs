@@ -25,9 +25,18 @@ namespace Equiv.Core.Reporting;
 /// <see cref="ReboundCalls"/> is the pair's
 /// <see cref="ProcedurePair.ReboundCalls"/> (ADR 0042; ticket P2-069), and is not part of the fingerprint either; nor is
 /// <see cref="ForwardersResolved"/>, the pair's <see cref="ProcedurePair.ForwardersResolved"/> (ADR 0047; ticket P2-068).
+/// <see cref="DecidedBy"/> names the later pass of thorough mode that produced the result, <see cref="BudgetPass"/> or
+/// <see cref="IlPass"/> (ADR 0049 decision 6; ticket P1-032); null for a result of the first pass. It is not part of the
+/// fingerprint.
 /// </summary>
 public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
 {
+    /// <summary><see cref="DecidedBy"/> of a result the budget pass produced.</summary>
+    public const string BudgetPass = "budget-pass";
+
+    /// <summary><see cref="DecidedBy"/> of a result the IL pass produced.</summary>
+    public const string IlPass = "il-pass";
+
     public ImmutableArray<string> EquivalencesApplied { get; init; } = [];
 
     public ImmutableArray<string> AssumedCallees { get; init; } = [];
@@ -45,4 +54,6 @@ public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verd
     public ImmutableArray<ReboundCall> ReboundCalls { get; init; } = [];
 
     public ImmutableArray<ResolvedForwarder> ForwardersResolved { get; init; } = [];
+
+    public string? DecidedBy { get; init; }
 }

@@ -30,6 +30,16 @@ public static class IrUnroller
     }
 
     /// <summary>
+    /// The most blocks <see cref="UnrollWithin"/> lets an unrolled procedure hold (ticket P1-032). Loops nested
+    /// <c>d</c> deep unroll to the body times <c>bound</c> to the power <c>d</c>, which no solver budget bounds:
+    /// at thorough mode's bound of 8 one pair of <c>gitextensions-8522</c> was still unrolling after eleven hours and
+    /// 89 GB. A product this large is not one the solver decides either, and the loop analysis, which recurses along
+    /// a procedure's paths, overflows a one-megabyte stack somewhere between 30,000 and 50,000 blocks of such a nest.
+    /// The limit sits under that and well over the 13,497 blocks of the largest pair the tests verify (ticket P2-121).
+    /// </summary>
+    public const int MaxBlocks = 25_000;
+
+    /// <summary>
     /// Rung 1's acyclic under-approximation: blocks no input reaches are dropped, self-calls are inlined
     /// <paramref name="bound"/> deep (the call below that is unreachable), then every loop is cloned
     /// <paramref name="bound"/> times with the last copy's back edges unreachable.
@@ -38,11 +48,21 @@ public static class IrUnroller
     public static IrProcedure Unroll(IrProcedure procedure, int bound) => Unroll(procedure, bound, out _);
 
     /// <summary>
+    /// <see cref="Unroll(IrProcedure, int)"/>, or null when the result would hold more than <paramref name="maxBlocks"/>
+    /// blocks. It gives up before it makes the copy that would pass the limit, so a procedure it refuses costs no more
+    /// than one it accepts.
+    /// </summary>
+    public static IrProcedure? UnrollWithin(IrProcedure procedure, int bound, int maxBlocks = MaxBlocks) => Unroll(procedure, bound, maxBlocks, out _);
+
+    /// <summary>
     /// <see cref="Unroll(IrProcedure, int)"/>, and in <paramref name="touched"/> how many times copying the loops read,
     /// replaced or added a block: the work a test can count to see that it grows with the size of what is copied
     /// (ticket P2-109).
     /// </summary>
-    internal static IrProcedure Unroll(IrProcedure procedure, int bound, out long touched)
+    internal static IrProcedure Unroll(IrProcedure procedure, int bound, out long touched) =>
+        Unroll(procedure, bound, int.MaxValue, out touched)!;
+
+    private static IrProcedure? Unroll(IrProcedure procedure, int bound, int maxBlocks, out long touched)
     {
         ArgumentNullException.ThrowIfNull(procedure);
         ArgumentOutOfRangeException.ThrowIfLessThan(bound, 1);
@@ -53,11 +73,20 @@ public static class IrUnroller
 
         RequireReducible(procedure);
 
-        IrProcedure current = Inline(Prune(procedure), bound);
         touched = 0;
+        if (Inline(Prune(procedure), bound, maxBlocks) is not { } current)
+        {
+            return null;
+        }
+
         while (IrLoopAnalysis.Of(current).Loops is { IsEmpty: false } loops)
         {
             IrLoop innermost = loops.First(l => !loops.Any(inner => inner.Parent == l.Header));
+            if (current.Blocks.Length + ((long)innermost.Blocks.Length * (bound - 1)) > maxBlocks)
+            {
+                return null;
+            }
+
             (current, _, long copying) = Copy(current, innermost, bound, IrLastCopy.Unreachable);
             touched += copying;
         }
@@ -240,8 +269,11 @@ public static class IrUnroller
         return (Checked(procedure, result), headers);
     }
 
-    /// <summary>Inlines every self-call <paramref name="bound"/> deep; a self-call below that ends its block unreachable.</summary>
-    private static IrProcedure Inline(IrProcedure procedure, int bound)
+    /// <summary>
+    /// Inlines every self-call <paramref name="bound"/> deep; a self-call below that ends its block unreachable. Null
+    /// when the next inlined copy would take the procedure past <paramref name="maxBlocks"/> blocks.
+    /// </summary>
+    private static IrProcedure? Inline(IrProcedure procedure, int bound, int maxBlocks)
     {
         IrEditor editor = new(procedure);
         Dictionary<IrBlockId, int> depth = procedure.Blocks.ToDictionary(static b => b.Id, static _ => 0);
@@ -255,6 +287,11 @@ public static class IrUnroller
             }
 
             instance++;
+            if ((instance + 1L) * procedure.Blocks.Length > maxBlocks)
+            {
+                return null;
+            }
+
             (ImmutableArray<IrBlockId> inlined, IrBlockId after) = editor.InlineCall(procedure, block, index, $"$r{instance.ToString(CultureInfo.InvariantCulture)}");
             foreach (IrBlockId id in inlined)
             {

@@ -488,6 +488,37 @@ public sealed class IrUnrollerTests
         Assert.InRange(many, 3 * few, 4 * few);
     }
 
+    /// <summary>
+    /// Ticket P1-032: loops nested twelve deep unroll three times to more blocks than <see cref="IrUnroller.MaxBlocks"/>,
+    /// and <see cref="IrUnroller.UnrollWithin"/> refuses before it makes them. Within the limit it is
+    /// <see cref="IrUnroller.Unroll(IrProcedure, int)"/>, and a limit a procedure just fits lets it through.
+    /// </summary>
+    [Fact]
+    public void UnrollWithin_RefusesAProcedureThatUnrollsPastTheLimit()
+    {
+        IrProcedure deep = IrText.Parse(DeepLoops.Nested(depth: 12));
+        IrProcedure shallow = IrText.Parse(DeepLoops.Nested(depth: 3));
+        IrProcedure unrolled = IrUnroller.Unroll(shallow, 3);
+
+        Assert.Equal(25_000, IrUnroller.MaxBlocks);
+        Assert.Null(IrUnroller.UnrollWithin(deep, 3));
+        Assert.Equal(unrolled, IrUnroller.UnrollWithin(shallow, 3));
+        Assert.Empty(IrLoopAnalysis.Of(unrolled).Loops);
+        Assert.Null(IrUnroller.UnrollWithin(shallow, 3, maxBlocks: unrolled.Blocks.Length / 2));
+        Assert.NotNull(IrUnroller.UnrollWithin(IrText.Parse(DeepLoops.Nested(depth: 1)), 8));
+    }
+
+    /// <summary>Ticket P1-032: inlining a self-call is refused the same way, before the copy that would pass the limit.</summary>
+    [Fact]
+    public void UnrollWithin_RefusesInliningPastTheLimit()
+    {
+        IrProcedure recursive = IrText.Parse(Recursive);
+        IrProcedure unrolled = IrUnroller.Unroll(recursive, 3);
+
+        Assert.Equal(unrolled, IrUnroller.UnrollWithin(recursive, 3));
+        Assert.Null(IrUnroller.UnrollWithin(recursive, 3, maxBlocks: recursive.Blocks.Length));
+    }
+
     [Fact]
     public void ArgumentsAreChecked()
     {

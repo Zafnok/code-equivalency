@@ -269,6 +269,24 @@ public sealed partial class LlmInvariantRungTests
     }
 
     /// <summary>
+    /// ADR 0049's table, the row "Rung 5's local proposer" (ticket P1-032 criterion 2): after rung 4 times out, a thorough
+    /// pass asks the local proposer, and a quick one, which turns <see cref="VerificationOptions.LocalProposer"/> off,
+    /// stops at rung 4's Unknown.
+    /// </summary>
+    [Theory]
+    [InlineData(true, UnknownReason.NoInvariant, ProofMethod.TraceInvariant)]
+    [InlineData(false, UnknownReason.ChcTimeout, ProofMethod.Chc)]
+    public void Rung5LocalProposer_RunsInThoroughAndNotInQuick(bool localProposer, UnknownReason reason, ProofMethod lastRung)
+    {
+        VerificationOptions options = Options with { TimeoutMs = 1, InvariantModel = null, LocalProposer = localProposer };
+
+        Verdict verdict = new LoopLadder(static () => new Context(), options).Verify(Fusion.Old, Fusion.New);
+
+        Assert.Equal(reason, Assert.IsType<Unknown>(verdict).Reason);
+        Assert.Equal(lastRung, verdict.Ladder[^1].Rung);
+    }
+
+    /// <summary>
     /// Ticket P1-009 criterion 3: rung 5 asks the trace proposer first and the model only once its candidates are all
     /// rejected; <c>loops/fusion</c> needs an invariant the templates cannot state, so the model proves it.
     /// </summary>

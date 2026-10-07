@@ -217,6 +217,7 @@ commercial licence, open an issue. Reasoning and the dependency licence policy a
 equiv compare --legacy <solution.sln|.slnx> --modern <solution.sln|.slnx>
               [--out equiv.sarif] [--baseline <previous.sarif>]
               [--config equiv.config.json] [--fail-on divergent|unknown]
+              [--mode thorough|quick]
               [--dry-run] [--lower-only]
               [--execute [--test-target 0.001] [--test-budget <inputs>[,<seconds>]]]
               [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback]
@@ -244,7 +245,7 @@ runs the solver and exits 0 unless loading fails. It cannot be combined with `--
 target, which must be installed. It needs Windows only when a side targets .NET Framework
 (otherwise exit 3). It replays every Divergent's counterexample on both runtimes and records
 the outcome in `properties.replay`: `reproduced`, `not-reproduced`, `not-applicable` or
-`not-constructible`. It also tests every Unknown pair on generated inputs, and a divergence it
+`not-constructible`. With `--mode thorough` it also tests every Unknown pair on generated inputs, and a divergence it
 sees twice becomes an EQ002 with `proofMethod: observed`. Testing a pair stops once the estimated
 chance of new behaviour drops below `--test-target` (default 0.001, after at least 1,000 inputs),
 or at `--test-budget` (default `10000,60`: 10,000 inputs or 60 seconds). Execution never yields
@@ -257,7 +258,27 @@ proposer, which mines invariants from runs in process and sends nothing, is on b
 is asked first. `--chc-int-mode` (default `true`) lets rung 4 try integer arithmetic before
 falling back to bitvectors.
 
-`--resource-limit <n>` overrides the config's `resourceLimit` (default 5,000,000), the budget of each
+`--mode quick|thorough` (default `quick`; the config key `mode`, which the option overrides) chooses how much
+machine time a run spends to leave fewer Unknowns (ADR 0049, ADR 0052). Both modes run the same first pass, and
+`quick` stops there. `thorough` then
+verifies again only the pairs that are still Unknown: with a larger bound and budget (`bound` 8, `resourceLimit`
+30,000,000, `timeoutMs` 600,000; the config's `escalation` replaces them) when a query ran out of budget or the pair
+has a loop, and then from IL when a pair holds an opaque the other side lacks. It also asks whether either side of a
+`timeout` Unknown can fail where the other does not, runs the contracts pass, and, under `--execute`, tests every
+Unknown. No verdict means anything
+different in either mode: quick answers Unknown where thorough may decide, never the reverse.
+
+Quick is the default because thorough is expensive for what it adds. On Git Extensions PR #8522 (13,541 matched
+pairs, four threads) quick takes 17 minutes and thorough 10.3 hours. For that, thorough proves one more pair
+Equivalent, reports 41 more Divergent and leaves 42 fewer Unknown, and it never changes a result quick decided. Some
+of its extra Divergents are false: read from IL, two runtimes' different bindings of the same source (an
+interpolated string, say) are different calls. Ask for `--mode thorough` when a run can take a night and every
+remaining Unknown is worth the machine time, and review a result marked `decidedBy: il-pass` before trusting it. A result a later pass
+produced says so in `properties.decidedBy` (`budget-pass` or `il-pass`), the run records its mode and budgets in
+`run.properties.mode`, and a `--baseline` written in the other mode is a warning. A mode never turns on `--execute`
+or `--invariant-model`.
+
+`--resource-limit <n>` overrides the config's `resourceLimit` (default 2,000,000), the budget of each
 solver query in Z3's own step count. It is deterministic, so a pair that runs out of it is
 Unknown (`timeout`) on every run, whatever the machine's speed or load. The config's `timeoutMs`
 (default 60000) is the wall-clock backstop behind it. The Unknown's message says which of the two
@@ -277,9 +298,10 @@ ships no cvc5: its release binary links LGPL libraries, so you install it yourse
 (`tools/cvc5/fetch.ps1` fetches the release this repo tests against). Without the setting nothing
 changes.
 
-`--il-fallback` (off by default) lowers a matched pair again from IL on both sides when
+`--il-fallback` (off by default) adds IL lowering to `--mode quick`: it lowers a matched pair again from IL on both sides when
 it is not congruent and either side holds an opaque the other lacks, and keeps the IL bodies only
-when they hold fewer such opaques. Every result on a matched pair then says which lowering it used,
+when they hold fewer such opaques. (`--mode thorough` reads such a pair from IL anyway, as a later pass and only while it is
+Unknown.) Every result on a matched pair then says which lowering it used,
 in `properties.lowering` (`operation` or `il`), and the census counts `pairsIlFallbackTried` and
 `pairsLoweredFromIl`.
 
@@ -358,7 +380,7 @@ server over stdio, so a coding agent can ask "is my port equivalent?" while it w
 has two read-only tools that write no file:
 
 - `compare`: `legacy` and `modern` (solution paths, required), and optionally `config`, `baseline`,
-  `bound`, `timeoutMs` and `ilFallback` (`--il-fallback`). The result is a short summary (`Equivalent n, Divergent n, Unknown n,
+  `bound`, `timeoutMs`, `ilFallback` (`--il-fallback`) and `mode` (`--mode`). The result is a short summary (`Equivalent n, Divergent n, Unknown n,
   skipped projects n, exit code k`, then the review list's lines), then the SARIF log `equiv compare` would write, as JSON text.
 - `lower_only`: `legacy`, `modern` and optionally `config` and `ilFallback`; the same as `equiv compare --lower-only`.
 
@@ -420,7 +442,7 @@ NuGet packages. Those are fetched into `$EQUIV_REFERENCE_ASSEMBLIES`
 (`-v equiv-ref-assemblies:/data/reference-assemblies`) to avoid fetching them on every run.
 
 **GitHub Action.** `action.yml` at the repo root runs the container with inputs `legacy`,
-`modern`, `config`, `baseline` and `fail-on`, and output `sarif`. Follow it with
+`modern`, `config`, `baseline`, `fail-on` and `mode`, and output `sarif`. Follow it with
 `github/codeql-action/upload-sarif` to get the results into Code Scanning:
 
 ```yaml

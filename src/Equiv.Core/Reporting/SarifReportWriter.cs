@@ -117,6 +117,23 @@ public static class SarifReportWriter
         };
     }
 
+    /// <summary>
+    /// <c>lowering</c>, which lowering the pair's bodies came from, under <c>--il-fallback</c> and on a result of the IL pass
+    /// (ADR 0039); and <c>decidedBy</c>, which later pass of thorough mode produced the result (ADR 0049 decision 6).
+    /// </summary>
+    private static void SetPassProperties(Result sarifResult, VerificationResult result)
+    {
+        if (result.Lowering is { } lowering)
+        {
+            sarifResult.SetProperty("lowering", lowering);
+        }
+
+        if (result.DecidedBy is { } decidedBy)
+        {
+            sarifResult.SetProperty("decidedBy", decidedBy);
+        }
+    }
+
     private static Result ToResult(VerificationResult result, SarifLog? baseline)
     {
         string fingerprint = ResultFingerprint.Compute(result);
@@ -162,12 +179,7 @@ public static class SarifReportWriter
         SetReplayProperties(sarifResult, result.Replay);
         SetTestingProperty(sarifResult, result.Testing);
 
-        // ADR 0039: under --il-fallback, which lowering the pair's bodies came from.
-        if (result.Lowering is { } lowering)
-        {
-            sarifResult.SetProperty("lowering", lowering);
-        }
-
+        SetPassProperties(sarifResult, result);
         SetCalleeProperties(sarifResult, result);
 
         // Ticket P2-064: a flagged result says which cause it shares with others; ReviewList.Apply ranks the groups.

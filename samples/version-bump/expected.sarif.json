@@ -227,6 +227,15 @@
             }
           ]
         },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
         "queryEndings": {
           "resourceLimit": 0,
           "wallClock": 0

@@ -99,7 +99,7 @@ public sealed class CompareTestingTests
         {
             int exitCode = 0;
             _ = CaptureStdErr(() => CaptureStdOut(() => exitCode = command.Parse(
-                ["--legacy", legacy.Path, "--modern", modern.Path, "--out", outPath, "--execute", "--test-target", "0.5", "--test-budget", "7,30"]).Invoke()));
+                ["--legacy", legacy.Path, "--modern", modern.Path, "--out", outPath, "--execute", "--mode", "thorough", "--test-target", "0.5", "--test-budget", "7,30"]).Invoke()));
 
             Assert.Equal(ExitCodes.Success, exitCode);
             Result unknown = SarifLog.Load(outPath).Runs[0].Results.Single(static r => string.Equals(r.RuleId, "EQ003", StringComparison.Ordinal));
@@ -142,6 +142,9 @@ public sealed class CompareTestingTests
         CompareOptions options = new(legacy.Path, modern.Path, "equiv.sarif", baseline is null ? null : baselineFile.Path, ConfigPath: null, FailOn: null, DryRun: false, Execute: execute)
         {
             Testing = testing ?? TestingOptions.Default,
+
+            // ADR 0049's table: only thorough mode tests an Unknown under --execute, and quick is the default (ADR 0052).
+            Mode = "thorough",
         };
         string error = CaptureStdErr(() => CaptureStdOut(() => exitCode = CompareCommand.Run(
             options, [new FakeFrontend("csharp", _ => true, Match(), replay: replay)], Backend(), sink, NullRunLog.Instance, new ExecutionEnvironment(IsWindows: true, replay ?? new FakeReplay(One, One)))));

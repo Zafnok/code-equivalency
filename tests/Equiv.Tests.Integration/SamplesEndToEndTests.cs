@@ -30,6 +30,15 @@ public sealed partial class SamplesEndToEndTests
 {
     private static readonly ConcurrentDictionary<string, Lazy<SampleRun>> Cache = new(StringComparer.Ordinal);
 
+    private static readonly ConcurrentDictionary<string, Lazy<SampleRun>> ThoroughCache = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The first pass's resource limit on every sample run here, pinned on purpose (ticket P1-032; P2-050's
+    /// <c>loop-fusion</c> margin): the samples' expected verdicts were chosen at 5,000,000, and they are about what
+    /// <c>equiv</c> decides, not about where the default budget sits.
+    /// </summary>
+    private static readonly string[] Pinned = ["--resource-limit", "5000000"];
+
     private static string SamplesRoot =>
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples"));
 
@@ -71,7 +80,7 @@ public sealed partial class SamplesEndToEndTests
             (string legacy, string modern) = Solutions(sample);
 
             int exitCode = RunProgramSilently(() => Program.Main(
-                ["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, "--baseline", baselinePath]));
+                ["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, "--baseline", baselinePath, .. Pinned]));
 
             Assert.Equal(ExitCodes.Success, exitCode);
             SarifLog log = SarifLog.Load(outPath);
@@ -316,7 +325,7 @@ public sealed partial class SamplesEndToEndTests
         string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P2-113-{Guid.NewGuid():N}.sarif");
         try
         {
-            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacy, "--modern", modern, "--out", outPath]));
+            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, .. Pinned]));
 
             Assert.Equal(ExitCodes.Divergent, exitCode);
             Result[] results = [.. SarifLog.Load(outPath).Runs[0].Results];
@@ -352,17 +361,23 @@ public sealed partial class SamplesEndToEndTests
 
     /// <summary>
     /// Ticket P1-010 criterion 5 (ADR 0036 decision 2): the caller sees only <c>Score(a) &gt; 0</c>, so it is Equivalent
-    /// under an admitted contract for the Divergent <c>Score</c>, which leaves no unproven assumption. The checked-in
-    /// snapshot is the whole run.
+    /// under an admitted contract for the Divergent <c>Score</c>, which leaves no unproven assumption. The contracts pass
+    /// is thorough mode's (ADR 0049's table), so that is the run read here. The checked-in snapshot is the default, quick
+    /// run, where <c>Classify</c> is Equivalent with <c>Score</c> still an unproven assumption (ADR 0052; ticket P1-032).
     /// </summary>
     [Fact]
     public async Task CalleeChangedInvisible_EquivalentPlusContract()
     {
         SampleRun run = RunSample("callee-changed-invisible");
-        Result score = Single("callee-changed-invisible", "::Score(int) diverges");
-        Result classify = Single("callee-changed-invisible", "::Classify(int) is equivalent");
+        IList<Result> thorough = ThoroughRun("callee-changed-invisible").Log.Runs[0].Results;
+        Result score = thorough.Single(static r => r.Message.Text.Contains("::Score(int) diverges", StringComparison.Ordinal));
+        Result classify = thorough.Single(static r => r.Message.Text.Contains("::Classify(int) is equivalent", StringComparison.Ordinal));
+        Result assumed = Single("callee-changed-invisible", "::Classify(int) is equivalent");
 
         Assert.Equal(await Snapshot("callee-changed-invisible"), run.NormalizedSarif);
+        Assert.Equal("EQ001", assumed.RuleId);
+        Assert.EndsWith("::Score(int)", Assert.Single(assumed.GetProperty<List<string>>("unprovenAssumptions")), StringComparison.Ordinal);
+        Assert.False(assumed.TryGetProperty("contractsUsed", out List<Dictionary<string, string>>? _));
         Assert.Equal("EQ002", score.RuleId);
         Assert.Equal("EQ001", classify.RuleId);
         Assert.Equal("bounded+contract", classify.GetProperty<string>("proofMethod"));
@@ -392,14 +407,18 @@ public sealed partial class SamplesEndToEndTests
     /// Ticket P1-013 criterion 5 (ADR 0037), with the ticket's recorded deviation: the modern side computes an unshared
     /// opaque value and then adds a guard that throws, so the pair is Unknown; the new throw lies past the opaque node, so
     /// <c>newFailures</c> is <c>unknown</c>, and the legacy side never throws, so <c>removedFailures</c> is <c>none-proved</c>.
+    /// That is the default, quick run and the checked-in snapshot. With <c>--mode thorough</c> the IL pass reads the pair
+    /// from IL, where the interpolated string is not opaque, and finds the new throw: Divergent (ADR 0049; ticket P1-032).
     /// </summary>
     [Fact]
     public async Task UnknownNewThrow_CarriesItsFailureRefinement()
     {
         SampleRun run = RunSample("unknown-new-throw");
         Result width = Single("unknown-new-throw", "::Width(int) is unknown");
+        Result decided = ThoroughRun("unknown-new-throw").Log.Runs[0].Results.Single(static r => r.Message.Text.Contains("::Width(int)", StringComparison.Ordinal));
 
         Assert.Equal(await Snapshot("unknown-new-throw"), run.NormalizedSarif);
+        Assert.Equal(("EQ002", "il-pass"), (decided.RuleId, decided.GetProperty<string>("decidedBy")));
         Assert.Equal("EQ003", width.RuleId);
         Dictionary<string, Dictionary<string, string>> refinement = width.GetProperty<Dictionary<string, Dictionary<string, string>>>("failureRefinement");
         Assert.Equal("unknown", refinement["newFailures"]["outcome"]);
@@ -571,7 +590,7 @@ public sealed partial class SamplesEndToEndTests
         try
         {
             int exitCode = RunProgramSilently(() => CompareCommand.Run(
-                new Equiv.Cli.CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+                new Equiv.Cli.CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { ResourceLimit = 5_000_000 },
                 [new CSharpFrontend()],
                 new WithoutRefinement(new Z3Backend()),
                 new FileReportSink(outPath),
@@ -596,6 +615,9 @@ public sealed partial class SamplesEndToEndTests
     /// <c>added-branch</c> that needs the solver is Unknown(timeout) on the resource limit, long before the wall-clock
     /// backstop, and a second run writes the same bytes: nothing in the result depends on how fast the machine was. The one
     /// measurement in the file, the census's failure-refinement time, is masked: a timeout Unknown is queried (ticket P1-035).
+    /// The run is a thorough one, since quick asks no refinement on a timeout, and the config's <c>escalation</c> keeps the
+    /// budget pass at the same tiny limit (ticket P1-032): then the run has none, and the first pass asks the refinement
+    /// itself. With ADR 0049's 30,000,000 the pass would decide the pair.
     /// </summary>
     [Fact]
     public void RepeatedRunsAreByteIdentical()
@@ -605,10 +627,10 @@ public sealed partial class SamplesEndToEndTests
         string[] outPaths = [.. Enumerable.Range(0, 2).Select(static _ => Path.Combine(Path.GetTempPath(), $"equiv-P2-050-{Guid.NewGuid():N}.sarif"))];
         try
         {
-            File.WriteAllText(configPath, """{ "timeoutMs": 600000 }""");
+            File.WriteAllText(configPath, """{ "timeoutMs": 600000, "escalation": { "bound": 3, "resourceLimit": 1 } }""");
 
             int[] exitCodes = [.. outPaths.Select(outPath => RunProgramSilently(() => Program.Main(
-                ["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, "--config", configPath, "--resource-limit", "1"])))];
+                ["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, "--config", configPath, "--resource-limit", "1", "--mode", "thorough"])))];
 
             Assert.Equal([ExitCodes.Success, ExitCodes.Success], exitCodes);
             Result unknown = SarifLog.Load(outPaths[0]).Runs[0].Results.Single(static r => r.Message.Text.Contains("::Double(", StringComparison.Ordinal));
@@ -645,17 +667,43 @@ public sealed partial class SamplesEndToEndTests
         Directory.GetFiles(Path.Combine(SamplesRoot, sample, "legacy"), "*.sln").Single(),
         Directory.GetFiles(Path.Combine(SamplesRoot, sample, "modern"), "*.slnx").Single());
 
+    /// <summary>
+    /// Ticket P1-032 criterion 5 (ADR 0049 decision 5): on every sample, each result that is Equivalent or Divergent in
+    /// quick mode, the default the other facts here run in (ADR 0052), has the same rule id with <c>--mode thorough</c>.
+    /// Thorough only ever adds to what quick decides.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Samples))]
+    public void QuickDecisionsHoldInThorough(string sample)
+    {
+        Run thoroughRun = ThoroughRun(sample).Log.Runs[0];
+        Dictionary<string, string> thorough = thoroughRun.Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], static r => r.RuleId, StringComparer.Ordinal);
+        Run quick = RunSample(sample).Log.Runs[0];
+
+        Assert.Equal("thorough", (string)thoroughRun.GetProperty<Newtonsoft.Json.Linq.JObject>("mode")["name"]!);
+        Assert.Equal("quick", (string)quick.GetProperty<Newtonsoft.Json.Linq.JObject>("mode")["name"]!);
+        Assert.Equal(thorough.Count, quick.Results.Count);
+        Assert.All(
+            quick.Results.Where(static r => r.RuleId is "EQ001" or "EQ002" or "EQ006"),
+            r => Assert.Equal(r.RuleId, thorough[r.PartialFingerprints["procedureIdentity/v1"]]));
+        Assert.All(quick.Results, static r => Assert.False(r.TryGetProperty("decidedBy", out string? _)));
+    }
+
     private static SampleRun RunSample(string sample) =>
         Cache.GetOrAdd(sample, static s => new Lazy<SampleRun>(() => Execute(s))).Value;
 
-    private static SampleRun Execute(string sample)
+    /// <summary>The sample's one <c>--mode thorough</c> run, cached as <see cref="RunSample"/>'s default, quick one is.</summary>
+    private static SampleRun ThoroughRun(string sample) =>
+        ThoroughCache.GetOrAdd(sample, static s => new Lazy<SampleRun>(() => Execute(s, "--mode", "thorough"))).Value;
+
+    private static SampleRun Execute(string sample, params string[] options)
     {
         string sampleDir = Path.Combine(SamplesRoot, sample);
         (string legacy, string modern) = Solutions(sample);
         string outPath = Path.Combine(Path.GetTempPath(), $"equiv-M3-003-{Guid.NewGuid():N}.sarif");
         try
         {
-            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacy, "--modern", modern, "--out", outPath]));
+            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, .. Pinned, .. options]));
             string json = File.ReadAllText(outPath);
             return new SampleRun(exitCode, json, SarifNormalizer.Normalize(json, sampleDir), SarifLog.Load(outPath));
         }

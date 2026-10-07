@@ -1,7 +1,8 @@
 # ADR 0049: `equiv compare` has a thorough mode and a quick mode, and measured yield chooses a technique's mode, not whether it exists
 
 Status: accepted (2026-10-04). Decided by the user the same day; this ADR records the decision and
-fixes the values.
+fixes the values. Its choice of default, in decision 1, is superseded by ADR 0052 (2026-10-06): the default is
+`quick`. Everything else here stands.
 
 ## Context
 `compare` has one setting for two jobs. A full migration is run once, and a missed deviation, or a

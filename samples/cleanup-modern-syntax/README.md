@@ -30,3 +30,7 @@ behaviour-preserving, so every row that is not Equivalent is a gap, and names th
 | `Tidy.Positives(List<int>)` | Unknown (`abstraction`, method scope) | the loop's enumerator and `Add` calls against the uninterpreted `Enumerable::Where` and `ToList`, whose result depends on the lambda | P2-096 |
 
 Exit code: 1 (one Divergent result).
+
+`expected.sarif.json` is the default run, quick mode (ADR 0052). With `--mode thorough` (ADR 0049, ticket P1-032)
+`Grade` and `LengthOf` are proved Equivalent by the IL pass (`decidedBy: il-pass`), from IL bodies that hold neither
+opaque. Their rows keep their owners: the IOperation lowering still does not lower those constructs.

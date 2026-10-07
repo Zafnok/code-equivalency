@@ -101,6 +101,80 @@ public sealed class EquivConfigLoaderTests
         Assert.Equal(1, EquivConfigLoader.Load("""{ "resourceLimit": 1 }""").Config.ResourceLimit);
     }
 
+    /// <summary>
+    /// Ticket P1-032 criterion 1 as ADR 0052 amends it: the mode is quick unless <c>mode</c> says thorough, and the first
+    /// pass's resource limit is 2,000,000 in either.
+    /// </summary>
+    [Fact]
+    public void Mode_DefaultsToQuick()
+    {
+        Assert.Equal(CompareMode.Quick, EquivConfig.Default.Mode);
+        Assert.Equal(CompareMode.Quick, EquivConfigLoader.Load("{}").Config.Mode);
+        Assert.Equal(CompareMode.Thorough, EquivConfigLoader.Load("""{ "mode": "thorough" }""").Config.Mode);
+        Assert.Equal(CompareMode.Quick, EquivConfigLoader.Load("""{ "mode": "quick" }""").Config.Mode);
+        Assert.True(EquivConfigLoader.Load("""{ "mode": "thorough" }""").IsValid);
+        Assert.Equal((3, 2_000_000, 60_000), (EquivConfig.Default.Bound, EquivConfig.Default.ResourceLimit, EquivConfig.Default.TimeoutMs));
+        Assert.Equal(new Escalation(8, 30_000_000, 600_000), EquivConfig.Default.Escalation);
+    }
+
+    /// <summary>Criterion 1: any other <c>mode</c> is CFG013, which <c>equiv compare</c> ends on with exit 3.</summary>
+    [Theory]
+    [InlineData("""{ "mode": "fast" }""")]
+    [InlineData("""{ "mode": "Quick" }""")]
+    [InlineData("""{ "mode": 1 }""")]
+    [InlineData("""{ "mode": null }""")]
+    public void Mode_UnknownValue_IsReported(string json)
+    {
+        EquivConfigResult result = EquivConfigLoader.Load(json);
+
+        Assert.Equal(new EquivConfigDiagnostic("CFG013", "/mode", "\"mode\" must be \"thorough\" or \"quick\""), Assert.Single(result.Diagnostics));
+        Assert.Equal(CompareMode.Quick, result.Config.Mode);
+        Assert.Null(EquivConfigLoader.ParseMode(name: null));
+    }
+
+    /// <summary>
+    /// Criterion 3 (ADR 0049 decision 4): <c>escalation</c> replaces the budget pass's values key by key, and the config
+    /// remembers which settings the file gave, in a fixed order.
+    /// </summary>
+    [Fact]
+    public void Escalation_ReplacesTheBudgetPassValuesAndExplicitSettingsAreRemembered()
+    {
+        EquivConfig partly = EquivConfigLoader.Load("""{ "escalation": { "resourceLimit": 9 } }""").Config;
+        EquivConfigResult whole = EquivConfigLoader.Load("""{ "timeoutMs": 7, "escalation": { "timeoutMs": 3, "bound": 4, "resourceLimit": 5 }, "resourceLimit": 6, "bound": 2 }""");
+
+        Assert.Equal(new Escalation(8, 9, 600_000), partly.Escalation);
+        Assert.Equal(["escalation"], partly.Explicit);
+        Assert.True(whole.IsValid);
+        Assert.Equal(new Escalation(4, 5, 3), whole.Config.Escalation);
+        Assert.Equal(["bound", "resourceLimit", "timeoutMs", "escalation"], whole.Config.Explicit);
+        Assert.Empty(EquivConfigLoader.Load("{}").Config.Explicit);
+        Assert.Equal(["bound"], EquivConfig.Default.WithExplicit("bound", given: true).WithExplicit("bound", given: true).WithExplicit("timeoutMs", given: false).Explicit);
+    }
+
+    /// <summary>Criterion 3: an <c>escalation</c> value that is not a positive integer, or a key it does not have, is CFG014 and keeps ADR 0049's value.</summary>
+    [Theory]
+    [InlineData("""{ "escalation": 8 }""", "/escalation", "\"escalation\" must be an object with \"bound\", \"resourceLimit\" and/or \"timeoutMs\"")]
+    [InlineData("""{ "escalation": { "bound": 0 } }""", "/escalation/bound", "\"bound\" must be a positive integer")]
+    [InlineData("""{ "escalation": { "resourceLimit": "plenty" } }""", "/escalation/resourceLimit", "\"resourceLimit\" must be a positive integer")]
+    [InlineData("""{ "escalation": { "timeoutMs": 4294967296 } }""", "/escalation/timeoutMs", "\"timeoutMs\" must be a positive integer")]
+    [InlineData("""{ "escalation": { "jobs": 2 } }""", "/escalation/jobs", "unknown property \"jobs\"")]
+    public void Escalation_IsValidated(string json, string path, string message)
+    {
+        EquivConfigResult result = EquivConfigLoader.Load(json);
+
+        Assert.Equal(new EquivConfigDiagnostic("CFG014", path, message), Assert.Single(result.Diagnostics));
+        Assert.Equal(Escalation.Default, result.Config.Escalation);
+    }
+
+    /// <summary>ADR 0049 decision 4: the budget pass never asks with less than the first pass.</summary>
+    [Fact]
+    public void Escalation_NeverBelowFirstPass()
+    {
+        Assert.Equal(new Escalation(8, 30_000_000, 600_000), Escalation.Default.AtLeast(3, 2_000_000, 60_000));
+        Assert.Equal(new Escalation(20, 40_000_000, 700_000), Escalation.Default.AtLeast(20, 40_000_000, 700_000));
+        Assert.Equal(new Escalation(8, 40_000_000, 600_000), Escalation.Default.AtLeast(3, 40_000_000, 60_000));
+    }
+
     /// <summary>Ticket P2-077 criterion 1: <c>jobs</c> is a positive integer, validated as <c>timeoutMs</c> is, and one unless set.</summary>
     [Theory]
     [InlineData("""{ "jobs": "many" }""")]

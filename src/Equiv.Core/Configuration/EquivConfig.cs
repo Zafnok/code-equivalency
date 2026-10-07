@@ -5,14 +5,28 @@ using Equiv.Core.Ir;
 namespace Equiv.Core.Configuration;
 
 /// <summary>
-/// Parsed and defaulted <c>equiv.config.json</c> (VERIFICATION-MODEL.md section 3; ARCHITECTURE.md's
-/// <c>--bound</c>/<c>--timeout-ms</c> CLI defaults). <see cref="CallIdentityRenames"/> maps a legacy-side
+/// Parsed and defaulted <c>equiv.config.json</c> (VERIFICATION-MODEL.md sections 3 and 6). <see cref="CallIdentityRenames"/> maps a legacy-side
 /// <c>CallIdentity.Value</c> to its modern-side counterpart so matched calls unify (ticket M3-001).
 /// </summary>
 public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, string> CallIdentityRenames, int Bound, int TimeoutMs)
 {
-    /// <summary>The default <see cref="ResourceLimit"/> (ticket P2-050; chosen from <c>docs/runs/2026-10-01-timeout-budget.md</c>).</summary>
-    public const int DefaultResourceLimit = 5_000_000;
+    /// <summary>
+    /// The default <see cref="ResourceLimit"/>, the first pass's in either mode (ADR 0049; tickets P2-050 and P1-032): on
+    /// the timeout pairs of <c>docs/runs/2026-10-01-timeout-budget.md</c> it gives up 5 answers against 5,000,000 and no proof.
+    /// </summary>
+    public const int DefaultResourceLimit = 2_000_000;
+
+    /// <summary><see cref="Explicit"/>'s name for <c>bound</c>.</summary>
+    public const string BoundSetting = "bound";
+
+    /// <summary><see cref="Explicit"/>'s name for <c>resourceLimit</c>.</summary>
+    public const string ResourceLimitSetting = "resourceLimit";
+
+    /// <summary><see cref="Explicit"/>'s name for <c>timeoutMs</c>.</summary>
+    public const string TimeoutSetting = "timeoutMs";
+
+    /// <summary><see cref="Explicit"/>'s name for <c>escalation</c>.</summary>
+    public const string EscalationSetting = "escalation";
 
     public static EquivConfig Default { get; } = new(RenameMap.Empty, [], Bound: 3, TimeoutMs: 60_000);
 
@@ -63,6 +77,29 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
     /// </summary>
     public string? Cvc5Path { get; init; }
 
+    /// <summary><c>mode</c> (ADR 0049, ADR 0052; ticket P1-032): quick unless set. The command line's <c>--mode</c> wins over it.</summary>
+    public CompareMode Mode { get; init; }
+
+    /// <summary>
+    /// <c>escalation</c> (ADR 0049 decision 4): the budget pass's bound, resource limit and timeout, ADR 0049's unless set.
+    /// The pass never asks with less than the first (<see cref="Configuration.Escalation.AtLeast"/>).
+    /// </summary>
+    public Escalation Escalation { get; init; } = Escalation.Default;
+
+    /// <summary>
+    /// The settings given explicitly, by the file or the command line, among <see cref="BoundSetting"/>,
+    /// <see cref="ResourceLimitSetting"/>, <see cref="TimeoutSetting"/> and <see cref="EscalationSetting"/>, in that
+    /// order (ADR 0049 decisions 4 and 6): a mode's value applies only where none was given, and the run records which were.
+    /// </summary>
+    public ImmutableArray<string> Explicit { get; init; } = [];
+
+    /// <summary><see cref="Explicit"/> with <paramref name="setting"/> when <paramref name="given"/>, each name once and in the fixed order.</summary>
+    public EquivConfig WithExplicit(string setting, bool given)
+    {
+        string[] order = [BoundSetting, ResourceLimitSetting, TimeoutSetting, EscalationSetting];
+        return given ? this with { Explicit = [.. order.Where(name => Explicit.Contains(name, StringComparer.Ordinal) || string.Equals(name, setting, StringComparison.Ordinal))] } : this;
+    }
+
     // Deliberate non-short-circuit '&' after the null check, matching Equiv.Core.Ir.IrEquality's
     // documented rationale: '&&' always compiles to a branch per operand, which would need extra
     // tests per field to keep this repo's 100% branch-coverage gate; the operands here are cheap
@@ -80,8 +117,11 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
             & (IlFallback == other.IlFallback) // NOSONAR
             & (ResourceLimit == other.ResourceLimit) // NOSONAR
             & (Jobs == other.Jobs) // NOSONAR
-            & string.Equals(Cvc5Path, other.Cvc5Path, StringComparison.Ordinal); // NOSONAR
+            & string.Equals(Cvc5Path, other.Cvc5Path, StringComparison.Ordinal) // NOSONAR
+            & (Mode == other.Mode) // NOSONAR
+            & (Escalation == other.Escalation) // NOSONAR
+            & IrEquality.SequenceEqual(Explicit, other.Explicit); // NOSONAR
 
     public override int GetHashCode() =>
-        HashCode.Combine(HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime), IlFallback, ResourceLimit, Cvc5Path, Jobs);
+        HashCode.Combine(HashCode.Combine(Renames, ConfigEquality.Hash(CallIdentityRenames), Bound, TimeoutMs, IrEquality.Hash(SuppressRuntimeChanges), IrEquality.Hash(SuppressApiEquivalences), LegacyRuntime, ModernRuntime), IlFallback, ResourceLimit, Cvc5Path, Jobs, Mode, Escalation, IrEquality.Hash(Explicit));
 }

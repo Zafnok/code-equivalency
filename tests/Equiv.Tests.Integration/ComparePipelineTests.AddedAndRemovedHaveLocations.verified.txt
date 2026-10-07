@@ -1,4 +1,4 @@
-{
+﻿{
   $schema: https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json,
   version: 2.1.0,
   runs: [
@@ -214,6 +214,12 @@
               source: attribute
             }
           ]
+        },
+        mode: {
+          name: quick,
+          bound: 3,
+          resourceLimit: 2000000,
+          timeoutMs: 60000
         },
         queryEndings: {
           resourceLimit: 0,

@@ -34,8 +34,23 @@ only when every ticket it needs says `done`:
 | Mode | Needs | Runs |
 |---|---|---|
 | `census` | M3-014, M3-024 | `equiv compare --lower-only` |
-| `full` | M3-003, M3-004 (and M3-025 for `scope`) | `equiv compare`, and again with `--fail-on unknown` |
+| `full` | M3-003, M3-004 (and M3-025 for `scope`) | `equiv compare --mode <compare mode>`, and again with `--fail-on unknown` |
 | `seeded` | same as `full` | `full` on a copy of the modern side with seeds from `tools/corpus/seeds.md` |
+
+These three are this skill's own modes. `equiv compare` has a mode of its own, thorough or quick (ADR 0049), called
+the **compare mode** here so the two are not confused. Every `full` and `seeded` run names one:
+
+- thorough for a run whose numbers describe what `equiv` decides over a whole pair: scoring ADR 0028's criteria, a
+  verdict or Unknown-rate report, a technique's measured yield, and any run that later runs are compared against;
+- thorough for `seeded` too: a later pass can be where a false Equivalent comes from, so recall is measured with
+  every pass running;
+- quick for a run that checks one thing: a crash is gone, a named pair's result changed, a newly lowered construct
+  is decided, no result the first pass decides has changed;
+- `census` (`--lower-only`) verifies nothing, so it takes no compare mode;
+- a before-and-after comparison uses one compare mode for both runs. A run from before ticket P1-032 has none, so the
+  first comparison against one starts with a fresh run;
+- a ticket that asks for a run names the compare mode in its criterion. Where an open ticket does not, this rule
+  decides and the ticket's Notes says which was used.
 
 ```powershell
 Select-String -Path docs/tickets/M3-014-*.md, docs/tickets/M3-024-*.md, docs/tickets/done/M3-014-*.md, docs/tickets/done/M3-024-*.md -Pattern '^Status:'
@@ -170,6 +185,13 @@ $t = Measure-Command {
 Every `equiv compare` here, in every mode, passes `--verbosity debug --log "$run/progress.log"`
 (ADR 0038): corpus runs are the long ones, and the log is the only way to see inside one.
 
+`./tools/corpus/corpus.ps1 -Compare <slug> -Mode thorough|quick` (ticket P1-032) is the block above for a verifying
+run: it makes the run directory (`<yyyymmdd-hhmm>-full-<compare mode>`), passes `--mode` and the log options, writes
+`console.txt` and `exit.txt`, and prints the directory. It refuses a verifying run with no `-Mode`. `-LowerOnly` is the
+census and takes none; `-Modern <solution>` runs a seeded copy; `-Tag fail-on-unknown -CompareArgs '--fail-on', 'unknown'`
+(or `'--jobs', '4'`) passes anything else through. `-Metrics` prints the compare mode a SARIF log was written in and
+the results each later pass produced.
+
 A verdict run may pass `--jobs 4` (ticket P2-077): on `gitextensions-8522` it takes 47 minutes against 2h12m
 on one thread and no query runs slower. Do not pass more than 4 until P2-132 lands; 24 threads were slower
 than four. Record the `--jobs` value in SUMMARY.md, and compare two runs only when both used the same value
@@ -228,7 +250,7 @@ where the SARIF has no value yet; `-Metrics` prints `n/a` for those.
 - Pair: <kind>, <repo>, legacy <sha12>, modern <sha12 or "agent migration">
 - Corpus list: Poly-MigrationBench @ <pinned commit from tools/corpus/README.md> (agent pairs only)
 - Migrated by: <agent / model / date, or "human" / tool name>
-- equiv: <git rev-parse --short HEAD of this repo>, mode <mode>, wall-clock <s>, exit <code>
+- equiv: <git rev-parse --short HEAD of this repo>, mode <mode>, compare mode <thorough | quick | "n/a" for census>, wall-clock <s>, exit <code>
 
 ## Phase times
 Paste `./tools/corpus/corpus.ps1 -Progress $run -Summary` as is: one row per phase that finished,

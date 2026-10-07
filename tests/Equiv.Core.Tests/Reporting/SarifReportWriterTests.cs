@@ -805,6 +805,22 @@ public sealed class SarifReportWriterTests
         Assert.False(result.TryGetProperty("ladderTrace", out List<Dictionary<string, string>> _));
     }
 
+    /// <summary>
+    /// ADR 0049 decision 6; ticket P1-032 criterion 6: a result a later pass produced says which, and the property is no
+    /// part of its fingerprints.
+    /// </summary>
+    [Fact]
+    public void Sarif_WritesDecidedByWhenALaterPassProducedTheResult()
+    {
+        VerificationResult first = Fixtures.Result(new Equivalent(ProofMethod.Bounded));
+        IList<Result> results = SarifReportWriter.Write([first with { DecidedBy = VerificationResult.BudgetPass }, first with { DecidedBy = VerificationResult.IlPass }, first]).Runs[0].Results;
+
+        Assert.Equal("budget-pass", results[0].GetProperty("decidedBy"));
+        Assert.Equal("il-pass", results[1].GetProperty("decidedBy"));
+        Assert.False(results[2].TryGetProperty("decidedBy", out string? _));
+        Assert.Equal(results[2].PartialFingerprints, results[0].PartialFingerprints);
+    }
+
     /// <summary>ADR 0039; ticket P1-016 criterion 4: a result says which lowering its pair kept, and only when it has one.</summary>
     [Fact]
     public void Sarif_WritesTheLoweringWhenSet()

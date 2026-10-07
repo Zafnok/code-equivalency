@@ -99,14 +99,6 @@
           "properties": {
             "unknownReason": "timeout",
             "scope": "method",
-            "failureRefinement": {
-              "newFailures": {
-                "outcome": "none-proved"
-              },
-              "removedFailures": {
-                "outcome": "none-proved"
-              }
-            },
             "ladderTrace": [
               {
                 "rung": "bounded",
@@ -161,10 +153,6 @@
           "unknownByScope": {
             "line": 0,
             "method": 1
-          },
-          "failureRefinement": {
-            "pairs": 1,
-            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {
@@ -189,6 +177,15 @@
               "runtime": "net10.0",
               "source": "attribute"
             }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
           ]
         },
         "queryEndings": {

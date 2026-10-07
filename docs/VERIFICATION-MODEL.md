@@ -489,12 +489,19 @@ not flagged.
 
 ### 3.1 IL fallback (ADR 0039)
 
-With `--il-fallback`, a matched pair that is not congruent, and where either side's IOperation
+A matched pair that is not congruent, and where either side's IOperation
 lowering holds an `IrOpaque` whose fingerprint the other side does not share, is lowered again on
-**both** sides from ILSpy's ILAst. The ILAst is read from the side's compilation emitted in memory
+**both** sides from ILSpy's ILAst: in thorough mode always, and in quick mode with `--il-fallback`.
+The ILAst is read from the side's compilation emitted in memory
 with a portable PDB, through P1-012's structural transforms only (none that rebuilds a C#
-construct). The IL bodies replace the IOperation bodies only if they hold fewer unshared opaques;
+construct). The IL bodies are used only if they hold fewer unshared opaques;
 otherwise the pair keeps its IOperation lowering. A pair is never lowered half from each.
+
+In thorough mode the IL bodies never replace the IOperation ones (ADR 0049; ticket P1-032). The pair keeps both,
+the first pass verifies the IOperation bodies, and the IL pass verifies the IL bodies only when the pair is still
+Unknown (section 6). In quick mode with `--il-fallback` the IL bodies replace the IOperation ones, as ADR 0039 first
+had it. With the replacement one Divergent became Unknown(timeout) and one pair crashed (P2-078); as a pass neither
+can happen, because a decided result is never replaced and a crash leaves the earlier result.
 
 The IL lowering produces the same IR the rules above do: every type and member reference is
 resolved to the loaded compilation's symbol and goes through the same sort and identity mapping, so
@@ -619,7 +626,11 @@ instead, so its counterexamples are real. Mutual recursion needs no rung: a call
 shared (section 1, ADR 0019), so `Recursion` means only a self-call that no rung decided.
 
 Rung 1's result is a proof only when no input reaches the bound; otherwise it only refutes, and rungs 2 and 3
-decide. A pair with loops or a self-call that no rung decides is Unknown: `Opaque` when a failed obligation reaches
+decide. Rung 1 does not apply to a pair either side of which, unrolled `k` times, would hold more than 25,000 blocks
+(ticket P1-032): loops nested `d` deep unroll to the body times `k` to the power `d`, work that no solver budget
+bounds, and at thorough mode's bound of 8 one real pair never finished it. The unroller refuses before it makes the
+copy that would pass the limit, the step says so in `ladderTrace`, and the other rungs still run. The contract check
+(section 5.2) and ADR 0037's queries (section 6), which need the same product, answer unknown for such a pair. A pair with loops or a self-call that no rung decides is Unknown: `Opaque` when a failed obligation reaches
 an `IrOpaque`, `Recursion` when a side calls itself, `UnalignedLoop` when the loops do not align or neither
 induction proves them and rung 4 does not apply, `ChcTimeout` when Spacer gave up, `ChcSpurious` when Spacer's
 derivation does not replay to a divergence or its invariant does not solve the clauses, `Timeout` when only the solver gave up. A header's state is its phis plus every other value
@@ -652,8 +663,9 @@ with both runs in the detail. Every invariant is checked too before it is a proo
 clauses of the query that found it, rule by rule, since Z3's Spacer has answered unsatisfiable with one that does
 not; one that fails is `ChcSpurious`.
 
-Rung 5 (tickets P1-002 and P1-009, ADR 0036) runs only when rung 4 timed out. It first asks a local proposer, on by
-default because it runs in process and sends nothing (P1-009): it runs both procedures in `IrInterpreter` on up to 200
+Rung 5 (tickets P1-002 and P1-009, ADR 0036) runs only when rung 4 timed out. It first asks a local proposer, which
+runs in process and sends nothing (P1-009). Thorough mode asks it, in its budget pass, and quick mode does not (ADR
+0049; section 6): its usual result after a rung 4 timeout is no invariant. It runs both procedures in `IrInterpreter` on up to 200
 inputs (each earlier counterexample's first, then random ones), cut at their loop headers as rung 4 cuts them and
 paired as rung 4 steps them, and defines each relation as the conjunction of every template instance that held on
 all its samples: over each pair of same-sort arguments `x = y`, `x = y + c` and `x = c*y` for small constants, and
@@ -855,8 +867,58 @@ Every Unknown carries `properties.scope` (ADR 0029):
   on the unrolled pair, which proves nothing past the bound. An `abstraction` Unknown is `method`
   too, since the first query found its candidate, so that query was satisfiable (ticket M3-025).
 
+`equiv compare` has two modes (ADR 0049, ADR 0052; ticket P1-032): `--mode quick|thorough`, the config key `mode`,
+`mode` on the MCP `compare` tool and in `action.yml`. The command line wins over the config, the default is `quick`,
+and any other value is exit 3. Quick is the default because of what thorough measured on `gitextensions-8522` with
+four threads: 37,184 s against quick's 999 s, for 1 more Equivalent, 41 more Divergent and 42 fewer Unknown, with
+Divergents from the IL pass that are not all real (ADR 0052). Both modes begin with the same first pass. Thorough then runs further passes, each over the
+pairs that are still Unknown and that the solver, not the CLI, made Unknown. A later pass's result replaces the
+earlier one when it is Equivalent or Divergent, or when it is an Unknown that is neither `timeout` nor `chc-timeout`
+and the earlier one was; otherwise the earlier result stands. So quick answers Unknown where thorough may decide, and
+never Equivalent or Divergent where thorough would not.
+
+| | quick | thorough |
+|---|---|---|
+| First pass: `bound` / `resourceLimit` / `timeoutMs` | 3 / 2,000,000 / 60,000 | the same |
+| Budget pass: a pair left Unknown whose ladder hit a budget, or that has a loop or a self-call, is verified again | no | `bound` 8, `resourceLimit` 30,000,000, `timeoutMs` 600,000 |
+| Failure refinement (ADR 0037) on a `timeout` Unknown | no | yes, at the budget pass's budgets |
+| Loop ladder rungs 1 to 4 | yes | yes |
+| Rung 5's local proposer (runs only after a rung 4 timeout) | no | yes |
+| Contracts pass (ADR 0036 decision 2) | no; the Equivalent keeps its `unprovenAssumptions` | yes |
+| IL lowering (ADR 0039) | no | yes, as a pass: a pair still Unknown that meets ADR 0039's condition is verified again from its IL bodies |
+| `--execute`, when given: replay of every Divergent | yes | yes |
+| `--execute`, when given: differential testing of every Unknown | no | yes |
+
+- A mode changes budgets, the bound and which queries are asked. It never changes an encoding, an assumption, a taint
+  or replay check, or what a verdict claims, so every verdict is as sound in one mode as in the other.
+- A mode never does what needs consent: neither turns on `--execute` or `--invariant-model`. Thorough without
+  `--execute` says once on stderr that its Unknowns were not tested, when it has any.
+- Explicit settings win. `bound`, `resourceLimit` and `timeoutMs`, in the config or as `--resource-limit`, are the
+  first pass's values in either mode, and the config's `"escalation": { "bound", "resourceLimit", "timeoutMs" }` are
+  the budget pass's. The budget pass never asks with less than the first: each of its three values is the larger of
+  the escalation's and the first pass's. When that leaves it the first pass's values, there is no budget pass, and
+  the first pass asks rung 5's local proposer and refines its timeouts itself. `--il-fallback` and
+  `--invariant-model` add their step to quick.
+- With a budget pass, the first pass asks neither rung 5's local proposer nor ADR 0037's queries on a `timeout`
+  Unknown: every pair either applies to is verified again in the budget pass, which asks both. A pair that times out
+  in both passes keeps its first result, as the rule above says, and carries the budget pass's `failureRefinement`.
+- The IL pass verifies with the budget pass's values, or the first pass's when there is no budget pass. A result it
+  produced has `properties.lowering: il`, applied no API equivalence, and its assumptions, its contracts and its
+  replay read the IL bodies.
+- A later pass that throws on a pair leaves the pair its earlier result and writes a warning on stderr. It is not
+  ADR 0023's failed pair: no notification, no `unverified` entry, and the exit code is what it would have been.
+- Each later pass is a phase of the run log, `budget` and `il`, weighed as `verify` is (ADR 0038).
+- `run.properties.mode` is `{ name, bound, resourceLimit, timeoutMs, escalation?, explicit }`: the first pass's
+  values, the budget pass's when the run had one, and the names of the settings given explicitly (`bound`,
+  `resourceLimit`, `timeoutMs`, `escalation`). A result a later pass produced carries `properties.decidedBy`,
+  `budget-pass` or `il-pass`, and its `ladderTrace` holds both passes. Neither is part of the fingerprint, and no rule
+  id or exit code depends on the mode: a result both modes decide alike is the same result. An Unknown's detail names
+  the limit it hit, so a `timeout` Unknown's fingerprint differs between runs with different budgets. A run whose
+  `--baseline` names the other mode warns once on stderr, since what the modes decide differently shows as `new`.
+  `--lower-only` verifies nothing, so it takes no mode and writes none.
+
 Every solver query has two budgets, both set in `equiv.config.json` as positive integers (ticket P2-050):
-- `resourceLimit` (default 5000000; `compare --resource-limit <n>` overrides it) is Z3's `rlimit`, a count of
+- `resourceLimit` (default 2000000, the first pass's in either mode; `compare --resource-limit <n>` overrides it) is Z3's `rlimit`, a count of
   the solver's own steps. It is the budget that ends a query. It does not depend on how fast or how loaded the
   machine is, so the same inputs give the same results on every run, and a baseline comparison shows no `new`
   result that nothing caused. For that the steps Z3 takes must not depend on anything else either, and in the
@@ -902,7 +964,7 @@ queries are asked of Z3 alone. With no solver configured nothing above happens a
 was. A run with cvc5 configured can therefore differ from one without; the results it touched say so
 (`proofMethod`, above).
 
-A rung 4 Spacer query gets ten times `resourceLimit`. Z3 counts a Spacer step far cheaper than a step
+A rung 4 Spacer query gets ten times `resourceLimit`, the limit of the pass it runs in. Z3 counts a Spacer step far cheaper than a step
 of the product queries the limit is sized for: the `loop-fusion` sample's proof spends 3 to 5 million
 units in under two seconds, and the count moved from run to run when the limit was chosen (it no longer
 does; ticket P2-100).
@@ -910,14 +972,17 @@ does; ticket P2-100).
 A query that exhausts either is Unknown with reason `timeout` (`chc-timeout` on rung 4), and the detail ends
 with the limit that was hit: `resource limit <n> hit` or `wall-clock limit <n> ms hit`. The budgets are per
 query, and a pair asks several (section 5.1), so neither bounds the time a pair takes. The defaults come from
-`docs/runs/2026-10-01-timeout-budget.md`.
+`docs/runs/2026-10-01-timeout-budget.md`: against 5,000,000, the first pass's 2,000,000 gives up 5 answers on its 184
+timeout pairs and no proof, and the budget pass's 30,000,000 is the largest budget measured there.
 
 A query that neither budget has ended once it has run four times `timeoutMs` is interrupted (ticket P2-076). It is
 Unknown with reason `timeout` like the others, the ladder goes on to the next rung as it does after a timeout, and
 the detail says `interrupted` in place of a limit. Only the one query is ended: nothing caps a rung, a pair or a run.
 
 Every Unknown other than `unbound` also carries `properties.failureRefinement` (ADR 0037; tickets P1-013
-and P1-035): `{ newFailures, removedFailures }`, each `{ outcome, model? }`. The backend asks two more
+and P1-035): `{ newFailures, removedFailures }`, each `{ outcome, model? }`. A `timeout` Unknown carries it in thorough
+mode only, asked at the budget pass's budgets (ADR 0049): the solver gives up on half of those queries, so quick
+mode does not ask them. The backend asks two more
 queries over rung 1's product (the pair with its shared fragments as calls, unrolled `k` times), comparing
 only whether each side returns or throws, never the value or the heap. `newFailures` asks for an input on
 which the legacy side returns and the modern side throws; `removedFailures` is the same with the sides

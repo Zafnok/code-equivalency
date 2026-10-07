@@ -40,7 +40,12 @@ internal sealed class FailureRefinementQuery(Func<Context> createContext, Verifi
     {
         (old, @new, _) = ProductEncoder.ShareFragments(old, @new);
         bool looping = new[] { IrLoopAnalysis.Of(old), IrLoopAnalysis.Of(@new) }.Any(static s => s.IsSelfRecursive || !s.Loops.IsEmpty);
-        (IrProcedure oldUnrolled, IrProcedure newUnrolled) = Stages.Timed(options, Stages.Unroll, () => (IrUnroller.Unroll(old, options.Bound), IrUnroller.Unroll(@new, options.Bound)));
+        if (Stages.Timed(options, Stages.Unroll, () => LoopLadder.Unrolled(old, @new, options.Bound)) is not var (oldUnrolled, newUnrolled))
+        {
+            // Rung 1 refused the same pair, so the caller says it is not encodable; a caller that asks anyway gets no answer.
+            return (RefinementResult.Unknown, RefinementResult.Unknown);
+        }
+
         return Stages.WithContext(options, createContext, context =>
         {
             ProductEncoding encoding = Stages.Timed(options, Stages.Encode, () => ProductEncoder.Encode(context, oldUnrolled, newUnrolled, options.CallIdentityMap));

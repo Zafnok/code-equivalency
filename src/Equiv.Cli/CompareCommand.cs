@@ -39,6 +39,9 @@ internal static class CompareCommand
     /// <summary>The descriptor id of the notification <see cref="ContradictedConditions"/> writes (ADR 0048; ticket P1-022).</summary>
     internal const string ContradictedCondition = "contradicted-condition";
 
+    /// <summary>The one word the run log ends an item with when the pass threw on its pair.</summary>
+    private const string Failed = "failed";
+
     /// <summary>How many times <see cref="DeleteTemporary"/> tries before it leaves the folder behind.</summary>
     internal const int DeleteAttempts = 5;
 
@@ -53,8 +56,7 @@ internal static class CompareCommand
         Option<string> outOption = new("--out") { DefaultValueFactory = _ => "equiv.sarif" };
         Option<string?> baselineOption = new("--baseline");
         Option<string?> configOption = new("--config");
-        Option<string?> failOnOption = new("--fail-on");
-        failOnOption.AcceptOnlyFromAmong("divergent", "unknown");
+        Option<string?> failOnOption = Among(new Option<string?>("--fail-on"), "divergent", "unknown");
         Option<bool> dryRunOption = new("--dry-run");
         Option<bool> lowerOnlyOption = new("--lower-only");
         Option<bool> executeOption = new("--execute");
@@ -64,17 +66,17 @@ internal static class CompareCommand
         Option<string?> testBudgetOption = new("--test-budget");
         testBudgetOption.Validators.Add(static result => Validate(result, TestingOptions.TryParse(target: null, result.GetValueOrDefault<string?>(), out string error), error));
         Option<string?> invariantModelOption = new("--invariant-model");
-        Option<string> verbosityOption = new("--verbosity") { DefaultValueFactory = _ => "normal" };
-        verbosityOption.AcceptOnlyFromAmong("quiet", "normal", "debug");
+        Option<string> verbosityOption = Among(new Option<string>("--verbosity") { DefaultValueFactory = _ => "normal" }, "quiet", "normal", "debug");
         Option<string?> logOption = new("--log");
         Option<bool> ilFallbackOption = new("--il-fallback");
         Option<int?> resourceLimitOption = new("--resource-limit");
         Option<int?> jobsOption = new("--jobs");
+        Option<string?> modeOption = Among(new Option<string?>("--mode"), Passes.ThoroughName, Passes.QuickName);
 
         Command command = new("compare")
         {
             legacyOption, modernOption, outOption, baselineOption, configOption, failOnOption, dryRunOption, lowerOnlyOption, executeOption, chcIntModeOption,
-            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption, ilFallbackOption, resourceLimitOption, jobsOption,
+            testTargetOption, testBudgetOption, invariantModelOption, verbosityOption, logOption, ilFallbackOption, resourceLimitOption, jobsOption, modeOption,
         };
 
         command.SetAction(parseResult => RunLogged(
@@ -97,12 +99,20 @@ internal static class CompareCommand
                 IlFallback = parseResult.GetValue(ilFallbackOption),
                 ResourceLimit = parseResult.GetValue(resourceLimitOption),
                 Jobs = parseResult.GetValue(jobsOption),
+                Mode = parseResult.GetValue(modeOption),
             },
             frontends,
             backend,
             execution));
 
         return command;
+    }
+
+    /// <summary><paramref name="option"/>, taking only <paramref name="values"/>; any other is the parser's usage error (exit 3).</summary>
+    private static Option<T> Among<T>(Option<T> option, params string[] values)
+    {
+        option.AcceptOnlyFromAmong(values);
+        return option;
     }
 
     /// <summary>
@@ -163,15 +173,9 @@ internal static class CompareCommand
             return ExitCodes.UsageError;
         }
 
-        if (options.LowerOnly && (options.BaselinePath is not null || options.FailOn is not null))
+        if (UsageError(options) is { } usageError)
         {
-            streams.Error.WriteLine("error: --lower-only cannot be combined with --baseline or --fail-on");
-            return ExitCodes.UsageError;
-        }
-
-        if (options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0 || options.Jobs is <= 0)
-        {
-            streams.Error.WriteLine("error: bound, timeoutMs, resourceLimit and jobs must be positive integers");
+            streams.Error.WriteLine(usageError);
             return ExitCodes.UsageError;
         }
 
@@ -192,7 +196,7 @@ internal static class CompareCommand
             return inputErrorExitCode;
         }
 
-        EquivConfig config = loaded with { Bound = options.Bound ?? loaded.Bound, TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs, ResourceLimit = options.ResourceLimit ?? loaded.ResourceLimit, Jobs = options.Jobs ?? loaded.Jobs, IlFallback = options.IlFallback };
+        EquivConfig config = Configured(loaded, options);
         FrontendAnalysis? analysis = Loaded(frontend, options, config, runLog, streams.Error);
         if (analysis is null)
         {
@@ -208,6 +212,44 @@ internal static class CompareCommand
         streams.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"analysed lines of code: legacy={analysis.Lines.Legacy} modern={analysis.Lines.Modern}"));
         return options.DryRun ? ExitCodes.Success : Report(options, analysis, config, backend, baseline, new Output(sink, runLog, streams), executing);
     }
+
+    /// <summary>
+    /// The message of an option combination or value the run cannot use (exit 3), or null: <c>--lower-only</c> with
+    /// <c>--baseline</c> or <c>--fail-on</c>, a budget or <c>jobs</c> that is not positive, or a mode that is neither
+    /// <c>thorough</c> nor <c>quick</c> (ADR 0049 decision 1; ticket P1-032).
+    /// </summary>
+    private static string? UsageError(CompareOptions options)
+    {
+        bool lowerOnlyWithAVerdictOption = options.LowerOnly && (options.BaselinePath is not null || options.FailOn is not null);
+        bool notPositive = options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0 || options.Jobs is <= 0;
+        bool noSuchMode = options.Mode is not null && EquivConfigLoader.ParseMode(options.Mode) is null;
+        return (lowerOnlyWithAVerdictOption, notPositive, noSuchMode) switch
+        {
+            (true, _, _) => "error: --lower-only cannot be combined with --baseline or --fail-on",
+            (false, true, _) => "error: bound, timeoutMs, resourceLimit and jobs must be positive integers",
+            (false, false, true) => $"error: mode must be {Passes.ThoroughName} or {Passes.QuickName}, not '{options.Mode}'",
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// The run's config: the file's, with the command line's settings over it, each one named as explicit (ADR 0049
+    /// decisions 1 and 4; ticket P1-032). <c>--lower-only</c> verifies nothing, so it takes no mode and the frontend keeps no
+    /// second lowering for it.
+    /// </summary>
+    private static EquivConfig Configured(EquivConfig loaded, CompareOptions options) =>
+        (loaded with
+        {
+            Bound = options.Bound ?? loaded.Bound,
+            TimeoutMs = options.TimeoutMs ?? loaded.TimeoutMs,
+            ResourceLimit = options.ResourceLimit ?? loaded.ResourceLimit,
+            Jobs = options.Jobs ?? loaded.Jobs,
+            IlFallback = options.IlFallback,
+            Mode = options.LowerOnly ? CompareMode.Quick : EquivConfigLoader.ParseMode(options.Mode) ?? loaded.Mode,
+        })
+        .WithExplicit(EquivConfig.BoundSetting, options.Bound is not null)
+        .WithExplicit(EquivConfig.ResourceLimitSetting, options.ResourceLimit is not null)
+        .WithExplicit(EquivConfig.TimeoutSetting, options.TimeoutMs is not null);
 
     /// <summary>The frontend's analysis, or null, with the message on stderr, when it cannot load (the frontend reports its own phases; ADR 0038, ticket M4-013).</summary>
     private static FrontendAnalysis? Loaded(ILanguageFrontend frontend, CompareOptions options, EquivConfig config, IRunLog runLog, TextWriter error)
@@ -248,12 +290,11 @@ internal static class CompareCommand
         // P2-011: a pair the frontend could not lower takes the same path as a pair whose verification throws (ADR 0023).
         List<Notification> pairFailures = [.. matchResult.LoweringFailures.Select(f => PairFailure("Lowering", f.Old, f.New, f.Exception, error))];
         List<ProcedureIdentity> unverifiedPairs = [.. matchResult.LoweringFailures.Select(static f => f.New)];
-        (List<VerificationResult> verified, List<Notification> verifyFailures, List<ProcedureIdentity> unverifiedVerified) =
-            options.LowerOnly ? ([], [], []) : Verified(lowered, backend, Verification(config, options, runLog), config.Jobs, error);
+        Passes passes = Passes.Of(config, Verification(config, options, runLog));
+        (List<VerificationResult> results, List<Notification> verifyFailures, List<ProcedureIdentity> unverifiedVerified) =
+            options.LowerOnly ? ([], [], []) : PairResults(lowered, analysis, passes, new Verifying(backend, config.Jobs, error), (execution, options.Testing));
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
-        List<VerificationResult> results = Executed(
-            WithContracts(WithAssumptions(verified, lowered, matchResult), lowered, backend, Verification(config, options, runLog), config.Jobs, error), lowered, analysis.Replay, execution, options.Testing, runLog);
         QueryEndings? endings = options.LowerOnly ? null : QueryEndings.Of(results);
         if (endings is not null)
         {
@@ -270,11 +311,12 @@ internal static class CompareCommand
         SarifLog log = SarifReportWriter.Write(
             results,
             baseline,
-            RunProperties(analysis, census, endings),
+            RunProperties(analysis, census, endings, passes.ToProperty(config.Explicit)),
             notifications,
             unverified,
             reviewList: !options.LowerOnly);
         Written(sink, log, options.OutPath, runLog);
+        WarnOfAnotherMode(baseline, passes, error);
         foreach (string line in ReviewList.Lines(log.Runs[0]))
         {
             stdout.WriteLine(line);
@@ -294,14 +336,15 @@ internal static class CompareCommand
     }
 
     /// <summary>
-    /// The run's property bag (ADR 0027; tickets M3-014, P2-013, P2-053), with <c>queryEndings</c> last on a run that
-    /// verifies (ticket P2-077).
+    /// The run's property bag (ADR 0027; tickets M3-014, P2-013, P2-053), with <c>mode</c> (ADR 0049 decision 6; ticket
+    /// P1-032) and then <c>queryEndings</c> last on a run that verifies (ticket P2-077).
     /// </summary>
-    private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census, QueryEndings? endings)
+    private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census, QueryEndings? endings, Dictionary<string, object> mode)
     {
         Dictionary<string, object> properties = RunProperties(analysis, census);
         if (endings is not null)
         {
+            properties[Passes.Property] = mode;
             properties["queryEndings"] = endings.ToProperty();
         }
 
@@ -324,6 +367,178 @@ internal static class CompareCommand
                 [ModernSide] = SarifReportWriter.RuntimesProperty(analysis.ModernRuntimes),
             },
         };
+
+    /// <summary>
+    /// ADR 0049 decision 6: one warning on stderr when <c>--baseline</c> was written in the other mode, since what the
+    /// modes decide differently then shows as <c>new</c> results. A baseline that names no mode, one from before the modes,
+    /// gets none.
+    /// </summary>
+    private static void WarnOfAnotherMode(SarifLog? baseline, Passes passes, TextWriter error)
+    {
+        if (baseline?.Runs is [{ } run, ..] && run.TryGetProperty(Passes.Property, out Dictionary<string, object> written) && written.GetValueOrDefault("name") is string name && !string.Equals(name, passes.Name, StringComparison.Ordinal))
+        {
+            error.WriteLine($"warning: the baseline was written in {name} mode and this run is in {passes.Name} mode; results the modes decide differently are reported as new");
+        }
+    }
+
+    /// <summary>
+    /// Every result of the matched pairs, in the pairs' order (ADR 0049 decision 2; ticket P1-032): the first pass
+    /// (<see cref="Verified"/>), thorough mode's later passes over what is still Unknown (<see cref="LaterPasses"/>), each
+    /// result's assumptions, thorough mode's contracts pass, and <c>--execute</c>. The failures and the unverified
+    /// identities are the first pass's: a later pass that fails on a pair leaves the pair its earlier result. Thorough
+    /// without <c>--execute</c> says once on stderr that its Unknowns were not tested (decision 3).
+    /// </summary>
+    private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) PairResults(
+        List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, FrontendAnalysis analysis, Passes passes, Verifying verifying, (ExecutionEnvironment? Environment, TestingOptions Testing) executing)
+    {
+        (IVerificationBackend backend, int jobs, TextWriter error) = verifying;
+        (List<VerificationResult> verified, List<Notification> failures, List<ProcedureIdentity> unverified) = Verified(lowered, backend, passes.First, jobs, error);
+        (List<VerificationResult> passed, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> decidedFrom) = LaterPasses(verified, lowered, passes, verifying);
+        List<VerificationResult> assumed = WithAssumptions(passed, decidedFrom, analysis.Match);
+        List<VerificationResult> contracted = passes.Thorough ? WithContracts(assumed, decidedFrom, backend, passes.Whole, jobs, error) : assumed;
+        List<VerificationResult> results = Executed(contracted, decidedFrom, analysis.Replay, executing.Environment, executing.Testing, passes);
+        if (passes.Thorough && executing.Environment is null && results.Exists(static r => r.Verdict is Unknown))
+        {
+            error.WriteLine("note: the Unknown results were not tested on generated inputs; --execute tests them, and runs the solutions' code to do it");
+        }
+
+        return (results, failures, unverified);
+    }
+
+    /// <summary>
+    /// Thorough mode's later passes, each over the results that are still Unknown and that the solver, not
+    /// <see cref="Decide"/>, gave (ADR 0049 decision 2; ticket P1-032). The budget pass, when the escalation asks for more
+    /// than the first pass had, verifies again each one whose ladder holds a step that hit a budget or whose pair has a loop
+    /// or a self-call. The IL pass then verifies again, from its IL bodies, each one whose pair the frontend lowered from IL
+    /// as well (ADR 0039's condition). A pair the IL pass decided is returned with its IL bodies, so its assumptions, its
+    /// contracts and its replay read the bodies its verdict is about. Quick mode has no later pass.
+    /// </summary>
+    private static (List<VerificationResult> Results, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> Lowered) LaterPasses(
+        List<VerificationResult> verified, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, Passes passes, Verifying verifying)
+    {
+        if (!passes.Thorough)
+        {
+            return (verified, lowered);
+        }
+
+        Dictionary<string, (ProcedurePair Pair, IrProcedure Old, IrProcedure New)> pairs = lowered.ToDictionary(static p => p.Pair.New.Value, StringComparer.Ordinal);
+        (Unknown Earlier, ProcedurePair Pair, IrProcedure Old, IrProcedure New)? Undecided(VerificationResult result)
+        {
+            (ProcedurePair pair, IrProcedure old, IrProcedure @new) = pairs[result.Identity.Value];
+            return result.Verdict is Unknown unknown && Decide(pair, old, @new) is null ? (unknown, pair, old, @new) : null;
+        }
+
+        List<VerificationResult> results = verified;
+        if (passes.Budget is { } budget)
+        {
+            results = LaterPass(
+                Passes.BudgetPhase,
+                results,
+                result => Undecided(result) is var (unknown, pair, old, @new) && (HitABudget(unknown) || LoopsOrCallsItself(old, @new)) ? new PassCandidate(unknown, pair, old, @new, FromIl: false) : null,
+                budget,
+                verifying);
+        }
+
+        results = LaterPass(
+            Passes.IlPhase,
+            results,
+            result => Undecided(result) is (var unknown, { Il: { } il } pair, _, _) ? new PassCandidate(unknown, pair, il.Old, il.New, FromIl: true) : null,
+            passes.Budget ?? passes.Whole,
+            verifying);
+        HashSet<string> fromIl = [.. results.Where(static r => string.Equals(r.DecidedBy, VerificationResult.IlPass, StringComparison.Ordinal)).Select(static r => r.Identity.Value)];
+        return (results, [.. lowered.Select(p => fromIl.Contains(p.Pair.New.Value) ? (p.Pair with { OldBody = p.Pair.Il!.Old, NewBody = p.Pair.Il.New }, p.Pair.Il.Old, p.Pair.Il.New) : p)]);
+    }
+
+    /// <summary>Whether a rung of <paramref name="verdict"/>'s ladder ended because the solver gave up, which a larger budget may change.</summary>
+    private static bool HitABudget(Verdict verdict) => verdict.Ladder.Any(static step => step.Outcome == RungOutcome.Timeout);
+
+    /// <summary>Whether either body has a loop or calls itself, which a larger bound unrolls further.</summary>
+    private static bool LoopsOrCallsItself(IrProcedure old, IrProcedure @new) =>
+        new[] { IrLoopAnalysis.Of(old), IrLoopAnalysis.Of(@new) }.Any(static shape => shape.IsSelfRecursive || !shape.Loops.IsEmpty);
+
+    /// <summary>
+    /// One later pass, a phase of the run log named <paramref name="phase"/> and weighed as <c>verify</c> is (ADR 0038):
+    /// each result <paramref name="candidate"/> gives a pair for is verified again with <paramref name="options"/>, and
+    /// <see cref="Standing"/> says whether the new result replaces it. A pass with no candidate has no phase. A crash on
+    /// one pair leaves its earlier result and is a warning on stderr, never ADR 0023's exit 5 (ADR 0049 decision 5). Up to
+    /// the run's jobs are verified at once, and the results and the warnings keep the order they came in.
+    /// </summary>
+    private static List<VerificationResult> LaterPass(
+        string phase, List<VerificationResult> results, Func<VerificationResult, PassCandidate?> candidate, VerificationOptions options, Verifying verifying)
+    {
+        PassCandidate?[] candidates = [.. results.Select(candidate)];
+        List<PassCandidate> chosen = [.. candidates.OfType<PassCandidate>()];
+        if (chosen.Count == 0)
+        {
+            return results;
+        }
+
+        options.Log.Phase(phase, chosen.Count, chosen.Sum(static c => c.Weight), new PhaseBound(chosen.Count, options.TimeoutMs, chosen.Max(static c => c.Rungs)));
+        int workers = PairWorkers.Count(verifying.Jobs, chosen.Count);
+        VerificationOptions shared = PairWorkers.Sharing(options, workers);
+        (VerificationResult Result, string? Warning)[] passed = PairWorkers.Run(
+            results.Count,
+            workers,
+            i => candidates[i] is { } again ? VerifiedAgain(phase, results[i], again, verifying.Backend, shared) : (results[i], null));
+        options.Log.PhaseDone();
+        foreach (string warning in passed.Select(static p => p.Warning).OfType<string>())
+        {
+            verifying.Error.WriteLine(warning);
+        }
+
+        return [.. passed.Select(static p => p.Result)];
+    }
+
+    /// <summary>
+    /// One item of a later pass, on the thread that calls it: the result that stands, and the warning to write when the
+    /// backend threw. The later result's ladder holds both passes and it names the pass (ADR 0049 decision 6). When the
+    /// earlier result stands and has no failure refinement, it takes the later one's, which is how a <c>timeout</c> Unknown
+    /// carries the answers asked at the budget pass's budgets (ADR 0049's table).
+    /// </summary>
+    private static (VerificationResult Result, string? Warning) VerifiedAgain(
+        string phase, VerificationResult earlier, PassCandidate candidate, IVerificationBackend backend, VerificationOptions options)
+    {
+        options.Log.Item(earlier.Identity.Value, candidate.Weight);
+        Verdict verdict;
+        try
+        {
+            verdict = backend.Verify(candidate.Old, candidate.New, options);
+        }
+        catch (Exception exception) when (IsPairFailure(exception))
+        {
+            options.Log.ItemDone(Failed);
+            return (earlier, $"warning: Verifying {earlier.Identity.Value} again in the {phase} pass failed, so it keeps its result: {exception.Message}");
+        }
+
+        options.Log.ItemDone(OutcomeWord(verdict));
+        VerificationResult later = candidate.Over(earlier) with { Verdict = verdict with { Ladder = [.. earlier.Verdict.Ladder, .. verdict.Ladder] }, DecidedBy = $"{phase}-pass" };
+        VerificationResult standing = Standing(earlier, later);
+        return candidate.Earlier.FailureRefinement is null && verdict is Unknown { FailureRefinement: { } refinement } && ReferenceEquals(standing, earlier)
+            ? (earlier with { Verdict = candidate.Earlier with { FailureRefinement = refinement } }, null)
+            : (standing, null);
+    }
+
+    /// <summary>
+    /// ADR 0049 decision 2, and the only place the rule lives: which of a pair's earlier result and a later pass's stands.
+    /// The later one replaces the earlier when it is Equivalent or Divergent, or when it is an Unknown that is neither
+    /// <c>timeout</c> nor <c>chc-timeout</c> and the earlier one was. Otherwise the earlier result stands, so a result that
+    /// is decided is never replaced.
+    /// </summary>
+    internal static VerificationResult Standing(VerificationResult earlier, VerificationResult later) => (earlier.Verdict, later.Verdict) switch
+    {
+        (not Unknown, _) => earlier,
+        (_, not Unknown) => later,
+        (Unknown { Reason: UnknownReason.Timeout or UnknownReason.ChcTimeout }, Unknown { Reason: not (UnknownReason.Timeout or UnknownReason.ChcTimeout) }) => later,
+        _ => earlier,
+    };
+
+    /// <summary>The one word the run log ends a verified pair's item with.</summary>
+    private static string OutcomeWord(Verdict verdict) => verdict switch
+    {
+        Equivalent => "equivalent",
+        Divergent => "divergent",
+        _ => "unknown",
+    };
 
     /// <summary>
     /// ADR 0040 decision 2: when any matched pair's runtimes reach below the oldest .NET version <c>runtime-changes.json</c>
@@ -398,7 +613,8 @@ internal static class CompareCommand
     /// recorded as the result's <see cref="VerificationResult.Replay"/>, which never changes the verdict, the rule id, the
     /// fingerprint or the exit code (ticket M4-009). Every Unknown pair is tested on generated inputs within
     /// <paramref name="testing"/>: it stays Unknown with <see cref="VerificationResult.Testing"/>, or becomes Divergent with
-    /// <c>proofMethod: observed</c> when the runtimes are seen to differ (ticket P1-008). Execution never makes a result
+    /// <c>proofMethod: observed</c> when the runtimes are seen to differ (ticket P1-008). Quick mode tests no Unknown (ADR
+    /// 0049's table; ticket P1-032). Execution never makes a result
     /// Equivalent. Projects and drivers are emitted into a temporary folder that is deleted afterwards. Without
     /// <c>--execute</c> (<paramref name="execution"/> null), or from a frontend that cannot build drivers, nothing runs.
     /// Otherwise each result is one item of the <c>execute</c> phase (ADR 0038).
@@ -409,8 +625,9 @@ internal static class CompareCommand
         IReplayDriverFactory? factory,
         ExecutionEnvironment? execution,
         TestingOptions testing,
-        IRunLog runLog)
+        Passes passes)
     {
+        IRunLog runLog = passes.First.Log;
         if (execution is null || factory is null)
         {
             return results;
@@ -434,7 +651,7 @@ internal static class CompareCommand
                 (VerificationResult next, string outcome) = (result.Verdict, pairs[result.Identity.Value]) switch
                 {
                     (Divergent divergent, var (pair, old, @new)) => (result with { Replay = replayer.Replay(factory.Create(pair, divergent.Counterexample, directory), divergent.Counterexample, old, @new) }, "replayed"),
-                    (Unknown unknown, var (pair, old, @new)) => (tester.Test(factory.Plan(pair, unknown.Candidate, directory), old, @new).Apply(result), "tested"),
+                    (Unknown unknown, var (pair, old, @new)) when passes.Thorough => (tester.Test(factory.Plan(pair, unknown.Candidate, directory), old, @new).Apply(result), "tested"),
                     _ => (result, "skipped"),
                 };
                 executed.Add(next);
@@ -568,7 +785,10 @@ internal static class CompareCommand
             error.WriteLine($"warning: {diagnostic.Id} {diagnostic.Path}: {diagnostic.Message}");
         }
 
-        return result.Config;
+        // ADR 0049 decision 1: a mode that is neither of the two is a usage error, wherever it was given.
+        return result.Diagnostics.FirstOrDefault(static d => string.Equals(d.Id, EquivConfigDiagnosticIds.InvalidMode, StringComparison.Ordinal)) is { } invalid
+            ? throw new EquivConfigParseException($"error: equiv.config.json: {invalid.Message}")
+            : result.Config;
     }
 
     /// <summary>
@@ -655,7 +875,7 @@ internal static class CompareCommand
         options.Log.Item(pair.New.Value, weight);
         if (crash is not null)
         {
-            options.Log.ItemDone("failed");
+            options.Log.ItemDone(Failed);
             return new PairOutcome(Result: null, "Weighing", crash);
         }
 
@@ -668,12 +888,7 @@ internal static class CompareCommand
         try
         {
             Verdict verdict = backend.Verify(old, @new, options);
-            options.Log.ItemDone(verdict switch
-            {
-                Equivalent => "equivalent",
-                Divergent => "divergent",
-                _ => "unknown",
-            });
+            options.Log.ItemDone(OutcomeWord(verdict));
             return new PairOutcome(new VerificationResult(pair.New, verdict)
             {
                 EquivalencesApplied = pair.EquivalencesApplied,
@@ -685,7 +900,7 @@ internal static class CompareCommand
         }
         catch (Exception exception) when (IsPairFailure(exception))
         {
-            options.Log.ItemDone("failed");
+            options.Log.ItemDone(Failed);
             return new PairOutcome(Result: null, "Verifying", exception);
         }
     }
@@ -843,7 +1058,7 @@ internal static class CompareCommand
         }
         catch (Exception exception) when (IsPairFailure(exception))
         {
-            options.Log.ItemDone("failed");
+            options.Log.ItemDone(Failed);
             return (result, $"warning: Verifying {result.Identity.Value} under callee contracts failed, so it keeps its verdict: {exception.Message}");
         }
 
@@ -949,6 +1164,27 @@ internal static class CompareCommand
     {
         public long Weight { get; } = PairWeight.Of(Old, New, solver: true);
     }
+
+    /// <summary>
+    /// A pair a later pass verifies again, with the Unknown it has and the bodies the pass verifies: the pair's own in the
+    /// budget pass, its IL bodies in the IL pass (<paramref name="FromIl"/>). As an item of the pass's phase it weighs what a pair of <c>verify</c> does.
+    /// </summary>
+    private sealed record PassCandidate(Unknown Earlier, ProcedurePair Pair, IrProcedure Old, IrProcedure New, bool FromIl)
+    {
+        public long Weight { get; } = PairWeight.Of(Old, New, solver: true);
+
+        public int Rungs { get; } = PairWeight.Rungs(Old, New);
+
+        /// <summary>
+        /// <paramref name="earlier"/> as the result of these bodies: from IL, it names that lowering, applied no API
+        /// equivalence and resolved the forwarders the IL bodies' calls name (ADR 0039, ADR 0047).
+        /// </summary>
+        public VerificationResult Over(VerificationResult earlier) =>
+            FromIl ? earlier with { Lowering = "il", EquivalencesApplied = [], ForwardersResolved = Pair.Il!.ForwardersResolved } : earlier;
+    }
+
+    /// <summary>What every pass verifies with: the backend, how many pairs at once, and where its warnings go (sonar(src): csharpsquid:S107).</summary>
+    private sealed record Verifying(IVerificationBackend Backend, int Jobs, TextWriter Error);
 
     /// <summary>What the verify phase made of one pair: its result, or the exception that failed it and the stage it failed in (<c>Weighing</c>, <c>Verifying</c>).</summary>
     private sealed record PairOutcome(VerificationResult? Result, string Stage = "", Exception? Crash = null);

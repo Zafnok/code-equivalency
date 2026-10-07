@@ -52,9 +52,10 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
 
     /// <summary>
     /// The local proposer rung 5 asks first, on by default because it runs in process and sends nothing (ticket P1-009);
-    /// a test sets it to null to run the model's proposer alone.
+    /// a test sets it to null to run the model's proposer alone, and so does a pass of <c>equiv compare</c> that turns
+    /// <see cref="VerificationOptions.LocalProposer"/> off (ADR 0049; ticket P1-032).
     /// </summary>
-    public IInvariantProposer? Traces { get; init; } = new TraceInvariantProposer();
+    public IInvariantProposer? Traces { get; init; } = options.LocalProposer ? new TraceInvariantProposer() : null;
 
     /// <summary>
     /// The callee contracts a caller's product relates its calls by (ticket P1-010; <see cref="ProductEncoder.Encode"/>), or
@@ -293,7 +294,12 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             return NotApplicable(ProofMethod.Bounded, $"self-recursion is not inlined: {obstacle}", cause: null);
         }
 
-        (IrProcedure oldUnrolled, IrProcedure newUnrolled) = Stages.Timed(options, Stages.Unroll, () => (IrUnroller.Unroll(old, k), IrUnroller.Unroll(@new, k)));
+        if (Stages.Timed(options, Stages.Unroll, () => Unrolled(old, @new, k)) is not var (oldUnrolled, newUnrolled))
+        {
+            // No product to ask about: the loops are left to the rungs that do not unroll them k times.
+            return NotApplicable(ProofMethod.Bounded, TooLargeToUnroll(k), UnknownReason.UnalignedLoop);
+        }
+
         return Session(
             oldUnrolled,
             newUnrolled,
@@ -337,6 +343,18 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             ? WithinBound(solvers, context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable), bound)
             : Proved(ProofMethod.Bounded, "no loop or self-call; every input checked", new Equivalent(ProofMethod.Bounded));
     }
+
+    /// <summary>
+    /// Both sides unrolled <paramref name="bound"/> times, or null when either would hold more than
+    /// <see cref="IrUnroller.MaxBlocks"/> blocks (ticket P1-032): rung 1, the contract check and the failure-refinement
+    /// queries then have no product to ask about, and say so instead of unrolling without end.
+    /// </summary>
+    internal static (IrProcedure Old, IrProcedure New)? Unrolled(IrProcedure old, IrProcedure @new, int bound) =>
+        IrUnroller.UnrollWithin(old, bound) is { } oldUnrolled && IrUnroller.UnrollWithin(@new, bound) is { } newUnrolled ? (oldUnrolled, newUnrolled) : null;
+
+    /// <summary>Why a pair <see cref="Unrolled"/> refused has no rung 1.</summary>
+    internal static string TooLargeToUnroll(int bound) =>
+        string.Create(CultureInfo.InvariantCulture, $"a side unrolled {bound} times holds more than {IrUnroller.MaxBlocks} blocks");
 
     /// <summary>
     /// The scope of rung 1's opaque Unknown, reached only once the first query of ADR 0014 was unsatisfiable (ADR 0029

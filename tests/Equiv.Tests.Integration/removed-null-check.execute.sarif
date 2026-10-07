@@ -203,6 +203,13 @@
             }
           ]
         },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 2000000,
+          "timeoutMs": 60000,
+          "explicit": []
+        },
         "queryEndings": {
           "resourceLimit": 0,
           "wallClock": 0

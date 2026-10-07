@@ -73,6 +73,24 @@ public sealed class VerificationOptionsTests
         Assert.NotEqual((a with { ResourceLimit = 7 }).GetHashCode(), a.GetHashCode());
     }
 
+    /// <summary>
+    /// Ticket P1-032: rung 5's local proposer and failure refinement on a timeout are on unless a pass turns them off, and
+    /// two options differing in either are unequal.
+    /// </summary>
+    [Fact]
+    public void LocalProposerAndRefineTimeoutsAreOnByDefaultAndPartOfEquality()
+    {
+        VerificationOptions a = new(3, 5000, []);
+
+        Assert.True(a.LocalProposer);
+        Assert.True(a.RefineTimeouts);
+        Assert.NotEqual(a, a with { LocalProposer = false });
+        Assert.NotEqual(a, a with { RefineTimeouts = false });
+        Assert.Equal(a with { LocalProposer = false, RefineTimeouts = false }, new VerificationOptions(3, 5000, []) { LocalProposer = false, RefineTimeouts = false });
+        Assert.NotEqual((a with { LocalProposer = false }).GetHashCode(), a.GetHashCode());
+        Assert.NotEqual((a with { RefineTimeouts = false }).GetHashCode(), a.GetHashCode());
+    }
+
     /// <summary>Ticket P1-033: no second solver unless one is given, and two options differing in it are unequal, since it can change a verdict.</summary>
     [Fact]
     public void SolverIsNoneByDefaultAndPartOfEquality()

@@ -55,6 +55,7 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0046 | A caller file path or line number the compiler supplies is an input both sides share, not a constant |
 | 0047 | A call to a static one-call forwarder is a call to its target (narrows 0019's rejection of inlining) |
 | 0048 | A result that is not Equivalent may carry a proved input condition under which the pair agrees (`properties.agreesWhen`); no verdict, rule id, exit code or fingerprint depends on it |
-| 0049 | `equiv compare` has a thorough mode (the default) and a quick mode; thorough is quick plus further passes over what is still Unknown; measured yield chooses a technique's mode, not whether it exists |
+| 0049 | `equiv compare` has a thorough mode and a quick mode (its default is superseded by 0052); thorough is quick plus further passes over what is still Unknown; measured yield chooses a technique's mode, not whether it exists |
 | 0050 | cvc5 is asked the rung 1 queries Z3 gives up on (supersedes 0005's "Z3 alone") |
 | 0051 | Proposed: a Lean proof a model writes may close a rung 1 query no solver decides; Lean checks the query, never the program, and nothing is built until it decides a query no solver does (narrows 0005's rejection of Lean) |
+| 0052 | Quick is the default mode of `equiv compare`; thorough is asked for with `--mode thorough` (reverses the default of 0049 decision 1, from P1-032's measurement: 37 times the time for one more proof) |

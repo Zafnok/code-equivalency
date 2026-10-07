@@ -254,15 +254,19 @@ public sealed class CSharpFrontend : ILanguageFrontend
     /// <paramref name="pair"/>, lowered from IOperation and fingerprinted, with the bodies it keeps. Under <c>--il-fallback</c>
     /// <see cref="IlFallback"/> may lower both sides again from IL, once congruence is decided on the fingerprints (ADR 0039;
     /// ticket P1-016); IL-lowered bodies applied no API equivalence, and resolved the forwarders their own calls name (ADR
-    /// 0047; ticket P2-068). Then, when exactly one side is <c>async</c>, both bodies
-    /// are one opaque, whichever lowering they came from (ticket M4-006).
+    /// 0047; ticket P2-068). In thorough mode the IL bodies never replace the IOperation ones: a pair <see cref="IlFallback"/>
+    /// would have given them to keeps both, the IL ones as <see cref="ProcedurePair.Il"/> for the IL pass, with or without
+    /// the flag (ADR 0049 decision 2; ticket P1-032). Then, when exactly one side is <c>async</c>, both bodies
+    /// are one opaque, whichever lowering they came from (ticket M4-006); such a pair has no IL bodies, since an
+    /// <c>async</c> method's IL is not read.
     /// </summary>
     private static ProcedurePair Relowered(
         ProcedurePair pair, (SideProcedure Procedure, SideRuntime Runtime) legacySide, (SideProcedure Procedure, SideRuntime Runtime) modernSide, EquivConfig config, ImmutableHashSet<string> kept, IRunLog log)
     {
         SideProcedure legacy = legacySide.Procedure;
         SideProcedure modern = modernSide.Procedure;
-        if (config.IlFallback)
+        bool thorough = config.Mode == CompareMode.Thorough;
+        if (thorough || config.IlFallback)
         {
             bool congruent = pair.OldFingerprint is { RuntimeSensitive: false } fingerprint && fingerprint == pair.NewFingerprint;
             CallSites oldSites = new(pair.ReboundCalls.Select(static r => r.Legacy)) { KeptForwarders = kept };
@@ -273,15 +277,18 @@ public sealed class CSharpFrontend : ILanguageFrontend
                 congruent,
                 log);
             bool il = string.Equals(lowering, IlFallback.Il, StringComparison.Ordinal);
-            pair = pair with
+            ImmutableArray<ResolvedForwarder> forwarders = CallSites.Forwarders(oldSites, newSites);
+            IlBodies? ilBodies = il ? new IlBodies(old, @new, forwarders) : null;
+            ProcedurePair replaced = pair with
             {
                 OldBody = old,
                 NewBody = @new,
                 Lowering = lowering,
                 IlFallbackTried = tried,
                 EquivalencesApplied = il ? [] : pair.EquivalencesApplied,
-                ForwardersResolved = il ? CallSites.Forwarders(oldSites, newSites) : pair.ForwardersResolved,
+                ForwardersResolved = il ? forwarders : pair.ForwardersResolved,
             };
+            pair = thorough ? pair with { Il = ilBodies } : replaced;
         }
 
         // Ticket M4-006: a sync method throws to its caller and an async one into its task, so the pair is decided from the

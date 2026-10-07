@@ -28,3 +28,8 @@ the backend's unit tests cover it on IR.
 | `Report.Width(int)` | Unknown | `opaque` | `unknown` | `none-proved` |
 
 Exit code: 0 (Unknown does not fail the run without `--fail-on unknown`).
+
+`expected.sarif.json` is the default run, quick mode (ADR 0052). With `--mode thorough` (ADR 0049, ticket P1-032) the
+pair is verified again from IL, where the interpolated string is a sequence of calls and not an opaque node. A
+negative `count` then reaches the modern guard, which throws where the legacy side returns, and the pair is
+Divergent (`decidedBy: il-pass`, exit code 1): the divergence the sample was written around.

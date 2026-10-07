@@ -24,3 +24,8 @@ is that run.
 | `Nullables.Wrap(int)` | Unknown (`opaque`) | Equivalent (`lowering: il`) |
 
 Exit code: 0 (Unknown does not fail the run without `--fail-on unknown`).
+
+`--il-fallback` adds the IL lowering to quick mode, the default, where the IL bodies replace the IOperation ones.
+`--mode thorough` (ADR 0049, ticket P1-032) reads the same pairs from IL without the flag, as a later pass: the pairs
+keep both lowerings, the first pass leaves both Unknown, and the IL pass proves both (`decidedBy: il-pass`,
+`lowering: il`).
