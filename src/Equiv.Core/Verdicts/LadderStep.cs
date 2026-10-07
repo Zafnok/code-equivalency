@@ -21,14 +21,15 @@ public sealed record LadderStep(ProofMethod Rung, RungOutcome Outcome, string De
 
     public ImmutableArray<string> Refined { get; init; } = [];
 
+    // Deliberate non-short-circuit '&': see the comment on Equiv.Core.Configuration.EquivConfig.Equals.
     public bool Equals(LadderStep? other) =>
         other is not null
         && (Rung == other.Rung)
-            & (Outcome == other.Outcome)
-            & string.Equals(Detail, other.Detail, StringComparison.Ordinal)
-            & (Mode == other.Mode)
-            & (Solver == other.Solver)
-            & IrEquality.SequenceEqual(Refined, other.Refined);
+            & (Outcome == other.Outcome) // NOSONAR
+            & string.Equals(Detail, other.Detail, StringComparison.Ordinal) // NOSONAR
+            & (Mode == other.Mode) // NOSONAR
+            & (Solver == other.Solver) // NOSONAR
+            & IrEquality.SequenceEqual(Refined, other.Refined); // NOSONAR
 
     public override int GetHashCode() => HashCode.Combine(Rung, Outcome, Detail, Mode, Solver, IrEquality.Hash(Refined));
 }

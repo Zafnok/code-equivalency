@@ -113,8 +113,7 @@ public sealed class RefinementTests
         Unknown unknown = Assert.IsType<Unknown>(verdict);
         Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
         Assert.Equal("the divergence depends on f64.add, f64.rem", unknown.Detail);
-        Assert.Single(verdict.Ladder);
-        Assert.Empty(verdict.Ladder[0].Refined);
+        Assert.Empty(Assert.Single(verdict.Ladder).Refined);
     }
 
     [Theory]
