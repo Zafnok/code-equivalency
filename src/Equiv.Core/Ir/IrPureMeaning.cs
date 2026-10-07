@@ -72,8 +72,8 @@ public static class IrPureMeaning
         Arithmetic(meanings, "sub", static (a, b) => a - b, static (a, b) => a - b);
         Arithmetic(meanings, "mul", static (a, b) => a * b, static (a, b) => a * b);
         Arithmetic(meanings, "div", static (a, b) => a / b, static (a, b) => a / b);
-        Comparison(meanings, "eq", static (a, b) => a == b, static (a, b) => a == b);
-        Comparison(meanings, "ne", static (a, b) => a != b, static (a, b) => a != b);
+        Comparison(meanings, "eq", static (a, b) => a == b, static (a, b) => a == b); // NOSONAR S1244: IEEE equality is the meaning
+        Comparison(meanings, "ne", static (a, b) => a != b, static (a, b) => a != b); // NOSONAR S1244: IEEE inequality is the meaning
         Comparison(meanings, "lt", static (a, b) => a < b, static (a, b) => a < b);
         Comparison(meanings, "le", static (a, b) => a <= b, static (a, b) => a <= b);
         Comparison(meanings, "gt", static (a, b) => a > b, static (a, b) => a > b);

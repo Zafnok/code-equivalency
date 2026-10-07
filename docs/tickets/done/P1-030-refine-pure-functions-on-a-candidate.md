@@ -1,5 +1,5 @@
 # P1-030 Abstraction refinement, part 1: a pure function a candidate depends on is given its real meaning
-Status: in-progress
+Status: done (PR #420)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-019, M3-016, M4-002
@@ -176,3 +176,34 @@ interpreted from the start for every pair. The reverse direction, abstracting mo
 - Three samples (`webapi-basic`, `version-bump`, `runtime-row-framework-only-change`) fail to load
   in this worktree because their packages are not restored here; `build.ps1 -Integration` restores
   them, and CI is where their snapshots are checked.
+- Criterion 6, measured 2026-10-07 on `gitextensions-9860` (compare mode quick, `--jobs 4`, `main` at
+  628ef68f against this branch, one run each, 379 s and 349 s): **0 of 22** `abstraction` Unknowns are
+  decided, and no result changed at all (14,044 results; Equivalent 13,734, EQ002 8, EQ006 7,
+  Unknown 291 in both). The pair has 22 `abstraction` Unknowns today, not the 52 of the 2026-10-03
+  run this ticket was written from, and none of the 22 names a floating-point function or an
+  `IntPtr` operator: each depends on a `delegate:`, an opaque fragment, `get:System.String::get_Length()`
+  or `op:GitExtUtils.ArgumentString::op_Implicit`. The pairs that held `conv.f32.f64`, `f64.mul` and
+  the rest on 2026-10-03 have since been decided by other tickets. Quick, because refinement is part
+  of rung 1 in the first pass, which both modes run; thorough's later passes were not measured.
+- Criterion 4 and the yield where there is one, measured the same day and the same way on
+  `gitextensions-8522` (388 s and 380 s): **12 of 178** `abstraction` Unknowns are decided, all
+  Divergent, and no result that was Equivalent or Divergent changed (13,742 results; Equivalent
+  12,727 in both). Six are EQ002 on `IntPtr ==`, the six of P1-019's report:
+  `EasyHook.LocalHook::GetProcAddress(string,string)`, `::get_HookBypassAddress()`,
+  `::IsThreadIntercepted(int)`, `::Dispose()`, `EasyHook.HookAccessControl::SetInclusiveACL(int[])`
+  and `::SetExclusiveACL(int[])`. Six are EQ006, a runtime-changed callee in the trace:
+  `GitUI.FontUtil::.cctor()` on `IntPtr !=`, and five on floating point
+  (`GitUI.SpellChecker.EditNetSpell::GetCursorPosition()`,
+  `GitExtensions.Plugins.GitStatistics.PieChart.PieChart3D::GetSliceDisplacement(float,float)`,
+  `...PieChart.PieSlice::CreateBrushForSide(System.Drawing.Color,double)`,
+  `ICSharpCode.TextEditor.TextAreaControl::HandleMouseWheel(System.Windows.Forms.MouseEventArgs)`,
+  `ICSharpCode.TextEditor.TextView::GetFontHeight(System.Drawing.Font)`). P1-019's seventh,
+  `FormStatus::BitmapToIcon`, is Equivalent by congruence on `main` today. None became
+  Equivalent: as P1-019 read it, a shared function hides a divergence only where the sides already
+  differ. Three results whose candidate names only floating-point functions stay Unknown (a refined
+  query that gave up, or a conversion out of range), and three more name floating point beside
+  something else. Of the 166 left, results holding each kind (a result can hold several): an opaque
+  fragment 89, a `delegate:` 54, `get:System.String::get_Length()` 36, `string ==` or `!=` 19,
+  `op:GitExtUtils.ArgumentString::op_Implicit` 17, floating point 6, `System.Type ==` 2.
+- The raw SARIF and logs are under `.corpus/pairs/gitextensions-{9860,8522}/runs/20261007-*`, not in
+  git (ADR 0028). No file under `docs/runs/` was added, so the README's scoreboard is untouched.

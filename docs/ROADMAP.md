@@ -880,10 +880,15 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   the same 13 at the first pass's budgets in an eighteenth of the time. Measure each knob (`bound` 8,
   `resourceLimit` 30,000,000, the IL pass's values) and set them from the table; a change to ADR 0049's
   table goes through `equiv-adr`. Filed by P1-032. Needs P1-032.
-- P1-030 (L) Abstraction refinement, part 1: when an `abstraction` Unknown's candidate depends only
-  on interpretable pure functions (`IntPtr` equality, `float` and `double` arithmetic as IEEE), the
-  pair is asked again with them interpreted (`proofMethod` suffix `+refined`). Starts with a new ADR
-  against ADR 0025. Needs P1-019, M3-016, M4-002.
+- P1-030 (L) Abstraction refinement, part 1 (ADR 0053): when rung 1's `abstraction` candidate depends only
+  on interpretable pure functions (`IntPtr` equality, `float` and `double` arithmetic, comparisons and
+  conversions as IEEE 754), rung 1 is asked again with them interpreted, three rounds at most
+  (`proofMethod` suffix `+refined`, `properties.refined`). `a * 2.0` against `a + a` is proved; a
+  regrouped sum is Divergent with numbers. Done 2026-10-07. Measured in quick mode: on
+  `gitextensions-8522`, 12 of 178 `abstraction` Unknowns are decided, all Divergent (6 EQ002, the
+  `IntPtr` pairs of P1-019, and 6 EQ006), none Equivalent; on `gitextensions-9860`, 0 of 22, none of
+  which names an interpretable function any more. No Equivalent or Divergent result changed on
+  either. `Release: minor`. Needs P1-019, M3-016, M4-002.
 - P1-031 (L) Abstraction refinement, part 2: a rung 1 query that times out is asked again with
   multiplication, division and remainder of two unknowns as shared functions, refined by point facts
   from spurious models (`+abstracted`). Needs P2-050, M3-016.
