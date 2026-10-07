@@ -59,3 +59,4 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0050 | cvc5 is asked the rung 1 queries Z3 gives up on (supersedes 0005's "Z3 alone") |
 | 0051 | Proposed: a Lean proof a model writes may close a rung 1 query no solver decides; Lean checks the query, never the program, and nothing is built until it decides a query no solver does (narrows 0005's rejection of Lean) |
 | 0052 | Quick is the default mode of `equiv compare`; thorough is asked for with `--mode thorough` (reverses the default of 0049 decision 1, from P1-032's measurement: 37 times the time for one more proof) |
+| 0053 | An interpretable pure function a candidate counterexample depends on (`IntPtr` equality, `float` and `double` arithmetic as IEEE 754) is given its real meaning and rung 1 is asked again; never from the start, never on x87 or a runtime-sensitive function (narrows 0025's rejection of IEEE floating point) |
