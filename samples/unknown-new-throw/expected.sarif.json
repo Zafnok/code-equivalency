@@ -69,49 +69,71 @@
       },
       "results": [
         {
-          "ruleId": "EQ002",
-          "level": "error",
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
           "message": {
-            "text": "Equiv.Samples.UnknownNewThrow.Report::Width(int) diverges: inputs(bv32 0, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 1 outs() trace()) new(returned bv32 0 outs() trace(\"System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::.ctor(int,int)\"(bv32 0, bv32 1), \"System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::AppendFormatted`1(int,string)<int>\"(sort \"System.Runtime.CompilerServices.DefaultInterpolatedStringHandler\" 0, bv32 0, sort \"System.String\" 1091301907), \"System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::ToStringAndClear()\"(sort \"System.Runtime.CompilerServices.DefaultInterpolatedStringHandler\" 0)))"
+            "text": "Equiv.Samples.UnknownNewThrow.Report::Width(int) is unknown (Opaque): new: InterpolatedString. It is equivalent on every input that reaches none of the related locations."
           },
           "locations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///legacy/Report.cs"
+                  "uri": "file:///modern/Report.cs"
                 },
                 "region": {
-                  "startLine": 5,
-                  "startColumn": 27,
-                  "endLine": 5,
-                  "endColumn": 32
+                  "startLine": 9,
+                  "startColumn": 29,
+                  "endLine": 9,
+                  "endColumn": 41
                 }
               }
             }
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.UnknownNewThrow.Report::Width(int)",
-            "resultFingerprint/v1": "a295d0d1e8b2814920cb0ef6d7b48a1ea9f7c0027b8df1f1204794f28e7a3514"
+            "resultFingerprint/v1": "f221edfa87c38e238f2f1098cda2ae45472528e67b8e771bf390b9847e2b6633"
           },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Report.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 29,
+                  "endLine": 9,
+                  "endColumn": 41
+                }
+              },
+              "message": {
+                "text": "InterpolatedString"
+              }
+            }
+          ],
           "baselineState": "new",
-          "rank": 60.002,
+          "rank": 20.002,
           "properties": {
-            "model": "inputs(bv32 0, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 1 outs() trace()) new(returned bv32 0 outs() trace(\"System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::.ctor(int,int)\"(bv32 0, bv32 1), \"System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::AppendFormatted`1(int,string)<int>\"(sort \"System.Runtime.CompilerServices.DefaultInterpolatedStringHandler\" 0, bv32 0, sort \"System.String\" 1091301907), \"System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::ToStringAndClear()\"(sort \"System.Runtime.CompilerServices.DefaultInterpolatedStringHandler\" 0)))",
+            "unknownReason": "opaque",
+            "scope": "line",
+            "residualClaim": "equivalent unless a relatedLocation is reached",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              }
+            },
             "ladderTrace": [
               {
                 "rung": "bounded",
                 "outcome": "inconclusive",
                 "detail": "an input reaches an opaque node: new: InterpolatedString"
-              },
-              {
-                "rung": "bounded",
-                "outcome": "refuted",
-                "detail": "a divergence within 8 iterations"
               }
             ],
-            "lowering": "il",
-            "decidedBy": "il-pass",
-            "reviewGroup": "calls:System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::.ctor(int,int)|System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::AppendFormatted`1(int,string)<int>|System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::ToStringAndClear()"
+            "reviewGroup": "opaque:InterpolatedString"
           }
         }
       ],
@@ -166,12 +188,11 @@
             ]
           },
           "unknownByScope": {
-            "line": 0,
+            "line": 1,
             "method": 0
           },
-          "agreesWhen": {
+          "failureRefinement": {
             "pairs": 1,
-            "admitted": 0,
             "milliseconds": 0
           }
         },
@@ -200,15 +221,10 @@
           ]
         },
         "mode": {
-          "name": "thorough",
+          "name": "quick",
           "bound": 3,
           "resourceLimit": 5000000,
           "timeoutMs": 60000,
-          "escalation": {
-            "bound": 8,
-            "resourceLimit": 30000000,
-            "timeoutMs": 600000
-          },
           "explicit": [
             "resourceLimit"
           ]
@@ -219,9 +235,9 @@
         },
         "reviewList": [
           {
-            "group": "calls:System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::.ctor(int,int)|System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::AppendFormatted`1(int,string)<int>|System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::ToStringAndClear()",
-            "ruleId": "EQ002",
-            "rank": 60.002,
+            "group": "opaque:InterpolatedString",
+            "ruleId": "EQ003",
+            "rank": 20.002,
             "count": 1,
             "identities": [
               "Equiv.Samples.UnknownNewThrow.Report::Width(int)"

@@ -35,7 +35,7 @@ public sealed class IlFallbackSampleTests
     }
 
     /// <summary>
-    /// ADR 0049's table, the IL lowering row, on a real sample (ticket P1-032): in thorough mode, with or without the
+    /// ADR 0049's table, the IL lowering row, on a real sample (ticket P1-032): with <c>--mode thorough</c>, with or without the
     /// flag, both pairs of <c>samples/il-fallback</c> are Unknown after the first pass, which verifies their IOperation
     /// bodies, and the IL pass proves both from their IL bodies. They are the results <c>--il-fallback</c> gives in quick
     /// mode, where the IL bodies replace the others, and quick without the flag leaves both Unknown.
@@ -170,7 +170,7 @@ public sealed class IlFallbackSampleTests
 
     /// <summary>
     /// One run at the samples' pinned resource limit. The flag's replacement is quick mode's (ADR 0049), so a run with
-    /// the flag is a quick one unless <paramref name="mode"/> says otherwise, and a run without it is the default, thorough.
+    /// the flag is a quick one unless <paramref name="mode"/> says otherwise, and a run without it is the default, quick too (ADR 0052).
     /// </summary>
     private static (string Json, string StdOut) Compare(string sample, bool ilFallback, string? mode = null) => Compare(
         Directory.GetFiles(Path.Combine(SamplesRoot, sample, "legacy"), "*.sln").Single(),

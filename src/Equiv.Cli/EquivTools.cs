@@ -76,7 +76,7 @@ internal sealed class EquivTools(IReadOnlyList<ILanguageFrontend> frontends, IVe
         [Description("Loop unrolling bound; overrides the config's, must be positive.")] int? bound = null,
         [Description("Solver timeout per procedure pair in milliseconds; overrides the config's, must be positive.")] int? timeoutMs = null,
         [Description(IlFallbackDescription)] bool ilFallback = false,
-        [Description("\"thorough\" (the default) verifies again, with more budget and from IL, the pairs a first pass leaves Unknown; \"quick\" stops after the first pass (--mode). Overrides the config's.")] string? mode = null) =>
+        [Description("\"quick\" (the default) stops after the first pass; \"thorough\" then verifies again, with more budget and from IL, the pairs still Unknown, which can take hours (--mode). Overrides the config's.")] string? mode = null) =>
         Run(new CompareOptions(legacy, modern, NoOutPath, baseline, config, FailOn: null, DryRun: false) { Bound = bound, TimeoutMs = timeoutMs, IlFallback = ilFallback, Mode = mode });
 
     public CallToolResult LowerOnly(

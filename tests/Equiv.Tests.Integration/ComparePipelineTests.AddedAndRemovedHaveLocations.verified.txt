@@ -216,15 +216,10 @@
           ]
         },
         mode: {
-          name: thorough,
+          name: quick,
           bound: 3,
           resourceLimit: 2000000,
-          timeoutMs: 60000,
-          escalation: {
-            bound: 8,
-            resourceLimit: 30000000,
-            timeoutMs: 600000
-          }
+          timeoutMs: 60000
         },
         queryEndings: {
           resourceLimit: 0,

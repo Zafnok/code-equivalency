@@ -310,8 +310,8 @@ public sealed class McpCommandTests
     }
 
     /// <summary>
-    /// Ticket P1-032 criterion 1 (ADR 0049 decision 1): <c>compare</c> takes <c>mode</c> as <c>--mode</c> does, thorough
-    /// unless given, and any other value is a tool error, not a run.
+    /// Ticket P1-032 criterion 1 (ADR 0049 decision 1, ADR 0052): <c>compare</c> takes <c>mode</c> as <c>--mode</c> does,
+    /// quick unless given, and any other value is a tool error, not a run.
     /// </summary>
     [Fact]
     public async Task Compare_ModeSelectsTheModeAndAnyOtherValueIsAToolError()
@@ -324,13 +324,13 @@ public sealed class McpCommandTests
 
         await session.CallAsync("compare", Args(legacy: legacy.Path, modern: modern.Path)).ConfigureAwait(true);
         CompareMode byDefault = frontend.LastConfig!.Mode;
-        CallToolResult quick = await session.CallAsync("compare", Mode("quick")).ConfigureAwait(true);
+        CallToolResult thorough = await session.CallAsync("compare", Mode("thorough")).ConfigureAwait(true);
         CompareMode asked = frontend.LastConfig!.Mode;
         CallToolResult other = await session.CallAsync("compare", Mode("fast")).ConfigureAwait(true);
 
-        Assert.Equal((CompareMode.Thorough, CompareMode.Quick), (byDefault, asked));
-        Assert.NotEqual(true, quick.IsError);
-        Assert.Contains("\"name\":\"quick\"", Assert.IsType<TextContentBlock>(quick.Content[1]).Text, StringComparison.Ordinal);
+        Assert.Equal((CompareMode.Quick, CompareMode.Thorough), (byDefault, asked));
+        Assert.NotEqual(true, thorough.IsError);
+        Assert.Contains("\"name\":\"thorough\"", Assert.IsType<TextContentBlock>(thorough.Content[1]).Text, StringComparison.Ordinal);
         Assert.True(other.IsError);
         Assert.Equal("error: mode must be thorough or quick, not 'fast'", Assert.IsType<TextContentBlock>(Assert.Single(other.Content)).Text);
         Assert.Equal(2, frontend.AnalyzeCallCount);

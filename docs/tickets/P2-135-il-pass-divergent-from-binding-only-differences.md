@@ -5,7 +5,7 @@ Model: Opus, high effort. If you are not Opus or Fable, stop before doing anythi
 Depends on: P1-032
 
 ## Goal
-ADR 0049 runs the IL lowering in thorough mode, the default, as a pass over the pairs that are still Unknown. A
+ADR 0049 runs the IL lowering in thorough mode as a pass over the pairs that are still Unknown. A
 pair whose IOperation bodies hold an unshared opaque is then verified from IL, where the construct is a sequence of
 calls. When the two runtimes compile the same source to different callees, the two IL bodies have different call
 traces and the pass answers Divergent. `samples/business-layer`'s `OrderService.Describe` is the checked-in
@@ -14,8 +14,8 @@ instance: an interpolated string that binds `String::Format` on .NET Framework 4
 and thorough reports EQ002 with `decidedBy: il-pass`.
 
 ADR 0039's measurement already saw this (`docs/runs/2026-10-01-il-fallback-verdicts.md`: 21 of 1,294 changed pairs
-of `gitextensions-8522` moved from Unknown to Divergent, none reproduced by replay). P1-032 made it the default's
-behaviour; its Notes give the count from the thorough run. When done, a Divergent the IL pass produces is one a
+of `gitextensions-8522` moved from Unknown to Divergent, none reproduced by replay). It is one of the reasons ADR 0052
+made quick the default; P1-032's Notes give the count from the thorough run. When done, a Divergent the IL pass produces is one a
 user can trust as much as one the first pass produces, or it is not reported as a Divergent.
 
 ## Spec references

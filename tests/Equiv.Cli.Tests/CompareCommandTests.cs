@@ -1846,7 +1846,7 @@ public sealed partial class CompareCommandTests
         InMemoryReportSink sink = new();
 
         _ = CaptureStdOut(() => CompareCommand.Run(
-            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { TimeoutMs = 50 },
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { TimeoutMs = 50, Mode = "thorough" },
             [new FakeFrontend("csharp", _ => true, match)],
             new Z3Backend(),
             sink,
@@ -2016,7 +2016,7 @@ public sealed partial class CompareCommandTests
         using TempFile modern = new();
         InMemoryReportSink sink = new();
         string stderr = CaptureStdErr(() => CompareCommand.Run(
-            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { Mode = "thorough" },
             [new FakeFrontend("csharp", _ => true, new MatchResult(pairs, [], [], []))], backend, sink, NullRunLog.Instance));
         return (sink.Log!.Runs[0].Results.ToDictionary(static r => r.PartialFingerprints["procedureIdentity/v1"], StringComparer.Ordinal), stderr);
     }

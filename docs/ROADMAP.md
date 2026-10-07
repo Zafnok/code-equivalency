@@ -865,10 +865,11 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   query, 2 of them a `none-proved` `newFailures`, and the queries' time goes from 501 s to 2,306 s
   (the ticket's Notes).
 - P1-032 (L) `equiv compare --mode thorough|quick` (ADR 0049). Both modes run one first pass
-  (`resourceLimit` 2,000,000). Thorough, the default, then verifies what is still Unknown again at
+  (`resourceLimit` 2,000,000), and quick, the default since ADR 0052, stops there. Thorough then verifies what is still Unknown again at
   `bound` 8 and `resourceLimit` 30,000,000 and from IL, asks ADR 0037's queries on `timeout`
   Unknowns (P1-035), and runs the contracts pass; quick stops after the first pass. A later pass
-  only ever replaces an Unknown. `run.properties.mode` records it. `Release: minor`. Needs P1-013,
+  only ever replaces an Unknown. `run.properties.mode` records it. Measured on `gitextensions-8522`: thorough is 37
+  times quick's time for one more proof, which is why ADR 0052 made quick the default. `Release: minor`. Needs P1-013,
   P1-016, P1-010, P1-035, P2-050, P2-076.
 - P2-135 (M) Precision: thorough's IL pass reports a Divergent where the two sides only bind to
   different callees (`samples/business-layer`'s `Describe`: `String::Format` against the interpolated
@@ -956,8 +957,8 @@ open ticket, in this order:
    two pairs' changed pairs), P2-087 (`Binary`, 6.2% of OpenRA's), P2-095 (13 of
    gitextensions-9860's 16 `Conversion` pairs), P2-093 and P2-104 (pattern forms behind cleanup
    samples), and P1-028, which counts the unowned tail and needs no run.
-5. P1-032 (the thorough and quick modes, ADR 0049), so the reruns measure the default mode a user
-   gets.
+5. P1-032 (the thorough and quick modes, ADR 0049; done, with quick the default under ADR 0052). The
+   reruns name their compare mode, as `equiv-corpus-run` says.
 6. The reruns, each applying `equiv-scoreboard`: P2-124 (two upgrades), P2-110 (three cleanups),
    then P2-130 (Git Extensions 4.8 to .NET 5, Duplicati, OpenRA), which also writes the scoreboard
    over all five large pairs and names the next milestone.

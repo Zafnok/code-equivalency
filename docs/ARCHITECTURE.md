@@ -117,7 +117,7 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
   [--chc-int-mode true|false] [--invariant-model <id>] [--il-fallback] [--resource-limit <n>] [--jobs <n>]`.
 - `--legacy` and `--modern` mean before and after the change, on any runtime pair; `--before` and
   `--after` are aliases, and both spellings of one option are a usage error (ADR 0040 decision 4).
-- `--mode` (default `thorough`; ADR 0049, ticket P1-032) overrides the config's `mode`; any other value is exit 3.
+- `--mode` (default `quick`; ADR 0049, ADR 0052, ticket P1-032) overrides the config's `mode`; any other value is exit 3.
   `CompareCommand` runs the passes (VERIFICATION-MODEL.md section 6 has the table): the first pass over every matched
   pair, the same in both modes; then, in thorough only, the budget pass and the IL pass, each over the results that are
   still Unknown; then each result's assumptions; the contracts pass, in thorough only; and `--execute`.

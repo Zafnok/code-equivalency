@@ -245,7 +245,7 @@ runs the solver and exits 0 unless loading fails. It cannot be combined with `--
 target, which must be installed. It needs Windows only when a side targets .NET Framework
 (otherwise exit 3). It replays every Divergent's counterexample on both runtimes and records
 the outcome in `properties.replay`: `reproduced`, `not-reproduced`, `not-applicable` or
-`not-constructible`. It also tests every Unknown pair on generated inputs, and a divergence it
+`not-constructible`. With `--mode thorough` it also tests every Unknown pair on generated inputs, and a divergence it
 sees twice becomes an EQ002 with `proofMethod: observed`. Testing a pair stops once the estimated
 chance of new behaviour drops below `--test-target` (default 0.001, after at least 1,000 inputs),
 or at `--test-budget` (default `10000,60`: 10,000 inputs or 60 seconds). Execution never yields
@@ -258,14 +258,22 @@ proposer, which mines invariants from runs in process and sends nothing, is on b
 is asked first. `--chc-int-mode` (default `true`) lets rung 4 try integer arithmetic before
 falling back to bitvectors.
 
-`--mode thorough|quick` (default `thorough`; the config key `mode`, which the option overrides) chooses how much
-machine time a run spends to leave fewer Unknowns (ADR 0049). Both modes run the same first pass. `thorough` then
+`--mode quick|thorough` (default `quick`; the config key `mode`, which the option overrides) chooses how much
+machine time a run spends to leave fewer Unknowns (ADR 0049, ADR 0052). Both modes run the same first pass, and
+`quick` stops there. `thorough` then
 verifies again only the pairs that are still Unknown: with a larger bound and budget (`bound` 8, `resourceLimit`
 30,000,000, `timeoutMs` 600,000; the config's `escalation` replaces them) when a query ran out of budget or the pair
 has a loop, and then from IL when a pair holds an opaque the other side lacks. It also asks whether either side of a
 `timeout` Unknown can fail where the other does not, runs the contracts pass, and, under `--execute`, tests every
-Unknown. `quick` stops after the first pass, for a diff check that must come back soon. No verdict means anything
-different in either mode: quick answers Unknown where thorough may decide, never the reverse. A result a later pass
+Unknown. No verdict means anything
+different in either mode: quick answers Unknown where thorough may decide, never the reverse.
+
+Quick is the default because thorough is expensive for what it adds. On Git Extensions PR #8522 (13,541 matched
+pairs, four threads) quick takes 17 minutes and thorough 10.3 hours. For that, thorough proves one more pair
+Equivalent, reports 41 more Divergent and leaves 42 fewer Unknown, and it never changes a result quick decided. Some
+of its extra Divergents are false: read from IL, two runtimes' different bindings of the same source (an
+interpolated string, say) are different calls. Ask for `--mode thorough` when a run can take a night and every
+remaining Unknown is worth the machine time, and review a result marked `decidedBy: il-pass` before trusting it. A result a later pass
 produced says so in `properties.decidedBy` (`budget-pass` or `il-pass`), the run records its mode and budgets in
 `run.properties.mode`, and a `--baseline` written in the other mode is a warning. A mode never turns on `--execute`
 or `--invariant-model`.
@@ -292,7 +300,7 @@ changes.
 
 `--il-fallback` (off by default) adds IL lowering to `--mode quick`: it lowers a matched pair again from IL on both sides when
 it is not congruent and either side holds an opaque the other lacks, and keeps the IL bodies only
-when they hold fewer such opaques. (`thorough` reads such a pair from IL anyway, as a later pass and only while it is
+when they hold fewer such opaques. (`--mode thorough` reads such a pair from IL anyway, as a later pass and only while it is
 Unknown.) Every result on a matched pair then says which lowering it used,
 in `properties.lowering` (`operation` or `il`), and the census counts `pairsIlFallbackTried` and
 `pairsLoweredFromIl`.

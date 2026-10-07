@@ -305,8 +305,9 @@ public sealed partial class CompareCommandProgressTests
     }
 
     /// <summary>One pair at a time, so the events are in the pairs' order.</summary>
+    /// <summary>Thorough mode, so the contracts pass and the testing of Unknowns under <c>--execute</c> are phases of the run (ADR 0052).</summary>
     private static CompareOptions Options(string legacy, string modern) =>
-        new(legacy, modern, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { Jobs = 1 };
+        new(legacy, modern, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { Jobs = 1, Mode = "thorough" };
 
     /// <summary>One pair for each way the verify phase decides it: three without the solver, five with it.</summary>
     private static FakeFrontend Frontend() => new(

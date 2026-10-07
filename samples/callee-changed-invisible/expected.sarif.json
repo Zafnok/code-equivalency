@@ -73,7 +73,7 @@
           "kind": "pass",
           "level": "none",
           "message": {
-            "text": "Equiv.Samples.CalleeChangedInvisible.Grading::Classify(int) is equivalent."
+            "text": "Equiv.Samples.CalleeChangedInvisible.Grading::Classify(int) is equivalent. Assumes callees equivalent; not proved for: Equiv.Samples.CalleeChangedInvisible.Grading::Score(int)."
           },
           "locations": [
             {
@@ -96,22 +96,11 @@
           },
           "baselineState": "new",
           "properties": {
-            "proofMethod": "bounded+contract",
-            "contractsUsed": [
-              {
-                "callee": "Equiv.Samples.CalleeChangedInvisible.Grading::Score(int)",
-                "contract": "(and (= threw.old threw.new) (=> (and threw.old threw.new) (= type.old type.new)) (= calls.old calls.new) (or threw.old threw.new (= (bvsgt r.old #x00000000) (bvsgt r.new #x00000000))))",
-                "proposedBy": "observed-predicates"
-              }
-            ],
-            "ladderTrace": [
-              {
-                "rung": "bounded",
-                "outcome": "proved",
-                "detail": "no loop or self-call; every input checked"
-              }
-            ],
+            "proofMethod": "congruence",
             "assumedCallees": [
+              "Equiv.Samples.CalleeChangedInvisible.Grading::Score(int)"
+            ],
+            "unprovenAssumptions": [
               "Equiv.Samples.CalleeChangedInvisible.Grading::Score(int)"
             ]
           }
@@ -237,15 +226,10 @@
           ]
         },
         "mode": {
-          "name": "thorough",
+          "name": "quick",
           "bound": 3,
           "resourceLimit": 5000000,
           "timeoutMs": 60000,
-          "escalation": {
-            "bound": 8,
-            "resourceLimit": 30000000,
-            "timeoutMs": 600000
-          },
           "explicit": [
             "resourceLimit"
           ]

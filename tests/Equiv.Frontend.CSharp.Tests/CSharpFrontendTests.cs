@@ -338,9 +338,9 @@ public sealed class CSharpFrontendTests
             new StubLoader(path => new LoadedSolution(null!, [string.Equals(path, "legacy.sln", StringComparison.Ordinal) ? legacyCompilation : modernCompilation], [], [])),
             new StableIdentityMatcher());
 
-        MatchResult thorough = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = ilFallback }, NullRunLog.Instance, CancellationToken.None).Match;
+        MatchResult thorough = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = ilFallback, Mode = CompareMode.Thorough }, NullRunLog.Instance, CancellationToken.None).Match;
         MatchResult replaced = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { IlFallback = true, Mode = CompareMode.Quick }, NullRunLog.Instance, CancellationToken.None).Match;
-        MatchResult quick = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default with { Mode = CompareMode.Quick }, NullRunLog.Instance, CancellationToken.None).Match;
+        MatchResult quick = frontend.Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
 
         ProcedurePair add = thorough.Pairs.Single(static p => p.New.Value.Contains("::Add(", StringComparison.Ordinal));
         ProcedurePair has = thorough.Pairs.Single(static p => p.New.Value.Contains("::Has(", StringComparison.Ordinal));

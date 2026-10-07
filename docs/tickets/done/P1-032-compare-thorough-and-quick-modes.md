@@ -7,7 +7,7 @@ Depends on: P1-013, P1-016, P1-010, P1-035, P2-050, P2-076
 ## Goal
 ADR 0049. A migration run should spend machine time to leave fewer Unknowns; a diff check should
 come back quickly. Today there is one setting. When done, `compare` has two modes. Both run the same
-first pass. `thorough` (the default) then verifies again, with more budget and from IL, only the
+first pass. `thorough` (the default when this ticket was written; `quick` is, since ADR 0052) then verifies again, with more budget and from IL, only the
 pairs that are still Unknown, asks ADR 0037's queries on `timeout` Unknowns, and runs the contracts
 pass. `quick` stops after the first pass. No verdict means anything different in either mode.
 
@@ -49,7 +49,7 @@ Pitfalls.
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. `compare --mode thorough|quick`, config key `mode`, MCP `compare` input `mode` and `action.yml`
    input `mode` select the mode; any other value is exit 3 (a tool error over MCP). The command line
-   wins over the config, and the default is `thorough`.
+   wins over the config, and the default is `quick` (ADR 0052; this criterion said `thorough`, see the Deviation in Notes).
 2. Each cell of ADR 0049's table holds, shown by a test per row that names the mode and the step
    that did or did not run.
 3. Explicit `bound`, `resourceLimit`, `timeoutMs` and `--resource-limit` replace the first pass's
@@ -64,7 +64,7 @@ Pitfalls.
    Verify snapshot for one run in each mode. Fingerprints, rule ids and exit codes are unchanged for
    a result both modes decide alike. A `--baseline` whose `run.properties.mode.name` differs gives one
    stderr warning.
-7. Thorough without `--execute` prints one stderr note that Unknowns were not tested. With
+7. Thorough without `--execute` prints one stderr note that Unknowns were not tested (when it has any). With
    `--execute`, quick replays Divergents and tests no Unknown.
 8. A `timeout` Unknown in thorough carries `properties.failureRefinement`; in quick it does not.
    ADR 0037's taint and opaque rules are unchanged, pinned by the existing P1-013 tests run in both
@@ -125,6 +125,12 @@ queries on `unbound` Unknowns. Fixing P2-078 (criterion 9 makes its crash harmle
 
 ## Notes
 - Decided by the user on 2026-10-04 and recorded as ADR 0049 the same day.
+- Deviation: criterion 1 and the Goal said the default is `thorough`. Criterion 11's runs put thorough at 37 times
+  quick's time on `gitextensions-8522` for one more Equivalent and 41 unadjudicated Divergents, some known false
+  (P2-135). The user decided on 2026-10-06 that quick is the default and thorough stays an option; ADR 0052 records
+  it and supersedes the default of ADR 0049 decision 1. Nothing else in ADR 0049 changed. The samples'
+  `expected.sarif.json` are therefore quick runs, the tests of thorough's passes ask for `--mode thorough`, and a
+  default `--execute` run tests no Unknown (ADR 0049's table).
 - The escalation `bound` of 8 is not measured; criterion 11's thorough run is its first measurement.
 - Decision: with a budget pass, the first pass turns rung 5's local proposer and failure refinement on a `timeout`
   Unknown off in thorough too, and the budget pass asks both. That keeps "both modes begin with the same first pass"

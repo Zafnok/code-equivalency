@@ -5,8 +5,8 @@ Model: Opus, high effort. If you are not Opus or Fable, stop before doing anythi
 Depends on: P1-032
 
 ## Goal
-P1-032 made thorough the default and measured it on `gitextensions-8522` with `--jobs 4` (its Notes hold the
-tables). Quick takes 999 s. Thorough takes 37,184 s, and its later passes are where the time goes:
+P1-032 built thorough mode and measured it on `gitextensions-8522` with `--jobs 4` (its Notes hold the
+tables), and ADR 0052 made quick the default because of what it cost. Quick takes 999 s. Thorough takes 37,184 s, and its later passes are where the time goes:
 
 - the budget pass (`bound` 8, `resourceLimit` 30,000,000, `timeoutMs` 600,000) verifies 255 pairs again in 30,222 s
   and decides 29, all Divergent (27 EQ006, 2 EQ002), and no Equivalent; 67 more leave `timeout` for another reason;
@@ -45,7 +45,7 @@ ADR 0049 (the mode table, decisions 4 and 7), ADR 0037, ticket P1-032's Notes, `
 Four runs of about ten hours each. If a run cannot finish in a day, record how far it got and stop.
 
 ## Out of scope
-Parallel verification past four threads (P2-132). Whether thorough is the default (ADR 0049 decides that).
+Parallel verification past four threads (P2-132). Whether thorough is the default (ADR 0052 decides that; this ticket's table is what a later ADR would revisit it with).
 The IL pass's false Divergents (P2-135).
 
 ## Notes

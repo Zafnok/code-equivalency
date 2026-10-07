@@ -22,3 +22,7 @@ returns the changed value, so no contract can hide the change there.
 | `Grading.Classify(int)` | Equivalent | `bounded+contract` | `Score` | (none) |
 
 Exit code: 1 (a new Divergent result).
+
+The contracts pass runs with `--mode thorough` (ADR 0049), and the table above is that run. `expected.sarif.json` is
+the default run, quick mode (ADR 0052): there `Classify` is Equivalent as its first proof left it, with `Score` in
+`unprovenAssumptions` and no `contractsUsed`.

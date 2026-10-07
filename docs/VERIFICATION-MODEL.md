@@ -867,9 +867,11 @@ Every Unknown carries `properties.scope` (ADR 0029):
   on the unrolled pair, which proves nothing past the bound. An `abstraction` Unknown is `method`
   too, since the first query found its candidate, so that query was satisfiable (ticket M3-025).
 
-`equiv compare` has two modes (ADR 0049; ticket P1-032): `--mode thorough|quick`, the config key `mode`, `mode` on
-the MCP `compare` tool and in `action.yml`. The command line wins over the config, the default is `thorough`, and any
-other value is exit 3. Both modes begin with the same first pass. Thorough then runs further passes, each over the
+`equiv compare` has two modes (ADR 0049, ADR 0052; ticket P1-032): `--mode quick|thorough`, the config key `mode`,
+`mode` on the MCP `compare` tool and in `action.yml`. The command line wins over the config, the default is `quick`,
+and any other value is exit 3. Quick is the default because of what thorough measured on `gitextensions-8522` with
+four threads: 37,184 s against quick's 999 s, for 1 more Equivalent, 41 more Divergent and 42 fewer Unknown, with
+Divergents from the IL pass that are not all real (ADR 0052). Both modes begin with the same first pass. Thorough then runs further passes, each over the
 pairs that are still Unknown and that the solver, not the CLI, made Unknown. A later pass's result replaces the
 earlier one when it is Equivalent or Divergent, or when it is an Unknown that is neither `timeout` nor `chc-timeout`
 and the earlier one was; otherwise the earlier result stands. So quick answers Unknown where thorough may decide, and

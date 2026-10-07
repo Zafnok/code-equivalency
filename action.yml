@@ -26,8 +26,9 @@ inputs:
     required: false
   mode:
     description: >-
-      "thorough" (default) verifies again, with more budget and from IL, the pairs a first pass
-      leaves Unknown; "quick" stops after the first pass. Any other value fails the action (exit 3).
+      "quick" (default) stops after the first pass; "thorough" then verifies again, with more
+      budget and from IL, the pairs still Unknown, which can take hours. Any other value fails the
+      action (exit 3).
     required: false
 
 outputs:

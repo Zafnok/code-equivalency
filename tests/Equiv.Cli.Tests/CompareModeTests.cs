@@ -34,6 +34,9 @@ public sealed class CompareModeTests
     private const string Budget = "budget";
     private const string Il = "il";
 
+    /// <summary>The mode a run here is in unless its test names another: most of these tests are about thorough's passes.</summary>
+    private const string ThoroughMode = "thorough";
+
     /// <summary>The callee only a body lowered from IL calls, which is how the backend here tells the IL pass.</summary>
     private const string FromIl = "T::FromIl()";
 
@@ -45,19 +48,27 @@ public sealed class CompareModeTests
 
     private static readonly FailureRefinement Refinement = new(RefinementResult.NoneProved, RefinementResult.Unknown);
 
-    /// <summary>Criterion 1 (ADR 0049 decision 1): with no <c>--mode</c> and no config the run is thorough, the frontend hears it, and the run records it.</summary>
+    /// <summary>
+    /// Criterion 1 as ADR 0052 amends it: with no <c>--mode</c> and no config the run is quick, the frontend hears it,
+    /// the run records it, and the backend is asked once, at the first pass's values.
+    /// </summary>
     [Fact]
-    public void Mode_DefaultsToThorough()
+    public void Mode_DefaultsToQuick()
     {
         FakeFrontend frontend = new("csharp", _ => true, Match(Plain("T::A()")));
         Command command = CompareCommand.Create([frontend], new FakeBackend(Verdicts(("T::A()", Proved))));
 
-        Ran ran = Run(frontend, new PassBackend(Script(("T::A()", First, Proved))));
+        PassBackend backend = new(Script(("T::A()", First, TimedOut())));
+
+        Ran ran = Run(frontend, backend, mode: null);
 
         Assert.Null(command.Parse(["--legacy", "a.sln", "--modern", "b.sln"]).GetValue<string?>("--mode"));
         Assert.Equal(ExitCodes.Success, ran.ExitCode);
-        Assert.Equal(CompareMode.Thorough, frontend.LastConfig!.Mode);
-        Assert.Equal(DefaultMode, ran.Mode);
+        Assert.Equal(CompareMode.Quick, frontend.LastConfig!.Mode);
+        Assert.Equal(CompareMode.Quick, EquivConfig.Default.Mode);
+        Assert.Equal("""{"name":"quick","bound":3,"resourceLimit":2000000,"timeoutMs":60000,"explicit":[]}""", ran.Mode);
+        Assert.Equal(First, Assert.Single(backend.Calls).Pass);
+        Assert.Empty(ran.StdErr);
     }
 
     /// <summary>Criterion 1: <c>--mode</c> wins over the config's <c>mode</c>, in both directions, and the config's stands without it.</summary>
@@ -559,7 +570,7 @@ public sealed class CompareModeTests
     private static Dictionary<(string Identity, string Pass), Verdict> Script(params (string Identity, string Pass, Verdict Verdict)[] answers) =>
         answers.ToDictionary(static a => (a.Identity, a.Pass), static a => a.Verdict);
 
-    private static Ran Run(MatchResult match, IVerificationBackend backend, string? mode = null, string? config = null, string? baseline = null, string? failOn = null) =>
+    private static Ran Run(MatchResult match, IVerificationBackend backend, string? mode = ThoroughMode, string? config = null, string? baseline = null, string? failOn = null) =>
         Run(new FakeFrontend("csharp", _ => true, match), backend, mode, config, baseline, failOn);
 
     /// <summary>
@@ -569,7 +580,7 @@ public sealed class CompareModeTests
     private static Ran Run(
         FakeFrontend frontend,
         IVerificationBackend backend,
-        string? mode = null,
+        string? mode = ThoroughMode,
         string? config = null,
         string? baseline = null,
         string? failOn = null,

@@ -24,7 +24,7 @@ namespace Equiv.Cli;
 /// <see cref="IlFallback"/> is <c>--il-fallback</c>, off by default: lower a pair with an unshared opaque again from IL (ADR 0039;
 /// ticket P1-016).
 /// <see cref="Mode"/> is <c>--mode</c>, <c>thorough</c> or <c>quick</c>, which overrides the config's <c>mode</c>; null
-/// leaves the config's, thorough unless set, and any other name is exit 3 (ADR 0049; ticket P1-032).
+/// leaves the config's, quick unless set, and any other name is exit 3 (ADR 0049, ADR 0052; ticket P1-032).
 /// </summary>
 internal sealed record CompareOptions(
     string LegacyPath,

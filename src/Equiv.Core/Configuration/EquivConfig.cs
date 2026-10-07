@@ -77,7 +77,7 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
     /// </summary>
     public string? Cvc5Path { get; init; }
 
-    /// <summary><c>mode</c> (ADR 0049; ticket P1-032): thorough unless set. The command line's <c>--mode</c> wins over it.</summary>
+    /// <summary><c>mode</c> (ADR 0049, ADR 0052; ticket P1-032): quick unless set. The command line's <c>--mode</c> wins over it.</summary>
     public CompareMode Mode { get; init; }
 
     /// <summary>

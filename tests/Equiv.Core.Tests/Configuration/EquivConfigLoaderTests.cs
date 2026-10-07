@@ -102,17 +102,18 @@ public sealed class EquivConfigLoaderTests
     }
 
     /// <summary>
-    /// Ticket P1-032 criterion 1 (ADR 0049 decision 1): the mode is thorough unless <c>mode</c> says quick, and the first
+    /// Ticket P1-032 criterion 1 as ADR 0052 amends it: the mode is quick unless <c>mode</c> says thorough, and the first
     /// pass's resource limit is 2,000,000 in either.
     /// </summary>
     [Fact]
-    public void Mode_DefaultsToThorough()
+    public void Mode_DefaultsToQuick()
     {
-        Assert.Equal(CompareMode.Thorough, EquivConfig.Default.Mode);
-        Assert.Equal(CompareMode.Thorough, EquivConfigLoader.Load("{}").Config.Mode);
+        Assert.Equal(CompareMode.Quick, EquivConfig.Default.Mode);
+        Assert.Equal(CompareMode.Quick, default(CompareMode));
+        Assert.Equal(CompareMode.Quick, EquivConfigLoader.Load("{}").Config.Mode);
         Assert.Equal(CompareMode.Thorough, EquivConfigLoader.Load("""{ "mode": "thorough" }""").Config.Mode);
         Assert.Equal(CompareMode.Quick, EquivConfigLoader.Load("""{ "mode": "quick" }""").Config.Mode);
-        Assert.True(EquivConfigLoader.Load("""{ "mode": "quick" }""").IsValid);
+        Assert.True(EquivConfigLoader.Load("""{ "mode": "thorough" }""").IsValid);
         Assert.Equal((3, 2_000_000, 60_000), (EquivConfig.Default.Bound, EquivConfig.Default.ResourceLimit, EquivConfig.Default.TimeoutMs));
         Assert.Equal(new Escalation(8, 30_000_000, 600_000), EquivConfig.Default.Escalation);
     }
@@ -128,7 +129,7 @@ public sealed class EquivConfigLoaderTests
         EquivConfigResult result = EquivConfigLoader.Load(json);
 
         Assert.Equal(new EquivConfigDiagnostic("CFG013", "/mode", "\"mode\" must be \"thorough\" or \"quick\""), Assert.Single(result.Diagnostics));
-        Assert.Equal(CompareMode.Thorough, result.Config.Mode);
+        Assert.Equal(CompareMode.Quick, result.Config.Mode);
         Assert.Null(EquivConfigLoader.ParseMode(name: null));
     }
 

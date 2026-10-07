@@ -22,15 +22,15 @@ behaviour-preserving, so every row that is not Equivalent is a gap, and names th
 | Procedure | Verdict today | Reason | Owner |
 |---|---|---|---|
 | `Circle.Diameter` (getter) | Equivalent, `proofMethod: bounded` | | |
-| `Tidy.Grade(int)` | Equivalent in thorough mode (`decidedBy: il-pass`); Unknown (`opaque`, line scope) in quick | modern: `switch-pattern`. A relational pattern (`>= 90`) is not lowered | P2-093 |
+| `Tidy.Grade(int)` | Unknown (`opaque`, line scope) | modern: `switch-pattern`. A relational pattern (`>= 90`) is not lowered | P2-093 |
 | `Tidy.Join(string, string)` | Divergent (a precision bug) | legacy calls `String::Format(string,object,object)`, modern lowers to `String::Concat(string,string)`, so the call traces differ | P2-094 |
-| `Tidy.LengthOf(string)` | Equivalent in thorough mode (`decidedBy: il-pass`); Unknown (`opaque`, line scope) in quick | legacy: `Conversion`; modern: `DefaultValue` and `Conversion`. A conversion to `int?` and `default(int?)` are not lowered | P2-095 |
+| `Tidy.LengthOf(string)` | Unknown (`opaque`, line scope) | legacy: `Conversion`; modern: `DefaultValue` and `Conversion`. A conversion to `int?` and `default(int?)` are not lowered | P2-095 |
 | `Tidy.OrDefault(string, string)` | Equivalent, `proofMethod: bounded` | | |
 | `Tidy.Measure(object)` | Equivalent, `proofMethod: bounded` | | |
 | `Tidy.Positives(List<int>)` | Unknown (`abstraction`, method scope) | the loop's enumerator and `Add` calls against the uninterpreted `Enumerable::Where` and `ToList`, whose result depends on the lambda | P2-096 |
 
 Exit code: 1 (one Divergent result).
 
-`expected.sarif.json` is the default run, thorough mode (ADR 0049, ticket P1-032). `Grade` and `LengthOf` are Unknown
-after its first pass, as they are in `--mode quick`; its IL pass then proves both from their IL bodies, which hold
-neither opaque. Their rows keep their owners: the IOperation lowering still does not lower those constructs.
+`expected.sarif.json` is the default run, quick mode (ADR 0052). With `--mode thorough` (ADR 0049, ticket P1-032)
+`Grade` and `LengthOf` are proved Equivalent by the IL pass (`decidedBy: il-pass`), from IL bodies that hold neither
+opaque. Their rows keep their owners: the IOperation lowering still does not lower those constructs.

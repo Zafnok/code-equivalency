@@ -256,7 +256,7 @@ public sealed partial class CompareCommandTests
         InMemoryReportSink sink = new();
         int exitCode = ExitCodes.UsageError;
         string stderr = CaptureStdErr(() => CaptureStdOut(() => exitCode = CompareCommand.Run(
-            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: lowerOnly) { Jobs = jobs },
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false, LowerOnly: lowerOnly) { Jobs = jobs, Mode = "thorough" },
             [new FakeFrontend("csharp", _ => true, new MatchResult([.. pairs], [], [], []))], backend, sink, NullRunLog.Instance)));
         return (exitCode, sink.Log!, stderr);
     }
