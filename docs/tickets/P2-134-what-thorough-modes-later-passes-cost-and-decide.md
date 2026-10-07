@@ -46,7 +46,7 @@ Four runs of about ten hours each. If a run cannot finish in a day, record how f
 
 ## Out of scope
 Parallel verification past four threads (P2-132). Whether thorough is the default (ADR 0049 decides that).
-The IL pass's false Divergents (P2-133).
+The IL pass's false Divergents (P2-135).
 
 ## Notes
 - Filed by P1-032 on 2026-10-06 from criterion 11's runs.

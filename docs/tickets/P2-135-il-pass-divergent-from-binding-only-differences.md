@@ -1,4 +1,4 @@
-# P2-133 Precision: thorough mode's IL pass reports a Divergent where the two sides only bind to different callees
+# P2-135 Precision: thorough mode's IL pass reports a Divergent where the two sides only bind to different callees
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.

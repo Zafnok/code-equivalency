@@ -158,7 +158,7 @@ queries on `unbound` Unknowns. Fixing P2-078 (criterion 9 makes its crash harmle
 - Finding: thorough's IL pass can report a Divergent that is not one. `samples/business-layer`'s `Describe` is
   Unknown in quick and EQ002 (`decidedBy: il-pass`) in thorough, because `String::Format` and the interpolated
   string handler are different calls in IL; the sample's README says its true verdict is Equivalent. It is the
-  behaviour ADR 0039 measured and ADR 0049 turned on. P2-133 is filed. The same pass finds the real new throw of
+  behaviour ADR 0039 measured and ADR 0049 turned on. P2-135 is filed. The same pass finds the real new throw of
   `samples/unknown-new-throw` and proves two pairs of `samples/cleanup-modern-syntax` and both of
   `samples/il-fallback`. `TestedUnknownTests.BusinessLayer_Execute_Snapshot` no longer has an Unknown to test on that
   sample and now checks the replayed `il-pass` Divergent instead; P1-008's tester keeps its own tests.
@@ -206,7 +206,7 @@ queries on `unbound` Unknowns. Fixing P2-078 (criterion 9 makes its crash harmle
   - No result decided in quick is Unknown in thorough: 0 of 12,941 has another rule id.
   - Thorough's budget pass produced 96 results: 2 EQ002 and 27 EQ006, and 67 Unknowns that left `timeout` (25
     `abstraction`, 23 `opaque`, 19 `unaligned-loop`). It proved no pair Equivalent. 159 pairs kept their first result.
-  - Thorough's IL pass produced 13: 1 EQ001, 5 EQ002, 7 EQ006 (P2-133 adjudicates the 12 Divergents; ADR 0039's
+  - Thorough's IL pass produced 13: 1 EQ001, 5 EQ002, 7 EQ006 (P2-135 adjudicates the 12 Divergents; ADR 0039's
     measurement found none of its 21 reproduced by replay). At the first pass's budgets the pass produced the same
     numbers of each in 327 s against 5,794 s.
   - All 84 `timeout` Unknowns of thorough carry `failureRefinement`: 74 with both answers `unknown`, 9 with both

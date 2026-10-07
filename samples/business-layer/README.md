@@ -74,7 +74,7 @@ Congruent results that call another matched procedure list it in `properties.ass
 | `OrderService.ParseQuantity(string)` | `int.TryParse(s, out var n)` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-003 |
 | `OrderService.ConfirmAsync(Task<Order>)` | `async`/`await` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-006 |
 | `OrderService.QuantityOf(object)` | `is T t` pattern | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-005 |
-| `OrderService.Describe(Order)` | interpolated string | binding only | Divergent in thorough mode (`decidedBy: il-pass`, a precision bug); Unknown in quick | Equivalent | none yet: not congruent, see above | P2-133 |
+| `OrderService.Describe(Order)` | interpolated string | binding only | Divergent in thorough mode (`decidedBy: il-pass`, a precision bug); Unknown in quick | Equivalent | none yet: not congruent, see above | P2-135 |
 | `OrderService.Export(Order)` | `using` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-001 |
 | `OrderService.Record()` | `lock` | unchanged | Equivalent (congruence) | Equivalent | M3-015 | M4-011 |
 | `OrderService.IsLarge(int)` | integer comparison | unchanged | Equivalent (congruence) | Equivalent | M3-001 | M3-001 |

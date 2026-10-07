@@ -865,7 +865,7 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   Unknowns (P1-035), and runs the contracts pass; quick stops after the first pass. A later pass
   only ever replaces an Unknown. `run.properties.mode` records it. `Release: minor`. Needs P1-013,
   P1-016, P1-010, P1-035, P2-050, P2-076.
-- P2-133 (M) Precision: thorough's IL pass reports a Divergent where the two sides only bind to
+- P2-135 (M) Precision: thorough's IL pass reports a Divergent where the two sides only bind to
   different callees (`samples/business-layer`'s `Describe`: `String::Format` against the interpolated
   string handler). Adjudicate the `il-pass` Divergents of P1-032's thorough run, then fix the largest
   cause. Filed by P1-032. Needs P1-032.
