@@ -61,7 +61,7 @@ public sealed class IlLoweringOracleTests
     private static readonly decimal[] Decimals = [0m, 1m, 0.5m, 2.5m, -3m, 1000m, 79228162514264337593543950335m];
 
     /// <summary>The number of the string literal <c>"s"</c>, the element <see cref="TypeMapper"/> designates for it.</summary>
-    private static readonly int Literal = ((IrSortValue)TypeMapper.Constant(RoslynTestCompilations.Compile(string.Empty).GetSpecialType(SpecialType.System_String), "s")).Id;
+    private static readonly int Literal = (int)((IrSortValue)TypeMapper.Constant(RoslynTestCompilations.Compile(string.Empty).GetSpecialType(SpecialType.System_String), "s")).Id;
 
     private static readonly Gen<int> Small = Gen.OneOf(Gen.Int[-9, 9], Gen.Const(int.MinValue), Gen.Const(int.MaxValue), Gen.Int);
 
@@ -401,8 +401,8 @@ public sealed class IlLoweringOracleTests
     /// </summary>
     private sealed class NumberOracle : IPureOracle
     {
-        private readonly Dictionary<(string Sort, int Element), object> values = [];
-        private readonly Dictionary<(string Sort, string Key), int> elements = [];
+        private readonly Dictionary<(string Sort, long Element), object> values = [];
+        private readonly Dictionary<(string Sort, string Key), long> elements = [];
         private int next = 1;
 
         public NumberOracle(Compilation compilation)
@@ -455,7 +455,7 @@ public sealed class IlLoweringOracleTests
 
         private IrSortValue Element(string sort, object value)
         {
-            if (!elements.TryGetValue((sort, Key(value)), out int element))
+            if (!elements.TryGetValue((sort, Key(value)), out long element))
             {
                 while (values.ContainsKey((sort, next)))
                 {

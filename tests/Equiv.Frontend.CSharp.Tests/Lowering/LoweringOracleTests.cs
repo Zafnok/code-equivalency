@@ -435,7 +435,7 @@ public sealed class LoweringOracleTests
             }
         }
 
-        private decimal Value(IrValue element) => element == one ? 1m : values[((IrSortValue)element).Id - 1];
+        private decimal Value(IrValue element) => element == one ? 1m : values[(int)((IrSortValue)element).Id - 1];
     }
 
     /// <summary>
@@ -529,6 +529,6 @@ public sealed class LoweringOracleTests
         private static IrMapValue Bumped(IrMapValue cells, IrValue k) =>
             cells.Write(CellReference, IrBitVecValue.FromSigned(32, unchecked((int)(((IrBitVecValue)cells.Read(CellReference)).TwosComplement + ((IrBitVecValue)k).TwosComplement))));
 
-        private IEnumerator<int> Enumerator(ImmutableArray<IrValue> arguments) => enumerators[((IrSortValue)arguments[0]).Id - 1];
+        private IEnumerator<int> Enumerator(ImmutableArray<IrValue> arguments) => enumerators[(int)((IrSortValue)arguments[0]).Id - 1];
     }
 }

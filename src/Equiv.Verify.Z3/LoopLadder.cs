@@ -7,6 +7,7 @@ using Equiv.Core.Verdicts;
 
 using Equiv.Verify.Z3.Contracts;
 using Equiv.Verify.Z3.Ladder;
+using Equiv.Verify.Z3.Refinement;
 
 using Microsoft.Z3;
 
@@ -92,6 +93,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         bool recursive = oldShape.IsSelfRecursive || newShape.IsSelfRecursive;
         bool looping = recursive || !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
         List<Rung> rungs = [Timed(() => Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible))];
+        Refine(rungs, old, @new, looping);
         if (looping && rungs[^1].Verdict is null)
         {
             LockstepInduction lockstep = Stages.Timed(options, Stages.Couple, () => new LockstepInduction(this, old, @new, oldShape, newShape));
@@ -111,6 +113,35 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
 
         Verdict verdict = rungs[^1].Verdict ?? Undecided(rungs, recursive);
         return verdict with { Ladder = [.. rungs.Select(static r => r.Step)] };
+    }
+
+    /// <summary>
+    /// Abstraction refinement (ADR 0053 decision 1; ticket P1-030). When rung 1 ended Unknown(abstraction) on a candidate
+    /// that depends only on interpretable pure functions, rung 1 is asked again with those functions interpreted, at most
+    /// <see cref="AbstractionRefinement.MaxRounds"/> times, each round adding what its candidate depends on. A round that
+    /// decides the pair (Equivalent, Divergent, or Unknown(opaque) with the first query unsatisfiable) is appended with
+    /// the rounds before it, each step naming what it interpreted. Anything else, a query the solver gives up on
+    /// included, leaves <paramref name="rungs"/> and so the Unknown(abstraction) as they were.
+    /// </summary>
+    private void Refine(List<Rung> rungs, IrProcedure old, IrProcedure @new, bool looping)
+    {
+        List<Rung> rounds = [];
+        ImmutableSortedSet<string> interpreted = ImmutableSortedSet.Create<string>(StringComparer.Ordinal);
+        Verdict? last = rungs[0].Verdict;
+        while (rounds.Count < AbstractionRefinement.MaxRounds
+            && last is Unknown { Reason: UnknownReason.Abstraction } candidate
+            && AbstractionRefinement.Next(old, @new, interpreted, candidate.Abstractions) is { } next)
+        {
+            interpreted = next;
+            Rung round = Timed(() => Bounded(old, @new, looping, reducible: true, interpreted));
+            rounds.Add(round with { Step = round.Step with { Refined = [.. interpreted] } });
+            last = round.Verdict;
+        }
+
+        if (rounds.Count > 0 && last is not (null or Unknown { Reason: UnknownReason.Abstraction }))
+        {
+            rungs.AddRange(rounds);
+        }
     }
 
     /// <summary>Runs one rung and, at <c>debug</c>, writes its <c>rung=… took=… result=…</c> line (ticket M4-014).</summary>
@@ -266,11 +297,16 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             _ => UnknownReason.Timeout,
         };
 
-    private T Session<T>(IrProcedure old, IrProcedure @new, Func<Context, ProductEncoding, T> body, ProductEncoder.TraceComparison traces = ProductEncoder.TraceComparison.Sequence) =>
+    private T Session<T>(
+        IrProcedure old,
+        IrProcedure @new,
+        Func<Context, ProductEncoding, T> body,
+        ProductEncoder.TraceComparison traces = ProductEncoder.TraceComparison.Sequence,
+        IReadOnlySet<string>? interpreted = null) =>
         Stages.WithContext(
             options,
             createContext,
-            context => body(context, Stages.Timed(options, Stages.Encode, () => ProductEncoder.Encode(context, old, @new, options.CallIdentityMap, Contracts, Relation, traces))));
+            context => body(context, Stages.Timed(options, Stages.Encode, () => ProductEncoder.Encode(context, old, @new, options.CallIdentityMap, Contracts, Relation, traces, interpreted))));
 
     /// <summary>
     /// Rung 1. Not applicable to irreducible control flow, or to a self-recursive side that cannot be inlined
@@ -279,9 +315,10 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
     /// any opaque, then (for a looping pair) whether any input reaches the bound at all. Each is asked of Z3 and, when Z3
     /// gives up and a second solver is configured, of that solver (<see cref="SecondSolver"/>; ADR 0050); the step names
     /// the solver when it answered one. The product compares the call traces by position (<see cref="PositionalTrace"/>;
-    /// ticket P1-038); every other rung's compares them as sequences.
+    /// ticket P1-038); every other rung's compares them as sequences. With <paramref name="interpreted"/> the product is a
+    /// refined one (<see cref="Refine"/>), whose queries go to Z3 alone: the second solver's printer knows no floating point.
     /// </summary>
-    private Rung Bounded(IrProcedure old, IrProcedure @new, bool looping, bool reducible)
+    private Rung Bounded(IrProcedure old, IrProcedure @new, bool looping, bool reducible, IReadOnlySet<string>? interpreted = null)
     {
         int k = options.Bound;
         if (!reducible)
@@ -305,10 +342,11 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             newUnrolled,
             (context, encoding) =>
             {
-                SecondSolver solvers = new(context, encoding, options, InterruptAfterMs);
+                SecondSolver solvers = new(context, encoding, interpreted is null ? options : AbstractionRefinement.Options(options), InterruptAfterMs);
                 return solvers.Tagged(Bounded(context, encoding, solvers, (oldUnrolled, newUnrolled), looping));
             },
-            ProductEncoder.TraceComparison.Positional);
+            ProductEncoder.TraceComparison.Positional,
+            interpreted);
     }
 
     /// <summary>Rung 1's queries on the encoding of the <paramref name="unrolled"/> pair, in order.</summary>

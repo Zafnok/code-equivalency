@@ -150,12 +150,14 @@ public sealed class Z3Backend : IVerificationBackend
     /// incremental mode it skips preprocessing, and its non-incremental default tactic times out on a
     /// plain diamond. The query itself is added with the definitions already <see cref="Inline"/>d. Making the solver
     /// with the encoding translated into its context, and inlining the query and adding it, are a stage each
-    /// (<see cref="Stages"/>).
+    /// (<see cref="Stages"/>). A refined encoding's solver (ADR 0053; ticket P1-030) turns floating point into bit-vectors and
+    /// those into propositional logic before <c>smt</c> (<c>fpa2bv</c>, <c>simplify</c>, <c>bit-blast</c>): left to
+    /// <c>smt</c>'s own floating-point theory, <c>a * 2.0 = a + a</c> on <c>double</c> costs ten times the resources.
     /// </summary>
     internal static SolverQuery Query(Context context, ProductEncoding encoding, VerificationOptions options, params BoolExpr[] query)
     {
         long started = Stages.Start();
-        SolverQuery asked = new(context, solving => Pipeline(solving, options), encoding.Assertions);
+        SolverQuery asked = new(context, solving => Pipeline(solving, options, encoding.Refined), encoding.Assertions);
         Stages.Done(options, Stages.Assert, started);
         started = Stages.Start();
         asked.Add(Inline(context, encoding.Assertions, query));
@@ -163,14 +165,21 @@ public sealed class Z3Backend : IVerificationBackend
         return asked;
     }
 
-    /// <summary>The solver of <see cref="Query"/> in <paramref name="context"/>, within <paramref name="options"/>' limits.</summary>
-    private static Solver Pipeline(Context context, VerificationOptions options)
+    /// <summary>
+    /// The solver of <see cref="Query"/> in <paramref name="context"/>, within <paramref name="options"/>' limits;
+    /// <paramref name="floats"/> for a refined encoding's.
+    /// </summary>
+    private static Solver Pipeline(Context context, VerificationOptions options, bool floats)
     {
         using Tactic solveEqs = context.MkTactic("solve-eqs");
         using Tactic simplify = context.MkTactic("simplify");
         using Tactic propagate = context.MkTactic("propagate-values");
         using Tactic smt = context.MkTactic("smt");
-        using Tactic pipeline = context.AndThen(solveEqs, simplify, propagate, solveEqs, smt);
+        using Tactic toBitVectors = context.MkTactic("fpa2bv");
+        using Tactic bitBlast = context.MkTactic("bit-blast");
+        using Tactic pipeline = floats
+            ? context.AndThen(solveEqs, simplify, propagate, solveEqs, toBitVectors, simplify, bitBlast, smt)
+            : context.AndThen(solveEqs, simplify, propagate, solveEqs, smt);
         Solver solver = context.MkSolver(pipeline);
         Limit(solver, options);
         return solver;

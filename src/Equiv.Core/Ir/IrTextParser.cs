@@ -311,7 +311,7 @@ internal sealed class IrTextParser
         {
             IrBool => new IrBoolValue(ParseBool()),
             IrBitVec bitVec => ParseBits(bitVec.Width),
-            IrSort sort => new IrSortValue(sort.Name, ParseInt()),
+            IrSort sort => new IrSortValue(sort.Name, ParseId()),
             _ => ParseMap((IrMap)type),
         };
     }
@@ -352,6 +352,16 @@ internal sealed class IrTextParser
         IrValue key = ParseLiteral();
         ExpectSymbol("->");
         return new KeyValuePair<IrValue, IrValue>(key, ParseLiteral());
+    }
+
+    /// <summary>A sort element's id: a 64-bit integer, negative when it is the bits of a negative floating-point number.</summary>
+    private long ParseId()
+    {
+        string sign = AcceptSymbol("-") ? "-" : string.Empty;
+        IrToken token = Expect(IrTokenKind.Number, "a number");
+        return long.TryParse(sign + token.Text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long value)
+            ? value
+            : throw Fail(token, "number out of range");
     }
 
     private int ParseInt()

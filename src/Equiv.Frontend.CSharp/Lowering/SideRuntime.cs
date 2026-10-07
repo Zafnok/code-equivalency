@@ -17,6 +17,13 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// </summary>
 internal sealed record SideRuntime(RuntimeInterval Interval, bool X87)
 {
+    /// <summary>
+    /// Whether this side's floating point may run on x87 at all, whatever the other side's does (ADR 0053 decision 4;
+    /// ticket P1-030): its arithmetic is then not IEEE binary32 and binary64, so its functions carry
+    /// <see cref="PureCatalogue.X87Prefix"/> and no backend interprets them. True whenever <see cref="X87"/> is.
+    /// </summary>
+    public bool OnX87 { get; init; } = X87;
+
     /// <summary>The runtime whose floating-point to integer conversions saturate, where earlier ones gave a platform's value.</summary>
     private static readonly TargetRuntime Saturation = new(TargetRuntime.RuntimeFamily.NetCore, new Version(9, 0));
 
@@ -34,8 +41,8 @@ internal sealed record SideRuntime(RuntimeInterval Interval, bool X87)
     {
         RuntimeInterval interval = Between(legacy, modern, table);
         return (
-            new SideRuntime(interval, MayBeX87(legacy, legacyCompilation) && !IsX87(modern, modernCompilation)),
-            new SideRuntime(interval, MayBeX87(modern, modernCompilation) && !IsX87(legacy, legacyCompilation)));
+            new SideRuntime(interval, MayBeX87(legacy, legacyCompilation) && !IsX87(modern, modernCompilation)) { OnX87 = MayBeX87(legacy, legacyCompilation) },
+            new SideRuntime(interval, MayBeX87(modern, modernCompilation) && !IsX87(legacy, legacyCompilation)) { OnX87 = MayBeX87(modern, modernCompilation) });
     }
 
     private static RuntimeInterval Between(ProjectRuntime legacy, ProjectRuntime modern, RuntimeChangeTable table)

@@ -74,19 +74,19 @@ public sealed class PureEncoderTests
             """
             proc "T::M(double,double)" (%a: sort "System.Double", %b: sort "System.Double") -> sort "System.Double" entry B0
             B0:
-              %s: sort "System.Double" = pure "f64.add"(%a, %b)
+              %s: sort "System.Double" = pure "f64.rem"(%a, %b)
               ret %s
             """,
             """
             proc "T::M(double,double)" (%a: sort "System.Double", %b: sort "System.Double") -> sort "System.Double" entry B0
             B0:
-              %s: sort "System.Double" = pure "f64.add"(%b, %a)
+              %s: sort "System.Double" = pure "f64.rem"(%b, %a)
               ret %s
             """);
 
         Unknown unknown = Assert.IsType<Unknown>(verdict);
         Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
-        Assert.Equal("the divergence depends on f64.add", unknown.Detail);
+        Assert.Equal("the divergence depends on f64.rem", unknown.Detail);
         Counterexample candidate = Assert.IsType<Counterexample>(unknown.Candidate);
         Assert.NotEqual(candidate.Old.Outcome, candidate.New.Outcome);
     }

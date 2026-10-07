@@ -93,7 +93,7 @@ public static class IrText
     {
         IrBoolValue b => b.Value ? "bool true" : "bool false",
         IrBitVecValue v => $"{Type(v.Type)} {v.Bits.ToString(CultureInfo.InvariantCulture)}",
-        IrSortValue s => $"{Type(s.Type)} {Number(s.Id)}",
+        IrSortValue s => $"{Type(s.Type)} {s.Id.ToString(CultureInfo.InvariantCulture)}",
         _ => MapValue((IrMapValue)value),
     };
 

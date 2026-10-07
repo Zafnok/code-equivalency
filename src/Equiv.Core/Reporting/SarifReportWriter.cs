@@ -31,6 +31,9 @@ public static class SarifReportWriter
     /// <summary>What an Equivalent's <c>proofMethod</c> ends with when its proof used a callee contract (ADR 0036 decision 2; ticket P1-010).</summary>
     private const string ContractSuffix = "+contract";
 
+    /// <summary>What a <c>proofMethod</c> ends with when the result was decided after abstraction refinement (ADR 0053 decision 8; ticket P1-030).</summary>
+    private const string RefinedSuffix = "+refined";
+
     /// <summary>The <c>proofMethod</c> of a Divergent the real runtimes showed (ADR 0035 decision 3); never an Equivalent's.</summary>
     internal const string ObservedProofMethod = "observed";
 
@@ -268,8 +271,9 @@ public static class SarifReportWriter
     /// <c>invariant</c> and for rung 5 its <c>proposedBy</c> (ticket P1-002; ADR 0036), the <c>+contract</c> suffix and
     /// <c>contractsUsed</c> of a proof that used callee contracts (ticket P1-010), an Unknown's <c>unknownReason</c> and
     /// <c>failureRefinement</c> (ADR 0037; ticket P1-013), the <c>ladderTrace</c> of every rung the backend attempted
-    /// (VERIFICATION-MODEL.md sections 1 and 5.1; ticket M3-002), and the <c>chcMode</c> rung 4 ran in when it ran
-    /// (ticket P1-001).
+    /// (VERIFICATION-MODEL.md sections 1 and 5.1; ticket M3-002), the <c>chcMode</c> rung 4 ran in when it ran
+    /// (ticket P1-001), and the <c>+refined</c> suffix and <c>refined</c> functions of a result decided after abstraction
+    /// refinement (ADR 0053; ticket P1-030).
     /// </summary>
     private static void SetVerdictProperties(Result sarifResult, Verdict verdict)
     {
@@ -285,7 +289,7 @@ public static class SarifReportWriter
                 break;
             case Equivalent equivalent:
                 // Ticket P1-010 (ADR 0036 decision 2): a proof that used callee contracts says so in its method and lists them.
-                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix) + SolverSuffix(verdict));
+                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix) + Suffixes(verdict));
                 if (!equivalent.ContractsUsed.IsEmpty)
                 {
                     sarifResult.SetProperty("contractsUsed", equivalent.ContractsUsed.Select(ContractProperty).ToList());
@@ -312,11 +316,23 @@ public static class SarifReportWriter
                 break;
         }
 
+        SetLadderProperties(sarifResult, verdict);
+    }
+
+    /// <summary>What a verdict's ladder says, whatever the verdict: who answered, what was refined, the rungs and rung 4's mode.</summary>
+    private static void SetLadderProperties(Result sarifResult, Verdict verdict)
+    {
         // ADR 0050 decision 4 (ticket P1-033): a Divergent or an Unknown a second solver answered a query of names the rung
-        // and the solver, as an Equivalent does. One the real runtimes showed stays observed.
-        if (verdict is Unknown or Divergent { Observed: null } && verdict.Ladder.FirstOrDefault(static s => s.Solver is not null) is { } answered)
+        // and the solver, as an Equivalent does, and so does one decided after refinement (ADR 0053 decision 8). One the
+        // real runtimes showed stays observed.
+        if (verdict is Unknown or Divergent { Observed: null } && verdict.Ladder.FirstOrDefault(static s => s.Solver is not null || !s.Refined.IsEmpty) is { } answered)
         {
-            sarifResult.SetProperty("proofMethod", Name(answered.Rung) + SolverSuffix(verdict));
+            sarifResult.SetProperty("proofMethod", Name(answered.Rung) + Suffixes(verdict));
+        }
+
+        if (verdict.Ladder.LastOrDefault(static s => !s.Refined.IsEmpty) is { } refined)
+        {
+            sarifResult.SetProperty("refined", refined.Refined.ToList());
         }
 
         if (!verdict.Ladder.IsEmpty)
@@ -330,9 +346,13 @@ public static class SarifReportWriter
         }
     }
 
-    /// <summary><c>+name</c> for each second solver that answered a query of one of <paramref name="verdict"/>'s rungs, each once.</summary>
-    private static string SolverSuffix(Verdict verdict) =>
-        string.Concat(verdict.Ladder.Select(static s => s.Solver?.Name).OfType<string>().Distinct(StringComparer.Ordinal).Select(static n => "+" + n));
+    /// <summary>
+    /// <c>+refined</c> when a step of <paramref name="verdict"/>'s ladder is a refined round, then <c>+name</c> for each
+    /// second solver that answered a query of one of its rungs, each once.
+    /// </summary>
+    private static string Suffixes(Verdict verdict) =>
+        (verdict.Ladder.Any(static s => !s.Refined.IsEmpty) ? RefinedSuffix : string.Empty)
+        + string.Concat(verdict.Ladder.Select(static s => s.Solver?.Name).OfType<string>().Distinct(StringComparer.Ordinal).Select(static n => "+" + n));
 
     /// <summary>One <c>ladderTrace</c> entry; its <c>solver</c> is the second solver that answered a query of the rung, with its version.</summary>
     private static Dictionary<string, string> LadderProperty(LadderStep step)

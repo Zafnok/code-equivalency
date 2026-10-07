@@ -203,7 +203,7 @@ public sealed class IrTextTests
     [InlineData("proc \"P\" () entry B0 B0: %x: bv8 = const bv8 256 ret", 1, 46, "does not fit in 8 bits")]
     [InlineData("proc \"P\" () entry B0 B0: %x: bv8 = const bv8 -129 ret", 1, 47, "does not fit in 8 bits")]
     [InlineData("proc \"P\" () entry B0 B0: %x: bv64 = const bv64 18446744073709551616 ret", 1, 48, "does not fit in 64 bits")]
-    [InlineData("proc \"P\" () entry B0 B0: %x: sort \"S\" = const sort \"S\" 2147483648 ret", 1, 56, "out of range")]
+    [InlineData("proc \"P\" () entry B0 B0: %x: sort \"S\" = const sort \"S\" 9223372036854775808 ret", 1, 56, "out of range")]
     [InlineData("proc \"P\" () entry B0 B0: %x: bv8 = frob %x ret", 1, 36, "unknown instruction 'frob'")]
     [InlineData("proc \"P\" () entry B0 B0: %x: bool = overflows sneg %x, %x ret", 1, 47, "unknown overflow operation 'sneg'")]
     [InlineData("proc \"P\" () entry B0 B0: %x: bv8 = neg %y ret", 1, 40, "undefined variable %y")]

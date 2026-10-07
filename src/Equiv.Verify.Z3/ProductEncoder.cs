@@ -120,7 +120,9 @@ internal static class ProductEncoder
     /// equal" is written (ticket P1-038): under <see cref="TraceComparison.Positional"/> it is
     /// <see cref="PositionalTrace.Equal"/>, the same relation, and the exception types are compared as bit-vectors, so the
     /// observables hold no sequence, datatype or integer; a product with more pairs of call sites than
-    /// <see cref="PositionalTrace.MaxPairs"/> keeps the sequence comparison.
+    /// <see cref="PositionalTrace.MaxPairs"/> keeps the sequence comparison. <paramref name="interpreted"/> makes the product
+    /// a refined one (ADR 0053; ticket P1-030): the pure functions it names have their real meaning, and <c>float</c> and
+    /// <c>double</c> are IEEE 754 sorts.
     /// </summary>
     public static ProductEncoding Encode(
         Context context,
@@ -129,9 +131,10 @@ internal static class ProductEncoder
         ImmutableDictionary<string, string> callIdentityMap,
         CallerContracts? contracts = null,
         CalleeContract? relation = null,
-        TraceComparison traces = TraceComparison.Sequence)
+        TraceComparison traces = TraceComparison.Sequence,
+        IReadOnlySet<string>? interpreted = null)
     {
-        SortMapper sorts = new(context);
+        SortMapper sorts = new(context, floats: interpreted is not null);
         ImmutableArray<(SharedParameter Shared, Expr Term)> inputs =
         [
             .. Pair(old, @new).Select(s => (s, context.MkConst(s.InputName, sorts.Sort(s.Type)))),
@@ -143,7 +146,7 @@ internal static class ProductEncoder
         IEnumerable<(Side, IrCall)> sites = [.. CallsOf(old).Select(static c => (Side.Old, c)), .. CallsOf(@new).Select(static c => (Side.New, c))];
         TraceEncoder calls = new(sorts, argumentTypes, callIdentityMap, HeapMaps(allCalls), freshPerSide, sites);
         ImmutableArray<Expr> heapInputs = [.. calls.Heap.Select(m => inputs.First(i => string.Equals(i.Shared.Var.Name, m.Name, StringComparison.Ordinal) && i.Shared.Type == m.Type).Term)];
-        PureEncoder pures = new(sorts, old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrPure>()));
+        PureEncoder pures = new(sorts, old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrPure>()), interpreted);
         Dictionary<string, int> exceptionTypes = new(StringComparer.Ordinal);
         FragmentEncoder oldSide = new(Side.Old, old, sorts, (calls, pures), Bound(inputs, static s => s.Old), heapInputs, exceptionTypes);
         FragmentEncoder newSide = new(Side.New, @new, sorts, (calls, pures), Bound(inputs, static s => s.New), heapInputs, exceptionTypes);
@@ -344,5 +347,8 @@ internal static class ProductEncoder
     {
         /// <summary>Under a callee contract, the term of each of its conjuncts, in order (ticket P1-010); empty otherwise.</summary>
         public ImmutableArray<BoolExpr> Conjuncts { get; init; } = [];
+
+        /// <summary>Whether this is a refined product (ADR 0053): some pure function has its real meaning, and floating point is IEEE.</summary>
+        public bool Refined => Pures.Interpreted.Count > 0;
     }
 }

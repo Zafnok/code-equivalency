@@ -3,6 +3,8 @@ using System.Collections.Immutable;
 
 using Equiv.Core.Ir;
 
+using Equiv.Verify.Z3.Refinement;
+
 using Microsoft.Z3;
 
 using Side = Equiv.Verify.Z3.ProductEncoder.Side;
@@ -14,13 +16,18 @@ namespace Equiv.Verify.Z3;
 /// uninterpreted function of its arguments alone, one per function name and signature, and each exception it can raise a
 /// Bool function of the same arguments. Both sides share them, so equal arguments give equal results. A function some
 /// application in the pair marks <see cref="IrPure.RuntimeSensitive"/> is side-specific instead: every application of it
-/// on either side uses an <c>old.</c> or <c>new.</c> prefixed name, so the two sides are never forced to agree.
+/// on either side uses an <c>old.</c> or <c>new.</c> prefixed name, so the two sides are never forced to agree. A function
+/// named in <paramref name="interpreted"/> is not uninterpreted: its result is the term <see cref="InterpretedPure"/> gives
+/// it, on both sides, and it raises nothing (ADR 0053; ticket P1-030).
 /// </summary>
-internal sealed class PureEncoder(SortMapper sorts, IEnumerable<IrPure> applications)
+internal sealed class PureEncoder(SortMapper sorts, IEnumerable<IrPure> applications, IReadOnlySet<string>? interpreted = null)
 {
     private readonly Context context = sorts.Context;
     private readonly FrozenSet<string> sideSpecific = applications.Where(static p => p.RuntimeSensitive).Select(static p => p.Function).ToFrozenSet(StringComparer.Ordinal);
     private readonly Dictionary<string, FuncDecl> functions = new(StringComparer.Ordinal);
+
+    /// <summary>The functions this encoding gives their real meaning; empty unless the query is a refined one.</summary>
+    public IReadOnlySet<string> Interpreted { get; } = interpreted ?? FrozenSet<string>.Empty;
 
     /// <summary>The name <paramref name="pure"/>'s function has on <paramref name="side"/>: its own, or prefixed with the side when side-specific.</summary>
     public string Name(Side side, IrPure pure) =>
@@ -28,7 +35,9 @@ internal sealed class PureEncoder(SortMapper sorts, IEnumerable<IrPure> applicat
 
     /// <summary><paramref name="pure"/>'s result and one flag per entry of its <see cref="IrPure.Throws"/>, applied to <paramref name="args"/>.</summary>
     public (Expr Result, ImmutableArray<BoolExpr> Threw) Apply(Side side, IrPure pure, Expr[] args) =>
-        (context.MkApp(ResultFunction(side, pure), args), [.. pure.Throws.Select(t => (BoolExpr)context.MkApp(ThrewFunction(side, pure, t.ExceptionType), args))]);
+        Interpreted.Contains(pure.Function)
+            ? (InterpretedPure.Term(context, pure.Function, args, () => context.MkApp(ResultFunction(side, pure), args)), [.. pure.Throws.Select(_ => context.MkFalse())])
+            : (context.MkApp(ResultFunction(side, pure), args), [.. pure.Throws.Select(t => (BoolExpr)context.MkApp(ThrewFunction(side, pure, t.ExceptionType), args))]);
 
     /// <summary>The result function <c>pure:f(args...)</c> for <paramref name="pure"/>'s function and signature, created on first use.</summary>
     public FuncDecl ResultFunction(Side side, IrPure pure) =>

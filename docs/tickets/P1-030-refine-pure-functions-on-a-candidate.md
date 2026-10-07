@@ -1,5 +1,5 @@
 # P1-030 Abstraction refinement, part 1: a pure function a candidate depends on is given its real meaning
-Status: todo
+Status: in-progress
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P1-019, M3-016, M4-002

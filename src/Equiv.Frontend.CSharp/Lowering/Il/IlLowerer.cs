@@ -1252,7 +1252,7 @@ internal sealed partial class IlLowerer
 
     /// <summary>A catalogued function (ticket M4-002), with the exceptions it raises in this context, runtime-sensitive as this side's runtime makes it.</summary>
     private IrVar Apply(PureCatalogue.Entry entry, ImmutableArray<IrVar> args, ITypeSymbol result, bool isChecked = false) =>
-        Pure(entry.Function, entry.Raises(isChecked), entry.RuntimeSensitive(runtime), args, Map(result));
+        Pure(entry.Name(runtime), entry.Raises(isChecked), entry.RuntimeSensitive(runtime), args, Map(result));
 
     /// <summary>
     /// An <see cref="IrPure"/> of <paramref name="function"/>, then, per exception it raises, a branch on its flag to where

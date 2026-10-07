@@ -191,8 +191,8 @@ internal static class ReplayArguments
     /// <summary>A sort element as a number, a string or <c>null</c>.</summary>
     private static string? Element(ExecutionTypeKind kind, IrSortValue value, IReadOnlyDictionary<string, IrValue> nullness) => kind switch
     {
-        ExecutionTypeKind.Binary32 => Bits(BitConverter.SingleToUInt32Bits(value.Id), "X8"),
-        ExecutionTypeKind.Binary64 => Bits(BitConverter.DoubleToUInt64Bits(value.Id), "X16"),
+        ExecutionTypeKind.Binary32 => Bits((uint)value.Id, "X8"),
+        ExecutionTypeKind.Binary64 => Bits((ulong)value.Id, "X16"),
         ExecutionTypeKind.DecimalNumber => string.Create(CultureInfo.InvariantCulture, $"[{value.Id},0,0,0]"),
         ExecutionTypeKind.Text => IsNull(value, nullness) ? "null" : string.Create(CultureInfo.InvariantCulture, $"\"s{value.Id}\""),
         ExecutionTypeKind.NullOnly when IsNull(value, nullness) => "null",

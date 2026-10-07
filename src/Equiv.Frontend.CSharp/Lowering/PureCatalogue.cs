@@ -39,6 +39,12 @@ internal static class PureCatalogue
     /// <summary>The name prefix of a user-defined operator's or conversion's function.</summary>
     public const string OperatorPrefix = "op:";
 
+    /// <summary>
+    /// The name prefix of a function that takes or yields floating point on a side whose floating point may run on x87
+    /// (ADR 0053 decision 4; ticket P1-030): <c>x87.f64.add</c>. Two x87 sides share it; nothing interprets it as IEEE.
+    /// </summary>
+    public const string X87Prefix = "x87.";
+
     private static readonly ImmutableArray<(SpecialType Type, string Code)> Integral =
     [
         (SpecialType.System_SByte, "i8"), (SpecialType.System_Byte, "u8"), (SpecialType.System_Int16, "i16"),
@@ -142,6 +148,12 @@ internal static class PureCatalogue
     {
         public ImmutableArray<string> CheckedThrows { get; init; } = Throws;
 
+        /// <summary>
+        /// Its name on a side with <paramref name="runtime"/>: <see cref="Function"/>, behind <see cref="X87Prefix"/> when
+        /// it takes or yields floating point and that side's floating point may run on x87.
+        /// </summary>
+        public string Name(SideRuntime runtime) => runtime.OnX87 && IsFloating ? X87Prefix + Function : Function;
+
         /// <summary>The exceptions it can raise in a context that is <paramref name="isChecked"/>.</summary>
         public ImmutableArray<string> Raises(bool isChecked) => isChecked ? CheckedThrows : Throws;
 
@@ -150,11 +162,11 @@ internal static class PureCatalogue
         /// ticket P2-055): a floating-point to integer conversion when the pair crosses .NET 9, where it began to
         /// saturate, and, on a side whose floating point alone runs on x87, anything that takes or yields floating point.
         /// </summary>
-        public bool RuntimeSensitive(SideRuntime runtime)
-        {
-            bool fromFloat = Arguments.Any(IsFloatingPoint);
-            return (runtime.FloatToIntegerChanged && fromFloat && Integral.Any(i => i.Type == Result)) || (runtime.X87 && (fromFloat || IsFloatingPoint(Result)));
-        }
+        public bool RuntimeSensitive(SideRuntime runtime) =>
+            (runtime.FloatToIntegerChanged && Arguments.Any(IsFloatingPoint) && Integral.Any(i => i.Type == Result)) || (runtime.X87 && IsFloating);
+
+        /// <summary>Whether it takes or yields <c>float</c> or <c>double</c>.</summary>
+        private bool IsFloating => Arguments.Any(IsFloatingPoint) || IsFloatingPoint(Result);
 
         private static bool IsFloatingPoint(SpecialType type) => type is SpecialType.System_Single or SpecialType.System_Double;
     }
