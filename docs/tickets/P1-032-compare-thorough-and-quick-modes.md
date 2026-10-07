@@ -219,6 +219,9 @@ queries on `unbound` Unknowns. Fixing P2-078 (criterion 9 makes its crash harmle
   - Five queries of the thorough run and four of today's default ended on the wall clock, not the resource limit, so
     up to that many results of each could differ on another run. Quick had none. A one-minute build ran beside the
     thorough run at 14:30 on 2026-10-06 (a format fix for CI); nothing else did.
+  - The three runs are of this branch before it merged P1-038 (rung 1 compares call traces by position), which
+    landed on `main` while the second thorough run was going. P1-038 changes which rung 1 queries Z3 decides, so
+    counts on `main` will differ; the comparisons between the modes are within one build and stand.
   - The README's scoreboard is not touched: these are one pair's numbers under a new default, and P2-130 reruns the
     large pairs for it.
 - Deviation: `src/Equiv.Core/Ir/IrUnroller.cs`, `LoopLadder`, `ContractVerifier` and `FailureRefinementQuery` are

@@ -179,7 +179,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.EffectFreeBclCall.Lengths::Reset(string,System.Collections.Generic.List<int>) diverges: inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 2 outs() trace()) new(threw \"System.Exception\" outs() trace(\"System.Collections.Generic.List`1::Clear()<int>\"(sort \"System.Collections.Generic.List`1\" 0))). Equivalent when a == null."
+            "text": "Equiv.Samples.EffectFreeBclCall.Lengths::Reset(string,System.Collections.Generic.List<int>) diverges: inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool true, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 4 outs() trace()) new(threw \"System.NullReferenceException\" outs() trace()). Equivalent when a == null."
           },
           "locations": [
             {
@@ -198,12 +198,12 @@
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.EffectFreeBclCall.Lengths::Reset(string,System.Collections.Generic.List<int>)",
-            "resultFingerprint/v1": "bea3626a6e98d0876dbbc2704c6bcc568f3c3d4b796c83914e66980e0ed60664"
+            "resultFingerprint/v1": "3f0ee57d69e3b81b51d74b9ab6c1e5db36722babc010bef1ebe6a6ebe0a1c4b0"
           },
           "baselineState": "new",
           "rank": 60.002,
           "properties": {
-            "model": "inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 2 outs() trace()) new(threw \"System.Exception\" outs() trace(\"System.Collections.Generic.List`1::Clear()<int>\"(sort \"System.Collections.Generic.List`1\" 0)))",
+            "model": "inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool true, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 4 outs() trace()) new(threw \"System.NullReferenceException\" outs() trace())",
             "agreesWhen": {
               "smt": "(select in.null.System.String in.a)",
               "text": "a == null",
@@ -217,7 +217,7 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
-            "reviewGroup": "calls:System.Collections.Generic.List`1::Clear()<int>"
+            "reviewGroup": "proofMethod:none"
           }
         }
       ],
@@ -329,7 +329,7 @@
         },
         "reviewList": [
           {
-            "group": "calls:System.Collections.Generic.List`1::Clear()<int>",
+            "group": "proofMethod:none",
             "ruleId": "EQ002",
             "rank": 60.002,
             "count": 1,

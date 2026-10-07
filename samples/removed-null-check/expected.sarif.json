@@ -72,7 +72,7 @@
           "ruleId": "EQ002",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.RemovedNullCheck.Greeter::Greet(string) diverges: inputs(sort \"System.String\" 221887975, map<sort \"System.String\", bool> [] default bool true) old(threw \"System.Exception\" outs() trace(\"System.ArgumentNullException::.ctor(string)\"(sort \"System.String\" 221887975))) new(threw \"System.NullReferenceException\" outs() trace()). Equivalent when name != null."
+            "text": "Equiv.Samples.RemovedNullCheck.Greeter::Greet(string) diverges: inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [] default bool true) old(threw \"System.Exception\" outs() trace(\"System.ArgumentNullException::.ctor(string)\"(sort \"System.String\" 221887975))) new(threw \"System.NullReferenceException\" outs() trace()). Equivalent when name != null."
           },
           "locations": [
             {
@@ -91,12 +91,12 @@
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.RemovedNullCheck.Greeter::Greet(string)",
-            "resultFingerprint/v1": "407c0fd2c8981e7690d53a06a3096cb6fbaea40b5b252e90ba98aefa617c6042"
+            "resultFingerprint/v1": "90942ac546731e4f6e5472da7f93ccb36b2fbdb3bec357d554356d0e730f04b5"
           },
           "baselineState": "new",
           "rank": 60.002,
           "properties": {
-            "model": "inputs(sort \"System.String\" 221887975, map<sort \"System.String\", bool> [] default bool true) old(threw \"System.Exception\" outs() trace(\"System.ArgumentNullException::.ctor(string)\"(sort \"System.String\" 221887975))) new(threw \"System.NullReferenceException\" outs() trace())",
+            "model": "inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [] default bool true) old(threw \"System.Exception\" outs() trace(\"System.ArgumentNullException::.ctor(string)\"(sort \"System.String\" 221887975))) new(threw \"System.NullReferenceException\" outs() trace())",
             "agreesWhen": {
               "smt": "(not (select in.null.System.String in.name))",
               "text": "name != null",

@@ -72,7 +72,7 @@
           "ruleId": "EQ006",
           "level": "error",
           "message": {
-            "text": "Equiv.Samples.VersionBump.Codec::Name(System.IO.BinaryReader) diverges via a runtime-changed API between net8.0 and net10.0 (Malformed encoded bytes decode to U+FFFD on .NET. https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader): inputs(sort \"System.IO.BinaryReader\" 0, map<sort \"System.IO.BinaryReader\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0))) new(returned sort \"System.String\" 1 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0)))"
+            "text": "Equiv.Samples.VersionBump.Codec::Name(System.IO.BinaryReader) diverges via a runtime-changed API between net8.0 and net10.0 (Malformed encoded bytes decode to U+FFFD on .NET. https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/9.0/binaryreader): inputs(sort \"System.IO.BinaryReader\" 0, map<sort \"System.IO.BinaryReader\", bool> [] default bool false) old(returned sort \"System.String\" 0 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0))) new(returned sort \"System.String\" 1 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0)))"
           },
           "locations": [
             {
@@ -91,12 +91,12 @@
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.VersionBump.Codec::Name(System.IO.BinaryReader)",
-            "resultFingerprint/v1": "1e0c0422e70ae4e346971a57d7566f882dfbeea15f6c3feb9bfadd8052740a3c"
+            "resultFingerprint/v1": "2bf7b722ec5b1a3b86c9c17b0fbee04882cd513a91541e7aff48a86c0a6c3c2f"
           },
           "baselineState": "new",
           "rank": 40.002,
           "properties": {
-            "model": "inputs(sort \"System.IO.BinaryReader\" 0, map<sort \"System.IO.BinaryReader\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0))) new(returned sort \"System.String\" 1 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0)))",
+            "model": "inputs(sort \"System.IO.BinaryReader\" 0, map<sort \"System.IO.BinaryReader\", bool> [] default bool false) old(returned sort \"System.String\" 0 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0))) new(returned sort \"System.String\" 1 outs() trace(\"System.IO.BinaryReader::ReadString()\"(sort \"System.IO.BinaryReader\" 0)))",
             "ladderTrace": [
               {
                 "rung": "bounded",

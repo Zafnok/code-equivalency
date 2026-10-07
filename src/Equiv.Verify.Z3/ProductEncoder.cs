@@ -116,7 +116,11 @@ internal static class ProductEncoder
     /// <paramref name="relation"/> (a callee pair's product), <see cref="ProductEncoding.Differs"/> says the relation fails
     /// or the call traces differ, instead of that some observable differs, and <see cref="ProductEncoding.Conjuncts"/> are the
     /// relation's conjuncts' terms. The traces always agree because a loop segment's cut events are trace events: without
-    /// them an induction step would never compare the header states.
+    /// them an induction step would never compare the header states. <paramref name="traces"/> picks how "the traces are
+    /// equal" is written (ticket P1-038): under <see cref="TraceComparison.Positional"/> it is
+    /// <see cref="PositionalTrace.Equal"/>, the same relation, and the exception types are compared as bit-vectors, so the
+    /// observables hold no sequence, datatype or integer; a product with more pairs of call sites than
+    /// <see cref="PositionalTrace.MaxPairs"/> keeps the sequence comparison.
     /// </summary>
     public static ProductEncoding Encode(
         Context context,
@@ -124,7 +128,8 @@ internal static class ProductEncoder
         IrProcedure @new,
         ImmutableDictionary<string, string> callIdentityMap,
         CallerContracts? contracts = null,
-        CalleeContract? relation = null)
+        CalleeContract? relation = null,
+        TraceComparison traces = TraceComparison.Sequence)
     {
         SortMapper sorts = new(context);
         ImmutableArray<(SharedParameter Shared, Expr Term)> inputs =
@@ -143,23 +148,25 @@ internal static class ProductEncoder
         FragmentEncoder oldSide = new(Side.Old, old, sorts, (calls, pures), Bound(inputs, static s => s.Old), heapInputs, exceptionTypes);
         FragmentEncoder newSide = new(Side.New, @new, sorts, (calls, pures), Bound(inputs, static s => s.New), heapInputs, exceptionTypes);
 
+        BoolExpr? byPosition = traces == TraceComparison.Positional ? PositionalTrace.Equal(context, calls, oldSide, newSide) : null;
+        BoolExpr tracesEqual = byPosition ?? context.MkEq(oldSide.Trace, newSide.Trace);
         List<BoolExpr> equal =
         [
             context.MkEq(oldSide.Returned, newSide.Returned),
             ReturnsEqual(context, sorts, oldSide, newSide),
             context.MkEq(oldSide.Threw, newSide.Threw),
-            context.MkEq(oldSide.ExceptionType, newSide.ExceptionType),
+            byPosition is null ? context.MkEq(oldSide.ExceptionType, newSide.ExceptionType) : context.MkEq(oldSide.ExceptionBits, newSide.ExceptionBits),
         ];
         equal.AddRange(inputs
             .Where(static i => i.Shared.ByRef)
             .Select(i => context.MkEq(oldSide.Final(i.Shared.Old, i.Shared.Var, i.Term), newSide.Final(i.Shared.New, i.Shared.Var, i.Term))));
-        equal.Add(context.MkEq(oldSide.Trace, newSide.Trace));
+        equal.Add(tracesEqual);
         ImmutableArray<BoolExpr> conjuncts = relation is null ? [] : ContractTerms.Callee(context, sorts, relation, oldSide, newSide, inputs);
         IEnumerable<BoolExpr> related = contracts is null ? [] : ContractTerms.Caller(context, sorts, contracts.Callees, calls, (oldSide, newSide), inputs);
 
         return new ProductEncoding(
             [.. oldSide.Assertions, .. newSide.Assertions, .. sorts.Distinctness(), .. related],
-            context.MkNot(context.MkAnd(relation is null ? equal : [context.MkEq(oldSide.Trace, newSide.Trace), .. conjuncts])),
+            context.MkNot(context.MkAnd(relation is null ? equal : [tracesEqual, .. conjuncts])),
             oldSide.Opaque,
             newSide.Opaque,
             inputs,
@@ -273,6 +280,16 @@ internal static class ProductEncoder
     {
         Old,
         New,
+    }
+
+    /// <summary>How a product writes "the two call traces are equal" (ticket P1-038). Both are the same relation.</summary>
+    public enum TraceComparison
+    {
+        /// <summary>An equality of the two <see cref="FragmentEncoder.Trace"/> sequences.</summary>
+        Sequence,
+
+        /// <summary><see cref="PositionalTrace.Equal"/>: call site against call site, by position.</summary>
+        Positional,
     }
 
     /// <summary>

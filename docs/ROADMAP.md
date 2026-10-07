@@ -707,6 +707,11 @@ Found by a CI failure (PR #390, `gates (ubuntu-latest)`):
   generator's filter for procedures that loop and call keeps 1 draw in 8, and CsCheck gives up after
   100 rejections in a row. Test code only.
 
+Found by CI run times (PR #414, `stryker (Equiv.Verify.Z3, Equiv.Verify.Z3.Tests)`, over five hours):
+- P2-133 (M) Mutation testing runs as parallel shards: `mutation.yml` splits a project's files over up
+  to 4 runners on a PR (8 on the nightly sweep), and a final job per project adds the shards up under
+  the unchanged required check name. Workflow and scripts only. Needs M0-011.
+
 Documentation:
 - P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list
   `--bound` and `--timeout-ms`, which the command never had (`bound` and `timeoutMs` come from the
@@ -898,7 +903,9 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   (`docs/runs/2026-10-04-trace-encoding.md`). P1-038.
 - P1-038 (M) Rung 1 compares the call traces by position, without sequences, so Z3 itself answers
   the queries P1-034 measured. A full run before and after shows no decided result becomes a
-  timeout. Needs P1-034.
+  timeout. Needs P1-034. Done 2026-10-05: on `gitextensions-8522` Z3 answers 106 of the 210 rung 1
+  queries it gave up on (48 Divergent, 54 Unknown(abstraction), 4 unsatisfiable), `timeout` Unknowns
+  fall from 148 to 80, and no pair is proved (`docs/runs/2026-10-05-positional-trace.md`).
 - P1-026 (M) Spike: cvc5 Alethe proofs checked by Carcara for the solver Equivalents of
   gitextensions-9860. A certificate covers the query, not the lowering or the encoder. Needs P1-025.
 - P1-027 (M) Spike: the share of inputs on which a Divergent pair diverges, by approximate model

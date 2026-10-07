@@ -556,6 +556,31 @@ arguments and the position only, it leaves every map, threaded or not, as it was
 leaves its own side's maps unchanged, and it reads and writes the threaded maps as that open call
 does.
 
+"The traces are equal" is written in one of two ways (P1-038). As sequences: each side's trace is a
+`Seq` of events, the reached blocks' events in reverse postorder, an event a datatype of the callee
+and its boxed values, and the two terms are compared with `=`. By position: the two traces are as
+long, and for every old call site and new call site, both reached at equal positions implies the
+same event, which is the same canonical callee, the same types of arguments and heap read, and
+equal values; two sites of different callees or types are never both reached at one position. A
+side's length is the count at the block its path ends in: a return, a throw or an `unreachable`. A
+pair of sites whose positions cannot meet on any path of the two control-flow graphs is left out.
+Rung 1 (section 5.1) compares by position, and there the exception type is a bit-vector, so its
+query holds no sequence, datatype or integer; every other query compares sequences. A rung 1
+product with more than 10,000 pairs of sites that can meet keeps the sequence comparison, because
+the positional one is quadratic in call sites.
+
+The two are the same relation on any product whose sides are acyclic, which is every product the
+encoder builds. On an input each side runs one path, and reverse postorder lists that path's blocks
+in the order they run, so the sequence is the events of the calls made, in order, and its length is
+the count at the last block. A path makes each call site at most once, so a reached site's position,
+the number of calls made before it, is the index of its event, and the reached sites of a side have
+the indices 0 to length - 1, each once. Two sequences are equal exactly when they are as long and
+equal at every index, which is "for every reached old site and reached new site at the same
+position". Two events are equal exactly when their callees are and their values are as many, of the
+same types (each type has its own constructor) and equal. A loop segment's cut events (section 5.1)
+are events of an acyclic product too, so the argument covers them, but rungs 2 to 5 still compare
+sequences.
+
 A pair that is not Equivalent is then asked under which inputs it is (ADR 0048; ticket P1-022). This
 runs on rung 1's product of a pair without a loop or a self-call, for a Divergent the solver found
 and for an Unknown with reason `abstraction`. A pair whose model calls a runtime-changed member is
