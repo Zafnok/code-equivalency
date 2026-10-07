@@ -903,7 +903,10 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   against ADR 0025. Needs P1-019, M3-016, M4-002.
 - P1-031 (L) Abstraction refinement, part 2: a rung 1 query that times out is asked again with
   multiplication, division and remainder of two unknowns as shared functions, refined by point facts
-  from spurious models (`+abstracted`). Needs P2-050, M3-016.
+  from spurious models (`+abstracted`). Needs P2-050, M3-016. Done 2026-10-07: the sample
+  `hard-arithmetic` is proved `bounded+abstracted` where the exact query runs out at 30,000,000
+  units. On `gitextensions-8522` in quick mode 2 of the 132 pairs whose rung 1 times out hold such an
+  operator, neither is decided, and no result changes: that pair's timeouts are not arithmetic.
 - P1-025 (M) Spike: do Bitwuzla, cvc5, Eldarica or Golem decide the queries Z3 gives up on. Done:
   cvc5 answers 59 of the 142 rung 1 queries Z3 gives up on for gitextensions-8522 (9 Divergent, 27
   Unknown(abstraction), 4 unsatisfiable) and proves no pair; Bitwuzla reads none; no rung 4 Unknown

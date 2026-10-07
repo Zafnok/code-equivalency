@@ -31,6 +31,12 @@ public static class SarifReportWriter
     /// <summary>What an Equivalent's <c>proofMethod</c> ends with when its proof used a callee contract (ADR 0036 decision 2; ticket P1-010).</summary>
     private const string ContractSuffix = "+contract";
 
+    /// <summary>
+    /// What a <c>proofMethod</c> ends with when a round of rung 1 asked with its hard arithmetic abstracted proved or refuted
+    /// the pair (ADR 0025, clarification of 2026-10-07; ticket P1-031).
+    /// </summary>
+    internal const string AbstractedSuffix = "+abstracted";
+
     /// <summary>The <c>proofMethod</c> of a Divergent the real runtimes showed (ADR 0035 decision 3); never an Equivalent's.</summary>
     internal const string ObservedProofMethod = "observed";
 
@@ -285,7 +291,7 @@ public static class SarifReportWriter
                 break;
             case Equivalent equivalent:
                 // Ticket P1-010 (ADR 0036 decision 2): a proof that used callee contracts says so in its method and lists them.
-                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix) + SolverSuffix(verdict));
+                sarifResult.SetProperty("proofMethod", Name(equivalent.Method) + (equivalent.ContractsUsed.IsEmpty ? string.Empty : ContractSuffix) + SolverSuffix(verdict) + Abstracted(verdict));
                 if (!equivalent.ContractsUsed.IsEmpty)
                 {
                     sarifResult.SetProperty("contractsUsed", equivalent.ContractsUsed.Select(ContractProperty).ToList());
@@ -313,10 +319,11 @@ public static class SarifReportWriter
         }
 
         // ADR 0050 decision 4 (ticket P1-033): a Divergent or an Unknown a second solver answered a query of names the rung
-        // and the solver, as an Equivalent does. One the real runtimes showed stays observed.
-        if (verdict is Unknown or Divergent { Observed: null } && verdict.Ladder.FirstOrDefault(static s => s.Solver is not null) is { } answered)
+        // and the solver, as an Equivalent does. One the real runtimes showed stays observed. So does a Divergent an abstracted
+        // round of rung 1 found (ticket P1-031).
+        if (verdict is Unknown or Divergent { Observed: null } && verdict.Ladder.FirstOrDefault(static s => s.Solver is not null || s.DecidedAbstracted) is { } answered)
         {
-            sarifResult.SetProperty("proofMethod", Name(answered.Rung) + SolverSuffix(verdict));
+            sarifResult.SetProperty("proofMethod", Name(answered.Rung) + SolverSuffix(verdict) + Abstracted(verdict));
         }
 
         if (!verdict.Ladder.IsEmpty)
@@ -334,7 +341,13 @@ public static class SarifReportWriter
     private static string SolverSuffix(Verdict verdict) =>
         string.Concat(verdict.Ladder.Select(static s => s.Solver?.Name).OfType<string>().Distinct(StringComparer.Ordinal).Select(static n => "+" + n));
 
-    /// <summary>One <c>ladderTrace</c> entry; its <c>solver</c> is the second solver that answered a query of the rung, with its version.</summary>
+    /// <summary><see cref="AbstractedSuffix"/> when an abstracted round of rung 1 proved or refuted the pair, else nothing.</summary>
+    private static string Abstracted(Verdict verdict) => verdict.Ladder.Any(static s => s.DecidedAbstracted) ? AbstractedSuffix : string.Empty;
+
+    /// <summary>
+    /// One <c>ladderTrace</c> entry; its <c>solver</c> is the second solver that answered a query of the rung, with its version,
+    /// and its <c>factsAdded</c> the facts an abstracted round of rung 1 added (ticket P1-031).
+    /// </summary>
     private static Dictionary<string, string> LadderProperty(LadderStep step)
     {
         Dictionary<string, string> entry = new(StringComparer.Ordinal)
@@ -346,6 +359,11 @@ public static class SarifReportWriter
         if (step.Solver is { } solver)
         {
             entry["solver"] = $"{solver.Name} {solver.Version}";
+        }
+
+        if (step.FactsAdded is { } facts)
+        {
+            entry["factsAdded"] = facts.ToString(CultureInfo.InvariantCulture);
         }
 
         return entry;

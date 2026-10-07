@@ -1,5 +1,5 @@
 # P1-031 Abstraction refinement, part 2: a query that times out is asked again with its hard arithmetic abstracted
-Status: todo
+Status: done (PR #419)
 Effort: L
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-050, M3-016
@@ -63,10 +63,11 @@ Pitfalls.
    of ADR 0026 (a model through such a function is decided by replay, not by taint).
 2. A result decided this way has `proofMethod` suffixed `+abstracted`, and `properties.ladderTrace`
    holds one step per round with the number of facts added.
-3. New sample `hard-arithmetic`: two bodies that compute the same product of three 64-bit unknowns
-   and differ in an unrelated renamed local are Equivalent with `bounded+abstracted` at the default
-   budget (and Unknown(timeout) with this ticket's path disabled, pinned by a test); a variant that
-   changes one factor is Divergent.
+3. New sample `hard-arithmetic`: two bodies that compute the same product of three 64-bit unknowns,
+   one picking the first factor before it multiplies and the other branching first, with a renamed
+   local, are Equivalent with `bounded+abstracted` at the default budget (and Unknown(timeout) with
+   this ticket's path disabled, pinned by a test); a variant that changes one factor is Divergent.
+   (Corrected: a renamed local alone is not a timeout. See the Deviation in Notes.)
 4. A pair for which the abstraction is too coarse, `x * y` against `y * x`, ends Unknown(timeout)
    after the rounds, or Equivalent if Z3 decides the original; it is never Divergent.
 5. Section 7's soundness harness runs with this path forced on for every pair: no mutant is
@@ -101,3 +102,65 @@ Abstracting unchanged statement blocks or whole callees as functions (ADR 0024's
 - How many of the 400 timeouts hold these operators is not known; P2-101's report is the place to
   look first. If it shows under ten such pairs on `gitextensions-8522`, record that in Notes and
   build the sample path only.
+- Bar test (`equiv-adr`, criterion 1): the first row fits. ADR 0025 already decides that a shared
+  function proves an unchanged operator and ADR 0026 how a model through an abstraction is decided;
+  this applies both to integer operators, which neither spelled out. So: a dated clarification on
+  each, no new ADR. The `+abstracted` suffix and a step's `factsAdded` are additions in the form
+  `+contract` and `+cvc5` already have, and no verdict changes its meaning.
+- Deviation: criterion 3 asked for two bodies that "differ in an unrelated renamed local". That pair
+  is not a timeout: after `Z3Backend.Inline` both sides' products are one term, and the exact query
+  is unsatisfiable in 0.1 s without the multiplier being looked at. The sample instead moves the
+  choice of the first factor across the multiplication (legacy `side = metric ? width : widthInches;
+  side * height * depth`, modern a branch with the product on each path, the second path's factor in
+  a renamed local). The exact `divergence` query runs out at 2,000,000, 5,000,000 and 30,000,000
+  units; the abstracted one is unsatisfiable in the first round. Criterion 3's text is corrected.
+- Decision: the rounds run in the context of the exact product, which is encoded again there with
+  the functions. One context per rung 1, as before.
+- Decision: a round's queries go through `SecondSolver` as the exact ones do, so a configured cvc5
+  is asked an abstracted query Z3 gives up on. Its `sat` is read back by Z3 and then held to the
+  same check as any model.
+- Decision: a round whose step is a timeout, or the eighth spurious round, is no cause of the
+  Unknown. The Unknown keeps the reason and detail of the exact product's timeout, so a pair the
+  rounds do not decide has the result it had; only its `ladderTrace` is longer.
+- Decision: a model of the opaque or the bound query that gets an application wrong refines too,
+  without a replay. Only the divergence query's model is replayed (Design step 3). The opaque nodes
+  an abstracted round lists are those reachable on the abstracted product, a superset, which is the
+  safe side for a line-scoped Unknown's residual claim.
+- Decision: the rounds are skipped when neither unrolled side holds an abstractable operation, since
+  the abstracted product would be the exact one over again. That is what keeps the added time small.
+- Decision: the path has no CLI switch. `Z3Backend.Arithmetic` (internal) turns it off or forces it,
+  for the tests of criteria 3 and 5 only.
+- Decision: `Release: minor`, as P1-033 took for `+cvc5`: a new `proofMethod` suffix and a new
+  `ladderTrace` key, nothing removed.
+- The citation in the Goal is right: Badihi, Akinotcho, Li and Rubin, "ARDiff: scaling program
+  equivalence checking via iterative abstraction and refinement of common code", ESEC/FSE 2020
+  (checked against Crossref).
+- `x * y` against `y * x` (criterion 4): Z3 decides the original at once (`simplify` orders the
+  operands), so the pair is Equivalent by the exact product. Forced onto the abstracted product it
+  is spurious eight times and ends Unknown(timeout).
+- Existing tests that pin the exact product's behaviour on hard arithmetic (`SecondSolverLadderTests`,
+  two of `LadderFixtureTests`) now turn the path off; `samples/hard-for-z3`'s snapshot gains its
+  eight spurious rounds and is otherwise as it was.
+- Criterion 6, `gitextensions-8522` (legacy 3f4ed21998af, modern 5190ba5c1a5f), through
+  `equiv-corpus-run`, compare mode quick, `--jobs 4`, Release, no second solver, 2026-10-07. Before:
+  `main` at 628ef68f. After: this branch at ac7e7964. The two differ by this ticket alone. Quick, not
+  thorough: the ticket names no mode, the path is in rung 1 of every pass so the first pass shows
+  it, and thorough's budget pass took 30,222 s on this pair in P1-032, twice over for a comparison.
+  What the budget pass would add is not measured.
+  - 13,742 results in both runs, the same identities, and every one has the same rule id, Unknown
+    reason and `proofMethod` in both. No result changed, so none that was decided did.
+  - Before, rung 1's step is a timeout on 132 pairs; 107 results are Unknown(`timeout`).
+  - After, 2 of those 132 pairs hold an operation the abstraction replaces and were asked again.
+    Both gave up in round 1 on the resource limit. Decided: 0 Equivalent, 0 Divergent, 0 other
+    Unknown. The two results are an Unknown(`timeout`) and an Unknown(`unaligned-loop`), as before.
+  - Verify phase: 359 s before, 265 s after. The difference is the machine, not the ticket: two more
+    queries ran (`queryEndings.resourceLimit` 176 before, 178 after; `wallClock` 0 in both).
+  - So the note under which this ticket was filed applies: under ten such pairs on this corpus
+    pair (two). The path is built and proved on the sample; on `gitextensions-8522` it decides
+    nothing, because its timeouts are not arithmetic. Nothing here says where they come from; that
+    is P2-101's question. No `docs/runs/` file is added and the README's scoreboard is not touched:
+    no number moved.
+- Not run locally: `./build.ps1`. Targeted runs: `Equiv.Verify.Z3.Tests` (705 pass),
+  `SarifReportWriterTests`, and the sample snapshot test. Three samples (`version-bump`,
+  `webapi-basic`, `runtime-row-framework-only-change`) wrote no SARIF in this fresh worktree, where
+  `samples/` was never restored; CI restores them.

@@ -4,6 +4,7 @@ using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 using Equiv.TestSupport;
+using Equiv.Verify.Z3.Refinement;
 
 using Xunit;
 
@@ -59,6 +60,41 @@ public sealed class SoundnessPropertyTests
                 if (verdict is Divergent divergent)
                 {
                     Assert.NotEqual(divergent.Counterexample.Old, divergent.Counterexample.New);
+                }
+            },
+            iter: 200,
+            print: static m => $"{m!.Description}\n{IrText.Dump(m.Original)}\n{IrText.Dump(m.Mutant)}");
+    }
+
+    /// <summary>
+    /// Ticket P1-031 criterion 5: the harness with rung 1 asked on the abstracted product for every pair, not only after
+    /// a timeout. <c>Verify(P, P)</c> is still Equivalent, since both sides apply the shared functions to the same terms; no
+    /// mutant is Equivalent, a swapped operand of a product included, which the abstraction cannot prove equal and must not
+    /// call different; and every Divergent's model replays, with the real arithmetic, to two runs that differ.
+    /// </summary>
+    [Fact]
+    public void WithArithmeticAbstracted_AProcedureIsEquivalentToItself()
+    {
+        IrGen.AcyclicProcedure.Sample(
+            static p => Assert.IsType<Equivalent>(new Z3Backend { Arithmetic = ArithmeticMode.Forced }.Verify(p, p, Options)),
+            iter: 200,
+            print: IrText.Dump);
+    }
+
+    /// <inheritdoc cref="WithArithmeticAbstracted_AProcedureIsEquivalentToItself"/>
+    [Fact]
+    public void WithArithmeticAbstracted_AMutantIsNeverEquivalentAndEveryDivergenceReplays()
+    {
+        IrGen.AcyclicProcedure.SelectMany(IrGen.Mutation).Where(static m => m is not null).Sample(
+            static m =>
+            {
+                Verdict verdict = new Z3Backend { Arithmetic = ArithmeticMode.Forced }.Verify(m!.Original, m.Mutant, Options);
+                Assert.IsNotType<Equivalent>(verdict);
+                Assert.All(verdict.Ladder, static step => Assert.NotNull(step.FactsAdded));
+                if (verdict is Divergent divergent)
+                {
+                    Assert.NotEqual(divergent.Counterexample.Old, divergent.Counterexample.New);
+                    Assert.All([divergent.Counterexample.Old.Outcome, divergent.Counterexample.New.Outcome], static o => Assert.True(o is IrReturned or IrThrew, o.ToString()));
                 }
             },
             iter: 200,
