@@ -308,7 +308,11 @@ public sealed class ArithmeticRefinementTests
           ret %mo
         """;
 
-    private static readonly VerificationOptions Options = new(3, 600_000, []) { RefineTimeouts = false };
+    /// <summary>
+    /// The default resource limit ends every hard query here in about a second. The timeout behind it is a minute and not
+    /// more, so that a mutant of the encoders that makes a query slow without spending the limit is ended by it.
+    /// </summary>
+    private static readonly VerificationOptions Options = new(3, 60_000, []) { RefineTimeouts = false };
 
     /// <summary>A limit every query here runs out of, the abstracted ones too.</summary>
     private static readonly VerificationOptions Starved = Options with { ResourceLimit = 1 };
