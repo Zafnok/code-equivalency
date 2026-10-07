@@ -869,6 +869,11 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   different callees (`samples/business-layer`'s `Describe`: `String::Format` against the interpolated
   string handler). Adjudicate the `il-pass` Divergents of P1-032's thorough run, then fix the largest
   cause. Filed by P1-032. Needs P1-032.
+- P2-134 (M) Thorough's later passes take ten hours on `gitextensions-8522` at `--jobs 4` (quick: 17
+  minutes) and prove no pair: the budget pass decides 29 of 255, all Divergent, and the IL pass decides
+  the same 13 at the first pass's budgets in an eighteenth of the time. Measure each knob (`bound` 8,
+  `resourceLimit` 30,000,000, the IL pass's values) and set them from the table; a change to ADR 0049's
+  table goes through `equiv-adr`. Filed by P1-032. Needs P1-032.
 - P1-030 (L) Abstraction refinement, part 1: when an `abstraction` Unknown's candidate depends only
   on interpretable pure functions (`IntPtr` equality, `float` and `double` arithmetic as IEEE), the
   pair is asked again with them interpreted (`proofMethod` suffix `+refined`). Starts with a new ADR

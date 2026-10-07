@@ -137,7 +137,8 @@ queries on `unbound` Unknowns. Fixing P2-078 (criterion 9 makes its crash harmle
   chooses between the two results; the carry-over is in `VerifiedAgain`.
 - Decision: the IL pass verifies with the budget pass's values (the first pass's when there is no budget pass).
   ADR 0049 names no budget for it; thorough's purpose is fewer Unknowns, and a pair that needed the larger budget
-  from IOperation bodies is not asked with less from IL.
+  from IOperation bodies is not asked with less from IL. Criterion 11's runs say this bought nothing on
+  `gitextensions-8522` (the same 13 results at eighteen times the time); P2-134 decides it again from a measurement.
 - Decision: a later pass looks only at Unknowns the solver gave. One the CLI decides without the solver (`unbound`,
   async mismatch) is never verified again, since ADR 0029 decision 2 says erroneous code is never asked.
 - Decision: a pair the IL pass decided is carried on with its IL bodies, so `assumedCallees`, the contracts pass and
@@ -154,17 +155,81 @@ queries on `unbound` Unknowns. Fixing P2-078 (criterion 9 makes its crash harmle
   An invalid `escalation` value is CFG014, a warning that keeps ADR 0049's value, as an invalid `bound` is.
 - Decision: the baseline warning is given when the baseline names the other mode. A baseline with no
   `run.properties.mode` (written before this ticket) gets none: it was written in neither mode.
+- Finding: thorough's IL pass can report a Divergent that is not one. `samples/business-layer`'s `Describe` is
+  Unknown in quick and EQ002 (`decidedBy: il-pass`) in thorough, because `String::Format` and the interpolated
+  string handler are different calls in IL; the sample's README says its true verdict is Equivalent. It is the
+  behaviour ADR 0039 measured and ADR 0049 turned on. P2-133 is filed. The same pass finds the real new throw of
+  `samples/unknown-new-throw` and proves two pairs of `samples/cleanup-modern-syntax` and both of
+  `samples/il-fallback`. `TestedUnknownTests.BusinessLayer_Execute_Snapshot` no longer has an Unknown to test on that
+  sample and now checks the replayed `il-pass` Divergent instead; P1-008's tester keeps its own tests.
 - Decision: thorough's "Unknowns were not tested" note is printed only when the run has an Unknown result.
 - Decision: `tools/corpus/corpus.ps1` had no command that runs `equiv compare` (the skill's section 5 was a snippet),
   so criterion 10's `-Mode` had nothing to pass through. `-Compare <slug> -Mode thorough|quick` is that snippet as a
   command; a verifying run must name its mode, `-LowerOnly` takes none, and `-Metrics` prints the mode a log names.
+- Criterion 11: three runs of `gitextensions-8522` through `equiv-corpus-run` (`corpus.ps1 -Compare`), all `full`,
+  `--jobs 4`, on one build except where noted. 13,541 matched pairs, 13,742 results, no notification and no
+  unverified procedure in any of them.
+
+  | | quick | thorough | today's default |
+  |---|---|---|---|
+  | wall clock (s) | 999 | 37,184 | 3,560 |
+  | lower | 144 | 120 | 165 |
+  | verify | 791 | 573 | 2,204 |
+  | budget | | 30,222 (255 pairs) | |
+  | il | | 5,794 (38 pairs) | 327 (40 pairs) |
+  | contracts | | 421 (841) | 815 (841) |
+  | EQ001 Equivalent | 12,727 | 12,728 | 12,728 |
+  | EQ002 Divergent | 20 | 27 | 25 |
+  | EQ006 runtime-changed | 194 | 228 | 212 |
+  | EQ003 Unknown | 619 | 577 | 595 |
+  | queries the resource limit ended | 310 | 348 | 261 |
+  | queries the wall clock ended | 0 | 5 | 4 |
+
+  Unknowns by reason:
+
+  | | quick | thorough | today's default |
+  |---|---|---|---|
+  | opaque | 257 | 271 | 256 |
+  | timeout | 183 | 84 | 145 |
+  | abstraction | 127 | 151 | 138 |
+  | unaligned-loop | 32 | 51 | 36 |
+  | unmatched-overload | 19 | 19 | 19 |
+  | recursion | 1 | 1 | 1 |
+
+  "Today's default" is the default before this ticket, run on this ticket's build: thorough with `resourceLimit`
+  5,000,000 and an `escalation` equal to the first pass, so there is no budget pass and the first pass asks every
+  query, as the old default did. Its IL pass is new, so its 13 `il-pass` results are counted as the first pass left
+  them. Thorough's SARIF is from the second thorough run, after the unroll limit (the Deviation below); its build
+  differs from the other two runs' only in that limit, which one pair hit.
+  - Results today's default decides and quick's first pass does not: 11, all EQ006. Quick decides none that today's
+    default does not, and loses no Equivalent.
+  - No result decided in quick is Unknown in thorough: 0 of 12,941 has another rule id.
+  - Thorough's budget pass produced 96 results: 2 EQ002 and 27 EQ006, and 67 Unknowns that left `timeout` (25
+    `abstraction`, 23 `opaque`, 19 `unaligned-loop`). It proved no pair Equivalent. 159 pairs kept their first result.
+  - Thorough's IL pass produced 13: 1 EQ001, 5 EQ002, 7 EQ006 (P2-133 adjudicates the 12 Divergents; ADR 0039's
+    measurement found none of its 21 reproduced by replay). At the first pass's budgets the pass produced the same
+    numbers of each in 327 s against 5,794 s.
+  - All 84 `timeout` Unknowns of thorough carry `failureRefinement`: 74 with both answers `unknown`, 9 with both
+    `found`, 1 with both `none-proved`. Quick's 183 carry none.
+  - The escalation `bound` of 8, measured here for the first time, is where the cost is: ADR 0049 estimated the budget
+    pass at about 28,500 s on one thread from a run at `bound` 3, and it took 30,222 s on four. In the first thorough run the median pair
+    of the pass took 62 s, one in ten over 24 minutes, the longest 71 minutes. Thorough as the default is 37 times quick's time on
+    this pair for 42 fewer Unknowns, 41 of them Divergents. P2-134 is filed to set the later passes' values from a
+    measurement of each knob; this ticket may not change ADR 0049's table.
+  - Five queries of the thorough run and four of today's default ended on the wall clock, not the resource limit, so
+    up to that many results of each could differ on another run. Quick had none. A one-minute build ran beside the
+    thorough run at 14:30 on 2026-10-06 (a format fix for CI); nothing else did.
+  - The README's scoreboard is not touched: these are one pair's numbers under a new default, and P2-130 reruns the
+    large pairs for it.
 - Deviation: `src/Equiv.Core/Ir/IrUnroller.cs`, `LoopLadder`, `ContractVerifier` and `FailureRefinementQuery` are
   outside the Files list. Criterion 11's first thorough run did not finish: after 254 of the budget pass's 255 pairs,
   `GitUI.CommandsDialogs.FormCommit::FormatAllText(int)` never left the unroll stage at bound 8 (4.7 s for the whole
   pair at bound 3). After 11.5 hours the process held 89 GB on a 63 GB machine, and the user had it stopped
   (2026-10-06). Unrolling is outside every solver budget, so thorough as the default could hang on real code.
   `IrUnroller.UnrollWithin` now refuses a side that would pass 25,000 blocks, before it makes the copy; rung 1 is
-  then not applicable and the other rungs run.
+  then not applicable and the other rungs run. In the second run that pair took 0.08 s in the budget pass and is
+  Unknown; it is the only result whose ladder names the limit. The first run's budget pass had finished 254 pairs
+  in 100,678 s of pair time with 29 Divergent and 225 Unknown, which is in line with the second run's 30,222 s on four threads.
 - Decision: the limit is 25,000 blocks. The loop analysis overflowed a one-megabyte stack between 30,000 and 50,000
   blocks of a nest of loops, and the largest pair the tests verify unrolls to 13,497 (P2-121). It is a constant, not
   a setting: nothing has asked for another value yet.

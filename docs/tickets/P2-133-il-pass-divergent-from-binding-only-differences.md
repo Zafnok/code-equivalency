@@ -54,3 +54,6 @@ Turning the IL pass off in thorough (ADR 0049 decides that). The lambda bodies t
 
 ## Notes
 - Filed by P1-032 on 2026-10-05, from `samples/business-layer` under the new default.
+- P1-032's thorough run of `gitextensions-8522` (2026-10-06) has 12 `decidedBy: il-pass` Divergents, 5 EQ002 and 7
+  EQ006, and 1 `il-pass` Equivalent. Its SARIF is `.corpus/pairs/gitextensions-8522/runs/20261006-1003-full-thorough-capped/`
+  in that ticket's worktree; a fresh thorough run reproduces it.
