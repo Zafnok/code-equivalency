@@ -242,6 +242,43 @@ public sealed class RefinementTests
         Assert.Single(verdict.Ladder);
     }
 
+    /// <summary>
+    /// A refined query has ten times the pair's resource limit and no second solver (ADR 0053 decision 1): the limit was
+    /// set on bit-vector queries, and the second solver's printer knows no floating point.
+    /// </summary>
+    [Fact]
+    public void ARefinedQueryHasTenTimesTheResourceLimitAndNoSecondSolver()
+    {
+        ScriptedSolver second = new(static _ => new SmtUnsat());
+        VerificationOptions options = Options with { ResourceLimit = 2_000_000, Solver = second };
+
+        VerificationOptions refined = AbstractionRefinement.Options(options);
+
+        Assert.Equal(20_000_000, refined.ResourceLimit);
+        Assert.Null(refined.Solver);
+        Assert.Equal(options with { ResourceLimit = 20_000_000, Solver = null }, refined);
+        Assert.Equal(int.MaxValue, AbstractionRefinement.Options(options with { ResourceLimit = (int.MaxValue / 10) + 1 }).ResourceLimit);
+        Assert.Equal(2_147_483_640, AbstractionRefinement.Options(options with { ResourceLimit = int.MaxValue / 10 }).ResourceLimit);
+        Assert.Equal(3, AbstractionRefinement.MaxRounds);
+    }
+
+    /// <summary>
+    /// The refined query of this pair gives up, which is where a second solver would be asked. It is not: a solver that
+    /// answers every script unsatisfiable would otherwise make the pair Equivalent.
+    /// </summary>
+    [Fact]
+    public void ARefinedQueryThatGivesUpIsNotAskedOfTheSecondSolver()
+    {
+        ScriptedSolver second = new(static _ => new SmtUnsat());
+        string old = $"proc \"T::M(double)\" (%a: {Double}) -> {Double} entry B0\nB0:\n  %half: {Double} = const {Literal(0.5)}\n  %s: {Double} = pure \"f64.mul\"(%a, %half)\n  ret %s";
+        string @new = $"proc \"T::M(double)\" (%a: {Double}) -> {Double} entry B0\nB0:\n  %two: {Double} = const {Literal(2.0)}\n  %s: {Double} = pure \"f64.div\"(%a, %two)\n  ret %s";
+
+        Verdict verdict = new Z3Backend().Verify(IrText.Parse(old), IrText.Parse(@new), Options with { ResourceLimit = 20_000, RefineTimeouts = false, Solver = second });
+
+        Assert.Equal(UnknownReason.Abstraction, Assert.IsType<Unknown>(verdict).Reason);
+        Assert.Empty(second.Scripts);
+    }
+
     [Fact]
     public void Refined_OpaqueReachedIsUnknownOpaqueWithTheResidualClaim()
     {
