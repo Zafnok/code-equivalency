@@ -218,14 +218,19 @@ internal static class CompareCommand
     /// <c>--baseline</c> or <c>--fail-on</c>, a budget or <c>jobs</c> that is not positive, or a mode that is neither
     /// <c>thorough</c> nor <c>quick</c> (ADR 0049 decision 1; ticket P1-032).
     /// </summary>
-    private static string? UsageError(CompareOptions options) =>
-        options.LowerOnly && (options.BaselinePath is not null || options.FailOn is not null)
-            ? "error: --lower-only cannot be combined with --baseline or --fail-on"
-            : options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0 || options.Jobs is <= 0
-                ? "error: bound, timeoutMs, resourceLimit and jobs must be positive integers"
-                : options.Mode is { } mode && EquivConfigLoader.ParseMode(mode) is null
-                    ? $"error: mode must be {Passes.ThoroughName} or {Passes.QuickName}, not '{mode}'"
-                    : null;
+    private static string? UsageError(CompareOptions options)
+    {
+        bool lowerOnlyWithAVerdictOption = options.LowerOnly && (options.BaselinePath is not null || options.FailOn is not null);
+        bool notPositive = options.Bound is <= 0 || options.TimeoutMs is <= 0 || options.ResourceLimit is <= 0 || options.Jobs is <= 0;
+        bool noSuchMode = options.Mode is not null && EquivConfigLoader.ParseMode(options.Mode) is null;
+        return (lowerOnlyWithAVerdictOption, notPositive, noSuchMode) switch
+        {
+            (true, _, _) => "error: --lower-only cannot be combined with --baseline or --fail-on",
+            (false, true, _) => "error: bound, timeoutMs, resourceLimit and jobs must be positive integers",
+            (false, false, true) => $"error: mode must be {Passes.ThoroughName} or {Passes.QuickName}, not '{options.Mode}'",
+            _ => null,
+        };
+    }
 
     /// <summary>
     /// The run's config: the file's, with the command line's settings over it, each one named as explicit (ADR 0049
@@ -287,7 +292,7 @@ internal static class CompareCommand
         List<ProcedureIdentity> unverifiedPairs = [.. matchResult.LoweringFailures.Select(static f => f.New)];
         Passes passes = Passes.Of(config, Verification(config, options, runLog));
         (List<VerificationResult> results, List<Notification> verifyFailures, List<ProcedureIdentity> unverifiedVerified) =
-            options.LowerOnly ? ([], [], []) : Decided(lowered, analysis, passes, new Verifying(backend, config.Jobs, error), (execution, options.Testing));
+            options.LowerOnly ? ([], [], []) : PairResults(lowered, analysis, passes, new Verifying(backend, config.Jobs, error), (execution, options.Testing));
         pairFailures.AddRange(verifyFailures);
         unverifiedPairs.AddRange(unverifiedVerified);
         QueryEndings? endings = options.LowerOnly ? null : QueryEndings.Of(results);
@@ -346,6 +351,23 @@ internal static class CompareCommand
         return properties;
     }
 
+    private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census) =>
+        new(StringComparer.Ordinal)
+        {
+            ["loweringCensus"] = census.ToProperty(),
+            ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
+            ["projectsNotBuilt"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [LegacySide] = (List<string>)[.. analysis.LegacyNotBuilt],
+                [ModernSide] = (List<string>)[.. analysis.ModernNotBuilt],
+            },
+            ["runtimes"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [LegacySide] = SarifReportWriter.RuntimesProperty(analysis.LegacyRuntimes),
+                [ModernSide] = SarifReportWriter.RuntimesProperty(analysis.ModernRuntimes),
+            },
+        };
+
     /// <summary>
     /// ADR 0049 decision 6: one warning on stderr when <c>--baseline</c> was written in the other mode, since what the
     /// modes decide differently then shows as <c>new</c> results. A baseline that names no mode, one from before the modes,
@@ -366,7 +388,7 @@ internal static class CompareCommand
     /// identities are the first pass's: a later pass that fails on a pair leaves the pair its earlier result. Thorough
     /// without <c>--execute</c> says once on stderr that its Unknowns were not tested (decision 3).
     /// </summary>
-    private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) Decided(
+    private static (List<VerificationResult> Results, List<Notification> Failures, List<ProcedureIdentity> Unverified) PairResults(
         List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> lowered, FrontendAnalysis analysis, Passes passes, Verifying verifying, (ExecutionEnvironment? Environment, TestingOptions Testing) executing)
     {
         (IVerificationBackend backend, int jobs, TextWriter error) = verifying;
@@ -400,8 +422,11 @@ internal static class CompareCommand
         }
 
         Dictionary<string, (ProcedurePair Pair, IrProcedure Old, IrProcedure New)> pairs = lowered.ToDictionary(static p => p.Pair.New.Value, StringComparer.Ordinal);
-        (Unknown Earlier, ProcedurePair Pair, IrProcedure Old, IrProcedure New)? Undecided(VerificationResult result) =>
-            result.Verdict is Unknown unknown && pairs[result.Identity.Value] is var (pair, old, @new) && Decide(pair, old, @new) is null ? (unknown, pair, old, @new) : null;
+        (Unknown Earlier, ProcedurePair Pair, IrProcedure Old, IrProcedure New)? Undecided(VerificationResult result)
+        {
+            (ProcedurePair pair, IrProcedure old, IrProcedure @new) = pairs[result.Identity.Value];
+            return result.Verdict is Unknown unknown && Decide(pair, old, @new) is null ? (unknown, pair, old, @new) : null;
+        }
 
         List<VerificationResult> results = verified;
         if (passes.Budget is { } budget)
@@ -485,7 +510,7 @@ internal static class CompareCommand
             return (earlier, $"warning: Verifying {earlier.Identity.Value} again in the {phase} pass failed, so it keeps its result: {exception.Message}");
         }
 
-        options.Log.ItemDone(Outcome(verdict));
+        options.Log.ItemDone(OutcomeWord(verdict));
         VerificationResult later = candidate.Over(earlier) with { Verdict = verdict with { Ladder = [.. earlier.Verdict.Ladder, .. verdict.Ladder] }, DecidedBy = $"{phase}-pass" };
         VerificationResult standing = Standing(earlier, later);
         return candidate.Earlier.FailureRefinement is null && verdict is Unknown { FailureRefinement: { } refinement } && ReferenceEquals(standing, earlier)
@@ -508,29 +533,12 @@ internal static class CompareCommand
     };
 
     /// <summary>The one word the run log ends a verified pair's item with.</summary>
-    private static string Outcome(Verdict verdict) => verdict switch
+    private static string OutcomeWord(Verdict verdict) => verdict switch
     {
         Equivalent => "equivalent",
         Divergent => "divergent",
         _ => "unknown",
     };
-
-    private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census) =>
-        new(StringComparer.Ordinal)
-        {
-            ["loweringCensus"] = census.ToProperty(),
-            ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
-            ["projectsNotBuilt"] = new Dictionary<string, object>(StringComparer.Ordinal)
-            {
-                [LegacySide] = (List<string>)[.. analysis.LegacyNotBuilt],
-                [ModernSide] = (List<string>)[.. analysis.ModernNotBuilt],
-            },
-            ["runtimes"] = new Dictionary<string, object>(StringComparer.Ordinal)
-            {
-                [LegacySide] = SarifReportWriter.RuntimesProperty(analysis.LegacyRuntimes),
-                [ModernSide] = SarifReportWriter.RuntimesProperty(analysis.ModernRuntimes),
-            },
-        };
 
     /// <summary>
     /// ADR 0040 decision 2: when any matched pair's runtimes reach below the oldest .NET version <c>runtime-changes.json</c>
@@ -880,7 +888,7 @@ internal static class CompareCommand
         try
         {
             Verdict verdict = backend.Verify(old, @new, options);
-            options.Log.ItemDone(Outcome(verdict));
+            options.Log.ItemDone(OutcomeWord(verdict));
             return new PairOutcome(new VerificationResult(pair.New, verdict)
             {
                 EquivalencesApplied = pair.EquivalencesApplied,

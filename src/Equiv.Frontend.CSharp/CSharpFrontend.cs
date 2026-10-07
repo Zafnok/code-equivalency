@@ -277,17 +277,18 @@ public sealed class CSharpFrontend : ILanguageFrontend
                 congruent,
                 log);
             bool il = string.Equals(lowering, IlFallback.Il, StringComparison.Ordinal);
-            pair = thorough
-                ? pair with { Il = il ? new IlBodies(old, @new, CallSites.Forwarders(oldSites, newSites)) : null }
-                : pair with
-                {
-                    OldBody = old,
-                    NewBody = @new,
-                    Lowering = lowering,
-                    IlFallbackTried = tried,
-                    EquivalencesApplied = il ? [] : pair.EquivalencesApplied,
-                    ForwardersResolved = il ? CallSites.Forwarders(oldSites, newSites) : pair.ForwardersResolved,
-                };
+            ImmutableArray<ResolvedForwarder> forwarders = CallSites.Forwarders(oldSites, newSites);
+            IlBodies? ilBodies = il ? new IlBodies(old, @new, forwarders) : null;
+            ProcedurePair replaced = pair with
+            {
+                OldBody = old,
+                NewBody = @new,
+                Lowering = lowering,
+                IlFallbackTried = tried,
+                EquivalencesApplied = il ? [] : pair.EquivalencesApplied,
+                ForwardersResolved = il ? forwarders : pair.ForwardersResolved,
+            };
+            pair = thorough ? pair with { Il = ilBodies } : replaced;
         }
 
         // Ticket M4-006: a sync method throws to its caller and an async one into its task, so the pair is decided from the

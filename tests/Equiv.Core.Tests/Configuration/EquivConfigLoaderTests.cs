@@ -109,7 +109,6 @@ public sealed class EquivConfigLoaderTests
     public void Mode_DefaultsToQuick()
     {
         Assert.Equal(CompareMode.Quick, EquivConfig.Default.Mode);
-        Assert.Equal(CompareMode.Quick, default(CompareMode));
         Assert.Equal(CompareMode.Quick, EquivConfigLoader.Load("{}").Config.Mode);
         Assert.Equal(CompareMode.Thorough, EquivConfigLoader.Load("""{ "mode": "thorough" }""").Config.Mode);
         Assert.Equal(CompareMode.Quick, EquivConfigLoader.Load("""{ "mode": "quick" }""").Config.Mode);

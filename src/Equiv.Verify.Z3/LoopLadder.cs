@@ -311,18 +311,6 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             ProductEncoder.TraceComparison.Positional);
     }
 
-    /// <summary>
-    /// Both sides unrolled <paramref name="bound"/> times, or null when either would hold more than
-    /// <see cref="IrUnroller.MaxBlocks"/> blocks (ticket P1-032): rung 1, the contract check and the failure-refinement
-    /// queries then have no product to ask about, and say so instead of unrolling without end.
-    /// </summary>
-    internal static (IrProcedure Old, IrProcedure New)? Unrolled(IrProcedure old, IrProcedure @new, int bound) =>
-        IrUnroller.UnrollWithin(old, bound) is { } oldUnrolled && IrUnroller.UnrollWithin(@new, bound) is { } newUnrolled ? (oldUnrolled, newUnrolled) : null;
-
-    /// <summary>Why a pair <see cref="Unrolled"/> refused has no rung 1.</summary>
-    internal static string TooLargeToUnroll(int bound) =>
-        string.Create(CultureInfo.InvariantCulture, $"a side unrolled {bound} times holds more than {IrUnroller.MaxBlocks} blocks");
-
     /// <summary>Rung 1's queries on the encoding of the <paramref name="unrolled"/> pair, in order.</summary>
     private Rung Bounded(Context context, ProductEncoding encoding, SecondSolver solvers, (IrProcedure Old, IrProcedure New) unrolled, bool looping)
     {
@@ -355,6 +343,18 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
             ? WithinBound(solvers, context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable), bound)
             : Proved(ProofMethod.Bounded, "no loop or self-call; every input checked", new Equivalent(ProofMethod.Bounded));
     }
+
+    /// <summary>
+    /// Both sides unrolled <paramref name="bound"/> times, or null when either would hold more than
+    /// <see cref="IrUnroller.MaxBlocks"/> blocks (ticket P1-032): rung 1, the contract check and the failure-refinement
+    /// queries then have no product to ask about, and say so instead of unrolling without end.
+    /// </summary>
+    internal static (IrProcedure Old, IrProcedure New)? Unrolled(IrProcedure old, IrProcedure @new, int bound) =>
+        IrUnroller.UnrollWithin(old, bound) is { } oldUnrolled && IrUnroller.UnrollWithin(@new, bound) is { } newUnrolled ? (oldUnrolled, newUnrolled) : null;
+
+    /// <summary>Why a pair <see cref="Unrolled"/> refused has no rung 1.</summary>
+    internal static string TooLargeToUnroll(int bound) =>
+        string.Create(CultureInfo.InvariantCulture, $"a side unrolled {bound} times holds more than {IrUnroller.MaxBlocks} blocks");
 
     /// <summary>
     /// The scope of rung 1's opaque Unknown, reached only once the first query of ADR 0014 was unsatisfiable (ADR 0029
