@@ -4,6 +4,7 @@ using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 using Equiv.TestSupport;
+using Equiv.Verify.Z3.Refinement;
 
 using Xunit;
 
@@ -12,7 +13,8 @@ namespace Equiv.Verify.Z3.Tests;
 /// <summary>
 /// Ticket P1-033 criteria 2 and 3 (ADR 0050): rung 1 asks a second solver the queries Z3 gives up on. Z3 is starved
 /// here by its resource limit, which ends a hard query at the same point on every machine and still lets it answer a
-/// query whose constants are all fixed, which is what a read-back is.
+/// query whose constants are all fixed, which is what a read-back is. The pairs hold hard arithmetic, so the abstracted
+/// product rung 1 would ask next (ticket P1-031) is off: these are the exact product's queries.
 /// </summary>
 public sealed class SecondSolverLadderTests
 {
@@ -242,8 +244,8 @@ public sealed class SecondSolverLadderTests
         Fixture fixture = Fixture.Load("hard-multiplication");
         ScriptedSolver solver = new(static _ => new SmtUnsat());
 
-        Assert.IsType<Unknown>(new Z3Backend().Verify(fixture.Old, fixture.New, Starved));
-        Equivalent equivalent = Assert.IsType<Equivalent>(new Z3Backend().Verify(fixture.Old, fixture.New, Starved with { Solver = solver }));
+        Assert.IsType<Unknown>(new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(fixture.Old, fixture.New, Starved));
+        Equivalent equivalent = Assert.IsType<Equivalent>(new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(fixture.Old, fixture.New, Starved with { Solver = solver }));
 
         Assert.Equal((ProofMethod.Bounded, null), (equivalent.Method, equivalent.BoundedBy));
         Assert.Equal(new LadderStep(ProofMethod.Bounded, RungOutcome.Proved, "no loop or self-call; every input checked") { Solver = Cvc5 }, Assert.Single(equivalent.Ladder));
@@ -271,7 +273,7 @@ public sealed class SecondSolverLadderTests
         IrProcedure procedure = IrText.Parse(LoopBehindAHardCondition);
         ScriptedSolver solver = new(static _ => new SmtUnsat());
 
-        Equivalent equivalent = Assert.IsType<Equivalent>(new Z3Backend().Verify(procedure, procedure, Starved with { Solver = solver }));
+        Equivalent equivalent = Assert.IsType<Equivalent>(new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(procedure, procedure, Starved with { Solver = solver }));
 
         Assert.Equal((ProofMethod.Bounded, 3), (equivalent.Method, equivalent.BoundedBy));
         Assert.Equal(new LadderStep(ProofMethod.Bounded, RungOutcome.Proved, "no input goes past the bound 3") { Solver = Cvc5 }, Assert.Single(equivalent.Ladder));
@@ -284,8 +286,8 @@ public sealed class SecondSolverLadderTests
         IrProcedure procedure = IrText.Parse(LoopBehindAFactoring);
         ScriptedSolver solver = new(ScriptedSolver.Solve);
 
-        Verdict alone = new Z3Backend().Verify(procedure, procedure, Starved);
-        Verdict verdict = new Z3Backend().Verify(procedure, procedure, Starved with { Solver = solver });
+        Verdict alone = new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(procedure, procedure, Starved);
+        Verdict verdict = new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(procedure, procedure, Starved with { Solver = solver });
 
         Assert.Equal(new LadderStep(ProofMethod.Bounded, RungOutcome.Timeout, StarvedDetail), alone.Ladder[0]);
         Assert.Equal(new LadderStep(ProofMethod.Bounded, RungOutcome.Inconclusive, "no divergence within the bound 3, and some input goes past it") { Solver = Cvc5 }, verdict.Ladder[0]);
@@ -300,9 +302,9 @@ public sealed class SecondSolverLadderTests
         RecordingRunLog log = new(isDebug: true);
         (IrProcedure old, IrProcedure @new) = Fixture.Pair(Factoring);
 
-        new Z3Backend().Verify(old, @new, Starved with { Solver = new ScriptedSolver(ScriptedSolver.Solve), Log = log });
-        new Z3Backend().Verify(old, @new, Starved with { Solver = new ScriptedSolver(static _ => new SmtUnsat()), Log = log });
-        new Z3Backend().Verify(old, @new, Starved with { Solver = new ScriptedSolver(static _ => new SmtUnknown("gave up")), Log = log });
+        new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(old, @new, Starved with { Solver = new ScriptedSolver(ScriptedSolver.Solve), Log = log });
+        new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(old, @new, Starved with { Solver = new ScriptedSolver(static _ => new SmtUnsat()), Log = log });
+        new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(old, @new, Starved with { Solver = new ScriptedSolver(static _ => new SmtUnknown("gave up")), Log = log });
 
         // Rung 1's queries only. After the ladder a Divergent is searched for an input condition (ADR 0048) and a timeout
         // Unknown is asked ADR 0037's two questions (ticket P1-035); their queries are stages of those steps.
@@ -324,7 +326,7 @@ public sealed class SecondSolverLadderTests
     private static Verdict Verify(string pair, ScriptedSolver? solver)
     {
         (IrProcedure old, IrProcedure @new) = Fixture.Pair(pair);
-        return new Z3Backend().Verify(old, @new, Starved with { Solver = solver });
+        return new Z3Backend { Arithmetic = ArithmeticMode.Off }.Verify(old, @new, Starved with { Solver = solver });
     }
 
     private static void AssertTimeout(Verdict verdict)

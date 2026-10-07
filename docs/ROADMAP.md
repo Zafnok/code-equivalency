@@ -837,7 +837,24 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
 
 - P1-028 (M) Measurement: the opaque reasons with no owner, counted over the three large runs
   together, by what each unlocks once the open owners land. Files a ticket for each at or above 1% of
-  the 2,246 changed pairs. Needs P2-066.
+  the 2,246 changed pairs. Needs P2-066. Done 2026-10-07 (`docs/runs/2026-10-07-opaque-tail.md`):
+  the open owners take the lowerable share from 34.1% to 55.6% and the unowned reasons hold the
+  other 44.3%. It filed the six below, in order of the changed pairs each unlocks once the open
+  owners have landed. `iterator` (27, 1.2%) is the seventh and was left out by the ticket's cap of
+  six, and `LocalFunction`, which P2-127 added after the three runs, unlocks 48 on
+  gitextensions-8522's 2026-10-06 run and has no owner either.
+  - P2-136 (M) `DelegateCreation`, what P2-067 left opaque: 257 pairs (11.4%). Counts the causes and
+    removes the largest.
+  - P2-137 (M) `rebound-call`: 191 pairs (8.5%), and 11.9% of gitextensions-8522's changed pairs
+    alone. Counts the callee pairs and adds a catalogue entry for the base class library ones that
+    are one call.
+  - P2-138 (M) `DefaultValue`: 73 pairs (3.3%). Counts the types and lowers the largest one P2-095
+    does not own.
+  - P2-139 (M) `InterpolatedString`, what P2-086 left opaque: 59 pairs (2.6%), 47 of them on
+    gitextensions-9860. Counts the forms and lowers the largest one P2-102 does not own.
+  - P2-140 (M) `CaughtException`: 51 pairs (2.3%). Counts what bodies do with the exception they
+    catch and lowers the largest use.
+  - P2-141 (M) `CompoundAssignment`: 35 pairs (1.6%). Counts the forms and lowers the largest.
 - P1-029 (M) `await using` and `await foreach` lower through their awaited calls instead of making
   the body opaque: 83 bodies per side and 13 changed pairs alone on jellyfin-13023. Needs M4-006,
   M4-001.
@@ -886,7 +903,10 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   against ADR 0025. Needs P1-019, M3-016, M4-002.
 - P1-031 (L) Abstraction refinement, part 2: a rung 1 query that times out is asked again with
   multiplication, division and remainder of two unknowns as shared functions, refined by point facts
-  from spurious models (`+abstracted`). Needs P2-050, M3-016.
+  from spurious models (`+abstracted`). Needs P2-050, M3-016. Done 2026-10-07: the sample
+  `hard-arithmetic` is proved `bounded+abstracted` where the exact query runs out at 30,000,000
+  units. On `gitextensions-8522` in quick mode 2 of the 132 pairs whose rung 1 times out hold such an
+  operator, neither is decided, and no result changes: that pair's timeouts are not arithmetic.
 - P1-025 (M) Spike: do Bitwuzla, cvc5, Eldarica or Golem decide the queries Z3 gives up on. Done:
   cvc5 answers 59 of the 142 rung 1 queries Z3 gives up on for gitextensions-8522 (9 Divergent, 27
   Unknown(abstraction), 4 unsatisfiable) and proves no pair; Bitwuzla reads none; no rung 4 Unknown
@@ -956,7 +976,8 @@ open ticket, in this order:
 4. Unknown, the opaque reasons with a measured share: P2-122 (`switch-pattern`, 6.9% and 6.8% of
    two pairs' changed pairs), P2-087 (`Binary`, 6.2% of OpenRA's), P2-095 (13 of
    gitextensions-9860's 16 `Conversion` pairs), P2-093 and P2-104 (pattern forms behind cleanup
-   samples), and P1-028, which counts the unowned tail and needs no run.
+   samples), and P1-028, which counts the unowned tail and needs no run (done; it filed P2-136 to
+   P2-141, in that order).
 5. P1-032 (the thorough and quick modes, ADR 0049; done, with quick the default under ADR 0052). The
    reruns name their compare mode, as `equiv-corpus-run` says.
 6. The reruns, each applying `equiv-scoreboard`: P2-124 (two upgrades), P2-110 (three cleanups),

@@ -298,6 +298,12 @@ ships no cvc5: its release binary links LGPL libraries, so you install it yourse
 (`tools/cvc5/fetch.ps1` fetches the release this repo tests against). Without the setting nothing
 changes.
 
+A rung 1 query that still hits its budget is asked once more with every multiplication, division and
+remainder of two unknowns as a function both sides share (ADR 0025). Arithmetic that did not change
+is then equal without the solver looking inside a 64-bit multiplier. A proof found this way is a
+proof, and a counterexample is reported only after it is replayed with the real arithmetic. Results
+decided this way say `proofMethod: bounded+abstracted`.
+
 `--il-fallback` (off by default) adds IL lowering to `--mode quick`: it lowers a matched pair again from IL on both sides when
 it is not congruent and either side holds an opaque the other lacks, and keeps the IL bodies only
 when they hold fewer such opaques. (`--mode thorough` reads such a pair from IL anyway, as a later pass and only while it is

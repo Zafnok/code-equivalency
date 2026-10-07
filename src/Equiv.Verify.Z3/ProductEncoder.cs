@@ -6,6 +6,7 @@ using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 
 using Equiv.Verify.Z3.Contracts;
+using Equiv.Verify.Z3.Refinement;
 
 using Microsoft.Z3;
 
@@ -129,8 +130,34 @@ internal static class ProductEncoder
         ImmutableDictionary<string, string> callIdentityMap,
         CallerContracts? contracts = null,
         CalleeContract? relation = null,
-        TraceComparison traces = TraceComparison.Sequence)
+        TraceComparison traces = TraceComparison.Sequence) =>
+        Encode(context, (old, @new), callIdentityMap, contracts, relation, (traces, Arithmetic: null));
+
+    /// <summary>
+    /// Rung 1's second product (ticket P1-031): <see cref="Encode(Context, IrProcedure, IrProcedure, ImmutableDictionary{string, string}, CallerContracts?, CalleeContract?, TraceComparison)"/>
+    /// with the traces compared by position, and both sides' hard arithmetic as <paramref name="arithmetic"/>'s functions,
+    /// one per operator and width and never one per side. The encoding carries it as <see cref="ProductEncoding.Arithmetic"/>.
+    /// </summary>
+    public static ProductEncoding EncodeAbstracted(
+        Context context,
+        IrProcedure old,
+        IrProcedure @new,
+        ImmutableDictionary<string, string> callIdentityMap,
+        ArithmeticAbstraction arithmetic,
+        CallerContracts? contracts = null,
+        CalleeContract? relation = null) =>
+        Encode(context, (old, @new), callIdentityMap, contracts, relation, (TraceComparison.Positional, arithmetic));
+
+    private static ProductEncoding Encode(
+        Context context,
+        (IrProcedure Old, IrProcedure New) pair,
+        ImmutableDictionary<string, string> callIdentityMap,
+        CallerContracts? contracts,
+        CalleeContract? relation,
+        (TraceComparison Traces, ArithmeticAbstraction? Arithmetic) shape)
     {
+        (IrProcedure old, IrProcedure @new) = pair;
+        (TraceComparison traces, ArithmeticAbstraction? arithmetic) = shape;
         SortMapper sorts = new(context);
         ImmutableArray<(SharedParameter Shared, Expr Term)> inputs =
         [
@@ -145,8 +172,8 @@ internal static class ProductEncoder
         ImmutableArray<Expr> heapInputs = [.. calls.Heap.Select(m => inputs.First(i => string.Equals(i.Shared.Var.Name, m.Name, StringComparison.Ordinal) && i.Shared.Type == m.Type).Term)];
         PureEncoder pures = new(sorts, old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrPure>()));
         Dictionary<string, int> exceptionTypes = new(StringComparer.Ordinal);
-        FragmentEncoder oldSide = new(Side.Old, old, sorts, (calls, pures), Bound(inputs, static s => s.Old), heapInputs, exceptionTypes);
-        FragmentEncoder newSide = new(Side.New, @new, sorts, (calls, pures), Bound(inputs, static s => s.New), heapInputs, exceptionTypes);
+        FragmentEncoder oldSide = new(Side.Old, old, sorts, (calls, pures, arithmetic), Bound(inputs, static s => s.Old), heapInputs, exceptionTypes);
+        FragmentEncoder newSide = new(Side.New, @new, sorts, (calls, pures, arithmetic), Bound(inputs, static s => s.New), heapInputs, exceptionTypes);
 
         BoolExpr? byPosition = traces == TraceComparison.Positional ? PositionalTrace.Equal(context, calls, oldSide, newSide) : null;
         BoolExpr tracesEqual = byPosition ?? context.MkEq(oldSide.Trace, newSide.Trace);
@@ -178,6 +205,7 @@ internal static class ProductEncoder
             newSide.Terms)
         {
             Conjuncts = conjuncts,
+            Arithmetic = arithmetic,
         };
     }
 
@@ -344,5 +372,8 @@ internal static class ProductEncoder
     {
         /// <summary>Under a callee contract, the term of each of its conjuncts, in order (ticket P1-010); empty otherwise.</summary>
         public ImmutableArray<BoolExpr> Conjuncts { get; init; } = [];
+
+        /// <summary>The functions that stand for the product's hard arithmetic (ticket P1-031); null when it is encoded exactly.</summary>
+        public ArithmeticAbstraction? Arithmetic { get; init; }
     }
 }

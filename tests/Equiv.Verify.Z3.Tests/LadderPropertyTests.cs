@@ -4,6 +4,7 @@ using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 using Equiv.TestSupport;
+using Equiv.Verify.Z3.Refinement;
 
 using Microsoft.Z3;
 
@@ -95,6 +96,31 @@ public sealed class LadderPropertyTests
                 Assert.False(proved && rungs.Any(static r => r.Step.Outcome == RungOutcome.Refuted), string.Join("; ", rungs.Select(static r => r.Step)));
             },
             iter: 200,
+            print: static pair => $"{IrText.Dump(pair.Old)}\n{IrText.Dump(pair.New)}");
+    }
+
+    /// <summary>
+    /// Ticket P1-031 criterion 5 over loops: rung 1 on its own, asked on the product with its hard arithmetic abstracted
+    /// for every pair. It proves no kept mutant whose witness makes both runs terminate, refutes no looping procedure
+    /// against itself, and every refutation replays; over 100 pairs.
+    /// </summary>
+    [Fact]
+    public void RungOneOnTheAbstractedProductProvesNoTerminatingMutantAndRefutesNoSelfPair()
+    {
+        Gen<(IrProcedure Old, IrProcedure New, bool Mutant)> pairs = Gen.Frequency(
+            (1, Looping.Select(static p => (p, p, false))),
+            (1, Mutants(Looping).Where(static m => Terminates(m.Original, m.Witness) && Terminates(m.Mutant, m.Witness)).Select(static m => (m.Original, m.Mutant, true))));
+        pairs.Sample(
+            static pair =>
+            {
+                LoopLadder.Rung rung = new LoopLadder(static () => new Context(), Options) { Arithmetic = ArithmeticMode.Forced }.Independently(pair.Old, pair.New).First();
+                Assert.NotEqual(pair.Mutant ? RungOutcome.Proved : RungOutcome.Refuted, rung.Step.Outcome);
+                if (rung.Verdict is Divergent divergent)
+                {
+                    AssertReplays(divergent);
+                }
+            },
+            iter: 100,
             print: static pair => $"{IrText.Dump(pair.Old)}\n{IrText.Dump(pair.New)}");
     }
 
