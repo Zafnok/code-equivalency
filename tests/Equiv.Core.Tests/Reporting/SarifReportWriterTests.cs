@@ -768,6 +768,37 @@ public sealed class SarifReportWriterTests
         return VerifyJson(Serialize(equivalent));
     }
 
+    /// <summary>
+    /// Ticket P1-030 criterion 2 (ADR 0053 decision 8): a result decided after refinement has <c>proofMethod</c> suffixed
+    /// <c>+refined</c>, whatever its verdict, and carries <c>properties.refined</c>, the functions the last refined round
+    /// interpreted, sorted. A result no round refined has neither.
+    /// </summary>
+    [Fact]
+    public void ARefinedResult_SuffixesTheProofMethodAndListsTheFunctions()
+    {
+        LadderStep first = new(ProofMethod.Bounded, RungOutcome.Inconclusive, "a divergence within 3 iterations depends on an abstraction");
+        LadderStep round = new(ProofMethod.Bounded, RungOutcome.Inconclusive, "again") { Refined = ["f64.add"] };
+        LadderStep last = new(ProofMethod.Bounded, RungOutcome.Proved, "no loop or self-call; every input checked") { Refined = ["f64.add", "f64.mul"] };
+        ContractUse contract = new("N.T::Score(int)", "(= r.old r.new)", "observed-predicates");
+
+        Assert.Equal(("bounded+refined", "f64.add|f64.mul"), Refined(new Equivalent(ProofMethod.Bounded) { Ladder = [first, round, last] }));
+        Assert.Equal(("bounded+refined", "f64.add"), Refined(new Divergent(Fixtures.Counterexample()) { Ladder = [first, round with { Outcome = RungOutcome.Refuted }] }));
+        Assert.Equal(("bounded+refined", "f64.add"), Refined(new Unknown(UnknownReason.Opaque, "old: Throw") { Ladder = [first, round] }));
+        Assert.Equal(("bounded+contract+refined", "f64.add"), Refined(new Equivalent(ProofMethod.Bounded) { ContractsUsed = [contract], Ladder = [first, round] }));
+        Assert.Equal(("bounded+refined+cvc5", "f64.add"), Refined(new Equivalent(ProofMethod.Bounded) { Ladder = [first with { Solver = new SolverUse("cvc5", "1.4.1") }, round] }));
+        Assert.Equal(("bounded", null), Refined(new Equivalent(ProofMethod.Bounded) { Ladder = [first] }));
+        Assert.Equal((null, null), Refined(new Unknown(UnknownReason.Abstraction, "the divergence depends on f64.rem") { Ladder = [first] }));
+        Assert.Equal((null, null), Refined(new Divergent(Fixtures.Counterexample()) { Ladder = [first] }));
+
+        static (string? Method, string? Functions) Refined(Verdict verdict)
+        {
+            Result result = SarifReportWriter.Write([Fixtures.Result(verdict)]).Runs[0].Results[0];
+            return (
+                result.TryGetProperty("proofMethod", out string? method) ? method : null,
+                result.PropertyNames.Contains("refined", StringComparer.Ordinal) ? string.Join('|', result.GetProperty<List<string>>("refined")) : null);
+        }
+    }
+
     /// <summary>A Divergent or an Unknown a second solver answered a query of names the rung and the solver too; one Z3 decided alone is named as before.</summary>
     [Fact]
     public void ASecondSolversAnswer_IsNamedOnEveryVerdictItTouched()

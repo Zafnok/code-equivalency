@@ -295,17 +295,22 @@ internal sealed class ModelDecoder
         }
 
         /// <summary>
-        /// The element of <paramref name="number"/>: its sign, biased exponent and significand are the IEEE bits, and a NaN
-        /// is the one NaN.
+        /// The element of <paramref name="number"/>: its sign, biased exponent and significand are the IEEE bits. A NaN is
+        /// the one NaN, which has no exponent to ask Z3 for, and an infinity's exponent is written out, since Z3 5.1 reports
+        /// it one bit too wide.
         /// </summary>
         private static IrSortValue Float(FPNum number)
         {
             int significand = (int)number.SBits - 1;
             int width = (int)number.EBits + significand + 1;
-            ulong bits = number.IsNaN
-                ? ulong.MaxValue
-                : ((number.IsNegative ? 1UL : 0UL) << (width - 1)) | ((ulong)number.ExponentInt64(biased: true) << significand) | number.SignificandUInt64;
-            return IrFloat.OfBits(width, bits);
+            ulong infinity = ((1UL << (int)number.EBits) - 1) << significand;
+            if (number.IsNaN)
+            {
+                return IrFloat.OfBits(width, ulong.MaxValue);
+            }
+
+            ulong magnitude = number.IsInf ? infinity : ((ulong)number.ExponentInt64(biased: true) << significand) | number.SignificandUInt64;
+            return IrFloat.OfBits(width, ((number.IsNegative ? 1UL : 0UL) << (width - 1)) | magnitude);
         }
 
         private Dictionary<string, long> Known(string sort)

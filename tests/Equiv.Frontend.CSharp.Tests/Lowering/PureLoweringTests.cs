@@ -355,13 +355,13 @@ public sealed class PureLoweringTests
     /// a floating-point to integer conversion wherever the pair crosses .NET 9, and nothing on a same-runtime pair.
     /// </summary>
     [Theory]
-    [InlineData("net48", "net10.0", true, "f64.lt:True", "f64.add:True", "conv.f64.i32:True")]
+    [InlineData("net48", "net10.0", true, "x87.f64.lt:True", "x87.f64.add:True", "x87.conv.f64.i32:True")]
     [InlineData("net48", "net10.0", false, "f64.lt:False", "f64.add:False", "conv.f64.i32:True")]
     [InlineData("net8.0", "net10.0", false, "f64.lt:False", "f64.add:False", "conv.f64.i32:True")]
     [InlineData("net48", "net8.0", false, "f64.lt:False", "f64.add:False", "conv.f64.i32:False")]
-    [InlineData("net48", "net8.0", true, "f64.lt:True", "f64.add:True", "conv.f64.i32:True")]
+    [InlineData("net48", "net8.0", true, "x87.f64.lt:True", "x87.f64.add:True", "x87.conv.f64.i32:True")]
     [InlineData("net10.0", "net10.0", false, "f64.lt:False", "f64.add:False", "conv.f64.i32:False")]
-    [InlineData("net48", "net48", true, "f64.lt:True", "f64.add:True", "conv.f64.i32:True")]
+    [InlineData("net48", "net48", true, "x87.f64.lt:True", "x87.f64.add:True", "x87.conv.f64.i32:True")]
     public void FloatingPointIsSideSpecificOnlyWhereARuntimeRuleApplies(string legacy, string modern, bool x87, string less, string add, string convert)
     {
         const string Source = "class C { static int M(double a, double b, decimal m) => a < b ? (int)(a + b) : (int)m; }";
@@ -369,10 +369,42 @@ public sealed class PureLoweringTests
         Assert.Equal([less, add, convert, "conv.dec.i32:False"], Sensitivity(Lower(Compilation(Source), Runtimes.Between(legacy, modern, x87))));
     }
 
+    /// <summary>
+    /// ADR 0053 decision 4 (ticket P1-030): a side whose floating point may run on x87 names its floating-point functions
+    /// <c>x87.</c>, whether or not the other side's does too. Two x87 sides are not runtime-sensitive, so they share the
+    /// function, and no backend reads it as IEEE arithmetic. A <c>decimal</c> function is the same on x87.
+    /// </summary>
+    [Fact]
+    public void ASideThatMayRunOnX87NamesItsFloatingPointFunctionsForIt()
+    {
+        const string Source = "class C { static int M(double a, double b, decimal m) => a < b ? (int)(a + b) : (int)m; }";
+        SideRuntime both = Runtimes.Between("net48", "net48") with { OnX87 = true };
+
+        Assert.Equal(["x87.f64.lt:False", "x87.f64.add:False", "x87.conv.f64.i32:False", "conv.dec.i32:False"], Sensitivity(Lower(Compilation(Source), both)));
+        Assert.Equal("x87.f64.neg", PureCatalogue.Entries["f64.neg"].Name(both));
+        Assert.Equal("x87.conv.u8.f32", PureCatalogue.Entries["conv.u8.f32"].Name(both));
+        Assert.Equal("dec.add", PureCatalogue.Entries["dec.add"].Name(both));
+        Assert.Equal("f64.neg", PureCatalogue.Entries["f64.neg"].Name(Runtimes.Migration));
+        string[] named = [.. PureCatalogue.Entries.Values.Select(e => e.Name(both)).Where(static n => n.StartsWith(PureCatalogue.X87Prefix, StringComparison.Ordinal))];
+        Assert.Equal(PureCatalogue.Entries.Keys.Count(static f => f.Contains("f32", StringComparison.Ordinal) || f.Contains("f64", StringComparison.Ordinal)), named.Length);
+        Assert.All(named, static n => Assert.Null(IrPureMeaning.Evaluate(n, [])));
+    }
+
+    /// <summary>ADR 0053 decision 5: a floating-point literal lowers to the element whose id is its IEEE bits, so its value is in the IR.</summary>
+    [Fact]
+    public void AFloatingPointLiteralIsItsBits()
+    {
+        IrProcedure doubles = Lowered.Method("static double M(double a) => a * 2.0;");
+        IrProcedure singles = Lowered.Method("static float M(float a) => a * 0.5f;");
+
+        Assert.Equal(IrFloat.Of(2.0), Assert.Single(doubles.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>()).Value);
+        Assert.Equal(IrFloat.Of(0.5f), Assert.Single(singles.Blocks.SelectMany(static b => b.Instructions).OfType<IrConst>()).Value);
+    }
+
     /// <summary>A conversion to floating point, and one between floating-point types, are sensitive on x87 alone, never by the .NET 9 rule.</summary>
     [Theory]
-    [InlineData("static double M(int a) => a;", "conv.i32.f64:False", "conv.i32.f64:True")]
-    [InlineData("static float M(double a) => (float)a;", "conv.f64.f32:False", "conv.f64.f32:True")]
+    [InlineData("static double M(int a) => a;", "conv.i32.f64:False", "x87.conv.i32.f64:True")]
+    [InlineData("static float M(double a) => (float)a;", "conv.f64.f32:False", "x87.conv.f64.f32:True")]
     [InlineData("static decimal M(int a) => a;", "conv.i32.dec:False", "conv.i32.dec:False")]
     public void OnlyAFloatToIntegerConversionCrossesNet9(string member, string migration, string x87)
     {

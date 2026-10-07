@@ -63,6 +63,23 @@ public sealed class IrTextTests
         Assert.Equal(new IrSort("System.String"), p.ReturnType);
     }
 
+    /// <summary>ADR 0053 decision 5 (ticket P1-030): a sort element's id is 64 bits and signed, as a negative number's bits are.</summary>
+    [Theory]
+    [InlineData(0L)]
+    [InlineData(2147483648L)]
+    [InlineData(long.MaxValue)]
+    [InlineData(long.MinValue)]
+    [InlineData(-1L)]
+    public void IrText_RoundTripsA64BitSortElement(long id)
+    {
+        IrSortValue element = new("System.Double", id);
+        IrProcedure procedure = IrText.Parse($"proc \"P\" () -> sort \"System.Double\" entry B0 B0: %x: sort \"System.Double\" = const {IrText.Value(element)} ret %x");
+
+        Assert.Equal(element, ((IrConst)procedure.Blocks[0].Instructions[0]).Value);
+        Assert.Equal(procedure, IrText.Parse(IrText.Dump(procedure)));
+        Assert.Equal(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"sort \"System.Double\" {id}"), IrText.Value(element));
+    }
+
     [Fact]
     public void IrText_RoundTripsRuntimeChangedFlag()
     {
@@ -204,6 +221,7 @@ public sealed class IrTextTests
     [InlineData("proc \"P\" () entry B0 B0: %x: bv8 = const bv8 -129 ret", 1, 47, "does not fit in 8 bits")]
     [InlineData("proc \"P\" () entry B0 B0: %x: bv64 = const bv64 18446744073709551616 ret", 1, 48, "does not fit in 64 bits")]
     [InlineData("proc \"P\" () entry B0 B0: %x: sort \"S\" = const sort \"S\" 9223372036854775808 ret", 1, 56, "out of range")]
+    [InlineData("proc \"P\" () entry B0 B0: %x: sort \"S\" = const sort \"S\" -9223372036854775809 ret", 1, 57, "out of range")]
     [InlineData("proc \"P\" () entry B0 B0: %x: bv8 = frob %x ret", 1, 36, "unknown instruction 'frob'")]
     [InlineData("proc \"P\" () entry B0 B0: %x: bool = overflows sneg %x, %x ret", 1, 47, "unknown overflow operation 'sneg'")]
     [InlineData("proc \"P\" () entry B0 B0: %x: bv8 = neg %y ret", 1, 40, "undefined variable %y")]
