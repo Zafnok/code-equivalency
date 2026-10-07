@@ -40,6 +40,24 @@ public static class IrFloat
     public static IrSortValue OfBits(int width, ulong bits) =>
         width == 32 ? Of(BitConverter.UInt32BitsToSingle((uint)bits)) : Of(BitConverter.UInt64BitsToDouble(bits));
 
+    /// <summary>
+    /// <paramref name="value"/> as a reader wants a number: <c>f64 0.1</c>, <c>f32 -0</c>, <c>f64 NaN</c>, the shortest
+    /// text that reads back to the same bits; null when its sort is not floating point. A report prints a model with it.
+    /// In a model of a query that does not interpret the sort, a value the solver made up is printed as the number its id
+    /// happens to spell, which is as good a value as any other: such a model holds whatever numbers its distinct elements
+    /// are.
+    /// </summary>
+    public static string? Text(IrSortValue value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return Width(value.Type) switch
+        {
+            32 => "f32 " + ToSingle(value).ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            64 => "f64 " + ToDouble(value).ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            _ => null,
+        };
+    }
+
     /// <summary>The <c>float</c> whose bits <paramref name="value"/>'s id is.</summary>
     public static float ToSingle(IrSortValue value)
     {

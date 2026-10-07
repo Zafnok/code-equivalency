@@ -1,0 +1,524 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.FloatArithmetic.Arithmetic::Twice(double) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Arithmetic.cs"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 30,
+                  "endLine": 5,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FloatArithmetic.Arithmetic::Twice(double)",
+            "resultFingerprint/v1": "00709cd43b6bf8af4b1e3cdd4a50c58d5f26c6020cfa42b508ed1d764ffd8854"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded+refined",
+            "refined": [
+              "f64.add",
+              "f64.mul"
+            ],
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
+              },
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.FloatArithmetic.Arithmetic::Combine(double,double) diverges: inputs(f64 1.6415323581137547E+299, f64 7.98336123813888E+292) old(returned f64 1.6415331564498785E+299 outs() trace()) new(returned f64 1.6415315597776309E+299 outs() trace())"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Arithmetic.cs"
+                },
+                "region": {
+                  "startLine": 10,
+                  "startColumn": 30,
+                  "endLine": 10,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FloatArithmetic.Arithmetic::Combine(double,double)",
+            "resultFingerprint/v1": "25e0be6418201f96d1ddcd8385763449cfe395afa0a84f0fbd27e5696ea878fa"
+          },
+          "baselineState": "new",
+          "rank": 60.004,
+          "properties": {
+            "model": "inputs(f64 1.6415323581137547E+299, f64 7.98336123813888E+292) old(returned f64 1.6415331564498785E+299 outs() trace()) new(returned f64 1.6415315597776309E+299 outs() trace())",
+            "proofMethod": "bounded+refined",
+            "refined": [
+              "f64.add",
+              "f64.sub"
+            ],
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
+              },
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "reviewGroup": "proofMethod:none"
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.FloatArithmetic.Arithmetic::Sum(double,double,double) diverges: inputs(f64 -3.9999999981373575, f64 3.999999996274714, f64 5.590190643722794E-09) old(returned f64 3.727547270848676E-09 outs() trace()) new(returned f64 3.727547159826372E-09 outs() trace())"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Arithmetic.cs"
+                },
+                "region": {
+                  "startLine": 15,
+                  "startColumn": 30,
+                  "endLine": 15,
+                  "endColumn": 33
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FloatArithmetic.Arithmetic::Sum(double,double,double)",
+            "resultFingerprint/v1": "fe313e1dd6dfa707c571d943fe7f09d13b6ccb0054cef91cc471aaaafb73dda4"
+          },
+          "baselineState": "new",
+          "rank": 60.004,
+          "properties": {
+            "model": "inputs(f64 -3.9999999981373575, f64 3.999999996274714, f64 5.590190643722794E-09) old(returned f64 3.727547270848676E-09 outs() trace()) new(returned f64 3.727547159826372E-09 outs() trace())",
+            "proofMethod": "bounded+refined",
+            "refined": [
+              "f64.add"
+            ],
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
+              },
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "reviewGroup": "proofMethod:none"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.FloatArithmetic.Arithmetic::IsOrdered(float,float) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Arithmetic.cs"
+                },
+                "region": {
+                  "startLine": 20,
+                  "startColumn": 28,
+                  "endLine": 20,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FloatArithmetic.Arithmetic::IsOrdered(float,float)",
+            "resultFingerprint/v1": "05b8806f9e817ec82054c28fd3067332b2e579b67dbba367e73b6de1232563dc"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded+refined",
+            "refined": [
+              "f32.ge",
+              "f32.le"
+            ],
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
+              },
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.FloatArithmetic.Arithmetic::Mean(double,double) is unknown (Abstraction): the divergence depends on f64.add, f64.div, op:Equiv.Samples.FloatArithmetic.Celsius::op_Implicit(double)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Arithmetic.cs"
+                },
+                "region": {
+                  "startLine": 25,
+                  "startColumn": 31,
+                  "endLine": 25,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FloatArithmetic.Arithmetic::Mean(double,double)",
+            "resultFingerprint/v1": "6b2a92664691faf8d53a1030f64ef2fb01ff7a49d2c6b4abce79bb0cff9ddeda"
+          },
+          "baselineState": "new",
+          "rank": 0.002,
+          "properties": {
+            "unknownReason": "abstraction",
+            "scope": "method",
+            "candidateCounterexample": "inputs(f64 2.0000000000000004, f64 2.000000000000001) old(returned sort \"Equiv.Samples.FloatArithmetic.Celsius\" 0 outs() trace()) new(threw \"System.Exception\" outs() trace())",
+            "abstractions": [
+              {
+                "identity": "f64.add",
+                "side": "legacy"
+              },
+              {
+                "identity": "f64.div",
+                "side": "legacy"
+              },
+              {
+                "identity": "op:Equiv.Samples.FloatArithmetic.Celsius::op_Implicit(double)",
+                "side": "legacy"
+              },
+              {
+                "identity": "f64.add",
+                "side": "modern"
+              },
+              {
+                "identity": "f64.div",
+                "side": "modern"
+              },
+              {
+                "identity": "op:Equiv.Samples.FloatArithmetic.Celsius::op_Implicit(double)",
+                "side": "modern"
+              }
+            ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "a divergence within 3 iterations depends on an abstraction"
+              }
+            ],
+            "reviewGroup": "abstraction"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.FloatArithmetic.Celsius::.ctor(double) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Celsius.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 16,
+                  "endLine": 7,
+                  "endColumn": 23
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FloatArithmetic.Celsius::.ctor(double)",
+            "resultFingerprint/v1": "d41ecead1e138a052fa6cf6cbdd41e30b91d2b4b720c7adc5327c3c4b7c14c84"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.FloatArithmetic.Celsius::op_Implicit(double) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Celsius.cs"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 41,
+                  "endLine": 12,
+                  "endColumn": 48
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.FloatArithmetic.Celsius::op_Implicit(double)",
+            "resultFingerprint/v1": "9f6a9acc64721d51566973c5fa8f8079b93e069e35f594458f290705867e1238"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.FloatArithmetic.Celsius::.ctor(double)"
+            ]
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 7,
+            "modern": 7
+          },
+          "matchedPairs": 7,
+          "pairsWithoutOpaque": 6,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 2,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {
+            "InstanceReference": {
+              "legacy": 1,
+              "modern": 1
+            }
+          },
+          "changedPairs": 5,
+          "changedPairsWithoutOpaque": 5,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 5
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [],
+            "modern": []
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 1
+          },
+          "failureRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
+          },
+          "agreesWhen": {
+            "pairs": 3,
+            "admitted": 0,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 58,
+          "modern": 34
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.FloatArithmetic",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.FloatArithmetic",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "proofMethod:none",
+            "ruleId": "EQ002",
+            "rank": 60.004,
+            "count": 2,
+            "identities": [
+              "Equiv.Samples.FloatArithmetic.Arithmetic::Combine(double,double)",
+              "Equiv.Samples.FloatArithmetic.Arithmetic::Sum(double,double,double)"
+            ]
+          },
+          {
+            "group": "abstraction",
+            "ruleId": "EQ003",
+            "rank": 0.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.FloatArithmetic.Arithmetic::Mean(double,double)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

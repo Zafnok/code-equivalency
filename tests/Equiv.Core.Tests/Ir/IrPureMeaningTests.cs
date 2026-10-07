@@ -58,6 +58,21 @@ public sealed class IrPureMeaningTests
     }
 
     [Fact]
+    public void ANumberReadsAsTheShortestTextThatGivesItsBitsBack()
+    {
+        Assert.Equal("f64 0.1", IrFloat.Text(IrFloat.Of(0.1)));
+        Assert.Equal("f32 0.1", IrFloat.Text(IrFloat.Of(0.1f)));
+        Assert.Equal("f64 0.10000000149011612", IrFloat.Text(IrFloat.Of((double)0.1f)));
+        Assert.Equal("f64 -0", IrFloat.Text(IrFloat.Of(-0.0)));
+        Assert.Equal("f64 NaN", IrFloat.Text(IrFloat.Of(double.NaN)));
+        Assert.Equal("f32 -Infinity", IrFloat.Text(IrFloat.Of(float.NegativeInfinity)));
+        Assert.Equal("f64 1E+300", IrFloat.Text(IrFloat.Of(1e300)));
+        Assert.Equal("f64 5E-324", IrFloat.Text(new IrSortValue("System.Double", 1)));
+        Assert.Null(IrFloat.Text(new IrSortValue("System.Decimal", 1)));
+        Assert.Throws<ArgumentNullException>(static () => IrFloat.Text(null!));
+    }
+
+    [Fact]
     public void OnlyTheTwoFloatingPointSortsHaveAWidth()
     {
         Assert.Equal(32, IrFloat.Width(new IrSort("System.Single")));

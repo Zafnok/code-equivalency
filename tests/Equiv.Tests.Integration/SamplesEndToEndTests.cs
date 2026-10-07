@@ -534,6 +534,41 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P1-030 criteria 2 and 3 (ADR 0053): <c>a * 2.0</c> against <c>a + a</c> is Equivalent once the two
+    /// functions have their IEEE meaning, <c>a + b</c> against <c>a - b</c> and the two groupings of a three-way sum are
+    /// Divergent with numbers for a model, and each such result says it was refined and with what. A pair whose candidate
+    /// also depends on a user-defined conversion is not refined, and names the conversion. The checked-in snapshot is the
+    /// whole run.
+    /// </summary>
+    [Fact]
+    public async Task FloatArithmetic_AnInterpretableCandidateIsRefinedAndAnyOtherIsLeftUnknown()
+    {
+        SampleRun run = RunSample("float-arithmetic");
+        Result twice = Single("float-arithmetic", "::Twice(");
+        Result ordered = Single("float-arithmetic", "::IsOrdered(");
+        Result combine = Single("float-arithmetic", "::Combine(");
+        Result sum = Single("float-arithmetic", "::Sum(");
+        Result mean = Single("float-arithmetic", "::Mean(");
+
+        Assert.Equal(await Snapshot("float-arithmetic"), run.NormalizedSarif);
+        Assert.Equal(("EQ001", "bounded+refined"), (twice.RuleId, twice.GetProperty<string>("proofMethod")));
+        Assert.Equal(["f64.add", "f64.mul"], twice.GetProperty<List<string>>("refined"));
+        Assert.Equal(("EQ001", "bounded+refined"), (ordered.RuleId, ordered.GetProperty<string>("proofMethod")));
+        Assert.Equal(["f32.ge", "f32.le"], ordered.GetProperty<List<string>>("refined"));
+        Assert.Equal(("EQ002", "bounded+refined"), (combine.RuleId, combine.GetProperty<string>("proofMethod")));
+        Assert.Equal(["f64.add", "f64.sub"], combine.GetProperty<List<string>>("refined"));
+        Assert.StartsWith("inputs(f64 ", combine.GetProperty<string>("model"), StringComparison.Ordinal);
+        Assert.Equal(("EQ002", "bounded+refined"), (sum.RuleId, sum.GetProperty<string>("proofMethod")));
+        Assert.Equal(["f64.add"], sum.GetProperty<List<string>>("refined"));
+        Assert.Equal("EQ003", mean.RuleId);
+        Assert.Equal("abstraction", mean.GetProperty<string>("unknownReason"));
+        Assert.False(mean.TryGetProperty("refined", out List<string>? _));
+        Assert.False(mean.TryGetProperty("proofMethod", out string? _));
+        Assert.Contains("op:Equiv.Samples.FloatArithmetic.Celsius::op_Implicit(double)", mean.Message.Text, StringComparison.Ordinal);
+        Assert.Equal(7, run.Log.Runs[0].Results.Count);
+    }
+
+    /// <summary>
     /// Ticket P2-116 criterion 1: a method whose string constant holds two lone surrogates, the same file on both sides,
     /// lowers with no notification and is Equivalent by congruence.
     /// </summary>
