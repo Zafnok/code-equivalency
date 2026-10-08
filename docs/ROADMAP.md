@@ -706,6 +706,12 @@ Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
   exits the `--il-fallback` run with code 5. `IlFallback` keeps the IOperation bodies when the IL
   bodies do not validate. Needs P1-016, P1-017.
 
+Found by P2-107 (2026-10-08, a throwaway unit test on `main`):
+- P2-145 (M) Soundness: the attributes of an `extern` function are its code, and nothing compares
+  them. Two bodies that differ only in the `[DllImport]` of a local `extern` function are congruent
+  and Equivalent, and an `extern` method is never a matched pair, so a changed `[DllImport]` on one
+  produces no result (repros in the ticket). The second half starts with `equiv-adr`. Needs P2-107.
+
 Found by a CI failure (PR #390, `gates (ubuntu-latest)`):
 - P2-129 (S) A ladder property test fails at random, about once in 400 runs, with no assertion: its
   generator's filter for procedures that loop and call keeps 1 draw in 8, and CsCheck gives up after
@@ -986,7 +992,8 @@ waits for the tickets below, so that one set of runs measures all of it. They co
 open ticket, in this order:
 
 1. P2-127 (M) the one known false-Equivalent path. First, because a scoreboard cannot claim
-   soundness over it.
+   soundness over it. P2-145 (M), filed 2026-10-08, is a second one and comes before the reruns
+   for the same reason.
 2. P2-077 (M) pairs verified in parallel: the run-time row, and it shortens every rerun.
 3. Divergent precision, every open ticket that owns a counted false-positive cause: P2-073 (15 of
    the migration audit's 50), P2-074 (7), P2-103 (all 5 of PowerShell's), P2-118 (4), P2-075 (2),
