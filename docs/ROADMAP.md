@@ -879,7 +879,9 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
       pairs on jellyfin-13023. Needs the span lowered and an adapter form for the elements.
     - P2-144 (M) a switch expression that matches no arm throws another exception type after a
       migration from .NET Framework: 41 results on gitextensions-8522, 39 of them Equivalent by
-      congruence.
+      congruence. Done 2026-10-08: a runtime rule (EQ006) for an expression that can match no arm.
+      Every switch expression in gitextensions-8522's 58 pairs that hold one covers every value,
+      so the 39 were right, stay congruent, and no longer name the two constructors.
   - P2-138 (M) `DefaultValue`: 73 pairs (3.3%). Counts the types and lowers the largest one P2-095
     does not own.
   - P2-139 (M) `InterpolatedString`, what P2-086 left opaque: 59 pairs (2.6%), 47 of them on

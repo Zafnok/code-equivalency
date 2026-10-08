@@ -26,6 +26,7 @@ public sealed class SamplesFixtureTests
             ["loop-to-linq"] = ["Equivalent"],
             ["loop-fusion"] = ["Equivalent"],
             ["partly-compiling-modern"] = ["Equivalent", "Unknown"],
+            ["switch-expression-no-match"] = ["Equivalent", "Divergent"],
         };
 
     private static string SamplesRoot =>

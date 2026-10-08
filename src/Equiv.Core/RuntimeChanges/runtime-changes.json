@@ -17,6 +17,11 @@
 // tools/runtime-diff between adjacent runtimes (P2-113). A member whose behaviour changed at more than one runtime
 // has one row per change point.
 //
+// One row is for a call the compiler makes and the source does not write (ADR 0024 as clarified by ticket P2-144):
+// the SwitchExpressionException constructor a switch expression calls when no arm matches. Where the reference
+// assemblies have no such type the compiler calls InvalidOperationException's, which has no row, so the row flags the
+// side that has the type; the bound fingerprint names the constructor on both sides.
+//
 // x87 vs SSE floating-point on x86 is NOT a row here: floats are an uninterpreted Sort in the
 // MVP, so there is no bit-level float semantics yet for a row to flag calls against. Add it once
 // floats gain a real encoding (post-MVP).
@@ -113,6 +118,13 @@
       "changedIn": "netcoreapp3.0",
       "reason": "Floating-point parsing became IEEE 754-compliant in .NET Core 3.0, so the same string can parse to a different nearest double than it did on .NET Framework 4.8.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/3.0#floating-point-formatting-and-parsing-behavior-changed"
+    },
+    {
+      "member": "System.Runtime.CompilerServices.SwitchExpressionException::.ctor(",
+      "source": "curated",
+      "changedIn": "netcoreapp3.0",
+      "reason": "A switch expression that matches no arm throws SwitchExpressionException where the reference assemblies have the type (.NET Core 3.0 and later) and InvalidOperationException where they do not (.NET Framework), so the same source throws another exception type; SwitchExpressionException derives from InvalidOperationException, so only code that names the exact type sees it.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/switch-expression#non-exhaustive-switch-expressions"
     },
     {
       "member": "System.Environment::get_Version(",
