@@ -101,3 +101,4 @@ Line-scoped opaques. Cross-runtime pairs.
   congruent than at `46e6636`. None of the 8 is `unbound` or `no-body`, none is this ticket's, and
   this ticket did not look into them; P2-110 reruns the cleanup pairs.
 - With P2-106 the 82 `unbound` pairs are that ticket's to count. The 46 here do not depend on it.
+- Decision: the owner of `no-body` in `WholeBodyReasonOwners` -> P2-118, the owner `docs/runs/2026-10-07-opaque-tail.md` gives that reason. Alternatives: a sample with no whole-body opaque, which could not show the case. Rule: 3. The table had no row because no sample had such a body; `WholeBodyReasonOwnerTests` failed on the first CI run and this row is the fix.
