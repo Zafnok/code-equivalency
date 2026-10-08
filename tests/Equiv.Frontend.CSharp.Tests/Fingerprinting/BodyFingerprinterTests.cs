@@ -85,6 +85,75 @@ public sealed class BodyFingerprinterTests
         Assert.Contains("DefaultInterpolatedStringHandler", Text(Compile(Body, LanguageVersion.CSharp10)), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-144: a <c>switch</c> expression that may match no arm ends in a throw the bound tree does not hold, of
+    /// <c>SwitchExpressionException</c> where the reference assemblies have the type. The text names its constructor, and
+    /// the body is runtime-sensitive on a pair that crosses .NET Core 3.0, where the type first shipped.
+    /// </summary>
+    [Theory]
+    [InlineData("net48", "net10.0", true)]
+    [InlineData("netcoreapp2.1", "netcoreapp3.1", true)]
+    [InlineData("netcoreapp3.1", "net10.0", false)]
+    [InlineData("net10.0", "net10.0", false)]
+    public void ASwitchExpressionThatMayMatchNoArmNamesItsNoMatchConstructor(string legacy, string modern, bool sensitive)
+    {
+        Compilation compilation = Compile(OpenSwitch);
+        (string? text, bool runtimeSensitive) = BodyFingerprinter.Text(Method(compilation), compilation, EquivConfig.Default, [], Runtimes.Between(legacy, modern));
+
+        Assert.Contains($"SwitchExpression syntax=SwitchExpression implicit=False type=int context={NoMatchConstructor}\n", text!.Replace("System.Int32", "int", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Equal(sensitive, runtimeSensitive);
+    }
+
+    [Fact]
+    public void ASuppressedNoMatchRowIsNotRuntimeSensitive()
+    {
+        Compilation compilation = Compile(OpenSwitch);
+        EquivConfig config = EquivConfig.Default with { SuppressRuntimeChanges = ["System.Runtime.CompilerServices.SwitchExpressionException::.ctor("] };
+
+        Assert.False(BodyFingerprinter.Compute(Method(compilation), compilation, config, [], Runtimes.Migration)!.RuntimeSensitive);
+    }
+
+    /// <summary>
+    /// Where the reference assemblies have no <c>SwitchExpressionException</c> the same text throws
+    /// <c>InvalidOperationException</c>, which no row flags: the two sides' fingerprints differ, so the pair is not congruent
+    /// (criterion 3), and two sides that both lack the type are the same body.
+    /// </summary>
+    [Fact]
+    public void WithoutTheNoMatchTypeTheSameTextHasAnotherFingerprint()
+    {
+        const string Framework = "namespace System { public class InvalidOperationException { public InvalidOperationException() { } } }";
+        Compilation legacy = CSharpCompilation.Create("Bare", [Parse($"{Framework} namespace N {{ public class C {{ {OpenSwitch} }} }}", LanguageVersion.CSharp14)]);
+        Compilation neither = CSharpCompilation.Create("Bare", [Parse($"namespace N {{ public class C {{ {OpenSwitch} }} }}", LanguageVersion.CSharp14)]);
+
+        Assert.Contains("context=System.InvalidOperationException::.ctor()\n", Text(legacy), StringComparison.Ordinal);
+        Assert.False(Fingerprint(legacy, legacy: true).RuntimeSensitive);
+        Assert.NotEqual(Fingerprint(legacy, legacy: true), Fingerprint(Compile(OpenSwitch), legacy: false));
+        Assert.DoesNotContain("context=", Text(neither), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Criterion 4: an expression whose arms cover every value (a discard or <c>var</c> arm with no <c>when</c> clause,
+    /// or patterns that leave no value out) has no throw: its text names no constructor and the body is not
+    /// runtime-sensitive. A <c>when</c> clause on the last arm, or a value left out (<c>null</c>), keeps the throw.
+    /// </summary>
+    [Theory]
+    [InlineData("int M(int a) => a switch { 1 => 10, _ => 0 };", false)]
+    [InlineData("int M(int a) => a switch { 1 => 10, var b => b };", false)]
+    [InlineData("int M(bool b) => b switch { true => 1, false => 0 };", false)]
+    [InlineData("int M(bool? b) => b switch { true => 1, false => 0, null => 2 };", false)]
+    [InlineData("int M(bool? b) => b switch { true => 1, false => 0 };", true)]
+    [InlineData("int M(string s) => s switch { \"a\" => 1, string t => t.Length };", true)]
+    [InlineData("int M(System.DayOfWeek d) => d switch { System.DayOfWeek.Sunday => 1, System.DayOfWeek.Monday => 2, System.DayOfWeek.Tuesday => 3, System.DayOfWeek.Wednesday => 4, System.DayOfWeek.Thursday => 5, System.DayOfWeek.Friday => 6, System.DayOfWeek.Saturday => 7 };", true)]
+    [InlineData("int M(int a) => a switch { 1 => 10, _ when a > 5 => 0 };", true)]
+    [InlineData("int M(int a) => a switch { 1 => 10, var b when b > 5 => 0 };", true)]
+    public void ASwitchExpressionWhoseArmAlwaysMatchesHasNoThrow(string member, bool throws)
+    {
+        Compilation compilation = Compile(member);
+
+        Assert.Equal(throws, Text(compilation).Contains(NoMatchConstructor, StringComparison.Ordinal));
+        Assert.Equal(throws, Fingerprint(compilation, legacy: false).RuntimeSensitive);
+    }
+
     [Fact]
     public void WithoutTheHandlerTypeAnInterpolatedStringBindsStringFormat()
     {
@@ -574,6 +643,11 @@ public sealed class BodyFingerprinterTests
 
         return Verify(Text(compilation, ".ctor"));
     }
+
+    /// <summary>A <c>switch</c> expression with no arm for most values, and the constructor the compiler calls for them on .NET.</summary>
+    private const string OpenSwitch = "int M(int a) => a switch { 1 => 10, 2 => 20 };";
+
+    private const string NoMatchConstructor = "System.Runtime.CompilerServices.SwitchExpressionException::.ctor()";
 
     /// <summary>A side of a pair whose two projects run on one runtime, so the pair crosses none (ADR 0040 decision 2).</summary>
     private static SideRuntime OneRuntime => Runtimes.Between("net8.0", "net8.0");

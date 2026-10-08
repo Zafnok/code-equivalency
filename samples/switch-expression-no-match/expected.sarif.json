@@ -69,61 +69,70 @@
       },
       "results": [
         {
-          "ruleId": "EQ001",
-          "kind": "pass",
-          "level": "none",
+          "ruleId": "EQ006",
+          "level": "error",
           "message": {
-            "text": "Equiv.Samples.SameRuntimeCleanup.Native::Beep(uint,uint) is equivalent."
+            "text": "Equiv.Samples.SwitchExpressionNoMatch.Codes::Weight(int) diverges via a runtime-changed API between net48 and net10.0 (A switch expression that matches no arm throws SwitchExpressionException where the reference assemblies have the type (.NET Core 3.0 and later) and InvalidOperationException where they do not (.NET Framework), so the same source throws another exception type; SwitchExpressionException derives from InvalidOperationException, so only code that names the exact type sees it. https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/switch-expression#non-exhaustive-switch-expressions): inputs(bv32 0) old(threw \"System.Exception\" outs() trace(\"System.InvalidOperationException::.ctor()\"())) new(threw \"System.Runtime.CompilerServices.SwitchExpressionException\" outs() trace(\"System.Runtime.CompilerServices.SwitchExpressionException::.ctor()\"()))"
           },
           "locations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///legacy/Native.cs"
-                },
-                "region": {
-                  "startLine": 7,
-                  "startColumn": 32,
-                  "endLine": 7,
-                  "endColumn": 36
-                }
-              }
-            }
-          ],
-          "partialFingerprints": {
-            "procedureIdentity/v1": "Equiv.Samples.SameRuntimeCleanup.Native::Beep(uint,uint)",
-            "resultFingerprint/v1": "9900e5698bb4174e7792532c59c5c2323a89ab38bab5349506f7871f54765c36"
-          },
-          "baselineState": "new",
-          "properties": {
-            "proofMethod": "congruence"
-          }
-        },
-        {
-          "ruleId": "EQ001",
-          "kind": "pass",
-          "level": "none",
-          "message": {
-            "text": "Equiv.Samples.SameRuntimeCleanup.Report::Describe(double,string) is equivalent."
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///legacy/Report.cs"
+                  "uri": "file:///legacy/Codes.cs"
                 },
                 "region": {
                   "startLine": 5,
-                  "startColumn": 19,
+                  "startColumn": 27,
                   "endLine": 5,
-                  "endColumn": 27
+                  "endColumn": 33
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "procedureIdentity/v1": "Equiv.Samples.SameRuntimeCleanup.Report::Describe(double,string)",
-            "resultFingerprint/v1": "596627a355db5f18d1a996c04d67c5edcf6a8fd9b1124c6490b90ec2092c8812"
+            "procedureIdentity/v1": "Equiv.Samples.SwitchExpressionNoMatch.Codes::Weight(int)",
+            "resultFingerprint/v1": "4d7a84dc9ae7f1acc0cb4ba0b869f3a23a1467d80ee3d1e2c5bb4d1e66d6056e"
+          },
+          "baselineState": "new",
+          "rank": 40.002,
+          "properties": {
+            "model": "inputs(bv32 0) old(threw \"System.Exception\" outs() trace(\"System.InvalidOperationException::.ctor()\"())) new(threw \"System.Runtime.CompilerServices.SwitchExpressionException\" outs() trace(\"System.Runtime.CompilerServices.SwitchExpressionException::.ctor()\"()))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/switch-expression#non-exhaustive-switch-expressions",
+            "reviewGroup": "runtime-change:System.Runtime.CompilerServices.SwitchExpressionException::.ctor("
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.SwitchExpressionNoMatch.Codes::WeightOrZero(int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Codes.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 27,
+                  "endLine": 7,
+                  "endColumn": 39
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.SwitchExpressionNoMatch.Codes::WeightOrZero(int)",
+            "resultFingerprint/v1": "b77c04b2b5db48eb086a6081a564cd3991ca7a0c483941b68b98f46f6f13abca"
           },
           "baselineState": "new",
           "properties": {
@@ -135,37 +144,30 @@
           "kind": "pass",
           "level": "none",
           "message": {
-            "text": "Equiv.Samples.SameRuntimeCleanup.Report::Rank(int) is equivalent."
+            "text": "Equiv.Samples.SwitchExpressionNoMatch.Codes::Sign(bool) is equivalent."
           },
           "locations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///legacy/Report.cs"
+                  "uri": "file:///legacy/Codes.cs"
                 },
                 "region": {
-                  "startLine": 16,
-                  "startColumn": 16,
-                  "endLine": 16,
-                  "endColumn": 20
+                  "startLine": 9,
+                  "startColumn": 27,
+                  "endLine": 9,
+                  "endColumn": 31
                 }
               }
             }
           ],
           "partialFingerprints": {
-            "procedureIdentity/v1": "Equiv.Samples.SameRuntimeCleanup.Report::Rank(int)",
-            "resultFingerprint/v1": "4145b204915aac9a06d55afde49032ed68c4bebdc4ad081cb1f58abf6cfb7be9"
+            "procedureIdentity/v1": "Equiv.Samples.SwitchExpressionNoMatch.Codes::Sign(bool)",
+            "resultFingerprint/v1": "d5fb41cbf7ccddccff8ed80ea18631cfea129d25bcb51ea68d569eb63beec1b0"
           },
           "baselineState": "new",
           "properties": {
-            "proofMethod": "bounded",
-            "ladderTrace": [
-              {
-                "rung": "bounded",
-                "outcome": "proved",
-                "detail": "no loop or self-call; every input checked"
-              }
-            ]
+            "proofMethod": "congruence"
           }
         }
       ],
@@ -177,19 +179,14 @@
             "modern": 3
           },
           "matchedPairs": 3,
-          "pairsWithoutOpaque": 2,
-          "pairsWholeBodyOpaque": 1,
+          "pairsWithoutOpaque": 3,
+          "pairsWholeBodyOpaque": 0,
           "pairsCongruent": 2,
           "projectsSkipped": {
             "legacy": 0,
             "modern": 0
           },
-          "opaqueByReason": {
-            "no-body": {
-              "legacy": 1,
-              "modern": 1
-            }
-          },
+          "opaqueByReason": {},
           "changedPairs": 1,
           "changedPairsWithoutOpaque": 1,
           "changedPairsWholeBodyOpaque": 0,
@@ -199,43 +196,27 @@
           "runtimeChangeCalls": {
             "callSites": {
               "legacy": 0,
-              "modern": 0
+              "modern": 1
             },
             "distinctMembers": {
               "legacy": 0,
-              "modern": 0
+              "modern": 1
             },
             "pairsWithAny": {
               "legacy": 0,
-              "modern": 0
+              "modern": 1
             }
           },
           "externalCallees": {
             "legacy": [
               {
-                "member": "System.Double::ToString()",
-                "callSites": 1
-              },
-              {
-                "member": "System.Int32::ToString()",
-                "callSites": 1
-              },
-              {
-                "member": "System.String::StartsWith(string)",
+                "member": "System.InvalidOperationException::.ctor()",
                 "callSites": 1
               }
             ],
             "modern": [
               {
-                "member": "System.Double::ToString()",
-                "callSites": 1
-              },
-              {
-                "member": "System.Int32::ToString()",
-                "callSites": 1
-              },
-              {
-                "member": "System.String::StartsWith(string)",
+                "member": "System.Runtime.CompilerServices.SwitchExpressionException::.ctor()",
                 "callSites": 1
               }
             ]
@@ -246,8 +227,8 @@
           }
         },
         "analysedLinesOfCode": {
-          "legacy": 49,
-          "modern": 46
+          "legacy": 26,
+          "modern": 21
         },
         "projectsNotBuilt": {
           "legacy": [],
@@ -256,14 +237,14 @@
         "runtimes": {
           "legacy": [
             {
-              "project": "Equiv.Samples.SameRuntimeCleanup",
-              "runtime": "net10.0",
+              "project": "Equiv.Samples.SwitchExpressionNoMatch",
+              "runtime": "net48",
               "source": "attribute"
             }
           ],
           "modern": [
             {
-              "project": "Equiv.Samples.SameRuntimeCleanup",
+              "project": "Equiv.Samples.SwitchExpressionNoMatch",
               "runtime": "net10.0",
               "source": "attribute"
             }
@@ -282,7 +263,17 @@
           "resourceLimit": 0,
           "wallClock": 0
         },
-        "reviewList": []
+        "reviewList": [
+          {
+            "group": "runtime-change:System.Runtime.CompilerServices.SwitchExpressionException::.ctor(",
+            "ruleId": "EQ006",
+            "rank": 40.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.SwitchExpressionNoMatch.Codes::Weight(int)"
+            ]
+          }
+        ]
       }
     }
   ]

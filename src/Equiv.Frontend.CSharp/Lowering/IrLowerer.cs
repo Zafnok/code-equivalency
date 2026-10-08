@@ -63,6 +63,7 @@ internal sealed class IrLowerer
     private ExceptionLowerer exceptions = null!;
     private SwitchChains chains = null!;
     private ArrayForEachLoops loops = null!;
+    private ImmutableHashSet<int> unreached = [];
     private SpilledCollections spilled = null!;
     private CSharpCompilation compilation = null!;
     private ControlFlowGraph cfg = null!;
@@ -393,6 +394,7 @@ internal sealed class IrLowerer
         chains = SwitchChains.Find(cfg);
         loops = ArrayForEachLoops.Find(cfg);
         spilled = SpilledCollections.Find(cfg, collection => Built(collection) is { Add: not null });
+        unreached = SwitchExpressions.Unreached(cfg, compilation);
         exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, loops, bodySpan, Fill);
         captures.Clear();
         captureTargets.Clear();
@@ -456,8 +458,18 @@ internal sealed class IrLowerer
         return ssa.Build(start, [.. heap.Outs()], [.. heap.CallHeap()], span);
     }
 
+    /// <summary>
+    /// Lowers one block of the graph into the IR block the context maps it to. The no-match throw of a <c>switch</c>
+    /// expression that covers every value is left empty (ticket P2-144): no edge names its block, so
+    /// <see cref="SsaBuilder.Build"/> drops it without reading its terminator.
+    /// </summary>
     private void Fill(BasicBlock block, LoweringContext context)
     {
+        if (unreached.Contains(block.Ordinal))
+        {
+            return;
+        }
+
         context.Source = block;
         context.Current = context.BlockIds[block.Ordinal];
         for (ControlFlowRegion? region = block.EnclosingRegion; region?.FirstBlockOrdinal == block.Ordinal; region = region.EnclosingRegion)
@@ -558,21 +570,26 @@ internal sealed class IrLowerer
     /// filter's last block falls through, when the filter is false, to its copy's structured-exception-handling exit
     /// (ticket M4-008). A condition that is a compile-time constant is a jump along its live edge: Roslyn follows only
     /// that edge when it marks blocks reachable, so the block the other edge names may never have been lowered, and a
-    /// branch to it would name a block with no terminator (ticket P2-090).
+    /// branch to it would name a block with no terminator (ticket P2-090). A test whose failing edge names the no-match
+    /// throw of a <c>switch</c> expression that covers every value (<see cref="SwitchExpressions.Unreached"/>) is such a
+    /// jump too, to the arm: the test never fails, and the throw is not lowered (ticket P2-144). The test is still
+    /// evaluated first, since a pattern can bind a variable.
     /// </summary>
     private void Branch(BasicBlock block, ControlFlowBranch conditional, ControlFlowBranch fallThrough, LoweringContext context)
     {
-        bool? constant = block.BranchValue!.ConstantValue is { HasValue: true, Value: bool known } ? known : null;
-        IrVar? condition = constant is null ? Value(block.BranchValue, context) : null;
+        IOperation test = block.BranchValue!;
+        bool whenTrue = block.ConditionKind == ControlFlowConditionKind.WhenTrue;
+        bool? folded = test.ConstantValue is { HasValue: true, Value: bool known } ? known : null;
+        bool? constant = folded ?? (conditional.Destination is { } target && unreached.Contains(target.Ordinal) ? !whenTrue : null);
+        IrVar? condition = folded is null ? Value(test, context) : null;
         IrBlockId? jumpRethrow = RethrowBlock(conditional, declined: null);
         IrBlockId jump = jumpRethrow ?? exceptions.Destination(conditional, context);
         IrBlockId? declined = fallThrough.Semantics == ControlFlowBranchSemantics.StructuredExceptionHandling ? context.HandlerExit : null;
         IrBlockId? rethrow = RethrowBlock(fallThrough, declined);
         IrBlockId next = rethrow ?? declined ?? exceptions.Destination(fallThrough, context);
-        bool whenTrue = block.ConditionKind == ControlFlowConditionKind.WhenTrue;
         (IrBlockId then, IrBlockId otherwise) = whenTrue ? (jump, next) : (next, jump);
         IrBlockId live = constant == whenTrue ? jump : next; // read only when the condition is constant
-        ssa.Terminate(context.Current, condition is null ? new IrGoto(live) : new IrBranch(condition, then, otherwise));
+        ssa.Terminate(context.Current, constant is null ? new IrBranch(condition!, then, otherwise) : new IrGoto(live));
         foreach (IrBlockId opaque in ((IrBlockId?[])[jumpRethrow, rethrow]).OfType<IrBlockId>())
         {
             context.Current = opaque;
@@ -620,16 +637,21 @@ internal sealed class IrLowerer
         ssa.Terminate(context.Current, new IrGoto(exceptions.Raise(TypeMapper.MetadataName(creation.Type!), creation.Type, context)));
     }
 
-    /// <summary>A chain of equality tests on one scrutinee, folded back into one terminator (acceptance criterion 2).</summary>
+    /// <summary>
+    /// A chain of equality tests on one scrutinee, folded back into one terminator (acceptance criterion 2). A chain whose
+    /// fall-out is the no-match throw of a <c>switch</c> expression that covers every value (<c>true</c> and <c>false</c>)
+    /// never falls out, so its last case is where every other value goes (ticket P2-144).
+    /// </summary>
     private void Switch(SwitchChains.Chain chain, LoweringContext context)
     {
         IrVar scrutinee = Value(chain.Scrutinee, context);
+        bool total = unreached.Contains(chain.Default.Destination!.Ordinal);
         // Every edge goes through Destination, so a case or the fall-out that leaves a `try` runs its
         // `finally` just as the branches this chain was folded from would have.
         ssa.Terminate(context.Current, new IrSwitch(
             scrutinee,
-            [.. chain.Cases.Select(c => (TypeMapper.Constant(c.ConstantType, c.Constant), exceptions.Destination(c.Target, context)))],
-            exceptions.Destination(chain.Default, context)));
+            [.. chain.Cases.Take(chain.Cases.Length - (total ? 1 : 0)).Select(c => (TypeMapper.Constant(c.ConstantType, c.Constant), exceptions.Destination(c.Target, context)))],
+            exceptions.Destination(total ? chain.Cases[^1].Target : chain.Default, context)));
     }
 
     /// <summary>
