@@ -80,12 +80,18 @@ of the lines it lists; a `method` Unknown claims nothing (ADR 0029). A pair whos
 runtime-sensitive is Equivalent by congruence, without the solver (`proofMethod:
 congruence`, ADR 0024): identical bound code makes the same claim a shared call does. A body is
 runtime-sensitive only by a runtime rule that applies inside the pair's runtime interval (section 3,
-ADR 0040), so on a same-runtime pair no body is. The fingerprint is of the bound tree, not of the
-IR, so a pair whose bodies are whole-body opaque (an iterator) can be congruent. A declaration with
-no bound code has no fingerprint, with one exception: on a same-runtime pair a partial method whose
-defining declaration is the one read has the fingerprint of its implementing part, with the method's
-attributes and those of the local functions that part declares, since an `extern` function's
-attributes say what it calls (ADR 0024 as clarified by ticket P2-107). Every result carries `properties.proofMethod` (which rung proved it),
+ADR 0040), or, on a pair that crosses a runtime, by declaring an `extern` local function, whose call
+the runtime marshals (ADR 0054); so on a same-runtime pair no body is. The fingerprint is of the bound tree, not of the
+IR, so a pair whose bodies are whole-body opaque (an iterator) can be congruent. A local function's
+attributes are in every text that holds the function, and an `extern` one's import with them, since
+an `extern` function's attributes say what it calls (ADR 0024 as clarified by tickets P2-107 and
+P2-145). A declaration with no bound code has no fingerprint, with two exceptions, both on a
+same-runtime pair only. A partial method whose defining declaration is the one read has the
+fingerprint of its implementing part, with the method's attributes (P2-107). And an `extern` method
+that names its implementation, with `[DllImport]` or `InternalCall`, has the fingerprint of its
+signature, of what it imports and of its attributes, so an unedited one is congruent; any other
+matched `extern` pair is Unknown with the whole-body reason `no-body`, and is never Divergent (ADR
+0054). Every result carries `properties.proofMethod` (which rung proved it),
 `properties.boundedBy` when the claim is bounded, and `properties.opaqueNodes`, so a
 reader can see exactly how strong the claim is. Never report Equivalent without saying how.
 
