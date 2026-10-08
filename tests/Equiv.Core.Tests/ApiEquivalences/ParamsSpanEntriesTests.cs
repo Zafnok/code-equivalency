@@ -13,7 +13,10 @@ namespace Equiv.Core.Tests.ApiEquivalences;
 /// </summary>
 public sealed class ParamsSpanEntriesTests
 {
-    /// <summary>Each entry passes the arguments before the <c>params</c> elements through and the elements as the span.</summary>
+    /// <summary>
+    /// Each entry passes the arguments before the <c>params</c> elements through and the elements as the span, and names
+    /// .NET 9, which added the span overloads, as the runtime a pair must cross for it to apply.
+    /// </summary>
     [Theory]
     [InlineData(
         "bcl.string-format-provider-params-span",
@@ -46,6 +49,7 @@ public sealed class ParamsSpanEntriesTests
         Assert.Equal((legacy, modern, page), (entry.Legacy, entry.Modern, entry.Url.OriginalString));
         Assert.Equal([.. Enumerable.Range(0, rest).Select(static i => new ApiArgument(i)), new ApiArgument(rest, Rest: true)], entry.Arguments);
         Assert.Contains("null array, which cannot happen here", entry.Reason, StringComparison.Ordinal);
+        Assert.Equal(TargetRuntime.Parse("net9.0"), entry.AddedIn);
     }
 
     /// <summary>

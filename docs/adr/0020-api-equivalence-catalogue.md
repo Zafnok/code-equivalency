@@ -138,4 +138,6 @@ precondition is not an entry.
   source arguments": nothing is computed, and the soundness condition is unchanged. A call that
   passes an array is not addressed, as before, which is also what keeps the array overload's
   `ArgumentNullException` for a null array out of the equated cases. Such an entry does not pass
-  its arguments through, so the fingerprint leaves its calls under their legacy name.
+  its arguments through, so the fingerprint leaves its calls under their legacy name. The four
+  entries name .NET 9 as the runtime that added their modern member (`addedIn`, the clarification
+  above), so a pair that does not cross it, where both sides bind the array overload, is left alone.

@@ -1,7 +1,11 @@
 using System.Collections.Immutable;
 
 using Equiv.Core.ApiEquivalences;
+using Equiv.Core.Configuration;
 using Equiv.Core.Ir;
+using Equiv.Frontend.CSharp.Lowering;
+
+using Microsoft.CodeAnalysis;
 
 using Xunit;
 
@@ -211,6 +215,26 @@ public sealed class ParamsSpanLoweringTests
 
         Assert.Equal(callee, Assert.Single(Calls(body)).Callee.Value);
         Assert.Empty(applied);
+    }
+
+    /// <summary>
+    /// The span overloads are .NET 9's, so the entries apply only to a pair that crosses it: on any other pair both sides
+    /// bind the array overload, and the legacy call keeps its callee.
+    /// </summary>
+    [Theory]
+    [InlineData("net48", "net8.0", "Old::Join(char,string[])", 0)]
+    [InlineData("net9.0", "net10.0", "Old::Join(char,string[])", 0)]
+    [InlineData("net8.0", "net9.0", "System.String::Join(char,System.ReadOnlySpan<string>)", 1)]
+    [InlineData("net8.0", "net10.0", "System.String::Join(char,System.ReadOnlySpan<string>)", 1)]
+    public void TheEntriesApplyOnlyToAPairThatCrossesTheRuntimeThatAddedTheSpanOverloads(string legacy, string modern, string callee, int entries)
+    {
+        Compilation compilation = RoslynTestCompilations.Compile($"{Old}class C {{ static string M(char s, string a, string b) => Old.Join(s, a, b); }}");
+        IMethodSymbol method = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+
+        (IrProcedure body, ImmutableArray<string> applied) = IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Spans, Runtimes.Between(legacy, modern));
+
+        Assert.Equal(callee, Assert.Single(Calls(body)).Callee.Value);
+        Assert.Equal(entries, applied.Length);
     }
 
     /// <summary>

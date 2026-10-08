@@ -462,7 +462,8 @@ Migration-specific normalisations (applied to both sides before matching):
   from that position on, which must be exactly the elements of the legacy call's `params` array, as
   the span the modern compiler builds from the same elements (the collection expression paragraph
   above), each element evaluated and stored where the legacy call evaluates it. A call that passes
-  an array, not elements, is not rewritten.
+  an array, not elements, is not rewritten. These entries too name the runtime that added their
+  modern member, .NET 9, and apply only to a pair that crosses it.
 - Rebound call sites (ADR 0042, ticket P2-069). A call site is a call the lowering emits for a member
   at a syntax node: an invocation, an object creation, a property, indexer or event accessor, an
   `await`. Its key is the node's source tokens and the member's name. When a key occurs on both sides

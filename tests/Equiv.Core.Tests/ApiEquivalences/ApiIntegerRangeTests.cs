@@ -75,13 +75,14 @@ public sealed class ApiIntegerRangeTests
     }
 
     /// <summary>No entry from before the ticket names a runtime or a range.</summary>
+    /// <summary>The <c>params</c> span entries of ticket P2-143 name a runtime too, and are pinned by their own tests.</summary>
     [Fact]
     public void Table_EveryOtherEntryHasNoRangeAndNoRuntime() =>
         Assert.All(
             ApiEquivalenceTable.Load().Entries.Where(static e => !e.Id.StartsWith("bcl.timespan-from-", StringComparison.Ordinal)),
             static e =>
             {
-                Assert.Null(e.AddedIn);
+                Assert.Equal(e.Id.EndsWith("-params-span", StringComparison.Ordinal), e.AddedIn is not null);
                 Assert.All(e.Arguments, static a => Assert.Null(a.Range));
             });
 
