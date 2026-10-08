@@ -1,0 +1,328 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ExternImport.Native::Ticks() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Native.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 31,
+                  "endLine": 9,
+                  "endColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ExternImport.Native::Ticks()",
+            "resultFingerprint/v1": "1524eec1bd5159bd41321d57c7d6371079d8a5648ed6d1d47968e8a2b74db42a"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ExternImport.Native::F() is unknown (Opaque): old: no-body; new: no-body"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Native.cs"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 5,
+                  "endLine": 13,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ExternImport.Native::F()",
+            "resultFingerprint/v1": "2cb1300deb69a16b6bde35267b6d904ffc3920b2138ca1f394093f37b86bb227"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Native.cs"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 5,
+                  "endLine": 13,
+                  "endColumn": 34
+                }
+              },
+              "message": {
+                "text": "no-body"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Native.cs"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 5,
+                  "endLine": 13,
+                  "endColumn": 34
+                }
+              },
+              "message": {
+                "text": "no-body"
+              }
+            }
+          ],
+          "baselineState": "new",
+          "rank": 0.002,
+          "properties": {
+            "unknownReason": "opaque",
+            "scope": "method",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "an input reaches an opaque node: old: no-body; new: no-body"
+              }
+            ],
+            "reviewGroup": "opaque:no-body"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ExternImport.Native::M() is equivalent. Assumes callees equivalent; not proved for: Equiv.Samples.ExternImport.Native::F()."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Native.cs"
+                },
+                "region": {
+                  "startLine": 16,
+                  "startColumn": 16,
+                  "endLine": 16,
+                  "endColumn": 17
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ExternImport.Native::M()",
+            "resultFingerprint/v1": "4784ee6f482496573aed30469d1d9a365854cee1e7f4ca65abc0fb8aefe492a4"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.ExternImport.Native::F()"
+            ],
+            "unprovenAssumptions": [
+              "Equiv.Samples.ExternImport.Native::F()"
+            ]
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 3,
+            "modern": 3
+          },
+          "matchedPairs": 3,
+          "pairsWithoutOpaque": 1,
+          "pairsWholeBodyOpaque": 2,
+          "pairsCongruent": 2,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {
+            "no-body": {
+              "legacy": 2,
+              "modern": 2
+            }
+          },
+          "changedPairs": 1,
+          "changedPairsWithoutOpaque": 0,
+          "changedPairsWholeBodyOpaque": 1,
+          "changedReasonSets": {
+            "no-body": 1
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [],
+            "modern": []
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 1
+          },
+          "failureRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 25,
+          "modern": 25
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.ExternImport",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.ExternImport",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "opaque:no-body",
+            "ruleId": "EQ003",
+            "rank": 0.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.ExternImport.Native::F()"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

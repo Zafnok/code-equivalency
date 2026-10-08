@@ -31,7 +31,7 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// <c>extern</c> local function has no bound code, so its attributes, which name the library and the entry point it calls
 /// and say how its arguments are marshalled, are its code (ADR 0024 as clarified by tickets P2-107 and P2-145). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
-/// P2-055). Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
+/// P2-055), or it declares an <c>extern</c> local function on a pair that crosses a runtime (ADR 0054 decision 4). Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
 /// <see cref="OperationKind.None"/>) carry their source tokens instead, which costs congruence on a rename there but never
 /// equates two different operations.
 /// </summary>
@@ -141,6 +141,20 @@ internal sealed class BoundSerialiser : OperationWalker
     }
 
     /// <summary>
+    /// The serialisation of an <c>extern</c> <paramref name="method"/>, which has no bound code (ADR 0054 decision 2;
+    /// ticket P2-145): its signature, what it imports as the compiler resolves it, and every attribute of the method,
+    /// which for a partial method has those of both its parts, of its return value and of its parameters. It is never
+    /// runtime-sensitive: the frontend asks only on a same-runtime pair.
+    /// </summary>
+    public static (string Text, bool RuntimeSensitive) SerialiseExtern(IMethodSymbol method, Compilation compilation, Settings settings)
+    {
+        BoundSerialiser serialiser = new(method, compilation, settings);
+        serialiser.Signature();
+        serialiser.Attributes("method", method);
+        return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
+    }
+
+    /// <summary>
     /// The serialisation of one expression-level <paramref name="fragment"/> of <paramref name="method"/>'s control-flow graph
     /// (ADR 0024 decision 2; ticket M4-004), and whether it is runtime-sensitive, by the rules of <see cref="Serialise"/>, with
     /// two differences. The graph holds a lambda as an <see cref="IFlowAnonymousFunctionOperation"/>, which has no body, so
@@ -184,6 +198,8 @@ internal sealed class BoundSerialiser : OperationWalker
         if (operation is ILocalFunctionOperation local)
         {
             Attributes(Number(local.Symbol, "F"), local.Symbol);
+            // Across runtimes it is the runtime that marshals an interop call, and no table row describes that (ADR 0054 decision 4).
+            RuntimeSensitive |= local.Symbol.IsExtern && !runtime.Interval.IsEmpty;
         }
 
         RuntimeSensitive |= (runtime.X87 && IsFloatingPoint(operation.Type))

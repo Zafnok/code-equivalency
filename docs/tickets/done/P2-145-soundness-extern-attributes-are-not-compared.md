@@ -1,5 +1,5 @@
 # P2-145 Soundness: the attributes of an `extern` function are its code, and nothing compares them
-Status: in-progress
+Status: done (PR #434)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-107
@@ -175,3 +175,78 @@ and file the rest.
 - Criterion 2's "keeps the text it has today":
   `BodyFingerprinterTests.ABodyWithoutAttributedLocalFunctionsKeepsItsText` is a snapshot taken
   on `main` (`40057429`) before the change and unchanged by it.
+
+### Criterion 3: the decision
+- Bar test (`equiv-adr`): the fourth row, a new ADR. The decision reverses a spec row
+  (ARCHITECTURE.md's frontend step 2 as M2-002 criterion 1 built it, which left `extern` members
+  out) and extends what an Equivalent covers to a member with no bound body. The first row did
+  not fit: ADR 0024 says an `extern` function's attributes are its code, but no accepted ADR says
+  which members are procedures. ADR 0054, pull request #432, before any change to
+  `ProcedureEnumerator`.
+- The five points, as ADR 0054 decides them:
+  - Enumerated and matched: yes, so an added or removed `extern` member is `EQ004` or `EQ005`.
+  - A matched pair on one runtime is Equivalent by congruence when the fingerprints are equal:
+    the signature line, the import as the compiler resolves it, and the bound attributes of the
+    method, its return value and its parameters. Otherwise Unknown. Never Divergent.
+  - A pair that crosses a runtime has no fingerprint and is Unknown. A body that declares an
+    `extern` local function is runtime-sensitive there, so the rule is not escaped by moving the
+    import inside a method.
+  - Members: a `[DllImport]` method; a partial method whose implementing part is `extern`; an
+    `InternalCall` method, whose text holds its declared type and name in place of an import;
+    `extern` constructors, accessors and operators by the same rule. An `extern` member with
+    neither `[DllImport]` nor `InternalCall` has no fingerprint and is Unknown on every pair.
+  - The Unknown's reason is the existing one: both sides lower, as before, to a whole-body
+    opaque with reason `no-body`, and the result is `unknownReason: opaque` naming it.
+- Decided beyond the five: `--execute` never calls an `extern` method (decision 6). A generated
+  driver would pass made-up handles and pointers to native code.
+- Size guard: an `extern` pair is congruent or Unknown and nothing else, so the stack went on.
+
+### Gap 2 (criteria 4 to 6)
+- Before the fix, `main`'s build (`40057429`) on `samples/extern-import`: one result, `M`,
+  `EQ001` by congruence, no `assumedCallees`. After: `F` is `EQ003` (`opaque`, `no-body`), the
+  unedited `Ticks` is `EQ001` by congruence, and `M` is `EQ001` by congruence with `F` in
+  `assumedCallees` and `unprovenAssumptions`.
+- Decision: the integration test is a new sample, `samples/extern-import`, and not three more
+  members of `same-runtime-cleanup`. One concept per sample, and P2-107's assertions on that
+  sample (three results, exit code 0) stay as they are.
+- Decision: the obstacle for `--execute` is in `ReplayArguments.CallObstacle`, which every driver
+  for a solution's own member goes through. `DriverFactory.Obstacles` is `runtime-diff`'s, for
+  base class library members, and is left alone.
+- Criterion 5: the exclusion test is now
+  `ProcedureEnumeratorTests.ExcludesLocalFunctionsLambdasImplicitAbstract`; the ticket names it
+  with its old `...Extern` ending. VERIFICATION-MODEL.md section 1 said a declaration with no
+  bound code has no fingerprint, with the partial method as the one exception; it now names the
+  `extern` method as the second.
+- `IlLowererTests` read the ILAst of every sample procedure and took it to exist. An `extern`
+  method has none (`il-no-body`, which production code already handled), so the three sweeps go
+  through `IlSamples.WithIl`.
+- Criterion 6. `powershell-19687` (net8.0 on both sides), compare mode quick, `--jobs 4`, one run
+  per column on 2026-10-08, exit 1 both. Before is `origin/main` `40057429`; after is this
+  branch. Another session's benchmark and three other agents' builds ran on the box during
+  both, so the wall-clock times (960 s and 734 s) say nothing.
+
+  | | before | after |
+  |---|---|---|
+  | results | 33889 | 34183 |
+  | EQ001 | 33855 | 34149 |
+  | EQ002 | 6 | 6 |
+  | EQ003 | 28 | 28 |
+  | EQ004 / EQ005 / EQ006 | 0 / 0 / 0 | 0 / 0 / 0 |
+  | `matchedPairs` | 33889 | 34183 |
+  | `pairsCongruent` | 33852 | 34146 |
+  | `pairsWholeBodyOpaque` | 369 | 663 |
+  | `no-body` bodies, each side | 46 | 340 |
+  | `changedPairs` | 37 | 37 |
+  | results that list a new pair in `assumedCallees` | 0 | 217 |
+
+  The 294 new results are the pair's `extern` methods, each `EQ001` with
+  `proofMethod: congruence`: the pull request edited none of them. No result that was there
+  before changed its rule id, its `proofMethod` or its `unknownReason`, and none left. 217
+  results now name an `extern` pair among the callees they assume, where before no pair stood
+  behind that call. None is in `unprovenAssumptions`, since all 294 are Equivalent. No `extern`
+  method of the pair lacks both `[DllImport]` and `InternalCall`: that case would be an `EQ003`,
+  and there is none.
+- Not measured: a pair that crosses a runtime. There every matched `extern` method becomes an
+  `EQ003` (ADR 0054 decision 4), so a migration's Unknown count rises by the number of its
+  imports. P2-124 and P2-130 rerun those pairs.
+- The scoreboard is not touched: no file under `docs/runs/` is added here.
