@@ -19,7 +19,10 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// the body of its first declaration, the one <c>IrLowerer</c> lowers. An instance constructor that does not chain to
 /// <c>this(...)</c>, and a static constructor, also run their type's field and property initializers of the same staticness,
 /// so those come first. An auto-accessor (one with a compiler-generated backing field) is fingerprinted as the body the compiler
-/// generates for it. Null when the declaration has no body.
+/// generates for it. On a same-runtime pair, a partial method whose defining declaration is the one read is fingerprinted by
+/// its implementing part, which holds its code, and by its attributes and those of that part's local functions
+/// (ADR 0024 as clarified by ticket P2-107); an ordinary method only, since a partial constructor also runs its type's
+/// initializers. Null when the declaration has no body otherwise.
 /// </summary>
 internal static class BodyFingerprinter
 {
@@ -52,11 +55,26 @@ internal static class BodyFingerprinter
         {
             return IsAutoAccessor(method)
                 ? BoundSerialiser.Serialise(method, compilation, [], settings)
-                : (null, false);
+                : runtime.Interval.IsEmpty && method.MethodKind == MethodKind.Ordinary && method.PartialImplementationPart is { } implementation
+                    ? ImplementingPart(implementation, compilation, settings)
+                    : (null, false);
         }
 
         ImmutableArray<IOperation> operations = [.. Initializers(method, syntax).Select(node => compilation.GetSemanticModel(node.SyntaxTree).GetOperation(node)!), body];
         return BoundSerialiser.Serialise(method, compilation, operations, settings);
+    }
+
+    /// <summary>
+    /// The text for a partial method whose defining declaration is the one read: its implementing part's, which holds the
+    /// code. Null when that part has no body (it is <c>extern</c>) or does not bind (ADR 0029 decision 2).
+    /// </summary>
+    private static (string? Text, bool RuntimeSensitive) ImplementingPart(IMethodSymbol implementation, Compilation compilation, BoundSerialiser.Settings settings)
+    {
+        SyntaxNode syntax = implementation.DeclaringSyntaxReferences[0].GetSyntax();
+        SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
+        return model.GetOperation(syntax) is { } body && IrLowerer.UnboundCauses(syntax, model, body).IsEmpty
+            ? BoundSerialiser.SerialiseImplementingPart(implementation, body, compilation, settings)
+            : (null, false);
     }
 
     /// <summary>An accessor of a property that has a compiler-generated backing field.</summary>

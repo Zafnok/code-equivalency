@@ -260,7 +260,8 @@ public sealed partial class SamplesEndToEndTests
     /// Ticket P2-055 criterion 2 (ADR 0040 decision 2): both sides run on .NET 10, so no runtime rule applies. The
     /// byte-identical method that calls <c>double.ToString()</c> and <c>string.StartsWith(string)</c> and casts a
     /// <c>double</c> to <c>int</c> is Equivalent by congruence, and the <c>if</c> chain made a <c>switch</c> expression is
-    /// Equivalent by the solver. No call counts as a runtime-change call.
+    /// Equivalent by the solver. No call counts as a runtime-change call. The partial method, the same on both sides, is
+    /// Equivalent by congruence too, by the fingerprint of its implementing part (ADR 0024 as clarified by ticket P2-107).
     /// </summary>
     [Fact]
     public void SameRuntimeCleanup_NoRuntimeRuleApplies()
@@ -268,12 +269,15 @@ public sealed partial class SamplesEndToEndTests
         Run run = RunSample("same-runtime-cleanup").Log.Runs[0];
         Result describe = Single("same-runtime-cleanup", "::Describe(");
         Result rank = Single("same-runtime-cleanup", "::Rank(");
+        Result beep = Single("same-runtime-cleanup", "::Beep(");
 
+        Assert.Equal("EQ001", beep.RuleId);
+        Assert.Equal("congruence", beep.GetProperty<string>("proofMethod"));
         Assert.Equal("EQ001", describe.RuleId);
         Assert.Equal("congruence", describe.GetProperty<string>("proofMethod"));
         Assert.Equal("EQ001", rank.RuleId);
         Assert.Equal("bounded", rank.GetProperty<string>("proofMethod"));
-        Assert.Equal(2, run.Results.Count);
+        Assert.Equal(3, run.Results.Count);
         Assert.Null(run.Invocations);
         Assert.Contains("\"callSites\":{\"legacy\":0,\"modern\":0}", Newtonsoft.Json.JsonConvert.SerializeObject(run.GetProperty<Dictionary<string, object>>("loweringCensus")["runtimeChangeCalls"]), StringComparison.Ordinal);
     }

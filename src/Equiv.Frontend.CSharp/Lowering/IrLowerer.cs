@@ -248,9 +248,10 @@ internal sealed class IrLowerer
     /// in it, in source order, or, when there is none, of every <see cref="IInvalidOperation"/> and every operation of an
     /// error type in <paramref name="operation"/>, such as a reference to a field whose type did not resolve. Empty when it
     /// binds. A syntax error anywhere in its file comes first and is the only cause: where each declaration of that file
-    /// begins and ends is the parser's recovery, so no method in it is taken as bound (ticket P2-085).
+    /// begins and ends is the parser's recovery, so no method in it is taken as bound (ticket P2-085). The fingerprint of a partial
+    /// method's implementing part, which is never lowered, asks the same of that part (ADR 0024 as clarified by ticket P2-107).
     /// </summary>
-    private static ImmutableArray<SourceSpan> UnboundCauses(SyntaxNode syntax, SemanticModel model, IOperation? operation)
+    internal static ImmutableArray<SourceSpan> UnboundCauses(SyntaxNode syntax, SemanticModel model, IOperation? operation)
     {
         if (syntax.SyntaxTree.GetDiagnostics().Where(static d => d.Severity == DiagnosticSeverity.Error).MinBy(static d => d.Location.SourceSpan.Start) is { } syntaxError)
         {
