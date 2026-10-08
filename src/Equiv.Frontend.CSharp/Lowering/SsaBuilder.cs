@@ -89,8 +89,7 @@ internal sealed class SsaBuilder
     public ImmutableArray<IrBlock> Build(IrBlockId entry, ImmutableArray<(Variable Variable, IrVar Param)> outs, ImmutableArray<Variable> heap, SourceSpan bodySpan)
     {
         span = bodySpan;
-        List<IrBlockId> order = [];
-        Walk(entry, [], order);
+        List<IrBlockId> order = Postorder(entry);
         order.Reverse();
         foreach (IrBlockId block in order)
         {
@@ -127,15 +126,34 @@ internal sealed class SsaBuilder
         _ => [],
     };
 
-    private void Walk(IrBlockId block, HashSet<IrBlockId> visited, List<IrBlockId> postorder)
+    /// <summary>
+    /// The blocks reachable from <paramref name="entry"/> in depth-first postorder, each block's successors taken in order.
+    /// The walk keeps its own stack: a generated method is thousands of blocks deep, and with a frame per block the
+    /// thread's stack overflows, which ends the process (ticket P2-106).
+    /// </summary>
+    private List<IrBlockId> Postorder(IrBlockId entry)
     {
-        visited.Add(block);
-        foreach (IrBlockId successor in Successors(drafts[block.Value].Terminator!).Where(s => !visited.Contains(s)))
+        List<IrBlockId> postorder = [];
+        HashSet<IrBlockId> visited = [entry];
+        Stack<(IrBlockId Block, IrBlockId[] Successors, int Next)> open = new();
+        open.Push((entry, [.. Successors(drafts[entry.Value].Terminator!)], 0));
+        while (open.TryPop(out (IrBlockId Block, IrBlockId[] Successors, int Next) frame))
         {
-            Walk(successor, visited, postorder);
+            if (frame.Next == frame.Successors.Length)
+            {
+                postorder.Add(frame.Block);
+                continue;
+            }
+
+            open.Push(frame with { Next = frame.Next + 1 });
+            IrBlockId successor = frame.Successors[frame.Next];
+            if (visited.Add(successor))
+            {
+                open.Push((successor, [.. Successors(drafts[successor.Value].Terminator!)], 0));
+            }
         }
 
-        postorder.Add(block);
+        return postorder;
     }
 
     private void Fill(Draft draft, ImmutableArray<(Variable Variable, IrVar Param)> outs, ImmutableArray<Variable> heap)
