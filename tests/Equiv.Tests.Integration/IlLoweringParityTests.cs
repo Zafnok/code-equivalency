@@ -56,6 +56,11 @@ public sealed class IlLoweringParityTests
         [$"effect-free-bcl-call/modern {Basket}"] = ListFamily,
         [$"lone-surrogate-constant/legacy {Find}"] = LiteralReceiver,
         [$"lone-surrogate-constant/modern {Find}"] = LiteralReceiver,
+        [$"params-span-overloads/modern {Texts}Describe(System.IFormatProvider,string,object,object,object,object)"] = ParamsSpan,
+        [$"params-span-overloads/modern {Texts}Row(char,string,string)"] = ParamsSpan,
+        [$"params-span-overloads/modern {Texts}Append(System.Text.StringBuilder,System.IFormatProvider,string,object,object,object,object)"] = ParamsSpan,
+        [$"params-span-overloads/modern {Texts}Locate(string,string,string,string,string)"] = ParamsSpan,
+        [$"params-span-overloads/modern {Texts}RowSwapped(char,string,string)"] = ParamsSpan,
     }.ToImmutableDictionary(StringComparer.Ordinal);
 
     private const string FlushAsync = "Equiv.Samples.AsyncDisposal.Journal::FlushAsync(System.IAsyncDisposable,int)";
@@ -89,6 +94,8 @@ public sealed class IlLoweringParityTests
     private const string Basket = "Equiv.Samples.EffectFreeBclCall.Basket::.ctor()";
 
     private const string Find = "Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)";
+
+    private const string Texts = "Equiv.Samples.ParamsSpanOverloads.Texts::";
 
     /// <summary>An <c>async</c> method's IL is its state machine's kickoff, whose ILAst is opaque (out of scope; P1-012).</summary>
     private const string StateMachine = "the IL of an async method is its state machine's kickoff, which is opaque";
@@ -141,6 +148,13 @@ public sealed class IlLoweringParityTests
     /// check of a <c>ldstr</c>, which is never null (ticket P2-126).
     /// </summary>
     private const string LiteralReceiver = "IOperation null-checks a string literal receiver through null.System.String; the IL does not";
+
+    /// <summary>
+    /// The IOperation lowering makes the span the compiler builds for a <c>params ReadOnlySpan&lt;T&gt;</c> parameter a new
+    /// array of the elements read through a <c>cast</c> map (ticket P2-143); the compiler emits an inline array filled
+    /// through compiler-generated helpers, which the IL lowering leaves opaque (ADR 0039).
+    /// </summary>
+    private const string ParamsSpan = "IOperation lowers a params span as its array through a cast map; the IL leaves the inline array and its compiler-generated helpers opaque";
 
     private static readonly VerificationOptions Options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, []);
 
