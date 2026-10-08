@@ -35,6 +35,8 @@ internal static class Program
         {
             case ["--export", string identities, string legacy, string modern, string outDir, .. string[] rest] when rest.Length % 2 == 0:
                 return Export(identities, legacy, modern, outDir, Options(rest));
+            case ["--replay", string identities, string legacy, string modern, string outDir, .. string[] rest] when rest.Length % 2 == 0:
+                return Replay(identities, legacy, modern, outDir, Options(rest));
             case ["--try", string outDir, .. string[] rest] when rest.Length % 2 == 0:
                 return Try(outDir, Options(rest));
             case ["--tactics"]:
@@ -76,7 +78,8 @@ internal static class Program
         HashSet<int>? only = Only(flags);
         bool verify = !flags.TryGetValue("--verify", out string? v) || bool.Parse(v);
         Directory.CreateDirectory(outDir);
-        string located = Path.Combine(outDir, Located);
+        bool positional = flags.TryGetValue("--positional-rung2", out string? p2) && bool.Parse(p2);
+        string located = Path.Combine(outDir, positional ? "located-r2p.tsv" : Located);
         HashSet<int> done = File.Exists(located) ? [.. File.ReadLines(located).Select(static l => int.Parse(l.Split('\t')[0], CultureInfo.InvariantCulture))] : [];
 
         Stopwatch clock = Stopwatch.StartNew();
@@ -103,7 +106,7 @@ internal static class Program
             try
             {
                 line = pairs.GetValueOrDefault(item.Identity) is { OldBody: { } old, NewBody: { } @new }
-                    ? new Locator(item.Index, old, @new, options, outDir).Run(verify)
+                    ? positional ? new Locator(item.Index, old, @new, options, outDir).Positional() : new Locator(item.Index, old, @new, options, outDir).Run(verify)
                     : "pair not found at this commit";
             }
             catch (Exception exception) when (exception is not OutOfMemoryException)
@@ -115,6 +118,55 @@ internal static class Program
             {
                 File.AppendAllText(located, $"{item.Index}\t{item.Identity}\t{one.ElapsedMilliseconds}\t{line}\n");
                 Console.Error.WriteLine($"[{++finished}/{items.Length}] {item.Index:D3} {one.Elapsed.TotalSeconds:F0} s {line.Split('\t')[0]}");
+            }
+        });
+        return 0;
+    }
+
+    /// <summary>
+    /// What a variant's answers are worth: rung 1 of each pair with every query asked of the production solver first
+    /// and, when that gives up, of the variant's. A model of <c>divergence</c> is replayed as rung 1 replays its own.
+    /// </summary>
+    private static int Replay(string identitiesPath, string legacy, string modern, string outDir, Dictionary<string, string> flags)
+    {
+        string[] identities = [.. File.ReadAllLines(identitiesPath).Where(static l => l.Length > 0)];
+        HashSet<int>? only = Only(flags);
+        Variant[] variants = [.. flags["--variants"].Split(';').Select(Variant.Parse)];
+        FrontendAnalysis analysis = new CSharpFrontend().Analyze(legacy, modern, EquivConfig.Default, NullRunLog.Instance, CancellationToken.None);
+        Dictionary<string, ProcedurePair> pairs = new(StringComparer.Ordinal);
+        foreach (ProcedurePair pair in analysis.Match.Pairs)
+        {
+            pairs[pair.New.Value] = pair;
+        }
+
+        EquivConfig config = EquivConfig.Default;
+        VerificationOptions options = new(config.Bound, config.TimeoutMs, config.CallIdentityRenames) { ResourceLimit = config.ResourceLimit };
+        string replayed = Path.Combine(outDir, "replayed.tsv");
+        object gate = new();
+        List<(int Index, string Identity, Variant Variant)> items =
+        [
+            .. from item in identities.Select(static (identity, index) => (identity, index))
+               where only?.Contains(item.index) != false
+               from variant in variants
+               select (item.index, item.identity, variant),
+        ];
+        Parallel.ForEach(items, new ParallelOptions { MaxDegreeOfParallelism = Threads(flags) }, item =>
+        {
+            string line;
+            try
+            {
+                ProcedurePair pair = pairs[item.Identity];
+                line = new Locator(item.Index, pair.OldBody!, pair.NewBody!, options, outDir).Rung1With(item.Variant);
+            }
+            catch (Exception exception) when (exception is not OutOfMemoryException)
+            {
+                line = "crash: " + exception.GetType().Name;
+            }
+
+            lock (gate)
+            {
+                File.AppendAllText(replayed, $"{item.Index}\t{item.Variant.Name}\t{line}\n");
+                Console.Error.WriteLine($"{item.Index:D3} {item.Variant.Name} {line}");
             }
         });
         return 0;
@@ -189,9 +241,19 @@ internal static class Program
             clock.Restart();
             Status status = asked.Check(options, variant.Name);
             long ms = clock.ElapsedMilliseconds;
+
+            // A model counts only if every assertion and every term of the query, as written, is true in it.
+            string checkedModel = string.Empty;
+            if (status == Status.SATISFIABLE)
+            {
+                SolverModel model = asked.Model;
+                int failed = all.Count(a => !model.Eval(a, completion: true).IsTrue);
+                checkedModel = failed == 0 ? "model holds" : $"model fails {failed} of {all.Length}";
+            }
+
             return new Answer(
                 status switch { Status.SATISFIABLE => "sat", Status.UNSATISFIABLE => "unsat", _ => "unknown" },
-                status == Status.UNKNOWN ? asked.ReasonUnknown.ReplaceLineEndings(" ") : string.Empty,
+                status == Status.UNKNOWN ? asked.ReasonUnknown.ReplaceLineEndings(" ") : checkedModel,
                 ms,
                 Spent(asked.Solver),
                 terms);
@@ -375,6 +437,97 @@ internal sealed class Locator(int index, IrProcedure oldBody, IrProcedure newBod
         return string.Join('\t', [summary, looping ? "loop" : "no-loop", arithmetic ? "hard-arithmetic" : "no-hard-arithmetic", string.Join(' ', steps), production, .. hard]);
     }
 
+    /// <summary>
+    /// Rung 2's obligations with the two traces compared by position, as rung 1 compares them (ticket P1-038), where
+    /// production compares sequences. All of them unsatisfiable is the proof rung 2 gives.
+    /// </summary>
+    public string Positional()
+    {
+        ProductEncoder.SharedFragments shared = ProductEncoder.ShareFragments(oldBody, newBody);
+        Rung2(shared.Old, shared.New, IrLoopAnalysis.Of(shared.Old), IrLoopAnalysis.Of(shared.New), ProductEncoder.TraceComparison.Positional);
+        return string.Join('\t', [hard.Count > 0 ? "hard" : "no-timeout", string.Join(' ', steps), .. hard]);
+    }
+
+    /// <summary>
+    /// Rung 1 with <paramref name="variant"/> behind the production solver: the outcome the rung would have, and which
+    /// solver answered each query.
+    /// </summary>
+    public string Rung1With(Variant variant)
+    {
+        ProductEncoder.SharedFragments shared = ProductEncoder.ShareFragments(oldBody, newBody);
+        IrLoopAnalysis oldShape = IrLoopAnalysis.Of(shared.Old);
+        IrLoopAnalysis newShape = IrLoopAnalysis.Of(shared.New);
+        bool looping = oldShape.IsSelfRecursive || newShape.IsSelfRecursive || !oldShape.Loops.IsEmpty || !newShape.Loops.IsEmpty;
+        if (LoopLadder.Unrolled(shared.Old, shared.New, options.Bound) is not { } unrolled)
+        {
+            return "not applicable";
+        }
+
+        using Context context = new();
+        ProductEncoding encoding = ProductEncoder.Encode(context, unrolled.Old, unrolled.New, options.CallIdentityMap, traces: ProductEncoder.TraceComparison.Positional);
+        BoolExpr[] reachable = [context.MkNot(encoding.Old.Unreachable), context.MkNot(encoding.New.Unreachable)];
+        (string Name, BoolExpr[] Terms)[] queries =
+        [
+            ("divergence", [encoding.Differs, context.MkNot(encoding.OpaqueOld), context.MkNot(encoding.OpaqueNew), .. reachable]),
+            ("opaque", [context.MkOr(encoding.OpaqueOld, encoding.OpaqueNew), .. reachable]),
+            ("bound", [context.MkOr(encoding.Old.Unreachable, encoding.New.Unreachable)]),
+        ];
+        List<string> asked = [];
+        string outcome = looping ? "no divergence within the bound, none past it" : "Equivalent";
+        for (int i = 0; i < (looping ? 3 : 2); i++)
+        {
+            string by = "z3";
+            SolverQuery query = Z3Backend.Query(context, encoding, options, queries[i].Terms);
+            Status status = query.Check(options, queries[i].Name);
+            if (status == Status.UNKNOWN)
+            {
+                query.Dispose();
+                by = variant.Name;
+                query = new SolverQuery(context, solving => variant.Solver(solving, options), encoding.Assertions);
+                query.Add(variant.Inline ? Z3Backend.Inline(context, encoding.Assertions, queries[i].Terms) : queries[i].Terms);
+                status = query.Check(options, queries[i].Name);
+            }
+
+            using SolverQuery answered = query;
+            asked.Add($"{queries[i].Name}={status switch { Status.SATISFIABLE => "sat", Status.UNSATISFIABLE => "unsat", _ => "unknown" }}({by})");
+            if (status == Status.UNKNOWN)
+            {
+                outcome = "Unknown(timeout)";
+                break;
+            }
+
+            if (status == Status.SATISFIABLE)
+            {
+                outcome = i switch
+                {
+                    0 => Replayed(context, answered.Model, encoding, unrolled),
+                    1 => "Unknown(opaque)",
+                    _ => "no divergence within the bound, some input past it",
+                };
+                break;
+            }
+        }
+
+        return $"{outcome}\t{(looping ? "loop" : "no-loop")}\t{string.Join(' ', asked)}";
+    }
+
+    private static string Replayed(Context context, SolverModel model, ProductEncoding encoding, (IrProcedure Old, IrProcedure New) unrolled)
+    {
+        try
+        {
+            return ModelDecoder.Replay(context, model, encoding, unrolled.Old, unrolled.New) switch
+            {
+                Divergent => "Divergent",
+                Unknown unknown => $"Unknown({unknown.Reason.ToString().ToLowerInvariant()})",
+                Verdict other => other.GetType().Name,
+            };
+        }
+        catch (InvalidOperationException)
+        {
+            return "the model replays to no difference";
+        }
+    }
+
     /// <summary>Rung 1's queries in order; true when one of them gives the pair its verdict.</summary>
     private bool Rung1((IrProcedure Old, IrProcedure New) unrolled, bool looping)
     {
@@ -411,12 +564,13 @@ internal sealed class Locator(int index, IrProcedure oldBody, IrProcedure newBod
         return true;
     }
 
-    private void Rung2(IrProcedure old, IrProcedure @new, IrLoopAnalysis oldShape, IrLoopAnalysis newShape)
+    private void Rung2(IrProcedure old, IrProcedure @new, IrLoopAnalysis oldShape, IrLoopAnalysis newShape, ProductEncoder.TraceComparison traces = ProductEncoder.TraceComparison.Sequence)
     {
+        string rung = traces == ProductEncoder.TraceComparison.Positional ? "r2p" : "r2";
         LockstepInduction lockstep = new(new LoopLadder(static () => new Context(), options), old, @new, oldShape, newShape);
         if (lockstep.Misalignment is not null)
         {
-            steps.Add("r2:not-applicable(misaligned)");
+            steps.Add(rung + ":not-applicable(misaligned)");
             return;
         }
 
@@ -428,7 +582,7 @@ internal sealed class Locator(int index, IrProcedure oldBody, IrProcedure newBod
             IrBlockId? oldStart = i < 0 ? null : lockstep.Loops[i].Old;
             IrBlockId? newStart = i < 0 ? null : lockstep.Loops[i].New;
             using Context context = new();
-            ProductEncoding encoding = ProductEncoder.Encode(context, IrFragmenter.Segment(old, oldStart, oldCuts), IrFragmenter.Segment(@new, newStart, newCuts), options.CallIdentityMap);
+            ProductEncoding encoding = ProductEncoder.Encode(context, IrFragmenter.Segment(old, oldStart, oldCuts), IrFragmenter.Segment(@new, newStart, newCuts), options.CallIdentityMap, traces: traces);
             BoolExpr[] terms =
             [
                 context.MkTrue(),
@@ -436,7 +590,7 @@ internal sealed class Locator(int index, IrProcedure oldBody, IrProcedure newBod
                 context.MkNot(encoding.Old.Unreachable),
                 context.MkNot(encoding.New.Unreachable),
             ];
-            if (Ask(context, encoding, terms, "r2", i < 0 ? "base" : $"step{i + 1}") != Status.UNSATISFIABLE)
+            if (Ask(context, encoding, terms, rung, i < 0 ? "base" : $"step{i + 1}") != Status.UNSATISFIABLE)
             {
                 return;
             }

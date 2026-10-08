@@ -690,7 +690,10 @@ Found by P2-050's measurement (`docs/runs/2026-10-01-timeout-budget.md`):
   collector runs. Two runs at the default budget agreed on 179 of 184 pairs; with collections made
   rare the pairs that differed repeat. Needs P2-050.
 - P2-101 (M) Measurement: what the 99 timeouts that 20 times the budget does not decide have in
-  common, and whether another tactic pipeline proves any. Needs P2-050, P2-076.
+  common, and whether another tactic pipeline proves any. Needs P2-050, P2-076. Done
+  (`docs/runs/2026-10-07-hard-queries.md`): 48 of the 99 are decided on `main` since, 34 of them
+  Equivalent; the other 51 are all heap maps under uninterpreted calls, and none of 14 ways of
+  asking Z3 proves one. No ticket filed.
 
 Found by P1-018's run (`docs/runs/2026-10-01-il-fallback-verdicts.md`):
 - P2-079 (M) Soundness, first: the IL lowering shares an opaque that names a lambda or local function
@@ -1008,7 +1011,8 @@ open ticket, in this order:
 Not on the milestone: `timeout` (400) and `abstraction` (246) are 44% of the scoreboard's Unknowns,
 and no open ticket has a measured yield above 8% of either (P1-033 decided 13 of 164 timeouts and
 proved no pair; P1-019 resolved 1.0% of Unknowns). P2-101 and P1-034 are the measurements that could
-find a larger lever, and are the first candidates for the milestone after this one. That orders
+find a larger lever, and are the first candidates for the milestone after this one (P2-101 is done and
+found none in the solver: no other tactic pipeline proves a pair). That orders
 the work; it leaves none of it out (ADR 0049 decision 7).
 
 ## Post-MVP (unordered backlog, separate tickets when scheduled)
