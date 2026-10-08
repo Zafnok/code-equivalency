@@ -7,7 +7,7 @@ a different tactic pipeline or encoding answer them?
 **Answer: no alternative proves at least 5 of the 99. None proves one.** Of the 99, 48 are no longer
 timeouts on `main`, 34 of them proved Equivalent, by work that landed since P2-050. The other 51
 still time out, and on their queries no solver built another way returns unsatisfiable at the
-default `resourceLimit`, and none does at 15 times it (rung 1 only, 241 checks). What one alternative does is find a model
+default `resourceLimit`, and none of six does at 15 times it. What one alternative does is find a model
 where the production pipeline finds none: Z3's newer core (`sat` with `euf=true`) answers 33 of the
 51 inside the default limit, and every answer is a Divergent (4), an Unknown(abstraction) (22) or an
 Unknown(opaque) (7). That is what P2-050 saw of a larger budget and P1-025 saw of cvc5. The 51 stay
@@ -188,24 +188,27 @@ eight of the nine looping pairs and seven others. The ninth looping pair gets a 
 The budget pass of thorough mode asks again at `resourceLimit` 30,000,000 (ADR 0049), so six of the
 solvers were given that too, with the same 60 s backstop.
 
-| solver, on the 42 rung 1 queries | asked | unsatisfiable | satisfiable, model holds | "model" that does not hold | gave up | of those on the backstop |
-|---|---|---|---|---|---|---|
-| production pipeline | 41 | 0 | 29 | 0 | 12 | 2 |
-| Z3's default solver, query inlined | 40 | 0 | 27 | 0 | 13 | 3 |
-| Z3's default solver, query as written | 41 | 0 | 26 | 0 | 15 | 1 |
-| `smt` alone | 39 | 0 | 34 | 0 | 5 | 1 |
-| `qfaufbv` | 40 | 0 | 25 | 4 | 11 | 2 |
-| `sat` with `euf=true` behind the preprocessing | 40 | 0 | 37 | 0 | 3 | 3 |
+| solver | rung 1 queries (42): unsatisfiable / model holds / "model" that does not hold / gave up | rung 2 obligations (9): the same |
+|---|---|---|
+| production pipeline | 0 / 29 / 0 / 13 | 0 / 0 / 0 / 9 |
+| Z3's default solver, query inlined | 0 / 28 / 0 / 14 | 0 / 1 / 0 / 8 |
+| Z3's default solver, query as written | 0 / 26 / 0 / 16 | 0 / 0 / 0 / 9 |
+| `smt` alone | 0 / 36 / 0 / 6 | 0 / 0 / 0 / 9 |
+| `qfaufbv` | 0 / 27 / 4 / 11 | 0 / 0 / 0 / 9 |
+| `sat` with `euf=true` behind the preprocessing | 0 / 39 / 0 / 3 | 0 / 0 / 0 / 9 |
 
-- Still no proof: 241 checks, no unsatisfiable answer.
-- With 15 times the limit the production pipeline finds a model of 29 of 41, which is P2-050's
-  finding again on today's encoding: more budget buys models. These models were not replayed.
-- At this limit the alternatives are no longer ahead of the pipeline by much, and `qfaufbv`
-  returns four "models" that do not hold.
-- This part is incomplete, and is not something a criterion asks for. 309 of 324 checks had
-  finished when the report was written. Some of the others had run for many minutes past the 60 s
-  backstop and the 240 s interrupt, which is P2-076's kind of time, here in the alternatives'
-  solvers on the largest queries. The nine rung 2 obligations were not asked at this limit.
+- Still no proof: 306 checks, no unsatisfiable answer.
+- With 15 times the limit the production pipeline finds a model of 29 of the 42 rung 1 queries, which
+  is P2-050's finding again on today's encoding: more budget buys models. These models were not
+  replayed.
+- At this limit the alternatives are no longer far ahead of the pipeline, and `qfaufbv` returns four
+  "models" that do not hold.
+- Rung 2's obligations stay out of reach: one model in 54 checks, and a model of an obligation makes
+  the rung fail.
+- This limit is not cheap. The checks themselves took 7,500 s, 48 of them over 60 s and none over
+  90 s. The run took three and a quarter hours on four threads: on the largest queries most of the
+  time went to the harness's own work around a check (reading the file back, inlining the query,
+  checking a model), which was not timed apart.
 
 ## Conclusion (criterion 4)
 
