@@ -1,5 +1,5 @@
 # P2-143 A `params` call that .NET 9 binds to the `params ReadOnlySpan<T>` overload is the same call as the `params T[]` one
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -62,3 +62,50 @@ criterion 1's lowering covers it with no further code.
 
 ## Notes
 - Found by P2-137, criterion 1.
+
+### Criterion 1: the span (2026-10-08)
+- Decision: the span the compiler builds for a `params ReadOnlySpan<T>` parameter -> a new `T[]` of
+  the elements (the existing array creation: `new.<T[]>`, `length.<T[]>`, `array.<T[]>`), read
+  through the `In` map `cast.<T[]>.<ReadOnlySpan>`. Alternatives: a new span sort with its own
+  element map; an `IrPure` of the elements, one function per element count. Rule: 1 and 4. It is
+  how P2-120 lowers an `IEnumerable<T>` target, a call already reads `array.*` as a heap pair so
+  element order reaches the callee, and it needs no sort and no IR node the IR does not have, so
+  `equiv-adr`'s bar test asks for no new ADR.
+- Decision: an empty span -> an array of length 0, not the `System.Array::Empty<T>()` call an empty
+  array target is. Alternatives: the `Array.Empty` call. Rule: 1. The compiler makes no call for
+  an empty span, and a call would be a trace event neither side has.
+- Decision: `ReadOnlySpan<T>` only; a `Span<T>` target stays opaque. Alternatives: both. Rule: 4.
+  The ticket is about `params ReadOnlySpan<T>`, and a `Span<T>` is written through.
+- The size guard's case is covered with no further code: a `ReadOnlySpan<T>` collection expression
+  written in the source is the same operation with a conversion around it, and lowers the same way.
+- Roslyn gives the compiler-built span as an implicit `ICollectionExpressionOperation` with no
+  conversion around it, whose syntax is the invocation and whose argument has kind
+  `ParamCollection`; the lowering only knew a collection expression under its conversion.
+
+### Criterion 2: the adapter form
+- Decision: `{"rest": n}`, `ApiArgument.Rest` -> every source argument from position n to the last,
+  which must be exactly the elements of the legacy call's `params` array, as the span above.
+  Alternatives: a `convertTo` on each element (cannot say how many); a second table of "same
+  member, span overload". Rule: 4. Recorded as a dated clarification on ADR 0020 (the bar test's
+  first row: the ADR's adapter applied to a case it did not spell out), in VERIFICATION-MODEL
+  section 3 and in the catalogue's header.
+- Decision: the legacy side names the span by its sort, `System.ReadOnlySpan`1`, not by a symbol ->
+  the entry applies on a framework that does not declare the type. Alternatives: resolve the type
+  in the legacy compilation and leave the call alone where it is missing. Rule: 4.
+- The elements are evaluated where the legacy call evaluates them, each stored before the next, as
+  the modern side builds its span, so the rewritten call and the modern call are the same IR text.
+  One difference is left where the control flow graph evaluates an element ahead of the call
+  (`a ?? b`): the legacy graph also captures the array's length, a constant nothing reads.
+
+### Criteria 3 and 4: entries, tests, sample
+- Entries: `bcl.string-format-provider-params-span`, `bcl.string-join-char-params-span`,
+  `bcl.string-builder-append-format-provider-params-span`, `bcl.path-combine-params-span`.
+- Tests: `ParamsSpanEntriesTests` (Core), `ParamsSpanLoweringTests` (frontend),
+  `SamplesEndToEndTests.ParamsSpanOverloads_*` on `samples/params-span-overloads`.
+- Decision: the sample pairs .NET 8 with .NET 10 -> SDK-style projects on both sides, as
+  `version-bump`. Alternatives: .NET Framework 4.8 on the legacy side. Rule: 1. .NET Framework has
+  no `String.Join(char, params string[])`, and with two to four arguments it binds the fixed
+  overloads of `Format`, `AppendFormat` and `Combine`; the pairs P2-137 counted are a .NET 8 to
+  .NET 9 upgrade.
+- The four methods are Equivalent with `proofMethod: bounded`, not by congruence: such an entry does
+  not pass its arguments through, so the fingerprint leaves its calls under their legacy name.

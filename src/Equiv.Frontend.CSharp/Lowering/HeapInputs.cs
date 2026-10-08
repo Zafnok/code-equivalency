@@ -80,6 +80,13 @@ internal sealed class HeapInputs(Func<string, string> sorts)
         Input($"cast.{Part(from.Name)}.{Part(TypeMapper.MetadataName(to, sorts))}", new IrMap(from, TypeMapper.Map(to, sorts)));
 
     /// <summary>
+    /// <see cref="Cast(ITypeSymbol, ITypeSymbol)"/> to the sort <paramref name="to"/>, for a type the compilation need not
+    /// declare: the span an API-equivalence adapter passes on the legacy side (ticket P2-143).
+    /// </summary>
+    public IrVar Cast(ITypeSymbol from, IrSort to) =>
+        Input($"cast.{Part(TypeMapper.MetadataName(from, sorts))}.{Part(to.Name)}", new IrMap(TypeMapper.Map(from, sorts), to));
+
+    /// <summary>
     /// Whether a value of <paramref name="from"/> is, at run time, of <paramref name="to"/> (ticket M4-005): a free predicate
     /// per pair of types, shared by both sides by name, read at a non-null value by <c>is</c>, <c>as</c>, a downcast and a
     /// type pattern. Nothing ties it to the type hierarchy, so it over-approximates.

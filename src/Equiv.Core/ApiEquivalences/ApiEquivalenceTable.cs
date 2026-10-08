@@ -36,7 +36,7 @@ public sealed class ApiEquivalenceTable
     /// Parses the catalogue's JSON: an array of member entries (<c>id</c>, <c>legacy</c>, <c>modern</c>, <c>arguments</c>,
     /// <c>reason</c>, <c>url</c>) and type entries (<c>id</c>, <c>legacyType</c>, <c>modernType</c>, <c>reason</c>,
     /// <c>url</c>). Each argument is <c>{"arg": n}</c>, optionally with <c>"unwrap": true</c> or <c>"convertTo"</c>, or
-    /// <c>{"const": literal, "type": irType}</c>, whose literal is kept as its JSON text. An <c>arg</c> item may carry
+    /// <c>{"const": literal, "type": irType}</c>, whose literal is kept as its JSON text, or <c>{"rest": n}</c>. An <c>arg</c> item may carry
     /// <c>"integer": {"bits": n, "min": a, "max": b}</c>, and a member entry <c>"addedIn"</c>, a target framework moniker;
     /// one that names no runtime is rejected with <see cref="InvalidDataException"/> (ticket P2-142).
     /// </summary>
@@ -77,6 +77,11 @@ public sealed class ApiEquivalenceTable
         if (element.TryGetProperty("const", out JsonElement constant))
         {
             return new ApiArgument(Source: null, ConstantType: element.GetProperty("type").GetString()!, Constant: constant.GetRawText());
+        }
+
+        if (element.TryGetProperty("rest", out JsonElement rest))
+        {
+            return new ApiArgument(rest.GetInt32(), Rest: true);
         }
 
         // Deliberate non-short-circuit '&': when "unwrap" is absent, the default element's kind is Undefined, not True.

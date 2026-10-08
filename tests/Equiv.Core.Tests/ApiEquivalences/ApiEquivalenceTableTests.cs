@@ -39,7 +39,7 @@ public sealed class ApiEquivalenceTableTests
     {
         ImmutableArray<ApiEquivalence> entries = ApiEquivalenceTable.Load().Entries;
 
-        Assert.Equal(16, entries.Count(static entry => !entry.IsType));
+        Assert.Equal(20, entries.Count(static entry => !entry.IsType));
         Assert.Equal(5, entries.Count(static entry => entry.IsType));
         Assert.All(entries.Where(static entry => entry.IsType), static entry => Assert.Empty(entry.Arguments));
         Assert.DoesNotContain(entries, static entry => entry.Legacy.Contains("StatusCode", StringComparison.Ordinal));

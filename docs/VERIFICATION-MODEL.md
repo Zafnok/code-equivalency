@@ -324,7 +324,12 @@ still holds (P2-120): the object is made where the first such element starts, an
 starts, or at the collection expression for the last ones. That is the order of the collection initializer and of the
 compiled code. An element starts at the first statement or branch value of the graph whose syntax lies inside the
 element's. An array is created after its captured elements, as the CFG has the array creation it replaces. Its shadow
-is false only where the old form's is: a creation or a `new`, read through no cast map. A spread element, a span, a
+is false only where the old form's is: a creation or a `new`, read through no cast map. For a `ReadOnlySpan<T>` target
+(P2-143), the span the compiler builds from the elements passed to a `params ReadOnlySpan<T>` parameter included, it is
+a new `T[]` of the elements, read through the `cast.<T[]>.<ReadOnlySpan>` map; with no element the array has
+length 0, since the compiler makes no `Array.Empty` call for a span. The span is the storage the compiler gives the
+elements, which no other value shares, so a new array models it, and every `ReadOnlySpan<T>` is one sort whatever
+its `T`. A spread element, a `Span<T>`, a
 type parameter, a type built by a `CollectionBuilder` method, a struct, a class whose constructor takes an argument, a
 class with an element and not exactly one such `Add`, and an array the array creation leaves opaque, stay an
 `IrOpaque` with reason `CollectionExpression`. The conversion around a target-typed `new()` whose creation is already
@@ -450,6 +455,14 @@ Migration-specific normalisations (applied to both sides before matching):
   be inside the range, as a compile-time constant in it or as a value of a type that cannot leave
   it, so the range is checked and never assumed, and any other call stays a rebound call. Such an
   entry names the runtime that added its modern member and applies only to a pair that crosses it.
+  A `params T[]` member that .NET 9 gives a `params ReadOnlySpan<T>` overload has an entry too
+  (ticket P2-143): `String::Format(IFormatProvider, String, Object[])`, `String::Join(Char, String[])`,
+  `StringBuilder::AppendFormat(IFormatProvider, String, Object[])` and `Path::Combine(String[])`,
+  each → the overload that takes the span. Its adapter ends in a `rest` item: every source argument
+  from that position on, which must be exactly the elements of the legacy call's `params` array, as
+  the span the modern compiler builds from the same elements (the collection expression paragraph
+  above), each element evaluated and stored where the legacy call evaluates it. A call that passes
+  an array, not elements, is not rewritten.
 - Rebound call sites (ADR 0042, ticket P2-069). A call site is a call the lowering emits for a member
   at a syntax node: an invocation, an object creation, a property, indexer or event accessor, an
   `await`. Its key is the node's source tokens and the member's name. When a key occurs on both sides
