@@ -865,6 +865,9 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
     jellyfin-13023's base class library pairs could not have an entry. It filed:
     - P2-142 (M) the `TimeSpan` factories that .NET 9 binds to an integer overload: 49 of
       jellyfin-13023's 162 changed pairs, 12 alone (7.4%). The two overloads agree only in range.
+      Done 2026-10-08: an entry's adapter may state an integer range and applies only to an argument
+      known to be inside it (ADR 0020, clarified); `rebound-call` falls from 69 to 25 of the 162
+      changed pairs and keeps none opaque alone.
     - P2-143 (M) `params` calls that .NET 9 binds to a `params ReadOnlySpan<T>` overload: 20 changed
       pairs on jellyfin-13023. Needs the span lowered and an adapter form for the elements.
     - P2-144 (M) a switch expression that matches no arm throws another exception type after a
