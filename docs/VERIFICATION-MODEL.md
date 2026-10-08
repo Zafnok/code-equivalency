@@ -80,7 +80,12 @@ of the lines it lists; a `method` Unknown claims nothing (ADR 0029). A pair whos
 runtime-sensitive is Equivalent by congruence, without the solver (`proofMethod:
 congruence`, ADR 0024): identical bound code makes the same claim a shared call does. A body is
 runtime-sensitive only by a runtime rule that applies inside the pair's runtime interval (section 3,
-ADR 0040), so on a same-runtime pair no body is. Every result carries `properties.proofMethod` (which rung proved it),
+ADR 0040), so on a same-runtime pair no body is. The fingerprint is of the bound tree, not of the
+IR, so a pair whose bodies are whole-body opaque (an iterator) can be congruent. A declaration with
+no bound code has no fingerprint, with one exception: on a same-runtime pair a partial method whose
+defining declaration is the one read has the fingerprint of its implementing part, with the method's
+attributes and those of the local functions that part declares, since an `extern` function's
+attributes say what it calls (ADR 0024 as clarified by ticket P2-107). Every result carries `properties.proofMethod` (which rung proved it),
 `properties.boundedBy` when the claim is bounded, and `properties.opaqueNodes`, so a
 reader can see exactly how strong the claim is. Never report Equivalent without saying how.
 
@@ -425,11 +430,14 @@ Migration-specific normalisations (applied to both sides before matching):
   (`api-equivalences.json`, ADR 0020, ticket M3-009) of member and type pairs that are
   exactly equivalent whenever both are invoked: overload drift such as
   `String::Split(Char[])` → `String::Split(Char, StringSplitOptions)`, and Web API 2 →
-  ASP.NET Core result helpers and result types. It also holds the rebinding forms (ticket
-  P2-070), where identical source binds to an overload the modern reference assemblies add or
-  to a member they move: `String::TrimEnd(Char[])` with one element → `String::TrimEnd(Char)`,
+  ASP.NET Core result helpers and result types. It also holds the rebinding forms (tickets
+  P2-070 and P2-137), where identical source binds to an overload the modern reference assemblies
+  add or to a member they move: `String::TrimEnd(Char[])` with one element →
+  `String::TrimEnd(Char)` and with no element → `String::TrimEnd()`,
   `String::TrimStart(Char[])` with no element → `String::TrimStart()`, and
-  `DirectoryInfo::get_FullName()` → `FileSystemInfo::get_FullName()`. The frontend rewrites a
+  `DirectoryInfo::get_FullName()` → `FileSystemInfo::get_FullName()`. Entries that share a legacy
+  member are tried in file order, and a call takes the first whose adapter addresses its source
+  arguments. The frontend rewrites a
   legacy call while lowering it, with an argument adapter, and every entry applied to a pair is
   listed in `properties.equivalencesApplied`. A property or event accessor call has no source
   arguments to adapt, so an entry rewrites one only when its adapter passes every operand
@@ -1194,7 +1202,9 @@ no lowered body, so it counts in `procedures` and `matchedPairs` but in neither
 The census also counts what the solver will see (ADR 0034; ticket M3-030). A lowered matched pair
 is *changed* unless it is congruent: both bound fingerprints are equal, neither is runtime-sensitive
 inside the pair's runtime interval, and neither body is unbound (ADRs 0024 and 0029; ticket M3-015). `pairsCongruent` counts the
-congruent pairs. `changedPairs`, `changedPairsWithoutOpaque` and
+congruent pairs. A congruent pair can be whole-body opaque: it counts in `pairsWholeBodyOpaque` and not in
+`changedPairs`, as an iterator the commit did not edit does, and on a same-runtime pair a partial method whose code is in
+its implementing part (ticket P2-107). A pair whose bodies are unbound is always changed. `changedPairs`, `changedPairsWithoutOpaque` and
 `changedPairsWholeBodyOpaque` are `matchedPairs`, `pairsWithoutOpaque` and `pairsWholeBodyOpaque`
 restricted to changed pairs; lowerable share is `changedPairsWithoutOpaque / changedPairs`.
 `changedReasonSets` maps the sorted, `+`-joined union of both sides' opaque reasons to its number

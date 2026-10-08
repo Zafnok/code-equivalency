@@ -73,99 +73,147 @@
           "kind": "pass",
           "level": "none",
           "message": {
-            "text": "Equiv.Samples.SameRuntimeCleanup.Native::Beep(uint,uint) is equivalent."
+            "text": "GET /branding/configuration is equivalent."
           },
           "locations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///legacy/Native.cs"
+                  "uri": "file:///legacy/Controllers.cs"
                 },
                 "region": {
-                  "startLine": 7,
-                  "startColumn": 32,
-                  "endLine": 7,
-                  "endColumn": 36
-                }
-              }
-            }
-          ],
-          "partialFingerprints": {
-            "procedureIdentity/v1": "Equiv.Samples.SameRuntimeCleanup.Native::Beep(uint,uint)",
-            "resultFingerprint/v1": "9900e5698bb4174e7792532c59c5c2323a89ab38bab5349506f7871f54765c36"
-          },
-          "baselineState": "new",
-          "properties": {
-            "proofMethod": "congruence"
-          }
-        },
-        {
-          "ruleId": "EQ001",
-          "kind": "pass",
-          "level": "none",
-          "message": {
-            "text": "Equiv.Samples.SameRuntimeCleanup.Report::Describe(double,string) is equivalent."
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///legacy/Report.cs"
-                },
-                "region": {
-                  "startLine": 5,
-                  "startColumn": 19,
-                  "endLine": 5,
-                  "endColumn": 27
-                }
-              }
-            }
-          ],
-          "partialFingerprints": {
-            "procedureIdentity/v1": "Equiv.Samples.SameRuntimeCleanup.Report::Describe(double,string)",
-            "resultFingerprint/v1": "596627a355db5f18d1a996c04d67c5edcf6a8fd9b1124c6490b90ec2092c8812"
-          },
-          "baselineState": "new",
-          "properties": {
-            "proofMethod": "congruence"
-          }
-        },
-        {
-          "ruleId": "EQ001",
-          "kind": "pass",
-          "level": "none",
-          "message": {
-            "text": "Equiv.Samples.SameRuntimeCleanup.Report::Rank(int) is equivalent."
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///legacy/Report.cs"
-                },
-                "region": {
-                  "startLine": 16,
+                  "startLine": 14,
                   "startColumn": 16,
-                  "endLine": 16,
-                  "endColumn": 20
+                  "endLine": 14,
+                  "endColumn": 34
                 }
-              }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "GET /branding/configuration",
+                  "kind": "endpoint"
+                }
+              ]
             }
           ],
           "partialFingerprints": {
-            "procedureIdentity/v1": "Equiv.Samples.SameRuntimeCleanup.Report::Rank(int)",
-            "resultFingerprint/v1": "4145b204915aac9a06d55afde49032ed68c4bebdc4ad081cb1f58abf6cfb7be9"
+            "procedureIdentity/v1": "GET /branding/configuration",
+            "resultFingerprint/v1": "4729db8e415a127956c990607fc223b9f99cad0358bd9238855568d5d1449da2"
           },
           "baselineState": "new",
           "properties": {
-            "proofMethod": "bounded",
-            "ladderTrace": [
-              {
-                "rung": "bounded",
-                "outcome": "proved",
-                "detail": "no loop or self-call; every input checked"
-              }
-            ]
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "GET /startup/configuration is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Controllers.cs"
+                },
+                "region": {
+                  "startLine": 20,
+                  "startColumn": 16,
+                  "endLine": 20,
+                  "endColumn": 39
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "GET /startup/configuration",
+                  "kind": "endpoint"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "GET /startup/configuration",
+            "resultFingerprint/v1": "139aa0784e2352b1adda1ee99ce185612672fe80f9e96ac449507a16fa3053b5"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "GET /audio/{itemid}/stream is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Controllers.cs"
+                },
+                "region": {
+                  "startLine": 27,
+                  "startColumn": 16,
+                  "endLine": 27,
+                  "endColumn": 30
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "GET /audio/{itemid}/stream",
+                  "kind": "endpoint"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "GET /audio/{itemid}/stream",
+            "resultFingerprint/v1": "2bf43e8b2a5bc5120b0ecb64ef8ef40d4d2920360175b802d9f5e16971247a80"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "GET /videos/{itemid}/stream is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Controllers.cs"
+                },
+                "region": {
+                  "startLine": 34,
+                  "startColumn": 16,
+                  "endLine": 34,
+                  "endColumn": 30
+                }
+              },
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "GET /videos/{itemid}/stream",
+                  "kind": "endpoint"
+                }
+              ]
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "GET /videos/{itemid}/stream",
+            "resultFingerprint/v1": "1612500693da9e0525849811ecf51ae1faf09b7e520b57e19553167dc606024a"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
           }
         }
       ],
@@ -173,29 +221,22 @@
       "properties": {
         "loweringCensus": {
           "procedures": {
-            "legacy": 3,
-            "modern": 3
+            "legacy": 4,
+            "modern": 4
           },
-          "matchedPairs": 3,
-          "pairsWithoutOpaque": 2,
-          "pairsWholeBodyOpaque": 1,
-          "pairsCongruent": 2,
+          "matchedPairs": 4,
+          "pairsWithoutOpaque": 4,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 4,
           "projectsSkipped": {
             "legacy": 0,
             "modern": 0
           },
-          "opaqueByReason": {
-            "no-body": {
-              "legacy": 1,
-              "modern": 1
-            }
-          },
-          "changedPairs": 1,
-          "changedPairsWithoutOpaque": 1,
+          "opaqueByReason": {},
+          "changedPairs": 0,
+          "changedPairsWithoutOpaque": 0,
           "changedPairsWholeBodyOpaque": 0,
-          "changedReasonSets": {
-            "": 1
-          },
+          "changedReasonSets": {},
           "runtimeChangeCalls": {
             "callSites": {
               "legacy": 0,
@@ -211,38 +252,8 @@
             }
           },
           "externalCallees": {
-            "legacy": [
-              {
-                "member": "System.Double::ToString()",
-                "callSites": 1
-              },
-              {
-                "member": "System.Int32::ToString()",
-                "callSites": 1
-              },
-              {
-                "member": "System.String::StartsWith(string)",
-                "callSites": 1
-              }
-            ],
-            "modern": [
-              {
-                "member": "System.Double::ToString()",
-                "callSites": 1
-              },
-              {
-                "member": "System.Int32::ToString()",
-                "callSites": 1
-              },
-              {
-                "member": "System.Runtime.CompilerServices.SwitchExpressionException::.ctor()",
-                "callSites": 1
-              },
-              {
-                "member": "System.String::StartsWith(string)",
-                "callSites": 1
-              }
-            ]
+            "legacy": [],
+            "modern": []
           },
           "unknownByScope": {
             "line": 0,
@@ -250,8 +261,8 @@
           }
         },
         "analysedLinesOfCode": {
-          "legacy": 49,
-          "modern": 46
+          "legacy": 41,
+          "modern": 41
         },
         "projectsNotBuilt": {
           "legacy": [],
@@ -260,14 +271,14 @@
         "runtimes": {
           "legacy": [
             {
-              "project": "Equiv.Samples.SameRuntimeCleanup",
+              "project": "Equiv.Samples.WebApiInheritedRoute",
               "runtime": "net10.0",
               "source": "attribute"
             }
           ],
           "modern": [
             {
-              "project": "Equiv.Samples.SameRuntimeCleanup",
+              "project": "Equiv.Samples.WebApiInheritedRoute",
               "runtime": "net10.0",
               "source": "attribute"
             }

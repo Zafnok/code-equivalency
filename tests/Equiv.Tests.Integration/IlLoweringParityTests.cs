@@ -38,6 +38,8 @@ public sealed class IlLoweringParityTests
         [$"async-disposal/modern {LastAsync}"] = StateMachine,
         [$"async-disposal/modern {FirstAsync}"] = StateMachine,
         [$"bcl-overload-rebinding/legacy {Indent}"] = EmptyParamsArray,
+        [$"bcl-rebound-overloads/legacy {TrimTail}"] = EmptyParamsArray,
+        [$"bcl-rebound-overloads/legacy {TrimTailOther}"] = EmptyParamsArray,
         [$"business-layer/legacy {ConfirmAsync}"] = StateMachine,
         [$"business-layer/modern {ConfirmAsync}"] = StateMachine,
         [$"business-layer/legacy {Export}"] = UsingResource,
@@ -65,6 +67,10 @@ public sealed class IlLoweringParityTests
     private const string FirstAsync = "Equiv.Samples.AsyncDisposal.Journal::FirstAsync(System.Collections.Generic.IAsyncEnumerable<int>)";
 
     private const string Indent = "Equiv.Samples.BclOverloadRebinding.Paths::Indent(string)";
+
+    private const string TrimTail = "Equiv.Samples.BclReboundOverloads.Calls::TrimTail(string)";
+
+    private const string TrimTailOther = "Equiv.Samples.BclReboundOverloads.Calls::TrimTailOther(string)";
 
     private const string ConfirmAsync = "Equiv.Samples.BusinessLayer.OrderService::ConfirmAsync(System.Threading.Tasks.Task<global::Equiv.Samples.BusinessLayer.Order>)";
 
@@ -116,9 +122,9 @@ public sealed class IlLoweringParityTests
     private const string InterpolatedString = "IOperation lowers an interpolated string as a chain of Concat(string,string); the IL calls Concat(string,string,string)";
 
     /// <summary>
-    /// The IOperation lowering makes the empty array of a <c>params</c> call with no elements, <c>s.TrimStart()</c> on .NET
-    /// Framework, a fresh array (ticket P1-006); the compiler emits a call of <c>Array.Empty&lt;char&gt;()</c>, which the IL
-    /// lowering names as it is (ticket P2-070).
+    /// The IOperation lowering makes the empty array of a <c>params</c> call with no elements, <c>s.TrimStart()</c> or
+    /// <c>s.TrimEnd()</c> on .NET Framework, a fresh array (ticket P1-006); the compiler emits a call of
+    /// <c>Array.Empty&lt;char&gt;()</c>, which the IL lowering names as it is (tickets P2-070 and P2-137).
     /// </summary>
     private const string EmptyParamsArray = "IOperation lowers an empty params array as a fresh array; the IL calls Array.Empty<char>()";
 

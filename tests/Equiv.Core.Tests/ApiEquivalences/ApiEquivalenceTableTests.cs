@@ -39,15 +39,19 @@ public sealed class ApiEquivalenceTableTests
     {
         ImmutableArray<ApiEquivalence> entries = ApiEquivalenceTable.Load().Entries;
 
-        Assert.Equal(9, entries.Count(static entry => !entry.IsType));
+        Assert.Equal(10, entries.Count(static entry => !entry.IsType));
         Assert.Equal(5, entries.Count(static entry => entry.IsType));
         Assert.All(entries.Where(static entry => entry.IsType), static entry => Assert.Empty(entry.Arguments));
         Assert.DoesNotContain(entries, static entry => entry.Legacy.Contains("StatusCode", StringComparison.Ordinal));
     }
 
-    /// <summary>Ticket P2-070: identical source that the modern reference assemblies bind to an added overload or a moved member.</summary>
+    /// <summary>
+    /// Tickets P2-070 and P2-137: identical source that the modern reference assemblies bind to an added overload or a moved
+    /// member. The two <c>TrimEnd</c> entries share a legacy member; the one-element entry comes first.
+    /// </summary>
     [Theory]
     [InlineData("bcl.string-trim-end-one-char", "System.String::TrimEnd(char[])", "System.String::TrimEnd(char)", 2)]
+    [InlineData("bcl.string-trim-end-no-chars", "System.String::TrimEnd(char[])", "System.String::TrimEnd()", 1)]
     [InlineData("bcl.string-trim-start-no-chars", "System.String::TrimStart(char[])", "System.String::TrimStart()", 1)]
     [InlineData("bcl.directory-info-full-name", "System.IO.DirectoryInfo::get_FullName()", "System.IO.FileSystemInfo::get_FullName()", 1)]
     public void Table_HasTheRebindingEntries_EachPassingItsSourceArgumentsThrough(string id, string legacy, string modern, int arguments)
@@ -56,6 +60,24 @@ public sealed class ApiEquivalenceTableTests
 
         Assert.Equal((legacy, modern), (entry.Legacy, entry.Modern));
         Assert.Equal(Enumerable.Range(0, arguments).Select(static i => new ApiArgument(i)), entry.Arguments);
+    }
+
+    /// <summary>
+    /// Ticket P2-137: entries that share a legacy member are tried in file order, and each must address another number of
+    /// source arguments, or the later one could never apply.
+    /// </summary>
+    [Fact]
+    public void Table_EntriesThatShareALegacyMemberAddressDifferentArgumentCounts()
+    {
+        ImmutableArray<ApiEquivalence> entries = ApiEquivalenceTable.Load().Entries;
+
+        Assert.Equal(
+            ["bcl.string-trim-end-one-char", "bcl.string-trim-end-no-chars"],
+            entries.Where(static entry => string.Equals(entry.Legacy, "System.String::TrimEnd(char[])", StringComparison.Ordinal)).Select(static entry => entry.Id),
+            StringComparer.Ordinal);
+        Assert.All(
+            entries.Where(static entry => !entry.IsType).GroupBy(static entry => entry.Legacy, StringComparer.Ordinal),
+            static group => Assert.Equal(group.Count(), group.Select(static entry => entry.Arguments.Count(static a => a.Source is not null)).Distinct().Count()));
     }
 
     [Fact]

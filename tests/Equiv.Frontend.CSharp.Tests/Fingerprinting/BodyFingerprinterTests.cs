@@ -4,6 +4,7 @@ using Equiv.Core.ApiEquivalences;
 using Equiv.Core.Configuration;
 using Equiv.Core.Matching;
 using Equiv.Frontend.CSharp.Fingerprinting;
+using Equiv.Frontend.CSharp.Lowering;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -157,6 +158,98 @@ public sealed class BodyFingerprinterTests
         Assert.Null(BodyFingerprinter.Compute(Method(compilation, name), compilation, EquivConfig.Default, legacy: false, Runtimes.Migration));
     }
 
+    /// <summary>Ticket P2-107: on one runtime a partial method's code, which its implementing part holds, is what is fingerprinted.</summary>
+    [Fact]
+    public void APartialMethodIsFingerprintedByItsImplementingPartOnOneRuntime()
+    {
+        const string Definition = "private static partial int M(int a);";
+        Compilation compilation = Compile(Definition + " private static partial int M(int a) { int b = a + 1; return b; }", partial: true);
+
+        string text = BodyFingerprinter.Text(Method(compilation), compilation, EquivConfig.Default, [], OneRuntime).Text!;
+
+        Assert.StartsWith("Ordinary static=True async=False returns=System.Int32 (None System.Int32)\nImplementingPart\nMethodBody", text, StringComparison.Ordinal);
+        Assert.Contains("symbols=P0", text, StringComparison.Ordinal);
+        Assert.Equal(OnOneRuntime(compilation), OnOneRuntime(Compile(Definition + " private static partial int M(int x) { int y = x + 1; return y; }", partial: true)));
+        Assert.NotEqual(OnOneRuntime(compilation), OnOneRuntime(Compile(Definition + " private static partial int M(int a) { int b = a + 2; return b; }", partial: true)));
+        Assert.NotEqual(OnOneRuntime(compilation), OnOneRuntime(Compile("private static int M(int a) { int b = a + 1; return b; }", partial: true)));
+    }
+
+    /// <summary>Ticket P2-107 criterion 3: a pair that crosses a runtime keeps what it has, which is no fingerprint.</summary>
+    [Theory]
+    [InlineData("net48", "net10.0")]
+    [InlineData("net8.0", "net9.0")]
+    public void APartialMethodHasNoFingerprintOnAPairThatCrossesARuntime(string legacy, string modern)
+    {
+        Compilation compilation = Compile("private static partial int M(int a); private static partial int M(int a) { return a + 1; }", partial: true);
+
+        Assert.Null(BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, Runtimes.Between(legacy, modern)));
+    }
+
+    /// <summary>
+    /// Ticket P2-107: the methods on one runtime that still have no fingerprint. A partial method with no implementing part, one
+    /// whose implementing part is <c>extern</c> or does not bind, an abstract accessor, and a partial member that is not an
+    /// ordinary method: a partial property's accessor, and a partial constructor, which runs its type's initializers too.
+    /// </summary>
+    [Theory]
+    [InlineData("partial void M();", "M")]
+    [InlineData("private static partial int M(); [System.Runtime.InteropServices.DllImport(\"a.dll\")] private static extern partial int M();", "M")]
+    [InlineData("private static partial int M(int a); private static partial int M(int a) { return Missing(a); }", "M")]
+    [InlineData("private static partial int M(int a); private static partial int M(int a) { return a + ; }", "M")]
+    [InlineData("public abstract int P { get; }", "get_P")]
+    [InlineData("public partial int Q { get; } public partial int Q { get => 1; }", "get_Q")]
+    [InlineData("public partial C(); public partial C() { }", ".ctor")]
+    public void ADeclarationWhoseCodeIsNotABoundBodyHasNoFingerprintOnOneRuntime(string member, string name)
+    {
+        Compilation compilation = Compile(member, partial: true);
+
+        Assert.Null(BodyFingerprinter.Compute(Method(compilation, name), compilation, EquivConfig.Default, legacy: false, OneRuntime));
+    }
+
+    /// <summary>Ticket P2-107: the compiler writes a record's primary constructor from the type's declarations, and no declaration holds it.</summary>
+    [Fact]
+    public void ARecordsPrimaryConstructorHasNoFingerprintOnOneRuntime()
+    {
+        Compilation compilation = Compile("public record R(int X);", wrap: false);
+        IMethodSymbol constructor = compilation.GetTypeByMetadataName("N.R")!.InstanceConstructors.Single(static c => c.Parameters is [{ Name: "X" }]);
+
+        Assert.Null(BodyFingerprinter.Compute(constructor, compilation, EquivConfig.Default, legacy: false, OneRuntime));
+    }
+
+    /// <summary>
+    /// Ticket P2-107: an <c>extern</c> local function has no bound code, so what it calls is in its attributes. This is the shape
+    /// the interop generator gives a <c>[LibraryImport]</c> method.
+    /// </summary>
+    [Theory]
+    [InlineData("\"user32.dll\", EntryPoint = \"Beep\"", "int", "int")]
+    [InlineData("\"kernel32.dll\", EntryPoint = \"Boop\"", "int", "int")]
+    [InlineData("\"kernel32.dll\", EntryPoint = \"Beep\", SetLastError = true", "int", "int")]
+    [InlineData("\"kernel32.dll\", EntryPoint = \"Beep\"", "[return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.I4)] int", "int")]
+    [InlineData("\"kernel32.dll\", EntryPoint = \"Beep\"", "int", "[System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.I4)] int")]
+    public void AnExternLocalFunctionIsFingerprintedByItsAttributes(string import, string returns, string parameter)
+    {
+        Compilation baseline = Compile(Stub("\"kernel32.dll\", EntryPoint = \"Beep\"", "int", "int"), partial: true);
+
+        Assert.NotEqual(OnOneRuntime(baseline), OnOneRuntime(Compile(Stub(import, returns, parameter), partial: true)));
+        Assert.Equal(OnOneRuntime(baseline), OnOneRuntime(Compile("private const string Library = \"kernel32.dll\"; " + Stub("Library, EntryPoint = \"Beep\"", "int", "int"), partial: true)));
+    }
+
+    /// <summary>Ticket P2-107: the attributes of both parts are in the text once, each as its constructor and its bound arguments.</summary>
+    [Fact]
+    public void APartialMethodsAttributesAreInItsFingerprint()
+    {
+        const string Implementation = "[System.Diagnostics.DebuggerStepThrough] private static partial int M(int a) { return a; }";
+        Compilation compilation = Compile("[System.Obsolete(\"old\")] private static partial int M([System.ComponentModel.DefaultValue(1)] int a); " + Implementation, partial: true);
+
+        string text = BodyFingerprinter.Text(Method(compilation), compilation, EquivConfig.Default, [], OneRuntime).Text!;
+
+        Assert.Contains("Attribute method: System.ObsoleteAttribute.ObsoleteAttribute(string?) = System.ObsoleteAttribute(\"old\")\n", text, StringComparison.Ordinal);
+        Assert.Contains("Attribute method #0: System.ComponentModel.DefaultValueAttribute.DefaultValueAttribute(int) = System.ComponentModel.DefaultValueAttribute(1)\n", text, StringComparison.Ordinal);
+        Assert.Contains("Attribute method: System.Diagnostics.DebuggerStepThroughAttribute.DebuggerStepThroughAttribute() = System.Diagnostics.DebuggerStepThroughAttribute\n", text, StringComparison.Ordinal);
+        Assert.NotEqual(
+            OnOneRuntime(compilation),
+            OnOneRuntime(Compile("[System.Obsolete(\"new\")] private static partial int M([System.ComponentModel.DefaultValue(1)] int a); " + Implementation, partial: true)));
+    }
+
     [Fact]
     public void AConstructorRunsItsInitializersUnlessItChainsToThis()
     {
@@ -210,6 +303,28 @@ public sealed class BodyFingerprinterTests
         Assert.Equal(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, entries, Runtimes.Migration));
         Assert.NotEqual(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, reordering, Runtimes.Migration));
         Assert.NotEqual(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, legacy: true, Runtimes.Migration));
+    }
+
+    /// <summary>
+    /// Ticket P2-137: a legacy member may have several entries, one per argument count. The fingerprint names a callee
+    /// without its arguments, so it takes the first pass-through entry in file order, as it did when there was one.
+    /// </summary>
+    [Fact]
+    public void ALegacyMemberWithTwoPassThroughEntriesIsNamedByTheFirst()
+    {
+        const string Legacy = "namespace Old { public class B { public int Ok() => 0; } } namespace N { public class C : Old.B { public int M() => Ok(); } }";
+        const string Modern = "namespace Old { public class B { public int Fine() => 0; } } namespace N { public class C : Old.B { public int M() => Fine(); } }";
+        ImmutableArray<ApiEquivalence> entries =
+        [
+            new("fine", IsType: false, "Old.B::Ok()", "Old.B::Fine()", [new ApiArgument(0)], "r", new Uri("https://learn.microsoft.com/")),
+            new("other", IsType: false, "Old.B::Ok()", "Old.B::Other()", [new ApiArgument(0)], "r", new Uri("https://learn.microsoft.com/")),
+        ];
+        Compilation legacy = RoslynTestCompilations.Compile(Legacy);
+        Compilation modern = RoslynTestCompilations.Compile(Modern);
+        BodyFingerprint? modernPrint = BodyFingerprinter.Compute(Method(modern), modern, EquivConfig.Default, [], Runtimes.Migration);
+
+        Assert.Equal(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, entries, Runtimes.Migration));
+        Assert.NotEqual(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, [entries[1], entries[0]], Runtimes.Migration));
     }
 
     [Fact]
@@ -284,6 +399,16 @@ public sealed class BodyFingerprinterTests
 
         return Verify(Text(compilation, ".ctor"));
     }
+
+    /// <summary>A side of a pair whose two projects run on one runtime, so the pair crosses none (ADR 0040 decision 2).</summary>
+    private static SideRuntime OneRuntime => Runtimes.Between("net8.0", "net8.0");
+
+    private static BodyFingerprint? OnOneRuntime(Compilation compilation) =>
+        BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, OneRuntime);
+
+    /// <summary>A partial method and an implementing part that calls a local <c>extern</c> function, as the interop generator writes one.</summary>
+    private static string Stub(string import, string returns, string parameter) =>
+        $"private static partial bool M(int a); private static partial bool M(int a) {{ return __PInvoke(a) != 0; [System.Runtime.InteropServices.DllImport({import})] static extern {returns} __PInvoke({parameter} x); }}";
 
     private static BodyFingerprint Fingerprint(string member, string extra = "") => Fingerprint(Compile(member, extra: extra), legacy: false);
 

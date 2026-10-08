@@ -93,3 +93,17 @@ labelled as the pair-level figure, so the two are never read as one number.
 - The `run.properties.loweringCensus` shape grows. It is still a property bag in the existing
   SARIF (ADR 0027), not a parallel schema.
 - M3-022's verdict stays "incomplete: human pair pending" until M3-031.
+
+## Clarifications
+- 2026-10-07 (P2-107). **The definition of a changed pair does not change for a cleanup pair.** On
+  `powershell-19687`, 128 of 140 changed pairs have a whole-body opaque on both sides and no edit
+  from the pull request, and the lowerable share reads 4.3% where the 12 edited pairs give 50.0%.
+  A changed pair stays "a matched pair that is not congruent", on every kind of pair. A second
+  rule that calls a pair unchanged without calling it congruent would need evidence of its own,
+  and the only evidence that two bodies are one function is the bound fingerprint (ADR 0024). So
+  the fix is on that side: ADR 0024's clarification of the same date gives a partial method the
+  fingerprint of its implementing part on a same-runtime pair, which makes the 46 `no-body` pairs
+  congruent, and so unchanged, with the verdict Equivalent. The 82 `unbound` pairs stay changed:
+  code that does not bind is never evidence of equivalence (ADR 0029 decision 2). P2-106 owns the
+  ones that are warnings promoted to errors, and what it lowers the count to is its measurement,
+  not a consequence of this one. A pair that crosses a runtime is counted as before.
