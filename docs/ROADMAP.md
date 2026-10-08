@@ -725,6 +725,12 @@ Found by P2-145 (2026-10-08, by reading what the fingerprint of an `extern` func
   `[BestFitMapping]` on a containing type, and the layout attributes of the types in its signature.
   The first step is the repro. Needs P2-145.
 
+Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
+- P2-148 (S) `SecondSolverPrintTests.Z3AnswersTheRewrittenTextAsItAnswersTheOriginal` fails at random
+  when Z3 answers the query inside its minute and gives up on the printed text: unsat against
+  unknown (timeout), never sat against unsat, so not a soundness matter. Both seeds reproduce; the
+  texts are unsat in 149 and 203 seconds. Test code only.
+
 Found by a CI failure (PR #390, `gates (ubuntu-latest)`):
 - P2-129 (S) A ladder property test fails at random, about once in 400 runs, with no assertion: its
   generator's filter for procedures that loop and call keeps 1 draw in 8, and CsCheck gives up after
