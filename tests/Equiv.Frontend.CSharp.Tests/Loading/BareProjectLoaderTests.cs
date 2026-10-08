@@ -149,6 +149,30 @@ public sealed class BareProjectLoaderTests : IDisposable
         Assert.Contains(skipped.Diagnostics, static d => d is { Kind: LoadDiagnosticKind.UnresolvedReference, Id: "CS0246" });
     }
 
+    /// <summary>
+    /// Ticket P2-106 (ADR 0029 as clarified): a project file that sets <c>TreatWarningsAsErrors</c> has its warnings
+    /// reported as errors (CS0219 here), and they are not among the project's errors. An error of the compiler's own in
+    /// the same project (CS0103) still is.
+    /// </summary>
+    [Fact]
+    public async Task AWarningTheProjectFilePromotesToAnErrorIsNotALoadDiagnostic()
+    {
+        string strict = Legacy(
+            "Strict",
+            """<PropertyGroup><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup><ItemGroup><Compile Include="Code.cs" /></ItemGroup>""",
+            code: "public class Strict { public int Promoted() { int unused = 1; return 2; } public int Broken() { return missing; } }");
+
+        LoadedSolution loaded = await Load(Solution(strict));
+
+        Compilation compilation = Assert.Single(loaded.Compilations);
+        Assert.Contains(
+            compilation.GetDiagnostics(TestContext.Current.CancellationToken),
+            static d => d is { Id: "CS0219", Severity: DiagnosticSeverity.Error, DefaultSeverity: DiagnosticSeverity.Warning });
+        Assert.Empty(loaded.Skipped);
+        LoadDiagnostic error = Assert.Single(loaded.Diagnostics);
+        Assert.Equal((LoadDiagnosticKind.CompilerError, "CS0103", "Strict"), (error.Kind, error.Id, error.Project));
+    }
+
     /// <summary>Ticket P2-085: on the modern side a non-SDK project that names a missing type is kept, like an SDK-style one.</summary>
     [Fact]
     public async Task OnTheModernSideAProjectThatNamesAMissingTypeIsKept()

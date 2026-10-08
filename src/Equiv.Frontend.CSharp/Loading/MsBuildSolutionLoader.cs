@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
-using System.Globalization;
 using System.Text.RegularExpressions;
 
 using Equiv.Core.Verdicts;
@@ -156,9 +155,7 @@ internal sealed partial class MsBuildSolutionLoader : ISolutionLoader
         Compilation compilation = (await project.GetCompilationAsync(ct).ConfigureAwait(false))!;
         ImmutableArray<LoadDiagnostic> diagnostics =
         [
-            .. compilation.GetDiagnostics(ct)
-                .Where(static d => d.Severity == DiagnosticSeverity.Error)
-                .Select(d => new LoadDiagnostic(CompilationDiagnosticClassifier.Classify(d.Id, side), d.Id, project.Name, d.GetMessage(CultureInfo.InvariantCulture))),
+            .. CompilationDiagnosticClassifier.Errors(compilation, project.Name, side, ct),
             .. Drain(workspaceEvents).Select(d => ToLoadDiagnostic(d, project.Name)),
             .. openingFailures,
         ];

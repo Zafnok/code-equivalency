@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Globalization;
 
 using Equiv.Core.Verdicts;
 
@@ -152,7 +151,7 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
             // Its compiler errors were computed against MSBuildWorkspace's copy of the reference; they are recomputed.
             string name = nameByAssembly[compilation.AssemblyName!];
             result.Diagnostics.RemoveAll(d => string.Equals(d.Project, name, StringComparison.Ordinal) && d.Kind == LoadDiagnosticKind.CompilerError);
-            ImmutableArray<LoadDiagnostic> errors = Errors(rebound, name, side, ct);
+            ImmutableArray<LoadDiagnostic> errors = CompilationDiagnosticClassifier.Errors(rebound, name, side, ct);
             if (errors.Any(static e => e.Kind == LoadDiagnosticKind.UnresolvedReference))
             {
                 result.Skipped.Add(new SkippedProject(name, compilation.AssemblyName!, IsCSharp: true, errors, rebound));
@@ -200,13 +199,6 @@ internal sealed class CompositeSolutionLoader : ISolutionLoader
             File.Delete(filterPath);
         }
     }
-
-    private static ImmutableArray<LoadDiagnostic> Errors(Compilation compilation, string project, Codebase side, CancellationToken ct) =>
-    [
-        .. compilation.GetDiagnostics(ct)
-            .Where(static d => d.Severity == DiagnosticSeverity.Error)
-            .Select(d => new LoadDiagnostic(CompilationDiagnosticClassifier.Classify(d.Id, side), d.Id, project, d.GetMessage(CultureInfo.InvariantCulture))),
-    ];
 
     /// <summary>Whether the project file is SDK-style; a missing or malformed one is left to the bare loader, which reports it.</summary>
     private static bool IsSdkStyle(string solutionDirectory, string projectPath) =>

@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Globalization;
 using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
@@ -123,13 +122,7 @@ internal sealed class BareProjectLoader(
         }
 
         CSharpCompilation compilation = CSharpCompilation.Create(assemblyName, trees, references, BareCompilationOptions.Compilation(properties, version));
-        ImmutableArray<LoadDiagnostic> diagnostics =
-        [
-            .. compilation.GetDiagnostics(ct)
-                .Where(static d => d.Severity == DiagnosticSeverity.Error)
-                .Select(d => new LoadDiagnostic(CompilationDiagnosticClassifier.Classify(d.Id, side), d.Id, name, d.GetMessage(CultureInfo.InvariantCulture))),
-        ];
-        return new BareProject(name, project.Path, assemblyName, IsCSharp: true, compilation, diagnostics);
+        return new BareProject(name, project.Path, assemblyName, IsCSharp: true, compilation, CompilationDiagnosticClassifier.Errors(compilation, name, side, ct));
     }
 
     /// <summary>The project's .NET Framework: version (default <c>v4.0</c>, as MSBuild's), profile and moniker.</summary>

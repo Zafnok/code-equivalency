@@ -1,6 +1,8 @@
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Loading;
 
+using Microsoft.CodeAnalysis;
+
 using Xunit;
 
 namespace Equiv.Frontend.CSharp.Tests.Loading;
@@ -69,6 +71,24 @@ public sealed class CompilationDiagnosticClassifierTests
     public void Classify_OtherErrorIsCompilerError(string id, Codebase side)
     {
         Assert.Equal(LoadDiagnosticKind.CompilerError, CompilationDiagnosticClassifier.Classify(id, side));
+    }
+
+    /// <summary>
+    /// Ticket P2-106 (ADR 0029 as clarified): an error is a diagnostic the compiler itself calls one. A warning the project
+    /// promotes (<c>TreatWarningsAsErrors</c>, <c>WarningsAsErrors</c>) is reported with severity error and is not one,
+    /// whatever its id: CS8032 is a warning by default, so promoted it never reaches <c>Classify</c> to skip a project.
+    /// </summary>
+    [Theory]
+    [InlineData("CS0103", DiagnosticSeverity.Error, DiagnosticSeverity.Error, true)]
+    [InlineData("CS0618", DiagnosticSeverity.Error, DiagnosticSeverity.Warning, false)]
+    [InlineData("CS8032", DiagnosticSeverity.Error, DiagnosticSeverity.Warning, false)]
+    [InlineData("CS0618", DiagnosticSeverity.Warning, DiagnosticSeverity.Warning, false)]
+    [InlineData("CS8019", DiagnosticSeverity.Hidden, DiagnosticSeverity.Hidden, false)]
+    public void IsError_IsTheCompilersOwnSeverityNotTheProjects(string id, DiagnosticSeverity reported, DiagnosticSeverity byDefault, bool expected)
+    {
+        Diagnostic diagnostic = Diagnostic.Create(id, "Compiler", "message", reported, byDefault, isEnabledByDefault: true, warningLevel: reported == DiagnosticSeverity.Error ? 0 : 1);
+
+        Assert.Equal(expected, CompilationDiagnosticClassifier.IsError(diagnostic));
     }
 
     [Fact]

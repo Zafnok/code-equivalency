@@ -15,10 +15,12 @@ internal sealed class TestWorkspace() : Workspace(MefHostServices.DefaultHost, "
 
     public bool IsDisposed { get; private set; }
 
+    /// <param name="treatWarningsAsErrors">The project's <c>TreatWarningsAsErrors</c>, which is the compiler's general diagnostic option.</param>
     /// <param name="raiseOnTextLoad">
     /// Raised when the document text is first read, which happens during <c>GetCompilationAsync</c>, not when the solution opens.
     /// </param>
-    public void AddCSharpProject(string name, string source, bool referenceCoreLibrary = true, WorkspaceDiagnostic? raiseOnTextLoad = null, string? filePath = null)
+    public void AddCSharpProject(
+        string name, string source, bool referenceCoreLibrary = true, WorkspaceDiagnostic? raiseOnTextLoad = null, string? filePath = null, bool treatWarningsAsErrors = false)
     {
         TextAndVersion text = TextAndVersion.Create(SourceText.From(source), VersionStamp.Create());
         ProjectId projectId = ProjectId.CreateNewId(name);
@@ -34,7 +36,9 @@ internal sealed class TestWorkspace() : Workspace(MefHostServices.DefaultHost, "
             name,
             LanguageNames.CSharp,
             filePath: filePath,
-            compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary),
+            compilationOptions: new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary,
+                generalDiagnosticOption: treatWarningsAsErrors ? ReportDiagnostic.Error : ReportDiagnostic.Default),
             documents: [document],
             metadataReferences: referenceCoreLibrary ? [CoreLibrary] : []));
     }

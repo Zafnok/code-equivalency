@@ -1,7 +1,11 @@
 using System.Collections.Frozen;
+using System.Collections.Immutable;
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 using Equiv.Core.Verdicts;
+
+using Microsoft.CodeAnalysis;
 
 namespace Equiv.Frontend.CSharp.Loading;
 
@@ -10,7 +14,8 @@ namespace Equiv.Frontend.CSharp.Loading;
 /// workspace failures into real failures and MSBuild, NuGet or SDK warnings that the workspace reports as failures
 /// (<see cref="MsBuildWarningCodes"/> and <see cref="ClassifyWorkspaceFailure"/>). A name the source uses that no
 /// reference provides (<see cref="UnboundNameIds"/>) skips a legacy project and not a modern one, whose methods that do
-/// not bind are Unknown(Unbound) one by one (ADR 0029 as clarified by ticket P2-085).
+/// not bind are Unknown(Unbound) one by one (ADR 0029 as clarified by ticket P2-085). Which diagnostics are errors at all
+/// is <see cref="IsError"/>'s to say, for loading and for lowering alike (ticket P2-106).
 /// </summary>
 internal static partial class CompilationDiagnosticClassifier
 {
@@ -39,6 +44,23 @@ internal static partial class CompilationDiagnosticClassifier
     private static readonly FrozenSet<string> MsBuildWarningCodes = FrozenSet.Create(
         StringComparer.Ordinal,
         "MSB3270"); // processor-architecture mismatch between the project and a reference
+
+    /// <summary>
+    /// Whether <paramref name="diagnostic"/> is an error of the compiler's own: its default severity is error. A warning the
+    /// project promotes (<c>TreatWarningsAsErrors</c>, <c>WarningsAsErrors</c>, an <c>.editorconfig</c> severity) is
+    /// reported with severity error on code that binds, and is not one. The one rule decides both which diagnostics bear
+    /// on loading a project (<see cref="Errors"/>) and which make a method Unknown(Unbound) (ADR 0029 as clarified by
+    /// ticket P2-106).
+    /// </summary>
+    public static bool IsError(Diagnostic diagnostic) => diagnostic.DefaultSeverity == DiagnosticSeverity.Error;
+
+    /// <summary>The errors (<see cref="IsError"/>) of <paramref name="compilation"/>, each classified for <paramref name="side"/>.</summary>
+    public static ImmutableArray<LoadDiagnostic> Errors(Compilation compilation, string project, Codebase side, CancellationToken ct) =>
+    [
+        .. compilation.GetDiagnostics(ct)
+            .Where(IsError)
+            .Select(d => new LoadDiagnostic(Classify(d.Id, side), d.Id, project, d.GetMessage(CultureInfo.InvariantCulture))),
+    ];
 
     public static LoadDiagnosticKind Classify(string errorId, Codebase side) =>
         UnresolvedReferenceIds.Contains(errorId) || (side == Codebase.Legacy && UnboundNameIds.Contains(errorId))
