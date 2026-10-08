@@ -66,7 +66,7 @@ public sealed class ParamsSpanEntriesTests
         {
             ApiArgument rest = entry.Arguments[^1];
             Assert.True(rest.Rest);
-            Assert.Equal(Enumerable.Range(0, entry.Arguments.Length - 1).Select(static i => (int?)i), entry.Arguments[..^1].Select(static a => a.Source));
+            Assert.Equal(Enumerable.Range(0, entry.Arguments.Length - 1).Cast<int?>(), entry.Arguments[..^1].Select(static a => a.Source));
             Assert.Equal(entry.Arguments.Length - 1, rest.Source);
         });
     }
