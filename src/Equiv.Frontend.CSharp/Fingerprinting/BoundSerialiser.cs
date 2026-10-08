@@ -69,7 +69,9 @@ internal sealed class BoundSerialiser : OperationWalker
         runtime = settings.Runtime;
         keptForwarders = settings.KeptForwarders;
         types = settings.Equivalences.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
-        members = settings.Equivalences.Where(static e => !e.IsType && PassesArgumentsThrough(e)).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
+        members = settings.Equivalences.Where(static e => !e.IsType && PassesArgumentsThrough(e))
+            .GroupBy(static e => e.Legacy, StringComparer.Ordinal)
+            .ToImmutableDictionary(static g => g.Key, static g => g.First().Modern, StringComparer.Ordinal);
         interpolation = ((CSharpCompilation)compilation).LanguageVersion >= LanguageVersion.CSharp10
             && compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.DefaultInterpolatedStringHandler") is not null
                 ? "DefaultInterpolatedStringHandler"

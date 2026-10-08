@@ -110,10 +110,14 @@ public sealed class ApiEquivalenceLoweringTests
     /// </summary>
     private const string Directories = "class B { public virtual string FullName => null!; }\nclass D : B { public override string FullName => null!; }\n";
 
-    /// <summary>The catalogue's rebinding entries (ticket P2-070), each with its legacy member the stand-in's.</summary>
+    /// <summary>
+    /// The catalogue's rebinding entries (tickets P2-070 and P2-137), each with its legacy member the stand-in's. The two
+    /// <c>TrimEnd</c> entries share a legacy member and differ in the element count their adapter addresses.
+    /// </summary>
     private static ImmutableArray<ApiEquivalence> Rebinding =>
     [
         Entry("bcl.string-trim-end-one-char") with { Legacy = "S::TrimEnd(char[])" },
+        Entry("bcl.string-trim-end-no-chars") with { Legacy = "S::TrimEnd(char[])" },
         Entry("bcl.string-trim-start-no-chars") with { Legacy = "S::TrimStart(char[])" },
         Entry("bcl.directory-info-full-name") with { Legacy = "D::get_FullName()" },
     ];
@@ -143,11 +147,40 @@ public sealed class ApiEquivalenceLoweringTests
         Assert.Equal(["bcl.string-trim-start-no-chars"], applied);
     }
 
+    /// <summary>
+    /// Ticket P2-137: a legacy member with two entries takes the first, in file order, whose adapter addresses the call, so
+    /// no elements is the parameterless overload although the one-element entry comes first.
+    /// </summary>
+    [Fact]
+    public void LegacyTrimEndOfNoChars_IsRewrittenToTheParameterlessOverload()
+    {
+        (IrProcedure body, ImmutableArray<string> applied) = Legacy(Trimmer + "class C { static string M(S s) => s.TrimEnd(); }", Rebinding);
+
+        IrCall call = Assert.Single(Calls(body));
+        Assert.Equal("System.String::TrimEnd()", call.Callee.Value);
+        Assert.False(call.Closed);
+        Assert.Equal("s", Assert.Single(call.Args).SourceName);
+        Assert.Equal(["bcl.string-trim-end-no-chars"], applied);
+    }
+
+    /// <summary>The rewritten parameterless trim keeps the legacy call's receiver null check (ticket P2-137).</summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void LegacyTrimEndOfNoChars_KeepsTheReceiverNullCheck(bool isNull, bool thrown)
+    {
+        IrProcedure body = Legacy(Trimmer + "class C { static string M(S s) => s.TrimEnd(); }", Rebinding).Body;
+
+        IrOutcome outcome = Run(body, Reference(0, "S"), Nulls("S", 0, isNull));
+
+        Assert.Equal(thrown, outcome is IrThrew { ExceptionType: "System.NullReferenceException" });
+    }
+
     /// <summary>Each trim entry covers one element count; any other count, or an array, keeps the legacy overload.</summary>
     [Theory]
-    [InlineData("s.TrimEnd()", "S::TrimEnd(char[])")]
     [InlineData("s.TrimEnd('/', '.')", "S::TrimEnd(char[])")]
     [InlineData("s.TrimEnd(new[] { '/' })", "S::TrimEnd(char[])")]
+    [InlineData("s.TrimEnd(new char[0])", "S::TrimEnd(char[])")]
     [InlineData("s.TrimStart(' ')", "S::TrimStart(char[])")]
     [InlineData("s.TrimStart(new char[0])", "S::TrimStart(char[])")]
     public void TrimWithAnotherElementCount_IsNotRewritten(string call, string callee)

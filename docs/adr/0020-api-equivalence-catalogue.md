@@ -79,3 +79,15 @@ precondition is not an entry.
   modern side throws `NullReferenceException` from the frontend's receiver check. The pair
   therefore stays Divergent on null input, which is the real behaviour change. The entry equates
   only the non-null case, which is the only case where both members are invoked.
+
+## Clarifications
+- 2026-10-07 (P2-137). **Several entries for one legacy member.** A `params` member that the modern
+  side binds to a different overload for each element count needs one entry per count:
+  `String::TrimEnd(char[])` is `TrimEnd(char)` with one element (P2-070) and `TrimEnd()` with none.
+  The decision already leaves a call alone when the entry's adapter cannot address all of its source
+  arguments, so entries that share a legacy member are tried in file order and the call takes the
+  first whose adapter addresses it. Each such entry addresses another number of source arguments (a
+  test pins it), so at most one fits a call and the order decides nothing. The fingerprint names a
+  callee without its arguments, so it keeps naming such a member by its first pass-through entry, as
+  it did when there was one; the legacy tree still holds the `params` array there, so that name
+  never makes two bodies congruent.

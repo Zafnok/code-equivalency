@@ -851,7 +851,16 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
     removes the largest.
   - P2-137 (M) `rebound-call`: 191 pairs (8.5%), and 11.9% of gitextensions-8522's changed pairs
     alone. Counts the callee pairs and adds a catalogue entry for the base class library ones that
-    are one call.
+    are one call. Done 2026-10-07: one entry (`String::TrimEnd()` with no element); 95 of
+    gitextensions-8522's 859 changed pairs are kept opaque by third-party callee pairs alone, and
+    jellyfin-13023's base class library pairs could not have an entry. It filed:
+    - P2-142 (M) the `TimeSpan` factories that .NET 9 binds to an integer overload: 49 of
+      jellyfin-13023's 162 changed pairs, 12 alone (7.4%). The two overloads agree only in range.
+    - P2-143 (M) `params` calls that .NET 9 binds to a `params ReadOnlySpan<T>` overload: 20 changed
+      pairs on jellyfin-13023. Needs the span lowered and an adapter form for the elements.
+    - P2-144 (M) a switch expression that matches no arm throws another exception type after a
+      migration from .NET Framework: 41 results on gitextensions-8522, 39 of them Equivalent by
+      congruence.
   - P2-138 (M) `DefaultValue`: 73 pairs (3.3%). Counts the types and lowers the largest one P2-095
     does not own.
   - P2-139 (M) `InterpolatedString`, what P2-086 left opaque: 59 pairs (2.6%), 47 of them on
