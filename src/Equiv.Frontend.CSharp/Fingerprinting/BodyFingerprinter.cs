@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -22,7 +23,9 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// generates for it. On a same-runtime pair, a partial method whose defining declaration is the one read is fingerprinted by
 /// its implementing part, which holds its code, and by its attributes and those of that part's local functions
 /// (ADR 0024 as clarified by ticket P2-107); an ordinary method only, since a partial constructor also runs its type's
-/// initializers. Null when the declaration has no body otherwise.
+/// initializers. On a same-runtime pair too, an <c>extern</c> method that names its implementation, with
+/// <c>[DllImport]</c> or <c>InternalCall</c>, is fingerprinted by its signature, what it imports and its attributes
+/// (ADR 0054; ticket P2-145). Null when the declaration has no body otherwise.
 /// </summary>
 internal static class BodyFingerprinter
 {
@@ -53,11 +56,13 @@ internal static class BodyFingerprinter
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         if (compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax) is not { } body)
         {
-            return IsAutoAccessor(method)
-                ? BoundSerialiser.Serialise(method, compilation, [], settings)
-                : runtime.Interval.IsEmpty && method.MethodKind == MethodKind.Ordinary && method.PartialImplementationPart is { } implementation
-                    ? ImplementingPart(implementation, compilation, settings)
-                    : (null, false);
+            return (IsAutoAccessor(method), runtime.Interval.IsEmpty, method) switch
+            {
+                (true, _, _) => BoundSerialiser.Serialise(method, compilation, [], settings),
+                (false, true, { IsExtern: true }) => NamesItsImplementation(method) ? BoundSerialiser.SerialiseExtern(method, compilation, settings) : (null, false),
+                (false, true, { MethodKind: MethodKind.Ordinary, PartialImplementationPart: { } implementation }) => ImplementingPart(implementation, compilation, settings),
+                _ => (null, false),
+            };
         }
 
         ImmutableArray<IOperation> operations = [.. Initializers(method, syntax).Select(node => compilation.GetSemanticModel(node.SyntaxTree).GetOperation(node)!), body];
@@ -65,8 +70,17 @@ internal static class BodyFingerprinter
     }
 
     /// <summary>
+    /// Whether an <c>extern</c> method says what runs in its place (ADR 0054 decision 5): a <c>[DllImport]</c>, or
+    /// <c>MethodImplOptions.InternalCall</c>, which its runtime answers by the method's name. One with neither has no
+    /// fingerprint: equal signatures would be the whole evidence.
+    /// </summary>
+    private static bool NamesItsImplementation(IMethodSymbol method) =>
+        method.GetDllImportData() is not null || method.MethodImplementationFlags.HasFlag(MethodImplAttributes.InternalCall);
+
+    /// <summary>
     /// The text for a partial method whose defining declaration is the one read: its implementing part's, which holds the
-    /// code. Null when that part has no body (it is <c>extern</c>) or does not bind (ADR 0029 decision 2).
+    /// code. Null when that part does not bind (ADR 0029 decision 2). One whose implementing part is <c>extern</c> never
+    /// comes here: it is an <c>extern</c> method.
     /// </summary>
     private static (string? Text, bool RuntimeSensitive) ImplementingPart(IMethodSymbol implementation, Compilation compilation, BoundSerialiser.Settings settings)
     {

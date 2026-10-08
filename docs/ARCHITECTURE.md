@@ -44,7 +44,9 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
    MSBuild in an out-of-process build host; for legacy (non-SDK) csproj it picks the
    .NET Framework host backed by VS Build Tools' MSBuild, so a .NET 10 engine can load a
    .NET Framework solution. Fail loudly on any workspace diagnostic; a silent partial load is a bug.
-2. Symbol enumeration -> `ProcedureIdentity` per method, constructor, property accessor.
+2. Symbol enumeration -> `ProcedureIdentity` per method, constructor, property accessor and operator
+   that has a body or is `extern`. An `extern` member has no code to lower: on a same-runtime pair it
+   is compared by what it imports and by its attributes, and is otherwise Unknown (ADR 0054).
 3. Endpoint discovery -> maps ASP.NET Web API 2 / MVC 5 attribute routes and ASP.NET Core
    attribute routes to a common `HTTP VERB /template` identity.
 4. Lowering: `ControlFlowGraph.Create(IOperation)` -> IR. Unsupported operations produce

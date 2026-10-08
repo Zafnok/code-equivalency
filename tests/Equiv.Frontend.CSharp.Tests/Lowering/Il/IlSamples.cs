@@ -58,6 +58,13 @@ internal static class IlSamples
 
     public static ImmutableArray<(string Name, Compilation Compilation)> All => Loaded.Value;
 
+    /// <summary>
+    /// The procedures of a sample side whose ILAst can be read: every one but an <c>extern</c> method, which is a
+    /// procedure with no body (ADR 0054; ticket P2-145).
+    /// </summary>
+    public static IEnumerable<EnumeratedProcedure> WithIl(Compilation compilation) =>
+        ProcedureEnumerator.Enumerate(compilation).Where(static p => !p.Symbol.IsExtern);
+
     public static string RepoRoot
     {
         get

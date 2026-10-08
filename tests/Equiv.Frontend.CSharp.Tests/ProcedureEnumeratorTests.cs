@@ -34,8 +34,12 @@ public sealed class ProcedureEnumeratorTests
         Assert.Contains(procedures, static p => p.Symbol.MethodKind == MethodKind.UserDefinedOperator);
     }
 
+    /// <summary>
+    /// What is no procedure: a local function and a lambda, which are no type members, a compiler-generated member, a
+    /// destructor, and an abstract member, which names no implementation. An <c>extern</c> member is one (ADR 0054).
+    /// </summary>
     [Fact]
-    public void ExcludesLocalFunctionsLambdasImplicitAbstractExtern()
+    public void ExcludesLocalFunctionsLambdasImplicitAbstract()
     {
         Compilation compilation = RoslynTestCompilations.Compile("""
             using System;
@@ -57,8 +61,6 @@ public sealed class ProcedureEnumeratorTests
                         a();
                     }
 
-                    public extern void ExternMethod();
-
                     ~C() { }
                 }
 
@@ -72,9 +74,71 @@ public sealed class ProcedureEnumeratorTests
         Assert.DoesNotContain(procedures, static p => p.Symbol.Name is "Local");
         Assert.DoesNotContain(procedures, static p => p.Symbol.MethodKind == MethodKind.LambdaMethod);
         Assert.DoesNotContain(procedures, static p => p.Symbol.Name is "AbstractMethod");
-        Assert.DoesNotContain(procedures, static p => p.Symbol.Name is "ExternMethod");
         Assert.DoesNotContain(procedures, static p => p.Symbol.MethodKind == MethodKind.Destructor);
         Assert.DoesNotContain(procedures, static p => p.Symbol.IsImplicitlyDeclared);
+    }
+
+    /// <summary>
+    /// ADR 0054 decision 1 (ticket P2-145): an <c>extern</c> member is a procedure, whatever names its implementation or
+    /// nothing does: a <c>[DllImport]</c> method, an <c>InternalCall</c> method, one with no attribute, and an
+    /// <c>extern</c> constructor, accessor and operator.
+    /// </summary>
+    [Fact]
+    public void IncludesExternMembers()
+    {
+        Compilation compilation = RoslynTestCompilations.Compile("""
+            using System.Runtime.CompilerServices;
+            using System.Runtime.InteropServices;
+
+            namespace N
+            {
+                public class C
+                {
+                    [DllImport("a.dll")] public static extern int Imported();
+                    [MethodImpl(MethodImplOptions.InternalCall)] public extern int Internal();
+                    public extern void Bare();
+                    [MethodImpl(MethodImplOptions.InternalCall)] public extern C(int x);
+                    public static extern int P { [DllImport("a.dll")] get; }
+                    [MethodImpl(MethodImplOptions.InternalCall)] public static extern C operator +(C a, C b);
+                }
+            }
+            """);
+
+        ImmutableArray<EnumeratedProcedure> procedures = ProcedureEnumerator.Enumerate(compilation);
+
+        Assert.Equal(
+            [".ctor", "Bare", "Imported", "Internal", "get_P", "op_Addition"],
+            procedures.Select(static p => p.Symbol.Name).Order(StringComparer.Ordinal),
+            StringComparer.Ordinal);
+        Assert.All(procedures, static p => Assert.True(p.Symbol.IsExtern));
+    }
+
+    /// <summary>
+    /// Ticket P2-145: Roslyn reports a partial method whose implementing part is <c>extern</c> as <c>extern</c>, and it is
+    /// one procedure, located at its defining part.
+    /// </summary>
+    [Fact]
+    public void IncludesAPartialMethodWhoseImplementingPartIsExtern()
+    {
+        Compilation compilation = RoslynTestCompilations.Compile("""
+            using System.Runtime.InteropServices;
+
+            namespace N
+            {
+                public static partial class C
+                {
+                    public static partial int F();
+                    [DllImport("a.dll")] public static extern partial int F();
+                }
+            }
+            """);
+
+        EnumeratedProcedure procedure = Assert.Single(ProcedureEnumerator.Enumerate(compilation));
+
+        Assert.Equal("F", procedure.Symbol.Name);
+        Assert.True(procedure.Symbol.IsExtern);
+        Assert.True(procedure.Symbol.IsPartialDefinition);
+        Assert.Equal(6, procedure.Location.GetLineSpan().StartLinePosition.Line);
     }
 
     [Fact]
