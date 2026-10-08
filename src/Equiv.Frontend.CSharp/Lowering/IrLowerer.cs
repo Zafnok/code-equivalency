@@ -1146,22 +1146,31 @@ internal sealed class IrLowerer
     /// (which is null-checked, and may itself run code) stays opaque with reason <c>DelegateCreation</c>, shared as any
     /// fingerprinted fragment is, and a conversion with no fingerprint stays opaque and unshared. Either way the delegate
     /// is never null.
+    /// <para>
+    /// A conversion a runtime rule applies to (its lambda calls a <c>runtime-changes.json</c> member, say) runs no code
+    /// either, so it is the same function of its reads, marked <see cref="IrPure.RuntimeSensitive"/>: each side's own, never
+    /// forced equal to the other's, because the two runtimes run the body differently (ADR 0025; ticket P2-136). As a
+    /// fragment it is still not shared.
+    /// </para>
     /// </summary>
     private IrVar? Delegate(IDelegateCreationOperation creation, LoweringContext context)
     {
         string reason = creation.Kind.ToString();
-        if (Fragment(creation) is not { } fragment)
+        if (Fragment(creation, runtimeSensitive: true) is not { } fragment)
         {
             return Opaque(creation, reason, shared: null, context);
         }
 
         if (creation.Target is not (IFlowAnonymousFunctionOperation or IMethodReferenceOperation { Instance: null or IInstanceReferenceOperation }))
         {
-            return Opaque(creation, reason, fragment, context);
+            return Opaque(creation, reason, fragment.RuntimeSensitive ? null : fragment, context);
         }
 
         IrVar target = ssa.Temp(Map(creation.Type!));
-        IrPure value = new(target, [], PureCatalogue.Delegate(fragment.Fingerprint, LambdaSite(creation, fragment.Fingerprint)), Loaded(fragment.Reads, context));
+        IrPure value = new(target, [], PureCatalogue.Delegate(fragment.Fingerprint, LambdaSite(creation, fragment.Fingerprint)), Loaded(fragment.Reads, context))
+        {
+            RuntimeSensitive = fragment.RuntimeSensitive,
+        };
         ssa.EmitDelegate(context.Current, value, new IrOpaque(target, reason, Span(creation.Syntax)), fragment.Captured);
         return target;
     }
@@ -1207,9 +1216,9 @@ internal sealed class IrLowerer
     /// <paramref name="operation"/>'s fingerprint, the variables it reads and those a lambda in it captures, when it writes no
     /// variable and every variable it reads or captures is one the lowering tracks; otherwise null.
     /// </summary>
-    private FragmentOf? Fragment(IOperation operation)
+    private FragmentOf? Fragment(IOperation operation, bool runtimeSensitive = false)
     {
-        if (Written(operation).Any() || fragments.Of(operation, cfg) is not { } fragment)
+        if (Written(operation).Any() || fragments.Of(operation, cfg) is not { } fragment || (fragment.RuntimeSensitive && !runtimeSensitive))
         {
             return null;
         }
@@ -1218,11 +1227,11 @@ internal sealed class IrLowerer
         SsaBuilder.Variable?[] captured = [.. fragment.Captured.Select(variables.GetValueOrDefault)];
         return reads.Concat(captured).Any(static v => v is null)
             ? null
-            : new FragmentOf(fragment.Fingerprint, [.. reads.OfType<SsaBuilder.Variable>()], [.. captured.OfType<SsaBuilder.Variable>()]);
+            : new FragmentOf(fragment.Fingerprint, [.. reads.OfType<SsaBuilder.Variable>()], [.. captured.OfType<SsaBuilder.Variable>()], fragment.RuntimeSensitive);
     }
 
-    /// <summary>A fragment's fingerprint, the tracked variables it reads and those a lambda in it captures.</summary>
-    private readonly record struct FragmentOf(string Fingerprint, ImmutableArray<SsaBuilder.Variable> Reads, ImmutableArray<SsaBuilder.Variable> Captured);
+    /// <summary>A fragment's fingerprint, the tracked variables it reads, those a lambda in it captures, and whether a runtime rule applies to it.</summary>
+    private readonly record struct FragmentOf(string Fingerprint, ImmutableArray<SsaBuilder.Variable> Reads, ImmutableArray<SsaBuilder.Variable> Captured, bool RuntimeSensitive);
 
     /// <summary>The variables an operation writes as a side effect: its <c>ref</c>/<c>out</c> arguments, deconstruction targets and pattern-declared locals.</summary>
     private IEnumerable<SsaBuilder.Variable> Written(IOperation operation) =>

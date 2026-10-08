@@ -148,7 +148,6 @@ public sealed class DelegateLoweringTests
 
     /// <summary>What ADR 0024 gives no fingerprint is not a function of its reads, as a delegate any more than as a fragment.</summary>
     [Theory]
-    [InlineData("class C { int M(double[] xs) => xs.Sum(x => (int)x); }")]
     [InlineData("class C { int M(int[] xs) { int t = 0; xs.Count(x => (t = x) > 0); return t; } }")]
     [InlineData("class C { int M(int[] xs) { int Twice(int x) => 2 * x; return xs.Sum(Twice); } }")]
     [InlineData("class C(int p) { int M(int[] xs) => xs.Count(x => x > p); }")]
@@ -162,8 +161,74 @@ public sealed class DelegateLoweringTests
         Assert.Null(opaque.Fingerprint);
     }
 
+    /// <summary>
+    /// Ticket P2-136: a conversion whose body a runtime rule applies to (a floating-point to integer conversion, a call of a
+    /// <c>runtime-changes.json</c> member, a method group of one) runs no code either, so it is a function of its reads too,
+    /// but each side's own (ADR 0025): the two runtimes run the body differently, and the two delegates are never forced
+    /// equal. Its name is still the conversion's fingerprint, which both sides compute alike.
+    /// </summary>
+    [Theory]
+    [InlineData("int M(double[] xs, int k) => xs.Sum(x => (int)x + k);", "k")]
+    [InlineData("int M(string[] xs, string k) => xs.Count(x => x.StartsWith(k));", "k,k")]
+    [InlineData("int M(string[] xs) { Array.Sort(xs, string.Compare); return 0; }", "")]
+    public void ARuntimeSensitiveConversionIsItsSidesOwnFunction(string members, string reads)
+    {
+        IrProcedure procedure = Source(Linq + "class C { " + members + " }");
+
+        IrPure conversion = Assert.Single(Delegates(procedure));
+        Assert.Empty(Opaques(procedure));
+        Assert.True(conversion.RuntimeSensitive);
+        Assert.Matches("^delegate:[0-9a-f]{64}(#0)?$", conversion.Function);
+        Assert.Equal(reads, string.Join(',', conversion.Args.Select(static a => a.SourceName)));
+        Assert.Empty(conversion.Throws);
+    }
+
+    /// <summary>
+    /// The same lambda between two projects on one runtime crosses no runtime rule (ADR 0040): it is the shared function,
+    /// under the name it has as a side's own, so the fingerprint does not depend on the pair's runtimes.
+    /// </summary>
+    [Fact]
+    public void TheSameLambdaOnOneRuntimeIsTheSharedFunction()
+    {
+        const string source = Linq + "class C { int M(double[] xs) => xs.Sum(x => (int)x); }";
+
+        IrPure crossing = Assert.Single(Delegates(Source(source)));
+        IrPure same = Assert.Single(Delegates(Source(source, runtime: Runtimes.Between("net10.0", "net10.0"))));
+
+        Assert.True(crossing.RuntimeSensitive);
+        Assert.False(same.RuntimeSensitive);
+        Assert.Equal(crossing.Function, same.Function);
+    }
+
+    /// <summary>Two runtime-sensitive lambdas with different bodies are two functions, as two shared ones are.</summary>
+    [Fact]
+    public void TwoRuntimeSensitiveLambdasThatDifferAreTwoFunctions()
+    {
+        static IrPure Lambda(string body) => Assert.Single(Delegates(Source(Linq + "class C { int M(double[] xs) => xs.Sum(x => " + body + "); }")));
+
+        Assert.NotEqual(Lambda("(int)x").Function, Lambda("(int)(x + 1)").Function, StringComparer.Ordinal);
+        Assert.True(Lambda("(int)(x + 1)").RuntimeSensitive);
+    }
+
+    /// <summary>
+    /// A runtime-sensitive method group whose receiver is evaluated stays opaque, and is not shared: the fragment would be
+    /// a call both sides make alike, which a member that differs between the runtimes is not.
+    /// </summary>
+    [Fact]
+    public void ARuntimeSensitiveMethodGroupWhoseReceiverIsEvaluatedIsNotShared()
+    {
+        IrProcedure procedure = Source(Linq + "class C { int M(string[] xs, string o) => xs.Count(o.StartsWith); }");
+
+        Assert.Empty(Delegates(procedure));
+        IrOpaque opaque = Assert.Single(Opaques(procedure));
+        Assert.Equal(DelegateCreation, opaque.Reason);
+        Assert.Null(opaque.Fingerprint);
+        Assert.Null(opaque.Threw);
+    }
+
     [Theory]
     [InlineData("int k = 1; var q = xs.Where(x => x > k); k = 2; return q.Count();")]
+    [InlineData("int k = 1; var q = xs.Where(x => (int)(double)x > k); k = 2; return q.Count();")]
     [InlineData("int k = 0; int n = 0; for (int i = 0; i < 3; i++) { n += xs.Count(x => x > k); k++; } return n;")]
     public void ALambdaCapturingALocalStoredAfterItIsOpaqueAgain(string body)
     {

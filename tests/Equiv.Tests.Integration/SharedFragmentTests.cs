@@ -109,6 +109,28 @@ public sealed class SharedFragmentTests
         Assert.IsType<Equivalent>(PairRuntime.Analyse(Applying("v => unchecked(v + a)"), Applying("w => unchecked(w + a)")).Verdict);
     }
 
+    /// <summary>
+    /// Ticket P2-136: a lambda whose body a runtime rule applies to (here a floating-point to integer conversion, which
+    /// .NET 9 changed) is each side's own function, so the two delegates differ even when both sides write the lambda alike:
+    /// the pair is never Equivalent. It is Unknown(Abstraction) naming a delegate on each side, where the unshared fragment
+    /// made it Unknown(Opaque), and neither side holds an opaque. So is a pair whose two such lambdas differ.
+    /// </summary>
+    [Theory]
+    [InlineData("v => unchecked((int)(double)v + a)", "v => unchecked((int)(double)v + a)")]
+    [InlineData("v => unchecked((int)(double)v + a)", "v => unchecked((int)(double)v - a)")]
+    public void ARuntimeSensitiveLambdaIsUnknownAbstractionNamingEachSidesOwnDelegate(string legacy, string modern)
+    {
+        PairRuntime.Analysis analysis = PairRuntime.Analyse(Applying(legacy), Applying(modern));
+
+        Assert.Empty(Opaques(analysis.Old));
+        Assert.Empty(Opaques(analysis.New));
+        Unknown unknown = Assert.IsType<Unknown>(analysis.Verdict);
+        Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
+        Assert.Equal(
+            [Codebase.Legacy, Codebase.Modern],
+            unknown.Abstractions.Where(static a => a.Identity.Value.StartsWith("delegate:", StringComparison.Ordinal)).Select(static a => a.Side).Order());
+    }
+
     /// <summary>A method that applies <paramref name="lambda"/>, which captures <c>a</c>, to <c>b</c>.</summary>
     private static string Applying(string lambda) => $$"""
         public static class Oracle

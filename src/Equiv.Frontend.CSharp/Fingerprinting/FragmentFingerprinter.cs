@@ -26,10 +26,12 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// <item>it refers to a local function declared outside it, whose body and captures its fingerprint does not hold;</item>
 /// <item>it reads a <c>ref</c> local;</item>
 /// <item>a lambda in it captures a variable that a lambda or local function anywhere in the graph writes, since that write
-/// can run after the fragment; the lowerer rejects one whose captured variable is assigned after it in the graph;</item>
-/// <item>it is runtime-sensitive, by M3-015's rule, inside the pair's runtime interval. Both sides are given the same
-/// interval, so a fragment both hold gets the same answer and the same fingerprint (ADR 0040; ticket P2-055).</item>
+/// can run after the fragment; the lowerer rejects one whose captured variable is assigned after it in the graph.</item>
 /// </list>
+/// A fragment that is runtime-sensitive, by M3-015's rule, inside the pair's runtime interval has a fingerprint and is
+/// flagged <see cref="Fragment.RuntimeSensitive"/>: the lowerer shares none (ADR 0024 decision 2), and names a side's own
+/// delegate function by it (ticket P2-136). Both sides are given the same interval, so a fragment both hold gets the same
+/// answer and the same fingerprint (ADR 0040; ticket P2-055).
 /// Its reads are the locals and parameters declared outside it that it references, a lambda's captures included, in order of
 /// first occurrence. Its text is <see cref="BoundSerialiser.SerialiseFragment"/>'s.
 /// </summary>
@@ -80,7 +82,7 @@ internal sealed class FragmentFingerprinter(
 
         (string text, bool runtimeSensitive) = BoundSerialiser.SerialiseFragment(
             method, compilation, operation, Lambda, new(renames, suppressedRuntimeChanges, equivalences, runtime) { KeptForwarders = KeptForwarders });
-        return runtimeSensitive ? null : new Fragment(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), reads, captured);
+        return new Fragment(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), reads, captured, runtimeSensitive);
     }
 
     /// <summary>Every operation of the fragment in pre-order, each lambda of the graph replaced by its bound body.</summary>
@@ -152,6 +154,9 @@ internal sealed class FragmentFingerprinter(
         return written;
     }
 
-    /// <summary>A fragment's fingerprint, the variables it reads in order of first occurrence, and those a lambda in it captures.</summary>
-    internal sealed record Fragment(string Fingerprint, ImmutableArray<ISymbol> Reads, ImmutableArray<ISymbol> Captured);
+    /// <summary>
+    /// A fragment's fingerprint, the variables it reads in order of first occurrence, those a lambda in it captures, and
+    /// whether a runtime rule applies to it inside the pair's runtime interval.
+    /// </summary>
+    internal sealed record Fragment(string Fingerprint, ImmutableArray<ISymbol> Reads, ImmutableArray<ISymbol> Captured, bool RuntimeSensitive);
 }
