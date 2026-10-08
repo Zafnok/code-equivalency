@@ -1,5 +1,5 @@
 # P2-143 A `params` call that .NET 9 binds to the `params ReadOnlySpan<T>` overload is the same call as the `params T[]` one
-Status: in-progress
+Status: done (PR #435)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -135,3 +135,26 @@ criterion 1's lowering covers it with no further code.
   opaque go from 23 to 26. The other 17 hold further reasons.
 - No verifying run was made: the criterion asks for the two counts, and a census gives them.
   Nothing under `docs/runs/` is added, so the README's scoreboard is not touched.
+
+### Other
+- The sample's five modern methods that pass elements joined `IlLoweringParityTests`' known list:
+  their IOperation lowering holds no opaque now, so the test compares it with the IL lowering, and
+  the IL builds the span in an inline array through compiler-generated helpers, which stays opaque
+  (ADR 0039). The legacy methods, which build an array, are proved.
+- The census runs used this worktree's own `.corpus/` checkouts, fetched and restored for it.
+
+### Stacked on P2-142 (2026-10-08)
+- The branch is rebased onto P2-142's (PR #433), which added an integer range to an adapter item
+  and `addedIn`, the runtime that added an entry's modern member, to a member entry. Both tickets'
+  adapter forms are kept: `ApiArgument` has `Range` and `Rest`, and ADR 0020 has both
+  clarifications.
+- Decision: the four entries carry `"addedIn": "net9.0"` -> they apply only to a pair that crosses
+  .NET 9. Alternatives: no runtime, as before the rebase. Rule: 1. .NET 9 added the span
+  overloads. On a pair that does not cross it, .NET Framework 4.8 to .NET 8 for one, both sides
+  bind the array overload, and rewriting the legacy call to the span overload would make a site
+  that was the same call on both sides a rebound one (ADR 0042), which is what P2-142's gate is
+  for. `jellyfin-13023` (.NET 8 to .NET 9) and the sample (.NET 8 to .NET 10) both cross it.
+  `ParamsSpanLoweringTests.TheEntriesApplyOnlyToAPairThatCrossesTheRuntimeThatAddedTheSpanOverloads`.
+- The counts under criterion 5 are of this ticket's change alone, measured against `main`. No
+  census of the two tickets together was run; P2-142's own run has `rebound-call` in 25 changed
+  pairs, and the 16 pairs this ticket frees of it and those overlap in an unknown number.
