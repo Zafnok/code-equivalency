@@ -148,6 +148,26 @@ The IL fallback. Comparing two lambdas whose bodies differ as a pair of procedur
   itself, which `CongruenceSoundnessTests` also draws from and which asserts that every method is
   congruent with itself across .NET Framework 4.8 and .NET 10, false of a runtime-sensitive body; a
   lambda that is also invoked, which needs the test's call oracle to run the lambda's body. Rule: 4.
+- **Criterion 4: the same census after the change (2026-10-08).** Same pair, same checkouts, this
+  branch, exit 0, 133 s, no project skipped. `changedReasonSets["DelegateCreation"]` fell from 49 to
+  21: 28 pairs, 3.3% of the 859 changed pairs, against a bar of 2% (18 pairs). Changed pairs holding
+  the reason at all fell from 103 to 38. `changedPairsWithoutOpaque` rose from 349 to 377, so the
+  lowerable share (ADR 0034) is 43.9%, up from 40.6%. Bodies holding the reason fell from 274 legacy
+  and 270 modern to 209 and 206. Matched, congruent and changed pairs are unchanged (13,541, 12,682
+  and 859), as they must be: congruence is decided on the body's fingerprint, which this ticket does
+  not touch. The 37 pairs that left a mixed set moved to the set of their other reasons
+  (`switch-pattern` alone is now 66, was 54; `Conversion` 8, was 3; `DefaultValue` 14, was 12). Of
+  the 29 pairs the split gave to this cause alone, 28 left the set and one still holds the reason; it
+  was not classified again.
+- **What this does not change.** A pair is lowerable, not decided, and these never will be Equivalent
+  while the runtime rule applies: the two delegates are two functions, so a pair that hands one to a
+  call is Unknown(Abstraction) naming both, where it was Unknown(Opaque). No verifying run was made.
+  What the pair gains is that everything else in the method is now compared, and that the Unknown
+  names the delegate instead of a whole opaque region.
+- **Criterion 5.** 5% of the 859 changed pairs is 43. No remaining cause keeps that many opaque
+  alone: the largest is a capture its own lambda writes, 13 pairs (1.5%), then a method group of a
+  local function 3, a lambda that calls a local function 2, a capture stored after creation 1. No
+  ticket is filed, and `docs/ROADMAP.md` is not touched.
 - Outside the ticket's Files, what pins the old behaviour or states the rule had to follow:
   `FragmentLoweringTests.RuntimeSensitiveFragmentHasNoFingerprint` (its fragment was a lambda, now a
   query), `SharedFragmentTests` in `Equiv.Tests.Integration`, `tests/Equiv.TestSupport/LoweringOracleGen.cs`,
