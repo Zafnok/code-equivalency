@@ -282,8 +282,8 @@ public sealed partial class SamplesEndToEndTests
 
     /// <summary>
     /// Ticket P2-137 criterion 3: <c>TimeSpan.FromHours(double)</c> and <c>TimeSpan.FromHours(int)</c> throw different
-    /// exception types for a value out of range, so the catalogue has no entry for them: the call stays a rebound call
-    /// (ADR 0042) and the pair Unknown, with the two callees named.
+    /// exception types for a value out of range, so the catalogue's entry for them (ticket P2-142) does not apply to an
+    /// <c>int</c> that is not constant: the call stays a rebound call (ADR 0042) and the pair Unknown, with the two callees named.
     /// </summary>
     [Fact]
     public void BclReboundOverloads_OverloadsThatDifferOutOfRangeStayARebindingAndUnknown()
@@ -295,6 +295,57 @@ public sealed partial class SamplesEndToEndTests
         Assert.False(result.TryGetProperty("equivalencesApplied", out string? _));
         Dictionary<string, string> rebound = Assert.Single(result.GetProperty<List<Dictionary<string, string>>>("reboundCalls"));
         Assert.Equal(("System.TimeSpan::FromHours(double)", "System.TimeSpan::FromHours(int)"), (rebound["legacy"], rebound["modern"]));
+    }
+
+    /// <summary>
+    /// Ticket P2-142 criterion 3: a call of each of the five <c>TimeSpan</c> factories whose argument is known to be in the
+    /// range on which the <c>double</c> and the integer overload agree, a constant in it or an <c>int</c> of seconds, is not a
+    /// rebound call, and the pair is Equivalent with the entry applied.
+    /// </summary>
+    [Theory]
+    [InlineData("::Week(", "bcl.timespan-from-days-integer")]
+    [InlineData("::CacheLifetime(", "bcl.timespan-from-hours-integer")]
+    [InlineData("::Retry(", "bcl.timespan-from-minutes-integer")]
+    [InlineData("::Poll(", "bcl.timespan-from-seconds-integer")]
+    [InlineData("::Never(", "bcl.timespan-from-milliseconds-integer")]
+    [InlineData("::Wait(", "bcl.timespan-from-seconds-integer")]
+    public void TimeSpanIntegerOverloads_AnArgumentKnownToBeInRangeIsEquivalentWithItsEntryApplied(string member, string entry)
+    {
+        Result result = Single("timespan-integer-overloads", member);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal([entry], result.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
+        Assert.False(result.TryGetProperty("reboundCalls", out string? _));
+    }
+
+    /// <summary>
+    /// Ticket P2-142 criterion 4: a constant out of range, an <c>int</c> of hours and a <c>long</c> of milliseconds are not
+    /// known to be in range, so no entry applies: the call stays a rebound call (ADR 0042) and the pair Unknown, with the
+    /// two callees named.
+    /// </summary>
+    [Theory]
+    [InlineData("::TooLong(", "System.TimeSpan::FromHours(double)", "System.TimeSpan::FromHours(int)")]
+    [InlineData("::Hours(", "System.TimeSpan::FromHours(double)", "System.TimeSpan::FromHours(int)")]
+    [InlineData("::Delay(", "System.TimeSpan::FromMilliseconds(double)", "System.TimeSpan::FromMilliseconds(long)")]
+    public void TimeSpanIntegerOverloads_AnArgumentThatMayBeOutOfRangeStaysARebindingAndUnknown(string member, string legacy, string modern)
+    {
+        Result result = Single("timespan-integer-overloads", member);
+
+        Assert.Equal("EQ003", result.RuleId);
+        Assert.Equal("opaque", result.GetProperty<string>("unknownReason"));
+        Assert.False(result.TryGetProperty("equivalencesApplied", out string? _));
+        Dictionary<string, string> rebound = Assert.Single(result.GetProperty<List<Dictionary<string, string>>>("reboundCalls"));
+        Assert.Equal((legacy, modern), (rebound["legacy"], rebound["modern"]));
+    }
+
+    /// <summary>Ticket P2-142 criterion 4: the entry does not hide an edit. Another constant on the modern side stays Divergent.</summary>
+    [Fact]
+    public void TimeSpanIntegerOverloads_AnotherConstantOnTheModernSideIsDivergent()
+    {
+        Result result = Single("timespan-integer-overloads", "::Backoff(");
+
+        Assert.Equal("EQ002", result.RuleId);
+        Assert.Equal(["bcl.timespan-from-minutes-integer"], result.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
     }
 
     /// <summary>
