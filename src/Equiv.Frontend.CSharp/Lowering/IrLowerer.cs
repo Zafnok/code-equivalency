@@ -10,6 +10,7 @@ using Equiv.Core.Ir;
 using Equiv.Core.Matching;
 using Equiv.Core.Verdicts;
 using Equiv.Frontend.CSharp.Fingerprinting;
+using Equiv.Frontend.CSharp.Loading;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -248,12 +249,14 @@ internal sealed class IrLowerer
     /// in it, in source order, or, when there is none, of every <see cref="IInvalidOperation"/> and every operation of an
     /// error type in <paramref name="operation"/>, such as a reference to a field whose type did not resolve. Empty when it
     /// binds. A syntax error anywhere in its file comes first and is the only cause: where each declaration of that file
-    /// begins and ends is the parser's recovery, so no method in it is taken as bound (ticket P2-085). The fingerprint of a partial
+    /// begins and ends is the parser's recovery, so no method in it is taken as bound (ticket P2-085). An error is one the
+    /// compiler itself calls an error (<see cref="CompilationDiagnosticClassifier.IsError"/>): a warning the project
+    /// promotes to an error sits on code that binds, and that code is lowered (ticket P2-106). The fingerprint of a partial
     /// method's implementing part, which is never lowered, asks the same of that part (ADR 0024 as clarified by ticket P2-107).
     /// </summary>
     internal static ImmutableArray<SourceSpan> UnboundCauses(SyntaxNode syntax, SemanticModel model, IOperation? operation)
     {
-        if (syntax.SyntaxTree.GetDiagnostics().Where(static d => d.Severity == DiagnosticSeverity.Error).MinBy(static d => d.Location.SourceSpan.Start) is { } syntaxError)
+        if (syntax.SyntaxTree.GetDiagnostics().Where(CompilationDiagnosticClassifier.IsError).MinBy(static d => d.Location.SourceSpan.Start) is { } syntaxError)
         {
             return [CSharpFrontend.ToSourceSpan(syntaxError.Location)];
         }
@@ -261,7 +264,7 @@ internal sealed class IrLowerer
         ImmutableArray<SourceSpan> errors =
         [
             .. model.GetDiagnostics(syntax.Span)
-                .Where(static d => d.Severity == DiagnosticSeverity.Error)
+                .Where(CompilationDiagnosticClassifier.IsError)
                 .OrderBy(static d => d.Location.SourceSpan.Start)
                 .Select(static d => CSharpFrontend.ToSourceSpan(d.Location))
                 .Distinct(),

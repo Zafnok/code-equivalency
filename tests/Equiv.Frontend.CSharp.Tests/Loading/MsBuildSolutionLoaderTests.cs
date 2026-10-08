@@ -262,6 +262,28 @@ public sealed class MsBuildSolutionLoaderTests
         Assert.Equal((LoadDiagnosticKind.CompilerError, "CS0246", "A"), (diagnostic.Kind, diagnostic.Id, diagnostic.Project));
     }
 
+    /// <summary>
+    /// Ticket P2-106 (ADR 0029 as clarified): a warning the project promotes to an error (CS0168 here) is not one of the
+    /// project's errors, on either side. An error of the compiler's own in the same project (CS0103) still is.
+    /// </summary>
+    [Theory]
+    [InlineData(Codebase.Legacy)]
+    [InlineData(Codebase.Modern)]
+    public async Task AWarningPromotedToAnErrorIsNotALoadDiagnostic(Codebase side)
+    {
+        LoadedSolution loaded = await LoadAsync(
+            ws => ws.AddCSharpProject("A", "class C { int Promoted() { int unused; return 1; } int Broken() { return missing; } }", treatWarningsAsErrors: true),
+            side);
+
+        Compilation compilation = Assert.Single(loaded.Compilations);
+        Assert.Contains(
+            compilation.GetDiagnostics(TestContext.Current.CancellationToken),
+            static d => d is { Id: "CS0168", Severity: DiagnosticSeverity.Error, DefaultSeverity: DiagnosticSeverity.Warning });
+        Assert.Empty(loaded.Skipped);
+        LoadDiagnostic diagnostic = Assert.Single(loaded.Diagnostics);
+        Assert.Equal((LoadDiagnosticKind.CompilerError, "CS0103", "A"), (diagnostic.Kind, diagnostic.Id, diagnostic.Project));
+    }
+
     /// <summary>A modern project with no core library is still skipped: nearly nothing in it binds (ticket P2-085).</summary>
     [Fact]
     public async Task AModernProjectWithoutACoreLibraryIsStillSkipped()

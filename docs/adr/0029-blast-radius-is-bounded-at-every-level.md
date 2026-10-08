@@ -138,3 +138,17 @@ methods it breaks. So there is no file level.
   methods are EQ003 results, so the exit code follows the verdicts. This is not the rejected "treat
   a skipped project's procedures as Unknown results": each of these Unknowns states an error in that
   method's own code, not one fact about the tool repeated for every method.
+- 2026-10-07 (P2-106). Decision 2's "error diagnostic", and the errors the 2026-10-01 bullets sort
+  for decision 1, are diagnostics whose default severity is error: the ones the compiler calls an
+  error whatever the project says. A warning the project promotes (`TreatWarningsAsErrors`,
+  `WarningsAsErrors`, an `.editorconfig` severity) is reported with severity error on code in which
+  every symbol resolves and every operation has a type. It does not make a method
+  `Unknown(Unbound)`, and it is not one of the project's errors at load, on either side. The method
+  is lowered and compared as any other is. Decision 2's other test stays as it is: an invalid
+  operation or an error-type symbol still makes a method `unbound` when no diagnostic does. Every id
+  the 2026-10-01 bullets name is an error by default except CS8032, a warning the compiler reports
+  only when it runs analyzers, which the loader does not do; a promoted CS8032 would no longer skip
+  a project. Observed on `powershell-19687`, whose projects promote warnings and whose commit, built
+  against the released net8.0 reference pack, reports the obsoletion of formatter-based
+  serialization (SYSLIB0051, SYSLIB0050, CS0672): 65 of its 82 `unbound` pairs had only such
+  diagnostics and are now compared, and the 17 with a real binding error stay `unbound`.

@@ -41,6 +41,37 @@ public sealed class SsaBuilderTests
         Assert.StartsWith("x.", blocks[1].Instructions.OfType<IrConst>().Single().Target.Name, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-106: a generated method is thousands of blocks one after another, and <see cref="SsaBuilder.Build"/>
+    /// orders them without a stack frame per block. The thread's stack is 128 KB, which a frame per block of this chain
+    /// does not fit in, so a walk that recurses ends the test process here instead of failing an assertion.
+    /// </summary>
+    [Fact]
+    public void AChainOfThousandsOfBlocksIsOrderedWithoutAFramePerBlock()
+    {
+        const int Length = 4000;
+        ImmutableArray<IrBlock> blocks = [];
+        Thread thread = new(
+            () =>
+            {
+                SsaBuilder ssa = new();
+                IrBlockId[] chain = [.. Enumerable.Range(0, Length).Select(_ => ssa.NewBlock())];
+                foreach ((IrBlockId from, IrBlockId to) in chain.Zip(chain.Skip(1)))
+                {
+                    ssa.Terminate(from, new IrGoto(to));
+                }
+
+                ssa.Terminate(chain[^1], new IrReturn(Value: null, []));
+                blocks = ssa.Build(chain[0], [], [], Span);
+            },
+            maxStackSize: 128 * 1024);
+        thread.Start();
+        thread.Join();
+
+        Assert.Equal(Enumerable.Range(0, Length), blocks.Select(static b => b.Id.Value));
+        Assert.Equal(new IrGoto(new IrBlockId(Length - 1)), blocks[^2].Terminator);
+    }
+
     [Fact]
     public void LoopHeaderPhiIsSealedAfterTheLatchAndUnchangedVariablesHaveNone()
     {

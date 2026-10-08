@@ -593,6 +593,67 @@ public sealed class CSharpFrontendTests
         Assert.DoesNotContain(both.OldBody!.Blocks.SelectMany(static b => b.Instructions), static i => i is IrOpaque);
     }
 
+    /// <summary>
+    /// A project that sets <c>TreatWarningsAsErrors</c>, which is the compiler's general diagnostic option: <c>Promoted</c>
+    /// calls an obsolete member (CS0618, a warning the project reports as an error) and <c>Broken</c> reads a name that
+    /// does not exist (CS0103, an error whatever the project says).
+    /// </summary>
+    private static MatchResult AnalyzedWithWarningsAsErrors()
+    {
+        Compilation relaxed = RoslynTestCompilations.Compile(
+            """
+            namespace N
+            {
+                public class C
+                {
+                    [System.Obsolete("use another")] public static int Old(int a) => a + 1;
+                    public int Promoted(int a) => Old(a);
+                    public int Broken(int a) => a + missing;
+                }
+            }
+            """);
+        Compilation strict = relaxed.WithOptions(relaxed.Options.WithGeneralDiagnosticOption(ReportDiagnostic.Error));
+        Assert.Equal(
+            [("CS0103", DiagnosticSeverity.Error), ("CS0618", DiagnosticSeverity.Warning)],
+            strict.GetDiagnostics(TestContext.Current.CancellationToken)
+                .Where(static d => d.Severity == DiagnosticSeverity.Error)
+                .Select(static d => (d.Id, d.DefaultSeverity))
+                .Order());
+        StubLoader loader = new(_ => new LoadedSolution(null!, [strict], [], []));
+        return new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
+    }
+
+    /// <summary>
+    /// Ticket P2-106 (ADR 0029 decision 2 as clarified): a warning the project promotes to an error says nothing about
+    /// whether the body binds, so the body is lowered as any other is.
+    /// </summary>
+    [Fact]
+    public void AWarningPromotedToAnErrorDoesNotUnbindABody()
+    {
+        ProcedurePair pair = AnalyzedWithWarningsAsErrors().Pairs.Single(static p => p.New.Value.Contains("::Promoted(", StringComparison.Ordinal));
+
+        Assert.All([pair.OldBody!, pair.NewBody!], static body =>
+        {
+            ImmutableArray<IrInstruction> instructions = [.. body.Blocks.SelectMany(static b => b.Instructions)];
+            Assert.DoesNotContain(instructions, static i => i is IrOpaque);
+            Assert.Contains(instructions, static i => i is IrCall);
+        });
+    }
+
+    /// <summary>Ticket P2-106: in the same project, a body with an error of the compiler's own is still one <c>unbound</c> opaque.</summary>
+    [Fact]
+    public void ARealBindingErrorStillUnbindsABody()
+    {
+        ProcedurePair pair = AnalyzedWithWarningsAsErrors().Pairs.Single(static p => p.New.Value.Contains("::Broken(", StringComparison.Ordinal));
+
+        Assert.All([pair.OldBody!, pair.NewBody!], static body =>
+        {
+            IrOpaque opaque = Assert.Single(body.Blocks.SelectMany(static b => b.Instructions).OfType<IrOpaque>());
+            Assert.Equal((Unknown.UnboundOpaqueReason, true), (opaque.Reason, opaque.WholeBody));
+        });
+    }
+
     [Fact]
     public void LowersBothBodiesOfEveryMatchedPair()
     {
