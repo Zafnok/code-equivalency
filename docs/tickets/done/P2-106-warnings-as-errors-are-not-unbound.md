@@ -1,5 +1,5 @@
 # P2-106 A body whose only diagnostics are warnings promoted to errors is not `unbound`
-Status: in-progress
+Status: done (PR #424)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-085, P2-058
