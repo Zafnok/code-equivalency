@@ -73,6 +73,37 @@
           "kind": "pass",
           "level": "none",
           "message": {
+            "text": "Equiv.Samples.SameRuntimeCleanup.Native::Beep(uint,uint) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Native.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 32,
+                  "endLine": 7,
+                  "endColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.SameRuntimeCleanup.Native::Beep(uint,uint)",
+            "resultFingerprint/v1": "9900e5698bb4174e7792532c59c5c2323a89ab38bab5349506f7871f54765c36"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
             "text": "Equiv.Samples.SameRuntimeCleanup.Report::Describe(double,string) is equivalent."
           },
           "locations": [
@@ -142,18 +173,23 @@
       "properties": {
         "loweringCensus": {
           "procedures": {
-            "legacy": 2,
-            "modern": 2
+            "legacy": 3,
+            "modern": 3
           },
-          "matchedPairs": 2,
+          "matchedPairs": 3,
           "pairsWithoutOpaque": 2,
-          "pairsWholeBodyOpaque": 0,
-          "pairsCongruent": 1,
+          "pairsWholeBodyOpaque": 1,
+          "pairsCongruent": 2,
           "projectsSkipped": {
             "legacy": 0,
             "modern": 0
           },
-          "opaqueByReason": {},
+          "opaqueByReason": {
+            "no-body": {
+              "legacy": 1,
+              "modern": 1
+            }
+          },
           "changedPairs": 1,
           "changedPairsWithoutOpaque": 1,
           "changedPairsWholeBodyOpaque": 0,
@@ -214,8 +250,8 @@
           }
         },
         "analysedLinesOfCode": {
-          "legacy": 37,
-          "modern": 34
+          "legacy": 49,
+          "modern": 46
         },
         "projectsNotBuilt": {
           "legacy": [],

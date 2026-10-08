@@ -523,7 +523,11 @@ of how much of the cleanup result each explains:
 - P2-106 (M) A body whose only diagnostics are warnings promoted to errors is not `unbound`. 82
   pairs on powershell-19687. Starts with `equiv-adr`. Needs P2-085.
 - P2-107 (M) On a same-runtime pair, a whole-body opaque pair with identical source is not
-  "changed": 128 of powershell-19687's 140 changed pairs. Starts with `equiv-adr`.
+  "changed": 128 of powershell-19687's 140 changed pairs. Starts with `equiv-adr`. Done 2026-10-07:
+  a changed pair is still one that is not congruent; on one runtime a partial method is
+  fingerprinted by its implementing part (ADR 0024 and ADR 0034, clarified), so the 46 `no-body`
+  pairs, all `[LibraryImport]` methods, are congruent. `changedPairs` 148 to 102 on the rerun, with
+  the 12 edited pairs still in it. The 82 `unbound` pairs stay changed (P2-106).
 - P2-067 (L) `DelegateCreation` is 17.0% of Git Extensions' changed pairs on its own and has no open
   owner: split it by cause, then lower the chosen construct. Found by P2-046. Done 2026-10-01: in
   134 of the 213 such pairs the lambda was unchanged and already shared; a lambda or method group

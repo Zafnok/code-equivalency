@@ -13,5 +13,10 @@ internal static class WholeBodyReasonOwners
     {
         // Not a lowering gap: erroneous code is Unknown(Unbound) by design (ADR 0029 decision 2), so it never goes away.
         ["unbound"] = "M3-024",
+
+        // A partial method whose code is in its implementing part, written by a source generator or by hand: the frontend
+        // reads the defining declaration (docs/runs/2026-10-07-opaque-tail.md gives the reason to P2-118). Ticket P2-107 makes
+        // an unedited one congruent on a same-runtime pair and does not lower it, so `samples/same-runtime-cleanup` has one.
+        ["no-body"] = "P2-118",
     }.ToImmutableSortedDictionary(StringComparer.Ordinal);
 }
