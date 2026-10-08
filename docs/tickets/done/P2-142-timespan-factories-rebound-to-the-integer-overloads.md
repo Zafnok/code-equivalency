@@ -1,5 +1,5 @@
 # P2-142 `TimeSpan.FromHours(2)` binds to an integer overload on .NET 9, and the two overloads agree while the result is in range
-Status: in-progress
+Status: done (PR #433)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
