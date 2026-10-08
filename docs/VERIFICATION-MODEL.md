@@ -496,6 +496,17 @@ Migration-specific normalisations (applied to both sides before matching):
   treated as the same uninterpreted function; it produces Divergent with ruleId EQ006
   and a link to the breaking-change entry. Users may suppress per member in
   `equiv.config.json`.
+- The throw of a `switch` expression that matches no arm (ADR 0024 as clarified by ticket P2-144).
+  The compiler adds it, constructing `System.Runtime.CompilerServices.SwitchExpressionException`
+  where the reference assemblies have the type (.NET Core 3.0 and later) and
+  `System.InvalidOperationException` where they do not. The table has a row for the first type's
+  constructors (`changedIn: netcoreapp3.0`), the one row for a call the source does not write.
+  The bound fingerprint of an expression whose arms do not cover every value names the
+  constructor that side's compiler calls, so a pair across that runtime is not congruent, and an
+  input that matches no arm is Divergent with ruleId EQ006. An expression that covers every value
+  (a discard or `var` arm with no `when` clause, `true` and `false`;
+  `ISwitchExpressionOperation.IsExhaustive`) has no throw: its fingerprint names no constructor
+  and its lowered body has no no-match block.
 
 Every runtime rule applies only inside the pair's runtime interval (ADR 0040 decision 2; ticket
 P2-055). A matched pair's interval runs between the runtimes of the two projects its bodies come

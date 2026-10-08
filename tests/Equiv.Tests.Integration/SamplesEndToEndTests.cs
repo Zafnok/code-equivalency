@@ -349,6 +349,37 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-144 criterion 3: the same <c>switch</c> expression with no discard arm on .NET Framework 4.8 and .NET 10
+    /// throws another exception type where no arm matches, so the pair is Divergent by the runtime rule (EQ006) and not
+    /// Equivalent by congruence; the compiler's two constructors are not a rebound call.
+    /// </summary>
+    [Fact]
+    public void SwitchExpressionNoMatch_AnExpressionThatMayMatchNoArmIsDivergentByItsRuntimeRow()
+    {
+        Result result = Single("switch-expression-no-match", "::Weight(");
+
+        Assert.Equal("EQ006", result.RuleId);
+        Assert.Contains("between net48 and net10.0", result.Message.Text, StringComparison.Ordinal);
+        Assert.Contains("SwitchExpressionException", result.Message.Text, StringComparison.Ordinal);
+        Assert.False(result.TryGetProperty("reboundCalls", out string? _));
+    }
+
+    /// <summary>
+    /// Ticket P2-144 criterion 4: a <c>switch</c> expression whose arms always match (a discard arm, or <c>true</c> and
+    /// <c>false</c>) has no such throw and stays Equivalent by congruence.
+    /// </summary>
+    [Theory]
+    [InlineData("::WeightOrZero(")]
+    [InlineData("::Sign(")]
+    public void SwitchExpressionNoMatch_AnExpressionWhoseArmsAlwaysMatchIsEquivalentByCongruence(string method)
+    {
+        Result result = Single("switch-expression-no-match", method);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>
     /// Ticket P2-055 criterion 2 (ADR 0040 decision 2): both sides run on .NET 10, so no runtime rule applies. The
     /// byte-identical method that calls <c>double.ToString()</c> and <c>string.StartsWith(string)</c> and casts a
     /// <c>double</c> to <c>int</c> is Equivalent by congruence, and the <c>if</c> chain made a <c>switch</c> expression is
