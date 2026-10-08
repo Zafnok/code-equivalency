@@ -314,7 +314,7 @@ public sealed class BodyFingerprinterTests
     /// <summary>
     /// Ticket P2-145: what an <c>extern</c> local function imports is written as the compiler resolves it. With no
     /// <c>EntryPoint</c> the entry point is the function's own name, so renaming the function changes what the body calls;
-    /// with one it does not. A function with no <c>[DllImport]</c> is written by its name.
+    /// with one it does not. A function with no <c>[DllImport]</c> is written by its declared type and name.
     /// </summary>
     [Fact]
     public void AnExternLocalFunctionIsWrittenByWhatItImports()

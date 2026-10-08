@@ -168,9 +168,10 @@ and file the rest.
   assembly's `[DisableRuntimeMarshalling]` and `[DefaultDllImportSearchPaths]`, a containing
   type's `[BestFitMapping]`, the layout of the types in the signature). Read off what the text
   holds, not reproduced.
-- A limit: an `extern` local function with no `[DllImport]` is written by its source name. The
-  name a runtime would look such a function up by is the compiler's (`<M>g__F|0_0`), which also
-  depends on the containing member. No runtime that `equiv` knows implements one.
+- A limit: an `extern` local function with no `[DllImport]` is written by its containing type and
+  its source name. The name a runtime would look such a function up by is the compiler's
+  (`<M>g__F|0_0`), which also depends on the containing member. No runtime that `equiv` knows
+  implements one.
 - Criterion 2's "keeps the text it has today":
   `BodyFingerprinterTests.ABodyWithoutAttributedLocalFunctionsKeepsItsText` is a snapshot taken
   on `main` (`40057429`) before the change and unchanged by it.
