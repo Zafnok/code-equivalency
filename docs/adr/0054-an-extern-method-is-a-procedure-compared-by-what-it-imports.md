@@ -94,7 +94,9 @@ attributes are its code, and that across runtimes it is the runtime that marshal
   `[DefaultDllImportSearchPaths]`, a containing type's `[BestFitMapping]`, the layout of the types in its
   signature). Ticket P2-146.
 - ARCHITECTURE.md's frontend step 2 and `ProcedureEnumerator` say that an `extern` member is a procedure.
-  VERIFICATION-MODEL.md needs no change: the verdicts and the congruence rule are as written.
+  VERIFICATION-MODEL.md section 1 names the `extern` method beside the partial method as a declaration
+  with no bound code that has a fingerprint, and the `extern` local function as a cause of runtime
+  sensitivity. The verdicts and the congruence rule are as written.
 - ADR 0045's one-sided helper stays "not `extern`": an `extern` method has no body to put in its caller.
 - Tickets: P2-145 implements this. P2-118 still owns generated interop code on a pair that crosses a
   runtime.
