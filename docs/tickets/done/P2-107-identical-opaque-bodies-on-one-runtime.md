@@ -1,5 +1,5 @@
 # P2-107 On a same-runtime pair, a whole-body opaque pair with identical source is not "changed"
-Status: in-progress
+Status: done (PR #425)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-055, P2-058
@@ -78,3 +78,26 @@ Line-scoped opaques. Cross-runtime pairs.
 - Found, not fixed here (both are older than this ticket and need their own):
   - The fingerprint of an ordinary body does not hold the attributes of the local functions it declares. Two bodies that differ only in the `[DllImport]` of a local `extern` function fingerprint equal, on any runtime pair, and are congruent. This ticket writes those attributes for an implementing part only.
   - `ProcedureEnumerator` leaves out `extern` methods, and a partial method whose implementing part is `extern` counts as one. A changed `[DllImport]` on such a method produces no result at all.
+- Criterion 2, the rerun of `powershell-19687` (2026-10-07, compare mode quick, one run per column, exit 1 both):
+
+  | | 2026-10-02 run (`46e6636`, on record) | `origin/main` `c59fa0fc`, without P2-106 | this branch |
+  |---|---|---|---|
+  | `changedPairs` | 140 | 148 | 102 |
+  | of which `unbound` | 82 | 82 | 82 |
+  | of which `no-body` | 46 | 46 | 0 |
+  | `changedPairsWithoutOpaque` | 6 | 10 | 10 |
+  | `changedPairsWholeBodyOpaque` | 128 | 129 | 83 |
+  | lowerable share | 4.3% | 6.8% | 9.8% |
+  | `pairsCongruent` | 33748 | 33741 | 33787 |
+  | `pairsWholeBodyOpaque` | 434 | 434 | 434 |
+  | EQ001 / EQ002 / EQ003 | 33748 / 5 / 135 | 33744 / 6 / 139 | 33790 / 6 / 93 |
+
+  The 46 pairs that left the changed set are exactly the 46 `no-body` results, each now EQ001 by
+  congruence. No pair joined it, and no other result changed its rule id. All 12 pairs the pull
+  request edited are still changed (the same 12 identities, each with the verdict it had in the
+  middle column). The middle column is P2-106's "before" run of the same evening on `origin/main`,
+  read from its SARIF, so the box ran the baseline once and not twice.
+- `changedPairs` is 148 on today's `main`, not the 140 of 2026-10-02: 8 more pairs are not
+  congruent than at `46e6636`. None of the 8 is `unbound` or `no-body`, none is this ticket's, and
+  this ticket did not look into them; P2-110 reruns the cleanup pairs.
+- With P2-106 the 82 `unbound` pairs are that ticket's to count. The 46 here do not depend on it.
