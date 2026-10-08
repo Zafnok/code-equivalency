@@ -232,11 +232,12 @@ internal sealed class BoundSerialiser : OperationWalker
     /// What an <c>extern</c> function imports, as the compiler resolves its <c>[DllImport]</c>: the library, the entry
     /// point, which is the function's own name when the attribute names none, the character set, which the module's
     /// <c>[DefaultCharSet]</c> supplies when the attribute names none, and the other settings the runtime's marshaller
-    /// reads. A function with no <c>[DllImport]</c> is written by its name, which is what its runtime looks it up by.
+    /// reads. A function with no <c>[DllImport]</c> is written by its declared type and name, without the rename map,
+    /// which is what its runtime looks an <c>InternalCall</c> up by.
     /// </summary>
     private static string Import(IMethodSymbol function) => function.GetDllImportData() is { } import
         ? $"module={Constant(import.ModuleName)} entry={Quote(import.EntryPointName ?? function.Name)} charset={import.CharacterSet} convention={import.CallingConvention} exact={import.ExactSpelling} lastError={import.SetLastError} bestFit={import.BestFitMapping} throwOnUnmappable={import.ThrowOnUnmappableCharacter}"
-        : Quote(function.Name);
+        : Quote($"{function.ContainingType.ToDisplayString()}::{function.Name}");
 
     private void Append(string name, string? value)
     {

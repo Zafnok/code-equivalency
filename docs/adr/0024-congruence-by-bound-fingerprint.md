@@ -188,5 +188,6 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     the layout attributes of the types in its signature, `[BestFitMapping]` on a containing type,
     and the assembly's `[DisableRuntimeMarshalling]` and `[DefaultDllImportSearchPaths]`. No
     fingerprint holds a type's or an assembly's attributes today; P2-146 has them. And an `extern`
-    local function with no `[DllImport]` is written by its source name, although the name a
-    runtime would look it up by is the one the compiler generates from the containing member.
+    local function with no `[DllImport]` is written by its containing type and its source name,
+    although the name a runtime would look it up by is the one the compiler generates from the
+    containing member.

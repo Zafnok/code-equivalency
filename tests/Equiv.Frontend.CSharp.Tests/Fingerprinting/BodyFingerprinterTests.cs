@@ -312,7 +312,7 @@ public sealed class BodyFingerprinterTests
     /// <summary>
     /// Ticket P2-145: what an <c>extern</c> local function imports is written as the compiler resolves it. With no
     /// <c>EntryPoint</c> the entry point is the function's own name, so renaming the function changes what the body calls;
-    /// with one it does not. A function with no <c>[DllImport]</c> is written by its name.
+    /// with one it does not. A function with no <c>[DllImport]</c> is written by its declared type and name.
     /// </summary>
     [Fact]
     public void AnExternLocalFunctionIsWrittenByWhatItImports()
@@ -328,7 +328,7 @@ public sealed class BodyFingerprinterTests
             "\nExtern F0: module=\"a.dll\" entry=\"E\" charset=Unicode convention=Cdecl exact=True lastError=True bestFit=False throwOnUnmappable=True\n",
             Text(Compile(Renamed(Settings, "F"))),
             StringComparison.Ordinal);
-        Assert.Contains("\nExtern F0: \"F\"\n", Text(Compile("public int M() { return F(); static extern int F(); }")), StringComparison.Ordinal);
+        Assert.Contains("\nExtern F0: \"N.C::F\"\n", Text(Compile("public int M() { return F(); static extern int F(); }")), StringComparison.Ordinal);
     }
 
     [Fact]
