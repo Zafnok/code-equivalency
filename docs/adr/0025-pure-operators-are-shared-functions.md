@@ -1,6 +1,6 @@
 # ADR 0025: Floating-point, decimal and user-defined operators are shared pure functions
 
-Status: accepted (2026-09-21); superseded in part by 0040 (runtime sensitivity applies only across the runtimes a pair crosses)
+Status: accepted (2026-09-21); superseded in part by 0040 (runtime sensitivity applies only across the runtimes a pair crosses); narrowed by 0053 (an interpretable function a candidate depends on is given its meaning; an x87 side names its functions `x87.`)
 
 ## Context
 VERIFICATION-MODEL section 2 makes `float`, `double` and `decimal` uninterpreted sorts with
