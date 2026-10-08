@@ -239,7 +239,7 @@ public sealed class CollectionExpressionLoweringTests
     }
 
     /// <summary>
-    /// The targets that stay opaque: a <c>CollectionBuilder</c> type, a span, a type parameter, a struct, a class whose
+    /// The targets that stay opaque: a <c>CollectionBuilder</c> type, a <c>Span&lt;T&gt;</c>, a type parameter, a struct, a class whose
     /// constructor takes an argument, one with two <c>Add</c> methods, and an array the array creation would not create.
     /// </summary>
     [Theory]

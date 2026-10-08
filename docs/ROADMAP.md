@@ -880,6 +880,9 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
       changed pairs and keeps none opaque alone.
     - P2-143 (M) `params` calls that .NET 9 binds to a `params ReadOnlySpan<T>` overload: 20 changed
       pairs on jellyfin-13023. Needs the span lowered and an adapter form for the elements.
+      Done 2026-10-08: the span is its array through a cast map, four entries with a `rest`
+      adapter item; on jellyfin-13023 `rebound-call` is in 53 changed pairs (was 69) and
+      `CollectionExpression` in none (was 20).
     - P2-144 (M) a switch expression that matches no arm throws another exception type after a
       migration from .NET Framework: 41 results on gitextensions-8522, 39 of them Equivalent by
       congruence. Done 2026-10-08: a runtime rule (EQ006) for an expression that can match no arm.

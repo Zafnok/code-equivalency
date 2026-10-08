@@ -23,6 +23,10 @@
 // why they do. A member entry may carry "addedIn", the target framework moniker of the first runtime that has the
 // modern member: the entry then applies only to a pair whose runtimes cross it, since on any other pair the modern side
 // cannot bind that member where the legacy side binds the legacy one.
+// {"rest": n} is every source argument from position n to the last, which must be exactly the elements of the legacy
+// call's params array, as the System.ReadOnlySpan<T> the compiler builds from the same elements for the modern member's
+// params span parameter: a new T[] of the elements read through the cast map of T[] to the span (ticket P2-143). The
+// entries that use it carry "addedIn": "net9.0", the runtime that added the span overloads.
 // A type entry maps a legacy metadata name to a modern one as a sort name.
 //
 // Soundness (ADR 0020): whenever both members are invoked on adapted arguments, they return the same value and either
@@ -74,6 +78,42 @@
     "arguments": [{ "arg": 0 }],
     "reason": "String.TrimStart(params char[]) with no elements is given an empty array, for which it removes the leading white-space characters, which is TrimStart(); neither throws. Both are instance members, so a null receiver throws NullReferenceException from the receiver check on both sides before either is invoked.",
     "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.trimstart"
+  },
+  {
+    "id": "bcl.string-format-provider-params-span",
+    "legacy": "System.String::Format(System.IFormatProvider,string,object[])",
+    "modern": "System.String::Format(System.IFormatProvider,string,System.ReadOnlySpan<object>)",
+    "addedIn": "net9.0",
+    "arguments": [{ "arg": 0 }, { "arg": 1 }, { "rest": 2 }],
+    "reason": "String.Format(IFormatProvider, string, params object[]) and the params ReadOnlySpan<object> overload that .NET 9 added format the same arguments with the same provider and composite format string, so on the same list of elements they return the same string, and both throw ArgumentNullException for a null format and FormatException for an invalid one or an index past the last element. The array overload also throws ArgumentNullException for a null array, which cannot happen here: the entry applies only where the source passes the elements and the compiler builds the array. Both are static, so there is no receiver check.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.format"
+  },
+  {
+    "id": "bcl.string-join-char-params-span",
+    "legacy": "System.String::Join(char,string[])",
+    "modern": "System.String::Join(char,System.ReadOnlySpan<string>)",
+    "addedIn": "net9.0",
+    "arguments": [{ "arg": 0 }, { "rest": 1 }],
+    "reason": "String.Join(char, params string[]) and the params ReadOnlySpan<string> overload that .NET 9 added concatenate the same elements with the separator between them, a null element as the empty string, so on the same list of elements they return the same string, and both throw only when the result is too long. The array overload also throws ArgumentNullException for a null array, which cannot happen here: the entry applies only where the source passes the elements and the compiler builds the array. Both are static, so there is no receiver check.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.string.join"
+  },
+  {
+    "id": "bcl.string-builder-append-format-provider-params-span",
+    "legacy": "System.Text.StringBuilder::AppendFormat(System.IFormatProvider,string,object[])",
+    "modern": "System.Text.StringBuilder::AppendFormat(System.IFormatProvider,string,System.ReadOnlySpan<object>)",
+    "addedIn": "net9.0",
+    "arguments": [{ "arg": 0 }, { "arg": 1 }, { "arg": 2 }, { "rest": 3 }],
+    "reason": "StringBuilder.AppendFormat(IFormatProvider, string, params object[]) and the params ReadOnlySpan<object> overload that .NET 9 added append the same formatted text to the same instance and return it, so on the same list of elements they leave the same builder, and both throw ArgumentNullException for a null format, FormatException for an invalid one or an index past the last element, and ArgumentOutOfRangeException past the maximum capacity. The array overload also throws ArgumentNullException for a null array, which cannot happen here: the entry applies only where the source passes the elements and the compiler builds the array. Both are instance members, so a null receiver throws NullReferenceException from the receiver check on both sides before either is invoked.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.text.stringbuilder.appendformat"
+  },
+  {
+    "id": "bcl.path-combine-params-span",
+    "legacy": "System.IO.Path::Combine(string[])",
+    "modern": "System.IO.Path::Combine(System.ReadOnlySpan<string>)",
+    "addedIn": "net9.0",
+    "arguments": [{ "rest": 0 }],
+    "reason": "Path.Combine(params string[]) and the params ReadOnlySpan<string> overload that .NET 9 added combine the same components into one path, so on the same list of elements they return the same string, and both throw ArgumentNullException when an element is null. The array overload also throws ArgumentNullException for a null array, which cannot happen here: the entry applies only where the source passes the elements and the compiler builds the array. Both are static, so there is no receiver check.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine"
   },
   {
     "id": "bcl.directory-info-full-name",

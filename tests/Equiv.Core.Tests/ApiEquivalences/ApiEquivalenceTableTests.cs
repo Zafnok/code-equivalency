@@ -39,7 +39,7 @@ public sealed class ApiEquivalenceTableTests
     {
         ImmutableArray<ApiEquivalence> entries = ApiEquivalenceTable.Load().Entries;
 
-        Assert.Equal(16, entries.Count(static entry => !entry.IsType));
+        Assert.Equal(20, entries.Count(static entry => !entry.IsType));
         Assert.Equal(5, entries.Count(static entry => entry.IsType));
         Assert.All(entries.Where(static entry => entry.IsType), static entry => Assert.Empty(entry.Arguments));
         Assert.DoesNotContain(entries, static entry => entry.Legacy.Contains("StatusCode", StringComparison.Ordinal));
@@ -110,7 +110,7 @@ public sealed class ApiEquivalenceTableTests
         ApiEquivalenceTable table = ApiEquivalenceTable.Load();
 
         Assert.Equal(table.Entries, table.Enabled([]));
-        ImmutableArray<ApiEquivalence> enabled = table.Enabled(["webapi.", "bcl.string-split", "bcl.string-trim", "bcl.directory-info", "bcl.timespan-"]);
+        ImmutableArray<ApiEquivalence> enabled = table.Enabled(["webapi.", "bcl.string-split", "bcl.string-trim", "bcl.directory-info", "bcl.timespan-", "bcl.string-format", "bcl.string-join", "bcl.string-builder", "bcl.path-combine"]);
         Assert.Equal(["bcl.string-contains-char"], enabled.Select(static entry => entry.Id), StringComparer.Ordinal);
     }
 }

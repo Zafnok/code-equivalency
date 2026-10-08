@@ -124,3 +124,20 @@ precondition is not an entry.
   these factories, 43 pass a constant in range, 15 an `int` of seconds or milliseconds, 2 a `long`
   of milliseconds, where the `double` overload can lose bits and the two are not one function even
   in range, and 2 a `double` (ticket P2-142's Notes).
+- 2026-10-08 (P2-143). **A `rest` item passes the `params` elements on as a span.** The decision
+  lets an adapter list argument positions and constants only, so it could not say "the remaining
+  elements, as the modern member's `params ReadOnlySpan<T>`", which is what a `params T[]` member
+  needs when .NET 9 adds a span overload next to it (`String::Format`, `String::Join`,
+  `StringBuilder::AppendFormat`, `Path::Combine`). An adapter may now end in one `{"rest": n}` item:
+  every source argument from position n to the last, which must be exactly the elements of the
+  legacy call's `params` array, passed as the span the modern compiler builds from the same
+  elements. That span is a new `T[]` of the elements read through the `cast` map of `T[]` to the
+  span (VERIFICATION-MODEL section 3), on both sides, so the rewritten legacy call and the modern
+  call are the same IR. The elements are evaluated where the legacy call evaluates them. This is
+  still the decision's adapter, "the modern argument list written in terms of the legacy call's
+  source arguments": nothing is computed, and the soundness condition is unchanged. A call that
+  passes an array is not addressed, as before, which is also what keeps the array overload's
+  `ArgumentNullException` for a null array out of the equated cases. Such an entry does not pass
+  its arguments through, so the fingerprint leaves its calls under their legacy name. The four
+  entries name .NET 9 as the runtime that added their modern member (`addedIn`, the clarification
+  above), so a pair that does not cross it, where both sides bind the array overload, is left alone.

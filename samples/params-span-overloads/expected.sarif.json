@@ -1,0 +1,436 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ParamsSpanOverloads.Texts::Describe(System.IFormatProvider,string,object,object,object,object) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Texts.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 26,
+                  "endLine": 9,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ParamsSpanOverloads.Texts::Describe(System.IFormatProvider,string,object,object,object,object)",
+            "resultFingerprint/v1": "4e5ce459cc22457543636b296cf4ff2e28fb63f16f5df7068d59b78c887451f1"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.string-format-provider-params-span"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ParamsSpanOverloads.Texts::Row(char,string,string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Texts.cs"
+                },
+                "region": {
+                  "startLine": 14,
+                  "startColumn": 26,
+                  "endLine": 14,
+                  "endColumn": 29
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ParamsSpanOverloads.Texts::Row(char,string,string)",
+            "resultFingerprint/v1": "e05b4db3eedda985a3190b08a4bda4323999a1e99594f1ee43fee83fce1e75d4"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.string-join-char-params-span"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ParamsSpanOverloads.Texts::Append(System.Text.StringBuilder,System.IFormatProvider,string,object,object,object,object) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Texts.cs"
+                },
+                "region": {
+                  "startLine": 19,
+                  "startColumn": 33,
+                  "endLine": 19,
+                  "endColumn": 39
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ParamsSpanOverloads.Texts::Append(System.Text.StringBuilder,System.IFormatProvider,string,object,object,object,object)",
+            "resultFingerprint/v1": "b9c30699744214fe31aee4b17541521b463d890d9da5704681ea96927c559a35"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.string-builder-append-format-provider-params-span"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ParamsSpanOverloads.Texts::Locate(string,string,string,string,string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Texts.cs"
+                },
+                "region": {
+                  "startLine": 24,
+                  "startColumn": 26,
+                  "endLine": 24,
+                  "endColumn": 32
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ParamsSpanOverloads.Texts::Locate(string,string,string,string,string)",
+            "resultFingerprint/v1": "abbf2cb2ce24896ed00633292e725edc6e97821392beeb247f3d203ff83e24c6"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.path-combine-params-span"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.ParamsSpanOverloads.Texts::RowSwapped(char,string,string) diverges: inputs(bv16 0, sort \"System.String\" 1, sort \"System.String\" 2, map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 0 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 5, bv32 1 -> sort \"System.String\" 6] default sort \"System.String\" 4] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 3, map<sort \"string[]\", sort \"System.ReadOnlySpan`1\"> [sort \"string[]\" 0 -> sort \"System.ReadOnlySpan`1\" 1] default sort \"System.ReadOnlySpan`1\" 0, map<sort \"string[]\", bv32> [] default bv32 0, map<bv32, sort \"string[]\"> [bv32 0 -> sort \"string[]\" 0] default sort \"string[]\" 1, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 7 outs(map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 2 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 10] default sort \"System.String\" 9] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 8, map<sort \"string[]\", bv32> [sort \"string[]\" 0 -> bv32 2] default bv32 0) trace(\"System.String::Join(char,System.ReadOnlySpan<string>)\"(bv16 0, sort \"System.ReadOnlySpan`1\" 1) heap(\"array.string__\" map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 0 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 1, bv32 1 -> sort \"System.String\" 2] default sort \"System.String\" 0] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 3))) new(threw \"System.Exception\" outs(map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 2 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 14] default sort \"System.String\" 13] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 12, map<sort \"string[]\", bv32> [sort \"string[]\" 0 -> bv32 2] default bv32 0) trace(\"System.String::Join(char,System.ReadOnlySpan<string>)\"(bv16 0, sort \"System.ReadOnlySpan`1\" 1) heap(\"array.string__\" map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 0 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 2, bv32 1 -> sort \"System.String\" 1] default sort \"System.String\" 0] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 3)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Texts.cs"
+                },
+                "region": {
+                  "startLine": 29,
+                  "startColumn": 26,
+                  "endLine": 29,
+                  "endColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ParamsSpanOverloads.Texts::RowSwapped(char,string,string)",
+            "resultFingerprint/v1": "570def1c9bafd03221f7d41603158b0a94e1d00fec75acaee2d91a0ae134afb0"
+          },
+          "baselineState": "new",
+          "rank": 60.002,
+          "properties": {
+            "model": "inputs(bv16 0, sort \"System.String\" 1, sort \"System.String\" 2, map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 0 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 5, bv32 1 -> sort \"System.String\" 6] default sort \"System.String\" 4] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 3, map<sort \"string[]\", sort \"System.ReadOnlySpan`1\"> [sort \"string[]\" 0 -> sort \"System.ReadOnlySpan`1\" 1] default sort \"System.ReadOnlySpan`1\" 0, map<sort \"string[]\", bv32> [] default bv32 0, map<bv32, sort \"string[]\"> [bv32 0 -> sort \"string[]\" 0] default sort \"string[]\" 1, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 7 outs(map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 2 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 10] default sort \"System.String\" 9] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 8, map<sort \"string[]\", bv32> [sort \"string[]\" 0 -> bv32 2] default bv32 0) trace(\"System.String::Join(char,System.ReadOnlySpan<string>)\"(bv16 0, sort \"System.ReadOnlySpan`1\" 1) heap(\"array.string__\" map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 0 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 1, bv32 1 -> sort \"System.String\" 2] default sort \"System.String\" 0] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 3))) new(threw \"System.Exception\" outs(map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 2 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 14] default sort \"System.String\" 13] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 12, map<sort \"string[]\", bv32> [sort \"string[]\" 0 -> bv32 2] default bv32 0) trace(\"System.String::Join(char,System.ReadOnlySpan<string>)\"(bv16 0, sort \"System.ReadOnlySpan`1\" 1) heap(\"array.string__\" map<sort \"string[]\", map<bv32, sort \"System.String\">> [sort \"string[]\" 0 -> map<bv32, sort \"System.String\"> [bv32 0 -> sort \"System.String\" 2, bv32 1 -> sort \"System.String\" 1] default sort \"System.String\" 0] default map<bv32, sort \"System.String\"> [] default sort \"System.String\" 3)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.string-join-char-params-span"
+            ],
+            "reviewGroup": "proofMethod:none"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.ParamsSpanOverloads.Texts::RowOfArray(char,string[]) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Texts.cs"
+                },
+                "region": {
+                  "startLine": 34,
+                  "startColumn": 26,
+                  "endLine": 34,
+                  "endColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.ParamsSpanOverloads.Texts::RowOfArray(char,string[])",
+            "resultFingerprint/v1": "06107398ce83a82c375cb19758b423d085f554e62b8c41db6117548caafffb4a"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 6,
+            "modern": 6
+          },
+          "matchedPairs": 6,
+          "pairsWithoutOpaque": 6,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 1,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 5,
+          "changedPairsWithoutOpaque": 5,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 5
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.String::Join(char,string[])",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.String::Join(char,System.ReadOnlySpan<string>)",
+                "callSites": 2
+              },
+              {
+                "member": "System.IO.Path::Combine(System.ReadOnlySpan<string>)",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::Format(System.IFormatProvider,string,System.ReadOnlySpan<object>)",
+                "callSites": 1
+              },
+              {
+                "member": "System.String::Join(char,string[])",
+                "callSites": 1
+              },
+              {
+                "member": "System.Text.StringBuilder::AppendFormat(System.IFormatProvider,string,System.ReadOnlySpan<object>)",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 0,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 43,
+          "modern": 43
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.ParamsSpanOverloads",
+              "runtime": "net8.0",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.ParamsSpanOverloads",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "proofMethod:none",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.ParamsSpanOverloads.Texts::RowSwapped(char,string,string)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

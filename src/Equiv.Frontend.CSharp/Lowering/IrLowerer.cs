@@ -36,6 +36,9 @@ internal sealed class IrLowerer
 {
     private const string OverflowException = "System.OverflowException";
 
+    /// <summary>The sort of a <c>ReadOnlySpan&lt;T&gt;</c>, whatever its element type: its metadata name (ticket P2-143).</summary>
+    private const string ReadOnlySpan = "System.ReadOnlySpan`1";
+
     private static readonly IrBool Bool = new();
 
     private readonly SsaBuilder ssa = new();
@@ -868,8 +871,8 @@ internal sealed class IrLowerer
                 return heap.Readable(operation, receiver, context) is { } read ? heap.ReadSlice(read, context) : Opaque(operation, operation.Kind.ToString(), context);
             case IPropertyReferenceOperation or IEventAssignmentOperation:
                 return AccessorCall(operation, context);
-            case IConversionOperation conversion:
-                return conversion.Operand is ICollectionExpressionOperation collection ? Collection(collection, context) : Convert(conversion, context);
+            case IConversionOperation or ICollectionExpressionOperation:
+                return Converted(operation, context);
             case ITypeOfOperation typeOf when typeOf.TypeOperand is not ITypeParameterSymbol:
                 return heap.Inputs.TypeOf(typeOf.TypeOperand, typeOf.Type!);
             case IBinaryOperation binary:
@@ -903,6 +906,15 @@ internal sealed class IrLowerer
                 return Opaque(operation, operation.Kind.ToString(), context);
         }
     }
+
+    /// <summary>
+    /// A conversion, unless it is the one around a collection expression, which is the collection expression. The span the
+    /// compiler builds for a <c>params</c> span parameter is a collection expression with no conversion around it (ticket P2-143).
+    /// </summary>
+    private IrVar? Converted(IOperation operation, LoweringContext context) =>
+        ((operation as IConversionOperation)?.Operand ?? operation) is ICollectionExpressionOperation collection
+            ? Collection(collection, context)
+            : Convert((IConversionOperation)operation, context);
 
     /// <summary>
     /// An interpolated string that is the concatenation of its parts under both bindings (ticket P2-086;
@@ -2035,7 +2047,9 @@ internal sealed class IrLowerer
     /// a class it is a new object, as <c>new T()</c> is, and then one <c>Add</c> call per element, as a collection
     /// initializer is. For <c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyCollection&lt;T&gt;</c> or <c>IReadOnlyList&lt;T&gt;</c> it
     /// is the array, and for <c>IList&lt;T&gt;</c> or <c>ICollection&lt;T&gt;</c> the <c>List&lt;T&gt;</c> the compiler
-    /// builds (ticket P2-120), read through the <c>cast</c> map the old form's conversion reads. Each element is evaluated,
+    /// builds (ticket P2-120), read through the <c>cast</c> map the old form's conversion reads. For a
+    /// <c>ReadOnlySpan&lt;T&gt;</c>, the one the compiler builds for a <c>params</c> span parameter included, it is a new
+    /// array of its elements read through the <c>cast</c> map of the array to the span (ticket P2-143). Each element is evaluated,
     /// then stored or added, before the next; one the CFG evaluated ahead of the collection expression was added where the
     /// next one started (<see cref="StartElements"/>). Anything else (<see cref="Built"/>) is opaque with reason
     /// <c>CollectionExpression</c>.
@@ -2048,8 +2062,8 @@ internal sealed class IrLowerer
         }
 
         int? resume = spilled.Resume(collection);
-        IrVar built = resume is null ? Make(plan, collection, context) : ssa.Load(context.Current, Building(collection, plan));
-        AddElements(plan, collection, built, resume ?? 0, collection.Elements.Length, context);
+        IrVar built = resume is null ? Make(plan, collection, collection.Elements.Length, context) : ssa.Load(context.Current, Building(collection, plan));
+        AddElements(plan, collection.Elements, built, resume ?? 0, collection.Elements.Length, context);
         return plan.ThroughCast ? heap.MapRead(heap.Inputs.Cast(plan.Type, collection.Type!), built, context) : built;
     }
 
@@ -2066,10 +2080,10 @@ internal sealed class IrLowerer
             SsaBuilder.Variable building = Building(start.Collection, plan);
             if (start.Makes)
             {
-                ssa.Store(context.Current, building, Make(plan, start.Collection, context));
+                ssa.Store(context.Current, building, Make(plan, start.Collection, start.Collection.Elements.Length, context));
             }
 
-            AddElements(plan, start.Collection, ssa.Load(context.Current, building), start.From, start.Element, context);
+            AddElements(plan, start.Collection.Elements, ssa.Load(context.Current, building), start.From, start.Element, context);
         }
     }
 
@@ -2086,29 +2100,29 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
-    /// The new collection of <paramref name="plan"/>, with no element yet: an array of the expression's length, or what
-    /// its factory yields, which is a call's result, or, for a constructor in the effect-free catalogue (ADR 0043), the
-    /// next new object of its sort, as <see cref="Create"/> makes a <c>new</c>.
+    /// The new collection of <paramref name="plan"/>, made at <paramref name="site"/> with no element yet: an array of
+    /// <paramref name="length"/> elements, or what its factory yields, which is a call's result, or, for a constructor in
+    /// the effect-free catalogue (ADR 0043), the next new object of its sort, as <see cref="Create"/> makes a <c>new</c>.
     /// </summary>
-    private IrVar Make(CollectionPlan plan, ICollectionExpressionOperation collection, LoweringContext context) =>
+    private IrVar Make(CollectionPlan plan, IOperation site, int length, LoweringContext context) =>
         plan.Factory is not { } factory
-            ? heap.Allocate((IrSort)Map(plan.Type), Map(((IArrayTypeSymbol)plan.Type).ElementType), Const(new IrBitVecValue(32, (ulong)collection.Elements.Length), context), plan.Initial!, context)
+            ? heap.Allocate((IrSort)Map(plan.Type), Map(((IArrayTypeSymbol)plan.Type).ElementType), Const(new IrBitVecValue(32, (ulong)length), context), plan.Initial!, context)
             : EffectFreeMembers.Allocates(factory)
                 ? heap.Fresh((IrSort)Map(plan.Type), context)
-                : Call(Called(factory, collection), [], Map(plan.Type), [], context)!;
+                : Call(Called(factory, site), [], Map(plan.Type), [], context)!;
 
     /// <summary>
-    /// Evaluates the elements of <paramref name="collection"/> from <paramref name="from"/> up to <paramref name="to"/>,
-    /// each passed to the plan's <c>Add</c>, or stored in the array, before the next.
+    /// Evaluates <paramref name="elements"/> from <paramref name="from"/> up to <paramref name="to"/>, each passed to the
+    /// plan's <c>Add</c>, or stored in the array, before the next.
     /// </summary>
-    private void AddElements(CollectionPlan plan, ICollectionExpressionOperation collection, IrVar built, int from, int to, LoweringContext context)
+    private void AddElements(CollectionPlan plan, ImmutableArray<IOperation> elements, IrVar built, int from, int to, LoweringContext context)
     {
         for (int i = from; i < to; i++)
         {
-            IrVar element = Value(collection.Elements[i], context);
+            IrVar element = Value(elements[i], context);
             if (plan.Add is { } add)
             {
-                _ = Call(Bound(add, collection.Elements[i]), [built, element], add.ReturnsVoid ? null : Map(add.ReturnType), [], context);
+                _ = Call(Bound(add, elements[i]), [built, element], add.ReturnsVoid ? null : Map(add.ReturnType), [], context);
             }
             else
             {
@@ -2119,10 +2133,11 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// What <see cref="Collection"/> builds, or null, with nothing emitted, for a collection expression that stays opaque:
-    /// one with a spread element, a target that is a span or a type parameter, a type built through a
+    /// one with a spread element, a target that is a <c>Span&lt;T&gt;</c> or a type parameter, a type built through a
     /// <c>CollectionBuilder</c> method, a struct, a class whose constructor takes an argument, a class with an element and
     /// not exactly one <c>Add</c> of the elements' type (<see cref="Adder"/>), and an array <see cref="CreateArray"/> would
-    /// not create.
+    /// not create. A <c>ReadOnlySpan&lt;T&gt;</c> is a creation of its elements whatever their number (ticket P2-143): the
+    /// compiler makes no <c>Array.Empty</c> call for an empty span.
     /// </summary>
     private CollectionPlan? Built(ICollectionExpressionOperation collection) => collection switch
     {
@@ -2143,6 +2158,8 @@ internal sealed class IrLowerer
             } target,
         } when compilation.GetTypeByMetadataName(EffectFreeMembers.List)?.Construct(target.TypeArguments[0]).InstanceConstructors.FirstOrDefault(static c => c.Parameters.IsEmpty) is { } constructor =>
             ClassPlan(constructor, collection, throughCast: true),
+        { Type: INamedTypeSymbol { TypeArguments: [var element] } span } when string.Equals(TypeMapper.MetadataName(span), ReadOnlySpan, StringComparison.Ordinal) =>
+            CreatedArrayPlan(compilation.CreateArrayTypeSymbol(element), throughCast: true),
         { ConstructMethod: { MethodKind: MethodKind.Constructor, Parameters.IsEmpty: true, ContainingType.IsReferenceType: true } constructor } =>
             ClassPlan(constructor, collection, throughCast: false),
         _ => null,
@@ -2320,26 +2337,45 @@ internal sealed class IrLowerer
     /// address the legacy call's source arguments (<see cref="Plan"/>). The source arguments are evaluated in source order,
     /// and then the receiver of an instance call is null-checked, as <see cref="Dispatch"/> checks the legacy call's
     /// (ticket P2-017); a static or extension call has no check, even when the modern member is an instance member (ADR 0020).
+    /// The elements a <c>rest</c> item takes (ticket P2-143) are evaluated where the first of them is, each stored in the
+    /// span's new array before the next, as <see cref="Collection"/> builds the span of the modern call; with no element
+    /// the array is made after the other arguments, where the compiler passes an argument the source leaves out.
     /// </summary>
     private ImmutableArray<IrVar>? Adapt(ApiEquivalence entry, IInvocationOperation invocation, LoweringContext context)
     {
         if (CallIdentityFactory.SourceArguments(invocation.Instance, invocation.Arguments) is not { } sources
-            || Plan(entry.Arguments, [.. sources.OrderBy(static s => s.Position).Select(static s => s.Value)]) is not { } plan)
+            || Plan(entry.Arguments, [.. sources.OrderBy(static s => s.Position).Select(static s => s.Value)], invocation) is not { } plan)
         {
             return null;
         }
 
         IrVar[] values = new IrVar[sources.Length];
-        foreach ((int position, _) in sources)
+        IrVar? span = null;
+        foreach ((int position, _) in sources.Where(s => s.Position <= plan.From))
         {
-            values[position] = Value(plan.Operands[position], context);
+            if (position == plan.From)
+            {
+                span = Span(plan.Rest!, invocation, plan.Operands[position..], context);
+            }
+            else
+            {
+                values[position] = Value(plan.Operands[position], context);
+            }
+        }
+
+        if (plan.Rest is { } empty && span is null)
+        {
+            span = Span(empty, invocation, [], context);
         }
 
         ImmutableArray<IrVar> adapted =
         [
-            .. entry.Arguments.Select((item, i) => item.Source is { } source
-                ? Adapted(plan.Operands[source], Sized(item, plan.Operands[source], values[source], context), plan.Targets[i], context)
-                : Const(TypeMapper.Constant(item.ConstantType!, item.Constant!)!, context)),
+            .. entry.Arguments.Select((item, i) => item switch
+            {
+                { Rest: true } => span!,
+                { Source: { } source } => Adapted(plan.Operands[source], Sized(item, plan.Operands[source], values[source], context), plan.Targets[i], context),
+                _ => Const(TypeMapper.Constant(item.ConstantType!, item.Constant!)!, context),
+            }),
         ];
         if (invocation.Instance is { Type.IsValueType: false } instance)
         {
@@ -2354,16 +2390,26 @@ internal sealed class IrLowerer
     /// a <c>params</c> element count other than the entry's does not match; an unwrapped argument has an implicit
     /// conversion and is not also used as it is; a <c>convertTo</c> type resolves and the conversion to it is an implicit
     /// identity, boxing or reference conversion; a constant parses; an argument with an integer range is known to lie in
-    /// it (<see cref="KnownIntegers"/>; ticket P2-142). Null when any of that fails.
+    /// it (<see cref="KnownIntegers"/>; ticket P2-142); a <c>rest</c> item starts at the first element of
+    /// <paramref name="invocation"/>'s <c>params</c> array (<see cref="Rest"/>). Null when any of that fails.
     /// </summary>
-    private AdapterPlan? Plan(ImmutableArray<ApiArgument> items, ImmutableArray<IOperation> sources)
+    private AdapterPlan? Plan(ImmutableArray<ApiArgument> items, ImmutableArray<IOperation> sources, IInvocationOperation invocation)
     {
         IOperation[] operands = [.. sources];
         bool?[] unwrapped = new bool?[sources.Length];
         ImmutableArray<ITypeSymbol?>.Builder targets = ImmutableArray.CreateBuilder<ITypeSymbol?>(items.Length);
+        CollectionPlan? rest = null;
+        int from = sources.Length;
         foreach (ApiArgument item in items)
         {
-            if (!Planned(item, sources, operands, unwrapped, out ITypeSymbol? target))
+            ITypeSymbol? target = null;
+            if (item.Rest)
+            {
+                from = item.Source.GetValueOrDefault();
+                rest = Rest(from, unwrapped, invocation);
+            }
+
+            if (item.Rest ? rest is null : !Planned(item, sources, operands, unwrapped, out target))
             {
                 return null;
             }
@@ -2371,7 +2417,37 @@ internal sealed class IrLowerer
             targets.Add(target);
         }
 
-        return Array.TrueForAll(unwrapped, static u => u is not null) ? new AdapterPlan([.. operands], targets.MoveToImmutable()) : null;
+        return Array.TrueForAll(unwrapped, static u => u is not null) ? new AdapterPlan([.. operands], targets.MoveToImmutable(), rest, from) : null;
+    }
+
+    /// <summary>
+    /// The array behind the span a <c>rest</c> item passes (ticket P2-143), or null when the item cannot be addressed: the
+    /// legacy call's <c>params</c> array, which the source gives as elements, the first of them the source argument at
+    /// <paramref name="from"/>, and which <see cref="CreateArray"/> would create. Its elements are then taken as they are.
+    /// </summary>
+    private CollectionPlan? Rest(int from, bool?[] unwrapped, IInvocationOperation invocation)
+    {
+        if (invocation.Arguments.FirstOrDefault(static a => a.ArgumentKind == ArgumentKind.ParamArray)?.Value is not IArrayCreationOperation array
+            || from != unwrapped.Length - array.Initializer!.ElementValues.Length)
+        {
+            return null;
+        }
+
+        Array.Fill(unwrapped, value: false, from, unwrapped.Length - from);
+        return CreatedArrayPlan((IArrayTypeSymbol)array.Type!, throughCast: true);
+    }
+
+    /// <summary>
+    /// The span of <paramref name="elements"/> a <c>rest</c> item passes: the new array of <paramref name="plan"/> with each
+    /// element evaluated and stored before the next, read through the <c>cast</c> map of the array to
+    /// <c>ReadOnlySpan&lt;T&gt;</c>, which is what <see cref="Collection"/> makes of the span the compiler builds from the
+    /// same elements. The span is named by its sort only, so a legacy framework need not declare it.
+    /// </summary>
+    private IrVar Span(CollectionPlan plan, IOperation site, ImmutableArray<IOperation> elements, LoweringContext context)
+    {
+        IrVar built = Make(plan, site, elements.Length, context);
+        AddElements(plan, elements, built, 0, elements.Length, context);
+        return heap.MapRead(heap.Inputs.Cast(plan.Type, new IrSort(ReadOnlySpan)), built, context);
     }
 
     /// <summary>
@@ -2610,8 +2686,12 @@ internal sealed class IrLowerer
     /// <summary>A field or property initializer a constructor runs, with its model and its operation (null only when it does not bind).</summary>
     private sealed record Initializer(EqualsValueClauseSyntax Syntax, SemanticModel Model, IOperation? Operation);
 
-    /// <summary>Each source argument's operand as an adapter takes it, and each adapter item's <c>convertTo</c> type, if any.</summary>
-    private sealed record AdapterPlan(ImmutableArray<IOperation> Operands, ImmutableArray<ITypeSymbol?> Targets);
+    /// <summary>
+    /// Each source argument's operand as an adapter takes it, and each adapter item's <c>convertTo</c> type, if any; the
+    /// array of a <c>rest</c> item's span, if there is one, and the source position its elements start at, which is the
+    /// number of source arguments when there is none.
+    /// </summary>
+    private sealed record AdapterPlan(ImmutableArray<IOperation> Operands, ImmutableArray<ITypeSymbol?> Targets, CollectionPlan? Rest, int From);
 
     /// <summary>
     /// The API-equivalence entries one body is lowered with (ADR 0020; ticket M3-009): member entries by legacy identity,
