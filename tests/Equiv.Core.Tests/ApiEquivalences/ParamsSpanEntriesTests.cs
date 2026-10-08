@@ -39,11 +39,11 @@ public sealed class ParamsSpanEntriesTests
         "System.IO.Path::Combine(System.ReadOnlySpan<string>)",
         0,
         "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine")]
-    public void Table_HasTheParamsSpanEntries(string id, string legacy, string modern, int rest, string url)
+    public void Table_HasTheParamsSpanEntries(string id, string legacy, string modern, int rest, string page)
     {
         ApiEquivalence entry = ApiEquivalenceTable.Load().Entries.Single(e => string.Equals(e.Id, id, StringComparison.Ordinal));
 
-        Assert.Equal((legacy, modern, url), (entry.Legacy, entry.Modern, entry.Url.OriginalString));
+        Assert.Equal((legacy, modern, page), (entry.Legacy, entry.Modern, entry.Url.OriginalString));
         Assert.Equal([.. Enumerable.Range(0, rest).Select(static i => new ApiArgument(i)), new ApiArgument(rest, Rest: true)], entry.Arguments);
         Assert.Contains("null array, which cannot happen here", entry.Reason, StringComparison.Ordinal);
     }

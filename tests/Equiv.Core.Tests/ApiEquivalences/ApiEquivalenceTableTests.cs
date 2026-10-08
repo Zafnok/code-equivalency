@@ -110,7 +110,7 @@ public sealed class ApiEquivalenceTableTests
         ApiEquivalenceTable table = ApiEquivalenceTable.Load();
 
         Assert.Equal(table.Entries, table.Enabled([]));
-        ImmutableArray<ApiEquivalence> enabled = table.Enabled(["webapi.", "bcl.string-split", "bcl.string-trim", "bcl.directory-info", "bcl.timespan-"]);
+        ImmutableArray<ApiEquivalence> enabled = table.Enabled(["webapi.", "bcl.string-split", "bcl.string-trim", "bcl.directory-info", "bcl.timespan-", "bcl.string-format", "bcl.string-join", "bcl.string-builder", "bcl.path-combine"]);
         Assert.Equal(["bcl.string-contains-char"], enabled.Select(static entry => entry.Id), StringComparer.Ordinal);
     }
 }
