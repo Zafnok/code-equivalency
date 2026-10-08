@@ -2316,7 +2316,7 @@ internal sealed class IrLowerer
         ImmutableArray<IrVar> adapted =
         [
             .. entry.Arguments.Select((item, i) => item.Source is { } source
-                ? Adapted(plan.Operands[source], values[source], plan.Targets[i], context)
+                ? Adapted(plan.Operands[source], Sized(item, plan.Operands[source], values[source], context), plan.Targets[i], context)
                 : Const(TypeMapper.Constant(item.ConstantType!, item.Constant!)!, context)),
         ];
         if (invocation.Instance is { Type.IsValueType: false } instance)
@@ -2331,7 +2331,8 @@ internal sealed class IrLowerer
     /// What each adapter item takes, checked before anything is emitted: every source position is in range and used, so
     /// a <c>params</c> element count other than the entry's does not match; an unwrapped argument has an implicit
     /// conversion and is not also used as it is; a <c>convertTo</c> type resolves and the conversion to it is an implicit
-    /// identity, boxing or reference conversion; a constant parses. Null when any of that fails.
+    /// identity, boxing or reference conversion; a constant parses; an argument with an integer range is known to lie in
+    /// it (<see cref="KnownIntegers"/>; ticket P2-142). Null when any of that fails.
     /// </summary>
     private AdapterPlan? Plan(ImmutableArray<ApiArgument> items, ImmutableArray<IOperation> sources)
     {
@@ -2380,6 +2381,11 @@ internal sealed class IrLowerer
             operands[position] = conversion.Operand;
         }
 
+        if (item.Range is { } range && !KnownIntegers.IsWithin(operands[position], range))
+        {
+            return false;
+        }
+
         if (item.ConvertTo is not { } name)
         {
             return true;
@@ -2394,6 +2400,14 @@ internal sealed class IrLowerer
         from is not null
         && compilation.ClassifyConversion(from, to) is { IsImplicit: true } conversion
         && (conversion.IsIdentity || conversion.IsBoxing || conversion.IsReference);
+
+    /// <summary>
+    /// An adapted source argument whose item has an integer range, at the range's width: extended as its own type's
+    /// signedness says, which is how the implicit conversion the modern side writes is lowered (ticket P2-142). Any other
+    /// item's argument as it is.
+    /// </summary>
+    private IrVar Sized(ApiArgument item, IOperation operand, IrVar value, LoweringContext context) =>
+        item.Range is { } range ? Resize(value, new IrBitVec(range.Bits), TypeMapper.IsSigned(operand.Type!), context) : value;
 
     /// <summary>An adapted source argument as it is or, converted to <paramref name="target"/>, a read of the <c>cast</c> map, as M3-010 lowers that conversion.</summary>
     private IrVar Adapted(IOperation operand, IrVar value, ITypeSymbol? target, LoweringContext context) =>
@@ -2591,14 +2605,15 @@ internal sealed class IrLowerer
         {
             Entries = entries;
             Runtime = runtime;
-            Members = entries.Where(static e => !e.IsType).ToLookup(static e => e.Legacy, StringComparer.Ordinal);
+            Members = entries.Where(e => !e.IsType && e.AppliesWithin(runtime.Interval)).ToLookup(static e => e.Legacy, StringComparer.Ordinal);
             types = entries.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, StringComparer.Ordinal);
             Sorts = Sort;
         }
 
         /// <summary>
         /// The member entries of each legacy identity, in file order: a call takes the first whose adapter addresses its
-        /// source arguments, so one legacy member may have an entry per <c>params</c> element count (ticket P2-137).
+        /// source arguments, so one legacy member may have an entry per <c>params</c> element count (ticket P2-137). An
+        /// entry whose modern member a later runtime added is left out unless the pair crosses that runtime (ticket P2-142).
         /// </summary>
         public ILookup<string, ApiEquivalence> Members { get; }
 

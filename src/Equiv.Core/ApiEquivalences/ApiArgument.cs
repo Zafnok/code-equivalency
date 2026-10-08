@@ -8,4 +8,11 @@ namespace Equiv.Core.ApiEquivalences;
 /// conversion to that type. Without a <see cref="Source"/>, it is the constant <see cref="Constant"/> (its invariant text,
 /// or null for <c>null</c>) of the IR type <see cref="ConstantType"/>: <c>bool</c>, <c>bv</c><i>n</i>, or a sort name.
 /// </summary>
-public sealed record ApiArgument(int? Source, bool Unwrap = false, string? ConvertTo = null, string? ConstantType = null, string? Constant = null);
+public sealed record ApiArgument(int? Source, bool Unwrap = false, string? ConvertTo = null, string? ConstantType = null, string? Constant = null)
+{
+    /// <summary>
+    /// With a <see cref="Source"/>: the argument, as the item takes it, is an integer known at the call to lie in this
+    /// range, and is passed as a signed integer of the range's width (ticket P2-142). Null for any other item.
+    /// </summary>
+    public ApiIntegerRange? Range { get; init; }
+}
