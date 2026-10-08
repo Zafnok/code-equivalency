@@ -448,6 +448,14 @@ Migration-specific normalisations (applied to both sides before matching):
   listed in `properties.equivalencesApplied`. A property or event accessor call has no source
   arguments to adapt, so an entry rewrites one only when its adapter passes every operand
   through in order and unchanged. Users can suppress entries in `equiv.config.json`.
+  Two members that agree only while an integer argument is in a range have an entry whose adapter
+  states that range (ADR 0020's clarification of 2026-10-08, ticket P2-142): the `TimeSpan`
+  factories `FromDays`, `FromHours`, `FromMinutes`, `FromSeconds` and `FromMilliseconds`, whose
+  `double` overload a call that passes an integer binds before .NET 9 and whose integer overload it
+  binds from then on. The adapter addresses a call only when the argument is known at the call to
+  be inside the range, as a compile-time constant in it or as a value of a type that cannot leave
+  it, so the range is checked and never assumed, and any other call stays a rebound call. Such an
+  entry names the runtime that added its modern member and applies only to a pair that crosses it.
 - Rebound call sites (ADR 0042, ticket P2-069). A call site is a call the lowering emits for a member
   at a syntax node: an invocation, an object creation, a property, indexer or event accessor, an
   `await`. Its key is the node's source tokens and the member's name. When a key occurs on both sides

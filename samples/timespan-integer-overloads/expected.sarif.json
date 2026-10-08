@@ -1,0 +1,773 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Week() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 32,
+                  "endLine": 9,
+                  "endColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Week()",
+            "resultFingerprint/v1": "39bb8ce4ce79e5ff1c97c4e2e5f694d98916505e24de309bb723361606c34d83"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.timespan-from-days-integer"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::CacheLifetime() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 11,
+                  "startColumn": 32,
+                  "endLine": 11,
+                  "endColumn": 45
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::CacheLifetime()",
+            "resultFingerprint/v1": "ae1eb26f416658fbaf0ab985698b0ea68dd7b8828ba2959ac32796115dcd04bd"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.timespan-from-hours-integer"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Retry() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 13,
+                  "startColumn": 32,
+                  "endLine": 13,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Retry()",
+            "resultFingerprint/v1": "fea69d443e9f5abb01fae51814dfa7f118a8e4ad6edcb771381c8780c78ca987"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.timespan-from-minutes-integer"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Poll() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 15,
+                  "startColumn": 32,
+                  "endLine": 15,
+                  "endColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Poll()",
+            "resultFingerprint/v1": "494b641bb599560a8c28b1222d8dead079deef9d27e5a09e9c349534b67ff76a"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.timespan-from-seconds-integer"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Never() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 17,
+                  "startColumn": 32,
+                  "endLine": 17,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Never()",
+            "resultFingerprint/v1": "8a719402b4ad690fdbf7033ec93251653ef9b50653c76c5dd32bbb1d03747233"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.timespan-from-milliseconds-integer"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Wait(int) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 19,
+                  "startColumn": 32,
+                  "endLine": 19,
+                  "endColumn": 36
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Wait(int)",
+            "resultFingerprint/v1": "3848d939c18adcb904fd4c698be3caa0b49229f097c3d77b0cb6650e173e7f26"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.timespan-from-seconds-integer"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ002",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Backoff() diverges: inputs() old(returned sort \"System.TimeSpan\" 0 outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 1))) new(returned sort \"System.TimeSpan\" 0 outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 2)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 21,
+                  "startColumn": 32,
+                  "endLine": 21,
+                  "endColumn": 39
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Backoff()",
+            "resultFingerprint/v1": "07aebc23648fac01b4af9499bc85a259c7def27e8f1b98ff247a15ab291827f8"
+          },
+          "baselineState": "new",
+          "rank": 60.002,
+          "properties": {
+            "model": "inputs() old(returned sort \"System.TimeSpan\" 0 outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 1))) new(returned sort \"System.TimeSpan\" 0 outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 2)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.timespan-from-minutes-integer"
+            ],
+            "reviewGroup": "proofMethod:none"
+          }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::TooLong() is unknown (Opaque): old: rebound-call; new: rebound-call. It is equivalent on every input that reaches none of the related locations."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 23,
+                  "startColumn": 45,
+                  "endLine": 23,
+                  "endColumn": 74
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::TooLong()",
+            "resultFingerprint/v1": "b89af0abdf6af4d5d8a99f02dc178c40c051ece09b7f39cb06a379c782e40bd1"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 23,
+                  "startColumn": 45,
+                  "endLine": 23,
+                  "endColumn": 74
+                }
+              },
+              "message": {
+                "text": "rebound-call"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 23,
+                  "startColumn": 45,
+                  "endLine": 23,
+                  "endColumn": 74
+                }
+              },
+              "message": {
+                "text": "rebound-call"
+              }
+            }
+          ],
+          "baselineState": "new",
+          "rank": 20.006,
+          "properties": {
+            "unknownReason": "opaque",
+            "scope": "line",
+            "residualClaim": "equivalent unless a relatedLocation is reached",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "an input reaches an opaque node: old: rebound-call; new: rebound-call"
+              }
+            ],
+            "reboundCalls": [
+              {
+                "legacy": "System.TimeSpan::FromHours(double)",
+                "modern": "System.TimeSpan::FromHours(int)"
+              }
+            ],
+            "reviewGroup": "opaque:rebound-call"
+          }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Hours(int) is unknown (Opaque): old: rebound-call; new: rebound-call. It is equivalent on every input that reaches none of the related locations."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 25,
+                  "startColumn": 52,
+                  "endLine": 25,
+                  "endColumn": 77
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Hours(int)",
+            "resultFingerprint/v1": "8cabeb0beb2a66111d3788c25149032d2fee420fd035f906301ce827fc395138"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 25,
+                  "startColumn": 52,
+                  "endLine": 25,
+                  "endColumn": 77
+                }
+              },
+              "message": {
+                "text": "rebound-call"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 25,
+                  "startColumn": 52,
+                  "endLine": 25,
+                  "endColumn": 77
+                }
+              },
+              "message": {
+                "text": "rebound-call"
+              }
+            }
+          ],
+          "baselineState": "new",
+          "rank": 20.006,
+          "properties": {
+            "unknownReason": "opaque",
+            "scope": "line",
+            "residualClaim": "equivalent unless a relatedLocation is reached",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "an input reaches an opaque node: old: rebound-call; new: rebound-call"
+              }
+            ],
+            "reboundCalls": [
+              {
+                "legacy": "System.TimeSpan::FromHours(double)",
+                "modern": "System.TimeSpan::FromHours(int)"
+              }
+            ],
+            "reviewGroup": "opaque:rebound-call"
+          }
+        },
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Delay(long) is unknown (Opaque): old: rebound-call; new: rebound-call. It is equivalent on every input that reaches none of the related locations."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 27,
+                  "startColumn": 60,
+                  "endLine": 27,
+                  "endColumn": 99
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Delay(long)",
+            "resultFingerprint/v1": "b6c9509c9c1d6f9d9353e99104978d52dd61bb121d499824f228232f4a4b0c71"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 27,
+                  "startColumn": 60,
+                  "endLine": 27,
+                  "endColumn": 99
+                }
+              },
+              "message": {
+                "text": "rebound-call"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Timeouts.cs"
+                },
+                "region": {
+                  "startLine": 27,
+                  "startColumn": 60,
+                  "endLine": 27,
+                  "endColumn": 99
+                }
+              },
+              "message": {
+                "text": "rebound-call"
+              }
+            }
+          ],
+          "baselineState": "new",
+          "rank": 20.006,
+          "properties": {
+            "unknownReason": "opaque",
+            "scope": "line",
+            "residualClaim": "equivalent unless a relatedLocation is reached",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "an input reaches an opaque node: old: rebound-call; new: rebound-call"
+              }
+            ],
+            "reboundCalls": [
+              {
+                "legacy": "System.TimeSpan::FromMilliseconds(double)",
+                "modern": "System.TimeSpan::FromMilliseconds(long)"
+              }
+            ],
+            "reviewGroup": "opaque:rebound-call"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 10,
+            "modern": 10
+          },
+          "matchedPairs": 10,
+          "pairsWithoutOpaque": 7,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 0,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {
+            "rebound-call": {
+              "legacy": 3,
+              "modern": 3
+            }
+          },
+          "changedPairs": 10,
+          "changedPairsWithoutOpaque": 7,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 7,
+            "rebound-call": 3
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [],
+            "modern": [
+              {
+                "member": "System.TimeSpan::FromMinutes(long)",
+                "callSites": 2
+              },
+              {
+                "member": "System.TimeSpan::FromSeconds(long)",
+                "callSites": 2
+              },
+              {
+                "member": "System.TimeSpan::FromDays(int)",
+                "callSites": 1
+              },
+              {
+                "member": "System.TimeSpan::FromHours(int)",
+                "callSites": 1
+              },
+              {
+                "member": "System.TimeSpan::FromMilliseconds(long)",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 3,
+            "method": 0
+          },
+          "failureRefinement": {
+            "pairs": 3,
+            "milliseconds": 0
+          },
+          "agreesWhen": {
+            "pairs": 1,
+            "admitted": 0,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 35,
+          "modern": 30
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.TimeSpanIntegerOverloads",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.TimeSpanIntegerOverloads",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "proofMethod:none",
+            "ruleId": "EQ002",
+            "rank": 60.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Backoff()"
+            ]
+          },
+          {
+            "group": "opaque:rebound-call",
+            "ruleId": "EQ003",
+            "rank": 20.006,
+            "count": 3,
+            "identities": [
+              "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::TooLong()",
+              "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Hours(int)",
+              "Equiv.Samples.TimeSpanIntegerOverloads.Timeouts::Delay(long)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -26,6 +26,7 @@ public sealed class SamplesFixtureTests
             ["loop-to-linq"] = ["Equivalent"],
             ["loop-fusion"] = ["Equivalent"],
             ["partly-compiling-modern"] = ["Equivalent", "Unknown"],
+            ["timespan-integer-overloads"] = ["Equivalent", "Divergent", "Unknown"],
             ["switch-expression-no-match"] = ["Equivalent", "Divergent"],
         };
 
