@@ -33,7 +33,8 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 /// the IR's calls to <c>o.Bump</c> change as the compiled method does (ticket P1-005). The <c>List&lt;int&gt;</c> parameter is <c>{ A, B }</c>, and the IR's calls on its
 /// enumerator are answered by an enumerator of that list (ticket M4-001). The <c>decimal</c> parameter is <c>M</c>, and the IR's
 /// pure <c>decimal</c> functions are answered by <see cref="DecimalOracle"/>, which applies <see cref="decimal"/>'s own operators
-/// (ticket M4-002).
+/// (ticket M4-002). A lambda converted to a delegate is a pure function too (ticket P2-136): its value is one element of the
+/// delegate's sort, and what is compared is that creating it changes nothing and that it is not null.
 /// </summary>
 public sealed class LoweringOracleTests
 {
@@ -78,14 +79,14 @@ public sealed class LoweringOracleTests
 
     [Fact]
     public void LoweredIrAgreesWithCompiledCSharp() =>
-        Gen.Select(LoweringOracleGen.Method, LoweringOracleGen.Input.Array[InputsPerCase]).Array[Cases]
+        Gen.Select(LoweringOracleGen.MethodWithLambda, LoweringOracleGen.Input.Array[InputsPerCase]).Array[Cases]
             .Sample(static cases => Check(cases), seed: Seed, iter: 1, print: static cases => $"{cases.Length} cases");
 
     private static void Check((OracleMethod Method, OracleInput[] Inputs)[] cases)
     {
         string source = Source(cases.Select(static c => c.Method));
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = ("])
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
@@ -100,6 +101,7 @@ public sealed class LoweringOracleTests
             HashSet<Equiv.Core.CallIdentity> callees = [];
             HashSet<string> pures = new(StringComparer.Ordinal);
             bool compoundAdd = false;
+            bool ownDelegate = false;
             IrSortValue one = (IrSortValue)TypeMapper.Constant(compilation.GetSpecialType(SpecialType.System_Decimal), 1m);
             SyntaxTree tree = compilation.SyntaxTrees[0];
             SemanticModel model = compilation.GetSemanticModel(tree);
@@ -115,6 +117,9 @@ public sealed class LoweringOracleTests
                 // Ticket P2-022: only a compound assignment or an increment writes a `dec.add` to `m`.
                 compoundAdd |= procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>()
                     .Any(static p => p is { Function: "dec.add", Target.SourceName: "m" });
+                // Ticket P2-136: the generated lambda converts floating point to an integer, so its function is each side's own.
+                ownDelegate |= procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>()
+                    .Any(static p => p.RuntimeSensitive && p.Function.StartsWith(PureCatalogue.DelegatePrefix, StringComparison.Ordinal));
                 MethodInfo method = oracle.GetMethod(declarations[i].Identifier.Text)!;
                 foreach (OracleInput input in cases[i].Inputs)
                 {
@@ -128,6 +133,7 @@ public sealed class LoweringOracleTests
 
             AssertReached(callees, pures);
             Assert.True(compoundAdd);
+            Assert.True(ownDelegate);
         }
         finally
         {
@@ -420,6 +426,7 @@ public sealed class LoweringOracleTests
                 "dec.le" => () => new IrBoolValue(Value(arguments[0]) <= Value(arguments[1])),
                 "dec.gt" => () => new IrBoolValue(Value(arguments[0]) > Value(arguments[1])),
                 "dec.ge" => () => new IrBoolValue(Value(arguments[0]) >= Value(arguments[1])),
+                _ when pure.Function.StartsWith(PureCatalogue.DelegatePrefix, StringComparison.Ordinal) => () => new IrSortValue(((IrSort)pure.Target.Type).Name, 1),
                 _ => throw new InvalidOperationException($"The lowering oracle generates no {pure.Function}."),
             };
             try

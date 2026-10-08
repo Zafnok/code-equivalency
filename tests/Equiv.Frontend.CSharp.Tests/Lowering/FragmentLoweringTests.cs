@@ -91,8 +91,9 @@ public sealed class FragmentLoweringTests
     [Fact]
     public void RuntimeSensitiveFragmentHasNoFingerprint()
     {
-        IrOpaque fragment = Assert.Single(Opaques(Source(Linq + "class C { int M(double[] xs) => xs.Sum(x => (int)x); }")));
+        IrOpaque fragment = Assert.Single(Opaques(Source(Linq + "class C { int M(double[] xs) => (from x in xs select (int)x).Sum(); }")));
 
+        Assert.Equal("TranslatedQuery", fragment.Reason);
         Assert.Null(fragment.Fingerprint);
     }
 

@@ -252,8 +252,13 @@ matches `Delegate.Equals` and conflates only reference identity, as a boxing `ca
 capture is stored at a point reachable after the conversion is opaque again, with reason `DelegateCreation` and no
 fingerprint. A method group whose receiver is evaluated (`o.M`, which null-checks `o` and may itself run code) stays
 an `IrOpaque` with reason `DelegateCreation`, shared as any fingerprinted fragment is, and a conversion with no
-fingerprint (a runtime-sensitive body, a capture some lambda or local function writes, a local function declared
-outside it, a struct's `this`) stays one that is not shared. A delegate creation's null shadow is false, as a `new`'s is. Like every `IrPure` result the delegate is
+fingerprint (a capture some lambda or local function writes, a local function declared
+outside it, a struct's `this`) stays one that is not shared. A conversion that runs no code and is runtime-sensitive
+inside the pair's runtime interval (its lambda calls a `runtime-changes.json` member or converts floating point to an
+integer, or it is a method group of such a member) is the same `delegate:` function of the same reads, marked
+runtime-sensitive (P2-136; ADR 0025): each side's own, as `old.` and `new.` functions, so the two delegates are never
+forced equal and a pair that hands one to a call is Unknown(Abstraction) naming both, not Unknown(Opaque). As a fragment
+it is still not shared: a runtime-sensitive method group whose receiver is evaluated stays an unshared opaque. A delegate creation's null shadow is false, as a `new`'s is. Like every `IrPure` result the delegate is
 tainted (section 6): two sides whose lambdas differ apply two functions, and a divergence that depends on them is
 Unknown(Abstraction) naming both, not Unknown(Opaque).
 

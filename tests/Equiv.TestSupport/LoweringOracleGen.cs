@@ -22,7 +22,8 @@ namespace Equiv.TestSupport;
 /// (ticket P2-022), and reads and writes of the instance field <c>G</c> of the <c>Cell</c> parameter <c>o</c> around calls to
 /// <c>o.Bump(k)</c>, which adds <c>k</c> to it (ticket P1-005), and <c>z = o.TryParse(k, out x)</c>, whose <c>out</c> argument is
 /// the call's output (ticket M4-003), and deconstructions of tuple literals into <c>(x, y, z)</c> and into <c>(F, x)</c>
-/// (ticket P2-025); built as a small AST and
+/// (ticket P2-025); and, only from <see cref="MethodWithLambda"/>, a lambda whose body a runtime rule applies to,
+/// converted to a delegate and tested against <c>null</c> (ticket P2-136); built as a small AST and
 /// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
@@ -101,9 +102,25 @@ public static class LoweringOracleGen
 
     private const string CellAccess = $"{Cell}.{CellField}";
 
-    public static Gen<OracleMethod> Method { get; } =
-        Gen.OneOfConst(ReturnTypes).SelectMany(static type =>
-            Gen.Select(Block(type, 2), type == typeof(void) ? FieldValue : ExprGen(type, Depth), (body, result) =>
+    /// <summary>
+    /// The right-hand side of <c>z = (lambda) != null;</c> (ticket P2-136): a lambda that converts floating point to an
+    /// integer, which .NET 9 changed, and captures the parameter <c>a</c>, which nothing stores. Creating the delegate runs
+    /// no code and it is never null, so <c>z</c> is true.
+    /// </summary>
+    public const string Lambda = "(((System.Func<int, int>)(t => unchecked((int)(double)t + a))) != null)";
+
+    public static Gen<OracleMethod> Method { get; } = Methods(lambdas: false);
+
+    /// <summary>
+    /// As <see cref="Method"/>, with one more statement, <see cref="Lambda"/> (ticket P2-136). It is a generator of its own
+    /// because the lambda's body is runtime-sensitive, so a method holding one is never congruent with itself across two
+    /// runtimes, which <see cref="Method"/>'s other consumer counts on.
+    /// </summary>
+    public static Gen<OracleMethod> MethodWithLambda { get; } = Methods(lambdas: true);
+
+    private static Gen<OracleMethod> Methods(bool lambdas) =>
+        Gen.OneOfConst(ReturnTypes).SelectMany(type =>
+            Gen.Select(Block(type, 2, lambdas), type == typeof(void) ? FieldValue : ExprGen(type, Depth), (body, result) =>
             {
                 StringBuilder text = new();
                 int loops = 0;
@@ -121,11 +138,13 @@ public static class LoweringOracleGen
 
     private static Gen<long> Long => Gen.Frequency((3, Gen.OneOfConst(LongEdges)), (1, Gen.Long[-16, 16]), (1, Gen.Long));
 
-    private static Gen<ImmutableArray<IStmt>> Block(Type returnType, int depth) =>
-        StmtGen(returnType, depth).Array[0, 3].Select(static s => ImmutableArray.Create(s));
+    private static Gen<ImmutableArray<IStmt>> Block(Type returnType, int depth, bool lambdas) =>
+        StmtGen(returnType, depth, lambdas).Array[0, 3].Select(static s => ImmutableArray.Create(s));
 
-    private static Gen<IStmt> StmtGen(Type returnType, int depth)
+    private static Gen<IStmt> StmtGen(Type returnType, int depth, bool lambdas)
     {
+        // Ticket P2-136: last, and only when asked for, so that without it every other choice is drawn as before.
+        (int, Gen<IStmt>)[] lambda = lambdas ? [(1, Gen.Const<IStmt>(new Assign("z", new Name(Lambda))))] : [];
         Gen<IStmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>
             ExprGen(type, Depth).Select(value => (IStmt)new Assign(LocalName(type), value)));
         Gen<IStmt> exit = returnType == typeof(void)
@@ -156,17 +175,17 @@ public static class LoweringOracleGen
         Gen<IStmt> deconstruct = Gen.OneOf(locals, fieldPair);
         if (depth == 0)
         {
-            return Gen.Frequency((4, assign), (1, property), (1, field), (1, cell), (1, bump), (1, parse), (2, element), (2, update), (1, step), (1, decimals), (1, deconstruct), (1, exit));
+            return Gen.Frequency([(4, assign), (1, property), (1, field), (1, cell), (1, bump), (1, parse), (2, element), (2, update), (1, step), (1, decimals), (1, deconstruct), (1, exit), .. lambda]);
         }
 
-        Gen<IStmt> branch = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Block(returnType, depth - 1), static (condition, then, otherwise) =>
+        Gen<IStmt> branch = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1, lambdas), Block(returnType, depth - 1, lambdas), static (condition, then, otherwise) =>
             (IStmt)new If(condition, then, otherwise));
-        Gen<IStmt> loop = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1), Gen.Int[1, 3], static (condition, body, bound) =>
+        Gen<IStmt> loop = Gen.Select(ExprGen(typeof(bool), 2), Block(returnType, depth - 1, lambdas), Gen.Int[1, 3], static (condition, body, bound) =>
             (IStmt)new While(condition, body, bound));
         // The element is as often a divisor or shift count, so a loop body also throws out through the `finally`.
-        Gen<IStmt> each = Gen.Select(Gen.OneOfConst([List, .. Arrays]), Gen.OneOfConst(Arithmetic), Gen.Bool, Block(returnType, depth - 1), static (collection, op, isChecked, body) =>
+        Gen<IStmt> each = Gen.Select(Gen.OneOfConst([List, .. Arrays]), Gen.OneOfConst(Arithmetic), Gen.Bool, Block(returnType, depth - 1, lambdas), static (collection, op, isChecked, body) =>
             (IStmt)new ForEach(collection, op, isChecked, body));
-        return Gen.Frequency((3, assign), (1, property), (1, field), (1, cell), (1, bump), (1, parse), (2, element), (2, update), (1, step), (1, decimals), (1, deconstruct), (2, branch), (2, loop), (2, each), (1, exit));
+        return Gen.Frequency([(3, assign), (1, property), (1, field), (1, cell), (1, bump), (1, parse), (2, element), (2, update), (1, step), (1, decimals), (1, deconstruct), (2, branch), (2, loop), (2, each), (1, exit), .. lambda]);
     }
 
     /// <summary>

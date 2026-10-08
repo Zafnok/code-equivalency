@@ -81,3 +81,16 @@ the heap or on position.
   `f(a, b) = a op b` at the operands it used, as constants, for at most 8 rounds. A result decided
   this way has `proofMethod` suffixed `+abstracted`, and each round is a `ladderTrace` step with its
   `factsAdded`, in the way `+contract` and `+cvc5` already mark a proof (ADRs 0036 and 0050).
+- 2026-10-07 (P2-136). **A runtime-sensitive `delegate:<fingerprint>` is side-specific.** The
+  clarification of 2026-10-01 ended "It is never side-specific: a runtime-sensitive lambda has no
+  fingerprint and stays opaque"; this replaces that sentence. The Decision already says what a
+  function is "where behaviour differs between .NET Framework and .NET 10": side-specific, and "it
+  can never be proved equal". A lambda whose body calls a `runtime-changes.json` member or converts
+  floating point to an integer inside the pair's runtime interval (ADR 0040), and a method group of
+  such a member, is exactly that: converting it runs no code, raises nothing and reads no heap on
+  either side, and the delegate it yields behaves as its side's runtime makes it. So the conversion
+  is the same `delegate:` function of the same reads, marked runtime-sensitive, and the encoder
+  names it `old.` on one side and `new.` on the other. Two sides that write the lambda alike apply
+  two functions, and a result that depends on them is Unknown(Abstraction) under ADR 0026, never
+  Equivalent. On a pair whose two projects run on one runtime no rule applies, the function is
+  shared, and its name is the same, since the fingerprint does not hold the sensitivity.

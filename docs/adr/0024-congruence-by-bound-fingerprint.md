@@ -96,3 +96,16 @@ the tree is **runtime-sensitive**, meaning it contains any of:
   delegates are never equal. Measured on Git Extensions (the ticket's Notes): in 134 of the 213
   changed pairs whose only opaque reason was `DelegateCreation`, every such fragment was already
   shared, and 84 of those were Unknown(Abstraction) on the fragment's tainted `threw` edge.
+- 2026-10-07 (P2-136). **A runtime-sensitive delegate creation that runs no code is not a fragment
+  either.** Decision 2 keeps ADR 0014's meaning for a runtime-sensitive fragment because sharing it
+  would claim that both runtimes run it alike. The clarification above left a runtime-sensitive
+  lambda "opaque and unshared" on those grounds, but its own argument holds for it as well: the
+  conversion evaluates nothing, so nothing of the lambda's body runs at that point on either
+  runtime. What differs between the sides is the delegate's behaviour when a callee later invokes
+  it, and ADR 0025 already has the vehicle for a value both sides compute alike in form but not in
+  meaning: a side-specific function. So such a conversion is lowered as `delegate:<fingerprint>`,
+  the fingerprint computed as for any other conversion, marked runtime-sensitive (see ADR 0025's
+  clarification of the same date). It is still never shared: decision 2 is unchanged for every
+  fragment that is a call event, a runtime-sensitive method group whose receiver is evaluated
+  included. Measured on Git Extensions (the ticket's Notes): of the 49 changed pairs whose only
+  opaque reason was `DelegateCreation`, a runtime-sensitive body was the only cause in 29.
