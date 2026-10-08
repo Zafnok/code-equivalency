@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 using Equiv.Cli;
@@ -67,6 +68,50 @@ public sealed partial class LoweringCensusTests
         Assert.True(int.Parse(counts.Groups["legacy"].Value, System.Globalization.CultureInfo.InvariantCulture) > 0, output);
         Assert.True(int.Parse(counts.Groups["modern"].Value, System.Globalization.CultureInfo.InvariantCulture) > 0, output);
         Assert.False(File.Exists("unused.sarif"));
+    }
+
+    /// <summary>
+    /// Ticket P2-107 (ADR 0024 and ADR 0034 as clarified): <c>samples/same-runtime-cleanup</c> has one partial method, the
+    /// same on both sides, in the shape the interop generator gives a <c>[LibraryImport]</c> method. Its code is in its
+    /// implementing part, so both bodies are one <c>no-body</c> opaque; on one runtime the pair is congruent all the same,
+    /// and so is not a changed pair. The one changed pair is the method the sample rewrites.
+    /// </summary>
+    [Fact]
+    public void AnIdenticalOpaqueBodyOnOneRuntimeIsNotAChangedPair()
+    {
+        string sample = Path.Combine(SamplesRoot, "same-runtime-cleanup");
+        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P2-107-{Guid.NewGuid():N}.sarif");
+        try
+        {
+            int exitCode = ExitCodes.UsageError;
+            CaptureStdOut(() => exitCode = CompareCommand.Run(
+                new CompareOptions(
+                    Directory.GetFiles(Path.Combine(sample, "legacy"), "*.sln").Single(),
+                    Directory.GetFiles(Path.Combine(sample, "modern"), "*.slnx").Single(),
+                    outPath,
+                    BaselinePath: null,
+                    ConfigPath: null,
+                    FailOn: null,
+                    DryRun: false,
+                    LowerOnly: true),
+                [new CSharpFrontend()], new Z3Backend(), new FileReportSink(outPath), NullRunLog.Instance));
+
+            Assert.Equal(ExitCodes.Success, exitCode);
+            Assert.True(SarifLog.Load(outPath).Runs[0].TryGetSerializedPropertyValue("loweringCensus", out string? serialized));
+            using JsonDocument census = JsonDocument.Parse(serialized);
+            JsonElement root = census.RootElement;
+            Assert.Equal(3, root.GetProperty("matchedPairs").GetInt32());
+            Assert.Equal(1, root.GetProperty("pairsWholeBodyOpaque").GetInt32());
+            Assert.Equal("""{"legacy":1,"modern":1}""", root.GetProperty("opaqueByReason").GetProperty("no-body").GetRawText());
+            Assert.Equal(2, root.GetProperty("pairsCongruent").GetInt32());
+            Assert.Equal(1, root.GetProperty("changedPairs").GetInt32());
+            Assert.Equal(0, root.GetProperty("changedPairsWholeBodyOpaque").GetInt32());
+            Assert.Equal("""{"":1}""", root.GetProperty("changedReasonSets").GetRawText());
+        }
+        finally
+        {
+            File.Delete(outPath);
+        }
     }
 
     private static string CaptureStdOut(Action action)

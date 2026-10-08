@@ -840,6 +840,7 @@ public sealed class CSharpFrontendTests
             public class RouteAttribute : System.Attribute { public RouteAttribute(string template = null) { } }
             public class HttpGetAttribute : System.Attribute { public HttpGetAttribute(string template = null) { } }
             public class HttpPostAttribute : System.Attribute { public HttpPostAttribute(string template = null) { } }
+            public class HttpHeadAttribute : System.Attribute { public HttpHeadAttribute(string template = null) { } }
         }
         """,
         "ModernRouteAttributes").ToReference();
@@ -1013,6 +1014,176 @@ public sealed class CSharpFrontendTests
         Assert.Empty(result.Added);
         Assert.Empty(result.Removed);
         Assert.Equal(3, result.Ambiguous.Length);
+    }
+
+    /// <summary>
+    /// P2-119, the first shape the ticket names: one action carrying both <c>[HttpGet]</c> and <c>[HttpHead]</c> is one
+    /// endpoint, <c>GET</c> (<c>HEAD</c> is not a verb the identity knows), so on its own it pairs and is never Ambiguous.
+    /// </summary>
+    [Fact]
+    public void Analyze_OneActionWithGetAndHeadIsOneEndpoint()
+    {
+        const string Source = """
+            namespace N
+            {
+                using Microsoft.AspNetCore.Mvc;
+
+                [Route("Audio")]
+                public class AudioController
+                {
+                    [HttpGet("{itemId}/stream")]
+                    [HttpHead("{itemId}/stream")]
+                    public int GetAudioStream(int itemId) => itemId;
+                }
+            }
+            """;
+
+        MatchResult result = AnalyzeIdenticalSides(Source);
+
+        Assert.Equal(["GET /audio/{itemid}/stream"], result.Pairs.Select(static p => p.New.Value), StringComparer.Ordinal);
+        Assert.Empty(result.Ambiguous);
+    }
+
+    /// <summary>
+    /// P2-119 acceptance criterion 2, the shape that did yield the duplicate: two controllers whose only
+    /// <c>[Route("[controller]")]</c> is on a shared base class each declare <c>[HttpGet("Configuration")]</c>. ASP.NET
+    /// Core inherits the route and replaces the token with each derived controller's own name, so they are two endpoints.
+    /// Read without the inherited route they were both <c>GET /configuration</c>, and all four actions went Ambiguous.
+    /// </summary>
+    [Fact]
+    public void Analyze_ControllerRouteInheritedFromABaseClassKeepsActionsApart()
+    {
+        const string Source = """
+            namespace N
+            {
+                using Microsoft.AspNetCore.Mvc;
+
+                [Route("[controller]")]
+                public abstract class BaseApiController { }
+
+                public class BrandingController : BaseApiController
+                {
+                    [HttpGet("Configuration")]
+                    public int GetBrandingOptions() => 1;
+                }
+
+                public abstract class SetupController : BaseApiController { }
+
+                public class StartupController : SetupController
+                {
+                    [HttpGet("Configuration")]
+                    public int GetStartupConfiguration() => 2;
+                }
+            }
+            """;
+
+        MatchResult result = AnalyzeIdenticalSides(Source);
+
+        Assert.Equal(
+            ["GET /branding/configuration", "GET /startup/configuration"],
+            result.Pairs.Select(static p => p.New.Value).Order(StringComparer.Ordinal),
+            StringComparer.Ordinal);
+        Assert.Empty(result.Ambiguous);
+    }
+
+    /// <summary>
+    /// P2-119 acceptance criterion 3: an inherited route with no <c>[controller]</c> token gives two controllers' actions
+    /// the same verb and template, which the endpoint identity cannot tell apart, so all four stay Ambiguous
+    /// (<c>unmatched-overload</c>).
+    /// </summary>
+    [Fact]
+    public void Analyze_ActionsAnInheritedRouteCannotTellApartStayAmbiguous()
+    {
+        const string Source = """
+            namespace N
+            {
+                using Microsoft.AspNetCore.Mvc;
+
+                [Route("api")]
+                public abstract class BaseApiController { }
+
+                public class BrandingController : BaseApiController
+                {
+                    [HttpGet("Configuration")]
+                    public int GetBrandingOptions() => 1;
+                }
+
+                public class StartupController : BaseApiController
+                {
+                    [HttpGet("Configuration")]
+                    public int GetStartupConfiguration() => 2;
+                }
+            }
+            """;
+
+        MatchResult result = AnalyzeIdenticalSides(Source);
+
+        Assert.Empty(result.Pairs);
+        Assert.Equal(
+            ["N.BrandingController::GetBrandingOptions()", "N.BrandingController::GetBrandingOptions()", "N.StartupController::GetStartupConfiguration()", "N.StartupController::GetStartupConfiguration()"],
+            result.Ambiguous.Select(static i => i.Value).Order(StringComparer.Ordinal),
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// P2-119: the controller's own route wins over an inherited one, and Web API 2 does not inherit a route at all (it
+    /// reads the prefix with <c>inherit: false</c>), so a legacy base class's route is not applied.
+    /// </summary>
+    [Fact]
+    public void Analyze_OwnRouteWinsAndALegacyBaseRouteIsNotInherited()
+    {
+        Compilation legacyCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace N
+            {
+                using System.Web.Http;
+
+                [Route("base")]
+                public abstract class BaseApiController { }
+
+                public class OrdersController : BaseApiController
+                {
+                    [HttpGet, Route("orders/{id}")]
+                    public int Get(int id) => id;
+                }
+            }
+            """,
+            [LegacyRouteAttributes]);
+        Compilation modernCompilation = RoslynTestCompilations.Compile(
+            """
+            namespace N
+            {
+                using Microsoft.AspNetCore.Mvc;
+
+                [Route("base")]
+                public abstract class BaseApiController { }
+
+                [Route("")]
+                public class OrdersController : BaseApiController
+                {
+                    [HttpGet("orders/{id}")]
+                    public int Get(int id) => id;
+                }
+            }
+            """,
+            [ModernRouteAttributes]);
+
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [legacyCompilation], [], [])
+            : new LoadedSolution(null!, [modernCompilation], [], []));
+
+        MatchResult result = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
+
+        Assert.Equal(["GET /orders/{id}"], result.Pairs.Select(static p => p.New.Value), StringComparer.Ordinal);
+    }
+
+    /// <summary>One ASP.NET Core source on both sides, as a version bump has it.</summary>
+    private static MatchResult AnalyzeIdenticalSides(string source)
+    {
+        StubLoader loader = new(_ => new LoadedSolution(null!, [RoslynTestCompilations.Compile(source, [ModernRouteAttributes])], [], []));
+        return new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None).Match;
     }
 
     /// <summary>The mirror of <see cref="Analyze_DuplicateEndpointYieldsUnknown"/>: duplicates on the modern side this time.</summary>

@@ -251,9 +251,10 @@ internal sealed class IrLowerer
     /// binds. A syntax error anywhere in its file comes first and is the only cause: where each declaration of that file
     /// begins and ends is the parser's recovery, so no method in it is taken as bound (ticket P2-085). An error is one the
     /// compiler itself calls an error (<see cref="CompilationDiagnosticClassifier.IsError"/>): a warning the project
-    /// promotes to an error sits on code that binds, and that code is lowered (ticket P2-106).
+    /// promotes to an error sits on code that binds, and that code is lowered (ticket P2-106). The fingerprint of a partial
+    /// method's implementing part, which is never lowered, asks the same of that part (ADR 0024 as clarified by ticket P2-107).
     /// </summary>
-    private static ImmutableArray<SourceSpan> UnboundCauses(SyntaxNode syntax, SemanticModel model, IOperation? operation)
+    internal static ImmutableArray<SourceSpan> UnboundCauses(SyntaxNode syntax, SemanticModel model, IOperation? operation)
     {
         if (syntax.SyntaxTree.GetDiagnostics().Where(CompilationDiagnosticClassifier.IsError).MinBy(static d => d.Location.SourceSpan.Start) is { } syntaxError)
         {
@@ -2186,10 +2187,13 @@ internal sealed class IrLowerer
 
         Callee called = Bound(invocation.TargetMethod, invocation);
         IrType? returns = invocation.TargetMethod.ReturnsVoid ? null : Map(invocation.Type!);
-        if (written.IsEmpty && catalogue.Members.TryGetValue(called.Identity.Value, out ApiEquivalence? entry) && Adapt(entry, invocation, context) is { } adapted)
+        foreach (ApiEquivalence entry in written.IsEmpty ? catalogue.Members[called.Identity.Value] : [])
         {
-            catalogue.Applied.Add(entry.Id);
-            return Call(new Callee(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), Closed: false, invocation, invocation.TargetMethod.Name), adapted, returns, [], context);
+            if (Adapt(entry, invocation, context) is { } adapted)
+            {
+                catalogue.Applied.Add(entry.Id);
+                return Call(new Callee(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), Closed: false, invocation, invocation.TargetMethod.Name), adapted, returns, [], context);
+            }
         }
 
         return Dispatch(invocation.Instance, called, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
@@ -2414,8 +2418,7 @@ internal sealed class IrLowerer
         IrType? returns = value is null ? Map(property.Type!) : null;
         ImmutableArray<IrVar> args = value is null ? operands : [.. operands, value];
         Callee callee = Called(accessor, property);
-        if (catalogue.Members.TryGetValue(callee.Identity.Value, out ApiEquivalence? entry)
-            && entry.Arguments.SequenceEqual(Enumerable.Range(0, args.Length).Select(static i => new ApiArgument(i))))
+        if (catalogue.Members[callee.Identity.Value].FirstOrDefault(e => e.Arguments.SequenceEqual(Enumerable.Range(0, args.Length).Select(static i => new ApiArgument(i)))) is { } entry)
         {
             catalogue.Applied.Add(entry.Id);
             callee = callee with { Identity = CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), Closed = false };
@@ -2579,12 +2582,16 @@ internal sealed class IrLowerer
         {
             Entries = entries;
             Runtime = runtime;
-            Members = entries.Where(static e => !e.IsType).ToImmutableDictionary(static e => e.Legacy, StringComparer.Ordinal);
+            Members = entries.Where(static e => !e.IsType).ToLookup(static e => e.Legacy, StringComparer.Ordinal);
             types = entries.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, StringComparer.Ordinal);
             Sorts = Sort;
         }
 
-        public ImmutableDictionary<string, ApiEquivalence> Members { get; }
+        /// <summary>
+        /// The member entries of each legacy identity, in file order: a call takes the first whose adapter addresses its
+        /// source arguments, so one legacy member may have an entry per <c>params</c> element count (ticket P2-137).
+        /// </summary>
+        public ILookup<string, ApiEquivalence> Members { get; }
 
         /// <summary>The entries themselves, which a fragment's fingerprint applies as the body's does (ticket M4-004).</summary>
         public ImmutableArray<ApiEquivalence> Entries { get; }

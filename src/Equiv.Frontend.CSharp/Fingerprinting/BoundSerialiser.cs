@@ -69,7 +69,9 @@ internal sealed class BoundSerialiser : OperationWalker
         runtime = settings.Runtime;
         keptForwarders = settings.KeptForwarders;
         types = settings.Equivalences.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
-        members = settings.Equivalences.Where(static e => !e.IsType && PassesArgumentsThrough(e)).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
+        members = settings.Equivalences.Where(static e => !e.IsType && PassesArgumentsThrough(e))
+            .GroupBy(static e => e.Legacy, StringComparer.Ordinal)
+            .ToImmutableDictionary(static g => g.Key, static g => g.First().Modern, StringComparer.Ordinal);
         interpolation = ((CSharpCompilation)compilation).LanguageVersion >= LanguageVersion.CSharp10
             && compilation.GetTypeByMetadataName("System.Runtime.CompilerServices.DefaultInterpolatedStringHandler") is not null
                 ? "DefaultInterpolatedStringHandler"
@@ -101,10 +103,7 @@ internal sealed class BoundSerialiser : OperationWalker
         Settings settings)
     {
         BoundSerialiser serialiser = new(method, compilation, settings);
-        serialiser.text
-            .Append(method.MethodKind).Append(" static=").Append(method.IsStatic).Append(" async=").Append(method.IsAsync)
-            .Append(" returns=").Append(method.ReturnsVoid ? "void" : serialiser.Type(method.ReturnType))
-            .Append(" (").AppendJoin(", ", method.Parameters.Select(p => $"{p.RefKind} {serialiser.Type(p.Type)}")).Append(")\n");
+        serialiser.Signature();
         if (operations.IsEmpty)
         {
             serialiser.text.Append("AutoAccessor init=").Append(method.IsInitOnly).Append('\n');
@@ -113,6 +112,33 @@ internal sealed class BoundSerialiser : OperationWalker
         foreach (IOperation operation in operations)
         {
             serialiser.Visit(operation);
+        }
+
+        return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
+    }
+
+    /// <summary>
+    /// The serialisation of a partial method by its <paramref name="implementation"/>, whose <paramref name="body"/> is its
+    /// code (ADR 0024 as clarified by ticket P2-107): the body as <see cref="Serialise"/> writes one, then every attribute of
+    /// the method, which has those of both its parts, and of each local function the body declares, on the method, its
+    /// return value and its parameters. An <c>extern</c> local function has no bound code: its attributes name the library
+    /// and the entry point it calls and say how its arguments are marshalled, so they are its code. An attribute is written
+    /// as its constructor and its bound arguments, so a constant it names is written as its value.
+    /// </summary>
+    public static (string Text, bool RuntimeSensitive) SerialiseImplementingPart(
+        IMethodSymbol implementation,
+        IOperation body,
+        Compilation compilation,
+        Settings settings)
+    {
+        BoundSerialiser serialiser = new(implementation, compilation, settings);
+        serialiser.Signature();
+        serialiser.text.Append("ImplementingPart\n");
+        serialiser.Visit(body);
+        serialiser.Attributes("method", implementation);
+        foreach (IMethodSymbol local in body.Descendants().OfType<ILocalFunctionOperation>().Select(static o => o.Symbol))
+        {
+            serialiser.Attributes(serialiser.Number(local, "F"), local);
         }
 
         return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
@@ -169,6 +195,27 @@ internal sealed class BoundSerialiser : OperationWalker
         }
 
         depth--;
+    }
+
+    /// <summary>The method's kind, staticness, asyncness, return type and parameter types: the text's first line.</summary>
+    private void Signature() => text
+        .Append(method.MethodKind).Append(" static=").Append(method.IsStatic).Append(" async=").Append(method.IsAsync)
+        .Append(" returns=").Append(method.ReturnsVoid ? "void" : Type(method.ReturnType))
+        .Append(" (").AppendJoin(", ", method.Parameters.Select(p => $"{p.RefKind} {Type(p.Type)}")).Append(")\n");
+
+    /// <summary>One line per attribute on <paramref name="owner"/>, on its return value and on each of its parameters.</summary>
+    private void Attributes(string name, IMethodSymbol owner)
+    {
+        (string Target, ImmutableArray<AttributeData> Attributes)[] targets =
+        [
+            (name, owner.GetAttributes()),
+            (name + " return", owner.GetReturnTypeAttributes()),
+            .. owner.Parameters.Select(p => ($"{name} #{p.Ordinal.ToString(CultureInfo.InvariantCulture)}", p.GetAttributes())),
+        ];
+        foreach ((string target, AttributeData attribute) in targets.SelectMany(static t => t.Attributes.Select(a => (t.Target, a))))
+        {
+            text.Append("Attribute ").Append(target).Append(": ").Append(attribute.AttributeConstructor).Append(" = ").Append(attribute).Append('\n');
+        }
     }
 
     private void Append(string name, string? value)
