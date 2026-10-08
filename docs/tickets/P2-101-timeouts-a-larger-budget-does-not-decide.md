@@ -1,5 +1,5 @@
 # P2-101 The timeout Unknowns that 20 times the budget does not decide: find what their queries share
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-050, P2-076
