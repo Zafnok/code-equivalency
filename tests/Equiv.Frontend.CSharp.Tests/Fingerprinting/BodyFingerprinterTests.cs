@@ -212,6 +212,28 @@ public sealed class BodyFingerprinterTests
         Assert.NotEqual(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, legacy: true, Runtimes.Migration));
     }
 
+    /// <summary>
+    /// Ticket P2-137: a legacy member may have several entries, one per argument count. The fingerprint names a callee
+    /// without its arguments, so it takes the first pass-through entry in file order, as it did when there was one.
+    /// </summary>
+    [Fact]
+    public void ALegacyMemberWithTwoPassThroughEntriesIsNamedByTheFirst()
+    {
+        const string Legacy = "namespace Old { public class B { public int Ok() => 0; } } namespace N { public class C : Old.B { public int M() => Ok(); } }";
+        const string Modern = "namespace Old { public class B { public int Fine() => 0; } } namespace N { public class C : Old.B { public int M() => Fine(); } }";
+        ImmutableArray<ApiEquivalence> entries =
+        [
+            new("fine", IsType: false, "Old.B::Ok()", "Old.B::Fine()", [new ApiArgument(0)], "r", new Uri("https://learn.microsoft.com/")),
+            new("other", IsType: false, "Old.B::Ok()", "Old.B::Other()", [new ApiArgument(0)], "r", new Uri("https://learn.microsoft.com/")),
+        ];
+        Compilation legacy = RoslynTestCompilations.Compile(Legacy);
+        Compilation modern = RoslynTestCompilations.Compile(Modern);
+        BodyFingerprint? modernPrint = BodyFingerprinter.Compute(Method(modern), modern, EquivConfig.Default, [], Runtimes.Migration);
+
+        Assert.Equal(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, entries, Runtimes.Migration));
+        Assert.NotEqual(modernPrint, BodyFingerprinter.Compute(Method(legacy), legacy, EquivConfig.Default, [entries[1], entries[0]], Runtimes.Migration));
+    }
+
     [Fact]
     public void AnErroneousBodyIsStillSerialised()
     {

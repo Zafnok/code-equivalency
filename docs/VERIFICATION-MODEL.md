@@ -420,11 +420,14 @@ Migration-specific normalisations (applied to both sides before matching):
   (`api-equivalences.json`, ADR 0020, ticket M3-009) of member and type pairs that are
   exactly equivalent whenever both are invoked: overload drift such as
   `String::Split(Char[])` → `String::Split(Char, StringSplitOptions)`, and Web API 2 →
-  ASP.NET Core result helpers and result types. It also holds the rebinding forms (ticket
-  P2-070), where identical source binds to an overload the modern reference assemblies add or
-  to a member they move: `String::TrimEnd(Char[])` with one element → `String::TrimEnd(Char)`,
+  ASP.NET Core result helpers and result types. It also holds the rebinding forms (tickets
+  P2-070 and P2-137), where identical source binds to an overload the modern reference assemblies
+  add or to a member they move: `String::TrimEnd(Char[])` with one element →
+  `String::TrimEnd(Char)` and with no element → `String::TrimEnd()`,
   `String::TrimStart(Char[])` with no element → `String::TrimStart()`, and
-  `DirectoryInfo::get_FullName()` → `FileSystemInfo::get_FullName()`. The frontend rewrites a
+  `DirectoryInfo::get_FullName()` → `FileSystemInfo::get_FullName()`. Entries that share a legacy
+  member are tried in file order, and a call takes the first whose adapter addresses its source
+  arguments. The frontend rewrites a
   legacy call while lowering it, with an argument adapter, and every entry applied to a pair is
   listed in `properties.equivalencesApplied`. A property or event accessor call has no source
   arguments to adapt, so an entry rewrites one only when its adapter passes every operand
