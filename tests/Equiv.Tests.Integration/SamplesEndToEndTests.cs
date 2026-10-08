@@ -257,6 +257,47 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-137 criterion 3: <c>s.TrimEnd()</c>, which .NET 10 binds to the parameterless overload, is Equivalent with
+    /// its entry applied and no rebound call left, although the legacy member has an earlier entry for one element.
+    /// </summary>
+    [Fact]
+    public void BclReboundOverloads_TrimEndOfNoCharsIsEquivalentWithItsEntryApplied()
+    {
+        Result result = Single("bcl-rebound-overloads", "::TrimTail(");
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal(["bcl.string-trim-end-no-chars"], result.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
+        Assert.False(result.TryGetProperty("reboundCalls", out string? _));
+    }
+
+    /// <summary>Ticket P2-137 criterion 3: the entry does not hide an edit. Trimming a character on the modern side stays Divergent.</summary>
+    [Fact]
+    public void BclReboundOverloads_TrimmingACharacterOnTheModernSideIsDivergent()
+    {
+        Result result = Single("bcl-rebound-overloads", "::TrimTailOther(");
+
+        Assert.Equal("EQ002", result.RuleId);
+        Assert.Equal(["bcl.string-trim-end-no-chars"], result.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-137 criterion 3: <c>TimeSpan.FromHours(double)</c> and <c>TimeSpan.FromHours(int)</c> throw different
+    /// exception types for a value out of range, so the catalogue has no entry for them: the call stays a rebound call
+    /// (ADR 0042) and the pair Unknown, with the two callees named.
+    /// </summary>
+    [Fact]
+    public void BclReboundOverloads_OverloadsThatDifferOutOfRangeStayARebindingAndUnknown()
+    {
+        Result result = Single("bcl-rebound-overloads", "::Hours(");
+
+        Assert.Equal("EQ003", result.RuleId);
+        Assert.Equal("opaque", result.GetProperty<string>("unknownReason"));
+        Assert.False(result.TryGetProperty("equivalencesApplied", out string? _));
+        Dictionary<string, string> rebound = Assert.Single(result.GetProperty<List<Dictionary<string, string>>>("reboundCalls"));
+        Assert.Equal(("System.TimeSpan::FromHours(double)", "System.TimeSpan::FromHours(int)"), (rebound["legacy"], rebound["modern"]));
+    }
+
+    /// <summary>
     /// Ticket P2-055 criterion 2 (ADR 0040 decision 2): both sides run on .NET 10, so no runtime rule applies. The
     /// byte-identical method that calls <c>double.ToString()</c> and <c>string.StartsWith(string)</c> and casts a
     /// <c>double</c> to <c>int</c> is Equivalent by congruence, and the <c>if</c> chain made a <c>switch</c> expression is
