@@ -45,6 +45,7 @@ internal static class IlSamples
             public sealed class ApiControllerAttribute : System.Attribute { }
             public sealed class RouteAttribute(string template) : System.Attribute { public string Template => template; }
             public sealed class HttpGetAttribute(string template) : System.Attribute { public string Template => template; }
+            public sealed class HttpHeadAttribute(string template) : System.Attribute { public string Template => template; }
         }
         """;
 

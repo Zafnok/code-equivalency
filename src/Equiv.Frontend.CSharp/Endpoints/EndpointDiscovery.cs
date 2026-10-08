@@ -15,7 +15,8 @@ namespace Equiv.Frontend.CSharp.Endpoints;
 /// of route/prefix attributes and a closed verb-attribute-to-HTTP-verb map. Controllers are never nested
 /// types, unlike the general procedures <see cref="Equiv.Frontend.CSharp.ProcedureEnumerator"/> walks,
 /// so only namespace-scoped types are considered. An action with neither a route attribute nor a verb
-/// attribute of its own is skipped (criterion 2: convention-based routing is out of scope).
+/// attribute of its own is skipped (criterion 2: convention-based routing is out of scope). A controller with no
+/// route of its own takes an ASP.NET Core base class's (P2-119).
 /// </summary>
 internal static class EndpointDiscovery
 {
@@ -27,6 +28,9 @@ internal static class EndpointDiscovery
         "System.Web.Mvc.RouteAttribute",
         "Microsoft.AspNetCore.Mvc.RouteAttribute",
     ];
+
+    /// <summary>The one route attribute a controller inherits from a base class (<see cref="InheritedPrefix"/>).</summary>
+    private const string InheritedRouteAttribute = "Microsoft.AspNetCore.Mvc.RouteAttribute";
 
     private static readonly ImmutableDictionary<string, string> VerbAttributes = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -101,7 +105,27 @@ internal static class EndpointDiscovery
         ImmutableArray<AttributeData> attributes = type.GetAttributes();
         AttributeData? prefixAttribute = attributes.FirstOrDefault(a => PrefixAttributes.Contains(AttributeName(a)))
             ?? attributes.FirstOrDefault(a => RouteAttributes.Contains(AttributeName(a)));
-        return prefixAttribute is null ? null : FirstArgument(prefixAttribute);
+        return prefixAttribute is null ? InheritedPrefix(type.BaseType) : FirstArgument(prefixAttribute);
+    }
+
+    /// <summary>
+    /// P2-119: the route of the nearest base class that carries ASP.NET Core's <c>[Route]</c>, for a controller with
+    /// no prefix of its own. ASP.NET Core reads a controller's route with attribute inheritance on, and
+    /// <see cref="RouteTemplate.Normalize"/> replaces <c>[controller]</c> with the derived controller's name, so
+    /// controllers sharing a base <c>[Route("[controller]")]</c> keep distinct templates. Web API 2 and MVC 5 read a
+    /// controller's route with inheritance off, so their attributes are not looked for here.
+    /// </summary>
+    private static string? InheritedPrefix(INamedTypeSymbol? baseType)
+    {
+        for (INamedTypeSymbol? type = baseType; type is not null; type = type.BaseType)
+        {
+            if (type.GetAttributes().FirstOrDefault(static a => string.Equals(AttributeName(a), InheritedRouteAttribute, StringComparison.Ordinal)) is { } route)
+            {
+                return FirstArgument(route);
+            }
+        }
+
+        return null;
     }
 
     private static bool IsCandidate(IMethodSymbol method) =>

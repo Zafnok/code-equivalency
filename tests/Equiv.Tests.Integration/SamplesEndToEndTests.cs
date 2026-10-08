@@ -324,6 +324,28 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-119 criterion 2: four controllers take their route from one base class's <c>[Route("[controller]")]</c>,
+    /// two of them share <c>[HttpGet("Configuration")]</c> and two share <c>[HttpGet]</c> plus <c>[HttpHead]</c> on
+    /// <c>{itemId}/stream</c>. Each action is its own endpoint, matched by its route and Equivalent by congruence; none
+    /// is an <c>unmatched-overload</c> Unknown.
+    /// </summary>
+    [Fact]
+    public void WebApiInheritedRoute_EveryActionIsMatchedByItsOwnRouteAndCongruent()
+    {
+        Result[] results = [.. RunSample("webapi-inherited-route").Log.Runs[0].Results];
+
+        Assert.Equal(
+            ["GET /audio/{itemid}/stream", "GET /branding/configuration", "GET /startup/configuration", "GET /videos/{itemid}/stream"],
+            results.Select(static r => Assert.Single(r.Locations).LogicalLocations.Single().FullyQualifiedName).Order(StringComparer.Ordinal),
+            StringComparer.Ordinal);
+        Assert.All(results, static r =>
+        {
+            Assert.Equal("EQ001", r.RuleId);
+            Assert.Equal("congruence", r.GetProperty<string>("proofMethod"));
+        });
+    }
+
+    /// <summary>
     /// Ticket P2-055 criterion 3: .NET 8 against .NET 10 crosses only the rows changed in .NET 9 or .NET 10. The
     /// byte-identical method that calls <c>BinaryReader.ReadString</c> (changed in .NET 9) is not congruent and is EQ006,
     /// its message naming both runtimes; the one that calls <c>double.ToString()</c> (changed in .NET Core 3.0) is
