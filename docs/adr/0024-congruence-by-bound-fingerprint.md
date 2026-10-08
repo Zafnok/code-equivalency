@@ -165,3 +165,28 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     0019). A body that is one opaque calls none in the IR, so a partial method's result lists no
     assumed callees, as an iterator's lists none. Lowering the implementing part would list them
     and is a lowering change, not part of this rule.
+- 2026-10-08 (P2-145). **A local function's attributes are in every text that holds the function.**
+  The clarification above says an `extern` function has no bound code, so its attributes are its
+  code, "and why a local `extern` function's are too". It wrote them for a partial method's
+  implementing part on a same-runtime pair only. An attribute is not an operation, so in every
+  other text a local `extern` function was its signature alone: two bodies that differed only in
+  its `[DllImport]` had one fingerprint and were Equivalent by decision 1 on any runtime pair, and
+  two lambdas that differed only there were one `delegate:<fingerprint>` function to the solver.
+  The decision's claim is that equal texts run the same operations; a text that leaves out which
+  native function is called does not establish it. So the line of every local function, in a
+  body, in an implementing part and in a fragment, is followed by the bound attributes of the
+  function, of its return value and of its parameters, each as its constructor and its arguments
+  as constants. An `extern` function has one more line ahead of them, holding its import as the
+  compiler resolves it: the library, the entry point, the character set, the calling convention
+  and the other settings of `[DllImport]`. Two of those are in no attribute argument. The entry
+  point is the function's own name when the attribute names none (measured: Roslyn emits the
+  import of a local function `F` with `[DllImport("a.dll")]` as `a.dll!F`), so renaming such a
+  function changes what the body calls, and the text numbers local functions instead of naming
+  them. The character set is the module's `[DefaultCharSet]` when the attribute names none. A
+  body that declares no local function with an attribute has the text it had.
+  - **What the text still does not hold.** What the marshaller reads from outside the function:
+    the layout attributes of the types in its signature, `[BestFitMapping]` on a containing type,
+    and the assembly's `[DisableRuntimeMarshalling]` and `[DefaultDllImportSearchPaths]`. No
+    fingerprint holds a type's or an assembly's attributes today; P2-146 has them. And an `extern`
+    local function with no `[DllImport]` is written by its source name, although the name a
+    runtime would look it up by is the one the compiler generates from the containing member.

@@ -715,6 +715,12 @@ Found by P2-107 (2026-10-08, a throwaway unit test on `main`):
   and Equivalent, and an `extern` method is never a matched pair, so a changed `[DllImport]` on one
   produces no result (repros in the ticket). The second half starts with `equiv-adr`. Needs P2-107.
 
+Found by P2-145 (2026-10-08, by reading what the fingerprint of an `extern` function holds; not reproduced):
+- P2-146 (M) Soundness: the marshalling settings an `extern` function takes from outside itself are
+  in no fingerprint: the assembly's `[DisableRuntimeMarshalling]` and `[DefaultDllImportSearchPaths]`,
+  `[BestFitMapping]` on a containing type, and the layout attributes of the types in its signature.
+  The first step is the repro. Needs P2-145.
+
 Found by a CI failure (PR #390, `gates (ubuntu-latest)`):
 - P2-129 (S) A ladder property test fails at random, about once in 400 runs, with no assertion: its
   generator's filter for procedures that loop and call keeps 1 draw in 8, and CsCheck gives up after
