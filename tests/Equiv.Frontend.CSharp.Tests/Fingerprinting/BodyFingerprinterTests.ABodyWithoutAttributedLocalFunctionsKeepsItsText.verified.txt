@@ -1,0 +1,11 @@
+﻿Ordinary static=False async=False returns=System.Int32 (None System.Int32)
+MethodBodyOperation syntax=MethodDeclaration implicit=False
+  Block syntax=Block implicit=False
+    Return syntax=ReturnStatement implicit=False
+      Invocation syntax=InvocationExpression implicit=False type=System.Int32 symbols=F0(async=False None System.Int32) -> System.Int32
+        Argument syntax=Argument implicit=False symbols=A1
+          ParameterReference syntax=IdentifierName implicit=False type=System.Int32 symbols=P0
+    LocalFunction syntax=LocalFunctionStatement implicit=False symbols=F0(async=False None System.Int32) -> System.Int32
+      Block syntax=ArrowExpressionClause implicit=False
+        Return syntax=IdentifierName implicit=True
+          ParameterReference syntax=IdentifierName implicit=False type=System.Int32 symbols=A1

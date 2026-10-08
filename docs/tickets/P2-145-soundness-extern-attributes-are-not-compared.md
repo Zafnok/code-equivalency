@@ -1,5 +1,5 @@
 # P2-145 Soundness: the attributes of an `extern` function are its code, and nothing compares them
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-107
@@ -141,3 +141,37 @@ and file the rest.
   was edited.
 - Until this lands, an Equivalent verdict does not cover the attributes of an `extern` function
   the member declares or calls.
+
+### Gap 1 (criteria 1 and 2)
+- Bar test for gap 1 (`equiv-adr`): the first row. ADR 0024's clarification of 2026-10-07 already
+  says a local `extern` function's attributes are its code; this applies it to every text. Recorded
+  as ADR 0024's clarification of 2026-10-08.
+- Decision: the attribute lines are written where the local function's own line is written
+  (`BoundSerialiser.Visit`), not after the body as `SerialiseImplementingPart` did. One place then
+  covers a body, an implementing part and a fragment, and a local function a lambda declares.
+  Rejected: a loop over the body's descendants in `Serialise`, which would leave a fragment's text
+  without them. The text of an implementing part that declares an attributed local function
+  changes (the same lines, earlier); nothing stores a fingerprint between runs.
+- Found while writing it, and fixed by the same line: a lambda that declares a local `extern`
+  function was one `delegate:<fingerprint>` function on both sides whatever its `[DllImport]`
+  said, so the solver would have proved the pair Equivalent after the body fingerprints differed.
+  `FragmentFingerprinterTests.ALambdasLocalExternFunctionsAttributesAreInItsFingerprint` fails
+  without the fix.
+- Decision: an `extern` function also has an `Extern` line holding its import as Roslyn resolves it
+  (`IMethodSymbol.GetDllImportData`). Measured with a throwaway program that compiled and read the
+  metadata: a local function `F` with `[DllImport("a.dll")]` and no `EntryPoint` is emitted as the
+  import `a.dll!F`, although the method is named `<M>g__F|0_0`. The text numbers local functions,
+  so without that line renaming such a function would change what the body calls and keep its
+  fingerprint. The line also holds the character set, which the module's `[DefaultCharSet]`
+  supplies when the attribute names none. A body with no `extern` local function has no such line.
+- Not fixed, filed as P2-146: the settings the marshaller reads from outside the function (the
+  assembly's `[DisableRuntimeMarshalling]` and `[DefaultDllImportSearchPaths]`, a containing
+  type's `[BestFitMapping]`, the layout of the types in the signature). Read off what the text
+  holds, not reproduced.
+- A limit: an `extern` local function with no `[DllImport]` is written by its containing type and
+  its source name. The name a runtime would look such a function up by is the compiler's
+  (`<M>g__F|0_0`), which also depends on the containing member. No runtime that `equiv` knows
+  implements one.
+- Criterion 2's "keeps the text it has today":
+  `BodyFingerprinterTests.ABodyWithoutAttributedLocalFunctionsKeepsItsText` is a snapshot taken
+  on `main` (`40057429`) before the change and unchanged by it.
