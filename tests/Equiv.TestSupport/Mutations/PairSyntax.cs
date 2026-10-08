@@ -28,7 +28,7 @@ internal static class PairSyntax
     {
         StringBuilder text = new();
         text.Append(CultureInfo.InvariantCulture, $"public static class {ClassName}\n{{\n    public static int {Field};\n\n")
-            .Append(CultureInfo.InvariantCulture, $"    public static {Keyword(method.ReturnType)} {MethodName}(int a, int b, long c, long d, bool e, string s, int[] {Array})\n    {{\n");
+            .Append(CultureInfo.InvariantCulture, $"    public static {Keyword(method.ReturnType)} {MethodName}(int a, int b, long c, long d, bool e, string s, int[] {Array}{(method.Floats ? ", float g, double h" : string.Empty)})\n    {{\n");
         int loops = 0;
         RenderBlock([.. method.Locals, .. method.Body], text, 2, ref loops);
         text.Append("    }\n}\n");
@@ -144,7 +144,11 @@ internal static class PairSyntax
     private static string Context(bool isChecked) => isChecked ? "checked" : "unchecked";
 
     /// <summary>The whole method: its locals, then its body, which ends in its <c>return</c> (or, when void, a write of <c>F</c>).</summary>
-    public sealed record Method(Type ReturnType, ImmutableArray<IStmt> Locals, ImmutableArray<IStmt> Body);
+    public sealed record Method(Type ReturnType, ImmutableArray<IStmt> Locals, ImmutableArray<IStmt> Body)
+    {
+        /// <summary>Whether it also takes <c>float g</c> and <c>double h</c>, as a floating-point pair's does (ticket P1-030).</summary>
+        public bool Floats { get; init; }
+    }
 
     public interface IExpr
     {
@@ -169,6 +173,16 @@ internal static class PairSyntax
         public bool CannotThrow => true;
 
         public string Render() => $"({Value.ToString(CultureInfo.InvariantCulture)}{(Type == typeof(long) ? "L" : string.Empty)})";
+    }
+
+    /// <summary>A <c>float</c> or <c>double</c> literal, written so that it reads back to the same number (ticket P1-030).</summary>
+    public sealed record Real(Type Type, double Value) : IExpr
+    {
+        public bool CannotThrow => true;
+
+        public string Render() => Type == typeof(float)
+            ? $"({((float)Value).ToString("R", CultureInfo.InvariantCulture)}f)"
+            : $"({Value.ToString("R", CultureInfo.InvariantCulture)}d)";
     }
 
     /// <summary>A read of <c>u[Index]</c>, which throws when <c>u</c> is null or too short.</summary>

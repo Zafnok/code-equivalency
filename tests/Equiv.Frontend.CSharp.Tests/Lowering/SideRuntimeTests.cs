@@ -93,6 +93,25 @@ public sealed class SideRuntimeTests
         Assert.Equal((false, false), Flags(SideRuntime.Of(On("net8.0,net10.0"), X86, On("net10.0"), AnyCpu, Table)));
     }
 
+    /// <summary>
+    /// ADR 0053 decision 4 (ticket P1-030): <see cref="SideRuntime.OnX87"/> is the side's own fact, whatever the other side
+    /// is. Two x87 sides are both on x87 and neither is flagged against the other; a side that only may be is on x87 too.
+    /// </summary>
+    [Fact]
+    public void ASideIsOnX87WhateverTheOtherSideIs()
+    {
+        Assert.Equal((true, true), OnX87(SideRuntime.Of(On("net48"), X86, On("net48"), X86, Table)));
+        Assert.Equal((false, false), Flags(SideRuntime.Of(On("net48"), X86, On("net48"), X86, Table)));
+        Assert.Equal((true, false), OnX87(SideRuntime.Of(On("net48"), X86, On("net10.0"), X86, Table)));
+        Assert.Equal((false, true), OnX87(SideRuntime.Of(On("net10.0"), X86, On("net48,net8.0"), X86, Table)));
+        Assert.Equal((true, true), OnX87(SideRuntime.Of(On("net48,net8.0"), X86, On("net48"), X86, Table)));
+        Assert.Equal((false, false), OnX87(SideRuntime.Of(On("net48"), AnyCpu, On("net48"), AnyCpu, Table)));
+        Assert.True(new SideRuntime(Table.Coverage, X87: true).OnX87);
+        Assert.False(new SideRuntime(Table.Coverage, X87: false).OnX87);
+    }
+
+    private static (bool Legacy, bool Modern) OnX87((SideRuntime Legacy, SideRuntime Modern) sides) => (sides.Legacy.OnX87, sides.Modern.OnX87);
+
     private static (bool Legacy, bool Modern) Flags((SideRuntime Legacy, SideRuntime Modern) sides) => (sides.Legacy.X87, sides.Modern.X87);
 
     /// <summary>A project that runs on <paramref name="runtimes"/>, comma-separated: its own, or its hosts'.</summary>

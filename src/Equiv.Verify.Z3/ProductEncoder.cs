@@ -131,7 +131,22 @@ internal static class ProductEncoder
         CallerContracts? contracts = null,
         CalleeContract? relation = null,
         TraceComparison traces = TraceComparison.Sequence) =>
-        Encode(context, (old, @new), callIdentityMap, contracts, relation, (traces, Arithmetic: null));
+        Encode(context, (old, @new), callIdentityMap, contracts, relation, (traces, Arithmetic: null, Interpreted: null));
+
+    /// <summary>
+    /// Rung 1's refined product (ADR 0053; ticket P1-030): <see cref="Encode(Context, IrProcedure, IrProcedure, ImmutableDictionary{string, string}, CallerContracts?, CalleeContract?, TraceComparison)"/>
+    /// with the traces compared by position, the pure functions <paramref name="interpreted"/> names given their real
+    /// meaning, and <c>float</c> and <c>double</c> as IEEE 754 sorts. <see cref="ProductEncoding.Refined"/> says so.
+    /// </summary>
+    public static ProductEncoding EncodeRefined(
+        Context context,
+        IrProcedure old,
+        IrProcedure @new,
+        ImmutableDictionary<string, string> callIdentityMap,
+        IReadOnlySet<string> interpreted,
+        CallerContracts? contracts = null,
+        CalleeContract? relation = null) =>
+        Encode(context, (old, @new), callIdentityMap, contracts, relation, (TraceComparison.Positional, Arithmetic: null, interpreted));
 
     /// <summary>
     /// Rung 1's second product (ticket P1-031): <see cref="Encode(Context, IrProcedure, IrProcedure, ImmutableDictionary{string, string}, CallerContracts?, CalleeContract?, TraceComparison)"/>
@@ -146,7 +161,7 @@ internal static class ProductEncoder
         ArithmeticAbstraction arithmetic,
         CallerContracts? contracts = null,
         CalleeContract? relation = null) =>
-        Encode(context, (old, @new), callIdentityMap, contracts, relation, (TraceComparison.Positional, arithmetic));
+        Encode(context, (old, @new), callIdentityMap, contracts, relation, (TraceComparison.Positional, arithmetic, Interpreted: null));
 
     private static ProductEncoding Encode(
         Context context,
@@ -154,11 +169,11 @@ internal static class ProductEncoder
         ImmutableDictionary<string, string> callIdentityMap,
         CallerContracts? contracts,
         CalleeContract? relation,
-        (TraceComparison Traces, ArithmeticAbstraction? Arithmetic) shape)
+        (TraceComparison Traces, ArithmeticAbstraction? Arithmetic, IReadOnlySet<string>? Interpreted) shape)
     {
         (IrProcedure old, IrProcedure @new) = pair;
-        (TraceComparison traces, ArithmeticAbstraction? arithmetic) = shape;
-        SortMapper sorts = new(context);
+        (TraceComparison traces, ArithmeticAbstraction? arithmetic, IReadOnlySet<string>? interpreted) = shape;
+        SortMapper sorts = new(context, floats: interpreted is not null);
         ImmutableArray<(SharedParameter Shared, Expr Term)> inputs =
         [
             .. Pair(old, @new).Select(s => (s, context.MkConst(s.InputName, sorts.Sort(s.Type)))),
@@ -170,7 +185,7 @@ internal static class ProductEncoder
         IEnumerable<(Side, IrCall)> sites = [.. CallsOf(old).Select(static c => (Side.Old, c)), .. CallsOf(@new).Select(static c => (Side.New, c))];
         TraceEncoder calls = new(sorts, argumentTypes, callIdentityMap, HeapMaps(allCalls), freshPerSide, sites);
         ImmutableArray<Expr> heapInputs = [.. calls.Heap.Select(m => inputs.First(i => string.Equals(i.Shared.Var.Name, m.Name, StringComparison.Ordinal) && i.Shared.Type == m.Type).Term)];
-        PureEncoder pures = new(sorts, old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrPure>()));
+        PureEncoder pures = new(sorts, old.Blocks.Concat(@new.Blocks).SelectMany(static b => b.Instructions.OfType<IrPure>()), interpreted);
         Dictionary<string, int> exceptionTypes = new(StringComparer.Ordinal);
         FragmentEncoder oldSide = new(Side.Old, old, sorts, (calls, pures, arithmetic), Bound(inputs, static s => s.Old), heapInputs, exceptionTypes);
         FragmentEncoder newSide = new(Side.New, @new, sorts, (calls, pures, arithmetic), Bound(inputs, static s => s.New), heapInputs, exceptionTypes);
@@ -375,5 +390,8 @@ internal static class ProductEncoder
 
         /// <summary>The functions that stand for the product's hard arithmetic (ticket P1-031); null when it is encoded exactly.</summary>
         public ArithmeticAbstraction? Arithmetic { get; init; }
+
+        /// <summary>Whether this is a refined product (ADR 0053): some pure function has its real meaning, and floating point is IEEE.</summary>
+        public bool Refined => Pures.Interpreted.Count > 0;
     }
 }

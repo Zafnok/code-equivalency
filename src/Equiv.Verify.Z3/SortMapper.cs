@@ -12,9 +12,11 @@ namespace Equiv.Verify.Z3;
 /// <see cref="IrMap"/> an array, and each <see cref="IrSort"/> name one uninterpreted sort that both sides
 /// share. A sort literal <c>sort "S" n</c> is the constant <c>lit.S.n</c>; <see cref="Distinctness"/> keeps
 /// literals of one sort apart, as the interpreter compares them by id. With <paramref name="integers"/>, a bitvector is
-/// an integer instead, and its literal the integer its bits denote (rung 4's integer mode, ticket P1-001).
+/// an integer instead, and its literal the integer its bits denote (rung 4's integer mode, ticket P1-001). With
+/// <paramref name="floats"/>, a refined query's mapper (ADR 0053 decision 3; ticket P1-030), <see cref="IrFloat.Binary32"/>
+/// and <see cref="IrFloat.Binary64"/> are Z3's IEEE 754 sorts and an element of either is the number whose bits its id is.
 /// </summary>
-internal sealed class SortMapper(Context context, IntModeTranslator? integers = null)
+internal sealed class SortMapper(Context context, IntModeTranslator? integers = null, bool floats = false)
 {
     private readonly Dictionary<string, UninterpretedSort> uninterpreted = new(StringComparer.Ordinal);
     private readonly Dictionary<IrSortValue, Expr> literals = [];
@@ -41,6 +43,7 @@ internal sealed class SortMapper(Context context, IntModeTranslator? integers = 
         IrBool => context.BoolSort,
         IrBitVec when integers is not null => integers.Sort,
         IrBitVec bitVec => context.MkBitVecSort((uint)bitVec.Width),
+        IrSort when FloatSort(type) is { } floating => floating,
         IrSort sort => Uninterpreted(sort.Name),
         _ => context.MkArraySort(Sort(((IrMap)type).Key), Sort(((IrMap)type).Value)),
     };
@@ -50,8 +53,17 @@ internal sealed class SortMapper(Context context, IntModeTranslator? integers = 
         IrBoolValue boolean => context.MkBool(boolean.Value),
         IrBitVecValue bits when integers is not null => integers.Literal(bits),
         IrBitVecValue bits => context.MkBV(bits.Bits, (uint)bits.Width),
+        IrSortValue element when FloatSort(element.Type) is { } floating => context.MkFPToFP(context.MkBV((ulong)element.Id, floating.EBits + floating.SBits), floating),
         IrSortValue element => SortLiteral(element),
         _ => MapLiteral((IrMapValue)value),
+    };
+
+    /// <summary>Z3's binary32 or binary64 sort when this mapper interprets floating point and <paramref name="type"/> is one, else null.</summary>
+    public FPSort? FloatSort(IrType type) => (floats ? IrFloat.Width(type) : null) switch
+    {
+        32 => context.MkFPSort32(),
+        64 => context.MkFPSort64(),
+        _ => null,
     };
 
     /// <summary>One <c>distinct</c> per sort with at least two literals.</summary>

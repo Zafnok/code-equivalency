@@ -30,7 +30,7 @@ B12:
   call "C::set_P(decimal)"(%c, %$11) threw %$15: bool
   br %$15, B7, B13
 B13:
-  %$17: sort "System.Double" = const sort "System.Double" 873244445
+  %$17: sort "System.Double" = const sort "System.Double" 4607182418800017408
   %d.27 "d": sort "System.Double" = pure "f64.add"(%d, %$17)
   %a.28 "a": sort "C+Money" = pure "op:C.Money::op_Addition(C.Money,C.Money)"(%a, %b) throws(%$22: bool "System.Exception")
   br %$22, B7, B14

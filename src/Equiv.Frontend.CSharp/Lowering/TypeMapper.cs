@@ -73,10 +73,11 @@ internal static class TypeMapper
     };
 
     /// <summary>
-    /// The IR value of a C# compile-time constant. A constant of an uninterpreted sort (a string, a
-    /// floating-point value, an enum member, <c>null</c>) is a designated element of that sort, chosen
+    /// The IR value of a C# compile-time constant. A constant of an uninterpreted sort (a string, an
+    /// enum member, <c>null</c>) is a designated element of that sort, chosen
     /// by a stable hash of the constant so that equal constants are the same element on both sides;
-    /// <c>null</c> is always element 0.
+    /// <c>null</c> is always element 0. A <c>float</c> or <c>double</c> constant is the element <see cref="IrFloat"/>
+    /// gives its number (ADR 0053 decision 5; ticket P1-030), so a backend that interprets the sort knows the value.
     /// </summary>
     public static IrValue Constant(ITypeSymbol type, object? value) => Constant(type, value, Unmapped);
 
@@ -86,6 +87,8 @@ internal static class TypeMapper
         IrBitVec bits when IsSigned(type) => IrBitVecValue.FromSigned(bits.Width, System.Convert.ToInt64(value, CultureInfo.InvariantCulture)),
         IrBitVec bits => new IrBitVecValue(bits.Width, System.Convert.ToUInt64(value, CultureInfo.InvariantCulture)),
         IrBool => new IrBoolValue((bool)value!),
+        var sort when IrFloat.Width(sort) == 32 => IrFloat.Of(System.Convert.ToSingle(value, CultureInfo.InvariantCulture)),
+        var sort when IrFloat.Width(sort) == 64 => IrFloat.Of(System.Convert.ToDouble(value, CultureInfo.InvariantCulture)),
         var sort => new IrSortValue(((IrSort)sort).Name, Element(value)),
     };
 
@@ -93,10 +96,13 @@ internal static class TypeMapper
     /// An API-equivalence adapter constant (ticket M3-009): <paramref name="text"/> of the IR type <paramref name="type"/>,
     /// which is <c>bool</c>, <c>bv</c><i>n</i> (a signed integer), or a sort name. A sort constant is the element
     /// <see cref="Constant(ITypeSymbol, object?)"/> gives a C# constant with the same invariant text, so an enum member
-    /// written as its underlying value is the element the modern side's own constant is. Null when the type or the text does not parse.
+    /// written as its underlying value is the element the modern side's own constant is, and a <c>System.Single</c> or
+    /// <c>System.Double</c> constant its number. Null when the type or the text does not parse.
     /// </summary>
     public static IrValue? Constant(string type, string text) => type switch
     {
+        _ when IrFloat.Width(new IrSort(type)) == 32 => float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out float single) ? IrFloat.Of(single) : null,
+        _ when IrFloat.Width(new IrSort(type)) == 64 => double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double number) ? IrFloat.Of(number) : null,
         "bool" => bool.TryParse(text, out bool flag) ? new IrBoolValue(flag) : null,
         ['b', 'v', .. string width] => int.TryParse(width, NumberStyles.None, CultureInfo.InvariantCulture, out int bits)
             && long.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long value)

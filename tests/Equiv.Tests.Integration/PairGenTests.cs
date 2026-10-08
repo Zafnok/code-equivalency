@@ -136,4 +136,71 @@ public sealed class PairGenTests
     }
 
     private static bool IsNullable(ITypeSymbol? type) => type?.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
+
+    /// <summary>
+    /// Ticket P1-030 criterion 5: the floating-point pairs compile, take <c>float g</c> and <c>double h</c>, use the
+    /// interpreted operators and comparisons, and come from both families.
+    /// </summary>
+    [Fact]
+    public void FloatPairsCompileAndUseTheInterpretedOperatorsInBothFamilies()
+    {
+        HashSet<string> seen = new(StringComparer.Ordinal);
+        int preserving = 0;
+        int changing = 0;
+        PairGen.FloatPair.Sample(
+            pair =>
+            {
+                Assert.NotEqual(pair.LegacySource, pair.ModernSource, StringComparer.Ordinal);
+                foreach (string source in (string[])[pair.LegacySource, pair.ModernSource])
+                {
+                    Assert.Contains("string s, int[] u, float g, double h)", source, StringComparison.Ordinal);
+                    Assert.Empty(PairRuntime.Compile(source, "Float").GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error));
+                    lock (seen)
+                    {
+                        seen.UnionWith(((string[])[" + ", " - ", " * ", " / ", "(-", " < ", " <= ", " > ", " >= ", " == ", " != ", "(double)", "(float)"]).Where(t => source.Contains(t, StringComparison.Ordinal)));
+                    }
+                }
+
+                Interlocked.Increment(ref PairGen.IsPreserving(pair.Operator) ? ref preserving : ref changing);
+            },
+            seed: DifferentialSoundnessTests.Budget.Seed,
+            iter: 300);
+
+        Assert.Equal(13, seen.Count);
+        Assert.True(preserving >= 60 && changing >= 60, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{preserving} preserving and {changing} changing of 300"));
+    }
+
+    /// <summary>Ticket P1-030 criterion 5: NaN, both zeros, both infinities and a subnormal are among the values an input gives <c>g</c> and <c>h</c>.</summary>
+    [Fact]
+    public void FloatInputsHoldEveryEdgeValue()
+    {
+        List<(float G, double H)> drawn = [];
+        PairGen.FloatInput.Sample(
+            input =>
+            {
+                lock (drawn)
+                {
+                    drawn.Add(input.Floats!.Value);
+                }
+
+                Assert.Matches(@" g=\S+ h=\S+$", input.ToString());
+            },
+            seed: DifferentialSoundnessTests.Budget.Seed,
+            iter: 2000,
+            threads: 1);
+
+        Assert.Contains(drawn, static v => double.IsNaN(v.H));
+        Assert.Contains(drawn, static v => float.IsNaN(v.G));
+        Assert.Contains(drawn, static v => v.H == 0 && !double.IsNegative(v.H));
+        Assert.Contains(drawn, static v => v.H == 0 && double.IsNegative(v.H));
+        Assert.Contains(drawn, static v => v.G == 0 && float.IsNegative(v.G));
+        Assert.Contains(drawn, static v => double.IsPositiveInfinity(v.H));
+        Assert.Contains(drawn, static v => double.IsNegativeInfinity(v.H));
+        Assert.Contains(drawn, static v => float.IsInfinity(v.G));
+        Assert.Contains(drawn, static v => double.IsSubnormal(v.H));
+        Assert.Contains(drawn, static v => float.IsSubnormal(v.G));
+        Assert.Contains(drawn, static v => v.H == double.MaxValue);
+        Assert.Null(new PairInput(1, 2, 3, 4, E: true, SIsNull: false, 5, U: null).Floats);
+        Assert.EndsWith("u=null", new PairInput(1, 2, 3, 4, E: true, SIsNull: false, 5, U: null).ToString(), StringComparison.Ordinal);
+    }
 }

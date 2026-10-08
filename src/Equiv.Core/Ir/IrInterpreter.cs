@@ -22,9 +22,16 @@ public static class IrInterpreter
     /// <see cref="IrTaint.None"/>. Taint never changes a value.
     /// </param>
     /// <param name="pure">Answers <see cref="IrPure"/> applications; a run that reaches one without it fails.</param>
+    /// <param name="interpreted">
+    /// The pure functions the run computes itself with <see cref="IrPureMeaning.Evaluate"/> (ADR 0053; ticket P1-030).
+    /// Such a result is no abstraction: no oracle is asked, every flag is false, and the result is tainted only if an
+    /// argument is. An argument the function has no meaning on is answered by <paramref name="pure"/> and tainted, as any
+    /// other pure function is.
+    /// </param>
     /// <exception cref="ArgumentException">The procedure does not validate, or the inputs do not match its parameters.</exception>
-    /// <exception cref="InvalidOperationException">An oracle answers with a value of the wrong type, or the run reaches an <see cref="IrPure"/> without <paramref name="pure"/>.</exception>
-    public static IrRun Run(IrProcedure procedure, IrInputs inputs, ICallOracle oracle, int stepBudget, Func<CallIdentity, bool>? taint = null, IPureOracle? pure = null)
+    /// <exception cref="InvalidOperationException">An oracle answers with a value of the wrong type, or the run reaches an <see cref="IrPure"/> it does not interpret without <paramref name="pure"/>.</exception>
+    public static IrRun Run(
+        IrProcedure procedure, IrInputs inputs, ICallOracle oracle, int stepBudget, Func<CallIdentity, bool>? taint = null, IPureOracle? pure = null, IReadOnlySet<string>? interpreted = null)
     {
         ArgumentNullException.ThrowIfNull(procedure);
         ArgumentNullException.ThrowIfNull(inputs);
@@ -36,13 +43,13 @@ public static class IrInterpreter
         {
             { IsEmpty: false } => throw new ArgumentException($"Procedure is not valid IR: {diagnostics[0].Id} {diagnostics[0].Message}", nameof(procedure)),
             _ when !typesMatch => throw new ArgumentException("Inputs do not match the procedure's parameter types.", nameof(inputs)),
-            _ => new IrMachine(oracle, pure, taint).Execute(procedure, inputs, stepBudget),
+            _ => new IrMachine(oracle, pure, taint, interpreted).Execute(procedure, inputs, stepBudget),
         };
     }
 
     private readonly record struct IrJump(IrBlockId? Next, IrOutcome? Outcome, ImmutableArray<IrOut> Outs);
 
-    private sealed class IrMachine(ICallOracle oracle, IPureOracle? pure, Func<CallIdentity, bool>? abstraction) : IIrInstructionVisitor<IrOutcome?>
+    private sealed class IrMachine(ICallOracle oracle, IPureOracle? pure, Func<CallIdentity, bool>? abstraction, IReadOnlySet<string>? interpreted) : IIrInstructionVisitor<IrOutcome?>
     {
         private readonly Dictionary<string, IrValue> values = new(StringComparer.Ordinal);
         private readonly ImmutableArray<IrCallRecord>.Builder trace = ImmutableArray.CreateBuilder<IrCallRecord>();
@@ -166,8 +173,20 @@ public static class IrInterpreter
 
         public IrOutcome? Visit(IrPure instruction)
         {
+            ImmutableArray<IrValue> arguments = [.. instruction.Args.Select(Get)];
+            if (interpreted?.Contains(instruction.Function) == true && IrPureMeaning.Evaluate(instruction.Function, arguments) is { } meant)
+            {
+                Set(instruction.Target, meant);
+                foreach (IrPureThrow thrown in instruction.Throws)
+                {
+                    Set(thrown.Flag, new IrBoolValue(Value: false));
+                }
+
+                return null;
+            }
+
             IrPureResult result = (pure ?? throw new InvalidOperationException($"The run reached pure function {instruction.Function} without a pure oracle."))
-                .Answer(instruction, [.. instruction.Args.Select(Get)]);
+                .Answer(instruction, arguments);
             if (result.Value.Type != instruction.Target.Type || result.Threw.Length != instruction.Throws.Length)
             {
                 throw new InvalidOperationException($"Pure oracle answered {instruction.Function} with a value that is not of type {IrText.Type(instruction.Target.Type)} or not one flag per exception.");

@@ -100,6 +100,7 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
         long started = TimeProvider.System.GetTimestamp();
         List<Rung> rungs = [.. Bounded(old, @new, looping, oldShape.IsReducible && newShape.IsReducible)];
         LogRung(rungs[^1].Step, started);
+        Refine(rungs, old, @new, looping);
         if (looping && rungs[^1].Verdict is null)
         {
             LockstepInduction lockstep = Stages.Timed(options, Stages.Couple, () => new LockstepInduction(this, old, @new, oldShape, newShape));
@@ -119,6 +120,57 @@ internal sealed class LoopLadder(Func<Context> createContext, VerificationOption
 
         Verdict verdict = rungs[^1].Verdict ?? Undecided(rungs, recursive);
         return verdict with { Ladder = [.. rungs.Select(static r => r.Step)] };
+    }
+
+    /// <summary>
+    /// Abstraction refinement (ADR 0053 decision 1; ticket P1-030). When rung 1 ended Unknown(abstraction) on a candidate
+    /// that depends only on interpretable pure functions, rung 1 is asked again with those functions interpreted, at most
+    /// <see cref="AbstractionRefinement.MaxRounds"/> times, each round adding what its candidate depends on. A round that
+    /// decides the pair (Equivalent, Divergent, or Unknown(opaque) with the first query unsatisfiable) is appended with
+    /// the rounds before it, each step naming what it interpreted. Anything else, a query the solver gives up on
+    /// included, leaves <paramref name="rungs"/> and so the Unknown(abstraction) as they were.
+    /// </summary>
+    private void Refine(List<Rung> rungs, IrProcedure old, IrProcedure @new, bool looping)
+    {
+        List<Rung> rounds = [];
+        ImmutableSortedSet<string> interpreted = ImmutableSortedSet.Create<string>(StringComparer.Ordinal);
+        Verdict? last = rungs[^1].Verdict;
+        while (rounds.Count < AbstractionRefinement.MaxRounds
+            && last is Unknown { Reason: UnknownReason.Abstraction } candidate
+            && AbstractionRefinement.Next(old, @new, interpreted, candidate.Abstractions) is { } next)
+        {
+            interpreted = next;
+            Rung round = Timed(() => Refined(old, @new, looping, interpreted));
+            rounds.Add(round with { Step = round.Step with { Refined = [.. interpreted] } });
+            last = round.Verdict;
+        }
+
+        if (rounds.Count > 0 && last is not (null or Unknown { Reason: UnknownReason.Abstraction }))
+        {
+            rungs.AddRange(rounds);
+        }
+    }
+
+    /// <summary>
+    /// Rung 1's queries on the refined product of the pair (<see cref="ProductEncoder.EncodeRefined"/>), under
+    /// <see cref="AbstractionRefinement.Options"/>: ten times the resource limit, and Z3 alone, since the second solver's
+    /// printer knows no floating point. Rung 1 unrolled the pair before it found the candidate, so it unrolls.
+    /// </summary>
+    private Rung Refined(IrProcedure old, IrProcedure @new, bool looping, IReadOnlySet<string> interpreted)
+    {
+        (IrProcedure Old, IrProcedure New) unrolled = Unrolled(old, @new, options.Bound).GetValueOrDefault();
+        return Stages.WithContext(
+            options,
+            createContext,
+            context =>
+            {
+                ProductEncoding encoding = Stages.Timed(
+                    options,
+                    Stages.Encode,
+                    () => ProductEncoder.EncodeRefined(context, unrolled.Old, unrolled.New, options.CallIdentityMap, interpreted, Contracts, Relation));
+                SecondSolver solvers = new(context, encoding, AbstractionRefinement.Options(options), InterruptAfterMs);
+                return Queries(context, encoding, solvers, unrolled, looping, refinement: null);
+            });
     }
 
     /// <summary>Runs one rung and, at <c>debug</c>, writes its <c>rung=… took=… result=…</c> line (ticket M4-014).</summary>

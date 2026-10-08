@@ -113,7 +113,19 @@ internal static class PairRuntime
             model.GetValueOrDefault("e") is IrBoolValue { Value: true },
             model.TryGetValue("s", out IrValue? s) && IsNull(model, s),
             field,
-            u), null);
+            u)
+        {
+            // A floating-point value is the element whose id is its bits (ADR 0053 decision 5; ticket P1-030).
+            Floats = model.GetValueOrDefault("g") is IrSortValue g && model.GetValueOrDefault("h") is IrSortValue h ? (IrFloat.ToSingle(g), IrFloat.ToDouble(h)) : null,
+        }, null);
+    }
+
+    /// <summary>The arguments of <paramref name="method"/> for <paramref name="input"/>: seven, and <c>g</c> and <c>h</c> when it takes them.</summary>
+    private static object?[] Arguments(MethodBase method, PairInput input, int[]? u)
+    {
+        (float g, double h) = input.Floats ?? default;
+        object?[] arguments = [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s", u, g, h];
+        return arguments[..method.GetParameters().Length];
     }
 
     private static long Bits(IrValue? value) => value is IrBitVecValue bits ? bits.TwosComplement : 0;
@@ -204,7 +216,8 @@ internal static class PairRuntime
             string outcome;
             try
             {
-                object? result = oracle.GetMethod("M")!.Invoke(null, [input.A, input.B, input.C, input.D, input.E, input.SIsNull ? null : "s", u]);
+                MethodInfo method = oracle.GetMethod("M")!;
+                object? result = method.Invoke(null, Arguments(method, input, u));
                 outcome = $"return {Convert.ToString(result, CultureInfo.InvariantCulture)}";
             }
             catch (TargetInvocationException exception)

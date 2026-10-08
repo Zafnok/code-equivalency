@@ -1872,7 +1872,7 @@ internal sealed class IrLowerer
 
     /// <summary>A catalogued function (ticket M4-002), with the exceptions it raises in this context, on this side.</summary>
     private IrVar Apply(PureCatalogue.Entry entry, bool isChecked, ImmutableArray<IrVar> args, IrType result, LoweringContext context) =>
-        Pure(entry.Function, entry.Raises(isChecked), entry.RuntimeSensitive(runtime), args, result, context);
+        Pure(entry.Name(runtime), entry.Raises(isChecked), entry.RuntimeSensitive(runtime), args, result, context);
 
     /// <summary>
     /// An <see cref="IrPure"/> of <paramref name="function"/>, then, per exception it raises, a branch on its flag to where

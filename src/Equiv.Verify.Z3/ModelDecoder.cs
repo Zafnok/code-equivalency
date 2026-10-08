@@ -23,7 +23,9 @@ namespace Equiv.Verify.Z3;
 /// observables the encoder compares. The oracle threads each heap map a call does not pair as the encoder does, and each
 /// call event is completed with the whole heap the call read (ticket P1-005). The replay taints every call whose identity
 /// starts with <see cref="OpaquePrefix"/> and every pure function (ADR 0026; tickets M3-016 and M4-002): only a difference
-/// in an observable that is untainted on both sides is real.
+/// in an observable that is untainted on both sides is real. A model of a refined query (ADR 0053; ticket P1-030) gives
+/// <c>float</c> and <c>double</c> values as numbers, each decoded to the element whose id is its bits, and the replay
+/// computes the functions the query interpreted instead of asking the model, and does not taint them.
 /// </summary>
 internal sealed class ModelDecoder
 {
@@ -214,10 +216,11 @@ internal sealed class ModelDecoder
 
     /// <summary>
     /// Replays <paramref name="procedure"/> with <paramref name="oracle"/> answering its calls and pure functions, with taint
-    /// (ADR 0026), and completes each call event with the heap the call read (ticket P1-005).
+    /// (ADR 0026), and completes each call event with the heap the call read (ticket P1-005). The functions the encoding
+    /// interpreted are computed, not asked (ADR 0053).
     /// </summary>
     private static IrRun Interpret(IrProcedure procedure, IrInputs inputs, ModelOracle oracle, int stepBudget) =>
-        oracle.Complete(IrInterpreter.Run(procedure, inputs, oracle, stepBudget, IsAbstraction, oracle));
+        oracle.Complete(IrInterpreter.Run(procedure, inputs, oracle, stepBudget, IsAbstraction, oracle, oracle.Interpreted));
 
     /// <summary><paramref name="lengths"/> with every negative length replaced by 0.</summary>
     private static IrMapValue NonNegative(IrMapValue lengths) =>
@@ -251,11 +254,12 @@ internal sealed class ModelDecoder
     /// element of an uninterpreted sort becomes <c>sort "S" n</c>: an element <see cref="Remember"/>ed for a literal keeps
     /// that literal's id, any other gets the next free id. A bitvector may come as an integer, in rung 4's integer mode,
     /// and then denotes its bits modulo its width. A map given as <c>as-array</c> is read from <paramref name="model"/>'s
-    /// interpretation of its function (ticket P2-041); without a model, it cannot be.
+    /// interpretation of its function (ticket P2-041); without a model, it cannot be. A floating-point number, which only a
+    /// refined query's model holds (ADR 0053), becomes the element <see cref="IrFloat"/> gives it.
     /// </summary>
     internal sealed class Values(SolverModel? model = null)
     {
-        private readonly Dictionary<string, Dictionary<string, int>> ids = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Dictionary<string, long>> ids = new(StringComparer.Ordinal);
         private readonly Dictionary<IrSortValue, Expr> elements = [];
 
         public IrValue Decode(Expr value, IrType type) => type switch
@@ -263,6 +267,7 @@ internal sealed class ModelDecoder
             IrBool => new IrBoolValue(value.IsTrue),
             IrBitVec bitVec when value is IntNum integer => IntModeTranslator.Decode(integer, bitVec.Width),
             IrBitVec bitVec => new IrBitVecValue(bitVec.Width, ((BitVecNum)value).UInt64),
+            IrSort when value is FPNum number => Float(number),
             IrSort sort => Element(sort.Name, value),
             _ => DecodeMap(value, (IrMap)type),
         };
@@ -289,9 +294,28 @@ internal sealed class ModelDecoder
             elements[element] = value;
         }
 
-        private Dictionary<string, int> Known(string sort)
+        /// <summary>
+        /// The element of <paramref name="number"/>: its sign, biased exponent and significand are the IEEE bits. A NaN is
+        /// the one NaN, which has no exponent to ask Z3 for, and an infinity's exponent is written out, since Z3 5.1 reports
+        /// it one bit too wide.
+        /// </summary>
+        private static IrSortValue Float(FPNum number)
         {
-            if (!ids.TryGetValue(sort, out Dictionary<string, int>? known))
+            int significand = (int)number.SBits - 1;
+            int width = (int)number.EBits + significand + 1;
+            ulong infinity = ((1UL << (int)number.EBits) - 1) << significand;
+            if (number.IsNaN)
+            {
+                return IrFloat.OfBits(width, ulong.MaxValue);
+            }
+
+            ulong magnitude = number.IsInf ? infinity : ((ulong)number.ExponentInt64(biased: true) << significand) | number.SignificandUInt64;
+            return IrFloat.OfBits(width, ((number.IsNegative ? 1UL : 0UL) << (width - 1)) | magnitude);
+        }
+
+        private Dictionary<string, long> Known(string sort)
+        {
+            if (!ids.TryGetValue(sort, out Dictionary<string, long>? known))
             {
                 known = new(StringComparer.Ordinal);
                 ids.Add(sort, known);
@@ -303,7 +327,7 @@ internal sealed class ModelDecoder
         private IrSortValue Element(string sort, Expr value)
         {
             string key = value.ToString();
-            if (ids.TryGetValue(sort, out Dictionary<string, int>? known) && known.TryGetValue(key, out int id))
+            if (ids.TryGetValue(sort, out Dictionary<string, long>? known) && known.TryGetValue(key, out long id))
             {
                 return new IrSortValue(sort, id);
             }
@@ -356,6 +380,9 @@ internal sealed class ModelDecoder
         public IReadOnlyDictionary<HeapMap, IrValue> Threaded => Heap.Zip(threaded).ToDictionary(static e => e.First, static e => e.Second);
 
         private ImmutableArray<HeapMap> Heap => decoder.encoding.Calls.Heap;
+
+        /// <summary>The pure functions the replay computes itself: those the encoding interpreted (ADR 0053).</summary>
+        public IReadOnlySet<string> Interpreted => decoder.encoding.Pures.Interpreted;
 
         public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments)
         {

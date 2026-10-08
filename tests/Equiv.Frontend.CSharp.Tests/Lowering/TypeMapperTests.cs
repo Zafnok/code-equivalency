@@ -98,6 +98,49 @@ public sealed class TypeMapperTests
     public void DefaultIsTheConstantOfADefault(string type, IrValue expected) =>
         Assert.Equal(expected, TypeMapper.Default(TypeOf(type), TypeMapper.Unmapped));
 
+    /// <summary>
+    /// ADR 0053 decision 5 (ticket P1-030): a <c>float</c> or <c>double</c> constant is the element whose id is its IEEE
+    /// bits, whatever numeric type the constant's value arrives as, with one NaN and two zeros.
+    /// </summary>
+    [Fact]
+    public void AFloatingPointConstantIsTheElementOfItsBits()
+    {
+        Assert.Equal(new IrSortValue("System.Double", 0x4000_0000_0000_0000), TypeMapper.Constant(TypeOf("double"), 2.0));
+        Assert.Equal(new IrSortValue("System.Double", 0x4000_0000_0000_0000), TypeMapper.Constant(TypeOf("double"), 2));
+        Assert.Equal(new IrSortValue("System.Single", 0x3F00_0000), TypeMapper.Constant(TypeOf("float"), 0.5f));
+        Assert.Equal(new IrSortValue("System.Single", 0x4000_0000), TypeMapper.Constant(TypeOf("float"), 2.0));
+        Assert.Equal(new IrSortValue("System.Double", 0), TypeMapper.Constant(TypeOf("double"), 0.0));
+        Assert.Equal(new IrSortValue("System.Double", long.MinValue), TypeMapper.Constant(TypeOf("double"), -0.0));
+        Assert.Equal(IrFloat.Of(double.NaN), TypeMapper.Constant(TypeOf("double"), -double.NaN));
+        Assert.Equal(IrFloat.Of(float.NaN), TypeMapper.Constant(TypeOf("float"), float.NaN));
+        Assert.Equal(TypeMapper.Constant(TypeOf("double"), 0.1), TypeMapper.Constant(TypeOf("double"), 0.1));
+        Assert.NotEqual(TypeMapper.Constant(TypeOf("double"), 0.1), TypeMapper.Constant(TypeOf("double"), 0.1f));
+    }
+
+    /// <summary>An API-equivalence adapter's floating-point constant is the element the C# constant with that text is.</summary>
+    [Theory]
+    [InlineData("System.Double", "1.5", 1.5)]
+    [InlineData("System.Double", "-0", -0.0)]
+    [InlineData("System.Double", "1E+300", 1e300)]
+    [InlineData("System.Double", "NaN", double.NaN)]
+    public void AnAdapterFloatingPointConstantIsItsNumber(string type, string text, double value)
+    {
+        Assert.Equal(IrFloat.Of(value), TypeMapper.Constant(type, text));
+        Assert.Equal(TypeMapper.Constant(TypeOf("double"), value), TypeMapper.Constant(type, text));
+    }
+
+    [Fact]
+    public void AnAdapterConstantOfAnotherSortOrOfNoNumberIsAsBefore()
+    {
+        Assert.Equal(IrFloat.Of(1.5f), TypeMapper.Constant("System.Single", "1.5"));
+        Assert.Equal(TypeMapper.Constant(TypeOf("float"), 1.5f), TypeMapper.Constant("System.Single", "1.5"));
+        Assert.Null(TypeMapper.Constant("System.Single", "one"));
+        Assert.Null(TypeMapper.Constant("System.Double", "one"));
+        Assert.Null(TypeMapper.Constant("System.Double", "1,5"));
+        Assert.Equal(TypeMapper.Constant(TypeOf("string"), "1.5"), TypeMapper.Constant("System.String", "1.5"));
+        Assert.Equal(TypeMapper.Constant(TypeOf("decimal"), 1.5m), TypeMapper.Constant("System.Decimal", "1.5"));
+    }
+
     [Fact]
     public void AStructHasNoConstantDefault() => Assert.Null(TypeMapper.Default(TypeOf("System.DateTime"), TypeMapper.Unmapped));
 

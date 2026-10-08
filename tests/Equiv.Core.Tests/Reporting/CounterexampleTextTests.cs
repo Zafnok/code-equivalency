@@ -34,6 +34,27 @@ public sealed class CounterexampleTextTests
         Assert.Contains("returned bv32 7", CounterexampleText.Dump(counterexample), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// ADR 0053 decision 5 (ticket P1-030): a <c>float</c> or <c>double</c> value is written as its number wherever a
+    /// value is written: an input, a returned value, an out, a call argument, a heap slice, and inside a map.
+    /// </summary>
+    [Fact]
+    public void AFloatingPointValueDumpsAsItsNumberEverywhere()
+    {
+        IrMap cells = new(IrFloat.Binary32, IrFloat.Binary64);
+        IrMapValue map = new IrMapValue(cells, IrFloat.Of(0.0), []).Write(IrFloat.Of(2f), IrFloat.Of(-0.0)).Write(IrFloat.Of(1f), IrFloat.Of(double.NaN));
+        IrCallRecord call = new(new CallIdentity("Log::Write(double)"), [IrFloat.Of(0.1)]) { Heap = [new IrHeapSlice("field.C.x", map)] };
+        IrRun run = new(new IrReturned(IrFloat.Of(1e300)), [IrFloat.Of(float.PositiveInfinity), new IrSortValue("System.Decimal", 3)], [call]);
+        Counterexample counterexample = new(new IrInputs([IrFloat.Of(1.5), IrFloat.Of(-2.5f), new IrBitVecValue(32, 7), map]), run, run);
+
+        string text = CounterexampleText.Dump(counterexample);
+
+        const string Map = "map<sort \"System.Single\", sort \"System.Double\"> [f32 1 -> f64 NaN, f32 2 -> f64 -0] default f64 0";
+        Assert.StartsWith($"inputs(f64 1.5, f32 -2.5, bv32 7, {Map}) old(returned f64 1E+300 outs(f32 Infinity, sort \"System.Decimal\" 3) ", text, StringComparison.Ordinal);
+        Assert.Contains($"trace(\"Log::Write(double)\"(f64 0.1) heap(\"field.C.x\" {Map}))", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sort \"System.Double\" ", text.Replace("sort \"System.Double\">", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ThrewDumpsTheExceptionType()
     {
