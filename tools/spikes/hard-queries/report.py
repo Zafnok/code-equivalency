@@ -1,8 +1,9 @@
 """P2-101: prints the tables docs/runs/2026-10-07-hard-queries.md quotes.
 
-usage: report.py <outDir> [<was.tsv>]
-  <outDir>   holds located.tsv, located-r2p.tsv, tried.tsv and replayed.tsv, as the spike wrote them
-  <was.tsv>  index, identity, and what P2-050 saw time out at 20 times the budget
+usage: report.py <outDir>
+  <outDir>   a folder under the working directory that holds located.tsv, located-r2p.tsv, tried.tsv
+             and replayed.tsv, as the spike wrote them, and optionally was.tsv: index, identity, and
+             what P2-050 saw time out at 20 times the budget
 Identities, statuses and counts only.
 """
 import collections
@@ -16,8 +17,17 @@ HARD = ["rung", "query", "reason", "ms", "assertions", "inlinedTerms"] + FEATURE
 GROUPS = ["heap maps and calls", "heap maps, calls and pure functions", "sequence trace (rung 2)", "other"]
 
 
+def folder(argument):
+    """The output folder, which must be under the working directory: nothing else is ever read."""
+    base = os.path.realpath(os.getcwd())
+    out = os.path.realpath(argument)
+    if not out.startswith(base + os.sep):
+        sys.exit("the output folder must be under the working directory")
+    return out
+
+
 def read(out, name):
-    path = os.path.join(out, name)
+    path = os.path.join(out, os.path.basename(name))
     return [line.rstrip("\n").split("\t") for line in open(path, encoding="utf-8")] if os.path.exists(path) else []
 
 
@@ -68,9 +78,9 @@ def median(values):
 
 
 def main():
-    out = sys.argv[1]
+    out = folder(sys.argv[1])
     rows = located(out)
-    was = {int(c[0]): c[2] for c in (line.rstrip("\n").split("\t") for line in open(sys.argv[2], encoding="utf-8"))} if len(sys.argv) > 2 else {}
+    was = {int(c[0]): c[2] for c in read(out, "was.tsv")}
     # The query between a pair and a proof is the last the ladder gave up on: rung 2's obligation for a looping pair.
     hard = [r for r in rows if r["verdict"] == "Unknown(Timeout)"]
     by = {r["index"]: r for r in rows}
