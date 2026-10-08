@@ -39,7 +39,7 @@ public sealed class ApiEquivalenceTableTests
     {
         ImmutableArray<ApiEquivalence> entries = ApiEquivalenceTable.Load().Entries;
 
-        Assert.Equal(10, entries.Count(static entry => !entry.IsType));
+        Assert.Equal(16, entries.Count(static entry => !entry.IsType));
         Assert.Equal(5, entries.Count(static entry => entry.IsType));
         Assert.All(entries.Where(static entry => entry.IsType), static entry => Assert.Empty(entry.Arguments));
         Assert.DoesNotContain(entries, static entry => entry.Legacy.Contains("StatusCode", StringComparison.Ordinal));
@@ -64,7 +64,8 @@ public sealed class ApiEquivalenceTableTests
 
     /// <summary>
     /// Ticket P2-137: entries that share a legacy member are tried in file order, and each must address another number of
-    /// source arguments, or the later one could never apply.
+    /// source arguments, or the later one could never apply. Two whose modern members different runtimes added may address
+    /// the same number (ticket P2-142): the later one applies to a pair that does not cross the earlier one's runtime.
     /// </summary>
     [Fact]
     public void Table_EntriesThatShareALegacyMemberAddressDifferentArgumentCounts()
@@ -76,7 +77,7 @@ public sealed class ApiEquivalenceTableTests
             entries.Where(static entry => string.Equals(entry.Legacy, "System.String::TrimEnd(char[])", StringComparison.Ordinal)).Select(static entry => entry.Id),
             StringComparer.Ordinal);
         Assert.All(
-            entries.Where(static entry => !entry.IsType).GroupBy(static entry => entry.Legacy, StringComparer.Ordinal),
+            entries.Where(static entry => !entry.IsType).GroupBy(static entry => (entry.Legacy, entry.AddedIn)),
             static group => Assert.Equal(group.Count(), group.Select(static entry => entry.Arguments.Count(static a => a.Source is not null)).Distinct().Count()));
     }
 
@@ -109,7 +110,7 @@ public sealed class ApiEquivalenceTableTests
         ApiEquivalenceTable table = ApiEquivalenceTable.Load();
 
         Assert.Equal(table.Entries, table.Enabled([]));
-        ImmutableArray<ApiEquivalence> enabled = table.Enabled(["webapi.", "bcl.string-split", "bcl.string-trim", "bcl.directory-info"]);
+        ImmutableArray<ApiEquivalence> enabled = table.Enabled(["webapi.", "bcl.string-split", "bcl.string-trim", "bcl.directory-info", "bcl.timespan-"]);
         Assert.Equal(["bcl.string-contains-char"], enabled.Select(static entry => entry.Id), StringComparer.Ordinal);
     }
 }

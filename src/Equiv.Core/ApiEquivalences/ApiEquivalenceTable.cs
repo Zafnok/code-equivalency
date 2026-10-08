@@ -36,7 +36,9 @@ public sealed class ApiEquivalenceTable
     /// Parses the catalogue's JSON: an array of member entries (<c>id</c>, <c>legacy</c>, <c>modern</c>, <c>arguments</c>,
     /// <c>reason</c>, <c>url</c>) and type entries (<c>id</c>, <c>legacyType</c>, <c>modernType</c>, <c>reason</c>,
     /// <c>url</c>). Each argument is <c>{"arg": n}</c>, optionally with <c>"unwrap": true</c> or <c>"convertTo"</c>, or
-    /// <c>{"const": literal, "type": irType}</c>, whose literal is kept as its JSON text.
+    /// <c>{"const": literal, "type": irType}</c>, whose literal is kept as its JSON text. An <c>arg</c> item may carry
+    /// <c>"integer": {"bits": n, "min": a, "max": b}</c>, and a member entry <c>"addedIn"</c>, a target framework moniker;
+    /// one that names no runtime is rejected with <see cref="InvalidDataException"/> (ticket P2-142).
     /// </summary>
     internal static ApiEquivalenceTable Parse(string json)
     {
@@ -58,8 +60,17 @@ public sealed class ApiEquivalenceTable
                 element.GetProperty("modern").GetString()!,
                 [.. element.GetProperty("arguments").EnumerateArray().Select(Argument)],
                 reason,
-                url);
+                url)
+            {
+                AddedIn = element.TryGetProperty("addedIn", out JsonElement added) ? Runtime(id, added.GetString()!) : null,
+            };
     }
+
+    private static TargetRuntime Runtime(string id, string text) =>
+        TargetRuntime.Parse(text) ?? throw new InvalidDataException($"api-equivalences entry '{id}' has malformed addedIn '{text}'");
+
+    private static ApiIntegerRange Range(JsonElement element) =>
+        new(element.GetProperty("bits").GetInt32(), element.GetProperty("min").GetInt64(), element.GetProperty("max").GetInt64());
 
     private static ApiArgument Argument(JsonElement element)
     {
@@ -71,7 +82,10 @@ public sealed class ApiEquivalenceTable
         // Deliberate non-short-circuit '&': when "unwrap" is absent, the default element's kind is Undefined, not True.
         bool unwrap = element.TryGetProperty("unwrap", out JsonElement flag) & flag.ValueKind == JsonValueKind.True; // NOSONAR
         string? convertTo = element.TryGetProperty("convertTo", out JsonElement type) ? type.GetString() : null;
-        return new ApiArgument(element.GetProperty("arg").GetInt32(), unwrap, convertTo);
+        return new ApiArgument(element.GetProperty("arg").GetInt32(), unwrap, convertTo)
+        {
+            Range = element.TryGetProperty("integer", out JsonElement range) ? Range(range) : null,
+        };
     }
 
     private static ApiEquivalenceTable LoadFromResource()

@@ -13,11 +13,22 @@
 // adapter passes the receiver, the index arguments and a setter's value through in order and unchanged (ticket P2-070).
 // Two member entries may name the same legacy member when their adapters address different numbers of source arguments
 // (one per params element count): a call takes the first, in file order, whose adapter addresses it (ticket P2-137).
+// Two may also name it for two runtimes that each added another modern member; the entry for the later runtime then
+// comes first, so a pair whose modern side has both members takes the one its source binds (ticket P2-142).
+// An {"arg": n} item may carry "integer": {"bits": w, "min": a, "max": b} (ticket P2-142): the argument, as the item
+// takes it, must be an integer whose type converts implicitly to a signed integer of w bits and whose value the frontend
+// knows, at the call, to lie in a..b: a compile-time constant inside it, or an argument of a type all of whose values are
+// inside it. It is then passed as that signed integer. The range is checked, never assumed: a call whose argument is not
+// known to be inside it is left as it is, so the two members need to agree only inside the range, and the "reason" says
+// why they do. A member entry may carry "addedIn", the target framework moniker of the first runtime that has the
+// modern member: the entry then applies only to a pair whose runtimes cross it, since on any other pair the modern side
+// cannot bind that member where the legacy side binds the legacy one.
 // A type entry maps a legacy metadata name to a modern one as a sort name.
 //
 // Soundness (ADR 0020): whenever both members are invoked on adapted arguments, they return the same value and either
 // neither throws or both throw the same exception type. Every "reason" says why that holds, including for null. An
-// equivalence that needs any further precondition is not an entry. The Web API entries equate action results (status
+// equivalence that needs any further precondition is not an entry; an "integer" range is none, because the adapter
+// addresses only the calls it is shown to hold at. The Web API entries equate action results (status
 // code observed, body opaque), not serialized responses: the pipeline's serializer (Newtonsoft, PascalCase, on Web API 2;
 // System.Text.Json, camelCase, on ASP.NET Core) is configured outside every procedure and is not checked.
 //
@@ -71,6 +82,60 @@
     "arguments": [{ "arg": 0 }],
     "reason": "On .NET Framework DirectoryInfo overrides FileSystemInfo.FullName and returns the same full path of the directory after a path-discovery permission demand, which fully trusted code always passes; .NET has no code access security and declares the getter on FileSystemInfo only, so the same read of a DirectoryInfo returns the same path and throws for the same over-long path. Both are instance members, so a null receiver throws NullReferenceException from the receiver check on both sides before either is invoked.",
     "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.filesysteminfo.fullname"
+  },
+  {
+    "id": "bcl.timespan-from-days-integer",
+    "legacy": "System.TimeSpan::FromDays(double)",
+    "modern": "System.TimeSpan::FromDays(int)",
+    "addedIn": "net9.0",
+    "arguments": [{ "arg": 0, "unwrap": true, "integer": { "bits": 32, "min": -10675199, "max": 10675199 } }],
+    "reason": "Given an integer, TimeSpan.FromDays(double) receives it exactly and returns that many days as ticks, a product a double holds exactly (.NET Framework goes through whole milliseconds, with the same result), and TimeSpan.FromDays(int) returns the same ticks. From -10675199 to 10675199 days the result is inside the range of TimeSpan and neither throws. Outside it the first throws OverflowException and the second ArgumentOutOfRangeException, so the entry applies only to an argument known to be inside. Both are static, so there is no receiver and no null.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.timespan.fromdays"
+  },
+  {
+    "id": "bcl.timespan-from-hours-integer",
+    "legacy": "System.TimeSpan::FromHours(double)",
+    "modern": "System.TimeSpan::FromHours(int)",
+    "addedIn": "net9.0",
+    "arguments": [{ "arg": 0, "unwrap": true, "integer": { "bits": 32, "min": -256204778, "max": 256204778 } }],
+    "reason": "Given an integer, TimeSpan.FromHours(double) receives it exactly and returns that many hours as ticks, a product a double holds exactly (.NET Framework goes through whole milliseconds, with the same result), and TimeSpan.FromHours(int) returns the same ticks. From -256204778 to 256204778 hours the result is inside the range of TimeSpan and neither throws. Outside it the first throws OverflowException and the second ArgumentOutOfRangeException, so the entry applies only to an argument known to be inside. Both are static, so there is no receiver and no null.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.timespan.fromhours"
+  },
+  {
+    "id": "bcl.timespan-from-minutes-integer",
+    "legacy": "System.TimeSpan::FromMinutes(double)",
+    "modern": "System.TimeSpan::FromMinutes(long)",
+    "addedIn": "net9.0",
+    "arguments": [{ "arg": 0, "unwrap": true, "integer": { "bits": 64, "min": -2147483648, "max": 2147483647 } }],
+    "reason": "Given an integer, TimeSpan.FromMinutes(double) receives it exactly and returns that many minutes as ticks, and TimeSpan.FromMinutes(long) returns the same ticks. For every 32-bit integer the result is inside the range of TimeSpan, so neither throws, and the double product is exact (.NET Framework goes through whole milliseconds, with the same result). A larger long can lose bits in the double product or leave the range, where the first throws OverflowException and the second ArgumentOutOfRangeException, so the entry applies only to an argument known to be a 32-bit value. Both are static, so there is no receiver and no null.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.timespan.fromminutes"
+  },
+  {
+    "id": "bcl.timespan-from-seconds-integer",
+    "legacy": "System.TimeSpan::FromSeconds(double)",
+    "modern": "System.TimeSpan::FromSeconds(long)",
+    "addedIn": "net9.0",
+    "arguments": [{ "arg": 0, "unwrap": true, "integer": { "bits": 64, "min": -2147483648, "max": 2147483647 } }],
+    "reason": "Given an integer, TimeSpan.FromSeconds(double) receives it exactly and returns that many seconds as ticks, and TimeSpan.FromSeconds(long) returns the same ticks. For every 32-bit integer the result is inside the range of TimeSpan, so neither throws, and the double product is exact (.NET Framework goes through whole milliseconds, with the same result). A larger long can lose bits in the double product or leave the range, where the first throws OverflowException and the second ArgumentOutOfRangeException, so the entry applies only to an argument known to be a 32-bit value. Both are static, so there is no receiver and no null.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.timespan.fromseconds"
+  },
+  {
+    "id": "bcl.timespan-from-milliseconds-integer",
+    "legacy": "System.TimeSpan::FromMilliseconds(double)",
+    "modern": "System.TimeSpan::FromMilliseconds(long)",
+    "addedIn": "net10.0",
+    "arguments": [{ "arg": 0, "unwrap": true, "integer": { "bits": 64, "min": -2147483648, "max": 2147483647 } }],
+    "reason": "Given an integer, TimeSpan.FromMilliseconds(double) receives it exactly and returns that many milliseconds as ticks, and TimeSpan.FromMilliseconds(long), which .NET 10 added and an integer argument binds from then on, returns the same ticks. It comes before the .NET 9 entry for the same legacy member, so a pair whose modern side has both overloads takes this one. For every 32-bit integer the result is inside the range of TimeSpan, so neither throws, and the double product is exact. A larger long can lose bits in the double product or leave the range, where the first throws OverflowException and the second ArgumentOutOfRangeException, so the entry applies only to an argument known to be a 32-bit value. Both are static, so there is no receiver and no null.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.timespan.frommilliseconds"
+  },
+  {
+    "id": "bcl.timespan-from-milliseconds-integer-and-microseconds",
+    "legacy": "System.TimeSpan::FromMilliseconds(double)",
+    "modern": "System.TimeSpan::FromMilliseconds(long,long)",
+    "addedIn": "net9.0",
+    "arguments": [{ "arg": 0, "unwrap": true, "integer": { "bits": 64, "min": -2147483648, "max": 2147483647 } }, { "const": 0, "type": "bv64" }],
+    "reason": "Given an integer, TimeSpan.FromMilliseconds(double) receives it exactly and returns that many milliseconds as ticks, and TimeSpan.FromMilliseconds(long, long), which is what an integer argument binds on .NET 9, with its second argument left at its default of 0 microseconds returns the same ticks. For every 32-bit integer the result is inside the range of TimeSpan, so neither throws, and the double product is exact. A larger long can lose bits in the double product or leave the range, where the first throws OverflowException and the second ArgumentOutOfRangeException, so the entry applies only to an argument known to be a 32-bit value. Both are static, so there is no receiver and no null.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.timespan.frommilliseconds"
   },
   {
     "id": "webapi.ok",

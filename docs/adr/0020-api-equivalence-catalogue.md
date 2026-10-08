@@ -91,3 +91,36 @@ precondition is not an entry.
   callee without its arguments, so it keeps naming such a member by its first pass-through entry, as
   it did when there was one; the legacy tree still holds the `params` array there, so that name
   never makes two bodies congruent.
+- 2026-10-08 (P2-142). **Two members that agree on a stated range of one integer argument.** .NET 9
+  added integer overloads of the `TimeSpan` factories, so `TimeSpan.FromHours(2)` binds
+  `FromHours(double)` before and `FromHours(int)` after. The two return the same value while the
+  result is in the range of `TimeSpan`; outside it the first throws `OverflowException` and the
+  second `ArgumentOutOfRangeException`. The soundness condition is about the argument tuples on
+  which an entry is applied, and the decision already leaves a call alone when the adapter cannot
+  address it. So an argument position may carry an integer range,
+  `"integer": {"bits", "min", "max"}`, and the adapter then addresses a call only when the frontend
+  knows at that call that the argument, without its implicit conversion, is an integer inside the
+  range whose type converts implicitly to a signed integer of that width: a compile-time constant
+  inside it, or an argument that is not constant, of a type all of whose values are inside it (every
+  `int` of seconds is in the range of `TimeSpan`; an `int` of hours is not). It is passed widened to
+  that width, which is the one implicit conversion added. The range is shown at the call and never
+  assumed, so it is not a "further precondition": on every tuple the entry is applied to, the two
+  members return the same value and neither throws. A call whose argument is not known to be inside
+  the range is left as it is and stays a rebound call (ADR 0042). Each such entry's `reason` gives
+  the range and why the members agree on it.
+  An entry may also name the first runtime that has its modern member (`addedIn`), and then applies
+  only to a pair whose runtimes cross it (ADR 0040's interval). On any other pair the modern side
+  cannot bind the modern member where the legacy side binds the legacy one, and rewriting the legacy
+  call would only make the site a rebound one, which is the cost ADR 0042's consequences name; an
+  entry that says when its modern member appeared does not pay it. Entries that share a legacy
+  member and differ in that runtime may address the same number of source arguments
+  (`FromMilliseconds(double)` is `FromMilliseconds(long, long)` on .NET 9 and
+  `FromMilliseconds(long)` from .NET 10 on); the one for the later runtime comes first, so a pair
+  whose modern side has both members takes the one its source binds.
+  Considered and not taken: modelling both overloads as one pure function of the integer, with a
+  guard that throws each side's own exception type outside the range. It would also decide an `int`
+  of hours or days, but it puts a model of two library members' bodies into both lowerings, where
+  an entry only names members, and `jellyfin-13023` has no such call: of its 62 rebound calls of
+  these factories, 43 pass a constant in range, 15 an `int` of seconds or milliseconds, 2 a `long`
+  of milliseconds, where the `double` overload can lose bits and the two are not one function even
+  in range, and 2 a `double` (ticket P2-142's Notes).
