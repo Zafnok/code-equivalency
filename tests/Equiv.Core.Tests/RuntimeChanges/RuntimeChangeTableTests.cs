@@ -10,7 +10,7 @@ namespace Equiv.Core.Tests.RuntimeChanges;
 /// <summary>The runtime-changes table (ticket M2-006, VERIFICATION-MODEL.md section 3; ADR 0008).</summary>
 public sealed class RuntimeChangeTableTests
 {
-    private const int CuratedRowCount = 13;
+    private const int CuratedRowCount = 14;
 
     /// <summary>The rows with an unknown change point: ticket P2-113 placed every one, so its Notes list none.</summary>
     private const int UnknownChangePointCount = 0;

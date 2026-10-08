@@ -564,10 +564,6 @@
               {
                 "member": "System.Linq.Enumerable::Where`1(System.Collections.Generic.IEnumerable<int>,System.Func<int, bool>)<int>",
                 "callSites": 1
-              },
-              {
-                "member": "System.Runtime.CompilerServices.SwitchExpressionException::.ctor()",
-                "callSites": 1
               }
             ]
           },

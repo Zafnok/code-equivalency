@@ -56,6 +56,8 @@ public sealed class IlLoweringParityTests
         [$"effect-free-bcl-call/modern {Basket}"] = ListFamily,
         [$"lone-surrogate-constant/legacy {Find}"] = LiteralReceiver,
         [$"lone-surrogate-constant/modern {Find}"] = LiteralReceiver,
+        [$"switch-expression-no-match/legacy {Weight}"] = NoMatchHelper,
+        [$"switch-expression-no-match/modern {Weight}"] = NoMatchHelper,
     }.ToImmutableDictionary(StringComparer.Ordinal);
 
     private const string FlushAsync = "Equiv.Samples.AsyncDisposal.Journal::FlushAsync(System.IAsyncDisposable,int)";
@@ -89,6 +91,14 @@ public sealed class IlLoweringParityTests
     private const string Basket = "Equiv.Samples.EffectFreeBclCall.Basket::.ctor()";
 
     private const string Find = "Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)";
+
+    private const string Weight = "Equiv.Samples.SwitchExpressionNoMatch.Codes::Weight(int)";
+
+    /// <summary>
+    /// The compiler's IL for the throw of a <c>switch</c> expression that matches no arm calls a helper it generates, which
+    /// the IL lowering leaves opaque; the IOperation lowering calls the exception's constructor (ticket P2-144).
+    /// </summary>
+    private const string NoMatchHelper = "IOperation calls the no-match exception's constructor; the IL calls a compiler-generated helper, which is opaque";
 
     /// <summary>An <c>async</c> method's IL is its state machine's kickoff, whose ILAst is opaque (out of scope; P1-012).</summary>
     private const string StateMachine = "the IL of an async method is its state machine's kickoff, which is opaque";

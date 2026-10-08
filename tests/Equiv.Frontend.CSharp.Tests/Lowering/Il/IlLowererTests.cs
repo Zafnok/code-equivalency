@@ -107,9 +107,7 @@ public sealed class IlLowererTests
 
     /// <summary>
     /// Sample methods whose two lowerings name different callees for a reason that is not a mapping difference. The first
-    /// is a <c>switch</c> expression that ends in a discard arm: Roslyn's control-flow graph keeps the no-match block, which
-    /// constructs a <c>SwitchExpressionException</c>, behind a branch that is never taken; the compiler emits no IL for it.
-    /// The two are Equivalent under Z3 (<c>IlLoweringParityTests</c>). The second is an interpolated string: the IOperation
+    /// is an interpolated string: the IOperation
     /// lowering joins its parts with the two-argument <c>String.Concat</c>, one call for each part after the first (ticket
     /// P2-086), and the compiler emits one call of the three-argument overload. That pair is one of
     /// <c>IlLoweringParityTests</c>' known differences. The last two are a call on a string literal: the IOperation
@@ -118,7 +116,6 @@ public sealed class IlLowererTests
     /// </summary>
     private static readonly string[] KnownCalleeDifferences =
     [
-        "same-runtime-cleanup/modern Equiv.Samples.SameRuntimeCleanup.Report::Rank(int)",
         "cleanup-modern-syntax/modern Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)",
         "lone-surrogate-constant/legacy Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)",
         "lone-surrogate-constant/modern Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)",

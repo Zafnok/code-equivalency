@@ -191,3 +191,45 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     local function with no `[DllImport]` is written by its containing type and its source name,
     although the name a runtime would look it up by is the one the compiler generates from the
     containing member.
+- 2026-10-08 (P2-144). **The throw a `switch` expression ends in is part of its bound code, and
+  across .NET Core 3.0 it is a runtime rule.** A `switch` expression that matches no arm throws.
+  The source does not write the throw and the `IOperation` tree does not hold it: the compiler
+  adds it, calling the constructor of `System.Runtime.CompilerServices.SwitchExpressionException`
+  where the reference assemblies have the type (.NET Core 3.0 and later) and of
+  `System.InvalidOperationException` where they do not (.NET Framework). This is the drift the
+  decision's Why names, identical text that means different things, and the same kind as the
+  interpolated string bound to `DefaultInterpolatedStringHandler`, which the fingerprint already
+  spells out. The exception type is an observable (VERIFICATION-MODEL section 1).
+  - **The rule.** The serialisation of a `switch` expression whose arms do not cover every value
+    names the constructor the compiler calls for an unmatched value, looked up in that side's own
+    compilation as the compiler looks it up. `runtime-changes.json` has a row for
+    `SwitchExpressionException`'s constructors with `changedIn: netcoreapp3.0` (ADR 0040 decision
+    2), so a body that names one is runtime-sensitive on a pair that crosses that runtime, and
+    its call in the lowered body is a runtime-changed callee. An input that matches no arm then
+    reaches two throws of two types, and the pair is Divergent with rule EQ006, citing the row.
+    ADR 0042 already keeps a runtime-changed callee out of every rebound pair, so the two
+    constructors are no longer one. Suppressing the row (`suppressRuntimeChanges`) is how a user
+    says the difference does not matter to them, as for any row.
+  - **An expression that covers every value has no throw.** The compiler proves it (a discard or
+    `var` arm with no `when` clause, `true` and `false`) and emits no code for the case, and
+    Roslyn says so (`ISwitchExpressionOperation.IsExhaustive`). Its serialisation names no
+    constructor, and its lowered body has no no-match block: Roslyn's control-flow graph still
+    draws one, behind the failing edge of the last arm's test, and the lowering takes that test as
+    always passing. Covering every named member of an enum is not covering every value, since a
+    cast yields the others, so such an expression keeps its throw.
+  - **Why not one exception type on both sides, as an assumption on the result.** P2-144 asked.
+    `SwitchExpressionException` derives from `InvalidOperationException`, so only a handler or a
+    test for the exact type sees the difference, and treating the two as one would keep the pair
+    Equivalent. It would also be a claim about two different behaviours that no run could ever
+    discharge, which ADR 0042 rejected for a rebound call ("the proof would rest on library code
+    that nobody checked"), and it would narrow what section 1 observes. A runtime rule says what is
+    true, is reported once per review group, and has the per-member suppression every row has.
+  - **What both sides lacking the type means.** Two `netstandard2.0` projects hosted on different
+    runtimes both call `InvalidOperationException`'s constructor. Their serialisations are equal
+    and no row applies, so the pair stays congruent although its interval crosses the row.
+  - **Measured on `gitextensions-8522`** (the ticket's Notes): 58 matched pairs hold a `switch`
+    expression and every one of their expressions covers every value: in 55 pairs each through a
+    discard or `var` arm, and 3 pairs hold one whose patterns leave no value out. So the 39
+    congruent results P2-137 found naming the two constructors as a rebound call were right to be
+    Equivalent: no input reaches a throw the compiler never emits. They stay congruent and no
+    longer name the pair.

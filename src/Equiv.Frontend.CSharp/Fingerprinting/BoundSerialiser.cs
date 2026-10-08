@@ -29,7 +29,9 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// for a caller-information parameter is written as <c>caller=</c> and its kind, without its value (ADR 0046). A local
 /// function's line is followed by one line per attribute on it, on its return value and on its parameters: an
 /// <c>extern</c> local function has no bound code, so its attributes, which name the library and the entry point it calls
-/// and say how its arguments are marshalled, are its code (ADR 0024 as clarified by tickets P2-107 and P2-145). The walk also decides whether the body is
+/// and say how its arguments are marshalled, are its code (ADR 0024 as clarified by tickets P2-107 and P2-145). A
+/// <c>switch</c> expression that may match no arm carries the constructor of the exception the compiler throws then, which
+/// depends on the reference assemblies (ADR 0024 as clarified by ticket P2-144). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
 /// P2-055). Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
 /// <see cref="OperationKind.None"/>) carry their source tokens instead, which costs congruence on a rename there but never
@@ -293,10 +295,19 @@ internal sealed class BoundSerialiser : OperationWalker
         IIncrementOrDecrementOperation o => Checked(o.IsChecked),
         IRelationalPatternOperation o => o.OperatorKind.ToString(),
         IInterpolatedStringOperation { Parent: not IInterpolatedStringHandlerCreationOperation } => interpolation,
+        ISwitchExpressionOperation { IsExhaustive: false } => NoMatch(),
         { Kind: OperationKind.None or OperationKind.DynamicMemberReference or OperationKind.DynamicInvocation or OperationKind.DynamicIndexerAccess or OperationKind.DynamicObjectCreation } =>
             Quote(string.Join(' ', operation.Syntax.DescendantTokens().Select(static t => t.Text))),
         _ => null,
     };
+
+    /// <summary>
+    /// What a <c>switch</c> expression whose arms do not cover every value does when none matches (ticket P2-144): the
+    /// constructor of the exception the compiler throws there, which the bound tree does not hold and which is another
+    /// type's where the reference assemblies have no <c>SwitchExpressionException</c>. It is spelled as any callee is, so
+    /// the <c>runtime-changes.json</c> row for it flags the body on a pair that crosses it.
+    /// </summary>
+    private string? NoMatch() => SwitchExpressions.NoMatchConstructor(compilation) is { } constructor ? Method(constructor) : null;
 
     /// <summary>The method a call to <paramref name="callee"/> calls: a forwarder's target, unless the pair keeps the forwarder.</summary>
     private IMethodSymbol Called(IMethodSymbol callee) =>

@@ -955,6 +955,7 @@ One line per entry: `- <title> — <url> — row: <prefix>[ ; <prefix>...]` or
 
 - System.String::GetHashCode( — https://learn.microsoft.com/en-us/dotnet/api/system.string.gethashcode?view=net-10.0 — row: System.String::GetHashCode(
 - System.Text.Encoding::get_Default( — https://learn.microsoft.com/en-us/dotnet/api/system.text.encoding.default?view=net-10.0 — row: System.Text.Encoding::get_Default(
+- The exception a switch expression throws when no arm matches (a call the compiler makes; ticket P2-144) — https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/switch-expression#non-exhaustive-switch-expressions — row: System.Runtime.CompilerServices.SwitchExpressionException::.ctor(
 
 ## Measured (ADR 0035, ticket M3-033)
 
