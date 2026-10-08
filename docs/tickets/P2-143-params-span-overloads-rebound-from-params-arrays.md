@@ -109,3 +109,29 @@ criterion 1's lowering covers it with no further code.
   .NET 9 upgrade.
 - The four methods are Equivalent with `proofMethod: bounded`, not by congruence: such an entry does
   not pass its arguments through, so the fingerprint leaves its calls under their legacy name.
+
+### Criterion 5: `jellyfin-13023` (2026-10-08)
+- Two `equiv compare --lower-only` runs (a census takes no compare mode and no `--jobs`), default
+  config, the checkouts `tools/corpus/pairs.csv` pins (legacy 5e8c0fe40c0e, modern ceb850c77052):
+  one with `main` at `b68abf40`, one with this branch. Both exit 0, no project skipped, 14,532
+  matched pairs, 14,370 congruent, 162 changed. Counts are from
+  `run.properties.loweringCensus.changedReasonSets`, a reason "in" a pair when its set holds it.
+
+| Changed pairs (of 162) | P2-137 (`main`, 2026-10-07) | Before (`main` at `b68abf40`) | After |
+|---|---|---|---|
+| hold `rebound-call` | 69 | 69 | 53 |
+| hold `rebound-call` only | 12 | 12 | 12 |
+| hold `CollectionExpression` | not recorded | 20 | 0 |
+| hold both | 20 (the pairs that name a `params` span pair) | 20 | 0 |
+| hold exactly those two | 3 | 3 | 0 |
+| hold no opaque | not recorded | 23 | 26 |
+
+- `rebound-call` falls by 16 changed pairs, 9.9% of the 162. The other 4 of the 20 pairs that named
+  a `params` span pair still hold a rebound call of another callee pair (the `TimeSpan` factories
+  of P2-142 among them).
+- `CollectionExpression` leaves every changed pair. Bodies that hold it go from 38 legacy and 58
+  modern to 37 and 37; those 37 are in congruent pairs, with the same source on both sides.
+- The 3 pairs that held exactly the two reasons now hold no opaque, so the changed pairs without
+  opaque go from 23 to 26. The other 17 hold further reasons.
+- No verifying run was made: the criterion asks for the two counts, and a census gives them.
+  Nothing under `docs/runs/` is added, so the README's scoreboard is not touched.
