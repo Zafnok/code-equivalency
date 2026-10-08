@@ -1,5 +1,5 @@
 # P2-107 On a same-runtime pair, a whole-body opaque pair with identical source is not "changed"
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-055, P2-058
@@ -35,3 +35,35 @@ only one of them in the solution, which limits how "identical" may be establishe
 Line-scoped opaques. Cross-runtime pairs.
 
 ## Notes
+- `equiv-adr` bar test: first row. ADR 0024 already decides that identical bound code is
+  Equivalent by congruence, and ADR 0034 that a changed pair is one that is not congruent. The
+  case neither spelled out is a method whose code is not at the declaration `equiv` reads. So the
+  outcome is a dated clarification on each (2026-10-07), not a new ADR: no verdict's meaning, rule
+  id, SARIF shape or component boundary changes, and neither Decision is reversed.
+- The decision. The definition of a changed pair does not change. On a same-runtime pair a partial
+  method whose defining declaration has no body is fingerprinted by its implementing part (its
+  bound body, plus the bound attributes of the method and of the local functions that body
+  declares), so an unedited one is congruent: Equivalent with `proofMethod: congruence`, and not a
+  changed pair. `unbound` pairs keep the counting they have, and so does every other `no-body`
+  method (a record's primary constructor) and every pair that crosses a runtime.
+- Criterion 4, the soundness argument, is ADR 0024's clarification: "What makes the two bodies the
+  same function" and "Why P2-072's case is not a counterexample". In short: the fingerprint is
+  taken from each side's own compilation (the symbol the matched identity resolves to there, its
+  implementing declaration, and the symbols that binds), never from a file, a path or a text
+  comparison across the two checkouts, which is what P2-072's audit did.
+- What the 128 pairs are. The Goal says a whole-body opaque pair is never congruent. That holds
+  for two reasons only: the same run has 306 `iterator` bodies, whole-body opaque on both sides,
+  and all of them are congruent, because the fingerprint is of the bound tree and not of the IR.
+  The 46 `no-body` pairs are all `[LibraryImport]` partial methods (19 files under
+  `engine/Interop/Windows`, `CorePsPlatform.cs`, `FileSystemProvider.cs`, `Clipboard.cs`,
+  `GetComputerInfoCommand.cs`, `ClearRecycleBinCommand.cs`), read from the 2026-10-02 run's SARIF.
+- Why `unbound` is left alone. A name that does not bind has no symbol, so "every symbol it binds
+  is identical" says nothing about it, and what it would bind to depends on the rest of the
+  solution. ADR 0029 decision 2 stays as written. P2-106 is the ticket that lowers that count.
+- The unit tests the decision names, all in `BodyFingerprinterTests`:
+  `APartialMethodIsFingerprintedByItsImplementingPartOnOneRuntime`,
+  `APartialMethodHasNoFingerprintOnAPairThatCrossesARuntime` (criterion 3),
+  `ADeclarationWhoseCodeIsNotABoundBodyHasNoFingerprintOnOneRuntime`,
+  `ARecordsPrimaryConstructorHasNoFingerprintOnOneRuntime`,
+  `AnExternLocalFunctionIsFingerprintedByItsAttributes` and
+  `APartialMethodsAttributesAreInItsFingerprint`.
