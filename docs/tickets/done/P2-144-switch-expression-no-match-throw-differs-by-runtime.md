@@ -1,5 +1,5 @@
 # P2-144 A switch expression that matches no arm throws another exception type after a migration from .NET Framework, and such pairs are Equivalent by congruence
-Status: in-progress
+Status: done (PR #436)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
