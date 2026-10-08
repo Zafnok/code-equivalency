@@ -730,6 +730,11 @@ Found by a CI failure (PR #390, `gates (ubuntu-latest)`):
   generator's filter for procedures that loop and call keeps 1 draw in 8, and CsCheck gives up after
   100 rejections in a row. Test code only.
 
+Found by a CI failure (PR #435, `gates (windows-latest)`):
+- P2-147 (S) `FloatingPointPairsAreDecidedAfterRefinement` fails at random, about once in 19 runs: it
+  wants 10 Divergent of 40 floating-point pairs, CsCheck's `seed` fixes only the first, and 37% of
+  random ones are Divergent. The verdicts of a fixed batch do not vary. Test code only.
+
 Found by CI run times (PR #414, `stryker (Equiv.Verify.Z3, Equiv.Verify.Z3.Tests)`, over five hours):
 - P2-133 (M) Mutation testing runs as parallel shards: `mutation.yml` splits a project's files over up
   to 4 runners on a PR (8 on the nightly sweep), and a final job per project adds the shards up under
