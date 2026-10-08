@@ -12,9 +12,10 @@ the callee pairs were counted over `gitextensions-8522` and `jellyfin-13023`):
 - `TimeSpan.FromHours(hours)` with an `int` binds `TimeSpan.FromHours(double)` on .NET Framework
   4.8 and `TimeSpan.FromHours(int)` on .NET 10. They return the same value while the result is in
   range, and outside it the first throws `OverflowException` and the second
-  `ArgumentOutOfRangeException`. The two agree only on some arguments, so there is no entry: the
-  call is a rebound call (ADR 0042) and the pair is Unknown, with the two callees in
-  `properties.reboundCalls`.
+  `ArgumentOutOfRangeException`. The two agree only on some arguments, and the entry for them
+  (ticket P2-142, sample `timespan-integer-overloads`) applies only to an argument known to be in
+  range, which an `int` of hours is not: the call is a rebound call (ADR 0042) and the pair is
+  Unknown, with the two callees in `properties.reboundCalls`.
 
 `TrimTailOther` trims white space on the legacy side and `'.'` on the modern side: the entry still
 applies to the legacy call, and `TrimEnd()` and `TrimEnd(char)` are two different calls, so the pair
