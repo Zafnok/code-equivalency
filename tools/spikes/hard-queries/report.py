@@ -1,14 +1,13 @@
 """P2-101: prints the tables docs/runs/2026-10-07-hard-queries.md quotes.
 
-usage: report.py <outDir>
-  <outDir>   a folder under the working directory that holds located.tsv, located-r2p.tsv, tried.tsv
-             and replayed.tsv, as the spike wrote them, and optionally was.tsv: index, identity, and
-             what P2-050 saw time out at 20 times the budget
+usage: report.py
+Reads .corpus/p2-101 of this repository, where the spike is told to write: located.tsv,
+located-r2p.tsv, tried.tsv and replayed.tsv, and optionally was.tsv (index, identity, and what
+P2-050 saw time out at 20 times the budget). It takes no path, so it reads nothing else.
 Identities, statuses and counts only.
 """
 import collections
 import os
-import sys
 
 FEATURES = ("terms sorts bvWidths arraySorts uninterpretedSorts stringSort datatypeSorts sequenceSorts intSort floatSorts "
             "mul mulNonlinear div mulOverflow otherOverflow shiftByTerm select store constArray "
@@ -17,17 +16,11 @@ HARD = ["rung", "query", "reason", "ms", "assertions", "inlinedTerms"] + FEATURE
 GROUPS = ["heap maps and calls", "heap maps, calls and pure functions", "sequence trace (rung 2)", "other"]
 
 
-def folder(argument):
-    """The output folder, which must be under the working directory: nothing else is ever read."""
-    base = os.path.realpath(os.getcwd())
-    out = os.path.realpath(argument)
-    if not out.startswith(base + os.sep):
-        sys.exit("the output folder must be under the working directory")
-    return out
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", ".corpus", "p2-101")
 
 
 def read(out, name):
-    path = os.path.join(out, os.path.basename(name))
+    path = os.path.join(out, name)
     return [line.rstrip("\n").split("\t") for line in open(path, encoding="utf-8")] if os.path.exists(path) else []
 
 
@@ -78,7 +71,7 @@ def median(values):
 
 
 def main():
-    out = folder(sys.argv[1])
+    out = OUT
     rows = located(out)
     was = {int(c[0]): c[2] for c in read(out, "was.tsv")}
     # The query between a pair and a proof is the last the ladder gave up on: rung 2's obligation for a looping pair.

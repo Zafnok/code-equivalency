@@ -50,7 +50,7 @@ dotnet $spike --try .corpus/p2-101 --only 3,17,40 --threads 2 `
   --variants 'pipeline=solve-eqs,simplify,propagate-values,solve-eqs,smt/inline;default=default/inline;no-inline=solve-eqs,simplify,propagate-values,solve-eqs,smt/raw;qfaufbv=qfaufbv/raw'
 dotnet $spike --export <identities.txt> <legacySolution> <modernSolution> .corpus/p2-101 --positional-rung2 true --only 2,8,33
 dotnet $spike --replay <identities.txt> <legacySolution> <modernSolution> .corpus/p2-101 --only 3,17,40 --variants 'smt-only=smt/raw'
-python tools/spikes/hard-queries/report.py .corpus/p2-101   # from the repository root
+python tools/spikes/hard-queries/report.py   # reads .corpus/p2-101
 ```
 
 A variant is `name=tactic,tactic,.../inline` or `/raw`; a tactic may carry parameters,
