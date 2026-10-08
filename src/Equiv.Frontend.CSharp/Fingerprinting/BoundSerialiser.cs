@@ -26,9 +26,12 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// by position (ADR 0021). A call to a forwarder is spelled as the call to its target that the lowering makes it (ADR 0047).
 /// So trivia, comments, local names and parameter names cannot change the text, and a different
 /// overload, operator, conversion, constant or <c>checked</c> context does. A file path or line number the compiler supplies
-/// for a caller-information parameter is written as <c>caller=</c> and its kind, without its value (ADR 0046). The walk also decides whether the body is
+/// for a caller-information parameter is written as <c>caller=</c> and its kind, without its value (ADR 0046). A local
+/// function's line is followed by one line per attribute on it, on its return value and on its parameters: an
+/// <c>extern</c> local function has no bound code, so its attributes, which name the library and the entry point it calls
+/// and say how its arguments are marshalled, are its code (ADR 0024 as clarified by tickets P2-107 and P2-145). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
-/// P2-055). Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
+/// P2-055), or it declares an <c>extern</c> local function on a pair that crosses a runtime (ADR 0054 decision 4). Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
 /// <see cref="OperationKind.None"/>) carry their source tokens instead, which costs congruence on a rename there but never
 /// equates two different operations.
 /// </summary>
@@ -119,11 +122,9 @@ internal sealed class BoundSerialiser : OperationWalker
 
     /// <summary>
     /// The serialisation of a partial method by its <paramref name="implementation"/>, whose <paramref name="body"/> is its
-    /// code (ADR 0024 as clarified by ticket P2-107): the body as <see cref="Serialise"/> writes one, then every attribute of
-    /// the method, which has those of both its parts, and of each local function the body declares, on the method, its
-    /// return value and its parameters. An <c>extern</c> local function has no bound code: its attributes name the library
-    /// and the entry point it calls and say how its arguments are marshalled, so they are its code. An attribute is written
-    /// as its constructor and its bound arguments, so a constant it names is written as its value.
+    /// code (ADR 0024 as clarified by ticket P2-107): the body as <see cref="Serialise"/> writes one, which has the
+    /// attributes of each local function it declares, then every attribute of the method, which has those of both its
+    /// parts, on the method, its return value and its parameters.
     /// </summary>
     public static (string Text, bool RuntimeSensitive) SerialiseImplementingPart(
         IMethodSymbol implementation,
@@ -136,11 +137,20 @@ internal sealed class BoundSerialiser : OperationWalker
         serialiser.text.Append("ImplementingPart\n");
         serialiser.Visit(body);
         serialiser.Attributes("method", implementation);
-        foreach (IMethodSymbol local in body.Descendants().OfType<ILocalFunctionOperation>().Select(static o => o.Symbol))
-        {
-            serialiser.Attributes(serialiser.Number(local, "F"), local);
-        }
+        return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
+    }
 
+    /// <summary>
+    /// The serialisation of an <c>extern</c> <paramref name="method"/>, which has no bound code (ADR 0054 decision 2;
+    /// ticket P2-145): its signature, what it imports as the compiler resolves it, and every attribute of the method,
+    /// which for a partial method has those of both its parts, of its return value and of its parameters. It is never
+    /// runtime-sensitive: the frontend asks only on a same-runtime pair.
+    /// </summary>
+    public static (string Text, bool RuntimeSensitive) SerialiseExtern(IMethodSymbol method, Compilation compilation, Settings settings)
+    {
+        BoundSerialiser serialiser = new(method, compilation, settings);
+        serialiser.Signature();
+        serialiser.Attributes("method", method);
         return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
     }
 
@@ -166,8 +176,9 @@ internal sealed class BoundSerialiser : OperationWalker
     }
 
     /// <summary>
-    /// Writes <paramref name="operation"/>'s line and then its children's. It does not dispatch through the visitor, which skips
-    /// an <see cref="OperationKind.None"/> operation and would drop exactly the ones whose meaning only their tokens hold.
+    /// Writes <paramref name="operation"/>'s line, a local function's attributes after its line, and then its children's. It
+    /// does not dispatch through the visitor, which skips an <see cref="OperationKind.None"/> operation and would drop
+    /// exactly the ones whose meaning only their tokens hold.
     /// </summary>
     public override void Visit(IOperation? operation)
     {
@@ -184,6 +195,12 @@ internal sealed class BoundSerialiser : OperationWalker
         Append("symbols", string.Join(", ", Symbols(operation).OfType<ISymbol>().Select(Render)));
         Append("context", Context(operation));
         text.Append('\n');
+        if (operation is ILocalFunctionOperation local)
+        {
+            Attributes(Number(local.Symbol, "F"), local.Symbol);
+            // Across runtimes it is the runtime that marshals an interop call, and no table row describes that (ADR 0054 decision 4).
+            RuntimeSensitive |= local.Symbol.IsExtern && !runtime.Interval.IsEmpty;
+        }
 
         RuntimeSensitive |= (runtime.X87 && IsFloatingPoint(operation.Type))
             || (runtime.FloatToIntegerChanged && operation is IConversionOperation { Operand.Type: { } from } conversion && IsFloatingPoint(from) && IsIntegral(conversion.Type!));
@@ -203,9 +220,18 @@ internal sealed class BoundSerialiser : OperationWalker
         .Append(" returns=").Append(method.ReturnsVoid ? "void" : Type(method.ReturnType))
         .Append(" (").AppendJoin(", ", method.Parameters.Select(p => $"{p.RefKind} {Type(p.Type)}")).Append(")\n");
 
-    /// <summary>One line per attribute on <paramref name="owner"/>, on its return value and on each of its parameters.</summary>
+    /// <summary>
+    /// One line per attribute on <paramref name="owner"/>, on its return value and on each of its parameters: the attribute's
+    /// constructor and its bound arguments, so a constant it names is written as its value. An <c>extern</c> function has a
+    /// line ahead of them that says what it imports, since part of that is in no attribute argument.
+    /// </summary>
     private void Attributes(string name, IMethodSymbol owner)
     {
+        if (owner.IsExtern)
+        {
+            text.Append("Extern ").Append(name).Append(": ").Append(Import(owner)).Append('\n');
+        }
+
         (string Target, ImmutableArray<AttributeData> Attributes)[] targets =
         [
             (name, owner.GetAttributes()),
@@ -217,6 +243,17 @@ internal sealed class BoundSerialiser : OperationWalker
             text.Append("Attribute ").Append(target).Append(": ").Append(attribute.AttributeConstructor).Append(" = ").Append(attribute).Append('\n');
         }
     }
+
+    /// <summary>
+    /// What an <c>extern</c> function imports, as the compiler resolves its <c>[DllImport]</c>: the library, the entry
+    /// point, which is the function's own name when the attribute names none, the character set, which the module's
+    /// <c>[DefaultCharSet]</c> supplies when the attribute names none, and the other settings the runtime's marshaller
+    /// reads. A function with no <c>[DllImport]</c> is written by its declared type and name, without the rename map,
+    /// which is what its runtime looks an <c>InternalCall</c> up by.
+    /// </summary>
+    private static string Import(IMethodSymbol function) => function.GetDllImportData() is { } import
+        ? $"module={Constant(import.ModuleName)} entry={Quote(import.EntryPointName ?? function.Name)} charset={import.CharacterSet} convention={import.CallingConvention} exact={import.ExactSpelling} lastError={import.SetLastError} bestFit={import.BestFitMapping} throwOnUnmappable={import.ThrowOnUnmappableCharacter}"
+        : Quote($"{function.ContainingType.ToDisplayString()}::{function.Name}");
 
     private void Append(string name, string? value)
     {

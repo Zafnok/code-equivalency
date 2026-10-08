@@ -10,10 +10,13 @@ namespace Equiv.Frontend.CSharp;
 /// <summary>
 /// Walks every named type in a <see cref="Compilation"/> and returns the procedures
 /// ARCHITECTURE.md's frontend step 2 identifies: ordinary methods, constructors, property
-/// get/set accessors, and operators, all with a body. Local functions and lambdas never appear as
-/// type members so they are excluded by construction; compiler-generated members
-/// (<see cref="ISymbol.IsImplicitlyDeclared"/>) and abstract/extern members (no body) are excluded
-/// explicitly (ticket M2-002 acceptance criterion 1).
+/// get/set accessors, and operators, each with a body or <c>extern</c>. Local functions and lambdas never
+/// appear as type members so they are excluded by construction; compiler-generated members
+/// (<see cref="ISymbol.IsImplicitlyDeclared"/>) and abstract members, which name no implementation, are
+/// excluded explicitly (ticket M2-002 acceptance criterion 1). An <c>extern</c> member has no body and is a
+/// procedure all the same (ADR 0054; ticket P2-145): what it imports can change, and its own pair is where
+/// that is reported. A partial method whose implementing part is <c>extern</c> is one, since Roslyn reports
+/// its defining part as <c>extern</c>.
 /// </summary>
 internal static class ProcedureEnumerator
 {
@@ -35,7 +38,7 @@ internal static class ProcedureEnumerator
 
     private static bool IsIncluded(IMethodSymbol method)
     {
-        return !method.IsImplicitlyDeclared && !method.IsAbstract && !method.IsExtern
+        return !method.IsImplicitlyDeclared && !method.IsAbstract
             && method.MethodKind is MethodKind.Ordinary
             or MethodKind.Constructor
             or MethodKind.StaticConstructor

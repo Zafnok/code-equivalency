@@ -53,7 +53,7 @@ public sealed class IlLowererTests
         List<string> wrong = [];
         foreach ((string sample, Compilation compilation) in IlSamples.All)
         {
-            foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))
+            foreach (EnumeratedProcedure procedure in IlSamples.WithIl(compilation))
             {
                 ILFunction function = IlAstReader.Read(procedure.Symbol, compilation).Function!;
                 HashSet<ILVariable> caught = IlKeys.CaughtException(function);
@@ -80,7 +80,7 @@ public sealed class IlLowererTests
         int compared = 0;
         foreach ((string sample, Compilation compilation) in IlSamples.All)
         {
-            foreach (EnumeratedProcedure procedure in ProcedureEnumerator.Enumerate(compilation))
+            foreach (EnumeratedProcedure procedure in IlSamples.WithIl(compilation))
             {
                 IrProcedure operation = IrLowerer.Lower(procedure.Symbol, compilation, RenameMap.Empty, [], Runtimes.Migration);
                 ILFunction function = IlAstReader.Read(procedure.Symbol, compilation).Function!;
@@ -338,7 +338,7 @@ public sealed class IlLowererTests
         string[] refined = ["LdLoca", "LdFlda", "LdsFlda", "LdElema", "AddressOf", "Throw"];
         ImmutableHashSet<string> sampled =
         [
-            .. IlSamples.All.SelectMany(static s => ProcedureEnumerator.Enumerate(s.Compilation).Select(p => IlAstReader.Read(p.Symbol, s.Compilation).Function!))
+            .. IlSamples.All.SelectMany(static s => IlSamples.WithIl(s.Compilation).Select(p => IlAstReader.Read(p.Symbol, s.Compilation).Function!))
                 .SelectMany(static f => f.Descendants.Select(i => IlKeys.Key(i, IlKeys.CaughtException(f)))),
         ];
 

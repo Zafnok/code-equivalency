@@ -115,13 +115,19 @@ internal static class ReplayArguments
     /// (tickets M4-009, P1-008). The driver is a friend of the emitted project (<see cref="ProjectEmitter"/>; ticket
     /// P2-052), so an <c>internal</c> or <c>protected internal</c> member is called like a public one. A <c>private</c>,
     /// <c>protected</c> or <c>private protected</c> member, or a member of such a type, is <c>not public</c>, with the
-    /// accessibility that hides it in brackets.
+    /// accessibility that hides it in brackets. An <c>extern</c> method is never called (ADR 0054 decision 6; ticket
+    /// P2-145): a driver would hand made-up handles, pointers and lengths straight to native code.
     /// </summary>
     public static string? CallObstacle(IMethodSymbol method)
     {
         if (Hidden(method) is { } accessibility)
         {
             return $"not public ({accessibility})";
+        }
+
+        if (method.IsExtern)
+        {
+            return "extern";
         }
 
         if (method.MethodKind is not (MethodKind.Ordinary or MethodKind.PropertyGet))

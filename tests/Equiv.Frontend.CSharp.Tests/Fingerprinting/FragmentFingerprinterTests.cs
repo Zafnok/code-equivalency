@@ -41,6 +41,22 @@ public sealed class FragmentFingerprinterTests
         Assert.Equal(legacyFragment.Fingerprint, modernFragment.Fingerprint);
     }
 
+    /// <summary>
+    /// Ticket P2-145: a lambda that declares an <c>extern</c> local function is named by a fingerprint that holds the
+    /// function's attributes, so two lambdas that import from different libraries are not one shared function.
+    /// </summary>
+    [Fact]
+    public void ALambdasLocalExternFunctionsAttributesAreInItsFingerprint()
+    {
+        static string Delegate(string library) => Assert.Single(
+            Lowered.Source($"using System;\nclass C {{ Func<int> M() => () => {{ return F(); [System.Runtime.InteropServices.DllImport(\"{library}\")] static extern int F(); }}; }}")
+                .Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>().Select(static p => p.Function),
+            static f => f.StartsWith("delegate:", StringComparison.Ordinal));
+
+        Assert.Equal(Delegate("a.dll"), Delegate("a.dll"), StringComparer.Ordinal);
+        Assert.NotEqual(Delegate("a.dll"), Delegate("b.dll"), StringComparer.Ordinal);
+    }
+
     /// <summary>The pitfall the one interval avoids: sides lowered with different intervals do not share the fragment.</summary>
     [Fact]
     public void SidesWithDifferentIntervalsDoNotShareTheFragment()

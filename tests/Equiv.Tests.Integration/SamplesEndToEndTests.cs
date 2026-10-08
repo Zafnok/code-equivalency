@@ -355,6 +355,34 @@ public sealed partial class SamplesEndToEndTests
     /// Equivalent by the solver. No call counts as a runtime-change call. The partial method, the same on both sides, is
     /// Equivalent by congruence too, by the fingerprint of its implementing part (ADR 0024 as clarified by ticket P2-107).
     /// </summary>
+    /// <summary>
+    /// Ticket P2-145 criterion 4 (ADR 0054): an <c>extern</c> method is a procedure. <c>F</c>, whose library differs between
+    /// the sides, has a result, and it is Unknown, never Equivalent and never Divergent; before, the run reported its
+    /// caller alone. The caller, the same on both sides, is congruent and names <c>F</c> as an assumption not proved (ADR
+    /// 0019). An unedited import is congruent.
+    /// </summary>
+    [Fact]
+    public void ExternImport_AChangedImportIsUnknownAndAnUneditedOneIsCongruent()
+    {
+        const string Changed = "Equiv.Samples.ExternImport.Native::F()";
+        Run run = RunSample("extern-import").Log.Runs[0];
+        Result Of(string member) => run.Results.Single(r => string.Equals(r.PartialFingerprints["procedureIdentity/v1"], $"Equiv.Samples.ExternImport.Native::{member}()", StringComparison.Ordinal));
+        Result changed = Of("F");
+        Result unedited = Of("Ticks");
+        Result caller = Of("M");
+
+        Assert.Equal(3, run.Results.Count);
+        Assert.Equal("EQ003", changed.RuleId);
+        Assert.Equal("opaque", changed.GetProperty<string>("unknownReason"));
+        Assert.Contains("no-body", changed.Message.Text, StringComparison.Ordinal);
+        Assert.Equal("EQ001", unedited.RuleId);
+        Assert.Equal("congruence", unedited.GetProperty<string>("proofMethod"));
+        Assert.Equal("EQ001", caller.RuleId);
+        Assert.Equal("congruence", caller.GetProperty<string>("proofMethod"));
+        Assert.Equal([Changed], caller.GetProperty<List<string>>("assumedCallees"), StringComparer.Ordinal);
+        Assert.Equal([Changed], caller.GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+    }
+
     [Fact]
     public void SameRuntimeCleanup_NoRuntimeRuleApplies()
     {

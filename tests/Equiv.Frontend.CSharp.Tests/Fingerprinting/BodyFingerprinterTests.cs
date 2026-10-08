@@ -187,12 +187,14 @@ public sealed class BodyFingerprinterTests
 
     /// <summary>
     /// Ticket P2-107: the methods on one runtime that still have no fingerprint. A partial method with no implementing part, one
-    /// whose implementing part is <c>extern</c> or does not bind, an abstract accessor, and a partial member that is not an
+    /// whose implementing part does not bind, an abstract accessor, and a partial member that is not an
     /// ordinary method: a partial property's accessor, and a partial constructor, which runs its type's initializers too.
+    /// And ADR 0054 decision 5 (ticket P2-145): an <c>extern</c> method that names no implementation.
     /// </summary>
     [Theory]
     [InlineData("partial void M();", "M")]
-    [InlineData("private static partial int M(); [System.Runtime.InteropServices.DllImport(\"a.dll\")] private static extern partial int M();", "M")]
+    [InlineData("public extern int M();", "M")]
+    [InlineData("private static partial int M(); private static extern partial int M();", "M")]
     [InlineData("private static partial int M(int a); private static partial int M(int a) { return Missing(a); }", "M")]
     [InlineData("private static partial int M(int a); private static partial int M(int a) { return a + ; }", "M")]
     [InlineData("public abstract int P { get; }", "get_P")]
@@ -248,6 +250,179 @@ public sealed class BodyFingerprinterTests
         Assert.NotEqual(
             OnOneRuntime(compilation),
             OnOneRuntime(Compile("[System.Obsolete(\"new\")] private static partial int M([System.ComponentModel.DefaultValue(1)] int a); " + Implementation, partial: true)));
+    }
+
+    /// <summary>
+    /// Ticket P2-145 criterion 1: an <c>extern</c> local function has no bound code, so its attributes are its code, in any
+    /// body and on any runtime pair. Two bodies that differ only there are not congruent; two that name the same import are,
+    /// also when one names the library through a constant.
+    /// </summary>
+    [Theory]
+    [InlineData("\"b.dll\"", "", "int")]
+    [InlineData("\"a.dll\", EntryPoint = \"G\"", "", "int")]
+    [InlineData("\"a.dll\"", "[return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.I4)]", "int")]
+    [InlineData("\"a.dll\"", "", "[System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.I4)] int")]
+    public void BodiesThatDifferOnlyInALocalExternFunctionsAttributesAreNotCongruent(string import, string returns, string parameter)
+    {
+        Compilation baseline = Compile(Importer("\"a.dll\""));
+        Compilation edited = Compile(Importer(import, returns, parameter));
+        Compilation named = Compile("private const string Library = \"a.dll\"; " + Importer("Library"));
+
+        foreach (SideRuntime runtime in (SideRuntime[])[OneRuntime, Runtimes.Migration])
+        {
+            BodyFingerprint? On(Compilation compilation) => BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, runtime);
+
+            Assert.NotNull(On(baseline));
+            Assert.NotEqual(On(baseline), On(edited));
+            Assert.Equal(On(baseline), On(Compile(Importer("\"a.dll\""))));
+            Assert.Equal(On(baseline), On(named));
+        }
+    }
+
+    /// <summary>
+    /// Ticket P2-145 criterion 2: a body that declares no local function with an attribute has the text it had before the
+    /// attribute lines existed. The snapshot was taken on <c>main</c> before they were written.
+    /// </summary>
+    [Fact]
+    public Task ABodyWithoutAttributedLocalFunctionsKeepsItsText()
+    {
+        Compilation plain = Compile("public int M(int a) { return F(a); static int F(int x) => x; }");
+
+        Assert.Equal(Text(plain), BodyFingerprinter.Text(Method(plain), plain, EquivConfig.Default, [], OneRuntime).Text);
+        Assert.DoesNotContain("Attribute ", Text(Compile("public int M(int a) { System.Func<int, int> f = x => x; return f(a); }")), StringComparison.Ordinal);
+        return Verify(Text(plain));
+    }
+
+    /// <summary>
+    /// Ticket P2-145 criterion 2: a local function's attribute lines follow its own line and are named by its number: those
+    /// on the function, then on its return value, then on each parameter.
+    /// </summary>
+    [Fact]
+    public void ALocalFunctionsAttributesFollowItsLine()
+    {
+        string attributed = Text(Compile(Importer("\"a.dll\"", "[return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.I4)]", "[System.Runtime.InteropServices.In] int")));
+        Assert.Contains(
+            "symbols=F0(async=False None System.Int32) -> System.Int32\n"
+            + "Extern F0: module=\"a.dll\" entry=\"F\" charset=None convention=Winapi exact=False lastError=False bestFit= throwOnUnmappable=\n"
+            + "Attribute F0: System.Runtime.InteropServices.DllImportAttribute.DllImportAttribute(string) = System.Runtime.InteropServices.DllImportAttribute(\"a.dll\")\n"
+            + "Attribute F0 return: System.Runtime.InteropServices.MarshalAsAttribute.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType) = System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.I4)\n"
+            + "Attribute F0 #0: System.Runtime.InteropServices.InAttribute.InAttribute() = System.Runtime.InteropServices.InAttribute\n",
+            attributed,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-145: what an <c>extern</c> local function imports is written as the compiler resolves it. With no
+    /// <c>EntryPoint</c> the entry point is the function's own name, so renaming the function changes what the body calls;
+    /// with one it does not. A function with no <c>[DllImport]</c> is written by its declared type and name.
+    /// </summary>
+    [Fact]
+    public void AnExternLocalFunctionIsWrittenByWhatItImports()
+    {
+        static string Renamed(string import, string name) =>
+            $"public int M(int a) {{ return {name}(a); [System.Runtime.InteropServices.DllImport({import})] static extern int {name}(int x); }}";
+        const string Settings = "\"a.dll\", EntryPoint = \"E\", CharSet = System.Runtime.InteropServices.CharSet.Unicode, CallingConvention = System.Runtime.InteropServices.CallingConvention.Cdecl, "
+            + "ExactSpelling = true, SetLastError = true, BestFitMapping = false, ThrowOnUnmappableChar = true";
+
+        Assert.NotEqual(Fingerprint(Renamed("\"a.dll\"", "F")), Fingerprint(Renamed("\"a.dll\"", "G")));
+        Assert.Equal(Fingerprint(Renamed("\"a.dll\", EntryPoint = \"E\"", "F")), Fingerprint(Renamed("\"a.dll\", EntryPoint = \"E\"", "G")));
+        Assert.Contains(
+            "\nExtern F0: module=\"a.dll\" entry=\"E\" charset=Unicode convention=Cdecl exact=True lastError=True bestFit=False throwOnUnmappable=True\n",
+            Text(Compile(Renamed(Settings, "F"))),
+            StringComparison.Ordinal);
+        Assert.Contains("\nExtern F0: \"N.C::F\"\n", Text(Compile("public int M() { return F(); static extern int F(); }")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// ADR 0054 decision 2 (ticket P2-145 criterion 4): on one runtime an <c>extern</c> method is fingerprinted by its
+    /// signature, by what it imports as the compiler resolves it, and by its attributes and those of its return value and
+    /// parameters. So an unedited one is congruent, and one whose import or marshalling changed is not.
+    /// </summary>
+    [Theory]
+    [InlineData("[DllImport(\"b.dll\")] public static extern int M(int a);")]
+    [InlineData("[DllImport(\"a.dll\", EntryPoint = \"G\")] public static extern int M(int a);")]
+    [InlineData("[DllImport(\"a.dll\", CharSet = CharSet.Unicode)] public static extern int M(int a);")]
+    [InlineData("[DllImport(\"a.dll\")] [return: MarshalAs(UnmanagedType.I4)] public static extern int M(int a);")]
+    [InlineData("[DllImport(\"a.dll\")] public static extern int M([MarshalAs(UnmanagedType.I4)] int a);")]
+    [InlineData("[DllImport(\"a.dll\")] [SuppressGCTransition] public static extern int M(int a);")]
+    [InlineData("[DllImport(\"a.dll\")] public static extern int M(ref int a);")]
+    [InlineData("[DllImport(\"a.dll\")] public static extern long M(int a);")]
+    public void AnExternMethodIsFingerprintedByItsSignatureAndAttributes(string edited)
+    {
+        const string Import = "[DllImport(\"a.dll\")] public static extern int M(int a);";
+        Compilation baseline = Interop(Import);
+
+        Assert.Equal(
+            "Ordinary static=True async=False returns=System.Int32 (None System.Int32)\n"
+            + "Extern method: module=\"a.dll\" entry=\"M\" charset=None convention=Winapi exact=False lastError=False bestFit= throwOnUnmappable=\n"
+            + "Attribute method: System.Runtime.InteropServices.DllImportAttribute.DllImportAttribute(string) = System.Runtime.InteropServices.DllImportAttribute(\"a.dll\")\n",
+            BodyFingerprinter.Text(Method(baseline), baseline, EquivConfig.Default, [], OneRuntime).Text);
+        Assert.False(OnOneRuntime(baseline)!.RuntimeSensitive);
+        Assert.Equal(OnOneRuntime(baseline), OnOneRuntime(Interop("[DllImport(\"a.dll\")] public static extern int M(int renamed);")));
+        Assert.Equal(OnOneRuntime(baseline), OnOneRuntime(Interop("private const string Library = \"a.dll\"; [DllImport(Library)] public static extern int M(int a);")));
+        Assert.NotEqual(OnOneRuntime(baseline), OnOneRuntime(Interop(edited)));
+    }
+
+    /// <summary>
+    /// ADR 0054 decision 2: with no <c>EntryPoint</c> the entry point is the method's own name, which a rename map can
+    /// match to another, so the name is in the text; with one, the method's name is not what is called.
+    /// </summary>
+    [Fact]
+    public void AnExternMethodsEntryPointIsItsNameUnlessTheImportNamesOne()
+    {
+        static BodyFingerprint? Named(string import, string name)
+        {
+            Compilation compilation = Interop($"[DllImport({import})] public static extern int {name}(int a);");
+            return BodyFingerprinter.Compute(Method(compilation, name), compilation, EquivConfig.Default, legacy: false, OneRuntime);
+        }
+
+        Assert.NotEqual(Named("\"a.dll\"", "F"), Named("\"a.dll\"", "G"));
+        Assert.Equal(Named("\"a.dll\", EntryPoint = \"E\"", "F"), Named("\"a.dll\", EntryPoint = \"E\"", "G"));
+    }
+
+    /// <summary>
+    /// ADR 0054 decisions 1 and 2: every kind of <c>extern</c> member that names its implementation has a fingerprint on one
+    /// runtime. An <c>InternalCall</c> has its declared type and name in place of an import, and a partial method whose
+    /// implementing part is <c>extern</c> has the attributes of both its parts.
+    /// </summary>
+    [Theory]
+    [InlineData("[MethodImpl(MethodImplOptions.InternalCall)] public extern int M();", "M", "Extern method: \"N.C::M\"\nAttribute method: System.Runtime.CompilerServices.MethodImplAttribute")]
+    [InlineData("[MethodImpl(MethodImplOptions.InternalCall)] public extern C(int x);", ".ctor", "Constructor static=False async=False returns=void (None System.Int32)\nExtern method: \"N.C::.ctor\"\n")]
+    [InlineData("public static extern int P { [DllImport(\"a.dll\")] get; }", "get_P", "PropertyGet static=True async=False returns=System.Int32 ()\nExtern method: module=\"a.dll\" entry=\"get_P\"")]
+    [InlineData("[DllImport(\"a.dll\")] public static extern C operator +(C a, C b);", "op_Addition", "Extern method: module=\"a.dll\" entry=\"op_Addition\"")]
+    [InlineData("[System.Obsolete] private static partial int M(); [DllImport(\"a.dll\")] private static extern partial int M();", "M", "entry=\"M\" charset=None convention=Winapi exact=False lastError=False bestFit= throwOnUnmappable=\nAttribute method: System.ObsoleteAttribute.ObsoleteAttribute() = System.ObsoleteAttribute\nAttribute method: System.Runtime.InteropServices.DllImportAttribute")]
+    public void EveryKindOfExternMemberThatNamesItsImplementationHasAFingerprint(string member, string name, string expected)
+    {
+        Compilation compilation = Interop(member);
+
+        Assert.Contains(expected, BodyFingerprinter.Text(Method(compilation, name), compilation, EquivConfig.Default, [], OneRuntime).Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>ADR 0054 decision 4: across runtimes it is the runtime that marshals the call, so an <c>extern</c> method has no fingerprint.</summary>
+    [Theory]
+    [InlineData("net48", "net10.0")]
+    [InlineData("net8.0", "net9.0")]
+    public void AnExternMethodHasNoFingerprintOnAPairThatCrossesARuntime(string legacy, string modern)
+    {
+        Compilation compilation = Interop("[DllImport(\"a.dll\")] public static extern int M(int a);");
+
+        Assert.Null(BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, Runtimes.Between(legacy, modern)));
+    }
+
+    /// <summary>
+    /// ADR 0054 decision 4: a body that declares an <c>extern</c> local function makes the same call, so on a pair that
+    /// crosses a runtime it is runtime-sensitive and never congruent. On one runtime it is not, and neither is a body whose
+    /// attributed local function has code.
+    /// </summary>
+    [Fact]
+    public void ABodyThatDeclaresAnExternLocalFunctionIsRuntimeSensitiveAcrossARuntime()
+    {
+        Compilation importer = Compile(Importer("\"a.dll\""));
+        Compilation coded = Compile("public int M(int a) { return F(a); [System.Obsolete] static int F(int x) => x; }");
+
+        Assert.True(Fingerprint(importer, legacy: false).RuntimeSensitive);
+        Assert.False(OnOneRuntime(importer)!.RuntimeSensitive);
+        Assert.False(Fingerprint(coded, legacy: false).RuntimeSensitive);
     }
 
     [Fact]
@@ -409,6 +584,14 @@ public sealed class BodyFingerprinterTests
     /// <summary>A partial method and an implementing part that calls a local <c>extern</c> function, as the interop generator writes one.</summary>
     private static string Stub(string import, string returns, string parameter) =>
         $"private static partial bool M(int a); private static partial bool M(int a) {{ return __PInvoke(a) != 0; [System.Runtime.InteropServices.DllImport({import})] static extern {returns} __PInvoke({parameter} x); }}";
+
+    /// <summary>Members of a partial class <c>N.C</c>, with the interop namespaces imported.</summary>
+    private static CSharpCompilation Interop(string members) =>
+        Compile(members, extra: "using System.Runtime.CompilerServices; using System.Runtime.InteropServices;", partial: true);
+
+    /// <summary>A method that calls a local <c>extern</c> function it declares: ticket P2-145's first repro.</summary>
+    private static string Importer(string import, string returns = "", string parameter = "int") =>
+        $"public int M(int a) {{ return F(a); [System.Runtime.InteropServices.DllImport({import})] {returns} static extern int F({parameter} x); }}";
 
     private static BodyFingerprint Fingerprint(string member, string extra = "") => Fingerprint(Compile(member, extra: extra), legacy: false);
 

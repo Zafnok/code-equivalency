@@ -33,6 +33,7 @@ public sealed class ReplayArgumentsTests
                 public static T Generic<T>(T x) => x;
                 public static int ByRef(ref int x) => x;
                 public static int When(System.DateTime d) => 0;
+                [System.Runtime.InteropServices.DllImport("a.dll")] public static extern int Native(int x);
             }
 
             public class G<T> { public static int M() => 0; }
@@ -109,6 +110,7 @@ public sealed class ReplayArgumentsTests
     [Theory]
     [InlineData("N.C", "set_Settable", "proc \"X\" (%value: bv32, %this: sort \"N.C\") entry B0 B0: ret", "not a method or a property getter")]
     [InlineData("N.C", "Generic", "proc \"X\" (%x: sort \"T\") entry B0 B0: ret", "generic")]
+    [InlineData("N.C", "Native", "proc \"X\" (%x: bv32) entry B0 B0: ret", "extern")]
     [InlineData("N.G`1", "M", Empty, "generic")]
     [InlineData("N.C", "ByRef", "proc \"X\" (ref %x: bv32) entry B0 B0: ret", "x is passed by reference")]
     [InlineData("N.A", "M", "proc \"X\" (%this: sort \"N.A\") entry B0 B0: ret", "N.A has no public parameterless constructor")]
