@@ -724,6 +724,15 @@ Found by P2-145 (2026-10-08, by reading what the fingerprint of an `extern` func
   in no fingerprint: the assembly's `[DisableRuntimeMarshalling]` and `[DefaultDllImportSearchPaths]`,
   `[BestFitMapping]` on a containing type, and the layout attributes of the types in its signature.
   The first step is the repro. Needs P2-145.
+  Done: all four reproduced as equal fingerprints. Each is now in the text of a function with a
+  `[DllImport]` that takes it, and in no other text (ADR 0024, clarification of 2026-10-09). On
+  `powershell-19687` no result changed.
+
+Found by P2-146 (2026-10-09, by reading what the fingerprint of an ordinary body holds; not reproduced):
+- P2-149 (M) Soundness: a type's layout can change what an ordinary body does, and no fingerprint of
+  such a body holds it: `[FieldOffset]` on a field the body reads, `[StructLayout]` under a `sizeof`
+  or a pointer, `[InlineArray]`, and the assembly's `[DisableRuntimeMarshalling]` under a call
+  through a function pointer. The first step is the repro. Needs P2-146.
 
 Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
 - P2-148 (S) `SecondSolverPrintTests.Z3AnswersTheRewrittenTextAsItAnswersTheOriginal` fails at random
