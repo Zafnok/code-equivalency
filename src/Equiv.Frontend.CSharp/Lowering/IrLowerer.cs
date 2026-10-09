@@ -896,7 +896,7 @@ internal sealed class IrLowerer
                 return Match(pattern, context);
             case IIsTypeOperation isType:
                 return TestType(isType.ValueOperand, isType.TypeOperand, context) is { } typeTest ? Passes(typeTest, context) : Opaque(isType, isType.Kind.ToString(), context);
-            case IIsNullOperation test when test.Operand.Type is { IsReferenceType: true } || TypeMapper.IsNullable(test.Operand.Type):
+            case IIsNullOperation test when test.Operand.Type is { IsReferenceType: true } or { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T }:
                 // The null test the CFG makes of a `using` resource or a `foreach` enumerator before disposing it, and of the
                 // operand of `?.` and `??` (ticket P2-008); a `Nullable<T>` is null when its null shadow says so, as a reference is.
                 return NullFlag(test.Operand, Value(test.Operand, context), context);
@@ -1102,8 +1102,13 @@ internal sealed class IrLowerer
     {
         // A cast-map conversion's result is a value of its own, whose nullness is not tied to the operand's; an `as`'s is its failed test.
         IOperation unwrapped = source;
-        while (unwrapped is IConversionOperation conversion && !IsCast(conversion) && !conversion.IsTryCast && !HasAValue(conversion))
+        while (unwrapped is IConversionOperation conversion && !IsCast(conversion) && !conversion.IsTryCast)
         {
+            if (HasAValue(conversion))
+            {
+                return null;
+            }
+
             unwrapped = conversion.Operand;
         }
 
@@ -1111,7 +1116,6 @@ internal sealed class IrLowerer
         {
             _ when tryCastNulls.TryGetValue(unwrapped, out IrVar? failed) => failed,
             IDefaultValueOperation or IObjectCreationOperation { Arguments.IsEmpty: true } when TypeMapper.IsNullable(unwrapped.Type) => Const(new IrBoolValue(Value: true), context),
-            IConversionOperation conversion when HasAValue(conversion) => null,
             IObjectCreationOperation or IArrayCreationOperation or IDelegateCreationOperation or IInstanceReferenceOperation or ITypeOfOperation => null,
             ICollectionExpressionOperation collection when Built(collection) is { NeverNull: true } => null,
             _ when ShadowOf(unwrapped) is { } shadow => ssa.Load(context.Current, shadow),
@@ -2021,14 +2025,19 @@ internal sealed class IrLowerer
     private IrVar? Create(IObjectCreationOperation creation, LoweringContext context) =>
         EffectFreeMembers.Allocates(creation.Constructor!)
             ? heap.Fresh((IrSort)Map(creation.Type!), context)
-            : TypeMapper.NullableValue(creation.Type) is null ? Construct(creation, context) : CreateNullable(creation, context);
+            : CreateNullable(creation, context) ?? Construct(creation, context);
 
     /// <summary>
     /// <c>new T?(x)</c> is the value <c>x</c> converted to <c>T?</c> is, and <c>new T?()</c> the one <c>null</c> is (ticket
-    /// P2-095), so a spelled-out constructor and the conversion the compiler makes of it are one value and no call.
+    /// P2-095), so a spelled-out constructor and the conversion the compiler makes of it are one value and no call. Null
+    /// for a creation of any other type.
     /// </summary>
-    private IrVar CreateNullable(IObjectCreationOperation creation, LoweringContext context) =>
-        creation.Arguments is [{ Value: var value }] ? Wrap(value, creation.Type!, context) : Constant(creation.Type!, value: null, context);
+    private IrVar? CreateNullable(IObjectCreationOperation creation, LoweringContext context) => creation.Arguments switch
+    {
+        _ when TypeMapper.NullableValue(creation.Type) is null => null,
+        [{ Value: var value }] => Wrap(value, creation.Type!, context),
+        _ => Constant(creation.Type!, value: null, context),
+    };
 
     /// <summary>The call to <paramref name="creation"/>'s constructor, or an opaque when a <c>ref</c> or <c>out</c> argument cannot be written.</summary>
     private IrVar? Construct(IObjectCreationOperation creation, LoweringContext context) =>
