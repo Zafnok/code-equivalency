@@ -95,18 +95,18 @@ Every number is measured on public code, and every row says when. The runs are i
 [docs/runs/](docs/runs/). A row changes only when a new run measures a different value.
 
 <!-- scoreboard:begin (edit only through .claude/skills/equiv-scoreboard) -->
-| Over 3 large real pairs, 42,064 matched procedure pairs | Today | Measured |
+| Over 3 large real pairs, 42,198 matched procedure pairs | Today | Measured |
 |---|---|---|
-| Proved Equivalent | 95.4% (40,122 of 42,064) | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
-| Equivalent by congruence (no solver) | 94.6% (39,812 of 42,064) | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
-| Changed pairs the solver proves | 13.8% (310 of 2,246) | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
-| Unknown | 3.5% of pairs (1,471), 65.5% of changed pairs. Opaque construct 733, solver budget 400, abstraction 246, unaligned loop 89, recursion 3 | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
-| Divergent | 1.1% of pairs (465), 20.7% of changed pairs | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
+| Proved Equivalent | 96.9% (40,874 of 42,198) | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md) |
+| Equivalent by congruence (no solver) | 96.0% (40,525 of 42,198) | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md) |
+| Changed pairs the solver proves | 20.9% (349 of 1,673) | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md) |
+| Unknown | 2.4% of pairs (1,030), 61.6% of changed pairs. Opaque construct 569, abstraction 256, solver budget 180, unaligned loop 22, recursion 3 | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md) |
+| Divergent | 0.7% of pairs (294), 17.6% of changed pairs | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md) |
 | Divergent precision (a Divergent is a real behaviour change) | Migration 3.8% (2 of 52). Upgrades 3.8% (5 of 131). Cleanups 0% (0 of 51) | [2026-09-30](docs/runs/2026-09-30-divergent-audit.md), [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md), [2026-10-02](docs/runs/2026-10-02-cleanup-verdict.md) |
-| Left for a reviewer (Unknown and Divergent) | 4.6% of pairs (1,936) | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
-| Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. 1 open soundness ticket ([P2-127](docs/tickets/done/P2-127-soundness-local-function-call-is-an-unverified-callee.md)) | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
+| Left for a reviewer (Unknown and Divergent) | 3.1% of pairs (1,324) | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md) |
+| Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. 1 open soundness ticket ([P2-146](docs/tickets/P2-146-soundness-interop-settings-outside-the-function.md)) | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
 | Large pairs that run to a result | 5 of 5 | 2026-10-03 ([Duplicati](docs/tickets/done/P2-082-pair-weighting-crash-ends-the-run.md), [OpenRA](docs/tickets/done/P2-125-tuple-array-sort-mismatch-on-element-names.md)) |
-| Run time, one large pair | mean 1h36m (1h11m to 2h05m), one pair at a time | [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md) |
+| Run time, one large pair | mean 5 min (3 min to 6 min), four pairs at a time | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md) |
 | Repeatability | 99.94% (13,734 of 13,742 results equal between two runs) | [2026-10-02](docs/runs/2026-10-02-pair-time.md) |
 <!-- scoreboard:end -->
 
@@ -115,22 +115,22 @@ Every number is measured on public code, and every row says when. The runs are i
 | | Git Extensions, .NET Framework 4.8 to .NET 5 | Git Extensions, .NET 5 to .NET 6 | Jellyfin, .NET 8 to .NET 9 | All three |
 |---|---|---|---|---|
 | Analysed lines per side | 187,000 | 189,000 | 156,000 | |
-| Matched procedure pairs | 13,541 | 14,020 | 14,503 | 42,064 |
-| Equivalent by congruence (both bodies lower to the same IR and no runtime change applies; no solver) | 93.0% | 94.8% | 96.0% | **94.6%** |
-| Equivalent by the solver | 0.5% (71) | 1.7% (239) | 0% (0) | **0.7%** |
-| Divergent | 2.2% (292) | 0.4% (62) | 0.8% (111) | **1.1%** |
-| Unknown | 4.3% (588) | 3.0% (421) | 3.2% (462) | **3.5%** |
-| Wall-clock | 2h05m | 1h11m | 1h32m | **mean 1h36m** |
+| Matched procedure pairs | 13,592 | 14,073 | 14,533 | 42,198 |
+| Equivalent by congruence (both bodies lower to the same IR and no runtime change applies; no solver) | 93.3% | 95.7% | 98.9% | **96.0%** |
+| Equivalent by the solver | 0.3% (45) | 1.9% (261) | 0.3% (43) | **0.8%** |
+| Divergent | 2.0% (269) | 0.1% (15) | 0.1% (10) | **0.7%** |
+| Unknown | 4.4% (596) | 2.3% (324) | 0.8% (110) | **2.4%** |
+| Wall-clock | 6 min | 5 min | 3 min | **mean 5 min** |
 
-So a reviewer is spared about 95% of the procedures and is handed the rest, grouped by cause.
+So a reviewer is spared about 97% of the procedures and is handed the rest, grouped by cause.
 
-**The changed pairs are where the work is left.** Of the 2,246 pairs that are not congruent, the
-solver proves 310 (13.8%) Equivalent: 7.5%, 33.1% and 0% on the three runs. 65.5% are Unknown and
-20.7% are Divergent. Most changed pairs on the two upgrades are in files the pull request did not
+**The changed pairs are where the work is left.** Of the 1,673 pairs that are not congruent, the
+solver proves 349 (20.9%) Equivalent: 4.9%, 43.5% and 26.4% on the three runs. 61.6% are Unknown and
+17.6% are Divergent. Most changed pairs on the two upgrades are in files the pull request did not
 touch: a runtime rule or a rebound call took them out of congruence.
 
-The Unknowns of the three runs by reason: opaque construct 733, solver budget 400, abstraction
-246, unaligned loop 89, recursion 3.
+The Unknowns of the three runs by reason: opaque construct 569, abstraction 256, solver budget
+180, unaligned loop 22, recursion 3.
 
 Other pairs, for range:
 
@@ -141,16 +141,16 @@ Other pairs, for range:
 | The collection-expression cleanup, on the branch of [Zafnok/code-equivalency#368](https://github.com/Zafnok/code-equivalency/pull/368) | 97.6% | 45.6% (160 of 351), from 2.0% on `main` |
 | Duplicati and OpenRA migrations (69,000 and 131,000 lines) | 85.0% and 95.8% | both now run to a result (3h26m and 1h10m); their rates are not summarised yet |
 
-**Run time.** Pairs are verified one at a time, and the time follows the number of changed pairs,
-not the number of lines. The mean of the three runs above is 1h36m (the two upgrades shared one
-machine). Before the fix that removed non-solver time from a pair, the same three took 2h43m,
-6h47m and more than 12 hours.
+**Run time.** The three runs above verify four pairs at a time (`--jobs 4`) in the default compare
+mode, and the time follows the number of changed pairs, not the number of lines. Their mean is 5
+minutes. One pair at a time, before the compare modes, the same three took 2h05m, 1h11m and 1h32m,
+and before the fix that removed non-solver time from a pair 2h43m, 6h47m and more than 12 hours.
 
 | Run | Analysed lines per side | Changed pairs | Wall-clock |
 |---|---|---|---|
-| Git Extensions, 4.8 to .NET 5 | 187,000 | 951 | 2h05m (verify 81 min, callee contracts 41 min, lowering 98 s) |
-| Jellyfin, .NET 8 to .NET 9 | 156,000 | 573 | 1h32m |
-| Git Extensions, .NET 5 to .NET 6 | 189,000 | 722 | 1h11m |
+| Git Extensions, 4.8 to .NET 5 | 187,000 | 910 | 6 min (verify 245 s, lowering 80 s) |
+| Jellyfin, .NET 8 to .NET 9 | 156,000 | 163 | 3 min |
+| Git Extensions, .NET 5 to .NET 6 | 189,000 | 600 | 5 min |
 | Git Extensions cleanup, collection expressions (on the branch of pull request 368) | 195,000 | 351 | 31 min |
 | PowerShell cleanup | 464,000 | 140 | 5 min |
 | Agent migrations | 400 to 7,600 | 0 to 40 | 8 s to 2 min |
@@ -159,18 +159,19 @@ machine). Before the fix that removed non-solver time from a pair, the same thre
 ([ADR 0028](docs/adr/0028-public-corpus-and-success-criteria.md)) are all met: every project
 loads, more than 40% of pairs are unchanged, and 28 of 28 seeded behaviour changes were caught,
 none reported Equivalent. On the two upgrades, no behaviour change the pull request made was
-reported Equivalent either. An Equivalent can be relied on today, with one known exception: a member
-that calls a local function by name is proved without the local function's body being read
-([P2-127](docs/tickets/done/P2-127-soundness-local-function-call-is-an-unverified-callee.md)).
+reported Equivalent either. An Equivalent can be relied on today, with one open question: the marshalling
+settings an `extern` function takes from outside itself are in no fingerprint, read off the code
+and not reproduced
+([P2-146](docs/tickets/P2-146-soundness-interop-settings-outside-the-function.md)).
 The rest cannot yet:
 
 | What is needed | Today |
 |---|---|
-| A Divergent is usually a real behaviour change | Of those audited and decided: 2 of 52 on the migration (3.8%), 5 of 131 on the upgrades (3.8%), 0 of 51 on cleanups. Counterexample results alone do better on the upgrades (5 of 8). One cause, runtime rules with no version they changed in, is 120 of the upgrades' 126 false positives and is not fixed. Three other causes have fixes in open pull requests; one of them takes the collection-expression cleanup from 25 Divergent to 3 |
-| The solver decides most changed pairs | 13.8% proved on the three large runs, 9.9% on cleanups |
-| Every large pair completes | Five of five. Duplicati and OpenRA now finish with no crashed pair. The three runs in the table above each lost one to three pairs to a lowering crash, fixed since and not yet run again |
+| A Divergent is usually a real behaviour change | Of those audited and decided: 2 of 52 on the migration (3.8%), 5 of 131 on the upgrades (3.8%), 0 of 51 on cleanups. Counterexample results alone do better on the upgrades (5 of 8). One cause, runtime rules with no version they changed in, was 120 of the upgrades' 126 false positives and is fixed: the two upgrades now report 25 Divergent, from 173, not yet adjudicated again. Three other causes have fixes in open pull requests; one of them takes the collection-expression cleanup from 25 Divergent to 3 |
+| The solver decides most changed pairs | 20.9% proved on the three large runs, 9.9% on cleanups |
+| Every large pair completes | Five of five. Duplicati and OpenRA now finish with no crashed pair. The three runs in the table above have no crashed pair either |
 | The same run gives the same results | 13,734 of 13,742 results agree between two runs |
-| A run fits in a CI job | 1h11m to 2h05m, one pair at a time. Verifying pairs in parallel is not built |
+| A run fits in a CI job | 3 to 6 minutes for a large pair, four pairs at a time in the default mode |
 
 In short: the sound half (congruence, no false Equivalent on seeded or real changes) is done, and
 the precise half (few false Divergents, few Unknowns on changed code) is early.
