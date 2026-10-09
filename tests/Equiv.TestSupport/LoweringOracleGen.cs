@@ -274,7 +274,7 @@ public static class LoweringOracleGen
 
     private static Gen<IExpr> Bool(int depth, Gen<IExpr> leaf)
     {
-        Gen<IExpr> nullTest = Gen.OneOfConst<IExpr>(new Name("(s == null)"), new Name("(s != null)"));
+        Gen<IExpr> nullTest = Gen.OneOfConst<IExpr>(new Name("(s == null)"), new Name("(s != null)"), new Name("(s is null)"));
         Gen<IExpr> relation = Gen.Select(Gen.OneOfConst(Relations), Gen.OneOfConst(typeof(int), typeof(long)), static (op, type) => (op, type))
             .SelectMany(t => Gen.Select(ExprGen(t.type, depth - 1), ExprGen(t.type, depth - 1), (l, r) => (IExpr)new Relation(t.op, l, r)));
         Gen<IExpr> logic = Gen.Select(Gen.OneOfConst(Logic), ExprGen(typeof(bool), depth - 1), ExprGen(typeof(bool), depth - 1), static (op, l, r) => (IExpr)new Relation(op, l, r));

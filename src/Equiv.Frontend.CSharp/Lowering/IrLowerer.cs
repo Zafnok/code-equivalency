@@ -655,7 +655,8 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
-    /// A pattern test (acceptance criterion 2): a constant pattern is an equality, a discard is <c>true</c>, a type
+    /// A pattern test (acceptance criterion 2): a constant pattern is an equality, a <c>null</c> pattern on a reference is
+    /// the null test <c>x == null</c> is (ticket P2-122), a discard is <c>true</c>, a type
     /// pattern and a declaration pattern (not <c>var</c>) are a type test (ticket M4-005), the latter binding its variable
     /// through the cast map, and every other pattern is opaque, which is how a pattern switch beyond these stops here.
     /// </summary>
@@ -663,6 +664,8 @@ internal sealed class IrLowerer
     {
         IDiscardPatternOperation =>
             Const(new IrBoolValue(Value: true), context),
+        IConstantPatternOperation constant when IsNull(constant.Value) && pattern.Value.Type!.IsReferenceType =>
+            NullFlag(pattern.Value, Value(pattern.Value, context), context),
         IConstantPatternOperation { Value: { Type: { } type, ConstantValue: { HasValue: true, Value: { } constant } } }
             when TypeMapper.Map(type) is IrBitVec or IrBool && TypeMapper.Map(pattern.Value.Type!) == TypeMapper.Map(type) =>
             Emit(IrBinaryOp.Eq, Value(pattern.Value, context), Constant(type, constant, context), Bool, context),
