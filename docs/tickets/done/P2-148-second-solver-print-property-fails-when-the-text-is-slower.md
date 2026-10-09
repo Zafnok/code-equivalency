@@ -1,5 +1,5 @@
 # P2-148 The second-solver print property fails at random when Z3 is slower on the printed text than on the query
-Status: in-progress
+Status: done (PR #449)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
