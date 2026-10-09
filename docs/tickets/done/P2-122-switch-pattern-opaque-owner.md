@@ -1,5 +1,5 @@
 # P2-122 The pattern forms behind `switch-pattern` are counted, and the largest one without a ticket lowers
-Status: in-progress
+Status: done (PR #444)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
