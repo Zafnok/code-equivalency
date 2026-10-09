@@ -87,7 +87,11 @@ attributes are in every text that holds the function, and an `extern` one's impo
 an `extern` function's attributes say what it calls (ADR 0024 as clarified by tickets P2-107 and
 P2-145). The text of a function with a `[DllImport]` also holds what the marshaller reads from
 outside it: the marshalling attributes of its assembly and its type, and the declarations of the
-types in its signature that the solution declares (P2-146). A declaration with no bound code has no fingerprint, with two exceptions, both on a
+types in its signature that the solution declares (P2-146). An operation whose result a type's
+declaration fixes is followed by that declaration, where the solution declares the type: a reference
+to a field that has a `[FieldOffset]`, a `sizeof`, an operation whose type is a pointer, a function
+pointer or an inline array, and a call into `System.Runtime.InteropServices` or
+`System.Runtime.CompilerServices` or one that takes a pointer (P2-149). A declaration with no bound code has no fingerprint, with two exceptions, both on a
 same-runtime pair only. A partial method whose defining declaration is the one read has the
 fingerprint of its implementing part, with the method's attributes (P2-107). And an `extern` method
 that names its implementation, with `[DllImport]` or `InternalCall`, has the fingerprint of its
