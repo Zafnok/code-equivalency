@@ -1,0 +1,23 @@
+﻿Ordinary static=True async=False returns=N.C.S (None N.C.S, None N.C.D, None N.C.Q, None N.C.S[], None System.Int32)
+Extern method: module="a.dll" entry="M" charset=None convention=Winapi exact=False lastError=False bestFit= throwOnUnmappable=
+Attribute method: System.Runtime.InteropServices.DllImportAttribute.DllImportAttribute(string) = System.Runtime.InteropServices.DllImportAttribute("a.dll")
+Marshalled method N.C.S: Struct : System.ValueType
+Attribute method N.C.S: System.Runtime.InteropServices.StructLayoutAttribute.StructLayoutAttribute(System.Runtime.InteropServices.LayoutKind) = System.Runtime.InteropServices.StructLayoutAttribute(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 2)
+Field method N.C.S #0: System.Boolean fixed=0
+Attribute method N.C.S #0: System.Runtime.InteropServices.MarshalAsAttribute.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType) = System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.I1)
+Field method N.C.S #1: byte* fixed=4
+Field method N.C.S #2: N.C.S* fixed=0
+Field method N.C.S #3: N.C.E fixed=0
+Field method N.C.S #4: System.Guid fixed=0
+Marshalled method N.C.E: Enum : System.Enum, System.Byte
+Marshalled method N.C.D: Delegate : System.MulticastDelegate
+Attribute method N.C.D: System.Runtime.InteropServices.UnmanagedFunctionPointerAttribute.UnmanagedFunctionPointerAttribute(System.Runtime.InteropServices.CallingConvention) = System.Runtime.InteropServices.UnmanagedFunctionPointerAttribute(System.Runtime.InteropServices.CallingConvention.Cdecl)
+Invoke method N.C.D: (Ref N.C.S, None System.Int32) -> System.Boolean
+Attribute method N.C.D return: System.Runtime.InteropServices.MarshalAsAttribute.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType) = System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.I1)
+Attribute method N.C.D #0: System.Runtime.InteropServices.InAttribute.InAttribute() = System.Runtime.InteropServices.InAttribute
+Marshalled method N.C.Q: Class : N.C.P
+Field method N.C.Q #0: N.C.G`1<System.Int64> fixed=0
+Marshalled method N.C.P: Class : System.Object
+Field method N.C.P #0: System.Int32 fixed=0
+Marshalled method N.C.G`1<System.Int64>: Struct : System.ValueType
+Field method N.C.G`1<System.Int64> #0: System.Int64 fixed=0

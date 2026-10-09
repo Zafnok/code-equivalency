@@ -85,7 +85,9 @@ the runtime marshals (ADR 0054); so on a same-runtime pair no body is. The finge
 IR, so a pair whose bodies are whole-body opaque (an iterator) can be congruent. A local function's
 attributes are in every text that holds the function, and an `extern` one's import with them, since
 an `extern` function's attributes say what it calls (ADR 0024 as clarified by tickets P2-107 and
-P2-145). A declaration with no bound code has no fingerprint, with two exceptions, both on a
+P2-145). The text of a function with a `[DllImport]` also holds what the marshaller reads from
+outside it: the marshalling attributes of its assembly and its type, and the declarations of the
+types in its signature that the solution declares (P2-146). A declaration with no bound code has no fingerprint, with two exceptions, both on a
 same-runtime pair only. A partial method whose defining declaration is the one read has the
 fingerprint of its implementing part, with the method's attributes (P2-107). And an `extern` method
 that names its implementation, with `[DllImport]` or `InternalCall`, has the fingerprint of its

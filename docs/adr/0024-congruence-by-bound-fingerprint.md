@@ -191,6 +191,42 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     local function with no `[DllImport]` is written by its containing type and its source name,
     although the name a runtime would look it up by is the one the compiler generates from the
     containing member.
+- 2026-10-09 (P2-146). **What the marshaller reads from outside an imported function is in that
+  function's text.** The two clarifications above say that an `extern` function's attributes are its
+  code because they "say how each argument is marshalled". The runtime's marshaller reads more than
+  the function's own attributes, and the clarification of 2026-10-08 listed what the text left out.
+  Each was reproduced as two functions with one fingerprint (the ticket's tests): a pair that
+  differed only there was Equivalent by decision 1, on a same-runtime pair as well. So the lines of
+  a function that has a `[DllImport]`, a method's and a local function's alike, are followed by:
+  - the assembly's `[DisableRuntimeMarshalling]`;
+  - the assembly's `[DefaultDllImportSearchPaths]`, unless the function has its own;
+  - the `[BestFitMapping]` of the assembly and of the type that declares the function, unless the
+    import names both `BestFitMapping` and `ThrowOnUnmappableChar`. The runtime takes the type's
+    where there is one and the assembly's otherwise; the text holds both, which costs congruence
+    only on a pair that edits one the runtime does not read;
+  - every type the signature reaches that is declared in the solution, once each: its kind, its
+    base type or an enum's underlying type, its attributes, its instance fields in declaration
+    order, each with its type, a fixed buffer's length and its attributes, and for a delegate its
+    signature with the attributes of its return value and parameters. The signature reaches a type
+    through an array, a pointer, a reference, a function pointer, a type argument, a field, a base
+    type and a delegate's signature.
+  - **Why a type's lines belong to the function and not to a rule about types.** The ticket asked.
+    A type's layout and a field's `[MarshalAs]` are how an argument of that type is marshalled, which
+    is what this ADR already calls the function's code; the function is the one text whose meaning
+    they are known to change, and it is where the earlier clarifications put every other
+    marshalling setting. A rule about types would say that every body that uses a type depends on
+    the type's declaration. That is a wider claim about what a fingerprint covers, it is not needed
+    to close this gap, and it has its own ticket (P2-149), because a type's layout can also change
+    what an ordinary body does.
+  - **Which texts change.** Only that of a function with a `[DllImport]`, and only where one of
+    the settings exists: a function whose signature names no type of the solution, in an assembly
+    with none of the three attributes, has the text it had. A body that declares no `extern`
+    function has no such line, whatever its types and its assembly say, and neither has an
+    `InternalCall`, which the marshaller never sees.
+  - **What the text still does not hold.** A type from a reference is written by its name alone:
+    what it holds is outside both solutions, as a callee there is (ADR 0018, ADR 0019). An attribute's
+    arguments are written as the compiler binds them, so a `typeof` in one is a name that the rename
+    map does not rewrite; that can cost congruence and cannot give it.
 - 2026-10-08 (P2-144). **The throw a `switch` expression ends in is part of its bound code, and
   across .NET Core 3.0 it is a runtime rule.** A `switch` expression that matches no arm throws.
   The source does not write the throw and the `IOperation` tree does not hold it: the compiler

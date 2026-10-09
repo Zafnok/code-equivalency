@@ -29,7 +29,9 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// for a caller-information parameter is written as <c>caller=</c> and its kind, without its value (ADR 0046). A local
 /// function's line is followed by one line per attribute on it, on its return value and on its parameters: an
 /// <c>extern</c> local function has no bound code, so its attributes, which name the library and the entry point it calls
-/// and say how its arguments are marshalled, are its code (ADR 0024 as clarified by tickets P2-107 and P2-145). A
+/// and say how its arguments are marshalled, are its code (ADR 0024 as clarified by tickets P2-107 and P2-145). One with a
+/// <c>[DllImport]</c> also has what the marshaller reads from outside it: the marshalling attributes of its assembly and
+/// its type, and the declarations of the types in its signature (ticket P2-146). A
 /// <c>switch</c> expression that may match no arm carries the constructor of the exception the compiler throws then, which
 /// depends on the reference assemblies (ADR 0024 as clarified by ticket P2-144). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
@@ -47,6 +49,8 @@ internal sealed class BoundSerialiser : OperationWalker
         SpecialType.System_UInt32, SpecialType.System_Int64, SpecialType.System_UInt64, SpecialType.System_Char, SpecialType.System_IntPtr,
         SpecialType.System_UIntPtr,
     ];
+
+    private const string SearchPaths = "System.Runtime.InteropServices.DefaultDllImportSearchPathsAttribute";
 
     private readonly StringBuilder text = new();
     private readonly Dictionary<ISymbol, string> numbered = new(SymbolEqualityComparer.Default);
@@ -225,7 +229,8 @@ internal sealed class BoundSerialiser : OperationWalker
     /// <summary>
     /// One line per attribute on <paramref name="owner"/>, on its return value and on each of its parameters: the attribute's
     /// constructor and its bound arguments, so a constant it names is written as its value. An <c>extern</c> function has a
-    /// line ahead of them that says what it imports, since part of that is in no attribute argument.
+    /// line ahead of them that says what it imports, since part of that is in no attribute argument. One with a
+    /// <c>[DllImport]</c> has the settings its marshaller takes from outside the function after them.
     /// </summary>
     private void Attributes(string name, IMethodSymbol owner)
     {
@@ -234,17 +239,112 @@ internal sealed class BoundSerialiser : OperationWalker
             text.Append("Extern ").Append(name).Append(": ").Append(Import(owner)).Append('\n');
         }
 
-        (string Target, ImmutableArray<AttributeData> Attributes)[] targets =
-        [
-            (name, owner.GetAttributes()),
-            (name + " return", owner.GetReturnTypeAttributes()),
-            .. owner.Parameters.Select(p => ($"{name} #{p.Ordinal.ToString(CultureInfo.InvariantCulture)}", p.GetAttributes())),
-        ];
+        AttributeLines(Targets(name, owner));
+        if (owner.GetDllImportData() is { } import)
+        {
+            Marshalling(name, owner, import);
+        }
+    }
+
+    /// <summary>The attributes of <paramref name="owner"/>, of its return value and of each of its parameters, each under the name its lines carry.</summary>
+    private static IEnumerable<(string Target, IEnumerable<AttributeData> Attributes)> Targets(string name, IMethodSymbol owner) =>
+    [
+        (name, owner.GetAttributes()),
+        (name + " return", owner.GetReturnTypeAttributes()),
+        .. owner.Parameters.Select(p => ($"{name} #{p.Ordinal.ToString(CultureInfo.InvariantCulture)}", (IEnumerable<AttributeData>)p.GetAttributes())),
+    ];
+
+    private void AttributeLines(IEnumerable<(string Target, IEnumerable<AttributeData> Attributes)> targets)
+    {
         foreach ((string target, AttributeData attribute) in targets.SelectMany(static t => t.Attributes.Select(a => (t.Target, a))))
         {
             text.Append("Attribute ").Append(target).Append(": ").Append(attribute.AttributeConstructor).Append(" = ").Append(attribute).Append('\n');
         }
     }
+
+    /// <summary>
+    /// What the runtime's marshaller reads for an imported <paramref name="function"/> from outside it (ADR 0024 as
+    /// clarified by ticket P2-146). From its assembly: <c>[DisableRuntimeMarshalling]</c>, and
+    /// <c>[DefaultDllImportSearchPaths]</c> when the function has none of its own. From its assembly and its type:
+    /// <c>[BestFitMapping]</c>, when the <paramref name="import"/> leaves either of that attribute's two settings open.
+    /// Then every type its signature reaches that is declared in the solution.
+    /// </summary>
+    private void Marshalling(string name, IMethodSymbol function, DllImportData import)
+    {
+        bool Taken(AttributeData attribute) => attribute.AttributeClass!.ToDisplayString() switch
+        {
+            "System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute" => true,
+            SearchPaths => !function.GetAttributes().Any(static own => string.Equals(own.AttributeClass!.ToDisplayString(), SearchPaths, StringComparison.Ordinal)),
+            "System.Runtime.InteropServices.BestFitMappingAttribute" => import.BestFitMapping is null || import.ThrowOnUnmappableCharacter is null,
+            _ => false,
+        };
+
+        AttributeLines(
+        [
+            (name + " assembly", function.ContainingAssembly.GetAttributes().Where(Taken)),
+            (name + " type", function.ContainingType.GetAttributes().Where(Taken)),
+        ]);
+        HashSet<ISymbol> written = new(SymbolEqualityComparer.Default);
+        foreach (ITypeSymbol type in SignatureTypes(function))
+        {
+            Marshalled(name, type, written);
+        }
+    }
+
+    /// <summary>
+    /// Writes the types <paramref name="type"/> is made of that are declared in the solution, each once. A type from a
+    /// reference has no lines: its name is in the signature, and what it holds is outside both solutions, as a callee
+    /// there is.
+    /// </summary>
+    private void Marshalled(string name, ITypeSymbol type, HashSet<ISymbol> written)
+    {
+        IEnumerable<ITypeSymbol> parts = type switch
+        {
+            IArrayTypeSymbol array => [array.ElementType],
+            IPointerTypeSymbol pointer => [pointer.PointedAtType],
+            IFunctionPointerTypeSymbol function => SignatureTypes(function.Signature),
+            INamedTypeSymbol named when written.Add(named) => [.. named.TypeArguments, .. named.DeclaringSyntaxReferences.IsEmpty ? [] : Declared(name, named)],
+            _ => [],
+        };
+        foreach (ITypeSymbol part in parts)
+        {
+            Marshalled(name, part, written);
+        }
+    }
+
+    /// <summary>
+    /// Writes how a value of <paramref name="type"/> is laid out and marshalled, as far as its declaration says: its kind,
+    /// its base type or an enum's underlying type, its attributes, its instance fields in declaration order, each with
+    /// its type, a fixed buffer's length and its attributes, and a delegate's signature with the attributes of its return
+    /// value and parameters. Returns the types those name.
+    /// </summary>
+    private ImmutableArray<ITypeSymbol> Declared(string name, INamedTypeSymbol type)
+    {
+        string target = $"{name} {Type(type)}";
+        ImmutableArray<ITypeSymbol> inherited = [.. ((ITypeSymbol?[])[type.BaseType, type.EnumUnderlyingType]).OfType<ITypeSymbol>()];
+        ImmutableArray<IFieldSymbol> fields = [.. type.GetMembers().OfType<IFieldSymbol>().Where(static f => !f.IsStatic)];
+        ImmutableArray<IMethodSymbol> invoke = [.. ((IMethodSymbol?[])[type.DelegateInvokeMethod]).OfType<IMethodSymbol>()];
+
+        text.Append("Marshalled ").Append(target).Append(": ").Append(type.TypeKind).Append(" : ").AppendJoin(", ", inherited.Select(Type)).Append('\n');
+        AttributeLines([(target, type.GetAttributes())]);
+        foreach ((int index, IFieldSymbol field) in fields.Index())
+        {
+            string position = $"{target} #{index.ToString(CultureInfo.InvariantCulture)}";
+            text.Append("Field ").Append(position).Append(": ").Append(Type(field.Type)).Append(" fixed=").Append(field.FixedSize).Append('\n');
+            AttributeLines([(position, field.GetAttributes())]);
+        }
+
+        foreach (IMethodSymbol signature in invoke)
+        {
+            text.Append("Invoke ").Append(target).Append(": (").AppendJoin(", ", signature.Parameters.Select(p => $"{p.RefKind} {Type(p.Type)}"))
+                .Append(") -> ").Append(Type(signature.ReturnType)).Append('\n');
+            AttributeLines(Targets(target, signature));
+        }
+
+        return [.. inherited, .. fields.Select(static f => f.Type), .. invoke.SelectMany(static signature => SignatureTypes(signature))];
+    }
+
+    private static ImmutableArray<ITypeSymbol> SignatureTypes(IMethodSymbol method) => [method.ReturnType, .. method.Parameters.Select(static p => p.Type)];
 
     /// <summary>
     /// What an <c>extern</c> function imports, as the compiler resolves its <c>[DllImport]</c>: the library, the entry

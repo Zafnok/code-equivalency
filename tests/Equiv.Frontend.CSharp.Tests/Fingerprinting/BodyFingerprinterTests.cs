@@ -467,6 +467,169 @@ public sealed class BodyFingerprinterTests
         Assert.Contains(expected, BodyFingerprinter.Text(Method(compilation, name), compilation, EquivConfig.Default, [], OneRuntime).Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-146: <c>[assembly: DisableRuntimeMarshalling]</c> turns marshalling off for every <c>[DllImport]</c> in the
+    /// assembly, so it is in the text of each one, a local function's included, on any runtime pair.
+    /// </summary>
+    [Fact]
+    public void AnAssemblysDisabledRuntimeMarshallingIsInAnExternFunctionsText()
+    {
+        Compilation disabled = Interop(Imported, Disabled);
+
+        Assert.NotEqual(OnOneRuntime(Interop(Imported)), OnOneRuntime(disabled));
+        Assert.Equal(OnOneRuntime(Interop(Imported, Disabled)), OnOneRuntime(disabled));
+        Assert.EndsWith(
+            "DllImportAttribute(\"a.dll\")\n"
+            + "Attribute method assembly: System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute.DisableRuntimeMarshallingAttribute() = System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute\n",
+            OneRuntimeText(disabled),
+            StringComparison.Ordinal);
+        AssertALocalImportTakes(Disabled);
+    }
+
+    /// <summary>
+    /// Ticket P2-146: the assembly's <c>[DefaultDllImportSearchPaths]</c> says where the library of an import that has none
+    /// of its own is looked for. An import that has its own keeps its text.
+    /// </summary>
+    [Fact]
+    public void AnAssemblysImportSearchPathsAreInTheTextOfAnExternFunctionThatNamesNone()
+    {
+        static string Paths(string path) => $"[assembly: System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.{path})]";
+        const string Own = "[DllImport(\"a.dll\")] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] public static extern int M(int a);";
+
+        Assert.NotEqual(OnOneRuntime(Interop(Imported)), OnOneRuntime(Interop(Imported, Paths("System32"))));
+        Assert.NotEqual(OnOneRuntime(Interop(Imported, Paths("SafeDirectories"))), OnOneRuntime(Interop(Imported, Paths("System32"))));
+        Assert.Contains("Attribute method assembly: System.Runtime.InteropServices.DefaultDllImportSearchPathsAttribute.", OneRuntimeText(Interop(Imported, Paths("System32"))), StringComparison.Ordinal);
+        Assert.Equal(OneRuntimeText(Interop(Own)), OneRuntimeText(Interop(Own, Paths("SafeDirectories"))));
+        Assert.DoesNotContain(" assembly", OneRuntimeText(Interop(Own, Paths("SafeDirectories"))), StringComparison.Ordinal);
+        AssertALocalImportTakes(Paths("System32"));
+    }
+
+    /// <summary>
+    /// Ticket P2-146: an import that leaves <c>BestFitMapping</c> or <c>ThrowOnUnmappableChar</c> open takes it from the
+    /// <c>[BestFitMapping]</c> of its type or of the assembly. An import that names both keeps its text.
+    /// </summary>
+    [Theory]
+    [InlineData("[assembly: System.Runtime.InteropServices.BestFitMapping(false)]", "", "[assembly: System.Runtime.InteropServices.BestFitMapping(true)]", "", "Attribute method assembly: System.Runtime.InteropServices.BestFitMappingAttribute.")]
+    [InlineData("", "[BestFitMapping(false)]", "", "[BestFitMapping(true)]", "Attribute method type: System.Runtime.InteropServices.BestFitMappingAttribute.")]
+    [InlineData("", "[BestFitMapping(true, ThrowOnUnmappableChar = true)]", "", "[BestFitMapping(true, ThrowOnUnmappableChar = false)]", "Attribute method type: System.Runtime.InteropServices.BestFitMappingAttribute.")]
+    public void ABestFitMappingOnTheTypeOrTheAssemblyIsInTheTextOfAnImportThatLeavesItOpen(string assembly, string type, string otherAssembly, string otherType, string line)
+    {
+        const string Own = "[DllImport(\"a.dll\", BestFitMapping = true, ThrowOnUnmappableChar = false)] public static extern int M(int a);";
+        string[] open =
+        [
+            Imported,
+            "[DllImport(\"a.dll\", BestFitMapping = true)] public static extern int M(int a);",
+            "[DllImport(\"a.dll\", ThrowOnUnmappableChar = false)] public static extern int M(int a);",
+        ];
+
+        foreach (string import in open)
+        {
+            Assert.NotEqual(OnOneRuntime(Interop(import)), OnOneRuntime(Interop(import, assembly, type)));
+            Assert.NotEqual(OnOneRuntime(Interop(import, otherAssembly, otherType)), OnOneRuntime(Interop(import, assembly, type)));
+            Assert.Contains(line, OneRuntimeText(Interop(import, assembly, type)), StringComparison.Ordinal);
+        }
+
+        Assert.Equal(OneRuntimeText(Interop(Own)), OneRuntimeText(Interop(Own, assembly, type)));
+    }
+
+    /// <summary>
+    /// Ticket P2-146: how an argument is marshalled is also in the declaration of its type: a type's layout, a field's
+    /// <c>[MarshalAs]</c> and <c>[FieldOffset]</c>, the order and the types of the fields, a delegate's
+    /// <c>[UnmanagedFunctionPointer]</c> and its own signature. The types are those the signature reaches: through an
+    /// array, a pointer, a reference, a function pointer, a type argument, a field and a base type.
+    /// </summary>
+    [Theory]
+    [InlineData("public struct S { public int A; public byte B; }", "[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public int A; public byte B; }", "int M(S s)")]
+    [InlineData("[StructLayout(LayoutKind.Sequential)] public struct S { public int A; }", "[StructLayout(LayoutKind.Sequential, Size = 16)] public struct S { public int A; }", "int M(S s)")]
+    [InlineData("[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)] public struct S { public string A; }", "[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct S { public string A; }", "int M(S s)")]
+    [InlineData("public struct S { public bool A; }", "public struct S { [MarshalAs(UnmanagedType.I1)] public bool A; }", "int M(S s)")]
+    [InlineData("[StructLayout(LayoutKind.Explicit)] public struct S { [FieldOffset(0)] public int A; [FieldOffset(4)] public int B; }", "[StructLayout(LayoutKind.Explicit)] public struct S { [FieldOffset(0)] public int A; [FieldOffset(0)] public int B; }", "int M(S s)")]
+    [InlineData("public struct S { public int A; public byte B; }", "public struct S { public byte B; public int A; }", "int M(S s)")]
+    [InlineData("public struct S { public int A; }", "public struct S { public int A; public int B; }", "int M(S s)")]
+    [InlineData("public unsafe struct S { public fixed byte A[4]; }", "public unsafe struct S { public fixed byte A[8]; }", "int M(S s)")]
+    [InlineData("public struct S { public int A { get; set; } }", "public struct S { [field: MarshalAs(UnmanagedType.U4)] public int A { get; set; } }", "int M(S s)")]
+    [InlineData("public struct S { public int A; }", "public class S { public int A; }", "int M(S s)")]
+    [InlineData("public enum S { A }", "public enum S : byte { A }", "int M(S s)")]
+    [InlineData("public delegate int S(int x);", "[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate int S(int x);", "int M(S s)")]
+    [InlineData("public delegate int S(bool x);", "public delegate int S([MarshalAs(UnmanagedType.I1)] bool x);", "int M(S s)")]
+    [InlineData("public delegate bool S(int x);", "[return: MarshalAs(UnmanagedType.I1)] public delegate bool S(int x);", "int M(S s)")]
+    [InlineData("public delegate int S(int x);", "public delegate int S(ref int x);", "int M(S s)")]
+    [InlineData("public delegate int S(int x);", "public delegate long S(int x);", "int M(S s)")]
+    [InlineData("public struct T { public bool A; } public delegate int S(T x);", "public struct T { [MarshalAs(UnmanagedType.I1)] public bool A; } public delegate int S(T x);", "int M(S s)")]
+    [InlineData("public struct T { public bool A; } public delegate T S();", "public struct T { [MarshalAs(UnmanagedType.I1)] public bool A; } public delegate T S();", "int M(S s)")]
+    [InlineData("public struct S { public bool A; }", "public struct S { [MarshalAs(UnmanagedType.I1)] public bool A; }", "S M()")]
+    [InlineData("public struct S { public bool A; }", "public struct S { [MarshalAs(UnmanagedType.I1)] public bool A; }", "int M(int a, ref S s)")]
+    [InlineData("public struct S { public bool A; }", "public struct S { [MarshalAs(UnmanagedType.I1)] public bool A; }", "int M(S[] s)")]
+    [InlineData("public struct S { public bool A; }", "public struct S { [MarshalAs(UnmanagedType.I1)] public bool A; }", "unsafe int M(S* s)")]
+    [InlineData("public struct S { public bool A; }", "public struct S { [MarshalAs(UnmanagedType.I1)] public bool A; }", "unsafe int M(delegate* unmanaged<S, int> s)")]
+    [InlineData("public struct S { public bool A; }", "public struct S { [MarshalAs(UnmanagedType.I1)] public bool A; }", "unsafe int M(delegate* unmanaged<int, S> s)")]
+    [InlineData("public struct S { public bool A; }", "public struct S { [MarshalAs(UnmanagedType.I1)] public bool A; }", "int M(System.Span<S> s)")]
+    [InlineData("public struct G<X> { public X A; } public struct S { public bool A; }", "public struct G<X> { public X A; } public struct S { [MarshalAs(UnmanagedType.I1)] public bool A; }", "int M(G<S> s)")]
+    [InlineData("public struct T { public bool A; } public struct S { public T A; }", "public struct T { [MarshalAs(UnmanagedType.I1)] public bool A; } public struct S { public T A; }", "int M(S s)")]
+    [InlineData("public class T { public bool A; } public class S : T { }", "public class T { [MarshalAs(UnmanagedType.I1)] public bool A; } public class S : T { }", "int M(S s)")]
+    [InlineData("public class T { } public class U { } public class S : T { }", "public class T { } public class U { } public class S : U { }", "int M(S s)")]
+    public void TheLayoutOfATypeInAnExternFunctionsSignatureIsInItsText(string legacy, string modern, string signature)
+    {
+        string method = $" [DllImport(\"a.dll\")] public static extern {signature};";
+        string local = $" public void L() {{ [DllImport(\"a.dll\")] static extern {signature}; }}";
+
+        Assert.NotEqual(OnOneRuntime(Interop(legacy + method)), OnOneRuntime(Interop(modern + method)));
+        Assert.Equal(OnOneRuntime(Interop(modern + method)), OnOneRuntime(Interop(modern + method)));
+        foreach (SideRuntime runtime in (SideRuntime[])[OneRuntime, Runtimes.Migration])
+        {
+            BodyFingerprint? On(string members)
+            {
+                Compilation compilation = Interop(members);
+                return BodyFingerprinter.Compute(Method(compilation, "L"), compilation, EquivConfig.Default, legacy: false, runtime);
+            }
+
+            Assert.NotNull(On(legacy + local));
+            Assert.NotEqual(On(legacy + local), On(modern + local));
+            Assert.Equal(On(modern + local), On(modern + local));
+        }
+    }
+
+    /// <summary>
+    /// Ticket P2-146: what a type in the signature is written as. Each type declared in the solution once, however often
+    /// the signature reaches it and although it holds a pointer to itself; its attributes; its instance fields in
+    /// declaration order, each with its type, a fixed buffer's length and its attributes; a delegate's signature. A static
+    /// field is no part of the layout, and a type from a reference has no lines: its name is in the signature.
+    /// </summary>
+    [Fact]
+    public Task TheTypesInAnExternFunctionsSignatureAreWrittenOnceEachWithTheirFields()
+    {
+        const string Types = "[StructLayout(LayoutKind.Sequential, Pack = 2)] public unsafe struct S { public static int Z; [MarshalAs(UnmanagedType.I1)] public bool A; public fixed byte B[4]; public S* Next; public E Kind; public System.Guid Id; } "
+            + "public enum E : byte { A } public class P { public int A; } public class Q : P { public G<long> B; } public struct G<X> { public X A; } "
+            + "[UnmanagedFunctionPointer(CallingConvention.Cdecl)] [return: MarshalAs(UnmanagedType.I1)] public delegate bool D([In] ref S s, int x); ";
+        const string Function = "[DllImport(\"a.dll\")] public static extern unsafe S M(S s, D d, Q q, S[] again, int plain);";
+        Compilation compilation = Interop(Types + Function);
+
+        Assert.Equal(OneRuntimeText(compilation), OneRuntimeText(Interop(Types.Replace("public static int Z; ", string.Empty, StringComparison.Ordinal) + Function)));
+        return Verify(OneRuntimeText(compilation));
+    }
+
+    /// <summary>
+    /// Ticket P2-146 criterion 2: the settings are in the text of an <c>extern</c> function that takes them and in no
+    /// other. A body that declares none, although it uses a type with a layout, and an <c>InternalCall</c>, which the
+    /// marshaller never sees, have the text they have without the settings.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M(S s) { return F(s); [System.Obsolete] static int F(S x) => x.A; }")]
+    [InlineData("[MethodImpl(MethodImplOptions.InternalCall)] public extern int M(S s);")]
+    public void ABodyWithoutAnExternFunctionKeepsItsText(string member)
+    {
+        const string Laid = "[StructLayout(LayoutKind.Explicit)] public struct S { [FieldOffset(0)] public int A; } ";
+        const string Settings = Disabled
+            + "[assembly: System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]"
+            + "[assembly: System.Runtime.InteropServices.BestFitMapping(false)]";
+
+        string text = OneRuntimeText(Interop(Laid + member, Settings, "[BestFitMapping(false)]"));
+
+        Assert.Equal(OneRuntimeText(Interop(Laid + member)), text);
+        Assert.DoesNotContain("Marshalled", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("BestFitMapping", text, StringComparison.Ordinal);
+    }
+
     /// <summary>ADR 0054 decision 4: across runtimes it is the runtime that marshals the call, so an <c>extern</c> method has no fingerprint.</summary>
     [Theory]
     [InlineData("net48", "net10.0")]
@@ -660,8 +823,29 @@ public sealed class BodyFingerprinterTests
         $"private static partial bool M(int a); private static partial bool M(int a) {{ return __PInvoke(a) != 0; [System.Runtime.InteropServices.DllImport({import})] static extern {returns} __PInvoke({parameter} x); }}";
 
     /// <summary>Members of a partial class <c>N.C</c>, with the interop namespaces imported.</summary>
-    private static CSharpCompilation Interop(string members) =>
-        Compile(members, extra: "using System.Runtime.CompilerServices; using System.Runtime.InteropServices;", partial: true);
+    private static CSharpCompilation Interop(string members, string assembly = "", string type = "") =>
+        Compile(members, extra: "using System.Runtime.CompilerServices; using System.Runtime.InteropServices; " + type, partial: true, header: assembly);
+
+    /// <summary>An <c>extern</c> method that names nothing but its library.</summary>
+    private const string Imported = "[DllImport(\"a.dll\")] public static extern int M(int a);";
+
+    private const string Disabled = "[assembly: System.Runtime.CompilerServices.DisableRuntimeMarshalling]";
+
+    private static string OneRuntimeText(Compilation compilation) =>
+        BodyFingerprinter.Text(Method(compilation), compilation, EquivConfig.Default, [], OneRuntime).Text!;
+
+    /// <summary>A body whose local <c>extern</c> function takes the <paramref name="assembly"/>'s setting has another fingerprint with it, on any runtime pair.</summary>
+    private static void AssertALocalImportTakes(string assembly)
+    {
+        Compilation plain = Compile(Importer("\"a.dll\""));
+        Compilation set = Compile(Importer("\"a.dll\""), header: assembly);
+        foreach (SideRuntime runtime in (SideRuntime[])[OneRuntime, Runtimes.Migration])
+        {
+            Assert.NotEqual(
+                BodyFingerprinter.Compute(Method(plain), plain, EquivConfig.Default, legacy: false, runtime),
+                BodyFingerprinter.Compute(Method(set), set, EquivConfig.Default, legacy: false, runtime));
+        }
+    }
 
     /// <summary>A method that calls a local <c>extern</c> function it declares: ticket P2-145's first repro.</summary>
     private static string Importer(string import, string returns = "", string parameter = "int") =>
@@ -681,12 +865,12 @@ public sealed class BodyFingerprinterTests
         compilation.GetTypeByMetadataName("N.C")!.GetMembers(name).OfType<IMethodSymbol>().First();
 
     private static CSharpCompilation Compile(
-        string members, LanguageVersion version = LanguageVersion.Preview, Platform platform = Platform.AnyCpu, string extra = "", bool partial = false, bool wrap = true)
+        string members, LanguageVersion version = LanguageVersion.Preview, Platform platform = Platform.AnyCpu, string extra = "", bool partial = false, bool wrap = true, string header = "")
     {
         string source = wrap ? $"namespace N {{ {extra} public {(partial ? "abstract partial " : string.Empty)}class C {{ {members} }} }}" : $"namespace N {{ {members} }}";
         return CSharpCompilation.Create(
             "Snippet",
-            [Parse(source, version)],
+            [Parse(header + source, version)],
             RoslynTestCompilations.References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, platform: platform, allowUnsafe: true));
     }
