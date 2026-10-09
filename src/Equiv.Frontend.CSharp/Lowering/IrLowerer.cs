@@ -1616,9 +1616,15 @@ internal sealed class IrLowerer
             return UserDefined(binary, method, [binary.LeftOperand, binary.RightOperand], context);
         }
 
-        bool signed = TypeMapper.IsSigned(leftType);
         IrVar left = Value(binary.LeftOperand, context);
         IrVar right = Value(binary.RightOperand, context);
+        if (binary.OperatorKind is BinaryOperatorKind.Equals or BinaryOperatorKind.NotEquals && leftType.TypeKind == TypeKind.Enum && SymbolEqualityComparer.Default.Equals(leftType, rightType))
+        {
+            // An enum value is the element of its sort a constant of its underlying value is, so equal values are equal elements (ticket P2-087).
+            return Emit(binary.OperatorKind == BinaryOperatorKind.Equals ? IrBinaryOp.Eq : IrBinaryOp.Ne, left, right, Bool, context);
+        }
+
+        bool signed = TypeMapper.IsSigned(leftType);
         return OperatorMapper.Binary(binary.OperatorKind, signed, left.Type, right.Type) switch
         {
             not { } => Opaque(binary, binary.Kind.ToString(), context),

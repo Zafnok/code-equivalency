@@ -1,5 +1,5 @@
 # P2-087 A lifted or otherwise unlowered binary operator no longer keeps a changed pair opaque
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-083
@@ -49,3 +49,36 @@ The IL fallback. The lowering crash on a binary operand with no type (P2-083).
 
 ## Notes
 - Found by P2-065 (`docs/runs/2026-10-01-migrations-verdict.md`).
+- Criterion 1, measured on `main` at `17e4cf66` with a `--lower-only` run of `openra-17989` (10,120 matched pairs, 345
+  changed; the 2026-10-01 run had 418). `Binary` is in 56 changed pairs and alone in 35. Those pairs hold 368 `Binary`
+  opaque nodes, both sides counted:
+
+  | form | nodes | changed pairs holding it |
+  |---|---|---|
+  | enum operands (no pointer operand occurs) | 304 | 45 |
+  | other: `object == object` 28, `object != object` 4 | 32 | 10 |
+  | operand types that differ: `string + object` 22, `object + string` 2 | 24 | 8 |
+  | a nullable struct compared with the `null` literal (P2-083's form) | 6 | 1 |
+  | lifted comparison: a user-defined `==` on a nullable struct | 2 | 1 |
+  | lifted arithmetic | 0 | 0 |
+
+  The enum nodes by operator: `==` 238, `!=` 60, `&` 4, `>=` 2. Lifted operators, which the title and criterion 2 expect,
+  are 2 nodes of 368.
+- The size guard does not trip: enum operands are 83% of the nodes.
+- Decision: the form lowered is `==` and `!=` on two operands of one enum type (298 of the 304 enum nodes), as `eq` and
+  `ne` on the enum's sort. The IR already takes both on a sort (`IrBinaryOp`), an enum constant is already the sort
+  element of its underlying value (`TypeMapper.Constant`), `default(E)` is the element of `0`, and the solver already
+  asserts a sort's literals distinct (`SortMapper.Distinctness`), so nothing in `Equiv.Core` or `Equiv.Verify.Z3` changes
+  and no nullable value sort is needed. `<`, `>=`, `&`, `|` and `-` on an enum read the underlying integer, which the
+  sort does not hold; they stay opaque with reason `Binary` (6 nodes here).
+- Deviation: criterion 3's property test is written for a lifted operator. No lifted operator was lowered, so the
+  property (`EnumEqualityLoweringTests.LoweredEnumEqualityAgreesWithCSharp`) is that the lowered enum `==` and `!=`
+  agree with C# on random operands, as a parameter and as a constant, defined by the enum or not.
+- Criterion 4, the same run with the lowering: `changedReasonSets["Binary"]` falls from 35 to 12, by 23 pairs (6.7% of
+  the 345 changed pairs; the criterion asks for 21). `Binary` is now in 20 changed pairs, down from 56; changed pairs
+  without opaque rise from 172 to 195 (49.9% to 56.5%); bodies holding a `Binary` opaque are 279 a side, where the
+  2026-10-01 run had 709. Matched, congruent and changed pairs are unchanged.
+- What is left alone is 12 of 345 changed pairs (3.5%), under ADR 0028's 5%, so `Binary` needs no further owner on this
+  pair. The largest forms left are reference equality on `object` and `string + object`.
+- No summary under `docs/runs/` was written: both runs are censuses for this ticket's own criteria, so the README's
+  scoreboard is untouched.
