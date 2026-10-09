@@ -104,7 +104,7 @@ Every number is measured on public code, and every row says when. The runs are i
 | Divergent | 0.7% of pairs (294), 17.6% of changed pairs | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md) |
 | Divergent precision (a Divergent is a real behaviour change) | Migration 3.8% (2 of 52). Upgrades 3.8% (5 of 131). Cleanups 0% (0 of 51) | [2026-09-30](docs/runs/2026-09-30-divergent-audit.md), [2026-10-03](docs/runs/2026-10-03-upgrade-verdict.md), [2026-10-02](docs/runs/2026-10-02-cleanup-verdict.md) |
 | Left for a reviewer (Unknown and Divergent) | 3.1% of pairs (1,324) | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md) |
-| Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. 1 open soundness ticket ([P2-146](docs/tickets/P2-146-soundness-interop-settings-outside-the-function.md)) | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
+| Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. 1 open soundness ticket ([P2-146](docs/tickets/done/P2-146-soundness-interop-settings-outside-the-function.md)) | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
 | Large pairs that run to a result | 5 of 5 | 2026-10-03 ([Duplicati](docs/tickets/done/P2-082-pair-weighting-crash-ends-the-run.md), [OpenRA](docs/tickets/done/P2-125-tuple-array-sort-mismatch-on-element-names.md)) |
 | Run time, one large pair | mean 5 min (3 min to 6 min), four pairs at a time | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md) |
 | Repeatability | 99.94% (13,734 of 13,742 results equal between two runs) | [2026-10-02](docs/runs/2026-10-02-pair-time.md) |
@@ -162,7 +162,7 @@ none reported Equivalent. On the two upgrades, no behaviour change the pull requ
 reported Equivalent either. An Equivalent can be relied on today, with one open question: the marshalling
 settings an `extern` function takes from outside itself are in no fingerprint, read off the code
 and not reproduced
-([P2-146](docs/tickets/P2-146-soundness-interop-settings-outside-the-function.md)).
+([P2-146](docs/tickets/done/P2-146-soundness-interop-settings-outside-the-function.md)).
 The rest cannot yet:
 
 | What is needed | Today |
