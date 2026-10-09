@@ -141,6 +141,34 @@ public sealed class TypeMapperTests
         Assert.Equal(TypeMapper.Constant(TypeOf("decimal"), 1.5m), TypeMapper.Constant("System.Decimal", "1.5"));
     }
 
+    /// <summary>Ticket P2-095: the <c>Nullable&lt;T&gt;</c> whose conversion from <c>T</c> lowers are those of a <c>bool</c> or integral <c>T</c>.</summary>
+    [Theory]
+    [InlineData("int?", "int")]
+    [InlineData("System.Nullable<byte>", "byte")]
+    [InlineData("ulong?", "ulong")]
+    [InlineData("char?", "char")]
+    [InlineData("bool?", "bool")]
+    public void ANullableOfABoolOrIntegralTypeHasItsValueType(string type, string underlying)
+    {
+        Assert.Equal(TypeOf(underlying), TypeMapper.NullableValue(TypeOf(type)), SymbolEqualityComparer.Default);
+        Assert.True(TypeMapper.IsNullable(TypeOf(type)));
+        Assert.Equal(new IrSort("System.Nullable`1"), TypeMapper.Map(TypeOf(type)));
+    }
+
+    [Theory]
+    [InlineData("double?", true)]
+    [InlineData("System.DayOfWeek?", true)]
+    [InlineData("System.DateTime?", true)]
+    [InlineData("int", false)]
+    [InlineData("string", false)]
+    public void AnyOtherTypeHasNoNullableValueType(string type, bool isNullable)
+    {
+        Assert.Null(TypeMapper.NullableValue(TypeOf(type)));
+        Assert.Equal(isNullable, TypeMapper.IsNullable(TypeOf(type)));
+        Assert.Null(TypeMapper.NullableValue(type: null));
+        Assert.False(TypeMapper.IsNullable(type: null));
+    }
+
     [Fact]
     public void AStructHasNoConstantDefault() => Assert.Null(TypeMapper.Default(TypeOf("System.DateTime"), TypeMapper.Unmapped));
 

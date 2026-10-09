@@ -896,7 +896,7 @@ internal sealed class IrLowerer
                 return Match(pattern, context);
             case IIsTypeOperation isType:
                 return TestType(isType.ValueOperand, isType.TypeOperand, context) is { } typeTest ? Passes(typeTest, context) : Opaque(isType, isType.Kind.ToString(), context);
-            case IIsNullOperation test when test.Operand.Type is { IsReferenceType: true } or { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T }:
+            case IIsNullOperation test when test.Operand.Type is { IsReferenceType: true } || TypeMapper.IsNullable(test.Operand.Type):
                 // The null test the CFG makes of a `using` resource or a `foreach` enumerator before disposing it, and of the
                 // operand of `?.` and `??` (ticket P2-008); a `Nullable<T>` is null when its null shadow says so, as a reference is.
                 return NullFlag(test.Operand, Value(test.Operand, context), context);
@@ -906,9 +906,18 @@ internal sealed class IrLowerer
             case IInterpolatedStringOperation interpolated when InterpolatedStrings.IsConcatenation(interpolated):
                 return Interpolate(interpolated, context);
             default:
-                return Opaque(operation, operation.Kind.ToString(), context);
+                return DefaultOrOpaque(operation, context);
         }
     }
+
+    /// <summary>
+    /// <c>default(T?)</c> for a <c>bool</c> or integral <c>T</c> is the null constant <c>(T?)null</c> is (ticket P2-095), so the
+    /// two spellings of no value are one value; any other operation <see cref="Operation"/> does not name is opaque with its kind.
+    /// </summary>
+    private IrVar? DefaultOrOpaque(IOperation operation, LoweringContext context) =>
+        operation is IDefaultValueOperation && TypeMapper.NullableValue(operation.Type) is not null
+            ? Constant(operation.Type!, value: null, context)
+            : Opaque(operation, operation.Kind.ToString(), context);
 
     /// <summary>
     /// A conversion, unless it is the one around a collection expression, which is the collection expression. The span the
@@ -1050,11 +1059,14 @@ internal sealed class IrLowerer
         return variable;
     }
 
-    /// <summary>A reference-typed variable is paired with a Bool <c>&lt;name&gt;.isNull</c> shadow (acceptance criterion 5).</summary>
+    /// <summary>
+    /// A reference-typed variable is paired with a Bool <c>&lt;name&gt;.isNull</c> shadow (acceptance criterion 5), and so is
+    /// a <c>Nullable&lt;T&gt;</c> one, whose shadow says it has no value (ticket P2-095).
+    /// </summary>
     private SsaBuilder.Variable Shadowed(IrVar template, ITypeSymbol type)
     {
         SsaBuilder.Variable variable = new(template);
-        if (type.IsReferenceType && template.Type is IrSort)
+        if ((type.IsReferenceType || TypeMapper.IsNullable(type)) && template.Type is IrSort)
         {
             shadows[variable] = new SsaBuilder.Variable(new IrVar($"{template.Name}.isNull", Bool, template.SourceName));
         }
@@ -1083,13 +1095,14 @@ internal sealed class IrLowerer
     /// <summary>
     /// Whether <paramref name="source"/> is null, or null when it provably is not. A <c>new</c> is never
     /// null and neither is <c>this</c>; a variable carries its own shadow; anything else asks the
-    /// <c>null.&lt;Sort&gt;</c> map, so equal references are equally null.
+    /// <c>null.&lt;Sort&gt;</c> map, so equal references are equally null. A <c>Nullable&lt;T&gt;</c> is null when it has no
+    /// value (ticket P2-095): <c>default(T?)</c> and <c>new T?()</c> are, and a <c>T</c> converted to it never is.
     /// </summary>
     private IrVar? Nullness(IOperation source, IrVar value, LoweringContext context)
     {
         // A cast-map conversion's result is a value of its own, whose nullness is not tied to the operand's; an `as`'s is its failed test.
         IOperation unwrapped = source;
-        while (unwrapped is IConversionOperation conversion && !IsCast(conversion) && !conversion.IsTryCast)
+        while (unwrapped is IConversionOperation conversion && !IsCast(conversion) && !conversion.IsTryCast && !HasAValue(conversion))
         {
             unwrapped = conversion.Operand;
         }
@@ -1097,6 +1110,8 @@ internal sealed class IrLowerer
         return unwrapped switch
         {
             _ when tryCastNulls.TryGetValue(unwrapped, out IrVar? failed) => failed,
+            IDefaultValueOperation or IObjectCreationOperation { Arguments.IsEmpty: true } when TypeMapper.IsNullable(unwrapped.Type) => Const(new IrBoolValue(Value: true), context),
+            IConversionOperation conversion when HasAValue(conversion) => null,
             IObjectCreationOperation or IArrayCreationOperation or IDelegateCreationOperation or IInstanceReferenceOperation or ITypeOfOperation => null,
             ICollectionExpressionOperation collection when Built(collection) is { NeverNull: true } => null,
             _ when ShadowOf(unwrapped) is { } shadow => ssa.Load(context.Current, shadow),
@@ -1104,6 +1119,16 @@ internal sealed class IrLowerer
             _ => heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context),
         };
     }
+
+    /// <summary>
+    /// Whether <paramref name="conversion"/> is one from a value type that is no <c>Nullable&lt;T&gt;</c> to one that is, whose
+    /// result always has a value. A user-defined conversion may return <c>null</c>, and is not.
+    /// </summary>
+    private static bool HasAValue(IConversionOperation conversion) =>
+        TypeMapper.IsNullable(conversion.Type)
+        && conversion.OperatorMethod is null
+        && conversion.Operand.Type is { IsValueType: true } from
+        && !TypeMapper.IsNullable(from);
 
     /// <summary>Whether <paramref name="source"/> is null, as a value: <see cref="Nullness"/>, or false when it provably is not.</summary>
     private IrVar NullFlag(IOperation source, IrVar value, LoweringContext context) =>
@@ -1469,7 +1494,7 @@ internal sealed class IrLowerer
     /// An implicit reference or boxing conversion between different IR types is a read of its <c>cast.&lt;From&gt;.&lt;To&gt;</c>
     /// map (ticket M3-010), <c>as</c> and a downcast are a type test (ticket M4-005), and an identity conversion is its operand (ticket M4-001). A numeric conversion to or from
     /// floating point or <c>decimal</c> is a <c>conv</c> function and a user-defined conversion its <c>op:</c> function
-    /// (ticket M4-002). Otherwise integral to integral only: extension follows the source's signedness; a checked
+    /// (ticket M4-002). <c>T</c> to <c>T?</c> for a <c>bool</c> or integral <c>T</c> is <see cref="ToNullable"/> (ticket P2-095). Otherwise integral to integral only: extension follows the source's signedness; a checked
     /// narrowing throws when the value does not fit.
     /// </summary>
     private IrVar? Convert(IConversionOperation conversion, LoweringContext context)
@@ -1489,6 +1514,11 @@ internal sealed class IrLowerer
         {
             // Such as the one the CFG wraps around a `foreach` collection.
             return Value(conversion.Operand, context);
+        }
+
+        if (ToNullable(conversion, context) is { } nullable)
+        {
+            return nullable;
         }
 
         if (conversion.Operand.Type is { } source && PureCatalogue.Conversion(source, conversion.Type!) is { } entry)
@@ -1521,14 +1551,39 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
+    /// A conversion to a <c>Nullable&lt;T&gt;</c> of a <c>bool</c> or integral <c>T</c> (ticket P2-095): of a <c>T</c>, implicit or
+    /// written as a cast, <see cref="Wrap"/> of it, and of the <c>default</c> literal the null constant <c>default(T?)</c>
+    /// is, which the <c>null</c> literal converted is already, as a compile-time constant. Null for any other conversion, one that also converts the <c>T</c> and one from another
+    /// <c>Nullable&lt;T&gt;</c> included, which stay opaque.
+    /// </summary>
+    private IrVar? ToNullable(IConversionOperation conversion, LoweringContext context) => TypeMapper.NullableValue(conversion.Type) switch
+    {
+        null => null,
+        _ when conversion.GetConversion().IsDefaultLiteral => Constant(conversion.Type!, value: null, context),
+        var underlying when SymbolEqualityComparer.Default.Equals(conversion.Operand.Type, underlying) => Wrap(conversion.Operand, conversion.Type!, context),
+        _ => null,
+    };
+
+    /// <summary>
+    /// The <c>Nullable&lt;T&gt;</c> that has the value <paramref name="value"/> (ticket P2-095), as boxing is: a read of the
+    /// <c>cast.&lt;T&gt;.System.Nullable_1</c> input at the value, so equal values are one <c>Nullable&lt;T&gt;</c> on both sides
+    /// and nothing is a call. <see cref="Nullness"/> knows it has a value; nothing says two values differ, or differ from null.
+    /// </summary>
+    private IrVar Wrap(IOperation value, ITypeSymbol nullable, LoweringContext context) =>
+        heap.MapRead(heap.Inputs.Cast(value.Type!, nullable), Value(value, context), context);
+
+    /// <summary>
     /// Whether <paramref name="conversion"/> is the one around a target-typed <c>new()</c> whose creation is already of
     /// the target type (ticket P2-099), so it is its operand. One to a <c>Nullable&lt;T&gt;</c> creates a <c>T</c>, and is not.
+    /// The one around a target-typed conditional such as <c>b ? a : null</c>, whose arms the compiler has already converted
+    /// to the target type, is its operand too (ticket P2-095).
     /// </summary>
-    private static bool IsTargetTypedNew(IConversionOperation conversion) =>
-        conversion.GetConversion().IsObjectCreation && SymbolEqualityComparer.Default.Equals(conversion.Operand.Type, conversion.Type);
+    private static bool IsTargetTyped(IConversionOperation conversion) =>
+        conversion.GetConversion() is { IsObjectCreation: true } or { IsConditionalExpression: true }
+        && SymbolEqualityComparer.Default.Equals(conversion.Operand.Type, conversion.Type);
 
-    /// <summary>Whether <paramref name="conversion"/> yields its operand unchanged: an identity conversion, or a target-typed <c>new()</c>'s.</summary>
-    private static bool IsItsOperand(IConversionOperation conversion) => conversion.GetConversion().IsIdentity || IsTargetTypedNew(conversion);
+    /// <summary>Whether <paramref name="conversion"/> yields its operand unchanged: an identity conversion, or a target-typed <c>new()</c>'s or conditional's.</summary>
+    private static bool IsItsOperand(IConversionOperation conversion) => conversion.GetConversion().IsIdentity || IsTargetTyped(conversion);
 
     /// <summary>
     /// An implicit reference or boxing conversion that changes the IR type: a read of its <c>cast</c> map, or, for a new
@@ -1966,7 +2021,14 @@ internal sealed class IrLowerer
     private IrVar? Create(IObjectCreationOperation creation, LoweringContext context) =>
         EffectFreeMembers.Allocates(creation.Constructor!)
             ? heap.Fresh((IrSort)Map(creation.Type!), context)
-            : Construct(creation, context);
+            : TypeMapper.NullableValue(creation.Type) is null ? Construct(creation, context) : CreateNullable(creation, context);
+
+    /// <summary>
+    /// <c>new T?(x)</c> is the value <c>x</c> converted to <c>T?</c> is, and <c>new T?()</c> the one <c>null</c> is (ticket
+    /// P2-095), so a spelled-out constructor and the conversion the compiler makes of it are one value and no call.
+    /// </summary>
+    private IrVar CreateNullable(IObjectCreationOperation creation, LoweringContext context) =>
+        creation.Arguments is [{ Value: var value }] ? Wrap(value, creation.Type!, context) : Constant(creation.Type!, value: null, context);
 
     /// <summary>The call to <paramref name="creation"/>'s constructor, or an opaque when a <c>ref</c> or <c>out</c> argument cannot be written.</summary>
     private IrVar? Construct(IObjectCreationOperation creation, LoweringContext context) =>

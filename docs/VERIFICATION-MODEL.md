@@ -164,6 +164,17 @@ variable. A dereference lowers to a conditional `IrThrow(NullReferenceException)
 where the CLR checks it: at the field or element load or store, or at the call, after every
 operand evaluated before it (index, arguments, a stored value) (P2-017).
 
+A `Nullable<T>` is represented the same way (P2-095): a value of the one sort `System.Nullable`1` plus the
+"is null" shadow, which here says it has no value. `null`, `default(T?)` and `new T?()` are the null constant
+of the sort (element 0) with the shadow true. For a `bool` or integral `T`, `T` converted to `T?`, implicit
+or written as a cast, and `new T?(x)` are `cast.<T>.System.Nullable_1[x]`, as a boxing conversion is, with the
+shadow false: equal values are one `Nullable<T>` on both sides and nothing is a call. A local, a parameter
+and a flow capture of a `Nullable<T>` type carry the shadow, so the null test the CFG makes for `?.` and `??`
+reads it, and it joins at a phi as the value does. As for a reference, a value read back from a field, an array
+or a call asks `null.System.Nullable_1`, and nothing ties `cast.<T>.System.Nullable_1` to the null constant or
+makes it one-to-one, which over-approximates. Reading the value out (`Value`, `GetValueOrDefault`, a lifted
+operator) is still a call or an opaque.
+
 Heap and nullness are inputs (M2-004). A procedure's parameter list is its C# parameters
 followed by the synthesised inputs its body needs, ordered by name: the receiver `this`,
 one `null.<Sort>` map from a reference sort to Bool, one `field.<Type>.<Field>` map per

@@ -34,7 +34,10 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 /// enumerator are answered by an enumerator of that list (ticket M4-001). The <c>decimal</c> parameter is <c>M</c>, and the IR's
 /// pure <c>decimal</c> functions are answered by <see cref="DecimalOracle"/>, which applies <see cref="decimal"/>'s own operators
 /// (ticket M4-002). A lambda converted to a delegate is a pure function too (ticket P2-136): its value is one element of the
-/// delegate's sort, and what is compared is that creating it changes nothing and that it is not null.
+/// delegate's sort, and what is compared is that creating it changes nothing and that it is not null. An <c>int?</c> is
+/// made from <see cref="LoweringOracleGen.NullableValue"/> or from nothing and read with <c>??</c> (ticket P2-095): the
+/// <c>cast.System.Int32.System.Nullable_1</c> input maps every <c>int</c> to one element that is not the null constant,
+/// <see cref="CompiledRunOracle"/> answers <c>GetValueOrDefault()</c> with that value, and what is compared is which side of <c>??</c> ran.
 /// </summary>
 public sealed class LoweringOracleTests
 {
@@ -74,6 +77,11 @@ public sealed class LoweringOracleTests
     /// <summary>The reference a null <c>v</c> is bound to: the one element the <c>null.int__</c> input answers true for.</summary>
     private static readonly IrSortValue Null = new(ArraySort, 3);
 
+    private const string NullableCast = "cast.System.Int32.System.Nullable_1";
+
+    /// <summary>The <c>int?</c> every converted <c>int</c> is: one element that is not the null constant, element 0.</summary>
+    private static readonly IrSortValue Wrapped = new("System.Nullable`1", 1);
+
     /// <summary>The key a static field's map is read at: element 0 of its declaring type's sort.</summary>
     private static readonly IrSortValue Token = new("Oracle", 0);
 
@@ -86,7 +94,7 @@ public sealed class LoweringOracleTests
     {
         string source = Source(cases.Select(static c => c.Method));
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda])
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda, .. LoweringOracleGen.Nullables])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
@@ -251,6 +259,7 @@ public sealed class LoweringOracleTests
     {
         Assert.Contains(CompiledRunOracle.Getter, callees);
         Assert.Contains(CompiledRunOracle.MoveNext, callees);
+        Assert.Contains(CompiledRunOracle.GetValueOrDefault, callees);
         Assert.Superset(new HashSet<string>(["conv.i32.dec", "conv.dec.i32", "dec.mul", "dec.div", "dec.lt"], StringComparer.Ordinal), pures);
     }
 
@@ -288,6 +297,7 @@ public sealed class LoweringOracleTests
         "l" => ListReference,
         LoweringOracleGen.Cell => CellReference,
         ListNulls or CellNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), []),
+        NullableCast => new IrMapValue((IrMap)parameter.Type, Wrapped, []),
         CellMap => InitialCell(input),
         FieldMap => InitialField(input),
         PropertyMap => InitialProperty(input),
@@ -455,7 +465,8 @@ public sealed class LoweringOracleTests
     /// it is; no other call writes the heap. The <c>G</c> it adds to is the heap's when the call is given <c>field.Cell.G</c>, else
     /// <see cref="Cells"/>, the version threaded through the earlier calls, as the encoder threads a map a side never names
     /// (VERIFICATION-MODEL.md section 5). <c>o.TryParse(k, out n)</c> (ticket M4-003) answers as the compiled method does, its
-    /// <c>n</c> as the call's one ref output. No other call is generated.
+    /// <c>n</c> as the call's one ref output. <c>GetValueOrDefault()</c> on an <c>int?</c> (ticket P2-095) is
+    /// <see cref="LoweringOracleGen.NullableValue"/>, the one value the generator wraps. No other call is generated.
     /// </summary>
     private sealed class CompiledRunOracle(int initial, List<int> list, IrMapValue cells) : Equiv.Core.ICallOracle
     {
@@ -468,6 +479,8 @@ public sealed class LoweringOracleTests
         private static readonly Equiv.Core.CallIdentity GetEnumerator = new("System.Collections.Generic.List`1::GetEnumerator()<int>");
 
         private static readonly Equiv.Core.CallIdentity Current = new("System.Collections.Generic.List`1.Enumerator::get_Current()<int>");
+
+        public static readonly Equiv.Core.CallIdentity GetValueOrDefault = new("System.Nullable`1::GetValueOrDefault()<int>");
 
         private static readonly Equiv.Core.CallIdentity Dispose = new("System.IDisposable::Dispose()");
 
@@ -527,6 +540,13 @@ public sealed class LoweringOracleTests
             {
                 Enumerator(arguments).Dispose();
                 return new IrCallResult(Value: null, Threw: false);
+            }
+
+            if (callee == GetValueOrDefault)
+            {
+                // The control flow graph's read of the left side of `??`, made only when it has a value (ticket P2-095).
+                Assert.Equal(Wrapped, arguments[0]);
+                return new IrCallResult(IrBitVecValue.FromSigned(32, LoweringOracleGen.NullableValue), Threw: false);
             }
 
             Assert.Equal(Getter, callee);

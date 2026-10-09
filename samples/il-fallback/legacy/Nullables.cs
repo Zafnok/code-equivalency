@@ -12,6 +12,6 @@ namespace Equiv.Samples.IlFallback
             return null;
         }
 
-        public static int? Wrap(int x) => new int?(x);
+        public static long? Wrap(int x) => new long?(x);
     }
 }

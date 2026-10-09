@@ -52,6 +52,19 @@ internal static class TypeMapper
             : null;
 
     /// <summary>
+    /// The <c>T</c> of a <c>Nullable&lt;T&gt;</c> whose <c>T</c> is <c>bool</c> or integral, the ones whose conversion from
+    /// <c>T</c> and whose <c>default</c> lower (ticket P2-095), or null for any other type.
+    /// </summary>
+    public static ITypeSymbol? NullableValue(ITypeSymbol? type) =>
+        type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T, TypeArguments: [var underlying] }
+        && Map(underlying) is IrBool or IrBitVec
+            ? underlying
+            : null;
+
+    /// <summary>Whether <paramref name="type"/> is a <c>Nullable&lt;T&gt;</c>, of any <c>T</c>.</summary>
+    public static bool IsNullable(ITypeSymbol? type) => type?.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
+
+    /// <summary>
     /// The 1-based position of <paramref name="field"/> in its tuple when that tuple is a <see cref="Tuple"/> sort (ticket
     /// P2-027), whether it is <c>Item1</c> or the name the tuple gives it; null for any other field.
     /// </summary>

@@ -1,5 +1,5 @@
 # P2-095 A conversion to `Nullable<T>` and `default(T?)` no longer keep a pair opaque
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-049
@@ -67,3 +67,13 @@ user-defined struct type. The IL lowering.
 - P2-123's split (2026-10-03): on `gitextensions-9860` this form is 13 of the 16 changed pairs that
   `Conversion` alone keeps opaque (2.2% of 725), and is in 34 changed pairs. 11 of the 13 have an
   `int` or `bool` `T`; the operand is a literal in 28 of the 59 nodes per side.
+- P2-087 has not landed, so there was no representation to reuse; this ticket picks one, and P2-087 inherits it.
+- Decision: representation of a `Nullable<T>` value -> what a boxed value already is: a value of the existing sort `System.Nullable`1` plus the Bool null shadow ("has no value"); `T` to `T?` is `mapread` of the `In` input `cast.<T>.System.Nullable_1`, `null` and `default(T?)` are the sort's null constant (element 0). No new IR sort or node, no backend change, so no ADR. Alternatives: the `IrTuple` sort `tuple(bool,bvN)` of a has-value flag and the value; a new nullable sort with solver axioms. Rule: 1 (the backend already consumes `cast` maps and null shadows as inputs, so a model that differs is a Divergent).
+- The tuple alternative was built first and dropped. It proves criterion 4, but `tuple.new` and `tuple.item` are `IrPure`, and a divergence that depends on an `IrPure` result is Unknown(`abstraction`) (ADR 0026), so criterion 5 was Unknown, not Divergent. Making tuple functions exact in the replay is a backend change with its own soundness argument (a replay from a fragment's model reaches applications the formula never constrained); not this ticket's.
+- Decision: which variables carry the shadow -> every `Nullable<T>` local, parameter and flow capture, of any `T`, as every reference does. Alternatives: flow captures only; only a `bool` or integral `T`. Rule: 4 (one condition added to `Shadowed`; the `IsNull` row already covered every `Nullable<T>`).
+- Decision: `new T?(x)` and `new T?()` -> the conversion's value and the null constant, no call. Alternatives: leave the constructor a call. Rule: 3. Left a call, `new int?(x)` against `(int?)x` would be a call against a map read with no opaque on either side, which `--il-fallback` no longer retries; `samples/il-fallback`'s `Wrap` showed it.
+- Decision: the conversion around a target-typed conditional (`b ? a : null`) -> its operand, as P2-099's target-typed `new()` is. Alternatives: leave it opaque. Rule: 4. Without it the commonest spelling of "a value or null" still ends in an opaque `Conversion`.
+- Deviation: `samples/il-fallback` is outside the Files list and changes. Its `Wrap(int)` was `int?`, which now lowers on both sides and is proved without the fallback, so the sample no longer showed a modern-only opaque. It is now `long? Wrap(int)`: the modern side's `int` to `long?` also converts the value and stays opaque. `Add` is unchanged in source; its message loses `Conversion`.
+- Precision limits, all the ones a boxing `cast` already has: nothing says `cast.<T>.System.Nullable_1` is one-to-one or never the null constant, and a `Nullable<T>` read back from a field, an array or a call asks `null.System.Nullable_1`. So a wrapped value stored in a field and tested there can be "null" in a model. No lowered operation reads the value out yet (`GetValueOrDefault` is a closed call), so a difference that needs the value is Unknown(`abstraction`), not Divergent.
+- `b ? a : default` is typed `int` by C# (`default` is `0`), then converted: it is `(int?)(b ? a : 0)`, never null. The first draft of a test assumed otherwise and the solver found the difference.
+- Out of scope and still opaque, with the same representation ready for them: `short` to `int?` (converts the value too), `T?` to `T?` of another `T`, and a floating-point, `decimal`, enum or struct `T`.

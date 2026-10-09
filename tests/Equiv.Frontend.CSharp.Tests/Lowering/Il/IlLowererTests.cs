@@ -112,13 +112,16 @@ public sealed class IlLowererTests
     /// P2-086), and the compiler emits one call of the three-argument overload. That pair is one of
     /// <c>IlLoweringParityTests</c>' known differences. The last two are a call on a string literal: the IOperation
     /// lowering null-checks the literal receiver, a path that ends before any call, and the IL lowering does not (ticket
-    /// P2-126). They are known differences of <c>IlLoweringParityTests</c> too.
+    /// P2-126). They are known differences of <c>IlLoweringParityTests</c> too. After them is a <c>new long?(x)</c>: the
+    /// IOperation lowering reads a <c>cast</c> input, as it does for the conversion, and the IL calls the constructor
+    /// (ticket P2-095).
     /// </summary>
     private static readonly string[] KnownCalleeDifferences =
     [
         "cleanup-modern-syntax/modern Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)",
         "lone-surrogate-constant/legacy Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)",
         "lone-surrogate-constant/modern Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)",
+        "il-fallback/legacy Equiv.Samples.IlFallback.Nullables::Wrap(int)",
     ];
 
     /// <summary>The Design's pitfall: the instruction's sign decides the division, not its operands' C# types.</summary>

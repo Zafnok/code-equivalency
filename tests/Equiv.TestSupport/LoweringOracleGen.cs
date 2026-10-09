@@ -23,7 +23,7 @@ namespace Equiv.TestSupport;
 /// <c>o.Bump(k)</c>, which adds <c>k</c> to it (ticket P1-005), and <c>z = o.TryParse(k, out x)</c>, whose <c>out</c> argument is
 /// the call's output (ticket M4-003), and deconstructions of tuple literals into <c>(x, y, z)</c> and into <c>(F, x)</c>
 /// (ticket P2-025); and, only from <see cref="MethodWithLambda"/>, a lambda whose body a runtime rule applies to,
-/// converted to a delegate and tested against <c>null</c> (ticket P2-136); built as a small AST and
+/// converted to a delegate and tested against <c>null</c> (ticket P2-136), and <see cref="Nullables"/> (ticket P2-095); built as a small AST and
 /// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
@@ -109,10 +109,27 @@ public static class LoweringOracleGen
     /// </summary>
     public const string Lambda = "(((System.Func<int, int>)(t => unchecked((int)(double)t + a))) != null)";
 
+    /// <summary>The value every <see cref="Nullables"/> expression wraps, which is what <c>GetValueOrDefault()</c> then reads of it.</summary>
+    public const int NullableValue = 7;
+
+    /// <summary>
+    /// The right-hand sides of <c>x = ...;</c> that make an <c>int?</c> and read it with <c>??</c> (ticket P2-095): a
+    /// <c>null</c>, a <c>default</c> or a <c>new int?()</c> on one side of a test of <c>s</c> and <see cref="NullableValue"/>
+    /// converted, cast or constructed on the other, so the fallback is taken exactly when the <c>int?</c> has no value.
+    /// </summary>
+    public static ImmutableArray<string> Nullables { get; } =
+    [
+        "((s == null ? (int?)null : 7) ?? b)",
+        "((s != null ? 7 : default(int?)) ?? a)",
+        "((e ? new int?(7) : new int?()) ?? b)",
+        "((e ? null : (int?)7) ?? a)",
+    ];
+
     public static Gen<OracleMethod> Method { get; } = Methods(lambdas: false);
 
     /// <summary>
-    /// As <see cref="Method"/>, with one more statement, <see cref="Lambda"/> (ticket P2-136). It is a generator of its own
+    /// As <see cref="Method"/>, with two more statements, <see cref="Lambda"/> (ticket P2-136) and one of
+    /// <see cref="Nullables"/> (ticket P2-095). It is a generator of its own
     /// because the lambda's body is runtime-sensitive, so a method holding one is never congruent with itself across two
     /// runtimes, which <see cref="Method"/>'s other consumer counts on.
     /// </summary>
@@ -144,7 +161,9 @@ public static class LoweringOracleGen
     private static Gen<IStmt> StmtGen(Type returnType, int depth, bool lambdas)
     {
         // Ticket P2-136: last, and only when asked for, so that without it every other choice is drawn as before.
-        (int, Gen<IStmt>)[] lambda = lambdas ? [(1, Gen.Const<IStmt>(new Assign("z", new Name(Lambda))))] : [];
+        (int, Gen<IStmt>)[] lambda = lambdas
+            ? [(1, Gen.Const<IStmt>(new Assign("z", new Name(Lambda)))), (1, Gen.OneOfConst([.. Nullables]).Select(static value => (IStmt)new Assign("x", new Name(value))))]
+            : [];
         Gen<IStmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>
             ExprGen(type, Depth).Select(value => (IStmt)new Assign(LocalName(type), value)));
         Gen<IStmt> exit = returnType == typeof(void)

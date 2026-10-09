@@ -5,9 +5,10 @@ with an opaque on the modern side only, and whose two sides compile to the same 
 
 - `Nullables.Add(int?, int)`: the legacy side spells out the lifted `+` (`HasValue`, then
   `GetValueOrDefault() + b` wrapped in a `new int?`, else `null`). The modern side writes `a + b`,
-  a lifted `Binary` and a nullable `Conversion` the IOperation lowering leaves opaque.
-- `Nullables.Wrap(int)`: the legacy side writes `new int?(x)`, the modern side the implicit
-  nullable `Conversion` of `x`, which the IOperation lowering leaves opaque.
+  a lifted `Binary` the IOperation lowering leaves opaque.
+- `Nullables.Wrap(int)`: the legacy side writes `new long?(x)`, the modern side the implicit
+  `Conversion` of `x` from `int` to `long?`, which the IOperation lowering leaves opaque because it
+  also widens the value. (A conversion from `int` to `int?` lowers, and needs no fallback; ticket P2-095.)
 
 Without `--il-fallback` both pairs are Unknown (`opaque`), from the modern side's opaque nodes;
 `expected.sarif.json` is that run. With `--il-fallback`, neither pair is congruent and each holds

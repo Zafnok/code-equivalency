@@ -384,15 +384,15 @@ public sealed class CSharpFrontendTests
 
     /// <summary>
     /// ADR 0047: a pair that keeps its IL bodies names the forwarders those resolved. Here the IOperation lowering never
-    /// reaches the modern side's forwarder call, an operand of a lifted operator it leaves opaque, and the IL lowering does.
+    /// reaches the modern side's forwarder call, which a conversion from <c>int</c> to <c>long?</c> it leaves opaque holds, and the IL lowering does.
     /// </summary>
     [Fact]
     public void APairLoweredFromIlNamesTheForwardersItsIlBodiesResolved()
     {
         const string Library = "public static class Lib { public static int Count(string s) => s.Length; } public static class Text { public static int Size(string s) => Lib.Count(s); }";
         Compilation legacy = RoslynTestCompilations.Compile(
-            $"namespace N {{ {Library} public class C {{ public int? Add(int? a, string s) {{ int n = Lib.Count(s); if (a.HasValue) {{ return new int?(a.GetValueOrDefault() + n); }} return null; }} }} }}");
-        Compilation modern = RoslynTestCompilations.Compile($"namespace N {{ {Library} public class C {{ public int? Add(int? a, string s) => a + Text.Size(s); }} }}");
+            $"namespace N {{ {Library} public class C {{ public long? Add(long? a, string s) {{ int n = Lib.Count(s); if (a.HasValue) {{ return new long?(a.GetValueOrDefault() + n); }} return null; }} }} }}");
+        Compilation modern = RoslynTestCompilations.Compile($"namespace N {{ {Library} public class C {{ public long? Add(long? a, string s) => a + Text.Size(s); }} }}");
         ResolvedForwarder[] size = [new("N.Text::Size(string)", "N.Lib::Count(string)")];
 
         ProcedurePair il = Analyzed(legacy, modern, ilFallback: true).Pairs.Single(static p => p.New.Value.Contains("::Add(", StringComparison.Ordinal));
