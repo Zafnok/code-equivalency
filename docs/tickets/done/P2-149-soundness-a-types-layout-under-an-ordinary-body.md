@@ -1,5 +1,5 @@
 # P2-149 Soundness: a type's layout can change what an ordinary body does, and no fingerprint of such a body holds it
-Status: in-progress
+Status: done (PR #446)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-146
