@@ -22,7 +22,7 @@ not own.
 
 ## Spec references
 `docs/tickets/IOPERATION-COVERAGE.md` row `DefaultValue`; ADR 0034 (per-ticket unlock rule);
-`docs/tickets/P2-095-nullable-value-conversion-and-default.md`;
+`docs/tickets/done/P2-095-nullable-value-conversion-and-default.md`;
 `docs/tickets/done/P2-003-default-value.md`; `docs/runs/2026-10-07-opaque-tail.md`.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
