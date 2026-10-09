@@ -33,3 +33,6 @@ when the inner pattern is one that `IsPattern` already lowers.
 `and`, `or`, relational, property, list and recursive patterns.
 
 ## Notes
+- P2-122 (2026-10-09) lowered the `null` pattern on a reference type, so `x is not null` is the
+  negation of a pattern `IsPattern` lowers. On `gitextensions-8522`, 28 of the 30 changed pairs that
+  `switch-pattern` alone still keeps opaque hold only negated patterns (27 `not null`, 1 a type).

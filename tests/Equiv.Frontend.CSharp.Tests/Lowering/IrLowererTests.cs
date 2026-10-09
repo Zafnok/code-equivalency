@@ -536,6 +536,39 @@ public sealed class IrLowererTests
     public void AConstantPatternOutsideASwitchIsAnEquality() =>
         Assert.Equal(new IrReturned(new IrBoolValue(Value: true)), Run(Method("static bool M(int n) => n is 5;"), Bits(32, 5)));
 
+    /// <summary>Ticket P2-122: <c>x is null</c> on a reference reads the null shadow, as <c>x == null</c> does.</summary>
+    [Theory]
+    [InlineData("static bool M(string s) => s is null;", true, true)]
+    [InlineData("static bool M(string s) => s is null;", false, false)]
+    [InlineData("static bool M(string s) => s switch { null => true, _ => false };", true, true)]
+    [InlineData("static bool M(string s) { switch (s) { case null: return true; default: return false; } }", false, false)]
+    public void ANullPatternOnAReferenceReadsTheShadow(string members, bool isNull, bool expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+        Assert.Equal(new IrReturned(new IrBoolValue(expected)), Run(procedure, Reference(0), Nulls("System.String", 0, isNull)));
+    }
+
+    /// <summary>Ticket P2-122: the test is the one <c>x == null</c> lowers to, instruction for instruction.</summary>
+    [Fact]
+    public void ANullPatternLowersAsAComparisonWithNull() =>
+        Assert.Equal(
+            Method("static bool M(object o) => o == null;").Blocks.SelectMany(static b => b.Instructions).Select(static i => i.GetType()),
+            Method("static bool M(object o) => o is null;").Blocks.SelectMany(static b => b.Instructions).Select(static i => i.GetType()));
+
+    /// <summary>
+    /// Ticket P2-122: a <c>null</c> pattern on anything but a reference stays opaque, as <c>x == null</c> does on a nullable
+    /// value (ticket P2-083), and so does a constant pattern of any other type the scrutinee's bitvector or Bool type is not.
+    /// </summary>
+    [Theory]
+    [InlineData("static bool M(int? n) => n is null;")]
+    [InlineData("static bool M<T>(T t) => t is null;")]
+    [InlineData("static bool M(string s) => s is \"a\";")]
+    public void ANullPatternOnANullableValueStaysOpaque(string members) =>
+        Assert.Contains(Opaques(Method(members)), static o => o.Reason is "switch-pattern");
+
     /// <summary>A guard is an ordinary branch after the constant test, so the arm still lowers.</summary>
     [Fact]
     public void AGuardedConstantPatternLowersAsABranch()

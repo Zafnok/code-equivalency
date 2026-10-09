@@ -605,7 +605,9 @@ OpenRA are rerun once they land:
   no open owner since P1-018 left the IL fallback off. Needs P2-083.
 - P2-122 (M) `switch-pattern` alone is 6.9% of gitextensions-8522's changed pairs and 6.8% of
   gitextensions-9860's, and has no open owner for the same reason. Counts the pattern forms and lowers
-  the largest one that P2-093, P2-103 and P2-104 do not own.
+  the largest one that P2-093, P2-103 and P2-104 do not own. Done 2026-10-09: `x is null` on a
+  reference lowers as `x == null` does, and the reason alone falls from 67 to 30 of
+  gitextensions-8522's 910 changed pairs. 28 of the 30 are `is not` patterns, which P2-104 owns.
 - P2-123 (M) `Conversion` alone was 15.2% of gitextensions-9860's changed pairs. Done 2026-10-03, with
   nothing lowered: that run predates P2-099, which took the reason from 110 pairs to 16 (2.2%). 13 of
   the 16 are conversions to `Nullable<T>`, which P2-095 owns, and no other form holds more than 1.
