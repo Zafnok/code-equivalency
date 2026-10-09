@@ -1,5 +1,5 @@
 # P2-095 A conversion to `Nullable<T>` and `default(T?)` no longer keep a pair opaque
-Status: in-progress
+Status: done (PR #450)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-049
