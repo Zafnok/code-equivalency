@@ -323,8 +323,14 @@ public sealed class SecondSolverPrintTests
                     return;
                 }
 
-                Interlocked.Increment(ref sent);
                 SmtAnswer answer = ScriptedSolver.Solve(printed.Script);
+                if (answer is SmtUnknown)
+                {
+                    // Z3 gives up on the text as it does on the query (P2-148): it says nothing about the rewrite.
+                    return;
+                }
+
+                Interlocked.Increment(ref sent);
                 Assert.Equal(original == Status.SATISFIABLE, answer is SmtSat);
                 Assert.Equal(original == Status.UNSATISFIABLE, answer is SmtUnsat);
                 if (answer is SmtSat sat)

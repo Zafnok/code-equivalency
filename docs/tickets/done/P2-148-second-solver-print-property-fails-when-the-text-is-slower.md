@@ -1,5 +1,5 @@
 # P2-148 The second-solver print property fails at random when Z3 is slower on the printed text than on the query
-Status: todo
+Status: done (PR #449)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -122,3 +122,12 @@ division.
 - Not measured: Linux timings (the CI log gives only the test's 1m 17s, which fits a 60-second
   timeout on the text after a query answered in seconds); the two seeds under machine load; whether
   cvc5 answers either text.
+- Change: a text answer of `SmtUnknown` returns before `sent` is counted (no seed pinned, so criterion 6
+  holds trivially). `sat` against `unsat` in either direction, and the read-back, are unchanged.
+- `TheConstantArrayRewriteKeepsTheAnswer` cannot fail this way: its terms are 2-bit arrays, it already
+  asserts the query is not `UNKNOWN`, and nothing there came near the 60-second limit. Left unchanged.
+- Measured after the change (Windows, Release, 20 unseeded runs of the test alone, with a temporary
+  stderr counter, removed): 20 passed; 0 samples of 200 dropped because the text was given up on in
+  any run (the two failing pairs did not turn up, as expected at roughly 1 run in 12); `sent` was 198 to
+  200, smallest 198 (the gap to 200 is queries Z3 gave up on or pairs with nothing to print).
+  So the drop path was not exercised by these runs; it is a three-line early return.
