@@ -96,13 +96,13 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 
 | Component | Version | Licence |
 |---|---|---|
-| Argon | 0.37.0 | MIT |
+| Argon | 0.38.2 | MIT |
 | CsCheck | 4.9.1 | Apache-2.0 |
 | CycleDetection | 2.0.0 | MIT |
-| DiffEngine | 20.6.0 | MIT |
-| EmptyFiles | 8.19.0 | MIT |
+| DiffEngine | 20.7.2 | MIT |
+| EmptyFiles | 8.20.1 | MIT |
 | JetBrains.Annotations | 2026.2.0 | MIT |
-| Meziantou.Analyzer | 3.0.291 | MIT |
+| Meziantou.Analyzer | 3.0.296 | MIT |
 | Microsoft.ApplicationInsights | 2.23.0 | MIT |
 | Microsoft.Bcl.AsyncInterfaces | 6.0.0 | MIT |
 | Microsoft.Bcl.AsyncInterfaces | 10.0.12 | MIT |
@@ -118,13 +118,13 @@ These are development dependencies (tests, analyzers, local tools). They are nev
 | Microsoft.Win32.Registry | 5.0.0 | MIT |
 | MinVer | 8.0.0 | Apache-2.0 |
 | Mono.Cecil | 0.11.6 | MIT |
-| SimpleInfoName | 3.2.0 | MIT |
+| SimpleInfoName | 3.2.1 | MIT |
 | System.Security.AccessControl | 6.0.1 | MIT |
 | System.ValueTuple | 4.6.2 | MIT |
 | TngTech.ArchUnitNET | 0.13.4 | Apache-2.0 |
 | TngTech.ArchUnitNET.xUnitV3 | 0.13.4 | Apache-2.0 |
-| Verify | 33.2.0 | MIT |
-| Verify.XunitV3 | 33.2.0 | MIT |
+| Verify | 33.3.2 | MIT |
+| Verify.XunitV3 | 33.3.2 | MIT |
 | coverlet.MTP | 10.1.0 | MIT |
 | dotnet-sonarscanner | 11.3.0 | LGPL-3.0 |
 | dotnet-stryker | 5.0.0 | Apache-2.0 |
