@@ -39,7 +39,7 @@ A committed file on `main` or in the pull request: a `docs/runs/**/SUMMARY.md`, 
 `docs/runs/*-verdict.md`, an audit or measurement report in `docs/runs/`, or the Notes of a ticket in
 `docs/tickets/done/` that records a run's exit code, time and counts. Nothing from memory, from a
 SARIF under `.corpus/` that no committed file summarises, or from a run on an uncommitted tree.
-A row rests only on runs in `compare`'s default mode (ADR 0049); a `quick` run is no source.
+A row rests only on runs in `compare`'s default mode, which is `quick` (ADR 0052); a `thorough` run is no source.
 A run that exits 4 with skipped projects is void (`equiv-corpus-run` section 5) and is no source.
 
 ## The rows
