@@ -2,6 +2,10 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <!-- P2-132: the Windows executable asks for the segment heap, so that pair workers inside Z3 do not wait on the
+         process heap's lock (app.manifest). The SDK copies the manifest into the apphost and the single-file
+         bundle. It does nothing on Linux, where each thread has a malloc arena of its own. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- M3-004 criterion 1: single-file, self-contained win-x64/linux-x64 publish, Z3's native
          bundled via IncludeNativeLibrariesForSelfExtract. Gated on a RuntimeIdentifier being set
          (i.e. `dotnet publish -r <rid>`); without one, Equiv.Cli.Tests' ProjectReference to this

@@ -25,7 +25,10 @@ public sealed class PairWorkersTests
         Assert.Equal(workers, PairWorkers.Count(jobs, items));
     }
 
-    /// <summary>Criterion 4: the backstop is the configured one times the threads, and nothing else changes.</summary>
+    /// <summary>
+    /// P2-077 criterion 4 and P2-132 criterion 5: the backstop is the configured one times the threads up to the measured
+    /// slowdown, times the threads to a processor when they outnumber the processors, and nothing else changes.
+    /// </summary>
     [Fact]
     public void Sharing_ScalesOnlyTheBackstop()
     {
@@ -35,6 +38,25 @@ public sealed class PairWorkersTests
         Assert.Equal(options, PairWorkers.Sharing(options, 1));
         Assert.Equal(options with { TimeoutMs = 240_000 }, PairWorkers.Sharing(options, 4));
         Assert.Equal(int.MaxValue, PairWorkers.Sharing(options with { TimeoutMs = int.MaxValue / 2 }, 3).TimeoutMs);
+        Assert.Equal(6, PairWorkers.Slowdown);
+        Assert.Equal(options with { TimeoutMs = 360_000 }, PairWorkers.Sharing(options, 6, processors: 24));
+        Assert.Equal(options with { TimeoutMs = 360_000 }, PairWorkers.Sharing(options, 24, processors: 24));
+        Assert.Equal(options with { TimeoutMs = 720_000 }, PairWorkers.Sharing(options, 25, processors: 24));
+        Assert.Equal(options with { TimeoutMs = 1_440_000 }, PairWorkers.Sharing(options, 24, processors: 4));
+        Assert.Equal(options with { TimeoutMs = 240_000 }, PairWorkers.Sharing(options, 4, processors: 1));
+    }
+
+    /// <summary>
+    /// Ticket P2-132: Z3 allocates from the process heap, whose one lock 24 workers queued on. The executable's manifest
+    /// asks Windows for the segment heap, which has none, and the manifest is in the assembly the apphost and the
+    /// single-file bundle take it from.
+    /// </summary>
+    [Fact]
+    public void WorkersDoNotWaitOnTheProcessHeapLock()
+    {
+        byte[] assembly = File.ReadAllBytes(typeof(PairWorkers).Assembly.Location);
+
+        Assert.True(assembly.AsSpan().IndexOf("""<heapType xmlns="http://schemas.microsoft.com/SMI/2020/WindowsSettings">SegmentHeap</heapType>"""u8) >= 0);
     }
 
     [Fact]
