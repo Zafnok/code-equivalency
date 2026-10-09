@@ -1,5 +1,5 @@
 # P2-087 A lifted or otherwise unlowered binary operator no longer keeps a changed pair opaque
-Status: in-progress
+Status: done (PR #445)
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-083

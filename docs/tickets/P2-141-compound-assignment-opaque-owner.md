@@ -24,7 +24,7 @@ operators may cover part of it. Count the forms, and lower the largest.
 ## Spec references
 `docs/tickets/IOPERATION-COVERAGE.md` rows `CompoundAssignment`, `Increment`, `Binary`,
 `Conversion`; ADR 0034 (per-ticket unlock rule); `docs/tickets/done/P2-022-pure-compound-assignment.md`;
-`docs/tickets/P2-087-binary-opaque-owner.md`; `docs/runs/2026-10-07-opaque-tail.md`.
+`docs/tickets/done/P2-087-binary-opaque-owner.md`; `docs/runs/2026-10-07-opaque-tail.md`.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
 1. Before any code, split the `CompoundAssignment` opaque nodes of `gitextensions-8522`'s and
