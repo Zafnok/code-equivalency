@@ -57,6 +57,21 @@ public sealed class FragmentFingerprinterTests
         Assert.NotEqual(Delegate("a.dll"), Delegate("b.dll"), StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-149: <c>sizeof</c> of a user-defined struct is an opaque fragment, shared when its fingerprint is on both
+    /// sides. The fingerprint holds the struct's declaration, so two sides whose structs differ do not share it.
+    /// </summary>
+    [Fact]
+    public void TheDeclarationUnderASizeOfIsInItsFragmentsFingerprint()
+    {
+        static string? SizeOf(string fields) =>
+            Assert.Single(Lowered.Opaques(Lowered.Source($"struct S {{ {fields} }} class C {{ unsafe int M() => sizeof(S); }}"))).Fingerprint;
+
+        Assert.NotNull(SizeOf("byte A; int B;"));
+        Assert.Equal(SizeOf("byte A; int B;"), SizeOf("byte A; int B;"), StringComparer.Ordinal);
+        Assert.NotEqual(SizeOf("byte A; int B;"), SizeOf("byte A; int B; int C;"), StringComparer.Ordinal);
+    }
+
     /// <summary>The pitfall the one interval avoids: sides lowered with different intervals do not share the fragment.</summary>
     [Fact]
     public void SidesWithDifferentIntervalsDoNotShareTheFragment()

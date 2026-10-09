@@ -227,6 +227,62 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     what it holds is outside both solutions, as a callee there is (ADR 0018, ADR 0019). An attribute's
     arguments are written as the compiler binds them, so a `typeof` in one is a name that the rename
     map does not rewrite; that can cost congruence and cannot give it.
+- 2026-10-09 (P2-149). **An operation whose result a type's declaration fixes has that declaration
+  in its text.** Decision 1 rests on "identical bound trees run the same operations in the same
+  order". The bound tree names a type and its members and holds nothing of their attributes or of
+  the type's other fields, and for a few operations the name is not the operation: what `sizeof(S)`
+  yields, where a read through an `S*` lands, and whether a write to one field of an explicit
+  layout changes another are all in `S`'s declaration. ADR 0019 does not cover this either: a
+  member's change is caught by the member's own pair, and a type has no pair. Each case was
+  reproduced as two bodies with one fingerprint beside two declarations (the ticket's tests), on a
+  same-runtime pair as well. So the line of each operation below is followed by the declaration of
+  the types it reaches, written as the clarification above writes a type in an imported function's
+  signature, once per text, under the name `layout`:
+  - a reference to a field that has a `[FieldOffset]`: the type that declares the field. Only an
+    explicit layout lets two fields share storage, and every instance field of one has the
+    attribute;
+  - `sizeof`: its operand;
+  - an operation whose type is a pointer or a function pointer: that type. A body that holds an
+    `S*` reads `S` as memory, and one that holds a function pointer passes its arguments as memory;
+  - an operation whose type has an `[InlineArray]`: that type. The array's length is the
+    attribute's argument, and indexing one, converting one to a span and enumerating one all have
+    an operand of the type;
+  - a call or an object creation whose callee is declared under `System.Runtime.InteropServices` or
+    `System.Runtime.CompilerServices`, or has a parameter that is a pointer or a function pointer:
+    the callee's type, its type arguments, the type of every operation under the call and the
+    operand of every `typeof` under it. These are the callees that are handed a type and read its
+    layout (`Marshal.SizeOf`, `Unsafe.SizeOf`, `MemoryMarshal.Cast`, `Marshal.StructureToPtr`,
+    `Marshal.GetFunctionPointerForDelegate`, the marshallers the interop generator calls,
+    `new Span<S>(void*, int)`). The two namespaces are named whole so that no list of members has
+    to be kept complete; that costs congruence on a call there that reads no layout, and only on
+    a pair that edits a type under the call.
+
+  A call through a function pointer, and a call into those two namespaces, is also followed by
+  the `[DisableRuntimeMarshalling]` of the body's assembly, once per text.
+  - **Which operations, and why not every use of a type.** The ticket asked. Copying a value,
+    reading a field that shares no storage, holding the type in an array or a list and naming it
+    in a `typeof` give the same result whatever the layout is, and a text that held the
+    declaration of every type it names would end congruence for every body that uses a type
+    whenever a field is added to it, which a migration does all the time. The rule is the
+    operations that read memory, not a list of the ticket's examples.
+  - **Which texts change.** A body's, an implementing part's and a fragment's, where it has one
+    of those operations on a type the solution declares. Every other text is the text it was.
+  - **The solver path needs the same fact, and does not have it.** The ticket asked. A pair whose
+    fingerprints differ is lowered, and the IR holds no layout. Where the lowering makes the
+    operation an opaque (`sizeof` of a user-defined struct), sharing it is decided by the
+    fragment's fingerprint (decision 2), which now holds the declaration. Where it lowers the
+    operation it is not covered: a field of an explicit layout is its own `field.<Type>.<Field>`
+    map, so a write to one field never changes another, on a pair whose declarations are equal
+    too; and a call such as `Marshal.SizeOf<S>()` is one function for both sides although `S`
+    differs. That is a lowering change and P2-150's.
+  - **A type from a reference** is its name alone, as in the clarification above: what it holds is
+    outside both solutions, as a callee there is (ADR 0018, ADR 0019).
+  - **What the text still does not hold.** A type handed as a type argument to a generic member of
+    the solution that does one of these operations on its type parameter and takes no pointer:
+    the callee's text is the same for every argument, and the caller's names the argument and
+    nothing of its declaration (P2-151). A value whose static type hides the type the callee reads
+    (an `object` or a `Delegate` held in a local). The `[DisableRuntimeMarshalling]` of another
+    project of the solution that declares a delegate type the body uses.
 - 2026-10-08 (P2-144). **The throw a `switch` expression ends in is part of its bound code, and
   across .NET Core 3.0 it is a runtime rule.** A `switch` expression that matches no arm throws.
   The source does not write the throw and the `IOperation` tree does not hold it: the compiler

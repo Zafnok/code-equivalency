@@ -31,7 +31,9 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// <c>extern</c> local function has no bound code, so its attributes, which name the library and the entry point it calls
 /// and say how its arguments are marshalled, are its code (ADR 0024 as clarified by tickets P2-107 and P2-145). One with a
 /// <c>[DllImport]</c> also has what the marshaller reads from outside it: the marshalling attributes of its assembly and
-/// its type, and the declarations of the types in its signature (ticket P2-146). A
+/// its type, and the declarations of the types in its signature (ticket P2-146). An operation whose result a type's
+/// declaration fixes is followed by that declaration: a field at a <c>[FieldOffset]</c>, a <c>sizeof</c>, a pointer, an
+/// inline array, a call into the interop services (ticket P2-149). A
 /// <c>switch</c> expression that may match no arm carries the constructor of the exception the compiler throws then, which
 /// depends on the reference assemblies (ADR 0024 as clarified by ticket P2-144). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
@@ -52,8 +54,14 @@ internal sealed class BoundSerialiser : OperationWalker
 
     private const string SearchPaths = "System.Runtime.InteropServices.DefaultDllImportSearchPathsAttribute";
 
+    private const string DisableRuntimeMarshalling = "System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute";
+
+    /// <summary>The namespaces whose members are handed a type and read its layout (ADR 0024 as clarified by ticket P2-149).</summary>
+    private static readonly ImmutableArray<string> InteropServices = ["System.Runtime.InteropServices", "System.Runtime.CompilerServices"];
+
     private readonly StringBuilder text = new();
     private readonly Dictionary<ISymbol, string> numbered = new(SymbolEqualityComparer.Default);
+    private readonly HashSet<ISymbol> laidOut = new(SymbolEqualityComparer.Default);
     private readonly IMethodSymbol method;
     private readonly Compilation compilation;
     private readonly RenameMap renames;
@@ -208,6 +216,8 @@ internal sealed class BoundSerialiser : OperationWalker
             RuntimeSensitive |= local.Symbol.IsExtern && !runtime.Interval.IsEmpty;
         }
 
+        Layout(operation);
+
         RuntimeSensitive |= (runtime.X87 && IsFloatingPoint(operation.Type))
             || (runtime.FloatToIntegerChanged && operation is IConversionOperation { Operand.Type: { } from } conversion && IsFloatingPoint(from) && IsIntegral(conversion.Type!));
 
@@ -273,7 +283,7 @@ internal sealed class BoundSerialiser : OperationWalker
     {
         bool Taken(AttributeData attribute) => attribute.AttributeClass!.ToDisplayString() switch
         {
-            "System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute" => true,
+            DisableRuntimeMarshalling => true,
             SearchPaths => !function.GetAttributes().Any(static own => string.Equals(own.AttributeClass!.ToDisplayString(), SearchPaths, StringComparison.Ordinal)),
             "System.Runtime.InteropServices.BestFitMappingAttribute" => import.BestFitMapping is null || import.ThrowOnUnmappableCharacter is null,
             _ => false,
@@ -343,6 +353,49 @@ internal sealed class BoundSerialiser : OperationWalker
 
         return [.. inherited, .. fields.Select(static f => f.Type), .. invoke.SelectMany(static signature => SignatureTypes(signature))];
     }
+
+    /// <summary>
+    /// Writes, after the line of an <paramref name="operation"/> whose result a type's declaration fixes, the types it
+    /// reaches that are declared in the solution, each once per text (ADR 0024 as clarified by ticket P2-149): the type
+    /// of a field that has a <c>[FieldOffset]</c>, the operand of a <c>sizeof</c>, a pointer's or a function pointer's
+    /// type, an inline array's, and every type under a call that is handed one to read as memory. A call through a
+    /// function pointer and a call into the interop services also take the assembly's
+    /// <c>[DisableRuntimeMarshalling]</c>.
+    /// </summary>
+    private void Layout(IOperation operation)
+    {
+        IMethodSymbol? callee = operation switch
+        {
+            IInvocationOperation o => o.TargetMethod,
+            IObjectCreationOperation o => o.Constructor,
+            _ => null,
+        };
+        bool interop = callee is not null && InteropServices.Any(prefix => callee.ContainingNamespace.ToDisplayString().StartsWith(prefix, StringComparison.Ordinal));
+        IEnumerable<ITypeSymbol?> reached = operation switch
+        {
+            ISizeOfOperation o => [o.TypeOperand],
+            IFieldReferenceOperation o when Has(o.Field, "System.Runtime.InteropServices.FieldOffsetAttribute") => [o.Field.ContainingType],
+            _ when callee is not null && (interop || callee.Parameters.Any(static p => IsPointer(p.Type))) =>
+                [callee.ContainingType, .. callee.TypeArguments, .. operation.DescendantsAndSelf().SelectMany(static o => (ITypeSymbol?[])[o.Type, (o as ITypeOfOperation)?.TypeOperand])],
+            _ when IsPointer(operation.Type) || (operation.Type is INamedTypeSymbol named && Has(named, "System.Runtime.CompilerServices.InlineArrayAttribute")) => [operation.Type],
+            _ => [],
+        };
+        if ((interop || operation is IFunctionPointerInvocationOperation) && laidOut.Add(method.ContainingAssembly))
+        {
+            AttributeLines([("layout assembly", method.ContainingAssembly.GetAttributes().Where(static a => Is(a, DisableRuntimeMarshalling)))]);
+        }
+
+        foreach (ITypeSymbol type in reached.OfType<ITypeSymbol>())
+        {
+            Marshalled("layout", type, laidOut);
+        }
+    }
+
+    private static bool IsPointer(ITypeSymbol? type) => type is IPointerTypeSymbol or IFunctionPointerTypeSymbol;
+
+    private static bool Has(ISymbol symbol, string attribute) => symbol.GetAttributes().Any(a => Is(a, attribute));
+
+    private static bool Is(AttributeData attribute, string name) => string.Equals(attribute.AttributeClass!.ToDisplayString(), name, StringComparison.Ordinal);
 
     private static ImmutableArray<ITypeSymbol> SignatureTypes(IMethodSymbol method) => [method.ReturnType, .. method.Parameters.Select(static p => p.Type)];
 

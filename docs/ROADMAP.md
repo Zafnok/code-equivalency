@@ -735,6 +735,17 @@ Found by P2-146 (2026-10-09, by reading what the fingerprint of an ordinary body
   such a body holds it: `[FieldOffset]` on a field the body reads, `[StructLayout]` under a `sizeof`
   or a pointer, `[InlineArray]`, and the assembly's `[DisableRuntimeMarshalling]` under a call
   through a function pointer. The first step is the repro. Needs P2-146.
+  Done: all four reproduced as equal fingerprints. The line of an operation that reads a type's
+  layout is now followed by the type's declaration (ADR 0024, clarification of 2026-10-09
+  (P2-149)); a body with no such operation has the text it had.
+
+Found by P2-149 (2026-10-09, by reading the coverage table and its own rule; not reproduced):
+- P2-150 (M) Soundness: the lowered body of an operation that reads a type's layout holds none of
+  it: a field of an explicit layout is its own map, and a call such as `Marshal.SizeOf<S>()` is one
+  function for both sides whatever `S` is. The first step is the repro. Needs P2-149.
+- P2-151 (S) Soundness: a type argument's layout reaches a generic member of the solution that
+  takes its size, and neither the caller's text nor the callee's holds it. The first step is the
+  repro. Needs P2-149.
 
 Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
 - P2-148 (S) `SecondSolverPrintTests.Z3AnswersTheRewrittenTextAsItAnswersTheOriginal` fails at random

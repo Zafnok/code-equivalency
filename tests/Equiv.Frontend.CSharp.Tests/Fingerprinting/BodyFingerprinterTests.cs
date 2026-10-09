@@ -618,7 +618,7 @@ public sealed class BodyFingerprinterTests
     [InlineData("[MethodImpl(MethodImplOptions.InternalCall)] public extern int M(S s);")]
     public void ABodyWithoutAnExternFunctionKeepsItsText(string member)
     {
-        const string Laid = "[StructLayout(LayoutKind.Explicit)] public struct S { [FieldOffset(0)] public int A; } ";
+        const string Laid = "[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public int A; } ";
         const string Settings = Disabled
             + "[assembly: System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]"
             + "[assembly: System.Runtime.InteropServices.BestFitMapping(false)]";
@@ -628,6 +628,129 @@ public sealed class BodyFingerprinterTests
         Assert.Equal(OneRuntimeText(Interop(Laid + member)), text);
         Assert.DoesNotContain("Marshalled", text, StringComparison.Ordinal);
         Assert.DoesNotContain("BestFitMapping", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-149: two fields of a <c>[StructLayout(LayoutKind.Explicit)]</c> type at one <c>[FieldOffset]</c> are one
+    /// storage location and at two offsets they are two, so the type's declaration is in the text of a body that reads or
+    /// writes such a field, of a type nested in another as well.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M(S s) { s.A = 1; return s.B; }")]
+    [InlineData("public int M(S s) => s.B;")]
+    [InlineData("public void M(ref S s) { s.A = 1; }")]
+    [InlineData("public int M(O o) => o.Inner.B;")]
+    public void AFieldOffsetIsInTheTextOfABodyThatReadsOrWritesTheField(string member)
+    {
+        const string Outer = " public struct O { public S Inner; }";
+
+        AssertTheBodyDependsOn(Overlaid("4") + Outer, Overlaid("0") + Outer, member);
+        Assert.Contains("Attribute layout N.C.S #1: System.Runtime.InteropServices.FieldOffsetAttribute.", OneRuntimeText(Interop(Overlaid("4") + Outer + member)), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-149: a type's size and the offsets of its fields are fixed by its <c>[StructLayout]</c>, by the order and
+    /// the types of its fields and by those of the types its fields have. A body that takes the type's size, asks the
+    /// interop services about it, or reads it through a pointer or out of a span of bytes depends on them.
+    /// </summary>
+    [Theory]
+    [InlineData("public struct S { public byte A; public int B; }", "[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; }")]
+    [InlineData("[StructLayout(LayoutKind.Sequential)] public struct S { public byte A; public int B; }", "[StructLayout(LayoutKind.Sequential, Size = 16)] public struct S { public byte A; public int B; }")]
+    [InlineData("public struct S { public byte A; public int B; public byte C; }", "public struct S { public byte A; public byte C; public int B; }")]
+    [InlineData("public struct S { public byte A; public int B; }", "public struct S { public byte A; public int B; public int C; }")]
+    [InlineData("public struct T { public byte A; } public struct S { public T A; public int B; }", "public struct T { public long A; } public struct S { public T A; public int B; }")]
+    public void ATypesLayoutIsInTheTextOfABodyThatTakesItsSizeOrReadsItAsBytes(string legacy, string modern)
+    {
+        string[] members =
+        [
+            "public unsafe int M() => sizeof(S);",
+            "public int M() => Marshal.SizeOf<S>();",
+            "public int M() => Marshal.SizeOf(typeof(S));",
+            "public void M(S s, System.IntPtr p) => Marshal.StructureToPtr((object)s, p, false);",
+            "public int M() => Unsafe.SizeOf<S>();",
+            "public int M() => Marshal.SizeOf<int>() + Unsafe.SizeOf<S>();",
+            "public int M(S[] all) => System.Runtime.InteropServices.Marshalling.ArrayMarshaller<S, S>.GetManagedValuesSource(all).Length;",
+            "public unsafe int M(byte* p) => ((S*)p)->B;",
+            "public unsafe int M(S* p) => p[1].B;",
+            "public unsafe int M(delegate*<S, int> f, S s) => f(s);",
+            "public int M(System.ReadOnlySpan<byte> b) => MemoryMarshal.Read<S>(b).B;",
+            "public int M(System.Span<byte> b) => MemoryMarshal.Cast<byte, S>(b)[0].B;",
+            "public unsafe int M(void* p) => new System.Span<S>(p, 1)[0].B;",
+            "public unsafe int M(byte* p) => R<S>(p).B; private static unsafe T R<T>(byte* p) where T : unmanaged => *(T*)p;",
+        ];
+
+        foreach (string member in members)
+        {
+            AssertTheBodyDependsOn(legacy, modern, member);
+        }
+    }
+
+    /// <summary>
+    /// Ticket P2-149: the length of an inline array is the argument of its <c>[InlineArray]</c>, so it is in the text of
+    /// a body that indexes one, converts one to a span or enumerates one.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M(B b, int i) => b[i];")]
+    [InlineData("public int M(B b) { System.Span<int> s = b; return s.Length; }")]
+    [InlineData("public int M(B b) { int n = 0; foreach (int x in b) { n += x; } return n; }")]
+    public void AnInlineArraysLengthIsInTheTextOfABodyThatUsesIt(string member)
+    {
+        static string Buffer(string length) => $"[InlineArray({length})] public struct B {{ private int e; }} ";
+
+        AssertTheBodyDependsOn(Buffer("4"), Buffer("8"), member);
+        Assert.Contains("Attribute layout N.C.B: System.Runtime.CompilerServices.InlineArrayAttribute.", OneRuntimeText(Interop(Buffer("4") + member)), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-149: a delegate type's <c>[UnmanagedFunctionPointer]</c> is the calling convention of the function
+    /// pointer the interop services make of a delegate, and the assembly's <c>[DisableRuntimeMarshalling]</c> says whether
+    /// a call through a function pointer marshals its arguments.
+    /// </summary>
+    [Theory]
+    [InlineData("public System.IntPtr M(D d) => Marshal.GetFunctionPointerForDelegate(d);", true)]
+    [InlineData("public System.IntPtr M(D d) => Marshal.GetFunctionPointerForDelegate((System.Delegate)d);", true)]
+    [InlineData("public D M(System.IntPtr p) => Marshal.GetDelegateForFunctionPointer<D>(p);", true)]
+    [InlineData("public unsafe int M(delegate* unmanaged<int, int> f) => f(1);", false)]
+    public void WhatAFunctionPointerTakesFromADelegateTypeAndFromTheAssemblyIsInTheBodysText(string member, bool namesTheDelegateType)
+    {
+        const string Plain = "public delegate int D(int x); ";
+        const string Cdecl = "[UnmanagedFunctionPointer(CallingConvention.Cdecl)] " + Plain;
+
+        if (namesTheDelegateType)
+        {
+            AssertTheBodyDependsOn(Plain, Cdecl, member);
+        }
+
+        AssertTheBodyDependsOn(Plain, Plain, member, modernAssembly: Disabled);
+        Assert.Contains("Attribute layout assembly: System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute.", OneRuntimeText(Interop(Plain + member, Disabled)), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-149 criterion 3: a body that does none of those things keeps the text it has, although the types it
+    /// uses have a layout and its assembly turns runtime marshalling off: it copies a value, reads a field that shares
+    /// no storage, holds the type in an array or a list, or names it in a <c>typeof</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M(S s) { S t = s; return t.B + s.A; }")]
+    [InlineData("public S M(S[] all) => all[0];")]
+    [InlineData("public int M(System.Collections.Generic.List<S> all) => all.Count + all[0].B;")]
+    [InlineData("public string M(S s) => typeof(S).Name + s.ToString();")]
+    [InlineData("public E M(E e) { E f = e; return f; }")]
+    [InlineData("public int M(int a) => sizeof(int) + a + new S().B;")]
+    [InlineData("public int M(D d) => d(1);")]
+    public void ABodyThatUsesNoLaidOutTypeKeepsItsText(string member)
+    {
+        const string Plain = "public struct S { public byte A; public int B; } public struct E { public int A; } public delegate int D(int x); ";
+        const string Laid = "[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; } "
+            + "[StructLayout(LayoutKind.Explicit)] public struct E { [FieldOffset(0)] public int A; } "
+            + "[UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate int D(int x); ";
+        Compilation laid = Interop(Laid + member, Disabled);
+
+        Assert.Empty(laid.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Equal(OneRuntimeText(Interop(Plain + member)), OneRuntimeText(laid));
+        Assert.Equal(Text(Interop(Plain + member)), Text(laid));
+        Assert.DoesNotContain("Marshalled", OneRuntimeText(laid), StringComparison.Ordinal);
+        Assert.DoesNotContain(" assembly", OneRuntimeText(laid), StringComparison.Ordinal);
     }
 
     /// <summary>ADR 0054 decision 4: across runtimes it is the runtime that marshals the call, so an <c>extern</c> method has no fingerprint.</summary>
@@ -844,6 +967,32 @@ public sealed class BodyFingerprinterTests
             Assert.NotEqual(
                 BodyFingerprinter.Compute(Method(plain), plain, EquivConfig.Default, legacy: false, runtime),
                 BodyFingerprinter.Compute(Method(set), set, EquivConfig.Default, legacy: false, runtime));
+        }
+    }
+
+    /// <summary>A type with two fields, the second at <paramref name="offset"/>: at 0 it shares the first one's storage.</summary>
+    private static string Overlaid(string offset) =>
+        $"[StructLayout(LayoutKind.Explicit)] public struct S {{ [FieldOffset(0)] public int A; [FieldOffset({offset})] public int B; }}";
+
+    /// <summary>
+    /// Ticket P2-149: <paramref name="member"/>'s body, which is the same code beside both sets of types and in both
+    /// assemblies, has one fingerprint beside <paramref name="legacy"/> and another beside <paramref name="modern"/>, on
+    /// one runtime and across one, and each is the same every time.
+    /// </summary>
+    private static void AssertTheBodyDependsOn(string legacy, string modern, string member, string modernAssembly = "")
+    {
+        foreach (SideRuntime runtime in (SideRuntime[])[OneRuntime, Runtimes.Migration])
+        {
+            BodyFingerprint? On(string types, string assembly)
+            {
+                Compilation compilation = Interop(types + " " + member, assembly);
+                Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+                return BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, runtime);
+            }
+
+            Assert.NotNull(On(legacy, string.Empty));
+            Assert.NotEqual(On(legacy, string.Empty), On(modern, modernAssembly));
+            Assert.Equal(On(modern, modernAssembly), On(modern, modernAssembly));
         }
     }
 
