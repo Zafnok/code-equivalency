@@ -737,7 +737,7 @@ round. Anything else leaves the pair the Unknown(abstraction) it was, with its f
 query the solver gives up on (never Unknown(timeout)), a candidate that depends on something not interpretable, a
 fourth round, a loop the bound does not cover. Rungs 2 to 5 are never refined. Rung 1 does not apply to a pair either side of which, unrolled `k` times, would hold more than 25,000 blocks
 (ticket P1-032): loops nested `d` deep unroll to the body times `k` to the power `d`, work that no solver budget
-bounds, and at thorough mode's bound of 8 one real pair never finished it. The unroller refuses before it makes the
+bounds, and at a bound of 8, thorough mode's until ticket P2-134, one real pair never finished it. The unroller refuses before it makes the
 copy that would pass the limit, the step says so in `ladderTrace`, and the other rungs still run. The contract check
 (section 5.2) and ADR 0037's queries (section 6), which need the same product, answer unknown for such a pair.
 
@@ -1020,9 +1020,13 @@ Every Unknown carries `properties.scope` (ADR 0029):
 
 `equiv compare` has two modes (ADR 0049, ADR 0052; ticket P1-032): `--mode quick|thorough`, the config key `mode`,
 `mode` on the MCP `compare` tool and in `action.yml`. The command line wins over the config, the default is `quick`,
-and any other value is exit 3. Quick is the default because of what thorough measured on `gitextensions-8522` with
-four threads: 37,184 s against quick's 999 s, for 1 more Equivalent, 41 more Divergent and 42 fewer Unknown, with
-Divergents from the IL pass that are not all real (ADR 0052). Both modes begin with the same first pass. Thorough then runs further passes, each over the
+and any other value is exit 3. Quick is the default because of what thorough costs for what it adds, and because
+Divergents from the IL pass are not all real (ADR 0052, which measured 37 times quick's time for 1 more Equivalent
+at the budgets thorough then had). What thorough costs today, on `gitextensions-8522` with four threads (ticket
+P2-134, `docs/runs/2026-10-08-thorough-budgets.md`): 10,870 s against quick's 368 s, 30 times as long, of which the
+budget pass is 9,113 s, the IL pass 1,072 s and the contracts pass 301 s. For that it proves 1 more pair Equivalent,
+reports 28 more Divergent (5 EQ002, 23 EQ006) and leaves 29 fewer Unknown, 78 fewer of them `timeout`. No budget
+pass measured has proved a pair Equivalent. Both modes begin with the same first pass. Thorough then runs further passes, each over the
 pairs that are still Unknown and that the solver, not the CLI, made Unknown. A later pass's result replaces the
 earlier one when it is Equivalent or Divergent, or when it is an Unknown that is neither `timeout` nor `chc-timeout`
 and the earlier one was; otherwise the earlier result stands. So quick answers Unknown where thorough may decide, and
@@ -1031,7 +1035,7 @@ never Equivalent or Divergent where thorough would not.
 | | quick | thorough |
 |---|---|---|
 | First pass: `bound` / `resourceLimit` / `timeoutMs` | 3 / 2,000,000 / 60,000 | the same |
-| Budget pass: a pair left Unknown whose ladder hit a budget, or that has a loop or a self-call, is verified again | no | `bound` 8, `resourceLimit` 30,000,000, `timeoutMs` 600,000 |
+| Budget pass: a pair left Unknown whose ladder hit a budget, or that has a loop or a self-call, is verified again | no | `bound` 3, `resourceLimit` 30,000,000, `timeoutMs` 600,000 |
 | Failure refinement (ADR 0037) on a `timeout` Unknown | no | yes, at the budget pass's budgets |
 | Loop ladder rungs 1 to 4 | yes | yes |
 | Rung 5's local proposer (runs only after a rung 4 timeout) | no | yes |
@@ -1053,7 +1057,15 @@ never Equivalent or Divergent where thorough would not.
 - With a budget pass, the first pass asks neither rung 5's local proposer nor ADR 0037's queries on a `timeout`
   Unknown: every pair either applies to is verified again in the budget pass, which asks both. A pair that times out
   in both passes keeps its first result, as the rule above says, and carries the budget pass's `failureRefinement`.
-- The IL pass verifies with the budget pass's values, or the first pass's when there is no budget pass. A result it
+- The budget pass's values are measured ones (ticket P2-134; ADR 0049's clarification of 2026-10-08). Its `bound`
+  is the first pass's: at 8 the pass took 2.5 times as long on `gitextensions-8522` (22,982 s against 9,113 s) and
+  reported 13 Divergent against 15, none of which needed more than three iterations. Its `resourceLimit` is where
+  its answers come from: at 5,000,000 the pass took 1,994 s and reported 5 Divergent. So the pass asks again with
+  more budget, not with a deeper unrolling, and a pair with a loop and no step that hit a budget is asked what the
+  first pass asked.
+- The IL pass verifies with the budget pass's values, or the first pass's when there is no budget pass. The same
+  measurement chose them: there the pass produced 14 results on that pair in 1,072 s, and at the first pass's
+  values 12 in 28 s, the same proof and the same EQ002 with two fewer EQ006. A result it
   produced has `properties.lowering: il`, applied no API equivalence, and its assumptions, its contracts and its
   replay read the IL bodies.
 - A later pass that throws on a pair leaves the pair its earlier result and writes a warning on stderr. It is not

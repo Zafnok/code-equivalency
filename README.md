@@ -261,7 +261,7 @@ falling back to bitvectors.
 `--mode quick|thorough` (default `quick`; the config key `mode`, which the option overrides) chooses how much
 machine time a run spends to leave fewer Unknowns (ADR 0049, ADR 0052). Both modes run the same first pass, and
 `quick` stops there. `thorough` then
-verifies again only the pairs that are still Unknown: with a larger bound and budget (`bound` 8, `resourceLimit`
+verifies again only the pairs that are still Unknown: with a larger budget (`bound` 3, `resourceLimit`
 30,000,000, `timeoutMs` 600,000; the config's `escalation` replaces them) when a query ran out of budget or the pair
 has a loop, and then from IL when a pair holds an opaque the other side lacks. It also asks whether either side of a
 `timeout` Unknown can fail where the other does not, runs the contracts pass, and, under `--execute`, tests every
@@ -269,10 +269,11 @@ Unknown. No verdict means anything
 different in either mode: quick answers Unknown where thorough may decide, never the reverse.
 
 Quick is the default because thorough is expensive for what it adds. On Git Extensions PR #8522 (13,541 matched
-pairs, four threads) quick takes 17 minutes and thorough 10.3 hours. For that, thorough proves one more pair
-Equivalent, reports 41 more Divergent and leaves 42 fewer Unknown, and it never changes a result quick decided. Some
+pairs, four threads) quick takes 6 minutes and thorough 3 hours, 30 times as long (368 s against 10,870 s; the
+budget pass is 9,113 s of it and the IL pass 1,072 s). For that, thorough proves one more pair
+Equivalent, reports 28 more Divergent and leaves 29 fewer Unknown, and it never changes a result quick decided. Some
 of its extra Divergents are false: read from IL, two runtimes' different bindings of the same source (an
-interpolated string, say) are different calls. Ask for `--mode thorough` when a run can take a night and every
+interpolated string, say) are different calls. Ask for `--mode thorough` when a run can take hours and every
 remaining Unknown is worth the machine time, and review a result marked `decidedBy: il-pass` before trusting it. A result a later pass
 produced says so in `properties.decidedBy` (`budget-pass` or `il-pass`), the run records its mode and budgets in
 `run.properties.mode`, and a `--baseline` written in the other mode is a warning. A mode never turns on `--execute`

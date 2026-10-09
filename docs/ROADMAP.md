@@ -941,7 +941,10 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   minutes) and prove no pair: the budget pass decides 29 of 255, all Divergent, and the IL pass decides
   the same 13 at the first pass's budgets in an eighteenth of the time. Measure each knob (`bound` 8,
   `resourceLimit` 30,000,000, the IL pass's values) and set them from the table; a change to ADR 0049's
-  table goes through `equiv-adr`. Filed by P1-032. Needs P1-032.
+  table goes through `equiv-adr`. Filed by P1-032. Needs P1-032. Done 2026-10-08
+  (`docs/runs/2026-10-08-thorough-budgets.md`): the budget pass's `bound` is 3 (ADR 0049 clarified), since 8 took
+  2.5 times as long and found no deeper divergence; `resourceLimit` 30,000,000 stays, and the IL pass keeps the
+  budget pass's values. Thorough is 10,870 s on that pair against quick's 368 s.
 - P1-030 (L) Abstraction refinement, part 1 (ADR 0053): when rung 1's `abstraction` candidate depends only
   on interpretable pure functions (`IntPtr` equality, `float` and `double` arithmetic, comparisons and
   conversions as IEEE 754), rung 1 is asked again with them interpreted, three rounds at most
