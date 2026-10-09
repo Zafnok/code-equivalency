@@ -410,7 +410,8 @@ internal static class CompareCommand
     /// <see cref="Decide"/>, gave (ADR 0049 decision 2; ticket P1-032). The budget pass, when the escalation asks for more
     /// than the first pass had, verifies again each one whose ladder holds a step that hit a budget or whose pair has a loop
     /// or a self-call. The IL pass then verifies again, from its IL bodies, each one whose pair the frontend lowered from IL
-    /// as well (ADR 0039's condition). A pair the IL pass decided is returned with its IL bodies, so its assumptions, its
+    /// as well (ADR 0039's condition), at the budget pass's values, which ticket P2-134's measurement chose
+    /// (<c>docs/runs/2026-10-08-thorough-budgets.md</c>). A pair the IL pass decided is returned with its IL bodies, so its assumptions, its
     /// contracts and its replay read the bodies its verdict is about. Quick mode has no later pass.
     /// </summary>
     private static (List<VerificationResult> Results, List<(ProcedurePair Pair, IrProcedure Old, IrProcedure New)> Lowered) LaterPasses(

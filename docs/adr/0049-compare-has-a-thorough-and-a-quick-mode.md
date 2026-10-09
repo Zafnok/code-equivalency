@@ -133,3 +133,19 @@ left are a long tail, so that reading rejects every technique, one at a time.
   they also run in quick.
 - Ticket P1-032 implements this. ARCHITECTURE.md and VERIFICATION-MODEL.md sections 5 and 6 change
   in that PR, with the mode table.
+
+## Clarifications
+- 2026-10-08 (P2-134). The budget pass's `bound` is 3, not 8: the table's thorough cell reads `bound` 3,
+  `resourceLimit` 30,000,000, `timeoutMs` 600,000. Decision 2 chose 30,000,000 and 600,000 from a measurement
+  (`docs/runs/2026-10-01-timeout-budget.md`) and 8 from none; ticket P1-032 says so, and P2-134 measured it
+  (`docs/runs/2026-10-08-thorough-budgets.md`, Git Extensions PR #8522, four threads). At `bound` 8 the pass takes
+  22,982 s and reports 13 Divergent; at `bound` 3 it takes 9,113 s and reports 15. No Divergent of the `bound` 8 run
+  needed more than three iterations to show, and three that show within three run out of 30,000,000 once the loops
+  are unrolled eight times. No pass proved a pair Equivalent at either bound. The other two values stay: at
+  `resourceLimit` 5,000,000 the pass takes 1,994 s and reports 5 Divergent, so the larger limit is where its answers
+  come from, as this ADR's Why says. A pair with a loop or a self-call and no step that hit a budget is still
+  verified again, as the table says: at the first pass's bound that asks what the first pass asked, and cost 88 s
+  between 41 such pairs. `"escalation": { "bound": n }` in the config still sets another bound (decision 4).
+  The IL pass, for which the table names no values, verifies at the budget pass's: the same measurement found every
+  result it produces there, in half the time `bound` 8 took. Thorough on that pair is then 10,870 s against quick's
+  368 s; the Consequences' "ten hours or more" was the estimate this replaces. Nothing else in the Decision changes.

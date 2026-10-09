@@ -40,7 +40,7 @@ public sealed class CompareModeTests
     /// <summary>The callee only a body lowered from IL calls, which is how the backend here tells the IL pass.</summary>
     private const string FromIl = "T::FromIl()";
 
-    private const string DefaultMode = """{"name":"thorough","bound":3,"resourceLimit":2000000,"timeoutMs":60000,"escalation":{"bound":8,"resourceLimit":30000000,"timeoutMs":600000},"explicit":[]}""";
+    private const string DefaultMode = """{"name":"thorough","bound":3,"resourceLimit":2000000,"timeoutMs":60000,"escalation":{"bound":3,"resourceLimit":30000000,"timeoutMs":600000},"explicit":[]}""";
 
     private static readonly Verdict Proved = new Equivalent(ProofMethod.Bounded);
 
@@ -203,7 +203,7 @@ public sealed class CompareModeTests
 
     /// <summary>
     /// ADR 0049's table, the budget pass row, thorough: of the results the first pass leaves Unknown, the ones verified
-    /// again, at bound 8, resource limit 30,000,000 and timeout 600,000, are those whose ladder holds a step that hit a
+    /// again, at bound 3, resource limit 30,000,000 and timeout 600,000 (ADR 0049 as ticket P2-134 clarified it), are those whose ladder holds a step that hit a
     /// budget and those whose pair has a loop or a self-call. An Unknown without either, an Unknown decided without the
     /// solver and a decided result are not. Rung 5's local proposer and failure refinement on a timeout run in that pass
     /// and not in the first.
@@ -228,7 +228,7 @@ public sealed class CompareModeTests
             [("T::A()", First), ("T::B()", First), ("T::C()", First), ("T::D()", First), ("T::E()", First), ("T::A()", Budget), ("T::C()", Budget), ("T::E()", Budget)],
             backend.Calls.Select(static c => (c.Identity, c.Pass)));
         Assert.All(backend.Calls.Where(static c => string.Equals(c.Pass, First, StringComparison.Ordinal)), static c => Assert.Equal((3, 2_000_000, 60_000, false, false), (c.Options.Bound, c.Options.ResourceLimit, c.Options.TimeoutMs, c.Options.LocalProposer, c.Options.RefineTimeouts)));
-        Assert.All(backend.Calls.Where(static c => string.Equals(c.Pass, Budget, StringComparison.Ordinal)), static c => Assert.Equal((8, 30_000_000, 600_000, true, true), (c.Options.Bound, c.Options.ResourceLimit, c.Options.TimeoutMs, c.Options.LocalProposer, c.Options.RefineTimeouts)));
+        Assert.All(backend.Calls.Where(static c => string.Equals(c.Pass, Budget, StringComparison.Ordinal)), static c => Assert.Equal((3, 30_000_000, 600_000, true, true), (c.Options.Bound, c.Options.ResourceLimit, c.Options.TimeoutMs, c.Options.LocalProposer, c.Options.RefineTimeouts)));
         Assert.Equal(("EQ001", "budget-pass"), (ran.Results["T::A()"].RuleId, ran.Results["T::A()"].GetProperty<string>("decidedBy")));
         Assert.Equal(["timeout", "proved"], ran.Results["T::A()"].GetProperty<List<Dictionary<string, string>>>("ladderTrace").Select(static step => step["outcome"]), StringComparer.Ordinal);
         Assert.Equal(("EQ002", "budget-pass"), (ran.Results["T::E()"].RuleId, ran.Results["T::E()"].GetProperty<string>("decidedBy")));
@@ -266,7 +266,7 @@ public sealed class CompareModeTests
         Assert.Equal(
             [("T::G()", First), ("T::H()", First), ("T::B()", First), ("T::J()", First), (FromIl, First), ("T::G()", Il), ("T::J()", Il)],
             backend.Calls.Select(static c => (c.Identity, c.Pass)));
-        Assert.All(backend.Calls.Where(static c => string.Equals(c.Pass, Il, StringComparison.Ordinal)), static c => Assert.Equal((8, 30_000_000, 600_000, true, true), (c.Options.Bound, c.Options.ResourceLimit, c.Options.TimeoutMs, c.Options.LocalProposer, c.Options.RefineTimeouts)));
+        Assert.All(backend.Calls.Where(static c => string.Equals(c.Pass, Il, StringComparison.Ordinal)), static c => Assert.Equal((3, 30_000_000, 600_000, true, true), (c.Options.Bound, c.Options.ResourceLimit, c.Options.TimeoutMs, c.Options.LocalProposer, c.Options.RefineTimeouts)));
         Result decided = ran.Results["T::G()"];
         Assert.Equal(("EQ002", "il-pass", "il"), (decided.RuleId, decided.GetProperty<string>("decidedBy"), decided.GetProperty<string>("lowering")));
         Assert.Equal([FromIl], decided.GetProperty<List<string>>("assumedCallees"));
@@ -281,6 +281,29 @@ public sealed class CompareModeTests
         Assert.All((string[])["T::H()", "T::B()", "T::I()"], identity => Assert.False(ran.Results[identity].TryGetProperty("lowering", out string? _)));
         Assert.Equal(["verify", "il", "execute", "write"], ran.Phases, StringComparer.Ordinal);
         Assert.Contains("phase il 2 8 (2, 600000, 1)", ran.Events, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// ADR 0049's table, the IL lowering row, with the values ticket P2-134's measurement chose
+    /// (<c>docs/runs/2026-10-08-thorough-budgets.md</c>): the IL pass verifies at the budget pass's values, with every
+    /// query on. Those are bound 3, resource limit 30,000,000 and timeout 600,000 unless the config's <c>escalation</c>
+    /// names others, and the first pass's when the run has no budget pass.
+    /// </summary>
+    [Theory]
+    [InlineData(null, 3, 30_000_000, 600_000)]
+    [InlineData("""{ "escalation": { "bound": 6, "resourceLimit": 5000000 } }""", 6, 5_000_000, 600_000)]
+    [InlineData("""{ "resourceLimit": 30000000, "timeoutMs": 600000 }""", 3, 30_000_000, 600_000)]
+    [InlineData("""{ "bound": 4, "resourceLimit": 40000000, "timeoutMs": 700000 }""", 4, 40_000_000, 700_000)]
+    public void Thorough_IlPass_UsesTheChosenBudgets(string? config, int bound, int resourceLimit, int timeoutMs)
+    {
+        PassBackend backend = new(Script(("T::G()", First, Opaque), ("T::G()", Il, Proved), (FromIl, First, Proved)));
+
+        Ran ran = Run(Match(WithIl("T::G()"), Plain(FromIl)), backend, config: config);
+
+        (string _, string _, VerificationOptions options) = Assert.Single(backend.Calls, static c => string.Equals(c.Pass, Il, StringComparison.Ordinal));
+        Assert.Equal((bound, resourceLimit, timeoutMs, true, true), (options.Bound, options.ResourceLimit, options.TimeoutMs, options.LocalProposer, options.RefineTimeouts));
+        Assert.Equal(("EQ001", "il-pass"), (ran.Results["T::G()"].RuleId, ran.Results["T::G()"].GetProperty<string>("decidedBy")));
+        Assert.Contains(string.Create(CultureInfo.InvariantCulture, $"phase il 1 4 (1, {timeoutMs}, 1)"), ran.Events, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -416,7 +439,7 @@ public sealed class CompareModeTests
 
     /// <summary>
     /// ADR 0049 decision 4: the budget pass never asks with less than the first pass. A config whose
-    /// <c>resourceLimit</c> is above the escalation's is escalated in bound and timeout only; and when the first pass's
+    /// <c>resourceLimit</c> is above the escalation's is escalated in timeout only; and when the first pass's
     /// values already meet the escalation's there is no budget pass, so the first pass asks rung 5's local proposer and
     /// refines its timeouts itself, and the IL pass runs at the first pass's values.
     /// </summary>
@@ -429,8 +452,8 @@ public sealed class CompareModeTests
         Ran raised = Run(Match(Plain("T::A()")), above, config: """{ "resourceLimit": 40000000 }""");
         Ran none = Run(Match(Plain("T::A()"), WithIl("T::G()"), Plain(FromIl)), met, config: """{ "bound": 9, "resourceLimit": 30000000, "timeoutMs": 600000 }""");
 
-        Assert.Equal([(3, 40_000_000, 60_000), (8, 40_000_000, 600_000)], above.Calls.Select(static c => (c.Options.Bound, c.Options.ResourceLimit, c.Options.TimeoutMs)));
-        Assert.Equal("""{"name":"thorough","bound":3,"resourceLimit":40000000,"timeoutMs":60000,"escalation":{"bound":8,"resourceLimit":40000000,"timeoutMs":600000},"explicit":["resourceLimit"]}""", raised.Mode);
+        Assert.Equal([(3, 40_000_000, 60_000), (3, 40_000_000, 600_000)], above.Calls.Select(static c => (c.Options.Bound, c.Options.ResourceLimit, c.Options.TimeoutMs)));
+        Assert.Equal("""{"name":"thorough","bound":3,"resourceLimit":40000000,"timeoutMs":60000,"escalation":{"bound":3,"resourceLimit":40000000,"timeoutMs":600000},"explicit":["resourceLimit"]}""", raised.Mode);
         Assert.Equal([("T::A()", First), ("T::G()", First), (FromIl, First), ("T::G()", Il)], met.Calls.Select(static c => (c.Identity, c.Pass)));
         Assert.All(met.Calls, static c => Assert.Equal((9, 30_000_000, 600_000, true, true), (c.Options.Bound, c.Options.ResourceLimit, c.Options.TimeoutMs, c.Options.LocalProposer, c.Options.RefineTimeouts)));
         Assert.Equal("""{"name":"thorough","bound":9,"resourceLimit":30000000,"timeoutMs":600000,"explicit":["bound","resourceLimit","timeoutMs"]}""", none.Mode);

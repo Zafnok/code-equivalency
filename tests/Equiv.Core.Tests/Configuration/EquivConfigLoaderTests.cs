@@ -114,7 +114,7 @@ public sealed class EquivConfigLoaderTests
         Assert.Equal(CompareMode.Quick, EquivConfigLoader.Load("""{ "mode": "quick" }""").Config.Mode);
         Assert.True(EquivConfigLoader.Load("""{ "mode": "thorough" }""").IsValid);
         Assert.Equal((3, 2_000_000, 60_000), (EquivConfig.Default.Bound, EquivConfig.Default.ResourceLimit, EquivConfig.Default.TimeoutMs));
-        Assert.Equal(new Escalation(8, 30_000_000, 600_000), EquivConfig.Default.Escalation);
+        Assert.Equal(new Escalation(3, 30_000_000, 600_000), EquivConfig.Default.Escalation);
     }
 
     /// <summary>Criterion 1: any other <c>mode</c> is CFG013, which <c>equiv compare</c> ends on with exit 3.</summary>
@@ -142,7 +142,7 @@ public sealed class EquivConfigLoaderTests
         EquivConfig partly = EquivConfigLoader.Load("""{ "escalation": { "resourceLimit": 9 } }""").Config;
         EquivConfigResult whole = EquivConfigLoader.Load("""{ "timeoutMs": 7, "escalation": { "timeoutMs": 3, "bound": 4, "resourceLimit": 5 }, "resourceLimit": 6, "bound": 2 }""");
 
-        Assert.Equal(new Escalation(8, 9, 600_000), partly.Escalation);
+        Assert.Equal(new Escalation(3, 9, 600_000), partly.Escalation);
         Assert.Equal(["escalation"], partly.Explicit);
         Assert.True(whole.IsValid);
         Assert.Equal(new Escalation(4, 5, 3), whole.Config.Escalation);
@@ -170,9 +170,9 @@ public sealed class EquivConfigLoaderTests
     [Fact]
     public void Escalation_NeverBelowFirstPass()
     {
-        Assert.Equal(new Escalation(8, 30_000_000, 600_000), Escalation.Default.AtLeast(3, 2_000_000, 60_000));
+        Assert.Equal(new Escalation(3, 30_000_000, 600_000), Escalation.Default.AtLeast(3, 2_000_000, 60_000));
         Assert.Equal(new Escalation(20, 40_000_000, 700_000), Escalation.Default.AtLeast(20, 40_000_000, 700_000));
-        Assert.Equal(new Escalation(8, 40_000_000, 600_000), Escalation.Default.AtLeast(3, 40_000_000, 60_000));
+        Assert.Equal(new Escalation(3, 40_000_000, 600_000), Escalation.Default.AtLeast(3, 40_000_000, 60_000));
     }
 
     /// <summary>Ticket P2-077 criterion 1: <c>jobs</c> is a positive integer, validated as <c>timeoutMs</c> is, and one unless set.</summary>
