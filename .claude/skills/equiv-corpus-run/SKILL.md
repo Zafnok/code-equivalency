@@ -192,11 +192,10 @@ census and takes none; `-Modern <solution>` runs a seeded copy; `-Tag fail-on-un
 (or `'--jobs', '4'`) passes anything else through. `-Metrics` prints the compare mode a SARIF log was written in and
 the results each later pass produced.
 
-A verdict run may pass `--jobs 4` (ticket P2-077): on `gitextensions-8522` it takes 47 minutes against 2h12m
-on one thread and no query runs slower. Do not pass more than 4 until P2-132 lands; 24 threads were slower
-than four. Record the `--jobs` value in SUMMARY.md, and compare two runs only when both used the same value
-or the comparison says so: a handful of results at the edge of the resource limit differ between any two runs
-(P2-100).
+A run with no `--jobs` verifies as many pairs at once as the box has processors, up to 24 (ticket P2-132): on
+`gitextensions-8522` in quick mode that takes 221 s against 864 s on one thread, with the same results
+(`docs/runs/2026-10-09-jobs-scaling.md`). Record the number of threads in SUMMARY.md (`--jobs`, or the
+processor count). To compare a run's time with an earlier run's, pass the `--jobs` the earlier run used.
 
 Two runs on the same pair must not overlap their load phase (they collide on MSBuild's
 `obj/**/*.AssemblyReference.cache`, "being used by another process"), so start the second only

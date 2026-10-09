@@ -1,5 +1,5 @@
 # P2-132 Find what blocks the pair workers past four threads, and raise the default `jobs` from one
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are not Opus or Fable, stop before doing anything else and tell the user to switch models; do not attempt this ticket.
 Depends on: P2-077, P2-100
@@ -63,3 +63,42 @@ Parallel lowering. Distributing pairs across machines. Caching verdicts between 
 
 ## Notes
 - Found 2026-10-05 by P2-077's runs.
+- Measured (criterion 1, `docs/runs/2026-10-09-jobs-scaling.md`): the workers wait on the lock of the Windows
+  process heap. Z3 allocates with the C runtime's `malloc`, which is the process heap. In 32 samples of a
+  `--jobs 24` run, 214 of the 215 waiting worker stacks were entering that heap's critical section from Z3's
+  allocate, free or reallocate, 198 of them under `Z3_solver_check`. Ruled out as the limit: page faults (kernel
+  time is 7% of the processor time), Z3's own mutexes (11 of 399 stacks, one waiting), the collector (17 of 399
+  stacks wait inside the runtime), the finalizer thread (idle in 30 of its 32 stacks).
+- Decision: how the heap lock is removed -> the executable's manifest asks Windows for the segment heap
+  (`src/Equiv.Cli/app.manifest`, `heapType`). Alternatives: worker processes (a new component and an ADR, for a
+  cause that is below Z3 and not inside it), building Z3 with another allocator (ADR 0030 rejects owning the
+  build), the server collector (P2-077's probe: it halves the median and leaves the largest). Rule: 4.
+- Decision: the compare mode of criterion 3's runs -> quick, the default mode (ADR 0052), whose pass is thorough's
+  first pass. Alternatives: thorough (three hours a run on four threads, and nine runs were needed). Rule: 4.
+- Decision: which checks the ratio is taken over -> those that answered sat or unsat in both runs and took at least
+  0.1 s on one thread, 157 of them. Alternatives: at least 1 s as P2-077 had (two checks in quick mode), every
+  check (most take a millisecond, and their ratio is the clock's grain). Rule: 3.
+- Decision: the backstop's multiplier when the threads outnumber the processors -> 6 for each thread to a
+  processor, and never more than the threads. Alternatives: 6 whatever the machine (a `--jobs 48` run on four
+  cores would end a query sooner than one thread does, which criterion 5 forbids). Rule: 2.
+- Result, criterion 3 (fixed build, quick mode): one thread 864 s, four 332 s, eight 272 s, twelve 241 s, 24
+  221 s; peak working set 3,553, 4,238, 5,146, 5,948 and 8,404 MB. Unfixed: 342, 276, 292 and 422 s on 4, 8, 12
+  and 24 threads. Largest ratio of an answered check to its time on one thread: 1.45, 2.00, 2.87 and 5.74.
+- Result, criterion 4: every run gives the rule id, `unknownReason` and `proofMethod` of the one-thread run for all
+  13,818 results, and no solver check of 3,179 answers differently. The pull request's build with no `--jobs` (24
+  threads here) does too, in 237 s. The default `jobs` is the processor count up to 24.
+- Result, criterion 5: the multiplier is 6 (5.74 rounded up). `queryEndings` is `resourceLimit` 179 and
+  `wallClock` 0 in every run.
+- Observed: not measured on Linux, where the manifest does nothing and glibc gives each thread an arena. This
+  pair's legacy side loads only on Windows.
+- Observed: not measured in thorough mode. Its later passes ask longer queries with more memory each, and the
+  ratio there may be larger than 5.74.
+- Observed: the manifest reaches a process only through `Equiv.Cli.exe` (the apphost, which `dotnet run` starts,
+  and the single-file bundle; both checked to hold it). `dotnet Equiv.Cli.dll` runs under `dotnet.exe`'s manifest
+  and keeps the old heap.
+- Observed: a 24-thread run now spends 83 s of its 221 s in `lower`, which is one thread's work and out of scope
+  here.
+- Observed: `CompareModeTests` read the order the backend is called in and the backstop each pass gives, so its
+  helper passes `Jobs = 1`.
+- Scoreboard unchanged: the report holds no `full` summary of a pair and changes no count; the README's run-time
+  row describes `--jobs 4` runs of three pairs at another commit.

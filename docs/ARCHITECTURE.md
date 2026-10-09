@@ -135,11 +135,11 @@ detected runtime (ADR 0040 decision 3; P2-056). It references
 - `--resource-limit` overrides the config's `resourceLimit`, Z3's deterministic `rlimit` for each
   query; the config's `timeoutMs` is the wall-clock backstop (VERIFICATION-MODEL.md section 6;
   ticket P2-050). A value that is not positive is exit 3.
-- `--jobs` overrides the config's `jobs` (default 1): the `verify`, `budget`, `il` and `contracts`
-  phases run up to that many pairs at once, each backend call on a thread of its own, and write their
-  results in the pairs' order. On `n` threads the backend is given `n` times `timeoutMs`, so the
-  resource limit, not the clock, is what ends a query (VERIFICATION-MODEL.md section 6; ticket
-  P2-077). A value that is not positive is exit 3.
+- `--jobs` overrides the config's `jobs` (by default the processor count, and never more than 24): the
+  `verify`, `budget`, `il` and `contracts` phases run up to that many pairs at once, each backend call on
+  a thread of its own, and write their results in the pairs' order. On `n` threads the backend is given
+  `n` times `timeoutMs`, up to 6 times, so the resource limit, not the clock, is what ends a query
+  (VERIFICATION-MODEL.md section 6; tickets P2-077 and P2-132). A value that is not positive is exit 3.
 - `--il-fallback` (off by default) adds the frontend's IL lowering (step 5 above) to quick mode, where the IL
   bodies replace the IOperation ones (ADR 0039). Thorough mode lowers from IL without it, as a pass (ADR 0049).
 - Every run prints the analysed line count of each codebase and writes both to

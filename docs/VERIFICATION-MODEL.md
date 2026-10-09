@@ -1092,12 +1092,17 @@ Every solver query has two budgets, both set in `equiv.config.json` as positive 
 - `timeoutMs` (default 60000) is the wall-clock backstop behind it, for a query that spends long in work Z3
   does not count. A result that ran into it can differ between runs.
 
-Matched pairs are verified on up to `jobs` threads at once (default 1; `compare --jobs <n>`
-overrides the config's `jobs`; ticket P2-077). The results are written in the order one thread writes them, and
-threads never end a query sooner than one thread would: `resourceLimit` does not depend on what else is running,
-and a phase that verifies on `n` threads gives each query `n` times `timeoutMs` on the clock, since threads that
-share a processor each get a share of it. The default stays 1 until a run on several threads gives no result a
-run on one does not (tickets P2-100, P2-132). A verifying run counts the
+Matched pairs are verified on up to `jobs` threads at once (by default the processor count, and never more than
+24; `compare --jobs <n>` overrides the config's `jobs`; tickets P2-077 and P2-132). The results are written in the
+order one thread writes them, and threads never end a query sooner than one thread would: `resourceLimit` does not
+depend on what else is running, and a phase that verifies on `n` threads gives each query `n` times `timeoutMs` on
+the clock, up to 6 times. Six is the most a check that answers was measured to slow down beside 23 others, rounded
+up (5.74 times; `docs/runs/2026-10-09-jobs-scaling.md`). Threads that outnumber the processors share them, so the
+6 is multiplied by the threads to a processor, and the whole is never more than `n`. On `gitextensions-8522` runs
+on 4, 8, 12 and 24 threads each gave every result the run on one thread gave, and each was faster than the one
+before, which is why the default is the processor count and why it stops at 24, the most that was measured. On
+Windows the executable asks for the segment heap (`src/Equiv.Cli/app.manifest`): Z3 allocates from the process
+heap, and the default heap's one lock is what 24 workers waited on before. A verifying run counts the
 rungs a limit timed out in `run.properties.queryEndings`: `resourceLimit` for those the resource limit ended and
 `wallClock` for those the backstop ended, over the ladders of the run's results. A run on several threads must
 not have more `wallClock` endings than the same run on one.

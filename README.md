@@ -286,10 +286,11 @@ Unknown (`timeout`) on every run, whatever the machine's speed or load. The conf
 (default 60000) is the wall-clock backstop behind it. The Unknown's message says which of the two
 was hit.
 
-`--jobs <n>` overrides the config's `jobs` (default 1), the number of matched
-pairs verified at once. It changes how long a run takes, not its results: they are written in the
-order `--jobs 1` writes them, and on `n` threads each query gets `n` times `timeoutMs` on the clock,
-so threads sharing a processor do not time out a query that one thread would finish.
+`--jobs <n>` overrides the config's `jobs`, the number of matched pairs verified at once. The
+default is the processor count, and never more than 24. It changes how long a run takes, not its
+results: they are written in the order `--jobs 1` writes them, and on `n` threads each query gets
+`n` times `timeoutMs` on the clock, up to 6 times, so threads working side by side do not time out
+a query that one thread would finish.
 `run.properties.queryEndings` counts the queries each of the two limits ended.
 
 A second solver is optional (ADR 0050). With `"solvers": { "cvc5": { "path": "<cvc5 executable>" } }`
