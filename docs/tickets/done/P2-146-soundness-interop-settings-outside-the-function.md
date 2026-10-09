@@ -1,5 +1,5 @@
 # P2-146 Soundness: the marshalling settings an `extern` function takes from its types and its assembly are in no fingerprint
-Status: in-progress
+Status: done (PR #443)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-145
