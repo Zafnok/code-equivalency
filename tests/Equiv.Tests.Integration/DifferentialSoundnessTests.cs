@@ -192,9 +192,11 @@ public sealed class DifferentialSoundnessTests
     public void FloatingPointPairsAreSoundUnderBothLowerings() =>
         Assert.Null(Record.Exception(() => Sample(PairGen.FloatPair, BothLowerings, Rules, Seed, Pairs / FloatShare, PairGen.FloatInput)));
 
+    private const int DecidedPairs = 40;
+
     /// <summary>
     /// The floating-point pairs do get decided: were refinement to stop running, every one of them would be Unknown and
-    /// the three rules would hold of nothing. Of 40 pairs, at least 10 are Equivalent after refinement and at least 10
+    /// the three rules would hold of nothing. Of one fixed batch of 40 pairs (ticket P2-147: CsCheck's seed fixes only the first iteration, so the batch is one array drawn in one iteration), at least 10 are Equivalent after refinement and at least 10
     /// Divergent. (A pair whose two operands happen to be one expression is decided without it.)
     /// </summary>
     [Fact]
@@ -202,20 +204,22 @@ public sealed class DifferentialSoundnessTests
     {
         int equivalent = 0;
         int divergent = 0;
-        PairGen.FloatPair.Sample(
-            pair =>
-            {
-                Verdict verdict = PairRuntime.Analyse(pair.LegacySource, pair.ModernSource).Verdict;
-                Assert.False(verdict is Divergent && PairGen.IsPreserving(pair.Operator), pair.LegacySource + pair.ModernSource);
-                if (verdict is Equivalent or Divergent && verdict.Ladder.Any(static s => !s.Refined.IsEmpty))
+        PairGen.FloatPair.Array[DecidedPairs].Sample(
+            pairs => Parallel.ForEach(
+                pairs,
+                pair =>
                 {
-                    Interlocked.Increment(ref verdict is Equivalent ? ref equivalent : ref divergent);
-                }
-            },
+                    Verdict verdict = PairRuntime.Analyse(pair.LegacySource, pair.ModernSource).Verdict;
+                    Assert.False(verdict is Divergent && PairGen.IsPreserving(pair.Operator), pair.LegacySource + pair.ModernSource);
+                    if (verdict is Equivalent or Divergent && verdict.Ladder.Any(static s => !s.Refined.IsEmpty))
+                    {
+                        Interlocked.Increment(ref verdict is Equivalent ? ref equivalent : ref divergent);
+                    }
+                }),
             seed: Seed,
-            iter: 40);
+            iter: 1);
 
-        Assert.True(equivalent >= 10 && divergent >= 10, string.Create(CultureInfo.InvariantCulture, $"{equivalent} Equivalent and {divergent} Divergent of 40"));
+        Assert.True(equivalent >= 10 && divergent >= 10, string.Create(CultureInfo.InvariantCulture, $"{equivalent} Equivalent and {divergent} Divergent of {DecidedPairs}"));
     }
 
     /// <summary>A deliberately broken IL mapping fails rule 1 within the pull-request budget, and the failure prints its seed.</summary>

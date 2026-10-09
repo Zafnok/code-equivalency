@@ -1,5 +1,5 @@
 # P2-147 The floating-point "pairs are decided" test counts verdicts over 39 random pairs, and fails about once in 20 runs
-Status: todo
+Status: in-progress
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -77,3 +77,10 @@ P2-080. The 10% of floating-point pairs that stay Unknown(abstraction).
   runs are consistent with it but do not pin it.
 - Not measured: the counts of `Array[40]` at the gate's seed. The first 40 of the 200-pair batch above
   have 17 Equivalent and 12 Divergent after refinement, but `Array[40]` need not draw those 40.
+- Fixed batch (`PairGen.FloatPair.Array[40]`, `iter: 1`, seed `000000000000`), Windows, local, 2026-10-09:
+  17 Equivalent and 12 Divergent after refinement, the same as the first 40 of the 200-pair batch above.
+  Both thresholds of 10 hold, so no seed search and no lowering. The Linux count is not measured here; it
+  is expected equal because the verdicts of a fixed batch do not vary (above), and CI's `ubuntu-latest`
+  run of this test is the check.
+- Decision: the 40 pairs are analysed with `Parallel.ForEach` inside the single iteration, as the 40
+  iterations ran in parallel before; sequentially the slowest pairs would add up.
