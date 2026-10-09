@@ -726,7 +726,7 @@
               {
                 "rung": "bounded",
                 "outcome": "refuted",
-                "detail": "a divergence within 8 iterations"
+                "detail": "a divergence within 3 iterations"
               }
             ],
             "replay": "not-constructible",
@@ -1270,7 +1270,7 @@
           "resourceLimit": 2000000,
           "timeoutMs": 60000,
           "escalation": {
-            "bound": 8,
+            "bound": 3,
             "resourceLimit": 30000000,
             "timeoutMs": 600000
           },

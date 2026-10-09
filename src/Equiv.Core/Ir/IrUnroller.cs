@@ -32,7 +32,7 @@ public static class IrUnroller
     /// <summary>
     /// The most blocks <see cref="UnrollWithin"/> lets an unrolled procedure hold (ticket P1-032). Loops nested
     /// <c>d</c> deep unroll to the body times <c>bound</c> to the power <c>d</c>, which no solver budget bounds:
-    /// at thorough mode's bound of 8 one pair of <c>gitextensions-8522</c> was still unrolling after eleven hours and
+    /// at a bound of 8, thorough mode's until ticket P2-134, one pair of <c>gitextensions-8522</c> was still unrolling after eleven hours and
     /// 89 GB. A product this large is not one the solver decides either, and the loop analysis, which recurses along
     /// a procedure's paths, overflows a one-megabyte stack somewhere between 30,000 and 50,000 blocks of such a nest.
     /// The limit sits under that and well over the 13,497 blocks of the largest pair the tests verify (ticket P2-121).

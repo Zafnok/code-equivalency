@@ -7,8 +7,12 @@ namespace Equiv.Core.Configuration;
 /// </summary>
 public sealed record Escalation(int Bound, int ResourceLimit, int TimeoutMs)
 {
-    /// <summary>ADR 0049's table: the largest budget measured (<c>docs/runs/2026-10-01-timeout-budget.md</c>), and a bound that is not measured yet.</summary>
-    public static Escalation Default { get; } = new(Bound: 8, ResourceLimit: 30_000_000, TimeoutMs: 600_000);
+    /// <summary>
+    /// ADR 0049's table as its clarification of 2026-10-08 reads (ticket P2-134): the largest budget measured
+    /// (<c>docs/runs/2026-10-01-timeout-budget.md</c>), and the first pass's bound. A bound of 8 took 2.5 times as long on
+    /// <c>gitextensions-8522</c> and no divergence it found needed more than three iterations (<c>docs/runs/2026-10-08-thorough-budgets.md</c>).
+    /// </summary>
+    public static Escalation Default { get; } = new(Bound: 3, ResourceLimit: 30_000_000, TimeoutMs: 600_000);
 
     /// <summary>
     /// These budgets, none below the first pass's (ADR 0049 decision 4): a config that sets a large <c>resourceLimit</c>
