@@ -779,6 +779,11 @@ Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
   unknown (timeout), never sat against unsat, so not a soundness matter. Both seeds reproduce; the
   texts are unsat in 149 and 203 seconds. Test code only.
 
+Found by a CI failure (PR #452, `gates (windows-latest)`):
+- P2-155 (S) `TraceInvariantProposerTests.StateUnpaired_ProvedByTraceProposer` gives rung 4 one
+  millisecond so that it gives up, and fails when Z3 answers inside it: `Timeout` expected, `Proved`
+  found. The verdict is Equivalent either way, so not a soundness matter. Test code only.
+
 Found by a CI failure (PR #390, `gates (ubuntu-latest)`):
 - P2-129 (S) A ladder property test fails at random, about once in 400 runs, with no assertion: its
   generator's filter for procedures that loop and call keeps 1 draw in 8, and CsCheck gives up after
