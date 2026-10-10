@@ -84,6 +84,24 @@ public sealed class LayoutEquivalenceTests
             Declared + $"class C {{ static int M(int x) => x + {call}; }}"));
     }
 
+    /// <summary>
+    /// Ticket P2-153: beside one declaration, the same reads and writes of an explicit layout's storage in the same
+    /// order are the same calls on both sides, so a pair that differs elsewhere is still proved; beside two declarations
+    /// it is not.
+    /// </summary>
+    [Theory]
+    [InlineData("[FieldOffset(0)] public int A; [FieldOffset(0)] public int B;", "[FieldOffset(0)] public int A; [FieldOffset(4)] public int B;")]
+    [InlineData("[field: FieldOffset(0)] public int A { get; set; } [field: FieldOffset(0)] public int B { get; set; }", "[field: FieldOffset(0)] public int A { get; set; } [field: FieldOffset(4)] public int B { get; set; }")]
+    public void TheSameUseOfAnExplicitLayoutIsSharedBesideOneDeclarationOnly(string members, string moved)
+    {
+        const string Legacy = "class C { static int M(U s, int x) { s.A = x; return s.B + 1; } }";
+        const string Modern = "class C { static int M(U s, int x) { s.A = x; return 1 + s.B; } }";
+        static string Declared(string members) => "[StructLayout(LayoutKind.Explicit)] sealed class U { " + members + " } ";
+
+        Assert.IsType<Equivalent>(Verify(Declared(members) + Legacy, Declared(members) + Modern));
+        Assert.IsNotType<Equivalent>(Verify(Declared(members) + Legacy, Declared(moved) + Modern));
+    }
+
     private static Verdict Verify(string legacy, string modern) =>
         new Z3Backend().Verify(Lower(legacy, isLegacy: true), Lower(modern, isLegacy: false), Options);
 

@@ -12,6 +12,7 @@ using Equiv.Frontend.CSharp.Lowering;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FlowAnalysis;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -323,14 +324,16 @@ internal sealed class BoundSerialiser : OperationWalker
     /// <summary>
     /// Writes how a value of <paramref name="type"/> is laid out and marshalled, as far as its declaration says: its kind,
     /// its base type or an enum's underlying type, its attributes, its instance fields in declaration order, each with
-    /// its type, a fixed buffer's length and its attributes, and a delegate's signature with the attributes of its return
-    /// value and parameters. Returns the types those name.
+    /// its type, a fixed buffer's length and its attributes, its field-like instance events, each with its type and the
+    /// attributes its declaration gives its backing field (ticket P2-153), and a delegate's signature with the attributes
+    /// of its return value and parameters. Returns the types those name.
     /// </summary>
     private ImmutableArray<ITypeSymbol> Declared(string name, INamedTypeSymbol type)
     {
         string target = $"{name} {Type(type)}";
         ImmutableArray<ITypeSymbol> inherited = [.. ((ITypeSymbol?[])[type.BaseType, type.EnumUnderlyingType]).OfType<ITypeSymbol>()];
         ImmutableArray<IFieldSymbol> fields = [.. type.GetMembers().OfType<IFieldSymbol>().Where(static f => !f.IsStatic)];
+        ImmutableArray<IEventSymbol> events = [.. type.GetMembers().OfType<IEventSymbol>().Where(Layouts.IsStored)];
         ImmutableArray<IMethodSymbol> invoke = [.. ((IMethodSymbol?[])[type.DelegateInvokeMethod]).OfType<IMethodSymbol>()];
 
         text.Append("Marshalled ").Append(target).Append(": ").Append(type.TypeKind).Append(" : ").AppendJoin(", ", inherited.Select(Type)).Append('\n');
@@ -342,6 +345,16 @@ internal sealed class BoundSerialiser : OperationWalker
             AttributeLines([(position, field.GetAttributes())]);
         }
 
+        foreach ((int index, IEventSymbol raised) in events.Index())
+        {
+            string position = $"{target} event #{index.ToString(CultureInfo.InvariantCulture)}";
+            text.Append("Event ").Append(position).Append(": ").Append(Type(raised.Type)).Append('\n');
+            foreach (string attribute in BackingFieldAttributes(raised))
+            {
+                text.Append("Attribute ").Append(position).Append(": ").Append(attribute).Append('\n');
+            }
+        }
+
         foreach (IMethodSymbol signature in invoke)
         {
             text.Append("Invoke ").Append(target).Append(": (").AppendJoin(", ", signature.Parameters.Select(p => $"{p.RefKind} {Type(p.Type)}"))
@@ -349,13 +362,47 @@ internal sealed class BoundSerialiser : OperationWalker
             AttributeLines(Targets(target, signature));
         }
 
-        return [.. inherited, .. fields.Select(static f => f.Type), .. invoke.SelectMany(static signature => SignatureTypes(signature))];
+        return [.. inherited, .. fields.Select(static f => f.Type), .. events.Select(static e => e.Type), .. invoke.SelectMany(static signature => SignatureTypes(signature))];
+    }
+
+    /// <summary>
+    /// The attributes a field-like event's declaration gives its backing field (<c>[field: FieldOffset(8)]</c>), each as
+    /// its constructor, its named arguments and its constants, bound in the compilation that declares the event. The
+    /// event's symbol does not have them, and no symbol of the type is its backing field (ticket P2-153).
+    /// </summary>
+    private IEnumerable<string> BackingFieldAttributes(IEventSymbol raised)
+    {
+        SyntaxNode declarator = raised.DeclaringSyntaxReferences[0].GetSyntax();
+        SemanticModel model = Referenced(compilation).First(c => c.ContainsSyntaxTree(declarator.SyntaxTree)).GetSemanticModel(declarator.SyntaxTree);
+        return declarator.Ancestors().OfType<EventFieldDeclarationSyntax>().First().AttributeLists
+            .Where(static list => list.Target?.Identifier.ValueText is "field")
+            .SelectMany(static list => list.Attributes)
+            .Select(attribute => string.Join(' ', model.GetOperation(attribute)!.DescendantsAndSelf().Select(Spelled)));
+    }
+
+    /// <summary>One operation of an attribute: its kind, the constructor or the member it names, and its constant.</summary>
+    private static string Spelled(IOperation operation) =>
+        $"{operation.Kind}:{(operation as IObjectCreationOperation)?.Constructor}{(operation as IMemberReferenceOperation)?.Member.Name}{(operation.ConstantValue.HasValue ? Constant(operation.ConstantValue.Value) : string.Empty)}";
+
+    /// <summary><paramref name="root"/> and the compilations of the solution it references, the nearest first.</summary>
+    private static IEnumerable<Compilation> Referenced(Compilation root)
+    {
+        Queue<Compilation> pending = new([root]);
+        while (pending.TryDequeue(out Compilation? next))
+        {
+            yield return next;
+            foreach (CompilationReference reference in next.References.OfType<CompilationReference>())
+            {
+                pending.Enqueue(reference.Compilation);
+            }
+        }
     }
 
     /// <summary>
     /// Writes, after the line of an <paramref name="operation"/> whose result a type's declaration fixes, the types it
     /// reaches that are declared in the solution, each once per text (ADR 0024 as clarified by ticket P2-149): the type
-    /// of a field that has a <c>[FieldOffset]</c>, the operand of a <c>sizeof</c>, a pointer's or a function pointer's
+    /// of a field that has a <c>[FieldOffset]</c>, or of an auto-property or a field-like event whose backing field
+    /// has one (ticket P2-153), the operand of a <c>sizeof</c>, a pointer's or a function pointer's
     /// type, an inline array's, and every type under a call that is handed one to read as memory. A call through a
     /// function pointer and a call into the interop services also take the assembly's
     /// <c>[DisableRuntimeMarshalling]</c>. <see cref="Layouts"/> holds that rule, which the lowering reads too (ticket

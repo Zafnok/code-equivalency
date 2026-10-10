@@ -726,6 +726,98 @@ public sealed class BodyFingerprinterTests
     }
 
     /// <summary>
+    /// Ticket P2-153: an auto-property and a field-like event of an explicit layout are storage at an offset too, through
+    /// <c>[field: FieldOffset(n)]</c>. The bound tree names the property or the event and not its backing field, so the
+    /// type's declaration is in the text of a body that reads, writes or subscribes to one.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M(U u) { u.A = 1; return u.B; }")]
+    [InlineData("public int M(U u) => u.B;")]
+    [InlineData("public void M(U u) { u.A++; }")]
+    [InlineData("public void M(U u, System.Action h) { u.E += h; }")]
+    [InlineData("public void M(U u, System.Action h) { u.F -= h; }")]
+    public void AnAutoPropertysFieldOffsetIsInTheTextOfABodyThatUsesIt(string member)
+    {
+        static string Stored(string property, string raised) =>
+            "[StructLayout(LayoutKind.Explicit)] public class U { [field: FieldOffset(0)] public int A { get; set; } [field: FieldOffset(" + property + ")] public int B { get; set; } "
+            + "[field: FieldOffset(8)] public event System.Action E; [field: FieldOffset(" + raised + ")] public event System.Action F; }";
+
+        AssertTheBodyDependsOn(Stored("4", "16"), Stored("0", "16"), member);
+        AssertTheBodyDependsOn(Stored("4", "16"), Stored("4", "8"), member);
+        Assert.Contains("Marshalled layout N.C.U: Class", OneRuntimeText(Interop(Stored("4", "16") + member)), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-153: a field-like event's backing field is no symbol of its type, so the attributes its declaration
+    /// gives that field are read where the event is declared: the constructor, the constants and the named arguments
+    /// of each. An attribute on the event itself is not one of them.
+    /// </summary>
+    [Fact]
+    public void TheAttributesOfAnEventsBackingFieldAreInItsTypesText()
+    {
+        static string Raised(string size) =>
+            "[StructLayout(LayoutKind.Explicit)] public class U { [System.Obsolete] [field: FieldOffset(8)] [field: MarshalAs(UnmanagedType.ByValArray, SizeConst = " + size + ")] public event System.Action E; "
+            + "public static event System.Action Z; public event System.Action G { add { } remove { } } }";
+        const string Member = "public void M(U u, System.Action h) { u.E += h; }";
+
+        AssertTheBodyDependsOn(Raised("4"), Raised("8"), Member);
+        string text = OneRuntimeText(Interop(Raised("4") + Member));
+        Assert.Contains("Event layout N.C.U event #0: System.Action\n", text, StringComparison.Ordinal);
+        Assert.Contains("Attribute layout N.C.U event #0: ", text, StringComparison.Ordinal);
+        Assert.Contains("FieldReference:SizeConst", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("event #1", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Obsolete", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket P2-153: an event of a type that another project of the solution declares is bound in that project's compilation.</summary>
+    [Fact]
+    public void AnEventOfATypeFromAnotherProjectIsReadWhereItIsDeclared()
+    {
+        static BodyFingerprint? On(string offset)
+        {
+            CSharpCompilationOptions options = new(OutputKind.DynamicallyLinkedLibrary);
+            CSharpCompilation library = CSharpCompilation.Create(
+                "Library",
+                [Parse("using System.Runtime.InteropServices; [StructLayout(LayoutKind.Explicit)] public class U { [field: FieldOffset(" + offset + ")] public event System.Action E; }", LanguageVersion.Preview)],
+                RoslynTestCompilations.References,
+                options);
+            CSharpCompilation compilation = CSharpCompilation.Create(
+                "Snippet",
+                [Parse("namespace N { public class C { public void M(U u, System.Action h) { u.E += h; } } }", LanguageVersion.Preview)],
+                [.. RoslynTestCompilations.References, library.ToMetadataReference()],
+                options);
+            Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+            return BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, OneRuntime);
+        }
+
+        Assert.NotNull(On("0"));
+        Assert.NotEqual(On("0"), On("8"));
+        Assert.Equal(On("0"), On("0"));
+    }
+
+    /// <summary>
+    /// Ticket P2-153 criterion 2: a body that uses a property with accessors of its own, a static one, or an
+    /// auto-property or an event of a type with no explicit layout keeps the text it has, whatever the type's attributes say.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M(U u) => u.Q;")]
+    [InlineData("public int M() => U.Z;")]
+    [InlineData("public int M(P p) { p.A = 1; return p.A; }")]
+    [InlineData("public void M(P p, System.Action h) { p.E += h; }")]
+    [InlineData("public void M(U u, System.Action h) { u.G += h; }")]
+    public void ABodyThatUsesNoStoredMemberOfAnExplicitLayoutKeepsItsText(string member)
+    {
+        static string Types(string pack, string offset) =>
+            "[StructLayout(LayoutKind.Explicit)] public class U { [FieldOffset(" + offset + ")] public int X; public int Q => 1; public static int Z { get; set; } public event System.Action G { add { } remove { } } } "
+            + "[StructLayout(LayoutKind.Sequential, Pack = " + pack + ")] public class P { public int A { get; set; } public event System.Action E; } ";
+        Compilation laid = Interop(Types("1", "4") + member);
+
+        Assert.Empty(laid.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Equal(OneRuntimeText(Interop(Types("2", "0") + member)), OneRuntimeText(laid));
+        Assert.DoesNotContain("Marshalled", OneRuntimeText(laid), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ticket P2-149 criterion 3: a body that does none of those things keeps the text it has, although the types it
     /// uses have a layout and its assembly turns runtime marshalling off: it copies a value, reads a field that shares
     /// no storage, holds the type in an array or a list, or names it in a <c>typeof</c>.
