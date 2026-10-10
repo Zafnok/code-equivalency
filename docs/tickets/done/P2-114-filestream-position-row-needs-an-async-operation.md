@@ -1,5 +1,5 @@
 # P2-114 The `FileStream.Position` row fires only where the stream had an asynchronous read or write
-Status: in-progress
+Status: done (PR #455)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-066
