@@ -94,3 +94,13 @@ the heap or on position.
   two functions, and a result that depends on them is Unknown(Abstraction) under ADR 0026, never
   Equivalent. On a pair whose two projects run on one runtime no rule applies, the function is
   shared, and its name is the same, since the fingerprint does not hold the sensitivity.
+- 2026-10-10 (P2-156). **A division or remainder is a shared function when its divisor is not a constant, whatever its dividend.**
+  The clarification of 2026-10-07 left an operator with a constant operand exact. That is right for a
+  product, which the solver multiplies by a constant cheaply on either side, and for a division by a
+  constant, which propagation mostly folds away. It is wrong for `c / x` and `c % x`: with an unknown
+  divisor the solver still builds the whole divider, and a generated procedure with `5 % a` and
+  `int.MinValue % v` ran the abstracted product out of its resource limit with no fact added, so a
+  procedure was Unknown(timeout) against itself. So a `sdiv`, `srem`, `udiv` or `urem` whose divisor
+  is not an `IrConst` is a shared function, a constant dividend included; a `mul` or an overflow test
+  still needs both operands unknown, and a constant divisor stays exact. Nothing else in the
+  clarification changes: the same sharing argument makes it sound, and a spurious model is refined as before.

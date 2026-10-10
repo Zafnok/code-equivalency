@@ -366,7 +366,7 @@ internal sealed class FragmentEncoder
         {
             Integer(binary.Target, integers.Binary(binary.Op, Operand(binary.A), Operand(binary.B), width), reached);
         }
-        else if (arithmetic is not null && ArithmeticAbstraction.Abstracts(binary.Op) && Unknowns(binary.A, binary.B))
+        else if (arithmetic is not null && ArithmeticAbstraction.Abstracts(binary.Op, IsConstant(binary.A), IsConstant(binary.B)))
         {
             Define(binary.Target, arithmetic.Binary(binary.Op, (BitVecExpr)Var(binary.A), (BitVecExpr)Var(binary.B)));
         }
@@ -394,7 +394,9 @@ internal sealed class FragmentEncoder
     }
 
     /// <summary>Whether neither operand is a constant: an <see cref="IrConst"/> defines its variable before any use of it.</summary>
-    private bool Unknowns(IrVar a, IrVar b) => !literals.ContainsKey(a.Name) && !literals.ContainsKey(b.Name);
+    private bool Unknowns(IrVar a, IrVar b) => !IsConstant(a) && !IsConstant(b);
+
+    private bool IsConstant(IrVar variable) => literals.ContainsKey(variable.Name);
 
     private void EncodeUnary(IrUnary unary, BoolExpr reached)
     {

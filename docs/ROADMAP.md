@@ -784,6 +784,13 @@ Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
   unknown (timeout), never sat against unsat, so not a soundness matter. Both seeds reproduce; the
   texts are unsat in 149 and 203 seconds. Test code only.
 
+Found by a CI failure (PR #457, `gates`, seed `4ubFDL-wLcDa`):
+- P2-156 (S) `SoundnessPropertyTests.WithArithmeticAbstracted_AProcedureIsEquivalentToItself` ends
+  Unknown(timeout) on a procedure against itself: `urem 5, a` and `srem 2^31, v` have a constant
+  dividend, so P1-031 left them as real dividers and the abstracted product ran out of its resource
+  limit. Not a wrong verdict. A division is now a shared function when its divisor is not a constant.
+  Done in the PR that filed it.
+
 Found by a CI failure (PR #452, `gates (windows-latest)`):
 - P2-155 (S) `TraceInvariantProposerTests.StateUnpaired_ProvedByTraceProposer` gives rung 4 one
   millisecond so that it gives up, and fails when Z3 answers inside it: `Timeout` expected, `Proved`

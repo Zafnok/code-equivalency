@@ -289,7 +289,10 @@ public sealed class ArithmeticRefinementTests
           ret %so
         """;
 
-    /// <summary>The same operators with a constant operand on either side, and operators of two unknowns the abstraction leaves alone.</summary>
+    /// <summary>
+    /// The same operators with a constant multiplier on either side or a constant divisor, and operators of two unknowns the
+    /// abstraction leaves alone.
+    /// </summary>
     private const string ConstantOperands = """
         proc "T::M(long, long)" (%a: bv64, %b: bv64) -> bool entry B0
         B0:
@@ -297,7 +300,7 @@ public sealed class ArithmeticRefinementTests
           %m: bv64 = mul %a, %two
           %n: bv64 = mul %two, %b
           %d: bv64 = udiv %a, %two
-          %r: bv64 = srem %two, %b
+          %r: bv64 = srem %a, %two
           %s: bv64 = add %a, %b
           %x: bv64 = xor %a, %b
           %l: bool = slt %a, %b
@@ -306,6 +309,23 @@ public sealed class ArithmeticRefinementTests
           %ao: bool = overflows sadd %a, %b
           %do: bool = overflows sdiv %a, %b
           ret %mo
+        """;
+
+    /// <summary>A remainder and a quotient of a constant by an unknown, and the same two with the constant as the divisor.</summary>
+    private const string ConstantDividend = """
+        proc "T::M(int)" (%a: bv32) -> bv32 entry B0
+        B0:
+          %five: bv32 = const bv32 5
+          %zero: bv32 = const bv32 0
+          %z: bool = eq %a, %zero
+          br %z, B1, B2
+        B1:
+          ret %zero
+        B2:
+          %r: bv32 = urem %five, %a
+          %q: bv32 = sdiv %five, %a
+          %s: bv32 = add %r, %q
+          ret %s
         """;
 
     /// <summary>
@@ -395,6 +415,12 @@ public sealed class ArithmeticRefinementTests
         { "%r: bool = overflows umul %a, %b", true },
         { "%r: bv64 = mul %a, %k", false },
         { "%r: bv64 = mul %k, %b", false },
+        { "%r: bv64 = udiv %a, %k", false },
+        { "%r: bv64 = urem %a, %k", false },
+        { "%r: bv64 = sdiv %k, %b", true },
+        { "%r: bv64 = srem %k, %b", true },
+        { "%r: bv64 = udiv %k, %b", true },
+        { "%r: bv64 = urem %k, %b", true },
         { "%r: bool = overflows smul %a, %k", false },
         { "%r: bool = overflows umul %k, %b", false },
         { "%r: bv64 = add %a, %b", false },
@@ -418,6 +444,27 @@ public sealed class ArithmeticRefinementTests
             """);
 
         Assert.Equal(applies, ArithmeticAbstraction.AppliesTo(procedure));
+    }
+
+    /// <summary>
+    /// A constant dividend over an unknown divisor is a whole divider for the solver, so it is a shared function; a constant
+    /// divisor and a constant multiplier are not (ticket P2-156).
+    /// </summary>
+    [Fact]
+    public void ConstantDividend_IsAbstracted()
+    {
+        using Context context = new();
+        IrProcedure procedure = IrText.Parse(ConstantDividend);
+        ArithmeticAbstraction arithmetic = new(context);
+
+        ProductEncoding encoding = ProductEncoder.EncodeAbstracted(context, procedure, procedure, [], arithmetic);
+
+        Assert.Equal(["arith.URem.32", "arith.SDiv.32", "arith.URem.32", "arith.SDiv.32"], arithmetic.Applications.Select(static a => a.Function.Name.ToString()), StringComparer.Ordinal);
+        string text = string.Join('\n', encoding.Assertions.Select(static a => a.ToString()));
+        Assert.Contains("(= old.r (arith.URem.32 old.five in.a))", text, StringComparison.Ordinal);
+        Assert.Contains("(= old.q (arith.SDiv.32 old.five in.a))", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("bvurem", text, StringComparison.Ordinal);
+        Assert.True(ArithmeticAbstraction.AppliesTo(procedure));
     }
 
     [Fact]
