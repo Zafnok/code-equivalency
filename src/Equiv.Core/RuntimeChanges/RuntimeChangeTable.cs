@@ -41,6 +41,10 @@ public sealed class RuntimeChangeTable
     /// <summary>Every row, in file order.</summary>
     public ImmutableArray<RuntimeChange> Rows { get; }
 
+    /// <summary>The <see cref="RuntimeChange.Member"/> of every row that <see cref="RuntimeChange.Requires"/> <paramref name="precondition"/>.</summary>
+    public ImmutableArray<string> MembersRequiring(RowPrecondition precondition) =>
+        [.. Rows.Where(row => row.Requires == precondition).Select(static row => row.Member).Distinct(StringComparer.Ordinal)];
+
     /// <summary>Reads and parses the embedded resource on first use; later calls return the same instance.</summary>
     public static RuntimeChangeTable Load() => Cached.Value;
 
@@ -114,8 +118,9 @@ public sealed class RuntimeChangeTable
     /// Parses a table in the embedded resource's format: an object with <c>coveredFrom</c> and <c>rows</c>. A row whose
     /// <c>source</c> is missing, or is not <c>curated</c>, <c>documented</c> or <c>measured</c> (ADR 0035), or whose
     /// <c>changedIn</c> is missing or is neither null nor a .NET Framework or .NET target framework moniker (ADR 0040),
-    /// is rejected with <see cref="InvalidDataException"/>, as is a malformed <c>coveredFrom</c> and a <c>precondition</c>
-    /// that is not one of <see cref="RuntimeChangePrecondition"/>'s names (ticket P2-073).
+    /// is rejected with <see cref="InvalidDataException"/>, as is a malformed <c>coveredFrom</c>, a <c>precondition</c>
+    /// that is not one of <see cref="RuntimeChangePrecondition"/>'s names (ticket P2-073) or a <c>requires</c> that is not
+    /// <c>asyncStreamOperation</c>.
     /// </summary>
     internal static RuntimeChangeTable Parse(Stream stream)
     {
@@ -138,8 +143,11 @@ public sealed class RuntimeChangeTable
             {
                 Witness = ParseWitness(element),
                 ChangedIn = ParseChangedIn(member, element),
-                Precondition = ParsePrecondition(member, element),
-                OrdinalUnaffected = element.TryGetProperty("ordinalUnaffected", out JsonElement ordinal) && ordinal.GetBoolean(),
+                Precondition = ParsePrecondition(member, element),
+
+                OrdinalUnaffected = element.TryGetProperty("ordinalUnaffected", out JsonElement ordinal) && ordinal.GetBoolean(),
+                Requires = ParseRequires(member, element),
+
             });
         }
 
@@ -178,6 +186,14 @@ public sealed class RuntimeChangeTable
         witness.GetProperty("culture").GetString()!,
         witness.GetProperty("legacy").GetRawText(),
         witness.GetProperty("modern").GetRawText());
+
+    private static RowPrecondition? ParseRequires(string member, JsonElement element) =>
+        element.TryGetProperty("requires", out JsonElement value) ? Requires(member, value) : null;
+
+    private static RowPrecondition Requires(string member, JsonElement value) =>
+        value.ValueKind == JsonValueKind.String && string.Equals(value.GetString(), "asyncStreamOperation", StringComparison.Ordinal)
+            ? RowPrecondition.AsyncStreamOperation
+            : throw new InvalidDataException($"runtime-changes row '{member}' has unknown requires {value.GetRawText()}");
 
     private static RuntimeChangeSource ParseSource(string member, JsonElement element)
     {

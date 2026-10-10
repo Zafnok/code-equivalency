@@ -39,10 +39,10 @@ internal static class CallIdentityFactory
     /// project compiled against, never the solution's own code (a <see cref="CompilationReference"/>, or the compilation's
     /// own assembly) or a NuGet package (a <see cref="PortableExecutableReference"/> without the attribute).
     /// </summary>
-    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null)
-    {
-        ArgumentNullException.ThrowIfNull(compilation);
-        return Of(method, renames, suppressedRuntimeChanges, interval, site) with { External = IsExternal(method.ContainingAssembly, compilation) };
+    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null)
+    {
+        ArgumentNullException.ThrowIfNull(compilation);
+        return Of(method, renames, suppressedRuntimeChanges, interval, site) with { External = IsExternal(method.ContainingAssembly, compilation) };
     }
 
     /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be inside <paramref name="interval"/>.</summary>

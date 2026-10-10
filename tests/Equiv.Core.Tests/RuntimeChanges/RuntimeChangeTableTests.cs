@@ -172,6 +172,39 @@ public sealed class RuntimeChangeTableTests
         Assert.Equal("-1", witness.Modern);
     }
 
+    /// <summary>Ticket P2-114: a row may require a fact about the calling method; <c>MembersRequiring</c> lists only those rows' members.</summary>
+    [Fact]
+    public void ARowMayRequireAnAsyncStreamOperation()
+    {
+        RuntimeChangeTable table = Parse("""
+            [
+              { "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "curated", "requires": "asyncStreamOperation" },
+              { "member": "C::D(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "curated" }
+            ]
+            """);
+
+        Assert.Equal(RowPrecondition.AsyncStreamOperation, table.Rows[0].Requires);
+        Assert.Null(table.Rows[1].Requires);
+        Assert.Equal(["A::B("], table.MembersRequiring(RowPrecondition.AsyncStreamOperation));
+    }
+
+    [Theory]
+    [InlineData("\"always\"")]
+    [InlineData("3")]
+    public void AnUnknownRequiresIsRejected(string requires)
+    {
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => Parse(
+            $$"""[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "curated", "requires": {{requires}} }]"""));
+
+        Assert.Contains($"has unknown requires {requires}", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OnlyTheFileStreamPositionRowRequiresAnAsyncStreamOperation()
+    {
+        Assert.Equal(["System.IO.FileStream::get_Position("], RuntimeChangeTable.Load().MembersRequiring(RowPrecondition.AsyncStreamOperation));
+    }
+
     /// <summary>A curated or documented row has no witness: only a measured row was proved with one.</summary>
     [Fact]
     public void ACuratedRowHasNoWitness()
