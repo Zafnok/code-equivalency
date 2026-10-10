@@ -170,6 +170,21 @@ public sealed class BodyFingerprinterTests
         Assert.False(Fingerprint("int M(string s) => s.Length;").RuntimeSensitive);
     }
 
+    /// <summary>
+    /// Ticket P2-073: the fingerprint reads a row's precondition as the lowering does, so a body whose only table call
+    /// has constants that cannot reach the row's change is not runtime-sensitive, and can be congruent across runtimes.
+    /// </summary>
+    [Theory]
+    [InlineData("""string[] M(string s) => System.Text.RegularExpressions.Regex.Split(s, @"\s+");""", false)]
+    [InlineData("""string[] M(string s) => System.Text.RegularExpressions.Regex.Split(s, "(?i)[a-z]");""", true)]
+    [InlineData("""string[] M(string s, string p) => System.Text.RegularExpressions.Regex.Split(s, p);""", true)]
+    [InlineData("""string M() => System.IO.Path.Combine(@"C:\data", "Images");""", false)]
+    [InlineData("""string M() => System.IO.Path.Combine("a|b", "Images");""", true)]
+    [InlineData("""object M() => new System.IO.StreamWriter("out.txt");""", false)]
+    [InlineData("""object M() => new System.IO.StreamWriter("a|b");""", true)]
+    public void ACallWhoseConstantsCannotReachARowsChangeIsNotRuntimeSensitive(string member, bool sensitive) =>
+        Assert.Equal(sensitive, Fingerprint(member).RuntimeSensitive);
+
     [Fact]
     public void ASuppressedRuntimeChangeIsNotRuntimeSensitive()
     {

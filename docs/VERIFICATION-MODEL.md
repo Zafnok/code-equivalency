@@ -528,6 +528,16 @@ Migration-specific normalisations (applied to both sides before matching):
   treated as the same uninterpreted function; it produces Divergent with ruleId EQ006
   and a link to the breaking-change entry. Users may suppress per member in
   `equiv.config.json`.
+  A row may carry a `precondition` on the call's arguments (ticket P2-073): `caseInsensitivePattern`
+  on the `Regex` row, `twoDigitYearFormat` on the `DateTime` and `DateTimeOffset` parsing rows,
+  `cultureSensitiveText` on the `String` comparison and search rows, `invalidPath` on the
+  path-validation rows. The header of `runtime-changes.json` defines each. A precondition reads the
+  operands it names, and only compile-time constants: a call whose constants cannot reach the row's
+  change (the pattern `\s+`, the format `yyyy-MM-dd`, `"abc"` compared with `"abd"`, the path
+  literal `"C:\\data"`) is not a call to a runtime-changed member under that row, in the lowered
+  body and in the bound fingerprint alike. A call with an operand the precondition reads that is not
+  a constant, or with no such operand (an instance `Regex` method, `DateTime.Parse`), is flagged as
+  a row without a precondition flags it. The IL lowering reads no constants and always flags.
 - The throw of a `switch` expression that matches no arm (ADR 0024 as clarified by ticket P2-144).
   The compiler adds it, constructing `System.Runtime.CompilerServices.SwitchExpressionException`
   where the reference assemblies have the type (.NET Core 3.0 and later) and

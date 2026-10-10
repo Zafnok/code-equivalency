@@ -1,5 +1,5 @@
 # P2-073 A runtime-change row fires only when the call's constant arguments can reach the change
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-047
@@ -48,3 +48,27 @@ other than those four, unless the precondition is a one-liner.
 
 ## Notes
 - Found by P2-047: 8 on Git Extensions and 7 on the Tomas pair (audit rows under P2-073).
+- Decision: the field is `precondition`, one of four names, each a fixed rule in `RuntimeChangeReach` (Core);
+  the frontend only hands it the call's operands (`CallArguments`). A free-form expression in the JSON was
+  the alternative; four named rules are testable one by one and need no evaluator.
+- Decision: a precondition answers conservatively. `caseInsensitivePattern` is met by any inline `i` option
+  or `RegexOptions.IgnoreCase`, with or without a character range. `invalidPath` also counts wildcards, a
+  misplaced colon, a blank path and a path of 248 characters or more, which .NET Framework rejects up front
+  too. A null constant always meets its precondition.
+- Decision: `cultureSensitiveText` needs the receiver and every string argument to be a constant of ASCII
+  letters and digits only. A constant argument alone is not enough: `"\r\n".IndexOf("\n")` and
+  `string.Compare("co-op", "coop")` are all-ASCII calls that differ between NLS and ICU, and a receiver that
+  is not a constant can hold anything. So the row still fires on `s.StartsWith("abc")`; P2-075 owns the
+  ordinal overloads. Not checked: a culture whose tailoring orders ASCII digraphs (Danish `aa`) differently
+  under NLS and ICU. The replay and differential oracles run under the invariant culture and `tr-TR` only.
+- The four families are 43 rows: 1 regex, 4 date parsing, 8 `String` comparison and search, 30 path
+  validation (every measured row whose reason is the invalid-path-characters check). `GetInvalidPathChars()`
+  takes no path and has none. Every measured witness of those rows meets its row's precondition (a test).
+- Scope: the arguments are read where the call is lowered from source and where the bound fingerprint is
+  taken. A call resolved to a forwarder's target, a call through an API-equivalence entry, an instance
+  `Regex` method (the pattern went to the constructor) and the IL lowering read none and fire as before.
+  The GDI+ and `XmlSerializer` cases in the audit are not constants of an argument and are left.
+- `VerdictRule` picks the row an EQ006 message cites by the callee's identity alone. If a member had two
+  rows, the first with a precondition the call does not meet, the message would cite the first. No member
+  has that today.
+- `LoweringCensus` counts runtime-change calls by identity, without arguments, so its counts are unchanged.

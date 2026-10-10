@@ -1,0 +1,419 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Words(string) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 5,
+                  "startColumn": 32,
+                  "endLine": 5,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Words(string)",
+            "resultFingerprint/v1": "3f60d321b18725555f68b8112701ee9943a02b4e3a681eaf35fa9dc92642f02e"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Cache() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 30,
+                  "endLine": 7,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Cache()",
+            "resultFingerprint/v1": "c69aab4acc2f818cbf8b54fd3c49295be7aa8ad75f9dedaac744b82b84598563"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Letters(string) diverges via a runtime-changed API between net48 and net10.0 (Case-insensitive character ranges and other pattern details are interpreted differently by the .NET regex engine, so matches can differ. https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges): inputs(sort \"System.String\" 1285608098, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 1285608098, sort \"System.String\" 1285608097))) new(threw \"System.Exception\" outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 1285608098, sort \"System.String\" 1285608097)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 32,
+                  "endLine": 9,
+                  "endColumn": 39
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Letters(string)",
+            "resultFingerprint/v1": "a089a1e3963be535fa07fac2c6aca6ed48ccb6234c6e16b0214b02af96df69e5"
+          },
+          "baselineState": "new",
+          "rank": 40.004,
+          "properties": {
+            "model": "inputs(sort \"System.String\" 1285608098, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 1285608098, sort \"System.String\" 1285608097))) new(threw \"System.Exception\" outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 1285608098, sort \"System.String\" 1285608097)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges",
+            "reviewGroup": "runtime-change:System.Text.RegularExpressions.Regex::"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Piped() diverges via a runtime-changed API between net48 and net10.0 (Combine no longer validates its arguments against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns the combined string unchanged. https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine): inputs() old(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 692878807, sort \"System.String\" 401363915))) new(returned sort \"System.String\" 692878809 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 692878807, sort \"System.String\" 401363915)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 11,
+                  "startColumn": 30,
+                  "endLine": 11,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Piped()",
+            "resultFingerprint/v1": "d75b2555edace88f649441b988889cd99ae1244c3d268d1ec199c28ceacfde75"
+          },
+          "baselineState": "new",
+          "rank": 40.004,
+          "properties": {
+            "model": "inputs() old(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 692878807, sort \"System.String\" 401363915))) new(returned sort \"System.String\" 692878809 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 692878807, sort \"System.String\" 401363915)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+            "reviewGroup": "runtime-change:System.IO.Path::Combine(string,string)"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::SplitBy(string,string) diverges via a runtime-changed API between net48 and net10.0 (Case-insensitive character ranges and other pattern details are interpreted differently by the .NET regex engine, so matches can differ. https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges): inputs(sort \"System.String\" 0, sort \"System.String\" 1, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 0, sort \"System.String\" 1))) new(threw \"System.Exception\" outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 0, sort \"System.String\" 1)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 13,
+                  "startColumn": 32,
+                  "endLine": 13,
+                  "endColumn": 39
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowConstantArgs.Calls::SplitBy(string,string)",
+            "resultFingerprint/v1": "3929bb0a1a1e7733d8b7f2df19c93c8c7eca71975c7f2ef25c80e5f61d2f43cc"
+          },
+          "baselineState": "new",
+          "rank": 40.004,
+          "properties": {
+            "model": "inputs(sort \"System.String\" 0, sort \"System.String\" 1, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"string[]\" 0 outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 0, sort \"System.String\" 1))) new(threw \"System.Exception\" outs() trace(\"System.Text.RegularExpressions.Regex::Split(string,string)\"(sort \"System.String\" 0, sort \"System.String\" 1)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges",
+            "reviewGroup": "runtime-change:System.Text.RegularExpressions.Regex::"
+          }
+        },
+        {
+          "ruleId": "EQ006",
+          "level": "error",
+          "message": {
+            "text": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Under(string) diverges via a runtime-changed API between net48 and net10.0 (Combine no longer validates its arguments against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns the combined string unchanged. https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine): inputs(sort \"System.String\" 401363916, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 401363917 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915))) new(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915)))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Calls.cs"
+                },
+                "region": {
+                  "startLine": 15,
+                  "startColumn": 30,
+                  "endLine": 15,
+                  "endColumn": 35
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.RuntimeRowConstantArgs.Calls::Under(string)",
+            "resultFingerprint/v1": "6aeea0c9eaf5ecdc5f5c87c80ba71bbed342a0c9ed91d2b538a292debb122d79"
+          },
+          "baselineState": "new",
+          "rank": 40.004,
+          "properties": {
+            "model": "inputs(sort \"System.String\" 401363916, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 401363917 outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915))) new(threw \"System.Exception\" outs() trace(\"System.IO.Path::Combine(string,string)\"(sort \"System.String\" 401363916, sort \"System.String\" 401363915)))",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "refuted",
+                "detail": "a divergence within 3 iterations"
+              }
+            ],
+            "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+            "reviewGroup": "runtime-change:System.IO.Path::Combine(string,string)"
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 6,
+            "modern": 6
+          },
+          "matchedPairs": 6,
+          "pairsWithoutOpaque": 6,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 2,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 4,
+          "changedPairsWithoutOpaque": 4,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 4
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 6,
+              "modern": 6
+            },
+            "distinctMembers": {
+              "legacy": 2,
+              "modern": 2
+            },
+            "pairsWithAny": {
+              "legacy": 6,
+              "modern": 6
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.IO.Path::Combine(string,string)",
+                "callSites": 3
+              },
+              {
+                "member": "System.Text.RegularExpressions.Regex::Split(string,string)",
+                "callSites": 3
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.IO.Path::Combine(string,string)",
+                "callSites": 3
+              },
+              {
+                "member": "System.Text.RegularExpressions.Regex::Split(string,string)",
+                "callSites": 3
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 29,
+          "modern": 24
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.RuntimeRowConstantArgs",
+              "runtime": "net48",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.RuntimeRowConstantArgs",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "runtime-change:System.IO.Path::Combine(string,string)",
+            "ruleId": "EQ006",
+            "rank": 40.004,
+            "count": 2,
+            "identities": [
+              "Equiv.Samples.RuntimeRowConstantArgs.Calls::Piped()",
+              "Equiv.Samples.RuntimeRowConstantArgs.Calls::Under(string)"
+            ]
+          },
+          {
+            "group": "runtime-change:System.Text.RegularExpressions.Regex::",
+            "ruleId": "EQ006",
+            "rank": 40.004,
+            "count": 2,
+            "identities": [
+              "Equiv.Samples.RuntimeRowConstantArgs.Calls::Letters(string)",
+              "Equiv.Samples.RuntimeRowConstantArgs.Calls::SplitBy(string,string)"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

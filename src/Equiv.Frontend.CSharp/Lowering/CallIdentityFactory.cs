@@ -19,12 +19,14 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// is not listed in <c>equiv.config.json</c>'s <c>suppressRuntimeChanges</c>, so on a same-runtime pair no callee is
 /// flagged; the flag is the backend's only input about it (ticket M3-001). A legacy call an
 /// API-equivalence entry rewrites (ticket M3-009) is checked against the table as the modern member it becomes.
+/// Given the operation that makes the call, a row with a precondition flags it only when the call's constant
+/// arguments can reach the row's change (ticket P2-073; <see cref="CallArguments"/>).
 /// </summary>
 internal static class CallIdentityFactory
 {
-    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval)
+    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null)
     {
-        return Of(Name(method, renames), suppressedRuntimeChanges, interval);
+        return Of(Name(method, renames), suppressedRuntimeChanges, interval, CallArguments.Of(site, method));
     }
 
     /// <summary>
@@ -34,17 +36,20 @@ internal static class CallIdentityFactory
     /// project compiled against, never the solution's own code (a <see cref="CompilationReference"/>, or the compilation's
     /// own assembly) or a NuGet package (a <see cref="PortableExecutableReference"/> without the attribute).
     /// </summary>
-    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval)
+    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null)
     {
         ArgumentNullException.ThrowIfNull(compilation);
-        return Of(method, renames, suppressedRuntimeChanges, interval) with { External = IsExternal(method.ContainingAssembly, compilation) };
+        return Of(method, renames, suppressedRuntimeChanges, interval, site) with { External = IsExternal(method.ContainingAssembly, compilation) };
     }
 
     /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be inside <paramref name="interval"/>.</summary>
-    public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval)
+    public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval) =>
+        Of(value, suppressedRuntimeChanges, interval, []);
+
+    private static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, ImmutableArray<CallArgument> arguments)
     {
         CallIdentity callee = new(value);
-        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, interval, suppressedRuntimeChanges, out _) };
+        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, interval, suppressedRuntimeChanges, arguments, out _) };
     }
 
     /// <summary>The <see cref="CallIdentity.Value"/> of a call to <paramref name="method"/>, which no runtime rule changes.</summary>

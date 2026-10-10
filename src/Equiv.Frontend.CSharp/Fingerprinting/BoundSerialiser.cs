@@ -205,7 +205,7 @@ internal sealed class BoundSerialiser : OperationWalker
         CallerLocationKind? caller = CallerLocation.Of(operation);
         Append("const", caller is null && operation.ConstantValue.HasValue ? Constant(operation.ConstantValue.Value) : null);
         Append("caller", caller?.ToString());
-        Append("symbols", string.Join(", ", Symbols(operation).OfType<ISymbol>().Select(Render)));
+        Append("symbols", string.Join(", ", Symbols(operation).OfType<ISymbol>().Select(symbol => Render(symbol, operation))));
         Append("context", Context(operation));
         text.Append('\n');
         if (operation is ILocalFunctionOperation local)
@@ -546,12 +546,12 @@ internal sealed class BoundSerialiser : OperationWalker
 
     private static string Checked(bool isChecked) => isChecked ? "checked" : "unchecked";
 
-    private string Render(ISymbol symbol) => symbol switch
+    private string Render(ISymbol symbol, IOperation site) => symbol switch
     {
         IMethodSymbol { MethodKind: MethodKind.AnonymousFunction or MethodKind.LocalFunction } m =>
             $"{Number(m, "F")}(async={m.IsAsync} {string.Join(", ", m.Parameters.Select(p => $"{p.RefKind} {Type(p.Type)}"))}) -> {(m.ReturnsVoid ? "void" : Type(m.ReturnType))}",
-        IMethodSymbol m => Method(m),
-        IPropertySymbol p => string.Join('|', ((IMethodSymbol?[])[p.GetMethod, p.SetMethod]).OfType<IMethodSymbol>().Select(Method)),
+        IMethodSymbol m => Method(m, site),
+        IPropertySymbol p => string.Join('|', ((IMethodSymbol?[])[p.GetMethod, p.SetMethod]).OfType<IMethodSymbol>().Select(accessor => Method(accessor))),
         ILocalSymbol l => $"{Number(l, "L")}:{l.RefKind} {Type(l.Type)}",
         ILabelSymbol => Number(symbol, "B"),
         IParameterSymbol p when SymbolEqualityComparer.Default.Equals(p.ContainingSymbol, method) =>
@@ -573,10 +573,14 @@ internal sealed class BoundSerialiser : OperationWalker
         return name;
     }
 
-    /// <summary>A callee as the IR's <c>IrCall</c> names it, rewritten by a pass-through API-equivalence entry; flags the body when a table row applies to it.</summary>
-    private string Method(IMethodSymbol callee)
+    /// <summary>
+    /// A callee as the IR's <c>IrCall</c> names it, rewritten by a pass-through API-equivalence entry; flags the body when a
+    /// table row applies to it, which a row with a precondition does by the arguments <paramref name="site"/> gives the
+    /// callee (ticket P2-073), as the lowering decides it.
+    /// </summary>
+    private string Method(IMethodSymbol callee, IOperation? site = null)
     {
-        CallIdentity identity = CallIdentityFactory.Of(callee, renames, suppressedRuntimeChanges, runtime.Interval);
+        CallIdentity identity = CallIdentityFactory.Of(callee, renames, suppressedRuntimeChanges, runtime.Interval, site);
         if (members.TryGetValue(identity.Value, out string? modern))
         {
             identity = CallIdentityFactory.Of(modern, suppressedRuntimeChanges, runtime.Interval);
