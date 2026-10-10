@@ -37,12 +37,17 @@ public sealed record EquivConfig(RenameMap Renames, ImmutableDictionary<string, 
     public int ResourceLimit { get; init; } = DefaultResourceLimit;
 
     /// <summary>
-    /// <c>jobs</c> (ticket P2-077): how many matched pairs are verified at once. One unless set: on
-    /// <c>gitextensions-8522</c> a run on several threads gave two or three results of 13,742 that a run on one did not
-    /// (<c>docs/runs/2026-10-05-parallel-verify.md</c>), which is what two runs on one thread also do (ticket P2-100),
-    /// and the ticket keeps the default at one until none differs (ticket P2-132).
+    /// The most threads the default <c>jobs</c> uses (ticket P2-132): the largest number measured, on a 24-core machine,
+    /// at which a run was no slower than on fewer (<c>docs/runs/2026-10-09-jobs-scaling.md</c>).
     /// </summary>
-    public int Jobs { get; init; } = 1;
+    public const int MaxDefaultJobs = 24;
+
+    /// <summary>
+    /// <c>jobs</c> (tickets P2-077 and P2-132): how many matched pairs are verified at once. The processor count unless
+    /// set, and never more than <see cref="MaxDefaultJobs"/>: on <c>gitextensions-8522</c> runs on 4, 8, 12 and 24
+    /// threads each gave every result the run on one thread gave, and each was faster than the one before.
+    /// </summary>
+    public int Jobs { get; init; } = Math.Min(Environment.ProcessorCount, MaxDefaultJobs);
 
     /// <summary>
     /// Runtime-changed-API member prefixes (ticket M2-006) whose

@@ -623,6 +623,8 @@ public sealed class CompareModeTests
         EventLog log = new();
         CompareOptions options = new(legacy.Path, modern.Path, "equiv.sarif", baseline is null ? null : baselineFile.Path, config is null ? null : configFile.Path, failOn, DryRun: false, Execute: replay is not null)
         {
+            // One pair at a time: these tests read the order the backend is called in and the backstop each pass gives it.
+            Jobs = 1,
             Mode = mode,
             Streams = new Streams(stdout, stderr),
         };

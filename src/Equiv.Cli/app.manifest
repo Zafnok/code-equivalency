@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ticket P2-132. Z3 allocates with the C runtime's malloc, which on Windows is the process heap, and the process
+     heap takes one lock for every block its front end does not serve. On 24 pair workers, 214 of 215 waiting worker
+     stacks were waiting for that lock (docs/runs/2026-10-09-jobs-scaling.md). The segment heap has no such lock, and
+     a process can only ask for it here: a heap's kind is fixed when the process starts. The trustInfo block is the
+     one the compiler's default manifest has, which this file replaces. -->
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="Equiv.Cli" />
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <heapType xmlns="http://schemas.microsoft.com/SMI/2020/WindowsSettings">SegmentHeap</heapType>
+    </windowsSettings>
+  </application>
+</assembly>

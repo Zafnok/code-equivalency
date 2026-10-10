@@ -669,6 +669,10 @@ rung, a pair or a run.
 - P2-132 (M) Find what blocks the pair workers past four threads, and raise the default `jobs` from
   one: four threads make a Git Extensions run 2.8 times faster with no query slowed, and 24 threads are
   slower than four, with 16 of the 24 workers waiting inside one native Z3 call. Needs P2-077, P2-100.
+  Done 2026-10-09: the workers waited on the Windows process heap's lock under Z3's allocations; the
+  executable now asks for the segment heap, 24 threads take a Git Extensions run in quick mode from 864 s
+  to 221 s with every result the same, and the default `jobs` is the processor count up to 24
+  (`docs/runs/2026-10-09-jobs-scaling.md`).
 - P2-112 (S) An interrupt that throws on the timer thread can no longer end the process.
   `Context.Interrupt()` threw `Z3Exception: canceled` on P2-076's timer and killed a CI test host
   (PR #368); the same crash would end a corpus run with no SARIF.
