@@ -81,6 +81,22 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
+    /// Whether <paramref name="method"/>'s bound code, with the initializers a constructor runs, has an operation that a
+    /// type's layout fixes (<see cref="Layouts.Reads"/>). Its IL names the same types and holds no more of their
+    /// declarations, and a fragment of IL has no fingerprint that does, so such a method is never lowered from IL
+    /// (ticket P2-150).
+    /// </summary>
+    internal static bool DependsOnLayout(IMethodSymbol method, Compilation compilation)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        ArgumentNullException.ThrowIfNull(compilation);
+        SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
+        IOperation? body = compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax);
+        IEnumerable<IOperation?> initializers = body is IConstructorBodyOperation ? Initializers(method, syntax, compilation).Select(static i => i.Operation) : [];
+        return initializers.Prepend(body).OfType<IOperation>().SelectMany(static root => root.DescendantsAndSelf()).Any(o => Layouts.Reads(o, method.ContainingAssembly));
+    }
+
+    /// <summary>
     /// Lowers <paramref name="method"/>'s first declaration. A constructor, static or instance, primary or not, runs the
     /// field and property initializers of its kind in declaration order and then its body, its base or <c>this</c>
     /// initializer first; one that chains to <c>this(...)</c> runs no initializers, since the constructor it calls runs them
@@ -132,22 +148,6 @@ internal sealed class IrLowerer
             _ => Opaque(method, renames, entries, "no-body", [Span(syntax)]),
         };
         return (procedure, [.. entries.Applied]);
-    }
-
-    /// <summary>
-    /// Whether <paramref name="method"/>'s bound code, with the initializers a constructor runs, has an operation that a
-    /// type's layout fixes (<see cref="Layouts.Reads"/>). Its IL names the same types and holds no more of their
-    /// declarations, and a fragment of IL has no fingerprint that does, so such a method is never lowered from IL
-    /// (ticket P2-150).
-    /// </summary>
-    internal static bool ReadsLayout(IMethodSymbol method, Compilation compilation)
-    {
-        ArgumentNullException.ThrowIfNull(method);
-        ArgumentNullException.ThrowIfNull(compilation);
-        SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
-        IOperation? body = compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax);
-        IEnumerable<IOperation?> initializers = body is IConstructorBodyOperation ? Initializers(method, syntax, compilation).Select(static i => i.Operation) : [];
-        return initializers.Prepend(body).OfType<IOperation>().SelectMany(static root => root.DescendantsAndSelf()).Any(o => Layouts.Reads(o, method.ContainingAssembly));
     }
 
     /// <summary>

@@ -85,7 +85,7 @@ public sealed class LayoutsTests
         Compilation compilation = Compile(
             assembly + "struct S { public int X; } [StructLayout(LayoutKind.Explicit)] class U { [field: FieldOffset(0)] public int P { get; set; } } class C { " + member + " }");
 
-        Assert.Equal(expected, IrLowerer.ReadsLayout(compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation));
+        Assert.Equal(expected, IrLowerer.DependsOnLayout(compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation));
     }
 
     [Fact]
@@ -101,8 +101,8 @@ public sealed class LayoutsTests
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.Reads(null!, compilation.Assembly));
         Assert.Throws<ArgumentNullException>("assembly", () => Layouts.Reads(operation, null!));
         Assert.Throws<ArgumentNullException>("member", () => Layouts.IsOverlaid(null!));
-        Assert.Throws<ArgumentNullException>("method", () => IrLowerer.ReadsLayout(null!, compilation));
-        Assert.Throws<ArgumentNullException>("compilation", () => IrLowerer.ReadsLayout(method, null!));
+        Assert.Throws<ArgumentNullException>("method", () => IrLowerer.DependsOnLayout(null!, compilation));
+        Assert.Throws<ArgumentNullException>("compilation", () => IrLowerer.DependsOnLayout(method, null!));
     }
 
     private static Compilation Compile(string source)

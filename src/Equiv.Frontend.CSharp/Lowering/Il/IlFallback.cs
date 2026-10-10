@@ -15,7 +15,7 @@ namespace Equiv.Frontend.CSharp.Lowering.Il;
 /// opaques, and never one side alone. A method whose IL cannot be read keeps its IOperation lowering, and so does the pair:
 /// the emit failed, the method was not found or has no body (<see cref="IlAstReader"/>'s reasons), or it is an
 /// <c>async</c> or iterator method, whose IL is only the kickoff of a state machine the IL lowering does not follow, or
-/// its bound code has an operation that a type's layout fixes (<see cref="IrLowerer.ReadsLayout(IMethodSymbol, Compilation)"/>;
+/// its bound code has an operation that a type's layout fixes (<see cref="IrLowerer.DependsOnLayout(IMethodSymbol, Compilation)"/>;
 /// ticket P2-150): the IL holds no layout, and a fragment of it has no fingerprint that holds a declaration. Each
 /// such method is one debug detail line. Each side is read with its rebound callee identities, so a rebound call is the
 /// same opaque in both lowerings and never a reason to prefer the IL bodies (ADR 0042; ticket P2-069). The same
@@ -82,7 +82,7 @@ internal static class IlFallback
 
     private static IrProcedure? Relowered(string side, Side procedure, IRunLog log, Func<IMethodSymbol, Compilation, SideRuntime, CallSites, IrProcedure> lower)
     {
-        string? declined = (procedure.Symbol.IsAsync || procedure.Symbol.IsIterator, IrLowerer.ReadsLayout(procedure.Symbol, procedure.Compilation)) switch
+        string? declined = (procedure.Symbol.IsAsync || procedure.Symbol.IsIterator, IrLowerer.DependsOnLayout(procedure.Symbol, procedure.Compilation)) switch
         {
             (true, _) => StateMachine,
             (false, true) => Layout,
