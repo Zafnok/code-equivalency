@@ -1,0 +1,33 @@
+﻿proc "C::M(int)" (%score "score": bv32) -> bv32 entry B0
+B0:
+  goto B1
+B1:
+  %$2: bv32 = const bv32 90
+  %$3: bool = sge %score, %$2
+  br %$3, B2, B3
+B2:
+  %$c1.20: bv32 = const bv32 4
+  goto B10
+B3:
+  %$6: bv32 = const bv32 80
+  %$7: bool = sge %score, %$6
+  br %$7, B4, B5
+B4:
+  %$c1.19: bv32 = const bv32 3
+  goto B10
+B5:
+  %$10: bv32 = const bv32 70
+  %$11: bool = sge %score, %$10
+  br %$11, B6, B7
+B6:
+  %$c1.18: bv32 = const bv32 2
+  goto B10
+B7:
+  %$13: bool = const bool true
+  goto B8
+B8:
+  %$c1.17: bv32 = const bv32 0
+  goto B10
+B10:
+  %$c1.21: bv32 = phi [B8: %$c1.17, B6: %$c1.18, B4: %$c1.19, B2: %$c1.20]
+  ret %$c1.21

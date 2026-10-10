@@ -677,7 +677,9 @@ internal sealed class IrLowerer
     /// A pattern test (acceptance criterion 2): a constant pattern is an equality, a <c>null</c> pattern on a reference is
     /// the null test <c>x == null</c> is (ticket P2-122), a discard is <c>true</c>, a type
     /// pattern and a declaration pattern (not <c>var</c>) are a type test (ticket M4-005), the latter binding its variable
-    /// through the cast map, and every other pattern is opaque, which is how a pattern switch beyond these stops here.
+    /// through the cast map, a relational pattern whose constant has the scrutinee's own bitvector type is the comparison
+    /// <c>Binary</c> lowers for that operator and type, with no exception edge (ticket P2-093), and every other pattern is
+    /// opaque, which is how a pattern switch beyond these stops here.
     /// </summary>
     private IrVar? Match(IIsPatternOperation pattern, LoweringContext context) => pattern.Pattern switch
     {
@@ -692,6 +694,13 @@ internal sealed class IrLowerer
             Passes(test, context),
         IDeclarationPatternOperation { MatchesNull: false } declaration when TestType(pattern.Value, declaration.MatchedType!, context) is { } test =>
             Bind(declaration, test, context),
+        IRelationalPatternOperation relational when TypeMapper.Map(pattern.Value.Type!) is IrBitVec bits && TypeMapper.Map(relational.Value.Type!) == bits =>
+            Emit(
+                OperatorMapper.Binary(relational.OperatorKind, TypeMapper.IsSigned(pattern.Value.Type!), bits, bits)!.Value,
+                Value(pattern.Value, context),
+                Value(relational.Value, context),
+                Bool,
+                context),
         _ => Opaque(pattern, "switch-pattern", context),
     };
 

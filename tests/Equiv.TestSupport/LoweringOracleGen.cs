@@ -48,6 +48,9 @@ public static class LoweringOracleGen
 
     private static readonly string[] Relations = ["<", "<=", ">", ">=", "==", "!="];
 
+    /// <summary>The operators of a relational pattern, each rendered after <c>is</c>.</summary>
+    public static ImmutableArray<string> Patterns { get; } = ["<", "<=", ">", ">="];
+
     private static readonly string[] Logic = ["&&", "||", "&", "|", "^", "==", "!="];
 
     private static readonly Type[] Types = [typeof(int), typeof(long), typeof(bool)];
@@ -299,7 +302,14 @@ public static class LoweringOracleGen
         Gen<IExpr> logic = Gen.Select(Gen.OneOfConst(Logic), ExprGen(typeof(bool), depth - 1), ExprGen(typeof(bool), depth - 1), static (op, l, r) => (IExpr)new Relation(op, l, r));
         Gen<IExpr> not = ExprGen(typeof(bool), depth - 1).Select(static operand => (IExpr)new Unary("!", operand, IsChecked: false));
         Gen<IExpr> decimals = Gen.Select(Gen.OneOfConst(Relations), DecimalGen(depth - 1), DecimalGen(depth - 1), static (op, l, r) => (IExpr)new Relation(op, l, r));
-        return Gen.Frequency((2, leaf), (3, relation), (2, logic), (1, not), (2, nullTest), (1, decimals));
+        // Ticket P2-093: a relational pattern, whose constant has the scrutinee's own type. The compiler rejects a pattern
+        // nothing matches (`< int.MinValue`), so the constant is never the type's least or greatest value.
+        Gen<IExpr> pattern = Gen.Select(Gen.OneOfConst([.. Patterns]), Gen.OneOfConst(typeof(int), typeof(long)), static (op, type) => (op, type))
+            .SelectMany(t => Gen.Select(
+                ExprGen(t.type, depth - 1),
+                RightOperand(t.type, t.op, literal: true, depth).Where(static r => ((Literal)r).Value is not (int.MinValue or int.MaxValue or long.MinValue or long.MaxValue)),
+                (l, r) => (IExpr)new Relation($"is {t.op}", l, r)));
+        return Gen.Frequency((2, leaf), (3, relation), (2, logic), (1, not), (2, nullTest), (1, decimals), (1, pattern));
     }
 
     private static void RenderBlock(ImmutableArray<IStmt> block, StringBuilder text, int indent, ref int loops)
