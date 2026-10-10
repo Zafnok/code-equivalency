@@ -14,7 +14,9 @@ namespace Equiv.Frontend.CSharp.Lowering.Il;
 /// both sides (<see cref="IlLowerer"/>). The IL bodies replace the IOperation bodies only when they hold fewer unshared
 /// opaques, and never one side alone. A method whose IL cannot be read keeps its IOperation lowering, and so does the pair:
 /// the emit failed, the method was not found or has no body (<see cref="IlAstReader"/>'s reasons), or it is an
-/// <c>async</c> or iterator method, whose IL is only the kickoff of a state machine the IL lowering does not follow. Each
+/// <c>async</c> or iterator method, whose IL is only the kickoff of a state machine the IL lowering does not follow, or
+/// its bound code has an operation that a type's layout fixes (<see cref="IrLowerer.DependsOnLayout(IMethodSymbol, Compilation)"/>;
+/// ticket P2-150): the IL holds no layout, and a fragment of it has no fingerprint that holds a declaration. Each
 /// such method is one debug detail line. Each side is read with its rebound callee identities, so a rebound call is the
 /// same opaque in both lowerings and never a reason to prefer the IL bodies (ADR 0042; ticket P2-069). The same
 /// <see cref="CallSites"/> record the forwarders the IL bodies' calls were resolved through (ADR 0047; ticket P2-068).
@@ -29,6 +31,9 @@ internal static class IlFallback
 
     /// <summary>An <c>async</c> or iterator method: its IL is the kickoff of its state machine, not its body.</summary>
     public const string StateMachine = "il-state-machine";
+
+    /// <summary>A method one of whose operations a type's layout fixes: the IL lowering holds no layout.</summary>
+    public const string Layout = "il-layout";
 
     private static readonly FrozenSet<string> Unreadable =
         new[] { IlAstReader.EmitFailed, IlAstReader.MethodNotFound, IlAstReader.NoBody }.ToFrozenSet(StringComparer.Ordinal);
@@ -77,8 +82,14 @@ internal static class IlFallback
 
     private static IrProcedure? Relowered(string side, Side procedure, IRunLog log, Func<IMethodSymbol, Compilation, SideRuntime, CallSites, IrProcedure> lower)
     {
-        IrProcedure? body = procedure.Symbol.IsAsync || procedure.Symbol.IsIterator ? null : lower(procedure.Symbol, procedure.Compilation, procedure.Runtime, procedure.Sites);
-        string? reason = body is null ? StateMachine : ReadFailure(body);
+        string? declined = (procedure.Symbol.IsAsync || procedure.Symbol.IsIterator, IrLowerer.DependsOnLayout(procedure.Symbol, procedure.Compilation)) switch
+        {
+            (true, _) => StateMachine,
+            (false, true) => Layout,
+            _ => null,
+        };
+        IrProcedure? body = declined is null ? lower(procedure.Symbol, procedure.Compilation, procedure.Runtime, procedure.Sites) : null;
+        string? reason = body is null ? declined : ReadFailure(body);
         if (reason is null)
         {
             return body;

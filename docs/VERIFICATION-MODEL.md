@@ -182,7 +182,8 @@ operator) is still a call or an opaque.
 Heap and nullness are inputs (M2-004). A procedure's parameter list is its C# parameters
 followed by the synthesised inputs its body needs, ordered by name: the receiver `this`,
 one `null.<Sort>` map from a reference sort to Bool, one `field.<Type>.<Field>` map per
-field touched, `array.<Sort>` from an array reference to its elements by bv32 index plus
+field touched (a field at a `[FieldOffset]` has none: another field may share its storage, so each
+read and write of it is an `IrOpaque` with reason `Layout`, shared by its fingerprint; P2-150), `array.<Sort>` from an array reference to its elements by bv32 index plus
 `length.<Sort>` from an array reference to its length, per array sort indexed, keyed by the
 reference like `null.<Sort>` so that two variables holding one array share its elements (P1-006), and one
 `cast.<From>.<To>` map from `<From>`'s IR type to `<To>`'s sort per implicit reference or boxing
@@ -573,6 +574,11 @@ The ILAst is read from the side's compilation emitted in memory
 with a portable PDB, through P1-012's structural transforms only (none that rebuilds a C#
 construct). The IL bodies are used only if they hold fewer unshared opaques;
 otherwise the pair keeps its IOperation lowering. A pair is never lowered half from each.
+A method whose bound code has an operation that a type's layout fixes (`sizeof`, a pointer, an
+inline array, a field at a `[FieldOffset]`, a call that is handed a type to read as memory) is not
+lowered from IL, and its pair keeps the IOperation lowering: the IL names the type and holds nothing
+of its declaration, and a fragment of IL has no fingerprint that does (ADR 0024, clarified
+2026-10-09 (P2-150)).
 
 In thorough mode the IL bodies never replace the IOperation ones (ADR 0049; ticket P1-032). The pair keeps both,
 the first pass verifies the IOperation bodies, and the IL pass verifies the IL bodies only when the pair is still

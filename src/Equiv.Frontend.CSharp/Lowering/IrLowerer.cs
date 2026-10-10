@@ -81,6 +81,22 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
+    /// Whether <paramref name="method"/>'s bound code, with the initializers a constructor runs, has an operation that a
+    /// type's layout fixes (<see cref="Layouts.Reads"/>). Its IL names the same types and holds no more of their
+    /// declarations, and a fragment of IL has no fingerprint that does, so such a method is never lowered from IL
+    /// (ticket P2-150).
+    /// </summary>
+    internal static bool DependsOnLayout(IMethodSymbol method, Compilation compilation)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        ArgumentNullException.ThrowIfNull(compilation);
+        SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
+        IOperation? body = compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax);
+        IEnumerable<IOperation?> initializers = body is IConstructorBodyOperation ? Initializers(method, syntax, compilation).Select(static i => i.Operation) : [];
+        return initializers.Prepend(body).OfType<IOperation>().SelectMany(static root => root.DescendantsAndSelf()).Any(o => Layouts.Reads(o, method.ContainingAssembly));
+    }
+
+    /// <summary>
     /// Lowers <paramref name="method"/>'s first declaration. A constructor, static or instance, primary or not, runs the
     /// field and property initializers of its kind in declaration order and then its body, its base or <c>this</c>
     /// initializer first; one that chains to <c>this(...)</c> runs no initializers, since the constructor it calls runs them
@@ -772,7 +788,7 @@ internal sealed class IrLowerer
             return;
         }
 
-        if (operation is IFlowCaptureOperation backed && assignedCaptures.Contains(backed.Id) && heap.Slice(backed.Value, context) is { } slice)
+        if (operation is IFlowCaptureOperation backed && assignedCaptures.Contains(backed.Id) && Overlaid(backed.Value).IsEmpty && heap.Slice(backed.Value, context) is { } slice)
         {
             // A field, an array element or an auto-property's backing field is its heap map (tickets M4-008, P2-007), so, as
             // for a direct write, its receiver and index are evaluated here, ahead of a value that branches. A read of the
@@ -781,7 +797,7 @@ internal sealed class IrLowerer
             return;
         }
 
-        if (operation is IFlowCaptureOperation { Value: IPropertyReferenceOperation property } assigned && assignedCaptures.Contains(assigned.Id))
+        if (operation is IFlowCaptureOperation { Value: IPropertyReferenceOperation property } assigned && assignedCaptures.Contains(assigned.Id) && Overlaid(property).IsEmpty)
         {
             // The CFG captures a property an assignment writes when the value branches: its receiver and index
             // arguments are evaluated here, and its accessors run at the assignment (ticket M3-010).
@@ -829,10 +845,16 @@ internal sealed class IrLowerer
     /// <summary>
     /// The operation's value, or null for an operation without one (a statement, a void call). An operation of an array
     /// <c>foreach</c> is its index loop's (ticket P1-004), and a file path or line number the compiler supplied for a
-    /// caller-information parameter is the input both sides share (ADR 0046; ticket P2-098).
+    /// caller-information parameter is the input both sides share (ADR 0046; ticket P2-098). An operation that a type's
+    /// layout fixes is an opaque (ticket P2-150).
     /// </summary>
-    private IrVar? Lower(IOperation operation, LoweringContext context) =>
-        Supplied(operation, context) ?? (loops.Of(operation) is { } site ? ForEach(site, context) : Operation(operation, context));
+    private IrVar? Lower(IOperation operation, LoweringContext context) => (Supplied(operation, context), loops.Of(operation)) switch
+    {
+        ({ } supplied, _) => supplied,
+        (null, { } site) => ForEach(site, context),
+        _ when ReadsLayout(operation) => Layout(operation, context),
+        _ => Operation(operation, context),
+    };
 
     /// <summary>
     /// The value of an argument the compiler supplied, or null for any other operation: the shared input a caller location
@@ -1167,6 +1189,44 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
+    /// Whether what <paramref name="operation"/> does is fixed by a type's layout, which the IR does not hold (ADR 0024
+    /// as clarified by ticket P2-150): it reads or writes storage of an explicit layout, or it is a call or an object
+    /// creation that is handed a type to read as memory (<see cref="Layouts"/>).
+    /// </summary>
+    private bool ReadsLayout(IOperation operation) =>
+        !Overlaid(operation).IsEmpty || (operation is IInvocationOperation or IObjectCreationOperation && Layouts.IsHanded(operation, compilation.Assembly));
+
+    /// <summary>
+    /// The opaque, with reason <see cref="Layouts.Reason"/>, of an <paramref name="operation"/> that
+    /// <see cref="ReadsLayout"/>. A field's own map would say that a write to one field of an explicit layout never
+    /// changes another, and a call's identity names a type and nothing of its declaration. The fragment's fingerprint
+    /// holds the declaration of a field's type and of every type under such a call (ticket P2-149), so the fragment is
+    /// shared as any other is: beside one declaration it is one call on both sides, whose place in the trace orders it
+    /// against every other read and write of that storage, and beside two it is unshared. The fingerprint does not hold
+    /// the declaration for an auto-property or a field-like event, whose backing field the bound tree does not name, so
+    /// an operation on one is never shared.
+    /// </summary>
+    private IrVar? Layout(IOperation operation, LoweringContext context) =>
+        Opaque(operation, Layouts.Reason, Overlaid(operation).All(static storage => storage is IFieldReferenceOperation) ? Fragment(operation) : null, context);
+
+    /// <summary>
+    /// The references to storage of an explicit layout (<see cref="Layouts.IsOverlaid"/>) that <paramref name="operation"/>
+    /// itself reads or writes: the reference it is, or the targets it assigns, steps or subscribes to.
+    /// </summary>
+    private static ImmutableArray<IMemberReferenceOperation> Overlaid(IOperation operation)
+    {
+        IEnumerable<IOperation> storage = operation switch
+        {
+            IMemberReferenceOperation => [operation],
+            IAssignmentOperation assignment => Lvalues(assignment.Target),
+            IIncrementOrDecrementOperation step => [step.Target],
+            IEventAssignmentOperation subscription => [subscription.EventReference],
+            _ => [],
+        };
+        return [.. storage.OfType<IMemberReferenceOperation>().Where(static reference => Layouts.IsOverlaid(reference.Member))];
+    }
+
+    /// <summary>
     /// An opaque for <paramref name="operation"/>, followed by one opaque with the same reason per local,
     /// parameter or capture it writes (ticket P2-009), so a later read sees a value and not <c>undefined</c>. A fragment
     /// that writes none of them and that <see cref="FragmentFingerprinter"/> fingerprints carries its fingerprint and the
@@ -1419,6 +1479,11 @@ internal sealed class IrLowerer
     /// </summary>
     private IrVar? Deconstruct(IDeconstructionAssignmentOperation deconstruction, LoweringContext context)
     {
+        if (ReadsLayout(deconstruction))
+        {
+            return Layout(deconstruction, context);
+        }
+
         ImmutableArray<IOperation> lvalues = [.. ((ITupleOperation)Declared(deconstruction.Target)).Elements.Select(Declared)];
         if (TupleLiteral(deconstruction.Value) is not { } literal
             || !lvalues.All(l => l is IDiscardOperation || (l is IFieldReferenceOperation field && TypeMapper.TupleElement(field.Field) is null) || Target(l) is not null))

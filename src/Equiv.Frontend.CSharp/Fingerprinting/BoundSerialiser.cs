@@ -55,10 +55,7 @@ internal sealed class BoundSerialiser : OperationWalker
 
     private const string SearchPaths = "System.Runtime.InteropServices.DefaultDllImportSearchPathsAttribute";
 
-    private const string DisableRuntimeMarshalling = "System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute";
-
-    /// <summary>The namespaces whose members are handed a type and read its layout (ADR 0024 as clarified by ticket P2-149).</summary>
-    private static readonly ImmutableArray<string> InteropServices = ["System.Runtime.InteropServices", "System.Runtime.CompilerServices"];
+    private const string DisableRuntimeMarshalling = Layouts.DisableRuntimeMarshalling;
 
     private readonly StringBuilder text = new();
     private readonly Dictionary<ISymbol, string> numbered = new(SymbolEqualityComparer.Default);
@@ -361,39 +358,25 @@ internal sealed class BoundSerialiser : OperationWalker
     /// of a field that has a <c>[FieldOffset]</c>, the operand of a <c>sizeof</c>, a pointer's or a function pointer's
     /// type, an inline array's, and every type under a call that is handed one to read as memory. A call through a
     /// function pointer and a call into the interop services also take the assembly's
-    /// <c>[DisableRuntimeMarshalling]</c>. A reference to a member also reaches the types it hands the member as type
-    /// arguments (<see cref="Handed"/>).
+    /// <c>[DisableRuntimeMarshalling]</c>. <see cref="Layouts"/> holds that rule, which the lowering reads too (ticket
+    /// P2-150). A reference to a member also reaches the types it hands the member as type arguments
+    /// (<see cref="Handed"/>).
     /// </summary>
     private void Layout(IOperation operation)
     {
-        IMethodSymbol? callee = operation switch
-        {
-            IInvocationOperation o => o.TargetMethod,
-            IObjectCreationOperation o => o.Constructor,
-            _ => null,
-        };
         ISymbol? member = operation switch
         {
             IInvocationOperation o => Called(o.TargetMethod),
             IMemberReferenceOperation o => o.Member,
-            _ => callee,
+            IObjectCreationOperation o => o.Constructor,
+            _ => null,
         };
-        bool interop = callee is not null && InteropServices.Any(prefix => callee.ContainingNamespace.ToDisplayString().StartsWith(prefix, StringComparison.Ordinal));
-        IEnumerable<ITypeSymbol?> reached = operation switch
-        {
-            ISizeOfOperation o => [o.TypeOperand],
-            IFieldReferenceOperation o when Has(o.Field, "System.Runtime.InteropServices.FieldOffsetAttribute") => [o.Field.ContainingType],
-            _ when callee is not null && (interop || callee.Parameters.Any(static p => IsPointer(p.Type))) =>
-                [callee.ContainingType, .. callee.TypeArguments, .. operation.DescendantsAndSelf().SelectMany(static o => (ITypeSymbol?[])[o.Type, (o as ITypeOfOperation)?.TypeOperand])],
-            _ when IsPointer(operation.Type) || (operation.Type is INamedTypeSymbol named && Has(named, "System.Runtime.CompilerServices.InlineArrayAttribute")) => [operation.Type],
-            _ => [],
-        };
-        if ((interop || operation is IFunctionPointerInvocationOperation) && laidOut.Add(method.ContainingAssembly))
+        if (Layouts.Marshals(operation) && laidOut.Add(method.ContainingAssembly))
         {
             AttributeLines([("layout assembly", method.ContainingAssembly.GetAttributes().Where(static a => Is(a, DisableRuntimeMarshalling)))]);
         }
 
-        foreach (ITypeSymbol type in reached.OfType<ITypeSymbol>().Concat(Handed(member)))
+        foreach (ITypeSymbol type in Layouts.Reached(operation).Concat(Handed(member)))
         {
             Marshalled("layout", type, laidOut);
         }
@@ -419,10 +402,6 @@ internal sealed class BoundSerialiser : OperationWalker
 
         return handed;
     }
-
-    private static bool IsPointer(ITypeSymbol? type) => type is IPointerTypeSymbol or IFunctionPointerTypeSymbol;
-
-    private static bool Has(ISymbol symbol, string attribute) => symbol.GetAttributes().Any(a => Is(a, attribute));
 
     private static bool Is(AttributeData attribute, string name) => string.Equals(attribute.AttributeClass!.ToDisplayString(), name, StringComparison.Ordinal);
 

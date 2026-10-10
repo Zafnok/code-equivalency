@@ -283,6 +283,64 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     nothing of its declaration (P2-151). A value whose static type hides the type the callee reads
     (an `object` or a `Delegate` held in a local). The `[DisableRuntimeMarshalling]` of another
     project of the solution that declares a delegate type the body uses.
+- 2026-10-09 (P2-150). **The lowering makes an opaque of what it would model without the layout,
+  and decision 2 decides whether it is shared.** The clarification above left this to the lowering.
+  Each case was reproduced as an Equivalent from the solver (`LayoutEquivalenceTests`): a body
+  that writes one field of an explicit layout and then reads another at the same offset, against
+  one that reads first, beside one declaration; and `Marshal.SizeOf<S>()` beside two declarations
+  of `S`, in bodies that differ elsewhere. The ticket named three things a lowered body could do
+  with them. This is the first:
+  - **The rule.** A reference to a field that has a `[FieldOffset]`, and an assignment, a compound
+    assignment, an increment or a deconstruction whose target is one, is an `IrOpaque` with reason
+    `Layout`, and no `field.<Type>.<Field>` map. So is a call or an object creation that the
+    clarification above follows with a declaration: its callee is declared under
+    `System.Runtime.InteropServices` or `System.Runtime.CompilerServices`, or has a parameter that
+    is a pointer or a function pointer, and either a type of the solution is among the types that
+    clarification lists for it or, for a callee in those namespaces, the body's assembly has a
+    `[DisableRuntimeMarshalling]`. Both read one rule (`Layouts`), so the lowering makes an opaque
+    exactly where the clarification above writes the declaration. The declarations the
+    clarification below adds, for a type handed to a generic member of the solution, are not part
+    of that rule, and a call that hands one over is still a call (P2-154).
+  - **Why an opaque is enough.** A fragment's fingerprint is the text of its operations, and that
+    text now holds the declaration. Beside two declarations the fingerprints differ, the opaque is
+    unshared, and an input that reaches it has an unknown outcome (ADR 0014). Beside one
+    declaration it is one call `opaque:<fingerprint>` on both sides, and a call's place in the
+    trace is observable: a body that writes `A` and then reads `B` has the two calls in the other
+    order from one that reads `B` first, so the two are not proved equal, whether or not the
+    fields share storage. No read of that storage goes round the trace, because every one is such
+    a call.
+  - **What has no fingerprint that holds the declaration is never shared.** An auto-property whose
+    backing field has a `[FieldOffset]`, and a field-like instance event of a type that has such a
+    field, are storage at an offset too. The bound tree names the property or the event and not
+    the backing field, so the clarification above writes no declaration for them, and their
+    accessors have no body whose own pair would catch a change (ADR 0019). Reading, writing or
+    subscribing to one is the same opaque with no fingerprint, and no accessor is called. The
+    text of a body that only uses such a member still does not hold the declaration, which is the
+    fingerprint's gap and has its own ticket (P2-153).
+  - **Rejected: a model of the shared storage.** One map per offset, or a map of bytes per object,
+    would prove more pairs, and it needs every primitive's size, the packing rules and the
+    runtime's own choice for an auto layout, per runtime. The corpus run of the ticket met no
+    field of an explicit layout in a changed pair, so nothing measured pays for it.
+  - **Rejected: a side-specific function when the declarations differ** (ADR 0025). The lowering
+    reads one side and does not know the other's declaration, so the declaration would have to go
+    into the call's identity, and two calls with two identities are a trace that differs: a
+    Divergent result where the answer is that nothing is known.
+  - **A call that is handed no type of the solution is the call it was**, in an assembly that does
+    not turn marshalling off: `Marshal.SizeOf<int>()`, the appends of an interpolated string's
+    handler and an awaiter's `GetResult` keep their identity, the catalogues and the runtime rules.
+    The cost is on a call under which a type of the solution appears although the callee reads no
+    layout of it (`handler.AppendFormatted<E>(e)` for an enum `E` of the solution): it is a
+    fragment and no longer a call, so it is shared only where the fragment has a fingerprint.
+  - **The other operations of the clarification above were already opaque.** `sizeof` of a type of
+    the solution, a read through a pointer, pointer arithmetic, a call through a function pointer
+    and an inline-array access each lower to an opaque whose fingerprint differs beside another
+    declaration (`AnOperationThatReadsMemoryIsAnOpaqueWhoseFingerprintHoldsTheDeclaration`).
+  - **The IL lowering holds no layout either, and a fragment of IL has no fingerprint that holds a
+    declaration** (ADR 0039). A method whose bound code has any operation of the clarification
+    above, or a reference to storage of an explicit layout, is not lowered from IL: it keeps its
+    operation lowering, and so does its pair, with the reason `il-layout` in the debug log.
+    Without this the pairs this clarification makes Unknown would be the ones the IL pass reads
+    next, with a field map and a shared call again.
 - 2026-10-09 (P2-151). **A type handed to a generic member of the solution has its declaration in
   the text of the body that hands it over.** The clarification above left this case out. A generic
   member's text is the same for every type argument: `sizeof(T)` names a type parameter, which has

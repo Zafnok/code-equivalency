@@ -177,6 +177,26 @@ public sealed class IlFallbackTests
             log.Events);
     }
 
+    /// <summary>
+    /// Ticket P2-150: the IL names a type and holds nothing of its declaration, and a fragment of it has no fingerprint
+    /// that does. A method one of whose operations a type's layout fixes is not read from IL, and is one debug line.
+    /// </summary>
+    [Fact]
+    public void AMethodThatReadsALayoutKeepsItsOperationLowering()
+    {
+        const string Sized = "struct S { public byte A; public int B; } static int Add(int a, int b) => a + b + System.Runtime.InteropServices.Marshal.SizeOf<S>();";
+        (IlFallback.Side legacy, IlFallback.Side modern) = Pair(Sized, "[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1)] " + Sized);
+        RecordingRunLog log = new(isDebug: true);
+        Assert.Equal(2, IlFallback.Unshared(legacy.Body, modern.Body));
+
+        IlFallback.Choice choice = IlFallback.Choose(legacy, modern, congruent: false, log, Never);
+
+        Assert.Equal(new IlFallback.Choice(legacy.Body, modern.Body, Tried: true, IlFallback.Operation), choice);
+        Assert.Equal(
+            [.. Sides.Select(side => $"detail il-fallback: {side} {legacy.Body.Identity.Value} keeps its operation lowering: il-layout")],
+            log.Events);
+    }
+
     [Fact]
     public void WithoutDebugAnUnreadableMethodWritesNothing()
     {

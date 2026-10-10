@@ -747,6 +747,10 @@ Found by P2-149 (2026-10-09, by reading the coverage table and its own rule; not
 - P2-150 (M) Soundness: the lowered body of an operation that reads a type's layout holds none of
   it: a field of an explicit layout is its own map, and a call such as `Marshal.SizeOf<S>()` is one
   function for both sides whatever `S` is. The first step is the repro. Needs P2-149.
+  Done: both reproduced as an Equivalent from the solver. A field at a `[FieldOffset]` and a call
+  that is handed a type of the solution are now an opaque with reason `Layout`, shared by a
+  fingerprint that holds the declaration (ADR 0024, clarification of 2026-10-09 (P2-150)), and a
+  method with such an operation is never lowered from IL.
 - P2-151 (S) Soundness: a type argument's layout reaches a generic member of the solution that
   takes its size, and neither the caller's text nor the callee's holds it. The first step is the
   repro. Needs P2-149.
@@ -759,11 +763,26 @@ Found by P2-151 (2026-10-09, by reading its own rule; not reproduced):
 - P2-152 (S) Soundness: a type argument named in a base list (`class D : Box<S>`) is in no body's
   text, and the code `D` inherits reads `S`. The first step is the repro. Needs P2-151.
 
+Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
+- P2-153 (S) Soundness: the text of a body that uses an auto-property or a field-like event of an
+  explicit layout holds none of the layout, because the bound tree does not name the backing
+  field. The lowering already makes it an opaque nothing shares. The first step is the repro.
+  Needs P2-150.
+- P2-154 (M) Soundness: a lowered call that hands a generic member of the solution a type
+  (`Size<S>()`) is one function for both sides beside two declarations of `S`. P2-151 put the
+  declaration in the text and P2-150's rule for calls does not reach such a callee. The first step
+  is the repro. Needs P2-150 and P2-151.
+
 Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
 - P2-148 (S) `SecondSolverPrintTests.Z3AnswersTheRewrittenTextAsItAnswersTheOriginal` fails at random
   when Z3 answers the query inside its minute and gives up on the printed text: unsat against
   unknown (timeout), never sat against unsat, so not a soundness matter. Both seeds reproduce; the
   texts are unsat in 149 and 203 seconds. Test code only.
+
+Found by a CI failure (PR #452, `gates (windows-latest)`):
+- P2-155 (S) `TraceInvariantProposerTests.StateUnpaired_ProvedByTraceProposer` gives rung 4 one
+  millisecond so that it gives up, and fails when Z3 answers inside it: `Timeout` expected, `Proved`
+  found. The verdict is Equivalent either way, so not a soundness matter. Test code only.
 
 Found by a CI failure (PR #390, `gates (ubuntu-latest)`):
 - P2-129 (S) A ladder property test fails at random, about once in 400 runs, with no assertion: its
