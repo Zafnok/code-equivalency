@@ -638,6 +638,9 @@ give one call two identities. Three (P2-073 to P2-075) are EQ006 rows that match
 
 - P2-073 (M) An EQ006 row fires only when the call's constant arguments can reach the change
   (regex without case-insensitive ranges, constant paths and formats). 15 false positives.
+  Done 2026-10-09: 43 rows carry a `precondition` read on the call's compile-time constants. The
+  ICU one needs every string operand constant, so `s.StartsWith("abc")` still fires, and an
+  instance `Regex` method has no pattern to read; the next audit says how many of the 15 are gone.
 - P2-068 (M) A call to a one-line forwarder is the same call as its BCL target. 11.
 - P2-069 (L) An unchanged call site that a dependency upgrade rebinds (class to interface, generic
   instantiation, namespace move) is Unknown, not Divergent. 9.
