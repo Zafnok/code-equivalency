@@ -694,11 +694,12 @@ again, three rounds at most. The outcome is section 5.1's.
 
 Rung 1 has a second encoding of the same product, which it asks only after a query of the first hit its
 budget (ADR 0025 and ADR 0026, clarifications of 2026-10-07; ticket P1-031; after ARDiff, Badihi et al.,
-ESEC/FSE 2020). In it an `IrBinary` `mul`, `sdiv`, `srem`, `udiv` or `urem` neither operand of which an
-`IrConst` defines, and an `IrOverflows` `smul` or `umul` of two such operands, is an uninterpreted function
+ESEC/FSE 2020). In it an `IrBinary` `mul` neither operand of which an `IrConst` defines, an `IrBinary`
+`sdiv`, `srem`, `udiv` or `urem` whose divisor no `IrConst` defines (its dividend may be a constant; ticket
+P2-156), and an `IrOverflows` `smul` or `umul` of two such operands, is an uninterpreted function
 of its two operands: one function per operator and width (`arith.Mul.64`, `arith.overflows.SMul.32`), shared
-by both sides and never side-specific. Everything else is encoded as before. That includes an operator with
-a constant operand, and a division's zero test and `MinValue / -1` test, which are an `IrBinary` `eq` and an
+by both sides and never side-specific. Everything else is encoded as before. That includes a product by a
+constant, a division by a constant, and a division's zero test and `MinValue / -1` test, which are an `IrBinary` `eq` and an
 `IrOverflows` `sdiv` of their own, so no exception is abstracted away. These are the operators a
 bit-blasting solver is worst at, and in a migrated pair both sides nearly always apply them to the same
 operands; the functions say exactly that equal operands give equal results. Every run of the pair is a run

@@ -8,14 +8,14 @@ using Microsoft.Z3;
 namespace Equiv.Verify.Z3.Refinement;
 
 /// <summary>
-/// The hard arithmetic of a product as shared functions (ADR 0025, clarification of 2026-10-07; ticket P1-031). A
-/// bitvector multiplication, division or remainder of two unknowns, and the overflow test of such a multiplication, is
+/// The hard arithmetic of a product as shared functions (ADR 0025, clarification of 2026-10-07; ticket P1-031 and P2-156). A
+/// bitvector multiplication of two unknowns, a division or remainder by an unknown, and the overflow test of such a multiplication, is
 /// an uninterpreted function of its two operands, one per operator and width, which both sides share: equal operands
 /// give equal results, and nothing else is known of them. Every run of the pair is a run of this product with the
 /// functions being the real operators, so a query it cannot satisfy the exact product cannot satisfy either. A model of
-/// it may give an application a value the real operator does not (<see cref="Broken"/>). An operator with a constant
-/// operand, and every other operator, is never one of these: the solver decides those as they are. Division's zero test
-/// and its <c>MinValue / -1</c> test are instructions of their own and stay exact, so no exception is abstracted away.
+/// it may give an application a value the real operator does not (<see cref="Broken"/>). A product with a constant
+/// operand, a division by a constant, and every other operator, is never one of these: the solver decides those as they
+/// are. Division's zero test and its <c>MinValue / -1</c> test are instructions of their own and stay exact, so no exception is abstracted away.
 /// </summary>
 internal sealed class ArithmeticAbstraction(Context context)
 {
@@ -31,6 +31,15 @@ internal sealed class ArithmeticAbstraction(Context context)
     /// <summary>Whether <paramref name="op"/>, the overflow test of an operator that is one, is a shared function too.</summary>
     public static bool Abstracts(IrOverflowOp op) => op is IrOverflowOp.SMul or IrOverflowOp.UMul;
 
+    /// <summary>
+    /// Whether <paramref name="op"/> with these operands is a shared function. A product is one when neither operand is a
+    /// constant, since the solver multiplies by a constant cheaply on either side. A division or remainder is one when its
+    /// divisor is not a constant, whatever its dividend: a constant divisor leaves the solver a divider that propagation
+    /// mostly folds away, a constant dividend over an unknown divisor leaves it the whole divider (ticket P2-156).
+    /// </summary>
+    public static bool Abstracts(IrBinaryOp op, bool aConstant, bool bConstant) =>
+        Abstracts(op) && !bConstant && (!aConstant || op != IrBinaryOp.Mul);
+
     /// <summary>Whether <paramref name="procedure"/> holds an operation this abstracts, without which its product is the exact one.</summary>
     public static bool AppliesTo(IrProcedure procedure)
     {
@@ -38,12 +47,10 @@ internal sealed class ArithmeticAbstraction(Context context)
         HashSet<string> constants = new(instructions.OfType<IrConst>().Select(static c => c.Target.Name), StringComparer.Ordinal);
         return instructions.Any(i => i switch
         {
-            IrBinary binary => Abstracts(binary.Op) && Unknowns(binary.A, binary.B),
-            IrOverflows check => Abstracts(check.Op) && Unknowns(check.A, check.B),
+            IrBinary binary => Abstracts(binary.Op, constants.Contains(binary.A.Name), constants.Contains(binary.B.Name)),
+            IrOverflows check => Abstracts(check.Op) && !constants.Contains(check.A.Name) && !constants.Contains(check.B.Name),
             _ => false,
         });
-
-        bool Unknowns(IrVar a, IrVar b) => !constants.Contains(a.Name) && !constants.Contains(b.Name);
     }
 
     /// <summary><paramref name="op"/> of <paramref name="a"/> and <paramref name="b"/> as its shared function's application.</summary>
