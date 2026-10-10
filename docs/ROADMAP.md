@@ -750,6 +750,14 @@ Found by P2-149 (2026-10-09, by reading the coverage table and its own rule; not
 - P2-151 (S) Soundness: a type argument's layout reaches a generic member of the solution that
   takes its size, and neither the caller's text nor the callee's holds it. The first step is the
   repro. Needs P2-149.
+  Done: reproduced as equal fingerprints, for a generic method and for every kind of member of a
+  generic type. A reference to a member of the solution is now followed by the declarations of the
+  types it hands the member as type arguments (ADR 0024, clarification of 2026-10-09 (P2-151)); a
+  call that hands over no type of the solution has the text it had.
+
+Found by P2-151 (2026-10-09, by reading its own rule; not reproduced):
+- P2-152 (S) Soundness: a type argument named in a base list (`class D : Box<S>`) is in no body's
+  text, and the code `D` inherits reads `S`. The first step is the repro. Needs P2-151.
 
 Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
 - P2-148 (S) `SecondSolverPrintTests.Z3AnswersTheRewrittenTextAsItAnswersTheOriginal` fails at random
