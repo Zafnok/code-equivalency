@@ -1,5 +1,5 @@
 # P2-074 A path-validation row does not fire on a path from a source that yields only valid paths
-Status: in-progress
+Status: done (PR #464)
 Effort: M
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-073
