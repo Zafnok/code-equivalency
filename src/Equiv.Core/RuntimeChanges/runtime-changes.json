@@ -19,6 +19,19 @@
 // which the row does not fire: "asyncStreamOperation" is a call to ReadAsync, WriteAsync, BeginRead, BeginWrite,
 // CopyToAsync or FlushAsync on a Stream in that same method.
 //
+// "precondition" (optional; ticket P2-073) names what a call's arguments must be able to be for the row's change to
+// reach it. It reads some of the call's operands, each only when it is a compile-time constant: the row does not apply
+// to a call that has at least one of them, all constants, none of which meets the precondition. A call with none of
+// them, or with one that is not a constant, gets the row as a row without a precondition does. The values:
+//   "caseInsensitivePattern": reads the arguments named pattern and options; met by a pattern with an inline option
+//     group that turns i on, such as (?i) or (?i:...), and by options with RegexOptions.IgnoreCase.
+//   "twoDigitYearFormat": reads the argument named format; met by a standard (one-character) format and by a custom
+//     format with a y or yy specifier.
+//   "cultureSensitiveText": reads the receiver and every string argument; met by a string with a character that is
+//     not an ASCII letter or digit.
+//   "invalidPath": reads every string argument; met by a blank path, one of 248 characters or more, and one with a
+//     control character, one of " < > | ? *, or a colon anywhere but after a drive letter.
+//
 // "ordinalUnaffected" (P2-075), when true, marks a row for a culture-sensitive comparison: a call that passes
 // StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant argument is not flagged by it.
 //
@@ -38,6 +51,7 @@
       "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
+      "precondition": "cultureSensitiveText",
       "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
@@ -46,6 +60,7 @@
       "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
+      "precondition": "cultureSensitiveText",
       "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
@@ -54,6 +69,7 @@
       "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
+      "precondition": "cultureSensitiveText",
       "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
@@ -62,6 +78,7 @@
       "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
+      "precondition": "cultureSensitiveText",
       "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
@@ -70,6 +87,7 @@
       "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
+      "precondition": "cultureSensitiveText",
       "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
@@ -78,6 +96,7 @@
       "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
+      "precondition": "cultureSensitiveText",
       "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
@@ -1094,6 +1113,7 @@
       "member": "System.Text.RegularExpressions.Regex::",
       "source": "documented",
       "changedIn": "net7.0",
+      "precondition": "caseInsensitivePattern",
       "reason": "Case-insensitive character ranges and other pattern details are interpreted differently by the .NET regex engine, so matches can differ.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/7.0/regex-ranges"
     },
@@ -1409,6 +1429,7 @@
       "member": "System.DateTime::Parse",
       "source": "documented",
       "changedIn": "net8.0",
+      "precondition": "twoDigitYearFormat",
       "reason": "The two-digit-year window ends at 2049 on .NET instead of 2029, so a parsed two-digit year from 30 to 49 lands in a different century.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/twodigityearmax-default"
     },
@@ -1416,6 +1437,7 @@
       "member": "System.DateTime::TryParse",
       "source": "documented",
       "changedIn": "net8.0",
+      "precondition": "twoDigitYearFormat",
       "reason": "The two-digit-year window ends at 2049 on .NET instead of 2029, so a parsed two-digit year from 30 to 49 lands in a different century.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/twodigityearmax-default"
     },
@@ -1423,6 +1445,7 @@
       "member": "System.DateTimeOffset::Parse",
       "source": "documented",
       "changedIn": "net8.0",
+      "precondition": "twoDigitYearFormat",
       "reason": "The two-digit-year window ends at 2049 on .NET instead of 2029, so a parsed two-digit year from 30 to 49 lands in a different century.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/twodigityearmax-default"
     },
@@ -1430,6 +1453,7 @@
       "member": "System.DateTimeOffset::TryParse",
       "source": "documented",
       "changedIn": "net8.0",
+      "precondition": "twoDigitYearFormat",
       "reason": "The two-digit-year window ends at 2049 on .NET instead of 2029, so a parsed two-digit year from 30 to 49 lands in a different century.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/8.0/twodigityearmax-default"
     },
@@ -2606,6 +2630,7 @@
       "member": "System.IO.Path::Combine(string,string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "Combine no longer validates its arguments against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns the combined string unchanged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
       "witness": { "input": ["\u0000", "i"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000\\i" }
@@ -2614,6 +2639,7 @@
       "member": "System.IO.Path::GetDirectoryName(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "GetDirectoryName no longer validates its argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getdirectoryname",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "" }
@@ -2678,6 +2704,7 @@
       "member": "System.IO.Directory::CreateDirectory(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "CreateDirectory no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.createdirectory",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2686,6 +2713,7 @@
       "member": "System.IO.Directory::Delete(string,bool)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "Delete no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.DirectoryNotFoundException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.delete",
       "witness": { "input": ["a\u0308\"\u03089aH", true], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.DirectoryNotFoundException" }
@@ -2694,6 +2722,7 @@
       "member": "System.IO.Directory::SetCurrentDirectory(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "SetCurrentDirectory no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.setcurrentdirectory",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2702,6 +2731,7 @@
       "member": "System.IO.File::Create(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "Create no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.create",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2710,6 +2740,7 @@
       "member": "System.IO.File::Delete(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "Delete no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.delete",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2718,6 +2749,7 @@
       "member": "System.IO.File::GetAttributes(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "GetAttributes no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.getattributes",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2726,6 +2758,7 @@
       "member": "System.IO.File::GetLastWriteTime(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "GetLastWriteTime no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.getlastwritetime",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2734,6 +2767,7 @@
       "member": "System.IO.File::GetLastWriteTimeUtc(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "GetLastWriteTimeUtc no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.getlastwritetimeutc",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2742,6 +2776,7 @@
       "member": "System.IO.File::OpenRead(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "OpenRead no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.openread",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2750,6 +2785,7 @@
       "member": "System.IO.File::ReadAllBytes(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "ReadAllBytes no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.readallbytes",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2758,6 +2794,7 @@
       "member": "System.IO.File::ReadAllLines(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "ReadAllLines no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.readalllines",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2766,6 +2803,7 @@
       "member": "System.IO.File::ReadAllText(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "ReadAllText no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.readalltext",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2782,6 +2820,7 @@
       "member": "System.IO.File::ReadLines(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "ReadLines no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.file.readlines",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2822,6 +2861,7 @@
       "member": "System.IO.Path::ChangeExtension(string,string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "ChangeExtension no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.changeextension",
       "witness": { "input": ["\u0000", "i"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000.i" }
@@ -2830,6 +2870,7 @@
       "member": "System.IO.Path::Combine(string,string,string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "Combine no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
       "witness": { "input": ["\u0000", "i", "i"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000\\i\\i" }
@@ -2838,6 +2879,7 @@
       "member": "System.IO.Path::Combine(string,string,string,string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "Combine no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
       "witness": { "input": ["\u0000", "i", "i", "i"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000\\i\\i\\i" }
@@ -2846,6 +2888,7 @@
       "member": "System.IO.Path::GetExtension(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "GetExtension no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getextension",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "" }
@@ -2854,6 +2897,7 @@
       "member": "System.IO.Path::GetFileName(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "GetFileName no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfilename",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000" }
@@ -2862,6 +2906,7 @@
       "member": "System.IO.Path::GetFileNameWithoutExtension(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "GetFileNameWithoutExtension no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfilenamewithoutextension",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "\u0000" }
@@ -2870,6 +2915,7 @@
       "member": "System.IO.Path::GetFullPath(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "GetFullPath no longer rejects invalid path characters: .NET Framework throws ArgumentException, .NET 10 returns the path joined to the current directory. The witness's modern value depends on the current directory, which it names in angle brackets.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfullpath",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "<current directory>\\a\u0308\"\u03089aH" }
@@ -2886,6 +2932,7 @@
       "member": "System.IO.Path::GetPathRoot(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "GetPathRoot no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getpathroot",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "" }
@@ -2894,6 +2941,7 @@
       "member": "System.IO.Path::IsPathRooted(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "IsPathRooted no longer validates its path argument against invalid path characters (an embedded NUL among them): .NET Framework throws ArgumentException, .NET 10 returns a result instead.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.ispathrooted",
       "witness": { "input": ["\u0000"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": false }
@@ -2918,6 +2966,7 @@
       "member": "System.IO.StreamWriter::.ctor(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "The constructor no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.streamwriter.-ctor",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -2926,6 +2975,7 @@
       "member": "System.IO.StreamWriter::.ctor(string,bool)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "The constructor no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.streamwriter.-ctor",
       "witness": { "input": ["a\u0308\"\u03089aH", true], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3006,6 +3056,7 @@
       "member": "System.Net.Mail.Attachment::.ctor(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "The constructor no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.net.mail.attachment.-ctor",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3022,6 +3073,7 @@
       "member": "System.Reflection.AssemblyName::GetAssemblyName(string)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "GetAssemblyName no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.reflection.assemblyname.getassemblyname",
       "witness": { "input": ["a\u0308\"\u03089aH"], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3031,6 +3083,7 @@
       "ordinalUnaffected": true,
       "source": "measured",
       "changedIn": "net5.0",
+      "precondition": "cultureSensitiveText",
       "reason": "Culture-sensitive comparison uses ICU from .NET 5 and NLS on .NET Framework: \"ss\" equals \"ß\" under NLS but not under ICU.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api",
       "witness": { "input": ["ss", "\u00df", 0], "culture": "invariant", "legacy": true, "modern": false }
@@ -3040,6 +3093,7 @@
       "ordinalUnaffected": true,
       "source": "measured",
       "changedIn": "net5.0",
+      "precondition": "cultureSensitiveText",
       "reason": "Culture-sensitive comparison uses ICU from .NET 5 and NLS on .NET Framework: \"ss\" equals \"ß\" under NLS but not under ICU.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api",
       "witness": { "input": ["ss", "\u00df", 0], "culture": "invariant", "legacy": true, "modern": false }
@@ -3104,6 +3158,7 @@
       "member": "System.Xml.XmlReader::Create(string,System.Xml.XmlReaderSettings)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "Create no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.xml.xmlreader.create",
       "witness": { "input": ["a\u0308\"\u03089aH", null], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }
@@ -3112,6 +3167,7 @@
       "member": "System.Xml.XmlTextWriter::.ctor(string,System.Text.Encoding)",
       "source": "measured",
       "changedIn": "netcoreapp1.0",
+      "precondition": "invalidPath",
       "reason": "The constructor no longer validates its path argument against invalid path characters up front: .NET Framework throws ArgumentException, .NET 10 leaves the path to the file system, which throws System.IO.IOException.",
       "url": "https://learn.microsoft.com/en-us/dotnet/api/system.xml.xmltextwriter.-ctor",
       "witness": { "input": ["a\u0308\"\u03089aH", null], "culture": "invariant", "legacy": "System.ArgumentException", "modern": "System.IO.IOException" }

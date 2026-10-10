@@ -380,6 +380,40 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-073 criterion 2: a call whose compile-time constant arguments cannot reach the change its
+    /// <c>runtime-changes.json</c> row documents (a regex pattern that does not ignore case, a plain path literal) is not
+    /// flagged, so the byte-identical method is Equivalent by congruence from .NET Framework 4.8 to .NET 10.
+    /// </summary>
+    [Theory]
+    [InlineData("Calls::Words(")]
+    [InlineData("Calls::Cache(")]
+    public void RuntimeRowConstantArgs_AConstantThatCannotReachTheChangeIsEquivalent(string method)
+    {
+        Result result = Single("runtime-row-constant-args", method);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>
+    /// Ticket P2-073 criteria 2 and 3: the same calls with a constant that can reach the change (the pattern
+    /// <c>(?i)[a-z]</c>, the path literal <c>a|b</c>), or with an argument that is no constant, stay EQ006.
+    /// </summary>
+    [Theory]
+    [InlineData("Calls::Letters(", "regex")]
+    [InlineData("Calls::Piped(", "invalid path characters")]
+    [InlineData("Calls::SplitBy(", "regex")]
+    [InlineData("Calls::Under(", "invalid path characters")]
+    public void RuntimeRowConstantArgs_AConstantThatCanReachTheChangeOrAVariableStaysDivergent(string method, string reason)
+    {
+        Result result = Single("runtime-row-constant-args", method);
+
+        Assert.Equal("EQ006", result.RuleId);
+        Assert.Contains("between net48 and net10.0", result.Message.Text, StringComparison.Ordinal);
+        Assert.Contains(reason, result.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ticket P2-055 criterion 2 (ADR 0040 decision 2): both sides run on .NET 10, so no runtime rule applies. The
     /// byte-identical method that calls <c>double.ToString()</c> and <c>string.StartsWith(string)</c> and casts a
     /// <c>double</c> to <c>int</c> is Equivalent by congruence, and the <c>if</c> chain made a <c>switch</c> expression is
