@@ -22,7 +22,7 @@ behaviour-preserving, so every row that is not Equivalent is a gap, and names th
 | Procedure | Verdict today | Reason | Owner |
 |---|---|---|---|
 | `Circle.Diameter` (getter) | Equivalent, `proofMethod: bounded` | | |
-| `Tidy.Grade(int)` | Unknown (`opaque`, line scope) | modern: `switch-pattern`. A relational pattern (`>= 90`) is not lowered | P2-093 |
+| `Tidy.Grade(int)` | Equivalent, `proofMethod: bounded` | | |
 | `Tidy.Join(string, string)` | Divergent (a precision bug) | legacy calls `String::Format(string,object,object)`, modern lowers to `String::Concat(string,string)`, so the call traces differ | P2-094 |
 | `Tidy.LengthOf(string)` | Equivalent, `proofMethod: bounded` | | |
 | `Tidy.OrDefault(string, string)` | Equivalent, `proofMethod: bounded` | | |
@@ -31,6 +31,4 @@ behaviour-preserving, so every row that is not Equivalent is a gap, and names th
 
 Exit code: 1 (one Divergent result).
 
-`expected.sarif.json` is the default run, quick mode (ADR 0052). With `--mode thorough` (ADR 0049, ticket P1-032)
-`Grade` is proved Equivalent by the IL pass (`decidedBy: il-pass`), from IL bodies that hold no
-opaque. Its row keeps its owner: the IOperation lowering still does not lower that construct.
+`expected.sarif.json` is the default run, quick mode (ADR 0052).

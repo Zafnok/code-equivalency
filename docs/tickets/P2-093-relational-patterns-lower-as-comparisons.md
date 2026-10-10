@@ -1,5 +1,5 @@
 # P2-093 A relational pattern lowers as a comparison
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-049
@@ -51,3 +51,8 @@ on floating-point, `decimal` or `char` scrutinees.
 
 ## Notes
 - Found by P2-049 (`samples/cleanup-modern-syntax`, `Tidy.Grade`).
+- Decision: the test is AC 1's, literally: the scrutinee's static type and the constant's type map to one `IrBitVec`. A `char` scrutinee therefore lowers too (an unsigned 16-bit comparison, which is what C# compares); Out of scope means it was not required, and keeping it opaque would need a rule AC 1 does not state.
+- Decision: signedness is `TypeMapper.IsSigned` of the scrutinee's type and the operator comes from `OperatorMapper.Binary`, the table `Binary` uses. No promotion to `int` for a `byte` or `short` scrutinee: the comparison of two values of one width has the same answer at that width.
+- The oracle generator never makes the constant the type's least or greatest value: the compiler rejects a pattern nothing matches (`x is < int.MinValue`, CS8518).
+- `samples/cleanup-modern-syntax/README.md` lost its paragraph on `--mode thorough` proving `Grade` by the IL pass: quick mode proves it now.
+- `Binary` is unchanged, so `VERIFICATION-MODEL.md` has no new row: no IR node, type or encoding was added.
