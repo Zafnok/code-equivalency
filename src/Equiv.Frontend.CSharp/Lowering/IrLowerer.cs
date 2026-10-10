@@ -2402,7 +2402,7 @@ internal sealed class IrLowerer
         Callee called = Bound(invocation.TargetMethod, invocation);
         IrType? returns = invocation.TargetMethod.ReturnsVoid ? null : Map(invocation.Type!);
         return Addressed(invocation, called.Identity) is { } rewrite
-            ? Converted(rewrite, invocation, returns, context)
+            ? AsLegacy(rewrite, invocation, returns, context)
             : Dispatch(invocation.Instance, called, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
     }
 
@@ -2411,7 +2411,7 @@ internal sealed class IrLowerer
     /// argument yields is read through the <c>cast</c> map to that type, as M3-010 lowers the implicit reference
     /// conversion of the modern call's result (ticket P2-117). Any other entry's result is the legacy call's as it is.
     /// </summary>
-    private IrVar? Converted(Rewrite rewrite, IInvocationOperation invocation, IrType? returns, LoweringContext context) =>
+    private IrVar? AsLegacy(Rewrite rewrite, IInvocationOperation invocation, IrType? returns, LoweringContext context) =>
         rewrite.Plan.Returned is { } array
             ? heap.MapRead(heap.Inputs.Cast(array, invocation.Type!), Rewritten(rewrite, invocation, Map(array), context)!, context)
             : Rewritten(rewrite, invocation, returns, context);
@@ -2613,13 +2613,10 @@ internal sealed class IrLowerer
         }
 
         ITypeSymbol? typeArgument = items.Where(static i => i.TypeArgument).Select(i => ((ITypeOfOperation)sources[i.Source.GetValueOrDefault()]).TypeOperand).FirstOrDefault();
+        IArrayTypeSymbol? returned = entry.ReturnsTypeArgumentArray ? compilation.CreateArrayTypeSymbol(typeArgument!) : null;
         return Array.TrueForAll(unwrapped, static u => u is not null)
             && !items.Any(i => i.OfTypeArgument && !SymbolEqualityComparer.Default.Equals(operands[i.Source.GetValueOrDefault()].Type, typeArgument))
-            ? new AdapterPlan([.. operands], targets.MoveToImmutable(), rest, from)
-            {
-                TypeArgument = typeArgument,
-                Returned = entry.ReturnsTypeArgumentArray ? compilation.CreateArrayTypeSymbol(typeArgument!) : null,
-            }
+            ? new AdapterPlan([.. operands], targets.MoveToImmutable(), rest, from) { TypeArgument = typeArgument, Returned = returned }
             : null;
     }
 
