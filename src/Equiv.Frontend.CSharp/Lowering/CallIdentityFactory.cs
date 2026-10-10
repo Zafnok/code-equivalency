@@ -22,15 +22,12 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// </summary>
 internal static class CallIdentityFactory
 {
-    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval) =>
-        Of(method, renames, suppressedRuntimeChanges, interval, ordinalComparison: false);
-
-    /// <summary>As the overload without <paramref name="ordinalComparison"/>, which says the call passes an ordinal comparison as a constant (<see cref="OrdinalComparison"/>; ticket P2-075).</summary>
+    /// <summary><paramref name="ordinalComparison"/> says the call passes an ordinal comparison as a constant (<see cref="OrdinalComparison"/>; ticket P2-075).</summary>
     public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, bool ordinalComparison) =>
         Of(Name(method, renames), suppressedRuntimeChanges, interval, ordinalComparison);
 
     /// <summary>
-    /// As the overload without a compilation, but also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
+    /// The identity of a call to a method of <paramref name="compilation"/>, which also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
     /// <paramref name="method"/>'s containing assembly is one of <paramref name="compilation"/>'s reference assemblies
     /// (<see cref="ReferenceAssemblies.IsReferenceAssembly(IAssemblySymbol)"/>): the framework or .NET reference pack the
     /// project compiled against, never the solution's own code (a <see cref="CompilationReference"/>, or the compilation's
