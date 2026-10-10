@@ -874,13 +874,26 @@ internal sealed class IrLowerer
     /// reads, and the constant that is the <c>default</c> passed for a parameter <c>GetAsyncEnumerator</c> leaves optional,
     /// its cancellation token (ticket P1-029). That one's syntax is the loop, so it has no fingerprint to share as an
     /// opaque; it is its type's one default value on both sides, element 0 of its sort, and only ever that call's argument.
+    /// So is the <c>default</c> passed for any optional parameter of a struct type a call leaves out (ticket P2-138;
+    /// <see cref="IsStructDefault"/>).
     /// </summary>
     private IrVar? Supplied(IOperation operation, LoweringContext context) => operation switch
     {
         _ when CallerLocation.Of(operation) is { } location => heap.Inputs.Caller(location, operation.Type!),
         IDefaultValueOperation { IsImplicit: true, Syntax: CommonForEachStatementSyntax } => Constant(operation.Type!, value: null, context),
+        IDefaultValueOperation { Parent: IArgumentOperation { ArgumentKind: ArgumentKind.DefaultValue }, Type: { } type }
+            when IsStructDefault(type) => Constant(type, value: null, context),
         _ => null,
     };
+
+    /// <summary>
+    /// Whether <c>default(<paramref name="type"/>)</c>, when it is no compile-time constant, is element 0 of the type's sort
+    /// (ticket P2-138): a struct type whose sort has no null, so the element names nothing else. That leaves out a
+    /// <c>Nullable&lt;T&gt;</c>, whose element 0 is null and comes with a shadow (ticket P2-095); a type parameter, which is
+    /// no one type; and a tuple of an <see cref="IrTuple"/> sort, whose value is its elements.
+    /// </summary>
+    private static bool IsStructDefault(ITypeSymbol type) =>
+        type.TypeKind == TypeKind.Struct && !TypeMapper.IsNullable(type) && TypeMapper.Tuple(type) is null;
 
     private IrVar? Operation(IOperation operation, LoweringContext context)
     {

@@ -38,6 +38,9 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 /// made from <see cref="LoweringOracleGen.NullableValue"/> or from nothing and read with <c>??</c> (ticket P2-095): the
 /// <c>cast.System.Int32.System.Nullable_1</c> input maps every <c>int</c> to one element that is not the null constant,
 /// <see cref="CompiledRunOracle"/> answers <c>GetValueOrDefault()</c> with that value, and what is compared is which side of <c>??</c> ran.
+/// <c>o.Nudge(k)</c> leaves out an optional parameter of a struct type (ticket P2-138): the IR passes element 0 of the
+/// struct's sort, <see cref="CompiledRunOracle"/> answers the call as the compiled method does for the default mark, and
+/// what is compared is the final <c>G</c>.
 /// </summary>
 public sealed class LoweringOracleTests
 {
@@ -82,6 +85,9 @@ public sealed class LoweringOracleTests
     /// <summary>The <c>int?</c> every converted <c>int</c> is: one element that is not the null constant, element 0.</summary>
     private static readonly IrSortValue Wrapped = new("System.Nullable`1", 1);
 
+    /// <summary>The <c>Mark</c> a call that leaves its optional parameter out passes: element 0 of the struct's sort (ticket P2-138).</summary>
+    private static readonly IrSortValue DefaultMark = new(LoweringOracleGen.MarkType, 0);
+
     /// <summary>The key a static field's map is read at: element 0 of its declaring type's sort.</summary>
     private static readonly IrSortValue Token = new("Oracle", 0);
 
@@ -94,7 +100,7 @@ public sealed class LoweringOracleTests
     {
         string source = Source(cases.Select(static c => c.Method));
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda, .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Nudge}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda, .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
@@ -260,6 +266,7 @@ public sealed class LoweringOracleTests
         Assert.Contains(CompiledRunOracle.Getter, callees);
         Assert.Contains(CompiledRunOracle.MoveNext, callees);
         Assert.Contains(CompiledRunOracle.GetValueOrDefault, callees);
+        Assert.Contains(CompiledRunOracle.Nudge, callees);
         Assert.Superset(new HashSet<string>(["conv.i32.dec", "conv.dec.i32", "dec.mul", "dec.div", "dec.lt"], StringComparer.Ordinal), pures);
     }
 
@@ -466,7 +473,8 @@ public sealed class LoweringOracleTests
     /// <see cref="Cells"/>, the version threaded through the earlier calls, as the encoder threads a map a side never names
     /// (VERIFICATION-MODEL.md section 5). <c>o.TryParse(k, out n)</c> (ticket M4-003) answers as the compiled method does, its
     /// <c>n</c> as the call's one ref output. <c>GetValueOrDefault()</c> on an <c>int?</c> (ticket P2-095) is
-    /// <see cref="LoweringOracleGen.NullableValue"/>, the one value the generator wraps. No other call is generated.
+    /// <see cref="LoweringOracleGen.NullableValue"/>, the one value the generator wraps. <c>o.Nudge(k)</c> (ticket P2-138) is
+    /// handed the default <c>Mark</c>, element 0 of its sort, whose <c>N</c> is 0, so it adds what <c>o.Bump(k)</c> does. No other call is generated.
     /// </summary>
     private sealed class CompiledRunOracle(int initial, List<int> list, IrMapValue cells) : Equiv.Core.ICallOracle
     {
@@ -486,6 +494,8 @@ public sealed class LoweringOracleTests
 
         private static readonly Equiv.Core.CallIdentity Bump = new($"{LoweringOracleGen.CellType}::{LoweringOracleGen.Bump}(int)");
 
+        public static readonly Equiv.Core.CallIdentity Nudge = new($"{LoweringOracleGen.CellType}::{LoweringOracleGen.Nudge}(int,{LoweringOracleGen.MarkType})");
+
         private static readonly Equiv.Core.CallIdentity TryParse = new($"{LoweringOracleGen.CellType}::{LoweringOracleGen.TryParse}(int,out int)");
 
         /// <summary>Boxed, so each call advances the one enumerator and not a copy of the struct.</summary>
@@ -498,9 +508,10 @@ public sealed class LoweringOracleTests
 
         public IrCallResult Answer(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, IrType? resultType, int position, ImmutableArray<IrHeapSlice> heap, ImmutableArray<IrType> refOuts)
         {
-            if (callee == Bump)
+            if (callee == Bump || callee == Nudge)
             {
                 Assert.Equal(CellReference, arguments[0]);
+                Assert.Equal(callee == Nudge ? [DefaultMark] : [], arguments[2..]);
                 Cells = Bumped((IrMapValue?)heap.FirstOrDefault(static h => h.Map is CellMap)?.Value ?? Cells, arguments[1]);
                 return new IrCallResult(Value: null, Threw: false) { Heap = [.. heap.Select(h => h.Map is CellMap ? Cells : h.Value)] };
             }
