@@ -19,6 +19,20 @@ public sealed record ApiEquivalence(string Id, bool IsType, string Legacy, strin
     /// </summary>
     public TargetRuntime? AddedIn { get; init; }
 
+    /// <summary>
+    /// The modern member returns an array of the entry's type argument where the legacy member returns a base type of it
+    /// (ticket P2-117): the rewritten call yields that array, converted to the legacy call's type by the implicit
+    /// reference conversion, as source that calls the modern member and converts its result is lowered.
+    /// </summary>
+    public bool ReturnsTypeArgumentArray { get; init; }
+
+    /// <summary>
+    /// <see cref="Modern"/> for a call whose type argument is <paramref name="typeArgument"/>, which replaces each
+    /// <c>{T}</c> in it (ticket P2-117); <see cref="Modern"/> itself when the entry has no type argument.
+    /// </summary>
+    public string ModernOf(string? typeArgument) =>
+        typeArgument is null ? Modern : Modern.Replace("{T}", typeArgument, StringComparison.Ordinal);
+
     /// <summary>Whether the entry applies to a pair that crosses <paramref name="interval"/>.</summary>
     public bool AppliesWithin(RuntimeInterval interval)
     {

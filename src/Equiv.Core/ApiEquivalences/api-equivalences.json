@@ -27,6 +27,15 @@
 // call's params array, as the System.ReadOnlySpan<T> the compiler builds from the same elements for the modern member's
 // params span parameter: a new T[] of the elements read through the cast map of T[] to the span (ticket P2-143). The
 // entries that use it carry "addedIn": "net9.0", the runtime that added the span overloads.
+// {"typeArgument": n} passes nothing (ticket P2-117): the source argument at position n must be typeof(E) for an enum
+// type E, and E replaces each {T} in "modern", which is then the generic member constructed with E. An {"arg": n} item
+// may carry "ofTypeArgument": true: the argument, as the item takes it, must be of exactly that type E. A call whose
+// System.Type argument is anything else, or whose value is of another type, is left as it is. A member entry may carry
+// "returnsTypeArgumentArray": true: the modern member returns E[] where the legacy one returns a base type of it, and
+// the rewritten call's result is that array converted to the legacy call's type, as source that calls the modern member
+// and converts its result is lowered. Where such a call is the operand of Enumerable.Cast<E>() and a foreach enumerates
+// that, the frontend lowers the loop over the array itself, as it does the modern side's loop over the E[]: Cast<E>
+// returns the E[] it is given, and enumerating an array through IEnumerable<E> yields its elements in index order.
 // A type entry maps a legacy metadata name to a modern one as a sort name.
 //
 // Soundness (ADR 0020): whenever both members are invoked on adapted arguments, they return the same value and either
@@ -122,6 +131,23 @@
     "arguments": [{ "arg": 0 }],
     "reason": "On .NET Framework DirectoryInfo overrides FileSystemInfo.FullName and returns the same full path of the directory after a path-discovery permission demand, which fully trusted code always passes; .NET has no code access security and declares the getter on FileSystemInfo only, so the same read of a DirectoryInfo returns the same path and throws for the same over-long path. Both are instance members, so a null receiver throws NullReferenceException from the receiver check on both sides before either is invoked.",
     "url": "https://learn.microsoft.com/en-us/dotnet/api/system.io.filesysteminfo.fullname"
+  },
+  {
+    "id": "bcl.enum-is-defined-generic",
+    "legacy": "System.Enum::IsDefined(System.Type,object)",
+    "modern": "System.Enum::IsDefined`1({T})<{T}>",
+    "arguments": [{ "typeArgument": 0 }, { "arg": 1, "unwrap": true, "ofTypeArgument": true }],
+    "reason": "Enum.IsDefined(typeof(E), value) with a boxed value of the enum type E itself and Enum.IsDefined<E>(value) both return whether a constant of E has that value, and neither throws: the Type-taking overload throws ArgumentNullException for a null type or value, ArgumentException for a type that is not an enum and InvalidOperationException for a value of another type, none of which can happen when the type is typeof of an enum and the value is a boxed value of it, which is all the entry applies to. Both are static, so there is no receiver check.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.enum.isdefined"
+  },
+  {
+    "id": "bcl.enum-get-values-generic",
+    "legacy": "System.Enum::GetValues(System.Type)",
+    "modern": "System.Enum::GetValues`1()<{T}>",
+    "arguments": [{ "typeArgument": 0 }],
+    "returnsTypeArgumentArray": true,
+    "reason": "Enum.GetValues(typeof(E)) returns, typed as Array, a new E[] of the values of E's constants sorted by their unsigned magnitude, and Enum.GetValues<E>() returns the same new E[] typed as itself, so the legacy result is the modern one through the reference conversion to Array. The Type-taking overload throws ArgumentNullException for a null type and ArgumentException for a type that is not an enum, neither of which can happen when the type is typeof of an enum, which is all the entry applies to; with that neither throws. Both are static, so there is no receiver check.",
+    "url": "https://learn.microsoft.com/en-us/dotnet/api/system.enum.getvalues"
   },
   {
     "id": "bcl.timespan-from-days-integer",

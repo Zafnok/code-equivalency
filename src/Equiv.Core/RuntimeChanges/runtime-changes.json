@@ -30,6 +30,9 @@
 //   "invalidPath": reads every string argument; met by a blank path, one of 248 characters or more, and one with a
 //     control character, one of " < > | ? *, or a colon anywhere but after a drive letter.
 //
+// "ordinalUnaffected" (P2-075), when true, marks a row for a culture-sensitive comparison: a call that passes
+// StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant argument is not flagged by it.
+//
 // One row is for a call the compiler makes and the source does not write (ADR 0024 as clarified by ticket P2-144):
 // the SwitchExpressionException constructor a switch expression calls when no arm matches. Where the reference
 // assemblies have no such type the compiler calls InvalidOperationException's, which has no row, so the row flags the
@@ -43,50 +46,56 @@
   "rows": [
     {
       "member": "System.String::IndexOf(",
+      "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
       "precondition": "cultureSensitiveText",
-      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
     {
       "member": "System.String::LastIndexOf(",
+      "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
       "precondition": "cultureSensitiveText",
-      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
     {
       "member": "System.String::StartsWith(",
+      "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
       "precondition": "cultureSensitiveText",
-      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
     {
       "member": "System.String::EndsWith(",
+      "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
       "precondition": "cultureSensitiveText",
-      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
     {
       "member": "System.String::Compare(",
+      "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
       "precondition": "cultureSensitiveText",
-      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
     {
       "member": "System.String::CompareTo(",
+      "ordinalUnaffected": true,
       "source": "curated",
       "changedIn": "net5.0",
       "precondition": "cultureSensitiveText",
-      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; ordinal overloads are unaffected but not distinguishable from an overload's CallIdentity alone, so the whole family is flagged (suppress it in equiv.config.json once call sites are confirmed ordinal).",
+      "reason": "Culture-sensitive overloads compare using ICU on .NET but NLS on .NET Framework 4.8, so results can differ by culture; a call that passes StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase as a constant is unaffected and is not flagged.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/globalization/5.0/icu-globalization-api"
     },
     {
@@ -916,7 +925,14 @@
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/null-owner-causes-invalidoperationexception"
     },
     {
-      "member": "System.Windows.Forms.ListViewGroupCollection::",
+      "member": "System.Windows.Forms.ListViewGroupCollection::Add(",
+      "source": "documented",
+      "changedIn": "net6.0",
+      "reason": "Adding or inserting a group already owned by another ListView throws InvalidOperationException on .NET.",
+      "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/windows-forms/6.0/listview-invalidoperationexception"
+    },
+    {
+      "member": "System.Windows.Forms.ListViewGroupCollection::Insert(",
       "source": "documented",
       "changedIn": "net6.0",
       "reason": "Adding or inserting a group already owned by another ListView throws InvalidOperationException on .NET.",
@@ -3061,6 +3077,7 @@
     },
     {
       "member": "System.String::Equals(string,System.StringComparison)",
+      "ordinalUnaffected": true,
       "source": "measured",
       "changedIn": "net5.0",
       "precondition": "cultureSensitiveText",
@@ -3070,6 +3087,7 @@
     },
     {
       "member": "System.String::Equals(string,string,System.StringComparison)",
+      "ordinalUnaffected": true,
       "source": "measured",
       "changedIn": "net5.0",
       "precondition": "cultureSensitiveText",

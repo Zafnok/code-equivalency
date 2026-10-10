@@ -24,32 +24,35 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// </summary>
 internal static class CallIdentityFactory
 {
-    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null)
-    {
-        return Of(Name(method, renames), suppressedRuntimeChanges, interval, CallArguments.Of(site, method));
-    }
+    /// <summary>
+    /// The identity of a call to <paramref name="method"/>. Given the <paramref name="site"/> that makes the call, a row
+    /// reads the call's constant arguments (<see cref="CallArguments"/>; ticket P2-073) and whether one is an ordinal
+    /// comparison (<see cref="OrdinalComparison"/>; ticket P2-075).
+    /// </summary>
+    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null) =>
+        Of(Name(method, renames), suppressedRuntimeChanges, interval, CallArguments.IsOrdinalComparison(site, method), CallArguments.Of(site, method));
 
     /// <summary>
-    /// As the overload without a compilation, but also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
+    /// The identity of a call to a method of <paramref name="compilation"/>, which also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
     /// <paramref name="method"/>'s containing assembly is one of <paramref name="compilation"/>'s reference assemblies
     /// (<see cref="ReferenceAssemblies.IsReferenceAssembly(IAssemblySymbol)"/>): the framework or .NET reference pack the
     /// project compiled against, never the solution's own code (a <see cref="CompilationReference"/>, or the compilation's
     /// own assembly) or a NuGet package (a <see cref="PortableExecutableReference"/> without the attribute).
     /// </summary>
-    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null)
-    {
-        ArgumentNullException.ThrowIfNull(compilation);
-        return Of(method, renames, suppressedRuntimeChanges, interval, site) with { External = IsExternal(method.ContainingAssembly, compilation) };
+    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null)
+    {
+        ArgumentNullException.ThrowIfNull(compilation);
+        return Of(method, renames, suppressedRuntimeChanges, interval, site) with { External = IsExternal(method.ContainingAssembly, compilation) };
     }
 
     /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be inside <paramref name="interval"/>.</summary>
     public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval) =>
-        Of(value, suppressedRuntimeChanges, interval, []);
+        Of(value, suppressedRuntimeChanges, interval, ordinalComparison: false, []);
 
-    private static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, ImmutableArray<CallArgument> arguments)
+    private static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, bool ordinalComparison, ImmutableArray<CallArgument> arguments)
     {
         CallIdentity callee = new(value);
-        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, interval, suppressedRuntimeChanges, arguments, out _) };
+        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, interval, suppressedRuntimeChanges, ordinalComparison, arguments, out _) };
     }
 
     /// <summary>The <see cref="CallIdentity.Value"/> of a call to <paramref name="method"/>, which no runtime rule changes.</summary>

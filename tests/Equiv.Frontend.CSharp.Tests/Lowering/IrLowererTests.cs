@@ -529,10 +529,58 @@ public sealed class IrLowererTests
             .Blocks.Select(static b => b.Terminator).OfType<IrSwitch>());
 
     [Theory]
-    [InlineData("static int M(int n) => n switch { > 1 => 2, _ => 0 };")]
+    [InlineData("static int M(int n) => n switch { > 1 or < -1 => 2, _ => 0 };")]
     [InlineData("static int M(object o) => o switch { int n => n, _ => 0 };")]
+    [InlineData("static bool M(object o) => o is > 1;")]
+    [InlineData("static bool M(int? n) => n is > 1;")]
+    [InlineData("static bool M(double d) => d is > 1;")]
+    [InlineData("static bool M(System.DayOfWeek d) => d is > System.DayOfWeek.Monday;")]
     public void APatternBeyondAConstantIsOpaque(string members) =>
         Assert.Contains(Opaques(Method(members)), static o => string.Equals(o.Reason, "switch-pattern", StringComparison.Ordinal));
+
+    /// <summary>Ticket P2-093: a relational pattern on an integral scrutinee is the comparison it spells, signed or unsigned as the scrutinee is.</summary>
+    [Theory]
+    [InlineData("static bool M(int n) => n is < 5;", 32, -1L, true)]
+    [InlineData("static bool M(int n) => n is < 5;", 32, 5L, false)]
+    [InlineData("static bool M(int n) => n is <= 5;", 32, 5L, true)]
+    [InlineData("static bool M(int n) => n is > 5;", 32, 5L, false)]
+    [InlineData("static bool M(int n) => n is >= 5;", 32, 5L, true)]
+    [InlineData("static bool M(uint n) => n is < 5;", 32, -1L, false)]
+    [InlineData("static bool M(long n) => n is >= 5;", 64, -1L, false)]
+    [InlineData("static bool M(byte n) => n is > 127;", 8, 200L, true)]
+    public void ARelationalPatternIsAComparison(string members, int width, long value, bool expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(new IrReturned(new IrBoolValue(expected)), Run(procedure, Bits(width, value)));
+    }
+
+    /// <summary>Ticket P2-093: the test is the one the comparison operator lowers to, and no edge leaves it.</summary>
+    [Theory]
+    [InlineData("static bool M(int n) => n is >= 5;", IrBinaryOp.Sge)]
+    [InlineData("static bool M(uint n) => n is >= 5;", IrBinaryOp.Uge)]
+    [InlineData("static bool M(int n) => n >= 5;", IrBinaryOp.Sge)]
+    [InlineData("static bool M(uint n) => n >= 5;", IrBinaryOp.Uge)]
+    public void ARelationalPatternLowersAsTheBinaryComparison(string members, IrBinaryOp expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Equal(expected, Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrBinary>()).Op);
+        Assert.DoesNotContain(procedure.Blocks, static b => b.Terminator is IrBranch or IrThrow);
+    }
+
+    [Fact]
+    public void ASwitchExpressionOnRelationalPatternsRunsAsTheIfChainItReplaces()
+    {
+        IrProcedure procedure = Method("static int M(int score) => score switch { >= 90 => 4, >= 80 => 3, >= 70 => 2, _ => 0 };");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+        Assert.All(
+            ((int Score, int Grade)[])[(95, 4), (90, 4), (89, 3), (80, 3), (70, 2), (69, 0), (-1, 0)],
+            c => Assert.Equal(new IrReturned(Bits(32, c.Grade)), Run(procedure, Bits(32, c.Score))));
+    }
 
     [Fact]
     public void AConstantPatternOutsideASwitchIsAnEquality() =>

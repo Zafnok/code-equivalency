@@ -25,6 +25,14 @@ internal static class CallArguments
         _ => [],
     };
 
+    /// <summary>
+    /// Whether the call <paramref name="site"/> makes to <paramref name="method"/> passes an ordinal
+    /// <c>StringComparison</c> as a constant (<see cref="OrdinalComparison"/>; ticket P2-075). A site that calls another
+    /// method, as a call resolved to a forwarder's target does, says nothing of it.
+    /// </summary>
+    public static bool IsOrdinalComparison(IOperation? site, IMethodSymbol method) =>
+        site is IInvocationOperation call && Calls(call.TargetMethod, method) && OrdinalComparison.IsConstantArgument(call);
+
     private static bool Calls(IMethodSymbol? called, IMethodSymbol method) => SymbolEqualityComparer.Default.Equals(called, method);
 
     private static IEnumerable<CallArgument> Receiver(IOperation? instance) =>

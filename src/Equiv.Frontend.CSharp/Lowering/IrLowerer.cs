@@ -39,6 +39,9 @@ internal sealed class IrLowerer
     /// <summary>The sort of a <c>ReadOnlySpan&lt;T&gt;</c>, whatever its element type: its metadata name (ticket P2-143).</summary>
     private const string ReadOnlySpan = "System.ReadOnlySpan`1";
 
+    /// <summary><c>Enumerable.Cast&lt;T&gt;()</c>, which returns a <c>T[]</c> it is given as it is (ticket P2-117).</summary>
+    private const string CastMember = "System.Linq.Enumerable::Cast`1(System.Collections.IEnumerable)<{T}>";
+
     private static readonly IrBool Bool = new();
 
     private readonly SsaBuilder ssa = new();
@@ -408,7 +411,7 @@ internal sealed class IrLowerer
     {
         cfg = graph;
         chains = SwitchChains.Find(cfg);
-        loops = ArrayForEachLoops.Find(cfg);
+        loops = ArrayForEachLoops.Find(cfg, CastArray);
         spilled = SpilledCollections.Find(cfg, collection => Built(collection) is { Add: not null });
         unreached = SwitchExpressions.Unreached(cfg, compilation);
         exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, loops, bodySpan, Fill);
@@ -674,7 +677,9 @@ internal sealed class IrLowerer
     /// A pattern test (acceptance criterion 2): a constant pattern is an equality, a <c>null</c> pattern on a reference is
     /// the null test <c>x == null</c> is (ticket P2-122), a discard is <c>true</c>, a type
     /// pattern and a declaration pattern (not <c>var</c>) are a type test (ticket M4-005), the latter binding its variable
-    /// through the cast map, and every other pattern is opaque, which is how a pattern switch beyond these stops here.
+    /// through the cast map, a relational pattern whose constant has the scrutinee's own bitvector type is the comparison
+    /// <c>Binary</c> lowers for that operator and type, with no exception edge (ticket P2-093), and every other pattern is
+    /// opaque, which is how a pattern switch beyond these stops here.
     /// </summary>
     private IrVar? Match(IIsPatternOperation pattern, LoweringContext context) => pattern.Pattern switch
     {
@@ -689,6 +694,13 @@ internal sealed class IrLowerer
             Passes(test, context),
         IDeclarationPatternOperation { MatchesNull: false } declaration when TestType(pattern.Value, declaration.MatchedType!, context) is { } test =>
             Bind(declaration, test, context),
+        IRelationalPatternOperation relational when TypeMapper.Map(pattern.Value.Type!) is IrBitVec bits && TypeMapper.Map(relational.Value.Type!) == bits =>
+            Emit(
+                OperatorMapper.Binary(relational.OperatorKind, TypeMapper.IsSigned(pattern.Value.Type!), bits, bits)!.Value,
+                Value(pattern.Value, context),
+                Value(relational.Value, context),
+                Bool,
+                context),
         _ => Opaque(pattern, "switch-pattern", context),
     };
 
@@ -1020,7 +1032,9 @@ internal sealed class IrLowerer
         switch (site.Role)
         {
             case ArrayForEachLoops.Role.Start:
-                IrVar collection = Value(site.Operand, context);
+                IrVar collection = site.Operand is IInvocationOperation call && Arrayed(call) is { } rewrite
+                    ? Rewritten(rewrite, call, Map(site.Loop.Type), context)!
+                    : Value(site.Operand, context);
                 ssa.Store(context.Current, array, collection);
                 StoreShadow(array, site.Operand, collection, context);
                 ssa.Store(context.Current, index, Const(new IrBitVecValue(32, 0), context));
@@ -1035,6 +1049,24 @@ internal sealed class IrLowerer
                 return element;
         }
     }
+
+    /// <summary>
+    /// The array <paramref name="collection"/> is when it is <c>Enumerable.Cast&lt;E&gt;()</c> of a call an API-equivalence
+    /// entry rewrites to a member that returns an <c>E[]</c> (ticket P2-117), and that call: <c>Cast&lt;E&gt;</c> returns
+    /// the <c>E[]</c> it is given, so a <c>foreach</c> over it enumerates that array, and <see cref="ForEach"/> lowers it as
+    /// the loop over the modern member's array. Null for any other collection.
+    /// </summary>
+    private (IOperation Array, IArrayTypeSymbol Type)? CastArray(IOperation collection) =>
+        collection is IInvocationOperation { Arguments.Length: 1 } cast
+        && cast.Arguments[0].Value is IConversionOperation { Operand: IInvocationOperation call }
+        && Arrayed(call) is { } rewrite
+        && string.Equals(Identity(cast.TargetMethod).Value, CastMember.Replace("{T}", rewrite.Plan.TypeArgument!.ToDisplayString(TypeMapper.Unannotated), StringComparison.Ordinal), StringComparison.Ordinal)
+            ? (call, rewrite.Plan.Returned!)
+            : null;
+
+    /// <summary>The rewrite of <paramref name="call"/> by an entry whose modern member returns an array of its type argument, or null (ticket P2-117).</summary>
+    private Rewrite? Arrayed(IInvocationOperation call) =>
+        Addressed(call, Bound(call.TargetMethod, call).Identity) is { } rewrite && rewrite.Plan.Returned is not null ? rewrite : null;
 
     /// <summary>The index of the array <c>foreach</c> whose enumerator is <paramref name="enumerator"/>.</summary>
     private SsaBuilder.Variable Index(CaptureId enumerator)
@@ -2378,17 +2410,20 @@ internal sealed class IrLowerer
 
         Callee called = Bound(invocation.TargetMethod, invocation);
         IrType? returns = invocation.TargetMethod.ReturnsVoid ? null : Map(invocation.Type!);
-        foreach (ApiEquivalence entry in written.IsEmpty ? catalogue.Members[called.Identity.Value] : [])
-        {
-            if (Adapt(entry, invocation, context) is { } adapted)
-            {
-                catalogue.Applied.Add(entry.Id);
-                return Call(new Callee(CallIdentityFactory.Of(entry.Modern, suppressedRuntimeChanges, runtime.Interval), Closed: false, invocation, invocation.TargetMethod.Name), adapted, returns, [], context);
-            }
-        }
-
-        return Dispatch(invocation.Instance, called, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
+        return Addressed(invocation, called.Identity) is { } rewrite
+            ? AsLegacy(rewrite, invocation, returns, context)
+            : Dispatch(invocation.Instance, called, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
     }
+
+    /// <summary>
+    /// <see cref="Rewritten"/>, as a value of the legacy call's type: the array an entry that returns one of its type
+    /// argument yields is read through the <c>cast</c> map to that type, as M3-010 lowers the implicit reference
+    /// conversion of the modern call's result (ticket P2-117). Any other entry's result is the legacy call's as it is.
+    /// </summary>
+    private IrVar? AsLegacy(Rewrite rewrite, IInvocationOperation invocation, IrType? returns, LoweringContext context) =>
+        rewrite.Plan.Returned is { } array
+            ? heap.MapRead(heap.Inputs.Cast(array, invocation.Type!), Rewritten(rewrite, invocation, Map(array), context)!, context)
+            : Rewritten(rewrite, invocation, returns, context);
 
     /// <summary>
     /// The call <paramref name="site"/> makes when it binds to <paramref name="method"/>. A call to a forwarder is the same
@@ -2476,31 +2511,54 @@ internal sealed class IrLowerer
     }
 
     /// <summary>
-    /// The modern call's arguments under <paramref name="entry"/>'s adapter, or null, with nothing emitted, when it cannot
-    /// address the legacy call's source arguments (<see cref="Plan"/>). The source arguments are evaluated in source order,
+    /// The first of <paramref name="callee"/>'s API-equivalence entries, in file order, whose adapter addresses
+    /// <paramref name="invocation"/>'s source arguments (<see cref="Plan"/>), with its plan; nothing is emitted. Null when
+    /// none does, or when the call has a <c>ref</c> or <c>out</c> argument.
+    /// </summary>
+    private Rewrite? Addressed(IInvocationOperation invocation, CallIdentity callee) =>
+        !invocation.Arguments.Any(static a => IsWritten(a.Parameter!)) && CallIdentityFactory.SourceArguments(invocation.Instance, invocation.Arguments) is { } sources
+            ? catalogue.Members[callee.Value]
+                .Select(entry => Plan(entry, [.. sources.OrderBy(static s => s.Position).Select(static s => s.Value)], invocation) is { } plan ? new Rewrite(entry, plan, sources) : null)
+                .FirstOrDefault(static r => r is not null)
+            : null;
+
+    /// <summary>
+    /// The call to <paramref name="rewrite"/>'s modern member that <paramref name="invocation"/> is, with the entry
+    /// recorded as applied (ADR 0020; ticket M3-009). Its result is the modern member's, of type
+    /// <paramref name="returns"/>: for an entry that returns an array of its type argument (ticket P2-117), that array,
+    /// which the caller converts to the legacy call's type.
+    /// </summary>
+    private IrVar? Rewritten(Rewrite rewrite, IInvocationOperation invocation, IrType? returns, LoweringContext context)
+    {
+        ImmutableArray<IrVar> adapted = Adapt(rewrite, invocation, context);
+        catalogue.Applied.Add(rewrite.Entry.Id);
+        string modern = rewrite.Entry.ModernOf(rewrite.Plan.TypeArgument?.ToDisplayString(TypeMapper.Unannotated));
+        return Call(new Callee(CallIdentityFactory.Of(modern, suppressedRuntimeChanges, runtime.Interval), Closed: false, invocation, invocation.TargetMethod.Name), adapted, returns, [], context);
+    }
+
+    /// <summary>
+    /// The modern call's arguments under <paramref name="rewrite"/>'s adapter, which addresses the legacy call's source
+    /// arguments (<see cref="Addressed"/>). The source arguments are evaluated in source order, a <c>typeof</c> that names
+    /// the modern member's type argument aside, which passes nothing (ticket P2-117),
     /// and then the receiver of an instance call is null-checked, as <see cref="Dispatch"/> checks the legacy call's
     /// (ticket P2-017); a static or extension call has no check, even when the modern member is an instance member (ADR 0020).
     /// The elements a <c>rest</c> item takes (ticket P2-143) are evaluated where the first of them is, each stored in the
     /// span's new array before the next, as <see cref="Collection"/> builds the span of the modern call; with no element
     /// the array is made after the other arguments, where the compiler passes an argument the source leaves out.
     /// </summary>
-    private ImmutableArray<IrVar>? Adapt(ApiEquivalence entry, IInvocationOperation invocation, LoweringContext context)
+    private ImmutableArray<IrVar> Adapt(Rewrite rewrite, IInvocationOperation invocation, LoweringContext context)
     {
-        if (CallIdentityFactory.SourceArguments(invocation.Instance, invocation.Arguments) is not { } sources
-            || Plan(entry.Arguments, [.. sources.OrderBy(static s => s.Position).Select(static s => s.Value)], invocation) is not { } plan)
-        {
-            return null;
-        }
-
+        (ApiEquivalence entry, AdapterPlan plan, ImmutableArray<(int Position, IOperation Value)> sources) = rewrite;
         IrVar[] values = new IrVar[sources.Length];
         IrVar? span = null;
+        ImmutableArray<int?> types = [.. entry.Arguments.Where(static a => a.TypeArgument).Select(static a => a.Source)];
         foreach ((int position, _) in sources.Where(s => s.Position <= plan.From))
         {
             if (position == plan.From)
             {
                 span = Span(plan.Rest!, invocation, plan.Operands[position..], context);
             }
-            else
+            else if (!types.Contains(position))
             {
                 values[position] = Value(plan.Operands[position], context);
             }
@@ -2513,11 +2571,11 @@ internal sealed class IrLowerer
 
         ImmutableArray<IrVar> adapted =
         [
-            .. entry.Arguments.Select((item, i) => item switch
+            .. entry.Arguments.Select(static (item, i) => (Item: item, Index: i)).Where(static a => !a.Item.TypeArgument).Select(a => a.Item switch
             {
                 { Rest: true } => span!,
-                { Source: { } source } => Adapted(plan.Operands[source], Sized(item, plan.Operands[source], values[source], context), plan.Targets[i], context),
-                _ => Const(TypeMapper.Constant(item.ConstantType!, item.Constant!)!, context),
+                { Source: { } source } item => Adapted(plan.Operands[source], Sized(item, plan.Operands[source], values[source], context), plan.Targets[a.Index], context),
+                var item => Const(TypeMapper.Constant(item.ConstantType!, item.Constant!)!, context),
             }),
         ];
         if (invocation.Instance is { Type.IsValueType: false } instance)
@@ -2534,10 +2592,13 @@ internal sealed class IrLowerer
     /// conversion and is not also used as it is; a <c>convertTo</c> type resolves and the conversion to it is an implicit
     /// identity, boxing or reference conversion; a constant parses; an argument with an integer range is known to lie in
     /// it (<see cref="KnownIntegers"/>; ticket P2-142); a <c>rest</c> item starts at the first element of
-    /// <paramref name="invocation"/>'s <c>params</c> array (<see cref="Rest"/>). Null when any of that fails.
+    /// <paramref name="invocation"/>'s <c>params</c> array (<see cref="Rest"/>); a type-argument item's argument is a
+    /// <c>typeof</c> of an enum type, and every argument an item says is of that type is (ticket P2-117). Null when any
+    /// of that fails.
     /// </summary>
-    private AdapterPlan? Plan(ImmutableArray<ApiArgument> items, ImmutableArray<IOperation> sources, IInvocationOperation invocation)
+    private AdapterPlan? Plan(ApiEquivalence entry, ImmutableArray<IOperation> sources, IInvocationOperation invocation)
     {
+        ImmutableArray<ApiArgument> items = entry.Arguments;
         IOperation[] operands = [.. sources];
         bool?[] unwrapped = new bool?[sources.Length];
         ImmutableArray<ITypeSymbol?>.Builder targets = ImmutableArray.CreateBuilder<ITypeSymbol?>(items.Length);
@@ -2560,7 +2621,12 @@ internal sealed class IrLowerer
             targets.Add(target);
         }
 
-        return Array.TrueForAll(unwrapped, static u => u is not null) ? new AdapterPlan([.. operands], targets.MoveToImmutable(), rest, from) : null;
+        ITypeSymbol? typeArgument = items.Where(static i => i.TypeArgument).Select(i => ((ITypeOfOperation)sources[i.Source.GetValueOrDefault()]).TypeOperand).FirstOrDefault();
+        IArrayTypeSymbol? returned = entry.ReturnsTypeArgumentArray ? compilation.CreateArrayTypeSymbol(typeArgument!) : null;
+        return Array.TrueForAll(unwrapped, static u => u is not null)
+            && !items.Any(i => i.OfTypeArgument && !SymbolEqualityComparer.Default.Equals(operands[i.Source.GetValueOrDefault()].Type, typeArgument))
+            ? new AdapterPlan([.. operands], targets.MoveToImmutable(), rest, from) { TypeArgument = typeArgument, Returned = returned }
+            : null;
     }
 
     /// <summary>
@@ -2612,6 +2678,11 @@ internal sealed class IrLowerer
         }
 
         unwrapped[position] = item.Unwrap;
+        if (item.TypeArgument)
+        {
+            return sources[position] is ITypeOfOperation { TypeOperand.TypeKind: TypeKind.Enum };
+        }
+
         if (item.Unwrap)
         {
             if (sources[position] is not IConversionOperation conversion || !conversion.GetConversion().IsImplicit)
@@ -2836,7 +2907,20 @@ internal sealed class IrLowerer
     /// array of a <c>rest</c> item's span, if there is one, and the source position its elements start at, which is the
     /// number of source arguments when there is none.
     /// </summary>
-    private sealed record AdapterPlan(ImmutableArray<IOperation> Operands, ImmutableArray<ITypeSymbol?> Targets, CollectionPlan? Rest, int From);
+    private sealed record AdapterPlan(ImmutableArray<IOperation> Operands, ImmutableArray<ITypeSymbol?> Targets, CollectionPlan? Rest, int From)
+    {
+        /// <summary>The enum type a type-argument item's <c>typeof</c> names, or null when the entry has no such item (ticket P2-117).</summary>
+        public ITypeSymbol? TypeArgument { get; init; }
+
+        /// <summary>The array of <see cref="TypeArgument"/> the modern member returns, when the entry says it returns one; else null.</summary>
+        public IArrayTypeSymbol? Returned { get; init; }
+    }
+
+    /// <summary>
+    /// An API-equivalence entry that rewrites a call, the plan of its adapter, and the call's source arguments in
+    /// evaluation order, each with its position.
+    /// </summary>
+    private sealed record Rewrite(ApiEquivalence Entry, AdapterPlan Plan, ImmutableArray<(int Position, IOperation Value)> Sources);
 
     /// <summary>
     /// The API-equivalence entries one body is lowered with (ADR 0020; ticket M3-009): member entries by legacy identity,

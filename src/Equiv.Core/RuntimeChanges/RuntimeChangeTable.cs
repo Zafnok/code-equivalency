@@ -54,20 +54,34 @@ public sealed class RuntimeChangeTable
 
     /// <summary>As the three-argument overload, but a row whose <see cref="RuntimeChange.Member"/> is in <paramref name="suppressed"/> never matches.</summary>
     public bool TryMatch(CallIdentity identity, RuntimeInterval interval, ImmutableArray<string> suppressed, out RuntimeChange match) =>
-        TryMatch(identity, interval, suppressed, [], out match);
+        TryMatch(identity, interval, suppressed, ordinalComparison: false, [], out match);
+
+    /// <summary>
+    /// As the four-argument overload, but when <paramref name="ordinalComparison"/> is true, the call passes
+    /// <c>StringComparison.Ordinal</c> or <c>OrdinalIgnoreCase</c> as a constant, which a row marked
+    /// <see cref="RuntimeChange.OrdinalUnaffected"/> does not match (ticket P2-075).
+    /// </summary>
+    public bool TryMatch(CallIdentity identity, RuntimeInterval interval, ImmutableArray<string> suppressed, bool ordinalComparison, out RuntimeChange match) =>
+        TryMatch(identity, interval, suppressed, ordinalComparison, [], out match);
 
     /// <summary>
     /// As the four-argument overload, for one call with <paramref name="arguments"/> (ticket P2-073): a row with a
     /// <see cref="RuntimeChange.Precondition"/> does not match a call whose constant arguments cannot reach its change.
     /// Without arguments every such row matches.
     /// </summary>
-    public bool TryMatch(CallIdentity identity, RuntimeInterval interval, ImmutableArray<string> suppressed, ImmutableArray<CallArgument> arguments, out RuntimeChange match)
+    public bool TryMatch(CallIdentity identity, RuntimeInterval interval, ImmutableArray<string> suppressed, ImmutableArray<CallArgument> arguments, out RuntimeChange match) =>
+        TryMatch(identity, interval, suppressed, ordinalComparison: false, arguments, out match);
+
+    /// <summary>One call's match, by both what <paramref name="ordinalComparison"/> and what its <paramref name="arguments"/> say of it (tickets P2-075 and P2-073).</summary>
+    public bool TryMatch(
+        CallIdentity identity, RuntimeInterval interval, ImmutableArray<string> suppressed, bool ordinalComparison, ImmutableArray<CallArgument> arguments, out RuntimeChange match)
     {
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentNullException.ThrowIfNull(interval);
 
         match = Rows.FirstOrDefault(row =>
             AppliesWithin(row, interval)
+            && !(ordinalComparison && row.OrdinalUnaffected)
             && identity.Value.StartsWith(row.Member, StringComparison.Ordinal)
             && !suppressed.Contains(row.Member, StringComparer.Ordinal)
             && (row.Precondition is not { } precondition || RuntimeChangeReach.CanReach(precondition, arguments)))!;
@@ -124,7 +138,8 @@ public sealed class RuntimeChangeTable
             {
                 Witness = ParseWitness(element),
                 ChangedIn = ParseChangedIn(member, element),
-                Precondition = ParsePrecondition(member, element),
+                Precondition = ParsePrecondition(member, element),
+                OrdinalUnaffected = element.TryGetProperty("ordinalUnaffected", out JsonElement ordinal) && ordinal.GetBoolean(),
             });
         }
 

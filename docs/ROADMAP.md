@@ -452,6 +452,7 @@ work, P2-050, P1-019, P2-051 and P2-052.
   - P2-094 (M) Precision bug: `string.Format` with plain holes is Divergent from the interpolated
     string it becomes.
   - P2-093 (S) A relational pattern (`>= 90`) lowers as a comparison, not opaque `switch-pattern`.
+    Done 2026-10-09: `Tidy.Grade(int)` is Equivalent in quick mode.
   - P2-095 (M) A conversion to `Nullable<T>` and `default(T?)` lower, so `x == null ? (int?)null :
     x.Length` and `x?.Length` are compared.
   - P2-096 (L) A filter loop against `Where(...).ToList()` is Unknown(abstraction). An `equiv-adr`

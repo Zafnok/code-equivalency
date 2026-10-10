@@ -48,6 +48,7 @@ public sealed class ForwarderLoweringTests
             static string Modern(string s) => string.IsNullOrWhiteSpace(s) ? "none" : s;
             static string Changed(string s) => Text.Trimmed(s) ? "none" : s;
             static bool Compared(string a, string b) => Text.Same(a, b, StringComparison.CurrentCulture);
+            static bool Ordered(string a, string b) => Text.Same(a, b, StringComparison.Ordinal);
             static bool Catalogued(string s) => Text.Old(s);
             static Func<string, bool> Group() => Text.Blank;
             static int? Lifted(int? a, string s) => a + Text.Size(s);
@@ -187,6 +188,22 @@ public sealed class ForwarderLoweringTests
     public void AForwarderToARuntimeChangedMemberIsRuntimeChanged()
     {
         (IMethodSymbol method, Compilation compilation) = Method("Compared");
+
+        IrCall call = Assert.Single(Lowered.Calls(IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration)));
+
+        Assert.Equal("System.String::Equals(string,string,System.StringComparison)", call.Callee.Value);
+        Assert.True(call.Callee.RuntimeChanged);
+        Assert.True(BodyFingerprinter.Compute(method, compilation, EquivConfig.Default, legacy: true, Runtimes.Migration)!.RuntimeSensitive);
+    }
+
+    /// <summary>
+    /// Ticket P2-075: an ordinal comparison handed to the forwarder is the forwarder's parameter at the target, which is not
+    /// a constant there, so the call to the target stays runtime-changed.
+    /// </summary>
+    [Fact]
+    public void AnOrdinalComparisonHandedToAForwarderDoesNotClearTheTargetsRow()
+    {
+        (IMethodSymbol method, Compilation compilation) = Method("Ordered");
 
         IrCall call = Assert.Single(Lowered.Calls(IrLowerer.Lower(method, compilation, RenameMap.Empty, [], Runtimes.Migration)));
 
