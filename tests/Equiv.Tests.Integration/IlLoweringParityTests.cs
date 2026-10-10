@@ -57,6 +57,8 @@ public sealed class IlLoweringParityTests
         [$"cleanup-modern-syntax/modern {Join}"] = InterpolatedString,
         [$"effect-free-bcl-call/modern {Basket}"] = ListFamily,
         [$"il-fallback/legacy {Nullables}Add(int?,int)"] = NullableValue,
+        [$"generic-enum-members/legacy {Count}"] = EnumeratorConversion,
+        [$"generic-enum-members/modern {Count}"] = CallResultArrayLoop,
         [$"il-fallback/legacy {Nullables}Wrap(int)"] = NullableValue,
         [$"lone-surrogate-constant/legacy {Find}"] = LiteralReceiver,
         [$"lone-surrogate-constant/modern {Find}"] = LiteralReceiver,
@@ -98,6 +100,8 @@ public sealed class IlLoweringParityTests
     private const string Join = "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)";
 
     private const string LengthOf = "Equiv.Samples.CleanupModernSyntax.Tidy::LengthOf(string)";
+
+    private const string Count = "Equiv.Samples.GenericEnumMembers.Days::Count()";
 
     private const string Nullables = "Equiv.Samples.IlFallback.Nullables::";
 
@@ -180,6 +184,21 @@ public sealed class IlLoweringParityTests
     /// through compiler-generated helpers, which the IL lowering leaves opaque (ADR 0039).
     /// </summary>
     private const string ParamsSpan = "IOperation lowers a params span as its array through a cast map; the IL leaves the inline array and its compiler-generated helpers opaque";
+
+    /// <summary>
+    /// The IOperation lowering calls <c>MoveNext</c> on the <c>IEnumerator&lt;T&gt;</c> a <c>foreach</c> over an
+    /// <c>IEnumerable&lt;T&gt;</c> gets; the compiler's <c>callvirt</c> names <c>IEnumerator</c>, so the IL lowering calls
+    /// it on the enumerator's conversion to that, read through a <c>cast</c> map (ticket P2-117's sample, as it is
+    /// lowered with no API equivalence).
+    /// </summary>
+    private const string EnumeratorConversion = "IOperation calls MoveNext on a foreach's IEnumerator<T>; the IL calls it on the enumerator's conversion to IEnumerator, read through a cast map";
+
+    /// <summary>
+    /// The IOperation lowering keeps the nullness of the array a <c>foreach</c> enumerates, here a call's result, in the
+    /// shadow of the capture that holds it (ticket P1-004); the IL lowering reads <c>null.&lt;T[]&gt;</c> at the array in
+    /// the loop, so the two loop headers hold different state and do not pair up.
+    /// </summary>
+    private const string CallResultArrayLoop = "IOperation keeps the null flag of a foreach's array, a call's result, in a shadow variable; the IL reads the null map in the loop, so the headers do not pair up";
 
     private static readonly VerificationOptions Options = new(EquivConfig.Default.Bound, EquivConfig.Default.TimeoutMs, []);
 
