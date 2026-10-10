@@ -107,103 +107,41 @@
           }
         },
         {
-          "ruleId": "EQ003",
-          "kind": "open",
+          "ruleId": "EQ001",
+          "kind": "pass",
           "level": "none",
           "message": {
-            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int) is unknown (Opaque): new: switch-pattern. It is equivalent on every input that reaches none of the related locations."
+            "text": "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int) is equivalent."
           },
           "locations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
+                  "uri": "file:///legacy/Tidy.cs"
                 },
                 "region": {
-                  "startLine": 12,
-                  "startColumn": 13,
-                  "endLine": 12,
-                  "endColumn": 23
+                  "startLine": 7,
+                  "startColumn": 20,
+                  "endLine": 7,
+                  "endColumn": 25
                 }
               }
             }
           ],
           "partialFingerprints": {
             "procedureIdentity/v1": "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int)",
-            "resultFingerprint/v1": "053e86cb5e71b02537da73f306242c1188933e480b278be6ff89f7e3d29e51d2"
+            "resultFingerprint/v1": "febf1270901fd62c633417994364ec5629cee7552d3a0ad387a6b28908702993"
           },
-          "relatedLocations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
-                },
-                "region": {
-                  "startLine": 12,
-                  "startColumn": 13,
-                  "endLine": 12,
-                  "endColumn": 23
-                }
-              },
-              "message": {
-                "text": "switch-pattern"
-              }
-            },
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
-                },
-                "region": {
-                  "startLine": 13,
-                  "startColumn": 13,
-                  "endLine": 13,
-                  "endColumn": 23
-                }
-              },
-              "message": {
-                "text": "switch-pattern"
-              }
-            },
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "file:///modern/Tidy.cs"
-                },
-                "region": {
-                  "startLine": 14,
-                  "startColumn": 13,
-                  "endLine": 14,
-                  "endColumn": 23
-                }
-              },
-              "message": {
-                "text": "switch-pattern"
-              }
-            }
-          ],
           "baselineState": "new",
-          "rank": 20.002,
           "properties": {
-            "unknownReason": "opaque",
-            "scope": "line",
-            "residualClaim": "equivalent unless a relatedLocation is reached",
-            "failureRefinement": {
-              "newFailures": {
-                "outcome": "unknown"
-              },
-              "removedFailures": {
-                "outcome": "none-proved"
-              }
-            },
+            "proofMethod": "bounded",
             "ladderTrace": [
               {
                 "rung": "bounded",
-                "outcome": "inconclusive",
-                "detail": "an input reaches an opaque node: new: switch-pattern"
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
               }
-            ],
-            "reviewGroup": "opaque:switch-pattern"
+            ]
           }
         },
         {
@@ -424,25 +362,19 @@
             "modern": 7
           },
           "matchedPairs": 7,
-          "pairsWithoutOpaque": 6,
+          "pairsWithoutOpaque": 7,
           "pairsWholeBodyOpaque": 0,
           "pairsCongruent": 0,
           "projectsSkipped": {
             "legacy": 0,
             "modern": 0
           },
-          "opaqueByReason": {
-            "switch-pattern": {
-              "legacy": 0,
-              "modern": 1
-            }
-          },
+          "opaqueByReason": {},
           "changedPairs": 7,
-          "changedPairsWithoutOpaque": 6,
+          "changedPairsWithoutOpaque": 7,
           "changedPairsWholeBodyOpaque": 0,
           "changedReasonSets": {
-            "": 6,
-            "switch-pattern": 1
+            "": 7
           },
           "runtimeChangeCalls": {
             "callSites": {
@@ -497,11 +429,11 @@
             ]
           },
           "unknownByScope": {
-            "line": 1,
+            "line": 0,
             "method": 1
           },
           "failureRefinement": {
-            "pairs": 2,
+            "pairs": 1,
             "milliseconds": 0
           },
           "agreesWhen": {
@@ -555,15 +487,6 @@
             "count": 1,
             "identities": [
               "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)"
-            ]
-          },
-          {
-            "group": "opaque:switch-pattern",
-            "ruleId": "EQ003",
-            "rank": 20.002,
-            "count": 1,
-            "identities": [
-              "Equiv.Samples.CleanupModernSyntax.Tidy::Grade(int)"
             ]
           },
           {

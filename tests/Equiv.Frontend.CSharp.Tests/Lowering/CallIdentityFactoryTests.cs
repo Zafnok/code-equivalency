@@ -102,6 +102,32 @@ public sealed class CallIdentityFactoryTests
         Assert.Equal(expected, Assert.Single(Calls(procedure)).Callee.RuntimeChanged);
     }
 
+    /// <summary>
+    /// Ticket P2-075: a culture-comparison row does not flag a call that passes <c>StringComparison.Ordinal</c> or
+    /// <c>OrdinalIgnoreCase</c> as a constant. A culture comparison, one that is not a constant, a call with no comparison and a
+    /// constant that is not a <c>StringComparison</c> but has the same value stay flagged.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(string s) => s.IndexOf(\"x\", System.StringComparison.Ordinal);", false)]
+    [InlineData("static int M(string s) => s.IndexOf(\"x\", System.StringComparison.OrdinalIgnoreCase);", false)]
+    [InlineData("static int M(string s) => s.IndexOf(\"x\", 1, System.StringComparison.Ordinal);", false)]
+    [InlineData("static int M(string s) => s.LastIndexOf(\"x\", System.StringComparison.OrdinalIgnoreCase);", false)]
+    [InlineData("static bool M(string s) => s.StartsWith(\"x\", System.StringComparison.Ordinal);", false)]
+    [InlineData("static bool M(string s) => s.EndsWith(\"x\", System.StringComparison.OrdinalIgnoreCase);", false)]
+    [InlineData("static int M(string a, string b) => string.Compare(a, b, System.StringComparison.Ordinal);", false)]
+    [InlineData("static bool M(string a, string b) => string.Equals(a, b, System.StringComparison.OrdinalIgnoreCase);", false)]
+    [InlineData("static bool M(string a, string b) => a.Equals(b, System.StringComparison.Ordinal);", false)]
+    [InlineData("static int M(string s) => s.IndexOf(\"x\", System.StringComparison.CurrentCulture);", true)]
+    [InlineData("static int M(string s) => s.IndexOf(\"x\", System.StringComparison.CurrentCultureIgnoreCase);", true)]
+    [InlineData("static int M(string s) => s.IndexOf(\"x\", System.StringComparison.InvariantCulture);", true)]
+    [InlineData("static int M(string s, System.StringComparison c) => s.IndexOf(\"x\", c);", true)]
+    [InlineData("static int M(string s) => s.IndexOf(\"x\");", true)]
+    [InlineData("static int M(string s) => s.IndexOf('x', 4);", true)]
+    [InlineData("static int M(string s) => s.IndexOf('x', 5);", true)]
+    [InlineData("static int M(string s) => s.GetHashCode();", true)]
+    public void AnOrdinalComparisonConstantIsNotRuntimeChanged(string member, bool expected) =>
+        Assert.Equal(expected, Assert.Single(Calls(Method(member))).Callee.RuntimeChanged);
+
     /// <summary>An <c>await</c>'s identity and an API equivalence's modern member are flagged inside the same interval as any callee.</summary>
     [Fact]
     public void EveryIdentityIsFlaggedInsideTheInterval()

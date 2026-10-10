@@ -22,29 +22,36 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// </summary>
 internal static class CallIdentityFactory
 {
-    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval)
-    {
-        return Of(Name(method, renames), suppressedRuntimeChanges, interval);
-    }
+    /// <summary><paramref name="ordinalComparison"/> says the call passes an ordinal comparison as a constant (<see cref="OrdinalComparison"/>; ticket P2-075).</summary>
+    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, bool ordinalComparison) =>
+        Of(Name(method, renames), suppressedRuntimeChanges, interval, ordinalComparison);
 
     /// <summary>
-    /// As the overload without a compilation, but also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
+    /// The identity of a call to a method of <paramref name="compilation"/>, which also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
     /// <paramref name="method"/>'s containing assembly is one of <paramref name="compilation"/>'s reference assemblies
     /// (<see cref="ReferenceAssemblies.IsReferenceAssembly(IAssemblySymbol)"/>): the framework or .NET reference pack the
     /// project compiled against, never the solution's own code (a <see cref="CompilationReference"/>, or the compilation's
     /// own assembly) or a NuGet package (a <see cref="PortableExecutableReference"/> without the attribute).
     /// </summary>
-    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval)
+    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval) =>
+        Of(method, compilation, renames, suppressedRuntimeChanges, interval, ordinalComparison: false);
+
+    /// <summary>As the overload without <paramref name="ordinalComparison"/>, which says the call passes an ordinal comparison as a constant (<see cref="OrdinalComparison"/>; ticket P2-075).</summary>
+    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, bool ordinalComparison)
     {
         ArgumentNullException.ThrowIfNull(compilation);
-        return Of(method, renames, suppressedRuntimeChanges, interval) with { External = IsExternal(method.ContainingAssembly, compilation) };
+        return Of(method, renames, suppressedRuntimeChanges, interval, ordinalComparison) with { External = IsExternal(method.ContainingAssembly, compilation) };
     }
 
     /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be inside <paramref name="interval"/>.</summary>
-    public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval)
+    public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval) =>
+        Of(value, suppressedRuntimeChanges, interval, ordinalComparison: false);
+
+    /// <summary>As the overload without <paramref name="ordinalComparison"/>, which says the call passes an ordinal comparison as a constant (<see cref="OrdinalComparison"/>; ticket P2-075).</summary>
+    public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, bool ordinalComparison)
     {
         CallIdentity callee = new(value);
-        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, interval, suppressedRuntimeChanges, out _) };
+        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, interval, suppressedRuntimeChanges, ordinalComparison, out _) };
     }
 
     /// <summary>The <see cref="CallIdentity.Value"/> of a call to <paramref name="method"/>, which no runtime rule changes.</summary>

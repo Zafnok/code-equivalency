@@ -38,7 +38,9 @@ public sealed class ApiEquivalenceTable
     /// <c>url</c>). Each argument is <c>{"arg": n}</c>, optionally with <c>"unwrap": true</c> or <c>"convertTo"</c>, or
     /// <c>{"const": literal, "type": irType}</c>, whose literal is kept as its JSON text, or <c>{"rest": n}</c>. An <c>arg</c> item may carry
     /// <c>"integer": {"bits": n, "min": a, "max": b}</c>, and a member entry <c>"addedIn"</c>, a target framework moniker;
-    /// one that names no runtime is rejected with <see cref="InvalidDataException"/> (ticket P2-142).
+    /// one that names no runtime is rejected with <see cref="InvalidDataException"/> (ticket P2-142). An argument may
+    /// also be <c>{"typeArgument": n}</c>, an <c>arg</c> item may carry <c>"ofTypeArgument": true</c>, and a member entry
+    /// <c>"returnsTypeArgumentArray": true</c>, which without a <c>typeArgument</c> item is rejected likewise (ticket P2-117).
     /// </summary>
     internal static ApiEquivalenceTable Parse(string json)
     {
@@ -51,20 +53,34 @@ public sealed class ApiEquivalenceTable
         string id = element.GetProperty("id").GetString()!;
         string reason = element.GetProperty("reason").GetString()!;
         Uri url = new(element.GetProperty("url").GetString()!, UriKind.Absolute);
-        return element.TryGetProperty("legacyType", out JsonElement legacyType)
-            ? new ApiEquivalence(id, IsType: true, legacyType.GetString()!, element.GetProperty("modernType").GetString()!, [], reason, url)
-            : new ApiEquivalence(
-                id,
-                IsType: false,
-                element.GetProperty("legacy").GetString()!,
-                element.GetProperty("modern").GetString()!,
-                [.. element.GetProperty("arguments").EnumerateArray().Select(Argument)],
-                reason,
-                url)
-            {
-                AddedIn = element.TryGetProperty("addedIn", out JsonElement added) ? Runtime(id, added.GetString()!) : null,
-            };
+        if (element.TryGetProperty("legacyType", out JsonElement legacyType))
+        {
+            return new ApiEquivalence(id, IsType: true, legacyType.GetString()!, element.GetProperty("modernType").GetString()!, [], reason, url);
+        }
+
+        ApiEquivalence member = new(
+            id,
+            IsType: false,
+            element.GetProperty("legacy").GetString()!,
+            element.GetProperty("modern").GetString()!,
+            [.. element.GetProperty("arguments").EnumerateArray().Select(Argument)],
+            reason,
+            url)
+        {
+            AddedIn = element.TryGetProperty("addedIn", out JsonElement added) ? Runtime(id, added.GetString()!) : null,
+            ReturnsTypeArgumentArray = Flag(element, "returnsTypeArgumentArray"),
+        };
+        return member.ReturnsTypeArgumentArray && !member.Arguments.Any(static a => a.TypeArgument)
+            ? throw new InvalidDataException($"api-equivalences entry '{id}' returns an array of a type argument it does not have")
+            : member;
     }
+
+    /// <summary>
+    /// Whether <paramref name="element"/> has the property <paramref name="name"/> with the value <c>true</c>. The '&amp;'
+    /// is deliberately not short-circuit: when the property is absent, the default element's kind is Undefined, not True.
+    /// </summary>
+    private static bool Flag(JsonElement element, string name) =>
+        element.TryGetProperty(name, out JsonElement flag) & flag.ValueKind == JsonValueKind.True; // NOSONAR
 
     private static TargetRuntime Runtime(string id, string text) =>
         TargetRuntime.Parse(text) ?? throw new InvalidDataException($"api-equivalences entry '{id}' has malformed addedIn '{text}'");
@@ -84,12 +100,16 @@ public sealed class ApiEquivalenceTable
             return new ApiArgument(rest.GetInt32(), Rest: true);
         }
 
-        // Deliberate non-short-circuit '&': when "unwrap" is absent, the default element's kind is Undefined, not True.
-        bool unwrap = element.TryGetProperty("unwrap", out JsonElement flag) & flag.ValueKind == JsonValueKind.True; // NOSONAR
+        if (element.TryGetProperty("typeArgument", out JsonElement typeArgument))
+        {
+            return new ApiArgument(typeArgument.GetInt32()) { TypeArgument = true };
+        }
+
         string? convertTo = element.TryGetProperty("convertTo", out JsonElement type) ? type.GetString() : null;
-        return new ApiArgument(element.GetProperty("arg").GetInt32(), unwrap, convertTo)
+        return new ApiArgument(element.GetProperty("arg").GetInt32(), Flag(element, "unwrap"), convertTo)
         {
             Range = element.TryGetProperty("integer", out JsonElement range) ? Range(range) : null,
+            OfTypeArgument = Flag(element, "ofTypeArgument"),
         };
     }
 

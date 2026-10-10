@@ -212,7 +212,8 @@ internal sealed class BoundSerialiser : OperationWalker
         CallerLocationKind? caller = CallerLocation.Of(operation);
         Append("const", caller is null && operation.ConstantValue.HasValue ? Constant(operation.ConstantValue.Value) : null);
         Append("caller", caller?.ToString());
-        Append("symbols", string.Join(", ", Symbols(operation).OfType<ISymbol>().Select(Render)));
+        bool ordinalComparison = IsOrdinalComparisonCall(operation);
+        Append("symbols", string.Join(", ", Symbols(operation).OfType<ISymbol>().Select(symbol => Render(symbol, ordinalComparison))));
         Append("context", Context(operation));
         text.Append('\n');
         if (operation is ILocalFunctionOperation local)
@@ -553,12 +554,21 @@ internal sealed class BoundSerialiser : OperationWalker
 
     private static string Checked(bool isChecked) => isChecked ? "checked" : "unchecked";
 
-    private string Render(ISymbol symbol) => symbol switch
+    /// <summary>
+    /// Whether <paramref name="operation"/> calls its own target with an ordinal <c>StringComparison</c> constant (ticket
+    /// P2-075). A call to a forwarder calls the forwarder's target with the forwarder's arguments, which say nothing of it.
+    /// </summary>
+    private bool IsOrdinalComparisonCall(IOperation operation) =>
+        operation is IInvocationOperation invocation
+        && OrdinalComparison.IsConstantArgument(invocation)
+        && SymbolEqualityComparer.Default.Equals(Called(invocation.TargetMethod), invocation.TargetMethod);
+
+    private string Render(ISymbol symbol, bool ordinalComparison) => symbol switch
     {
         IMethodSymbol { MethodKind: MethodKind.AnonymousFunction or MethodKind.LocalFunction } m =>
             $"{Number(m, "F")}(async={m.IsAsync} {string.Join(", ", m.Parameters.Select(p => $"{p.RefKind} {Type(p.Type)}"))}) -> {(m.ReturnsVoid ? "void" : Type(m.ReturnType))}",
-        IMethodSymbol m => Method(m),
-        IPropertySymbol p => string.Join('|', ((IMethodSymbol?[])[p.GetMethod, p.SetMethod]).OfType<IMethodSymbol>().Select(Method)),
+        IMethodSymbol m => Method(m, ordinalComparison),
+        IPropertySymbol p => string.Join('|', ((IMethodSymbol?[])[p.GetMethod, p.SetMethod]).OfType<IMethodSymbol>().Select(accessor => Method(accessor))),
         ILocalSymbol l => $"{Number(l, "L")}:{l.RefKind} {Type(l.Type)}",
         ILabelSymbol => Number(symbol, "B"),
         IParameterSymbol p when SymbolEqualityComparer.Default.Equals(p.ContainingSymbol, method) =>
@@ -581,9 +591,9 @@ internal sealed class BoundSerialiser : OperationWalker
     }
 
     /// <summary>A callee as the IR's <c>IrCall</c> names it, rewritten by a pass-through API-equivalence entry; flags the body when a table row applies to it.</summary>
-    private string Method(IMethodSymbol callee)
+    private string Method(IMethodSymbol callee, bool ordinalComparison = false)
     {
-        CallIdentity identity = CallIdentityFactory.Of(callee, renames, suppressedRuntimeChanges, runtime.Interval);
+        CallIdentity identity = CallIdentityFactory.Of(callee, renames, suppressedRuntimeChanges, runtime.Interval, ordinalComparison);
         if (members.TryGetValue(identity.Value, out string? modern))
         {
             identity = CallIdentityFactory.Of(modern, suppressedRuntimeChanges, runtime.Interval);

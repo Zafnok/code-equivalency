@@ -10,6 +10,8 @@ namespace Equiv.Core.ApiEquivalences;
 /// With <see cref="Rest"/> (ticket P2-143), <see cref="Source"/> is where the elements of the legacy call's <c>params</c>
 /// array start, and the item is all of them, to the last source argument, as the <c>System.ReadOnlySpan&lt;T&gt;</c> the
 /// compiler builds from the same elements for the modern member's <c>params</c> span parameter.
+/// With <see cref="TypeArgument"/> (ticket P2-117), the item passes nothing: the legacy call's source argument at
+/// <see cref="Source"/> is a <c>typeof</c> of an enum type, which is the modern member's type argument.
 /// </summary>
 public sealed record ApiArgument(int? Source, bool Unwrap = false, string? ConvertTo = null, string? ConstantType = null, string? Constant = null, bool Rest = false)
 {
@@ -18,4 +20,17 @@ public sealed record ApiArgument(int? Source, bool Unwrap = false, string? Conve
     /// range, and is passed as a signed integer of the range's width (ticket P2-142). Null for any other item.
     /// </summary>
     public ApiIntegerRange? Range { get; init; }
+
+    /// <summary>
+    /// The source argument is <c>typeof(E)</c> for an enum type <c>E</c>, and <c>E</c> is the type argument the modern
+    /// member is constructed with: <see cref="ApiEquivalence.ModernOf"/> names it (ticket P2-117). A call whose argument
+    /// is any other <c>System.Type</c> is left as it is.
+    /// </summary>
+    public bool TypeArgument { get; init; }
+
+    /// <summary>
+    /// With a <see cref="Source"/>: the argument, as the item takes it, is of exactly the type a
+    /// <see cref="TypeArgument"/> item of the same entry names (ticket P2-117). A call where it is not is left as it is.
+    /// </summary>
+    public bool OfTypeArgument { get; init; }
 }

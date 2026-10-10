@@ -94,7 +94,7 @@ public sealed class LoweringOracleTests
     {
         string source = Source(cases.Select(static c => c.Method));
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda, .. LoweringOracleGen.Nullables])
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda, .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }

@@ -488,6 +488,19 @@ Migration-specific normalisations (applied to both sides before matching):
   above), each element evaluated and stored where the legacy call evaluates it. A call that passes
   an array, not elements, is not rewritten. These entries too name the runtime that added their
   modern member, .NET 9, and apply only to a pair that crosses it.
+  A `Type`-taking member whose generic form an analyzer suggests (CA2263) has an entry (ticket
+  P2-117): `Enum::IsDefined(Type, Object)` → `Enum::IsDefined<T>(T)` and `Enum::GetValues(Type)` →
+  `Enum::GetValues<T>()`. Its adapter has a `typeArgument` item: the source argument at that
+  position must be `typeof(E)` for an enum type `E`, it passes nothing, and `E` is the type
+  argument the modern member is constructed with. `IsDefined`'s value must be of that same `E`. A
+  `Type` that is anything else (a variable, a `typeof` of another type), or a value of another
+  type, leaves the call as it is. `GetValues<E>()` returns the `E[]` the legacy member returns
+  typed as `Array`, so the rewritten call yields the array, read through the `cast` map to `Array`
+  as source that converts the modern call's result is. Where that call is the operand of
+  `Enumerable.Cast<E>()` and a `foreach` enumerates the result, the loop is the index loop over the
+  array, as the modern side's `foreach` over `Enum.GetValues<E>()` is: `Cast<E>` returns the `E[]`
+  it is given, and an array enumerated through `IEnumerable<E>` yields its elements in index
+  order. Anywhere else the `Cast<E>()` call is lowered as it stands.
 - Rebound call sites (ADR 0042, ticket P2-069). A call site is a call the lowering emits for a member
   at a syntax node: an invocation, an object creation, a property, indexer or event accessor, an
   `await`. Its key is the node's source tokens and the member's name. When a key occurs on both sides

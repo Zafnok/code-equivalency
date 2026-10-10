@@ -25,8 +25,11 @@ internal sealed class ArrayForEachLoops
 
     private readonly HashSet<ControlFlowRegion> finallys = [];
 
-    private ArrayForEachLoops()
+    private readonly Func<IOperation, (IOperation Array, IArrayTypeSymbol Type)?> known;
+
+    private ArrayForEachLoops(Func<IOperation, (IOperation Array, IArrayTypeSymbol Type)?> known)
     {
+        this.known = known;
     }
 
     /// <summary>What a recognised operation is in its loop.</summary>
@@ -42,16 +45,19 @@ internal sealed class ArrayForEachLoops
         Element,
     }
 
-    public static ArrayForEachLoops Find(ControlFlowGraph cfg)
+    /// <summary>
+    /// The loops of <paramref name="cfg"/>. <paramref name="known"/> says of a collection that is not typed as an array
+    /// which array it is known to be, and the operation that yields it, or null (ticket P2-117).
+    /// </summary>
+    public static ArrayForEachLoops Find(ControlFlowGraph cfg, Func<IOperation, (IOperation Array, IArrayTypeSymbol Type)?> known)
     {
-        ArrayForEachLoops loops = new();
+        ArrayForEachLoops loops = new(known);
         Dictionary<ILocalSymbol, IArrayTypeSymbol> arrays = new(
             cfg.OriginalOperation.Descendants()
                 .OfType<IForEachLoopOperation>()
-                // The tree wraps the collection in its conversion to the enumerated type; the array is that conversion's operand.
-                .SelectMany(static l => Chain(l.Collection).Skip(1).Take(1).Select(c => (Loop: l, c.Type)))
-                .Where(static l => l.Type is IArrayTypeSymbol { IsSZArray: true } && l.Loop.LoopControlVariable is IVariableDeclaratorOperation)
-                .Select(static l => KeyValuePair.Create(((IVariableDeclaratorOperation)l.Loop.LoopControlVariable).Symbol, (IArrayTypeSymbol)l.Type!)),
+                .Select(l => (Loop: l, loops.Enumerated(l.Collection)?.Type))
+                .Where(static l => l.Type is not null && l.Loop.LoopControlVariable is IVariableDeclaratorOperation)
+                .Select(static l => KeyValuePair.Create(((IVariableDeclaratorOperation)l.Loop.LoopControlVariable).Symbol, l.Type!)),
             SymbolEqualityComparer.Default);
         foreach (ISimpleAssignmentOperation assignment in cfg.Blocks.SelectMany(static b => b.Operations).OfType<ISimpleAssignmentOperation>())
         {
@@ -77,7 +83,7 @@ internal sealed class ArrayForEachLoops
         CaptureId enumerator = current.Id;
         IFlowCaptureOperation start = cfg.Blocks.SelectMany(static b => b.Operations).OfType<IFlowCaptureOperation>().First(c => c.Id.Equals(enumerator));
         BasicBlock header = cfg.Blocks.First(b => b.BranchValue is IInvocationOperation { Instance: IFlowCaptureReferenceOperation receiver } && receiver.Id.Equals(enumerator));
-        IOperation collection = ((IConversionOperation)((IInvocationOperation)start.Value).Instance!).Operand;
+        IOperation collection = Enumerated(((IInvocationOperation)start.Value).Instance!).GetValueOrDefault().Array;
         // The MoveNext block is the `try` of the enumerator's `try`/`finally`.
         Loop loop = new(enumerator, collection, type, header.EnclosingRegion.EnclosingRegion!.NestedRegions[^1]);
 
@@ -99,6 +105,16 @@ internal sealed class ArrayForEachLoops
             finallys.Add(loop.Finally);
         }
     }
+
+    /// <summary>
+    /// The array a <c>foreach</c> enumerates and its type, given the collection as the loop has it, in the tree or as the
+    /// receiver of the CFG's <c>GetEnumerator</c>: the operand of the collection's conversion to the enumerated type, when
+    /// that is a single-dimensional array, or what <see cref="known"/> says of the collection. Null for any other.
+    /// </summary>
+    private (IOperation Array, IArrayTypeSymbol Type)? Enumerated(IOperation collection) =>
+        Chain(collection).Skip(1).Take(1)
+            .Select(operand => operand.Type is IArrayTypeSymbol { IsSZArray: true } array ? (operand, array) : known(operand))
+            .FirstOrDefault();
 
     /// <summary><paramref name="value"/> and the operands of the conversions it wraps, outermost first.</summary>
     private static IEnumerable<IOperation> Chain(IOperation value)
