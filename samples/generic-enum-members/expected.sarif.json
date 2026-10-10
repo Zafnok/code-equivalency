@@ -1,0 +1,254 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.GenericEnumMembers.Days::Known(System.DayOfWeek) is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Days.cs"
+                },
+                "region": {
+                  "startLine": 8,
+                  "startColumn": 24,
+                  "endLine": 8,
+                  "endColumn": 29
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.GenericEnumMembers.Days::Known(System.DayOfWeek)",
+            "resultFingerprint/v1": "8747e94806d7cd91ec3f3c19561f3b03d4d0366ed3ff08e76e9de63eb4273466"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "bounded",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "proved",
+                "detail": "no loop or self-call; every input checked"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.enum-is-defined-generic"
+            ]
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.GenericEnumMembers.Days::Count() is equivalent."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Days.cs"
+                },
+                "region": {
+                  "startLine": 13,
+                  "startColumn": 23,
+                  "endLine": 13,
+                  "endColumn": 28
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.GenericEnumMembers.Days::Count()",
+            "resultFingerprint/v1": "8b2db827fb95bd7ebd83a4f3998bcd150a73dca4c2b2462662e7a7c83bd7e4b6"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "lockstep-induction",
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "no divergence within the bound 3, and some input goes past it"
+              },
+              {
+                "rung": "lockstep-induction",
+                "outcome": "proved",
+                "detail": "base and 1 step obligations hold"
+              }
+            ],
+            "equivalencesApplied": [
+              "bcl.enum-get-values-generic"
+            ]
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 2,
+            "modern": 2
+          },
+          "matchedPairs": 2,
+          "pairsWithoutOpaque": 2,
+          "pairsWholeBodyOpaque": 0,
+          "pairsCongruent": 0,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {},
+          "changedPairs": 2,
+          "changedPairsWithoutOpaque": 2,
+          "changedPairsWholeBodyOpaque": 0,
+          "changedReasonSets": {
+            "": 2
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [],
+            "modern": [
+              {
+                "member": "System.Enum::GetValues`1()<System.DayOfWeek>",
+                "callSites": 1
+              },
+              {
+                "member": "System.Enum::IsDefined`1(System.DayOfWeek)<System.DayOfWeek>",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 31,
+          "modern": 31
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.GenericEnumMembers",
+              "runtime": "net8.0",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.GenericEnumMembers",
+              "runtime": "net10.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": []
+      }
+    }
+  ]
+}
