@@ -267,6 +267,14 @@ public sealed class IrLowererSnapshotTests
     [Fact]
     public Task NullConditionalLengthWithFallback() => Dump("static int M(string s) => s?.Length ?? 0;");
 
+    /// <summary>Ticket P2-095 acceptance criterion 2: <c>null</c> converted to <c>int?</c> has no value, and an <c>int</c> converted to it has that value.</summary>
+    [Fact]
+    public Task NullableConversionOfNullAndOfAValue() => Dump("static int? M(string x) => x == null ? (int?)null : x.Length;");
+
+    /// <summary>Ticket P2-095 acceptance criteria 2 and 3: the <c>default(int?)</c> of <c>?.</c> is the value <c>(int?)null</c> is.</summary>
+    [Fact]
+    public Task NullConditionalLength() => Dump("static int? M(string x) => x?.Length;");
+
     /// <summary>Ticket P2-008 acceptance criterion 1: <c>?.</c> on a property, then <c>??</c> with a string constant.</summary>
     [Fact]
     public Task NullConditionalPropertyWithFallback() => Dump("class Person { public string Name { get; } } static string M(Person p) => p?.Name ?? \"anonymous\";");

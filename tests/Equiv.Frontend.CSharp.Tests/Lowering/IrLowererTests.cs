@@ -203,7 +203,8 @@ public sealed class IrLowererTests
     /// <summary>
     /// Ticket P2-008 acceptance criterion 2: <c>s?.Length ?? 0</c> branches first on <c>s</c>'s null shadow, as
     /// <c>s == null ? 0 : s.Length</c> does, and its <c>??</c> then branches on the null shadow of the <c>int?</c> the CFG
-    /// captures, not on an opaque. That second branch is the one the spelled-out form lacks (see the ticket's Deviation).
+    /// captures, not on an opaque. That last branch is the one the spelled-out form lacks (see the ticket's Deviation). The
+    /// shadow is the capture's own, joined from the two values it holds (ticket P2-095), and no read of a null map.
     /// </summary>
     [Fact]
     public void NullConditionalBranchesAsTheExplicitNullTestDoes()
@@ -214,7 +215,8 @@ public sealed class IrLowererTests
         ImmutableArray<string> tests = NullTests(conditional);
 
         Assert.Equal("null.System.String[s]", tests[0]);
-        Assert.Equal("null.System.Nullable_1", tests[1]);
+        Assert.Equal("null.System.String[s]", tests[1]);
+        Assert.DoesNotContain("null.", tests[2], StringComparison.Ordinal);
         Assert.Equal("null.System.String[s]", NullTests(spelledOut)[0]);
     }
 
@@ -1683,7 +1685,7 @@ public sealed class IrLowererTests
     [InlineData("static int M((int, (int, int)) t, int[] xs) { int a; (a, (xs[0], _)) = t; return a; }", "DeconstructionAssignment", 2)]
     [InlineData("static int M(object o) => o is int x ? x : 0;", "switch-pattern", 2)]
     [InlineData("static int M(object o) => o is int _ ? 1 : 0;", "switch-pattern", 1)]
-    [InlineData("static int M(string s) { int? d = (int?)P(s, out int n); return n; } static int P(string s, out int n) => n = 0;", "Conversion", 2)]
+    [InlineData("static int M(string s) { double? d = (double?)P(s, out int n); return n; } static int P(string s, out int n) => n = 0;", "Conversion", 2)]
     public void AVariableWrittenByAnotherOpaqueIsDefined(string members, string reason, int opaques) =>
         AssertDefined(Method(members), reason, opaques);
 
