@@ -2397,7 +2397,7 @@ internal sealed class IrLowerer
     private Callee Bound(IMethodSymbol method, IOperation site)
     {
         IMethodSymbol target = method;
-        CallIdentity callee = Identity(target);
+        CallIdentity callee = Identity(target, ordinalComparison: site is IInvocationOperation invocation && OrdinalComparison.IsConstantArgument(invocation));
         if (!catalogue.Sites.KeptForwarders.Contains(callee.Value) && Forwarders.Resolve(target, compilation) is { } resolved)
         {
             CallIdentity forwarded = CallIdentityFactory.Of(resolved.Target, resolved.Compilation, renames, suppressedRuntimeChanges, runtime.Interval);
@@ -2710,7 +2710,10 @@ internal sealed class IrLowerer
     /// <summary>The setter an assignment calls; an init-only one is callable only from an initializer, which is not lowered.</summary>
     private static IMethodSymbol? Setter(IPropertySymbol property) => property.SetMethod is { IsInitOnly: false } setter ? setter : null;
 
-    private CallIdentity Identity(IMethodSymbol method) => CallIdentityFactory.Of(method, compilation, renames, suppressedRuntimeChanges, runtime.Interval);
+    private CallIdentity Identity(IMethodSymbol method) => Identity(method, ordinalComparison: false);
+
+    private CallIdentity Identity(IMethodSymbol method, bool ordinalComparison) =>
+        CallIdentityFactory.Of(method, compilation, renames, suppressedRuntimeChanges, runtime.Interval, ordinalComparison);
 
     /// <summary>A call to <paramref name="method"/> lowered at <paramref name="site"/>.</summary>
     private Callee Called(IMethodSymbol method, IOperation site) => new(Identity(method), ClosedCalls.IsClosed(method), site, method.Name);

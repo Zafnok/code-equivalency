@@ -516,6 +516,23 @@ public sealed partial class SamplesEndToEndTests
         }
     }
 
+    /// <summary>
+    /// Ticket P2-075 criterion 1: <c>s.IndexOf("x.exe", StringComparison.OrdinalIgnoreCase)</c> on a .NET Framework 4.8 to .NET 10
+    /// pair is Equivalent, because the ICU row does not apply to an ordinal comparison; the same call with
+    /// <c>CurrentCultureIgnoreCase</c> stays EQ006.
+    /// </summary>
+    [Fact]
+    public void RuntimeRowUnaffectedOverload_AnOrdinalComparisonIsEquivalentAndACultureOneStaysEQ006()
+    {
+        Result ordinal = Single("runtime-row-unaffected-overload", "::Has(");
+        Result culture = Single("runtime-row-unaffected-overload", "::HasCulture(");
+
+        Assert.Equal("EQ001", ordinal.RuleId);
+        Assert.Equal("congruence", ordinal.GetProperty<string>("proofMethod"));
+        Assert.Equal("EQ006", culture.RuleId);
+        Assert.Equal(2, RunSample("runtime-row-unaffected-overload").Log.Runs[0].Results.Count);
+    }
+
     [Fact]
     public void AddedRemoved_HasAnEQ004AndAnEQ005()
     {

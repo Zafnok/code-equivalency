@@ -248,6 +248,56 @@ public sealed class RuntimeChangeTableTests
         Assert.True(table.TryMatch(new CallIdentity("System.String::IndexOf(char)"), Interval("net48", "net10.0"), out _));
     }
 
+    /// <summary>Ticket P2-075 criterion 2: the <c>ListViewGroup</c> rows name <c>Add</c> and <c>Insert</c>, not the collection's other members.</summary>
+    [Theory]
+    [InlineData("System.Windows.Forms.ListViewGroupCollection::Add(System.Windows.Forms.ListViewGroup)", true)]
+    [InlineData("System.Windows.Forms.ListViewGroupCollection::Add(string,string)", true)]
+    [InlineData("System.Windows.Forms.ListViewGroupCollection::Insert(int32,System.Windows.Forms.ListViewGroup)", true)]
+    [InlineData("System.Windows.Forms.ListViewGroupCollection::GetEnumerator()", false)]
+    [InlineData("System.Windows.Forms.ListViewGroupCollection::get_Count()", false)]
+    [InlineData("System.Windows.Forms.ListViewGroupCollection::AddRange(System.Windows.Forms.ListViewGroup[])", false)]
+    [InlineData("System.Windows.Forms.ListViewGroupCollection::Remove(System.Windows.Forms.ListViewGroup)", false)]
+    public void ListViewGroupRowsMatchOnlyAddAndInsert(string identityValue, bool matches)
+    {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+
+        Assert.Equal(matches, table.TryMatch(new CallIdentity(identityValue), table.Coverage, out _));
+    }
+
+    /// <summary>
+    /// Ticket P2-075 criterion 1: a call that passes an ordinal <c>StringComparison</c> as a constant is not matched by a
+    /// culture-comparison row, and is matched by every other row, and by the culture-comparison row when the comparison is
+    /// not ordinal.
+    /// </summary>
+    [Theory]
+    [InlineData("System.String::IndexOf(string,System.StringComparison)")]
+    [InlineData("System.String::LastIndexOf(string,System.StringComparison)")]
+    [InlineData("System.String::StartsWith(string,System.StringComparison)")]
+    [InlineData("System.String::EndsWith(string,System.StringComparison)")]
+    [InlineData("System.String::Compare(string,string,System.StringComparison)")]
+    [InlineData("System.String::CompareTo(string)")]
+    [InlineData("System.String::Equals(string,System.StringComparison)")]
+    [InlineData("System.String::Equals(string,string,System.StringComparison)")]
+    public void OrdinalComparisonIsNotMatchedByACultureComparisonRow(string identityValue)
+    {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        CallIdentity identity = new(identityValue);
+
+        Assert.True(table.TryMatch(identity, table.Coverage, [], ordinalComparison: false, out RuntimeChange match));
+        Assert.True(match.OrdinalUnaffected);
+        Assert.False(table.TryMatch(identity, table.Coverage, [], ordinalComparison: true, out _));
+    }
+
+    [Fact]
+    public void OrdinalComparisonStillMatchesARowThatIsNotAboutCultureComparison()
+    {
+        RuntimeChangeTable table = RuntimeChangeTable.Load();
+        CallIdentity identity = new("System.String::GetHashCode()");
+
+        Assert.True(table.TryMatch(identity, table.Coverage, [], ordinalComparison: true, out RuntimeChange match));
+        Assert.False(match.OrdinalUnaffected);
+    }
+
     [Fact]
     public void NullIntervalThrows()
     {
