@@ -144,12 +144,17 @@ public sealed class RuntimeChangeTable
         witness.GetProperty("legacy").GetRawText(),
         witness.GetProperty("modern").GetRawText());
 
-    private static RowPrecondition? ParseRequires(string member, JsonElement element) =>
-        !element.TryGetProperty("requires", out JsonElement value)
-            ? null
-            : value.ValueKind == JsonValueKind.String && string.Equals(value.GetString(), "asyncStreamOperation", StringComparison.Ordinal)
-                ? RowPrecondition.AsyncStreamOperation
-                : throw new InvalidDataException($"runtime-changes row '{member}' has unknown requires {value.GetRawText()}");
+    private static RowPrecondition? ParseRequires(string member, JsonElement element)
+    {
+        if (!element.TryGetProperty("requires", out JsonElement value))
+        {
+            return null;
+        }
+
+        return value.ValueKind == JsonValueKind.String && string.Equals(value.GetString(), "asyncStreamOperation", StringComparison.Ordinal)
+            ? RowPrecondition.AsyncStreamOperation
+            : throw new InvalidDataException($"runtime-changes row '{member}' has unknown requires {value.GetRawText()}");
+    }
 
     private static RuntimeChangeSource ParseSource(string member, JsonElement element)
     {
