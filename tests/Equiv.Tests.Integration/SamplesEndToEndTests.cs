@@ -414,6 +414,32 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P2-074 criterion 2: a path-validation row does not fire on the directory of <c>Assembly.Location</c>, a
+    /// valid-path source, nor on a <c>StreamReader</c> opened only where <c>File.Exists</c> returned true for the path.
+    /// Neither method has an EQ006; both are congruent.
+    /// </summary>
+    [Theory]
+    [InlineData("Paths::BaseDir(")]
+    [InlineData("Paths::Load(")]
+    public void RuntimeRowValidPathSource_AValidPathDoesNotFireThePathRows(string method)
+    {
+        Result result = Single("runtime-row-valid-path-source", method);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>Ticket P2-074 criterion 2: a parameter passed straight to <c>Path.Combine</c> stays EQ006, the only one in the sample.</summary>
+    [Fact]
+    public void RuntimeRowValidPathSource_AParameterPassedStraightThroughStaysDivergent()
+    {
+        Result result = Assert.Single(RunSample("runtime-row-valid-path-source").Log.Runs[0].Results, static r => string.Equals(r.RuleId, "EQ006", StringComparison.Ordinal));
+
+        Assert.Contains("Paths::Under(", result.Message.Text, StringComparison.Ordinal);
+        Assert.Contains("invalid path characters", result.Message.Text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Ticket P2-055 criterion 2 (ADR 0040 decision 2): both sides run on .NET 10, so no runtime rule applies. The
     /// byte-identical method that calls <c>double.ToString()</c> and <c>string.StartsWith(string)</c> and casts a
     /// <c>double</c> to <c>int</c> is Equivalent by congruence, and the <c>if</c> chain made a <c>switch</c> expression is

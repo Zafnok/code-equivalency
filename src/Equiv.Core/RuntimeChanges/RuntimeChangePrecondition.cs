@@ -15,6 +15,6 @@ public enum RuntimeChangePrecondition
     /// <summary><c>cultureSensitiveText</c>: the receiver or a string argument has a character that is not an ASCII letter or digit.</summary>
     CultureSensitiveText,
 
-    /// <summary><c>invalidPath</c>: a string argument is a path that .NET Framework's up-front validation could reject.</summary>
+    /// <summary><c>invalidPath</c>: a string argument is a path that .NET Framework's up-front validation could reject, and is not a <see cref="CallArgument.ValidPath"/>.</summary>
     InvalidPath,
 }

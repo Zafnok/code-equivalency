@@ -587,7 +587,9 @@ internal sealed class BoundSerialiser : OperationWalker
     /// </summary>
     private string Method(IMethodSymbol callee, IOperation? site = null)
     {
-        CallIdentity identity = CallIdentityFactory.Of(callee, renames, suppressedRuntimeChanges, runtime.Interval, site);
+        CallIdentity identity = site is null
+            ? CallIdentityFactory.Of(callee, renames, suppressedRuntimeChanges, runtime.Interval)
+            : CallIdentityFactory.Of(callee, renames, suppressedRuntimeChanges, runtime.Interval, site, compilation);
         if (members.TryGetValue(identity.Value, out string? modern))
         {
             identity = CallIdentityFactory.Of(modern, suppressedRuntimeChanges, runtime.Interval);
