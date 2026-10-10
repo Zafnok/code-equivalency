@@ -17,8 +17,9 @@ internal static class WholeBodyReasonOwners
         // A partial method whose code is in its implementing part, written by a source generator or by hand: the frontend
         // reads the defining declaration (docs/runs/2026-10-07-opaque-tail.md gives the reason to P2-118). Ticket P2-107 makes
         // an unedited one congruent on a same-runtime pair and does not lower it, so `samples/same-runtime-cleanup` has one.
-        // An `extern` method has the reason too and keeps it by design (ADR 0054; ticket P2-145): it has no code to lower,
-        // so P2-118 will not remove it from `samples/extern-import`.
+        // An `extern` method has the reason too and keeps it by design (ADR 0054; ticket P2-145): it has no code to lower.
+        // So does a `[GeneratedRegex]` member (ADR 0055; ticket P2-118), which is compared by its declaration: the
+        // `generated-regex-*` samples have one each. P2-118 decided that and stays the owner, as M3-024 is of `unbound`.
         ["no-body"] = "P2-118",
     }.ToImmutableSortedDictionary(StringComparer.Ordinal);
 }

@@ -91,13 +91,19 @@ types in its signature that the solution declares (P2-146). An operation whose r
 declaration fixes is followed by that declaration, where the solution declares the type: a reference
 to a field that has a `[FieldOffset]`, a `sizeof`, an operation whose type is a pointer, a function
 pointer or an inline array, and a call into `System.Runtime.InteropServices` or
-`System.Runtime.CompilerServices` or one that takes a pointer (P2-149). A declaration with no bound code has no fingerprint, with two exceptions, both on a
+`System.Runtime.CompilerServices` or one that takes a pointer (P2-149). A declaration with no bound code has no fingerprint, with three exceptions, the first two on a
 same-runtime pair only. A partial method whose defining declaration is the one read has the
 fingerprint of its implementing part, with the method's attributes (P2-107). And an `extern` method
 that names its implementation, with `[DllImport]` or `InternalCall`, has the fingerprint of its
 signature, of what it imports and of its attributes, so an unedited one is congruent; any other
 matched `extern` pair is Unknown with the whole-body reason `no-body`, and is never Divergent (ADR
-0054). Every result carries `properties.proofMethod` (which rung proved it),
+0054). And on every runtime pair, a `[GeneratedRegex]` method or property accessor whose implementing
+part the regex source generator wrote (the member carries that generator's `[GeneratedCode]`) has the
+fingerprint of its signature and of that attribute as it is bound: the pattern, the options, the
+timeout and the culture name. The implementing part is not read. The text is runtime-sensitive when a
+`runtime-changes.json` row for the `Regex` constructor applies inside the pair's interval. An unedited
+one is congruent, and an edited one is Unknown, `no-body`, never Divergent. The matcher types the
+generator emits are no procedures (ADR 0055; P2-118). Every result carries `properties.proofMethod` (which rung proved it),
 `properties.boundedBy` when the claim is bounded, and `properties.opaqueNodes`, so a
 reader can see exactly how strong the claim is. Never report Equivalent without saying how.
 
@@ -1337,6 +1343,13 @@ codebase and never a total (ticket M3-014). The rule is the one in README's "Lic
 applied identically to both sides. It counts the lines that hold part of a C# token, in every C#
 file the loaded projects compile (generated files included), and a file compiled by more than one
 project once. `--dry-run` prints the same two numbers without verifying.
+
+A run that left procedures out because a source generator emitted them writes
+`run.properties.generatedProcedures`: `legacy` and `modern`, each side's count of the methods,
+constructors, accessors and operators in the types the regex generator wrote. They are no pairs and
+are never Added or Removed; the `[GeneratedRegex]` declaration each one implements is the pair that
+stands for it (ADR 0055; P2-118). A multi-targeted project counts once, by its last flavour. A run
+with none on either side does not carry the property.
 
 A pair whose verification throws (an encoder bug, a `Z3Exception`), or whose lowering throws
 (ticket P2-011), has no result: a crash is

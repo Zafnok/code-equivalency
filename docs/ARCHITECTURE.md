@@ -47,6 +47,9 @@ Equiv.Cli --> Equiv.Frontend.CSharp --> Equiv.Core <-- Equiv.Verify.Z3 <-- Equiv
 2. Symbol enumeration -> `ProcedureIdentity` per method, constructor, property accessor and operator
    that has a body or is `extern`. An `extern` member has no code to lower: on a same-runtime pair it
    is compared by what it imports and by its attributes, and is otherwise Unknown (ADR 0054).
+   A type the regex source generator wrote holds no procedure: the `[GeneratedRegex]` member it
+   implements is compared by its declaration, and `run.properties.generatedProcedures` counts what
+   was left out (ADR 0055).
 3. Endpoint discovery -> maps ASP.NET Web API 2 / MVC 5 attribute routes and ASP.NET Core
    attribute routes to a common `HTTP VERB /template` identity.
 4. Lowering: `ControlFlowGraph.Create(IOperation)` -> IR. Unsupported operations produce

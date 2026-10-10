@@ -351,8 +351,9 @@ internal static class CompareCommand
         return properties;
     }
 
-    private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census) =>
-        new(StringComparer.Ordinal)
+    private static Dictionary<string, object> RunProperties(FrontendAnalysis analysis, LoweringCensus census)
+    {
+        Dictionary<string, object> properties = new(StringComparer.Ordinal)
         {
             ["loweringCensus"] = census.ToProperty(),
             ["analysedLinesOfCode"] = LoweringCensus.Property(new SideCounts(analysis.Lines.Legacy, analysis.Lines.Modern)),
@@ -367,6 +368,15 @@ internal static class CompareCommand
                 [ModernSide] = SarifReportWriter.RuntimesProperty(analysis.ModernRuntimes),
             },
         };
+
+        // ADR 0055 decision 4: what a source generator emitted is no pair, and the run says how much that was.
+        if (analysis.GeneratedProcedures is not (0, 0))
+        {
+            properties["generatedProcedures"] = LoweringCensus.Property(new SideCounts(analysis.GeneratedProcedures.Legacy, analysis.GeneratedProcedures.Modern));
+        }
+
+        return properties;
+    }
 
     /// <summary>
     /// ADR 0049 decision 6: one warning on stderr when <c>--baseline</c> was written in the other mode, since what the

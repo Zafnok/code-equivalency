@@ -13,7 +13,7 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering.Il;
 /// Each side of each <c>samples/</c> pair as one compilation of its sources, read from disk with their encoding as a loaded
 /// project's are, against this test run's own framework (ticket P1-014). A project's package references are not restored
 /// here, so the few web types <c>webapi-basic</c> uses come from a stub compilation it references. A side that does not
-/// compile by design (<see cref="DoesNotCompile"/>) is left out: it emits no IL.
+/// compile here (<see cref="DoesNotCompile"/>) is left out: it emits no IL.
 /// </summary>
 internal static class IlSamples
 {
@@ -51,8 +51,19 @@ internal static class IlSamples
 
     private static readonly string[] Sides = ["legacy", "modern"];
 
-    /// <summary>The sides whose sources hold compiler errors on purpose (ticket P2-085); every other side must compile.</summary>
-    private static readonly string[] DoesNotCompile = ["partly-compiling-modern/modern"];
+    /// <summary>
+    /// The sides that do not compile from their sources alone; every other side must. One holds compiler errors on purpose
+    /// (ticket P2-085). The <c>generated-regex-*</c> sides (ticket P2-118) need the regex source generator, which no
+    /// generator is run for here: a <c>[GeneratedRegex]</c> method has no implementing part without it.
+    /// </summary>
+    private static readonly string[] DoesNotCompile =
+    [
+        "partly-compiling-modern/modern",
+        "generated-regex-unedited/legacy",
+        "generated-regex-unedited/modern",
+        "generated-regex-edited/legacy",
+        "generated-regex-edited/modern",
+    ];
 
     private static readonly Lazy<ImmutableArray<(string Name, Compilation Compilation)>> Loaded = new(Load);
 

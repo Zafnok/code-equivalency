@@ -1306,6 +1306,31 @@ public sealed class CSharpFrontendTests
         Assert.Equal([net40, modern], lowered);
     }
 
+    /// <summary>
+    /// ADR 0055 decision 4 (ticket P2-118): the analysis counts, per side, the procedures the regex generator emitted, which
+    /// are no pairs and neither Added nor Removed. A project's flavours count once, by the last, and two projects add up.
+    /// </summary>
+    [Fact]
+    public void Analyze_CountsTheProceduresTheRegexGeneratorEmittedPerSide()
+    {
+        static Compilation Emitted(string assembly, string members) => RoslynTestCompilations.Compile(
+            "namespace N { public class " + assembly + "C { public int M(int a) => a; } } namespace System.Text.RegularExpressions.Generated { "
+            + "[System.CodeDom.Compiler.GeneratedCode(\"System.Text.RegularExpressions.Generator\", \"9.0\")] internal static class Utilities { " + members + " } }",
+            assembly);
+        const string One = "internal static int A() => 0;";
+        StubLoader loader = new(path => string.Equals(path, "legacy.sln", StringComparison.Ordinal)
+            ? new LoadedSolution(null!, [Emitted("Lib", One + " internal static int B() => 0; internal static int C() => 0;"), Emitted("Lib", One)], [], [])
+            : new LoadedSolution(null!, [Emitted("Lib", One + " internal static int B() => 0;"), Emitted("Other", One)], [], []));
+
+        FrontendAnalysis analysis = new CSharpFrontend(loader, new StableIdentityMatcher())
+            .Analyze("legacy.sln", "modern.sln", EquivConfig.Default, NullRunLog.Instance, CancellationToken.None);
+
+        Assert.Equal((1, 3), analysis.GeneratedProcedures);
+        Assert.Equal(["N.LibC::M(int)"], analysis.Match.Pairs.Select(static p => p.New.Value), StringComparer.Ordinal);
+        Assert.Equal(["N.OtherC::M(int)"], analysis.Match.Added.Select(static i => i.Value), StringComparer.Ordinal);
+        Assert.Empty(analysis.Match.Removed);
+    }
+
     /// <summary>P2-016 collapses flavours, not assemblies: one file linked into two projects is still Ambiguous.</summary>
     [Fact]
     public void Analyze_OneDeclarationInTwoAssembliesStaysAmbiguous()

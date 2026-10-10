@@ -291,6 +291,92 @@ public sealed class BodyFingerprinterTests
         Assert.Null(BodyFingerprinter.Compute(Method(compilation, name), compilation, EquivConfig.Default, legacy: false, OneRuntime));
     }
 
+    /// <summary>
+    /// ADR 0055 decision 1 (ticket P2-118): a <c>[GeneratedRegex]</c> member the regex generator implemented is fingerprinted
+    /// by its signature and that attribute, on a pair that crosses a runtime as on one that does not. The implementing part
+    /// and the generator's version are not in the text, so two versions' output for one declaration are congruent.
+    /// </summary>
+    [Theory]
+    [InlineData("net8.0", "net8.0")]
+    [InlineData("net8.0", "net9.0")]
+    public void AGeneratedRegexIsFingerprintedByItsDeclaration(string legacy, string modern)
+    {
+        const string Declaration = "\"a+\", RegexOptions.Multiline";
+        SideRuntime runtime = Runtimes.Between(legacy, modern);
+        Compilation compilation = Compile(GeneratedRegex(Declaration, "8.0.1", "A_0.Instance"), partial: true);
+
+        (string? text, bool runtimeSensitive) = BodyFingerprinter.Text(Method(compilation), compilation, EquivConfig.Default, [], runtime);
+
+        Assert.Equal(
+            "Ordinary static=True async=False returns=System.Text.RegularExpressions.Regex ()\n"
+            + "Attribute generated regex: System.Text.RegularExpressions.GeneratedRegexAttribute.GeneratedRegexAttribute(string, System.Text.RegularExpressions.RegexOptions)"
+            + " = System.Text.RegularExpressions.GeneratedRegexAttribute(\"a+\", System.Text.RegularExpressions.RegexOptions.Multiline)\n",
+            text);
+        Assert.False(runtimeSensitive);
+        BodyFingerprint? On(string declaration, string version = "8.0.1", string body = "A_0.Instance")
+        {
+            Compilation other = Compile(GeneratedRegex(declaration, version, body), partial: true);
+            return BodyFingerprinter.Compute(Method(other), other, EquivConfig.Default, legacy: false, runtime);
+        }
+
+        Assert.Equal(On(Declaration), On(Declaration, "9.0.2", "new System.Text.RegularExpressions.Regex(\"b\")"));
+        Assert.NotEqual(On(Declaration), On("\"a*\", RegexOptions.Multiline"));
+        Assert.NotEqual(On(Declaration), On("\"a+\", RegexOptions.Singleline"));
+        Assert.NotEqual(On(Declaration), On(Declaration + ", 1000"));
+        Assert.NotEqual(On(Declaration), On(Declaration + ", \"tr-TR\""));
+    }
+
+    /// <summary>ADR 0055 decision 1: a partial property's <c>get</c> accessor is fingerprinted by the property's declaration.</summary>
+    [Fact]
+    public void AGeneratedRegexPropertyIsFingerprintedByItsDeclaration()
+    {
+        static string Property(string pattern) =>
+            $"[GeneratedRegex(\"{pattern}\")] private static partial Regex P {{ get; }} "
+            + "[System.CodeDom.Compiler.GeneratedCode(\"System.Text.RegularExpressions.Generator\", \"9.0\")] private static partial Regex P => null!;";
+        Compilation compilation = Compile(Property("a"), extra: RegexNamespace, partial: true);
+        Compilation edited = Compile(Property("b"), extra: RegexNamespace, partial: true);
+        SideRuntime runtime = Runtimes.Between("net8.0", "net9.0");
+
+        string text = BodyFingerprinter.Text(Method(compilation, "get_P"), compilation, EquivConfig.Default, [], runtime).Text!;
+
+        Assert.StartsWith("PropertyGet static=True async=False returns=System.Text.RegularExpressions.Regex ()\nAttribute generated regex: ", text, StringComparison.Ordinal);
+        Assert.NotEqual(
+            BodyFingerprinter.Compute(Method(compilation, "get_P"), compilation, EquivConfig.Default, legacy: false, runtime),
+            BodyFingerprinter.Compute(Method(edited, "get_P"), edited, EquivConfig.Default, legacy: false, runtime));
+    }
+
+    /// <summary>
+    /// ADR 0055 decision 1: the rule is for a member the regex generator implemented. One with no implementing part, one
+    /// whose implementing part somebody wrote, one another tool stamped, and a stamped member with no
+    /// <c>[GeneratedRegex]</c> keep the rules they had, which on a pair that crosses a runtime is no fingerprint.
+    /// </summary>
+    [Theory]
+    [InlineData("[GeneratedRegex(\"a\")] private static partial Regex M();")]
+    [InlineData("[GeneratedRegex(\"a\")] private static partial Regex M(); private static partial Regex M() => null!;")]
+    [InlineData("[GeneratedRegex(\"a\")] private static partial Regex M(); [System.CodeDom.Compiler.GeneratedCode(\"Mine\", \"1\")] private static partial Regex M() => null!;")]
+    [InlineData("private static partial Regex M(); [System.CodeDom.Compiler.GeneratedCode(\"System.Text.RegularExpressions.Generator\", \"9.0\")] private static partial Regex M() => null!;")]
+    public void AMemberTheRegexGeneratorDidNotImplementKeepsItsRules(string member)
+    {
+        Compilation compilation = Compile(member, extra: RegexNamespace, partial: true);
+
+        Assert.Null(BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, Runtimes.Between("net8.0", "net9.0")));
+    }
+
+    /// <summary>
+    /// ADR 0055 decision 3: the declaration constructs a <c>Regex</c>, so it is runtime-sensitive where a row for that
+    /// constructor applies (the .NET 7 row, on a pair that crosses .NET 7), and not when the row is suppressed.
+    /// </summary>
+    [Fact]
+    public void AGeneratedRegexIsRuntimeSensitiveWhereARegexRowApplies()
+    {
+        Compilation compilation = Compile(GeneratedRegex("\"a+\"", "8.0.1", "null!"), partial: true);
+        SideRuntime crossing = Runtimes.Between("net6.0", "net9.0");
+        EquivConfig suppressed = EquivConfig.Default with { SuppressRuntimeChanges = ["System.Text.RegularExpressions.Regex::"] };
+
+        Assert.True(BodyFingerprinter.Compute(Method(compilation), compilation, EquivConfig.Default, legacy: false, crossing)!.RuntimeSensitive);
+        Assert.False(BodyFingerprinter.Compute(Method(compilation), compilation, suppressed, legacy: false, crossing)!.RuntimeSensitive);
+    }
+
     /// <summary>Ticket P2-107: the compiler writes a record's primary constructor from the type's declarations, and no declaration holds it.</summary>
     [Fact]
     public void ARecordsPrimaryConstructorHasNoFingerprintOnOneRuntime()
@@ -1109,6 +1195,17 @@ public sealed class BodyFingerprinterTests
     /// <summary>A partial method and an implementing part that calls a local <c>extern</c> function, as the interop generator writes one.</summary>
     private static string Stub(string import, string returns, string parameter) =>
         $"private static partial bool M(int a); private static partial bool M(int a) {{ return __PInvoke(a) != 0; [System.Runtime.InteropServices.DllImport({import})] static extern {returns} __PInvoke({parameter} x); }}";
+
+    private const string RegexNamespace = "using System.Text.RegularExpressions;";
+
+    /// <summary>
+    /// A <c>[GeneratedRegex]</c> method <c>M</c> and the implementing part the regex generator of <paramref name="version"/>
+    /// writes for it, which returns <paramref name="body"/>; with the matcher type <c>A_0</c> that part names.
+    /// </summary>
+    private static string GeneratedRegex(string declaration, string version, string body) =>
+        $"[System.Text.RegularExpressions.GeneratedRegex({declaration.Replace("RegexOptions", "System.Text.RegularExpressions.RegexOptions", StringComparison.Ordinal)})] private static partial System.Text.RegularExpressions.Regex M(); "
+        + $"[System.CodeDom.Compiler.GeneratedCode(\"System.Text.RegularExpressions.Generator\", \"{version}\")] private static partial System.Text.RegularExpressions.Regex M() => {body}; "
+        + "private sealed class A_0 { internal static readonly System.Text.RegularExpressions.Regex Instance = null!; }";
 
     /// <summary>Members of a partial class <c>N.C</c>, with the interop namespaces imported.</summary>
     private static CSharpCompilation Interop(string members, string assembly = "", string type = "") =>

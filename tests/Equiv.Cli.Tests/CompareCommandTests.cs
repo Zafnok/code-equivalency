@@ -331,6 +331,29 @@ public sealed partial class CompareCommandTests
         Assert.Equal("""{"legacy":["Example.Site","_build"],"modern":[]}""", notBuilt);
     }
 
+    /// <summary>
+    /// ADR 0055 decision 4 (ticket P2-118): the procedures a source generator emitted are no pairs, and the run says how
+    /// many each side left out. A run that left none out does not carry the property.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0, null)]
+    [InlineData(7, 0, """{"legacy":7,"modern":0}""")]
+    [InlineData(0, 9, """{"legacy":0,"modern":9}""")]
+    public void Compare_CountsEachSidesGeneratedProceduresInARunProperty(int legacyCount, int modernCount, string? expected)
+    {
+        using TempFile legacy = new();
+        using TempFile modern = new();
+        FakeFrontend frontend = new("csharp", _ => true, generatedProcedures: (legacyCount, modernCount));
+        InMemoryReportSink sink = new();
+
+        _ = CaptureStdOut(() => CompareCommand.Run(
+            new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
+            [frontend], new FakeBackend(NoVerdicts), sink, NullRunLog.Instance));
+
+        Assert.Equal(expected is not null, sink.Log!.Runs[0].TryGetSerializedPropertyValue("generatedProcedures", out string? counts));
+        Assert.Equal(expected, counts);
+    }
+
     [Fact]
     public void LowerOnlyNeverCallsTheBackend()
     {

@@ -9,6 +9,61 @@ namespace Equiv.Frontend.CSharp.Tests;
 
 public sealed class ProcedureEnumeratorTests
 {
+    /// <summary>
+    /// ADR 0055 decision 4 (ticket P2-118): a type the regex generator wrote, and each type nested in it, holds no
+    /// procedure, and its methods are counted. A type another tool stamped, and a member of a written type that the
+    /// generator stamped, are procedures as before.
+    /// </summary>
+    [Fact]
+    public void LeavesOutAndCountsWhatTheRegexGeneratorEmitted()
+    {
+        Compilation compilation = RoslynTestCompilations.Compile("""
+            using System.CodeDom.Compiler;
+
+            namespace N
+            {
+                public partial class C
+                {
+                    [GeneratedCode("System.Text.RegularExpressions.Generator", "9.0")]
+                    public int Stamped() => 1;
+                }
+
+                [GeneratedCode("resgen", "1.0")]
+                public class Resources
+                {
+                    public int Text() => 1;
+                }
+            }
+
+            namespace System.Text.RegularExpressions.Generated
+            {
+                [GeneratedCode("System.Text.RegularExpressions.Generator", "9.0")]
+                internal sealed class R_0
+                {
+                    private R_0() { }
+
+                    private sealed class RunnerFactory
+                    {
+                        private sealed class Runner
+                        {
+                            private bool TryFindNextPossibleStartingPosition() => true;
+                        }
+                    }
+                }
+
+                [GeneratedCode("System.Text.RegularExpressions.Generator", "9.0")]
+                internal static class Utilities
+                {
+                    internal static int IndexOfNonAsciiOrAny_0123(string s) => 0;
+                }
+            }
+            """);
+
+        Assert.Equal(["Stamped", "Text"], ProcedureEnumerator.Enumerate(compilation).Select(static p => p.Symbol.Name).Order(StringComparer.Ordinal), StringComparer.Ordinal);
+        Assert.Equal(3, ProcedureEnumerator.CountEmitted(compilation));
+        Assert.Throws<ArgumentNullException>(static () => ProcedureEnumerator.CountEmitted(null!));
+    }
+
     [Fact]
     public void IncludesMethodsCtorsAccessorsOperators()
     {

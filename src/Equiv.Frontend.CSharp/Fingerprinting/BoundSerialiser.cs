@@ -58,6 +58,9 @@ internal sealed class BoundSerialiser : OperationWalker
 
     private const string DisableRuntimeMarshalling = Layouts.DisableRuntimeMarshalling;
 
+    /// <summary>What a <c>[GeneratedRegex]</c> member constructs, as a <c>runtime-changes.json</c> row names it (ADR 0055 decision 3).</summary>
+    private const string RegexConstructor = "System.Text.RegularExpressions.Regex::.ctor";
+
     private readonly StringBuilder text = new();
     private readonly Dictionary<ISymbol, string> numbered = new(SymbolEqualityComparer.Default);
     private readonly HashSet<ISymbol> laidOut = new(SymbolEqualityComparer.Default);
@@ -171,6 +174,21 @@ internal sealed class BoundSerialiser : OperationWalker
         BoundSerialiser serialiser = new(method, compilation, settings);
         serialiser.Signature();
         serialiser.Attributes("method", method);
+        return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
+    }
+
+    /// <summary>
+    /// The serialisation of a <c>[GeneratedRegex]</c> <paramref name="method"/> (ADR 0055 decisions 1 and 3; ticket
+    /// P2-118): its signature and its <paramref name="declaration"/>, the attribute as the compiler binds it, which is all
+    /// the regex generator reads. It constructs a <c>Regex</c>, so it is runtime-sensitive when a row for that constructor
+    /// applies inside the pair's interval; no argument is read for a row's precondition.
+    /// </summary>
+    public static (string Text, bool RuntimeSensitive) SerialiseGeneratedRegex(IMethodSymbol method, AttributeData declaration, Compilation compilation, Settings settings)
+    {
+        BoundSerialiser serialiser = new(method, compilation, settings);
+        serialiser.Signature();
+        serialiser.AttributeLines([("generated regex", [declaration])]);
+        serialiser.RuntimeSensitive = CallIdentityFactory.Of(RegexConstructor, settings.SuppressedRuntimeChanges, settings.Runtime.Interval).RuntimeChanged;
         return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
     }
 

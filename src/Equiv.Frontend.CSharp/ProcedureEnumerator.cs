@@ -16,7 +16,9 @@ namespace Equiv.Frontend.CSharp;
 /// excluded explicitly (ticket M2-002 acceptance criterion 1). An <c>extern</c> member has no body and is a
 /// procedure all the same (ADR 0054; ticket P2-145): what it imports can change, and its own pair is where
 /// that is reported. A partial method whose implementing part is <c>extern</c> is one, since Roslyn reports
-/// its defining part as <c>extern</c>.
+/// its defining part as <c>extern</c>. A type the regex source generator wrote, with the types nested in it, holds no
+/// procedure (ADR 0055 decision 4; ticket P2-118): it is how a <c>[GeneratedRegex]</c> member matches, and that member's
+/// own pair stands for it. <see cref="CountEmitted"/> counts what is left out so.
 /// </summary>
 internal static class ProcedureEnumerator
 {
@@ -24,17 +26,24 @@ internal static class ProcedureEnumerator
     {
         ArgumentNullException.ThrowIfNull(compilation);
 
-        ImmutableArray<EnumeratedProcedure>.Builder result = ImmutableArray.CreateBuilder<EnumeratedProcedure>();
-        foreach (INamedTypeSymbol type in AllTypes(compilation.Assembly.GlobalNamespace))
-        {
-            foreach (IMethodSymbol method in type.GetMembers().OfType<IMethodSymbol>().Where(IsIncluded))
-            {
-                result.Add(new EnumeratedProcedure(RoslynIdentity.Of(method, RenameMap.Empty), method, method.Locations[0]));
-            }
-        }
-
-        return result.ToImmutable();
+        return [.. Methods(compilation, emitted: false).Select(static method => new EnumeratedProcedure(RoslynIdentity.Of(method, RenameMap.Empty), method, method.Locations[0]))];
     }
+
+    /// <summary>
+    /// How many methods of <paramref name="compilation"/> would be procedures and are not, because a source generator
+    /// emitted them as the implementation of a declaration that is compared in their place (ADR 0055 decision 4).
+    /// </summary>
+    public static int CountEmitted(Compilation compilation)
+    {
+        ArgumentNullException.ThrowIfNull(compilation);
+        return Methods(compilation, emitted: true).Count();
+    }
+
+    private static IEnumerable<IMethodSymbol> Methods(Compilation compilation, bool emitted) =>
+        TopLevelTypes(compilation.Assembly.GlobalNamespace)
+            .Where(type => RegexGenerator.Emitted(type) == emitted)
+            .SelectMany(AllNested)
+            .SelectMany(static type => type.GetMembers().OfType<IMethodSymbol>().Where(IsIncluded));
 
     private static bool IsIncluded(IMethodSymbol method)
     {
@@ -48,24 +57,8 @@ internal static class ProcedureEnumerator
             or MethodKind.Conversion;
     }
 
-    private static IEnumerable<INamedTypeSymbol> AllTypes(INamespaceSymbol @namespace)
-    {
-        foreach (INamedTypeSymbol type in @namespace.GetTypeMembers())
-        {
-            foreach (INamedTypeSymbol nested in AllNested(type))
-            {
-                yield return nested;
-            }
-        }
-
-        foreach (INamespaceSymbol child in @namespace.GetNamespaceMembers())
-        {
-            foreach (INamedTypeSymbol type in AllTypes(child))
-            {
-                yield return type;
-            }
-        }
-    }
+    private static IEnumerable<INamedTypeSymbol> TopLevelTypes(INamespaceSymbol @namespace) =>
+        @namespace.GetTypeMembers().Concat(@namespace.GetNamespaceMembers().SelectMany(TopLevelTypes));
 
     private static IEnumerable<INamedTypeSymbol> AllNested(INamedTypeSymbol type)
     {
