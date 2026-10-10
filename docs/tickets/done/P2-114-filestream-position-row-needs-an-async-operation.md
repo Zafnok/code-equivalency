@@ -1,5 +1,5 @@
 # P2-114 The `FileStream.Position` row fires only where the stream had an asynchronous read or write
-Status: todo
+Status: done (PR #455)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-066
@@ -39,3 +39,21 @@ Other rows that depend on an earlier call on the same receiver: list any you fin
 
 ## Notes
 - Found by P2-066: 1 on `gitextensions-9860`.
+- Decision: a `Position` read in a method with no asynchronous stream call does not fire the row, even when the stream came
+  from outside the method (a parameter, a field). The ticket's own repro takes the stream as a parameter and must be
+  congruent, so a possible async call in a caller cannot keep the row. The residual unsoundness is a caller that issues
+  `ReadAsync` and passes the stream to a method that only reads `Position`.
+- Decision: the precondition is a row field `requires` (value `asyncStreamOperation`, enum `RowPrecondition`), checked per
+  method: a method that does not meet it has the row's member added to its suppressed runtime changes before it is lowered
+  or fingerprinted (`RowPreconditions.Suppress`), so no call-identity signature changed. P2-073's argument preconditions are
+  a different field and do not use this one.
+- Decision: "a call on a `FileStream` or `Stream`" is any invocation whose target method's containing type is
+  `System.IO.Stream` or derives from it, so a `Stream` subclass's own `ReadAsync` override counts; an extension method does not.
+- The IL fallback lowering (`IlLowerer`) does not apply the precondition (it already passes no suppressions): a `Position`
+  read in IL, i.e. in a callee reached without source, is still flagged, which is the conservative side.
+- Other rows that depend on an earlier call on the same receiver (out of scope, not changed): `System.Reflection.FieldInfo::SetValue(`
+  (after the type is initialized), `System.Security.Cryptography.CryptoStream::Dispose(` (after a partial read),
+  `System.Linq.Enumerable::First(` (after `OrderBy`), `System.Security.Cryptography.Oid::set_Value(` (a second assignment),
+  `System.Net.Sockets.Socket::get_LocalEndPoint(` (after an implicit bind by `SendToAsync`),
+  `System.Net.Security.SslStream::BeginAuthenticateAs` (a second call before the first completes) and
+  `System.Net.WebClient::CancelAsync(` (once the response is being read). `requires` can carry each as a new `RowPrecondition` value.

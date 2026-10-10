@@ -118,7 +118,7 @@ internal sealed class BoundSerialiser : OperationWalker
         ImmutableArray<IOperation> operations,
         Settings settings)
     {
-        BoundSerialiser serialiser = new(method, compilation, settings);
+        BoundSerialiser serialiser = new(method, compilation, WithRowPreconditions(settings, operations));
         serialiser.Signature();
         if (operations.IsEmpty)
         {
@@ -134,6 +134,13 @@ internal sealed class BoundSerialiser : OperationWalker
     }
 
     /// <summary>
+    /// <paramref name="settings"/> with the rows whose <see cref="Equiv.Core.RuntimeChanges.RowPrecondition"/> the method made of
+    /// <paramref name="operations"/> does not meet suppressed, as the lowering does (ticket P2-114).
+    /// </summary>
+    private static Settings WithRowPreconditions(Settings settings, IEnumerable<IOperation> operations) =>
+        settings with { SuppressedRuntimeChanges = RowPreconditions.Suppress(settings.SuppressedRuntimeChanges, operations) };
+
+    /// <summary>
     /// The serialisation of a partial method by its <paramref name="implementation"/>, whose <paramref name="body"/> is its
     /// code (ADR 0024 as clarified by ticket P2-107): the body as <see cref="Serialise"/> writes one, which has the
     /// attributes of each local function it declares, then every attribute of the method, which has those of both its
@@ -145,7 +152,7 @@ internal sealed class BoundSerialiser : OperationWalker
         Compilation compilation,
         Settings settings)
     {
-        BoundSerialiser serialiser = new(implementation, compilation, settings);
+        BoundSerialiser serialiser = new(implementation, compilation, WithRowPreconditions(settings, [body]));
         serialiser.Signature();
         serialiser.text.Append("ImplementingPart\n");
         serialiser.Visit(body);

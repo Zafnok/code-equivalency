@@ -564,6 +564,10 @@ are lowered and fingerprinted with that one interval. The rules are:
 
 - a `runtime-changes.json` row, when the interval crosses its `changedIn`; a row whose `changedIn` is
   `null` applies whenever the two runtimes differ;
+  A row may also `require` a fact about the calling method (ticket P2-114): `asyncStreamOperation`, a call in the
+  same method to `ReadAsync`, `WriteAsync`, `BeginRead`, `BeginWrite`, `CopyToAsync` or `FlushAsync` on a `Stream`.
+  The `FileStream.get_Position` row requires it, and a method with no such call, whatever stream it reads, does not
+  fire the row;
 - floating-point to integer conversion, when the interval crosses `net9.0`;
 - x87 floating point, on the side whose project alone runs on the 32-bit .NET Framework JIT. This is
   the one rule that depends on the platform too, so it can apply between two projects on the same

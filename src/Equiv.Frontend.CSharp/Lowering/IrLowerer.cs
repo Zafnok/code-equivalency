@@ -130,6 +130,7 @@ internal sealed class IrLowerer
         SemanticModel model = compilation.GetSemanticModel(syntax.SyntaxTree);
         IOperation? operation = model.GetOperation(syntax);
         ImmutableArray<Initializer> initializers = operation is IConstructorBodyOperation ? Initializers(method, syntax, compilation) : [];
+        ImmutableArray<string> suppressed = RowPreconditions.Suppress(suppressedRuntimeChanges, initializers.Select(static i => i.Operation).Prepend(operation));
         ImmutableArray<SourceSpan> unbound =
             [.. UnboundCauses(syntax, model, operation), .. initializers.SelectMany(static i => UnboundCauses(i.Syntax, i.Model, i.Operation))];
         if (unbound.IsEmpty && LeavesAnErrorTypeOut(method))
@@ -140,12 +141,12 @@ internal sealed class IrLowerer
         IrProcedure procedure = (unbound.IsEmpty, operation) switch
         {
             (false, _) => Opaque(method, renames, entries, Unknown.UnboundOpaqueReason, unbound),
-            (true, IMethodBodyOperation body) => Lower(method, body, [ControlFlowGraph.Create(body)], model, renames, suppressedRuntimeChanges, entries),
-            (true, IBlockOperation body) => Lower(method, body, [ControlFlowGraph.Create(body)], model, renames, suppressedRuntimeChanges, entries),
+            (true, IMethodBodyOperation body) => Lower(method, body, [ControlFlowGraph.Create(body)], model, renames, suppressed, entries),
+            (true, IBlockOperation body) => Lower(method, body, [ControlFlowGraph.Create(body)], model, renames, suppressed, entries),
             (true, IConstructorBodyOperation body) =>
-                Lower(method, body, [.. initializers.Select(static i => Graph(i.Operation!)), ControlFlowGraph.Create(body)], model, renames, suppressedRuntimeChanges, entries),
+                Lower(method, body, [.. initializers.Select(static i => Graph(i.Operation!)), ControlFlowGraph.Create(body)], model, renames, suppressed, entries),
             _ when method.AssociatedSymbol is IPropertySymbol property && HeapLowerer.BackingField(property) is { } field =>
-                AutoAccessor(method, field, model, Span(syntax), renames, suppressedRuntimeChanges, entries),
+                AutoAccessor(method, field, model, Span(syntax), renames, suppressed, entries),
             // No operation to lower: an `extern` method, or a record's primary constructor, whose writes of its positional
             // properties no operation holds.
             _ => Opaque(method, renames, entries, "no-body", [Span(syntax)]),
@@ -165,7 +166,7 @@ internal sealed class IrLowerer
         IMethodSymbol method = (IMethodSymbol)model.GetDeclaredSymbol(body.Syntax)!;
         // A constructor's graph starts with its initializer: a call to the base or `this` constructor on `this`.
         ControlFlowGraph graph = body is IConstructorBodyOperation constructor ? ControlFlowGraph.Create(constructor) : ControlFlowGraph.Create((IMethodBodyOperation)body);
-        return Lower(method, body, [graph], model, renames, suppressedRuntimeChanges, new Catalogue([], runtime));
+        return Lower(method, body, [graph], model, renames, RowPreconditions.Suppress(suppressedRuntimeChanges, [body]), new Catalogue([], runtime));
     }
 
     /// <summary>
