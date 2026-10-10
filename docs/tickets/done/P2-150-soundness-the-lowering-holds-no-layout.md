@@ -98,7 +98,7 @@ the opaque and file the model.
   SARIF shape changes.
 - Decision: what a lowered body does with both bullets -> an opaque with reason `Layout`, shared by the fragment's fingerprint, which holds the declaration since P2-149. Alternatives: a model of the shared storage (needs every size and packing rule per runtime; the size guard files it, and nothing measured asks for it), a side-specific function (the lowering reads one side, so the declaration would go into the call's identity, and two identities are a trace that differs: Divergent where nothing is known). Rule: 1 (soundness first), then 4.
 - Decision: why sharing the opaque is sound beside one declaration -> it is one call on both sides and a call's place in the trace is observable, so a write of `A` before a read of `B` is not proved equal to the read first; every read of that storage is such a call. Alternatives: never share it (loses every pair that uses such a field the same way on both sides). Rule: 2.
-- Decision: an auto-property or an event of an explicit layout -> the same opaque with no fingerprint, never shared, and no accessor call. Alternatives: share it as a field's (no fingerprint holds the declaration, because the bound tree does not name the backing field), leave it (the repro above). Rule: 1. The fingerprint's side of it is P2-152.
+- Decision: an auto-property or an event of an explicit layout -> the same opaque with no fingerprint, never shared, and no accessor call. Alternatives: share it as a field's (no fingerprint holds the declaration, because the bound tree does not name the backing field), leave it (the repro above). Rule: 1. The fingerprint's side of it is P2-153.
 - Decision: which calls -> exactly those the fingerprint follows with a declaration: the callee is under the two namespaces or takes a pointer, and a type of the solution is among the types P2-149 lists for it, or the assembly has a `[DisableRuntimeMarshalling]`. Alternatives: every call into the two namespaces (an interpolated string's handler, an awaiter and `Unsafe.As` on framework types would stop being calls for no declaration that could differ), a list of members (goes stale; a missing member is a false Equivalent). Rule: 4.
 - Decision: where the rule lives -> `Lowering/Layouts.cs`, read by `BoundSerialiser.Layout` and by `IrLowerer`, so the lowering makes an opaque exactly where the text has the declaration. Alternatives: a copy of the predicate in the lowering (the two drift, and a call the lowering keeps that the text does not cover is this bug again). Rule: 4. `BoundSerialiser` is in the fingerprint's folder; its text is unchanged, and every fingerprint test passes as it was.
 - Decision: the IL lowering -> a method whose bound code has any operation of P2-149's rule, or a reference to storage of an explicit layout, is not lowered from IL (`IlFallback`, reason `il-layout`). Alternatives: the same two refusals inside `IlLowerer` (it has no bound tree, so "every type under the call" would be a second rule over ILAst; and its `sizeof`, pointer and inline-array fragments are fingerprinted by IL text, which holds no declaration either), nothing (the pairs this ticket makes Unknown are the ones the IL pass reads next, with the field map and the shared call again). Rule: 1.
@@ -156,5 +156,9 @@ the opaque and file the model.
 - The scoreboard is not touched: no file under `docs/runs/` is added here.
 
 ### What is left
-- P2-152: the text of a body that uses an auto-property or an event of an explicit layout.
-- P2-151: a generic member of the solution that reads its type parameter's layout (unchanged).
+- P2-153: the text of a body that uses an auto-property or an event of an explicit layout.
+- P2-154: a call that hands a generic member of the solution a type. P2-151 merged while this
+  pull request was open and put that type's declaration in the text; its ticket left the lowering
+  to this one, and this one left generic members to it. Not reproduced.
+- Renumbered at that merge: the follow-up filed here as P2-152 is P2-153, since P2-151 filed its
+  own P2-152.

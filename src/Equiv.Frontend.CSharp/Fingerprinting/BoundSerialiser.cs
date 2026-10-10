@@ -33,7 +33,8 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// <c>[DllImport]</c> also has what the marshaller reads from outside it: the marshalling attributes of its assembly and
 /// its type, and the declarations of the types in its signature (ticket P2-146). An operation whose result a type's
 /// declaration fixes is followed by that declaration: a field at a <c>[FieldOffset]</c>, a <c>sizeof</c>, a pointer, an
-/// inline array, a call into the interop services (ticket P2-149). A
+/// inline array, a call into the interop services (ticket P2-149). A reference to a generic member of the solution is
+/// followed by the declarations of the types it hands the member (ticket P2-151). A
 /// <c>switch</c> expression that may match no arm carries the constructor of the exception the compiler throws then, which
 /// depends on the reference assemblies (ADR 0024 as clarified by ticket P2-144). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
@@ -357,19 +358,49 @@ internal sealed class BoundSerialiser : OperationWalker
     /// of a field that has a <c>[FieldOffset]</c>, the operand of a <c>sizeof</c>, a pointer's or a function pointer's
     /// type, an inline array's, and every type under a call that is handed one to read as memory. A call through a
     /// function pointer and a call into the interop services also take the assembly's
-    /// <c>[DisableRuntimeMarshalling]</c>. <see cref="Layouts"/> holds the rule, which the lowering reads too (ticket P2-150).
+    /// <c>[DisableRuntimeMarshalling]</c>. <see cref="Layouts"/> holds that rule, which the lowering reads too (ticket
+    /// P2-150). A reference to a member also reaches the types it hands the member as type arguments
+    /// (<see cref="Handed"/>).
     /// </summary>
     private void Layout(IOperation operation)
     {
+        ISymbol? member = operation switch
+        {
+            IInvocationOperation o => Called(o.TargetMethod),
+            IMemberReferenceOperation o => o.Member,
+            IObjectCreationOperation o => o.Constructor,
+            _ => null,
+        };
         if (Layouts.Marshals(operation) && laidOut.Add(method.ContainingAssembly))
         {
             AttributeLines([("layout assembly", method.ContainingAssembly.GetAttributes().Where(static a => Is(a, DisableRuntimeMarshalling)))]);
         }
 
-        foreach (ITypeSymbol type in Layouts.Reached(operation))
+        foreach (ITypeSymbol type in Layouts.Reached(operation).Concat(Handed(member)))
         {
             Marshalled("layout", type, laidOut);
         }
+    }
+
+    /// <summary>
+    /// The type arguments a reference to <paramref name="member"/> hands code of the solution (ADR 0024 as clarified by
+    /// ticket P2-151): a method's own, and those of the type that declares the member and of the types that one is
+    /// nested in. A generic member's text is the same for every type argument, so what it reads of one's layout is in
+    /// the text of the body that names the argument. A member of a type from a reference hands the solution nothing.
+    /// </summary>
+    private static List<ITypeSymbol> Handed(ISymbol? member)
+    {
+        List<ITypeSymbol> handed = [];
+        if (member?.ContainingType is { DeclaringSyntaxReferences.IsEmpty: false } declaring)
+        {
+            handed.AddRange((member as IMethodSymbol)?.TypeArguments ?? []);
+            for (INamedTypeSymbol? type = declaring; type is not null; type = type.ContainingType)
+            {
+                handed.AddRange(type.TypeArguments);
+            }
+        }
+
+        return handed;
     }
 
     private static bool Is(AttributeData attribute, string name) => string.Equals(attribute.AttributeClass!.ToDisplayString(), name, StringComparison.Ordinal);

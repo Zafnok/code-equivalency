@@ -1,4 +1,4 @@
-# P2-152 Soundness: the text of a body that uses an auto-property or an event of an explicit layout holds none of the layout
+# P2-153 Soundness: the text of a body that uses an auto-property or an event of an explicit layout holds none of the layout
 Status: todo
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.

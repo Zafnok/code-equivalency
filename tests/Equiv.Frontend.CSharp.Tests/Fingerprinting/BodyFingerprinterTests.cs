@@ -753,6 +753,64 @@ public sealed class BodyFingerprinterTests
         Assert.DoesNotContain(" assembly", OneRuntimeText(laid), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-151: a generic member of the solution can read the layout of its type parameter, and its text is the
+    /// same for every type argument. So the declaration of a type the solution declares is in the text of the body that
+    /// hands it over: to a generic method, a local function, or any member of a generic type, by naming it, by
+    /// inference, inside another type argument, through a forwarder or through a base type.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M() => Size<S>();")]
+    [InlineData("public int M(S s) => SizeOf(s);")]
+    [InlineData("public System.Func<int> M() => Size<S>;")]
+    [InlineData("public int M() => Size<P<S>>();")]
+    [InlineData("public int M() => Size<(S, int)>();")]
+    [InlineData("public int M() => SizeOfS();")]
+    [InlineData("public int M() { return Local<S>(); static unsafe int Local<T>() where T : unmanaged => sizeof(T); }")]
+    [InlineData("public int M() => Box<S>.Size();")]
+    [InlineData("public int M() => Box<S>.Property;")]
+    [InlineData("public int M() => Box<S>.Field;")]
+    [InlineData("public int M() => new Box<S>().Instance;")]
+    [InlineData("public int M(Box<S> b) => b.Instance;")]
+    [InlineData("public int M(Derived d) => d.Instance;")]
+    [InlineData("public int M() => Box<S>.Nested.Size();")]
+    public void ATypeArgumentsLayoutIsInTheTextOfACallToAMemberThatReadsIt(string member)
+    {
+        const string Generic = " static unsafe int Size<T>() where T : unmanaged => sizeof(T);"
+            + " static unsafe int SizeOf<T>(T value) where T : unmanaged => sizeof(T);"
+            + " static int SizeOfS() => Size<S>();"
+            + " public struct P<T> { public T First; public byte Second; }"
+            + " public class Derived : Box<S> { }"
+            + " public unsafe class Box<T> where T : unmanaged { public static readonly int Field = sizeof(T); public int Instance = sizeof(T);"
+            + " public static int Property => sizeof(T); public static int Size() => sizeof(T); public static class Nested { public static int Size() => sizeof(T); } }";
+
+        AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; }", member + Generic);
+        AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "public struct S { public byte A; public int B; public int C; }", member + Generic);
+    }
+
+    /// <summary>
+    /// Ticket P2-151 criterion 3: a call that hands a generic member no type of the solution keeps the text it has,
+    /// whatever layout the types beside it have: its type argument is a type from a reference or a type parameter, the
+    /// member is not generic, or it is a generic member of a reference.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M() => Size<int>() + Size<System.Guid>() + Box<long>.Size;")]
+    [InlineData("public int M<U>() where U : unmanaged => Size<U>() + Box<U>.Size;")]
+    [InlineData("public int M(S s) => Plain(s) + s.B;")]
+    [InlineData("public int M(S s) => new System.Collections.Generic.List<S> { s }.Count + System.Array.Empty<S>().Length;")]
+    public void ACallThatHandsOverNoTypeOfTheSolutionKeepsItsText(string member)
+    {
+        const string Generic = " static unsafe int Size<T>() where T : unmanaged => sizeof(T); static int Plain(S s) => s.A;"
+            + " public static unsafe class Box<T> where T : unmanaged { public static int Size => sizeof(T); }";
+        Compilation plain = Interop("public struct S { public byte A; public int B; } " + member + Generic);
+        Compilation laid = Interop("[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; } " + member + Generic);
+
+        Assert.Empty(laid.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Equal(OneRuntimeText(plain), OneRuntimeText(laid));
+        Assert.Equal(Text(plain), Text(laid));
+        Assert.DoesNotContain("Marshalled", OneRuntimeText(laid), StringComparison.Ordinal);
+    }
+
     /// <summary>ADR 0054 decision 4: across runtimes it is the runtime that marshals the call, so an <c>extern</c> method has no fingerprint.</summary>
     [Theory]
     [InlineData("net48", "net10.0")]

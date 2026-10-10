@@ -298,7 +298,9 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     is a pointer or a function pointer, and either a type of the solution is among the types that
     clarification lists for it or, for a callee in those namespaces, the body's assembly has a
     `[DisableRuntimeMarshalling]`. Both read one rule (`Layouts`), so the lowering makes an opaque
-    exactly where the text of the fragment has the declaration.
+    exactly where the clarification above writes the declaration. The declarations the
+    clarification below adds, for a type handed to a generic member of the solution, are not part
+    of that rule, and a call that hands one over is still a call (P2-154).
   - **Why an opaque is enough.** A fragment's fingerprint is the text of its operations, and that
     text now holds the declaration. Beside two declarations the fingerprints differ, the opaque is
     unshared, and an input that reaches it has an unknown outcome (ADR 0014). Beside one
@@ -314,7 +316,7 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     accessors have no body whose own pair would catch a change (ADR 0019). Reading, writing or
     subscribing to one is the same opaque with no fingerprint, and no accessor is called. The
     text of a body that only uses such a member still does not hold the declaration, which is the
-    fingerprint's gap and has its own ticket (P2-152).
+    fingerprint's gap and has its own ticket (P2-153).
   - **Rejected: a model of the shared storage.** One map per offset, or a map of bytes per object,
     would prove more pairs, and it needs every primitive's size, the packing rules and the
     runtime's own choice for an auto layout, per runtime. The corpus run of the ticket met no
@@ -339,6 +341,48 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     operation lowering, and so does its pair, with the reason `il-layout` in the debug log.
     Without this the pairs this clarification makes Unknown would be the ones the IL pass reads
     next, with a field map and a shared call again.
+- 2026-10-09 (P2-151). **A type handed to a generic member of the solution has its declaration in
+  the text of the body that hands it over.** The clarification above left this case out. A generic
+  member's text is the same for every type argument: `sizeof(T)` names a type parameter, which has
+  no declaration. The caller's text names the argument and nothing of it. ADR 0019 does not cover
+  it: the member's own pair is unchanged, and a type has no pair. It was reproduced as one
+  fingerprint beside two declarations, for a generic method, a generic local function and every
+  kind of member of a generic type (the ticket's tests). So the line of an operation that
+  references a member declared in the solution (a call, an object creation, and a reference to a
+  method, a property, a field or an event) is followed by the declaration of every type it hands
+  the member: a method's own type arguments, and the type arguments of the type that declares the
+  member and of every type that one is nested in. A declaration is written as the clarification
+  above writes one, under the name `layout`, once per text, and it reaches the types the argument
+  is made of (an array's element, a tuple's and a generic type's arguments, a field's type). A
+  call to a forwarder hands over what the call to its target does, since that is the call the line
+  spells (ADR 0047).
+  - **Every type argument, and not only those of a member that reads a layout.** The ticket asked.
+    The narrower rule reads the member's body, and the bodies of the generic members it hands its
+    type parameter on to. Three things are against it. The member a call names is not always the
+    one that runs: an interface member, an abstract one and a virtual one have other bodies, in
+    types the caller's text does not name. Following the type parameter through other generic
+    members makes a caller's text depend on bodies that have their own pairs, which is what
+    ADR 0019 keeps apart. And what counts as reading a layout would be a second copy of the
+    clarification above, kept in step by hand, where a case left out is a false Equivalent. The
+    wider rule needs none of that: a member that passes its type parameter on hands over a type
+    parameter, which has no declaration, so the declaration stays with the one body that names the
+    type, and every caller of that body assumes it (ADR 0019).
+  - **Which texts change.** A body's, an implementing part's and a fragment's, where it references
+    a generic member of the solution, or a member of a generic type of the solution, with a type
+    argument the solution declares or one made of such a type. A type from a reference and a type
+    parameter have no lines, so a call that hands over only those has the text it had, and so has
+    a call to a generic member of a reference whatever it is handed (the clarification above
+    decides which of those read a layout).
+  - **What it costs.** Congruence for such a body on a pair that edits the type it hands over, or a
+    type that one's fields reach. Measured on
+    `gitextensions-8522` in compare mode quick (the ticket's Notes): 94 of 12682 congruent pairs
+    are no longer congruent, since the pull request edits a type they hand over or one its fields
+    reach. 86 of them are still Equivalent, proved by the solver, and 8 are Unknown. The narrower
+    rule would keep at most those 94.
+  - **What the text still does not hold.** A type argument named where there is no body: in
+    `class D : Box<S>`, `new D()` and a call to a member `D` declares or to an interface member
+    name nothing of `Box<S>`, and the code `D` inherits reads `S` (P2-152). A generic type of the
+    solution handed to a member of a reference that runs the type's code by reflection.
 - 2026-10-08 (P2-144). **The throw a `switch` expression ends in is part of its bound code, and
   across .NET Core 3.0 it is a runtime rule.** A `switch` expression that matches no arm throws.
   The source does not write the throw and the `IOperation` tree does not hold it: the compiler
