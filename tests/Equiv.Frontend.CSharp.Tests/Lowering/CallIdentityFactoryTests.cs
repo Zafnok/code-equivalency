@@ -60,6 +60,47 @@ public sealed class CallIdentityFactoryTests
     [Fact]
     public Task Lowering_FlagsIndexOfCall() => Verify(IrText.Dump(Method("static int M(string s, char c) => s.IndexOf(c);")));
 
+    /// <summary>
+    /// Ticket P2-073: a row with a precondition flags a call only when its constant arguments can reach the row's change.
+    /// A regex pattern that does not ignore case, a four-digit-year format, ASCII letters compared with one another and
+    /// a plain path literal cannot; the same call with a constant that can, or with an argument that is no constant, is
+    /// flagged as before.
+    /// </summary>
+    [Theory]
+    [InlineData("""static string[] M(string s) => Regex.Split(s, @"\s+");""", false)]
+    [InlineData("""static string[] M(string s) => Regex.Split(s, "[a-z]", RegexOptions.Multiline);""", false)]
+    [InlineData("""static string[] M(string s) => Regex.Split(s, "(?i)[a-z]");""", true)]
+    [InlineData("""static string[] M(string s) => Regex.Split(s, "[a-z]", RegexOptions.IgnoreCase | RegexOptions.Multiline);""", true)]
+    [InlineData("""static string[] M(string s, string p) => Regex.Split(s, p);""", true)]
+    [InlineData("""static string[] M(string s, RegexOptions o) => Regex.Split(s, "[a-z]", o);""", true)]
+    [InlineData("""static object M() => new Regex("[a-z]+");""", false)]
+    [InlineData("""static object M() => new Regex("(?i:[a-z]+)");""", true)]
+    [InlineData("""static string M() => System.IO.Path.Combine(@"C:\data", "Images");""", false)]
+    [InlineData("""static string M() => System.IO.Path.Combine("a|b", "Images");""", true)]
+    [InlineData("""static string M(string d) => System.IO.Path.Combine(d, "Images");""", true)]
+    [InlineData("""static DateTime M(string s) => DateTime.ParseExact(s, "yyyy-MM-dd", null);""", false)]
+    [InlineData("""static DateTime M(string s) => DateTime.ParseExact(s, "yy-MM-dd", null);""", true)]
+    [InlineData("""static DateTime M(string s) => DateTime.Parse(s);""", true)]
+    [InlineData("""static bool M() => "abc".StartsWith("ab");""", false)]
+    [InlineData("""static bool M(string s) => s.StartsWith("ab");""", true)]
+    [InlineData("""static int M() => string.Compare("abc", "abd");""", false)]
+    [InlineData("""static int M() => string.Compare("co-op", "coop");""", true)]
+    public void ARowWithAPreconditionFlagsOnlyACallWhoseConstantsCanReachIt(string member, bool flagged) =>
+        Assert.Equal(flagged, Assert.Single(Calls(Regexes(member))).Callee.RuntimeChanged);
+
+    /// <summary>
+    /// Ticket P2-073: the arguments a precondition reads are those of the call to the callee itself. An element of a
+    /// collection expression is passed to <c>Add</c>, whose call the element's own arguments do not describe.
+    /// </summary>
+    [Theory]
+    [InlineData("""static System.Collections.Generic.HashSet<string> M() => [System.IO.Path.GetFileName("a.txt")];""")]
+    [InlineData("""static System.Collections.Generic.HashSet<Regex> M() => [new Regex("[a-z]+")];""")]
+    public void AnElementsArgumentsAreNotThoseOfTheAddItIsPassedTo(string member) =>
+        Assert.All(Calls(Regexes(member)), static call => Assert.False(call.Callee.RuntimeChanged));
+
+    private static IrProcedure Regexes(string member) =>
+        Source($"using System;\nusing System.Text.RegularExpressions;\nclass C\n{{\n{member}\n}}\n");
+
     [Fact]
     public void ASuppressedMemberIsNotMarkedRuntimeChanged()
     {

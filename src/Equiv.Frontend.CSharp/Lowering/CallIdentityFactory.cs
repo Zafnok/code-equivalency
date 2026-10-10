@@ -19,12 +19,18 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// is not listed in <c>equiv.config.json</c>'s <c>suppressRuntimeChanges</c>, so on a same-runtime pair no callee is
 /// flagged; the flag is the backend's only input about it (ticket M3-001). A legacy call an
 /// API-equivalence entry rewrites (ticket M3-009) is checked against the table as the modern member it becomes.
+/// Given the operation that makes the call, a row with a precondition flags it only when the call's constant
+/// arguments can reach the row's change (ticket P2-073; <see cref="CallArguments"/>).
 /// </summary>
 internal static class CallIdentityFactory
 {
-    /// <summary><paramref name="ordinalComparison"/> says the call passes an ordinal comparison as a constant (<see cref="OrdinalComparison"/>; ticket P2-075).</summary>
-    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, bool ordinalComparison) =>
-        Of(Name(method, renames), suppressedRuntimeChanges, interval, ordinalComparison);
+    /// <summary>
+    /// The identity of a call to <paramref name="method"/>. Given the <paramref name="site"/> that makes the call, a row
+    /// reads the call's constant arguments (<see cref="CallArguments"/>; ticket P2-073) and whether one is an ordinal
+    /// comparison (<see cref="OrdinalComparison"/>; ticket P2-075).
+    /// </summary>
+    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null) =>
+        Of(Name(method, renames), suppressedRuntimeChanges, interval, CallArguments.IsOrdinalComparison(site, method), CallArguments.Of(site, method));
 
     /// <summary>
     /// The identity of a call to a method of <paramref name="compilation"/>, which also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
@@ -33,25 +39,20 @@ internal static class CallIdentityFactory
     /// project compiled against, never the solution's own code (a <see cref="CompilationReference"/>, or the compilation's
     /// own assembly) or a NuGet package (a <see cref="PortableExecutableReference"/> without the attribute).
     /// </summary>
-    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval) =>
-        Of(method, compilation, renames, suppressedRuntimeChanges, interval, ordinalComparison: false);
-
-    /// <summary>As the overload without <paramref name="ordinalComparison"/>, which says the call passes an ordinal comparison as a constant (<see cref="OrdinalComparison"/>; ticket P2-075).</summary>
-    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, bool ordinalComparison)
+    public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null)
     {
         ArgumentNullException.ThrowIfNull(compilation);
-        return Of(method, renames, suppressedRuntimeChanges, interval, ordinalComparison) with { External = IsExternal(method.ContainingAssembly, compilation) };
+        return Of(method, renames, suppressedRuntimeChanges, interval, site) with { External = IsExternal(method.ContainingAssembly, compilation) };
     }
 
     /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be inside <paramref name="interval"/>.</summary>
     public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval) =>
-        Of(value, suppressedRuntimeChanges, interval, ordinalComparison: false);
+        Of(value, suppressedRuntimeChanges, interval, ordinalComparison: false, []);
 
-    /// <summary>As the overload without <paramref name="ordinalComparison"/>, which says the call passes an ordinal comparison as a constant (<see cref="OrdinalComparison"/>; ticket P2-075).</summary>
-    public static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, bool ordinalComparison)
+    private static CallIdentity Of(string value, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, bool ordinalComparison, ImmutableArray<CallArgument> arguments)
     {
         CallIdentity callee = new(value);
-        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, interval, suppressedRuntimeChanges, ordinalComparison, out _) };
+        return callee with { RuntimeChanged = RuntimeChangeTable.Load().TryMatch(callee, interval, suppressedRuntimeChanges, ordinalComparison, arguments, out _) };
     }
 
     /// <summary>The <see cref="CallIdentity.Value"/> of a call to <paramref name="method"/>, which no runtime rule changes.</summary>

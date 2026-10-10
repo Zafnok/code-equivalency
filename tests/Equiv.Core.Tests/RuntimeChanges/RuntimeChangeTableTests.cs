@@ -401,6 +401,57 @@ public sealed class RuntimeChangeTableTests
         Assert.Empty(tableMembers.Except(reviewed, StringComparer.Ordinal));
     }
 
+    /// <summary>Ticket P2-073: <c>precondition</c> is optional, and one of four names.</summary>
+    [Theory]
+    [InlineData("caseInsensitivePattern", RuntimeChangePrecondition.CaseInsensitivePattern)]
+    [InlineData("twoDigitYearFormat", RuntimeChangePrecondition.TwoDigitYearFormat)]
+    [InlineData("cultureSensitiveText", RuntimeChangePrecondition.CultureSensitiveText)]
+    [InlineData("invalidPath", RuntimeChangePrecondition.InvalidPath)]
+    public void PreconditionIsParsed(string name, RuntimeChangePrecondition precondition)
+    {
+        RuntimeChangeTable table = Parse($$"""
+            [{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "curated", "precondition": "{{name}}" },
+             { "member": "A::C(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "curated" }]
+            """);
+
+        Assert.Equal(precondition, table.Rows[0].Precondition);
+        Assert.Null(table.Rows[1].Precondition);
+    }
+
+    [Fact]
+    public void AnUnknownPreconditionIsRejected()
+    {
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(() => Parse(
+            """[{ "member": "A::B(", "reason": "r", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "curated", "precondition": "anything" }]"""));
+
+        Assert.Contains("row 'A::B(' has unknown precondition 'anything'", exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-073: a row with a precondition does not match a call whose constant arguments cannot reach its change,
+    /// and the next row for the member is then the match. Without arguments, or with one that is no constant, it matches.
+    /// </summary>
+    [Fact]
+    public void ARowWithAPreconditionMatchesOnlyACallThatCanReachIt()
+    {
+        RuntimeChangeTable table = Parse("""
+            [{ "member": "A::B(", "reason": "path", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "curated", "precondition": "invalidPath" },
+             { "member": "A::B(string,bool)", "reason": "other", "url": "https://learn.microsoft.com/x", "changedIn": null, "source": "curated" }]
+            """);
+        RuntimeInterval interval = Interval("net48", "net10.0");
+        CallArgument valid = new("path", IsString: true, IsConstant: true, "a.txt");
+        CallArgument invalid = valid with { Value = "a|b" };
+        CallArgument variable = valid with { IsConstant = false, Value = null };
+
+        Assert.False(table.TryMatch(new CallIdentity("A::B(string)"), interval, [], [valid], out _));
+        Assert.True(table.TryMatch(new CallIdentity("A::B(string)"), interval, [], [invalid], out RuntimeChange reached));
+        Assert.Equal("path", reached.Reason);
+        Assert.True(table.TryMatch(new CallIdentity("A::B(string)"), interval, [], [variable], out _));
+        Assert.True(table.TryMatch(new CallIdentity("A::B(string)"), interval, out _));
+        Assert.True(table.TryMatch(new CallIdentity("A::B(string,bool)"), interval, [], [valid], out RuntimeChange next));
+        Assert.Equal("other", next.Reason);
+    }
+
     private static RuntimeInterval Interval(string first, string second) => new(TargetRuntime.Parse(first)!, TargetRuntime.Parse(second)!);
 
     private static string RepoRoot => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
