@@ -373,7 +373,7 @@ internal sealed class BoundSerialiser : OperationWalker
     private IEnumerable<string> BackingFieldAttributes(IEventSymbol raised)
     {
         SyntaxNode declarator = raised.DeclaringSyntaxReferences[0].GetSyntax();
-        SemanticModel model = Referenced(compilation).First(c => c.ContainsSyntaxTree(declarator.SyntaxTree)).GetSemanticModel(declarator.SyntaxTree);
+        SemanticModel model = Declaring(compilation, declarator.SyntaxTree).GetSemanticModel(declarator.SyntaxTree);
         return declarator.Ancestors().OfType<EventFieldDeclarationSyntax>().First().AttributeLists
             .Where(static list => list.Target?.Identifier.ValueText is "field")
             .SelectMany(static list => list.Attributes)
@@ -384,18 +384,25 @@ internal sealed class BoundSerialiser : OperationWalker
     private static string Spelled(IOperation operation) =>
         $"{operation.Kind}:{(operation as IObjectCreationOperation)?.Constructor}{(operation as IMemberReferenceOperation)?.Member.Name}{(operation.ConstantValue.HasValue ? Constant(operation.ConstantValue.Value) : string.Empty)}";
 
-    /// <summary><paramref name="root"/> and the compilations of the solution it references, the nearest first.</summary>
-    private static IEnumerable<Compilation> Referenced(Compilation root)
+    /// <summary>
+    /// The compilation that holds <paramref name="tree"/>: <paramref name="root"/>, or the nearest compilation of the
+    /// solution it references. A symbol with a declaration was reached through such a reference, so there is one.
+    /// </summary>
+    private static Compilation Declaring(Compilation root, SyntaxTree tree)
     {
-        Queue<Compilation> pending = new([root]);
-        while (pending.TryDequeue(out Compilation? next))
+        Queue<Compilation> pending = new();
+        Compilation next = root;
+        while (!next.ContainsSyntaxTree(tree))
         {
-            yield return next;
             foreach (CompilationReference reference in next.References.OfType<CompilationReference>())
             {
                 pending.Enqueue(reference.Compilation);
             }
+
+            next = pending.Dequeue();
         }
+
+        return next;
     }
 
     /// <summary>
