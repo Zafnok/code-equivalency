@@ -747,9 +747,19 @@ Found by P2-149 (2026-10-09, by reading the coverage table and its own rule; not
 - P2-150 (M) Soundness: the lowered body of an operation that reads a type's layout holds none of
   it: a field of an explicit layout is its own map, and a call such as `Marshal.SizeOf<S>()` is one
   function for both sides whatever `S` is. The first step is the repro. Needs P2-149.
+  Done: both reproduced as an Equivalent from the solver. A field at a `[FieldOffset]` and a call
+  that is handed a type of the solution are now an opaque with reason `Layout`, shared by a
+  fingerprint that holds the declaration (ADR 0024, clarification of 2026-10-09 (P2-150)), and a
+  method with such an operation is never lowered from IL.
 - P2-151 (S) Soundness: a type argument's layout reaches a generic member of the solution that
   takes its size, and neither the caller's text nor the callee's holds it. The first step is the
   repro. Needs P2-149.
+
+Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
+- P2-152 (S) Soundness: the text of a body that uses an auto-property or a field-like event of an
+  explicit layout holds none of the layout, because the bound tree does not name the backing
+  field. The lowering already makes it an opaque nothing shares. The first step is the repro.
+  Needs P2-150.
 
 Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
 - P2-148 (S) `SecondSolverPrintTests.Z3AnswersTheRewrittenTextAsItAnswersTheOriginal` fails at random

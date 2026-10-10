@@ -2143,6 +2143,150 @@ public sealed class IrLowererTests
         Assert.Equal(new IrReturned(new IrBoolValue(Value: false)), Run(procedure, new IrSortValue("System.Type", 1)));
     }
 
+    /// <summary>
+    /// Ticket P2-150, the Goal's first bullet: two fields at one <c>[FieldOffset]</c> are one storage location, so a field
+    /// of an explicit layout is not its own map. Reading, writing and stepping one are each an opaque with reason
+    /// <c>Layout</c>, whose fingerprint holds the type's declaration (ticket P2-149) and decides whether it is shared.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(C s) => s.A;")]
+    [InlineData("static void M(C s) { s.A = 1; }")]
+    [InlineData("static void M(C s) { s.A += 1; }")]
+    [InlineData("static void M(C s) { s.A++; }")]
+    [InlineData("static void M(C s) { (s.A, _) = (1, 2); }")]
+    [InlineData("static void M(C s, bool c) { s.A = c ? 1 : 2; }")]
+    [InlineData("static void M(C s, bool c) { s.A += c ? 1 : 2; }")]
+    [InlineData("static int M(C s) => s.Inner.X;")]
+    public void AFieldOfAnExplicitLayoutIsAnOpaqueAndNotItsMap(string member)
+    {
+        IrProcedure procedure = Explicit("0", member);
+
+        IrOpaque[] layout = [.. Opaques(procedure).Where(static o => o.Reason is "Layout")];
+        Assert.NotEmpty(layout);
+        Assert.All(layout, static o => Assert.NotNull(o.Fingerprint));
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name is "field.C.A" or "field.C.Inner");
+        Assert.Empty(Fingerprints(procedure).Intersect(Fingerprints(Explicit("4", member)), StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Ticket P2-150: an auto-property and a field-like event of an explicit layout are storage at an offset too, and
+    /// the bound tree does not name their backing fields, so no fingerprint holds the declaration: the opaque is never
+    /// shared, and no accessor is called.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(C s) => s.P;")]
+    [InlineData("static void M(C s) { s.P = 1; }")]
+    [InlineData("static void M(C s) { s.P++; }")]
+    [InlineData("static void M(C s, bool c) { s.P = c ? 1 : 2; }")]
+    [InlineData("static void M(C s) { (s.A, s.P) = (1, 2); }")]
+    [InlineData("void M(Action h) { E += h; }")]
+    [InlineData("void M() { E = null; }")]
+    [InlineData("bool M() => E == null;")]
+    public void AnAutoPropertyOrAnEventOfAnExplicitLayoutIsAnOpaqueNothingShares(string member)
+    {
+        IrProcedure procedure = Explicit("0", member);
+
+        IrOpaque[] layout = [.. Opaques(procedure).Where(static o => o.Reason is "Layout")];
+        Assert.NotEmpty(layout);
+        Assert.All(layout, static o => Assert.Null(o.Fingerprint));
+        Assert.Empty(Calls(procedure));
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("field.C.", StringComparison.Ordinal));
+    }
+
+    /// <summary>Ticket P2-150 criterion 3: a field of a type with no explicit layout lowers as it did, whatever attributes the type has.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("[StructLayout(LayoutKind.Sequential, Pack = 1)] ")]
+    public void AFieldOfATypeWithoutAnExplicitLayoutIsStillItsMap(string attribute)
+    {
+        IrProcedure procedure = Source(Interop + attribute + "class C { public int A; public int P { get; set; } public event Action E; bool M(C s) { s.A = 1; s.P = s.A; return E == null; } }");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+        Assert.Equal(["field.C.A", "field.C.E", "field.C.P"], procedure.Parameters.Select(static p => p.Var.Name).Where(static n => n.StartsWith("field.", StringComparison.Ordinal)).Order(StringComparer.Ordinal), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-150, the Goal's second bullet: a call that is handed a type reads its declaration, which the call's
+    /// identity does not hold. It is an opaque with reason <c>Layout</c>, not a call, and its fingerprint is another
+    /// beside another declaration.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M() => Marshal.SizeOf<S>();")]
+    [InlineData("static int M() => Marshal.SizeOf(typeof(S));")]
+    [InlineData("static int M() => Unsafe.SizeOf<S>();")]
+    [InlineData("static int M(byte[] b) => MemoryMarshal.Cast<byte, S>(b).Length;")]
+    [InlineData("static unsafe S M(void* p) => new Span<S>(p, 1)[0];")]
+    [InlineData("static unsafe int M(S* p) => F(p); static unsafe int F(S* p) => 0;")]
+    public void ACallThatIsHandedATypeIsAnOpaqueWhoseFingerprintHoldsTheDeclaration(string member)
+    {
+        IrProcedure procedure = Sized(string.Empty, member);
+
+        IrOpaque layout = Assert.Single(Opaques(procedure), static o => o.Reason is "Layout");
+        Assert.NotNull(layout.Fingerprint);
+        Assert.DoesNotContain(Calls(procedure), static c => Handed.Any(name => c.Callee.Value.Contains(name, StringComparison.Ordinal)));
+        Assert.Empty(Fingerprints(procedure).Intersect(Fingerprints(Sized("[StructLayout(LayoutKind.Sequential, Pack = 1)] ", member)), StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Ticket P2-150: a call into the interop services that is handed no type of the solution is the call it was, unless
+    /// the body's assembly has a <c>[DisableRuntimeMarshalling]</c>, which the fingerprint writes after such a call.
+    /// </summary>
+    [Fact]
+    public void ACallThatIsHandedNoDeclaredTypeIsStillACall()
+    {
+        const string Member = "class C { static int M() => Marshal.SizeOf<int>(); }";
+        IrProcedure pointed = Source(Interop + "class C { static unsafe string M(char* p) => new string(p); }");
+
+        IrProcedure plain = Source(Interop + Member);
+        IrProcedure disabled = Source(Interop + "[assembly: DisableRuntimeMarshalling]\n" + Member);
+
+        Assert.Empty(Opaques(plain));
+        Assert.Equal("System.Runtime.InteropServices.Marshal::SizeOf`1()<int>", Assert.Single(Calls(plain)).Callee.Value);
+        Assert.Equal("Layout", Assert.Single(Opaques(disabled)).Reason);
+        Assert.Empty(Calls(disabled));
+        Assert.Empty(Opaques(pointed));
+        Assert.Equal("System.String::.ctor(char*)", Assert.Single(Calls(pointed)).Callee.Value);
+    }
+
+    /// <summary>
+    /// Ticket P2-150 criterion 1: a read through a pointer, pointer arithmetic, a call through a function pointer and an
+    /// inline-array access are each an opaque, and beside another declaration no fingerprint of the body is the same.
+    /// </summary>
+    [Theory]
+    [InlineData("static unsafe int M(S* p) => (*p).B;")]
+    [InlineData("static unsafe int M(S* p) => p->B;")]
+    [InlineData("static unsafe int M(S* p) => p[1].B;")]
+    [InlineData("static unsafe int M(byte* p) => ((S*)p)->B;")]
+    [InlineData("static unsafe S* M(S* p) => p + 1;")]
+    [InlineData("static unsafe long M(S* p, S* q) => q - p;")]
+    [InlineData("static unsafe S* M(S* p) { p++; return p; }")]
+    [InlineData("static unsafe int M(delegate*<S, int> f, S s) => f(s);")]
+    [InlineData("static int M(Buffer b, int i) => b[i];")]
+    public void AnOperationThatReadsMemoryIsAnOpaqueWhoseFingerprintHoldsTheDeclaration(string member)
+    {
+        IrProcedure procedure = Sized(string.Empty, member);
+
+        Assert.NotEmpty(Opaques(procedure));
+        Assert.Empty(Fingerprints(procedure).Intersect(Fingerprints(Sized("[StructLayout(LayoutKind.Sequential, Pack = 1)] ", member, length: 8)), StringComparer.Ordinal));
+    }
+
+    private const string Interop = "using System;\nusing System.Runtime.CompilerServices;\nusing System.Runtime.InteropServices;\n";
+
+    /// <summary>What names the callees that <see cref="ACallThatIsHandedATypeIsAnOpaqueWhoseFingerprintHoldsTheDeclaration"/> hands a type.</summary>
+    private static readonly string[] Handed = ["Marshal", "Unsafe", "::F(", ".ctor"];
+
+    /// <summary>Lowers <c>M</c> of an explicit layout <c>C</c> whose field <c>B</c> is at <paramref name="offset"/>: at 0 it shares <c>A</c>'s storage.</summary>
+    private static IrProcedure Explicit(string offset, string member) => Source(
+        Interop + "struct T { public int X; } [StructLayout(LayoutKind.Explicit)] class C { [FieldOffset(0)] public int A; [FieldOffset(" + offset + ")] public int B; [FieldOffset(8)] public T Inner; "
+        + "[field: FieldOffset(16)] public int P { get; set; } [field: FieldOffset(24)] public event Action E; " + member + " }");
+
+    /// <summary>Lowers <c>M</c> of <c>C</c> beside a struct <c>S</c> with <paramref name="attribute"/> and an inline array of <paramref name="length"/>.</summary>
+    private static IrProcedure Sized(string attribute, string member, int length = 4) => Source(
+        Interop + attribute + "struct S { public byte A; public int B; } [InlineArray(" + length.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")] struct Buffer { private int e; } class C { " + member + " }");
+
+    private static string[] Fingerprints(IrProcedure procedure) => [.. Opaques(procedure).Select(static o => o.Fingerprint).OfType<string>()];
+
     /// <summary>Runs <paramref name="procedure"/> with <paramref name="arguments"/> and every heap input after them empty, so nothing is null.</summary>
     private static IrOutcome RunWith(IrProcedure procedure, Equiv.Core.ICallOracle oracle, params IrValue[] arguments) =>
         IrInterpreter.Run(
