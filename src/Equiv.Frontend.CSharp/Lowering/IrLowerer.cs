@@ -1200,14 +1200,12 @@ internal sealed class IrLowerer
     /// The opaque, with reason <see cref="Layouts.Reason"/>, of an <paramref name="operation"/> that
     /// <see cref="ReadsLayout"/>. A field's own map would say that a write to one field of an explicit layout never
     /// changes another, and a call's identity names a type and nothing of its declaration. The fragment's fingerprint
-    /// holds the declaration of a field's type and of every type under such a call (ticket P2-149), so the fragment is
-    /// shared as any other is: beside one declaration it is one call on both sides, whose place in the trace orders it
-    /// against every other read and write of that storage, and beside two it is unshared. The fingerprint does not hold
-    /// the declaration for an auto-property or a field-like event, whose backing field the bound tree does not name, so
-    /// an operation on one is never shared.
+    /// holds the declaration of the type that has the storage, be it a field, an auto-property or a field-like event
+    /// (tickets P2-149 and P2-153), and of every type under such a call, so the fragment is shared as any other is:
+    /// beside one declaration it is one call on both sides, whose place in the trace orders it against every other read
+    /// and write of that storage, and beside two it is unshared.
     /// </summary>
-    private IrVar? Layout(IOperation operation, LoweringContext context) =>
-        Opaque(operation, Layouts.Reason, Overlaid(operation).All(static storage => storage is IFieldReferenceOperation) ? Fragment(operation) : null, context);
+    private IrVar? Layout(IOperation operation, LoweringContext context) => Opaque(operation, Layouts.Reason, context);
 
     /// <summary>
     /// The references to storage of an explicit layout (<see cref="Layouts.IsOverlaid"/>) that <paramref name="operation"/>

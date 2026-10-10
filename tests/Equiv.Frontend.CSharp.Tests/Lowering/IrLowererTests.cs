@@ -2171,9 +2171,9 @@ public sealed class IrLowererTests
     }
 
     /// <summary>
-    /// Ticket P2-150: an auto-property and a field-like event of an explicit layout are storage at an offset too, and
-    /// the bound tree does not name their backing fields, so no fingerprint holds the declaration: the opaque is never
-    /// shared, and no accessor is called.
+    /// Ticket P2-153: an auto-property and a field-like event of an explicit layout are storage at an offset too. The
+    /// opaque of one has a fingerprint that holds the type's declaration, as a field's has, so it is another beside
+    /// another declaration; no accessor is called and there is no map.
     /// </summary>
     [Theory]
     [InlineData("static int M(C s) => s.P;")]
@@ -2184,15 +2184,16 @@ public sealed class IrLowererTests
     [InlineData("void M(Action h) { E += h; }")]
     [InlineData("void M() { E = null; }")]
     [InlineData("bool M() => E == null;")]
-    public void AnAutoPropertyOrAnEventOfAnExplicitLayoutIsAnOpaqueNothingShares(string member)
+    public void AnAutoPropertyOrAnEventOfAnExplicitLayoutIsAnOpaqueWhoseFingerprintHoldsTheDeclaration(string member)
     {
         IrProcedure procedure = Explicit("0", member);
 
         IrOpaque[] layout = [.. Opaques(procedure).Where(static o => o.Reason is "Layout")];
         Assert.NotEmpty(layout);
-        Assert.All(layout, static o => Assert.Null(o.Fingerprint));
+        Assert.All(layout, static o => Assert.NotNull(o.Fingerprint));
         Assert.Empty(Calls(procedure));
         Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("field.C.", StringComparison.Ordinal));
+        Assert.Empty(Fingerprints(procedure).Intersect(Fingerprints(Explicit("4", member)), StringComparer.Ordinal));
     }
 
     /// <summary>Ticket P2-150 criterion 3: a field of a type with no explicit layout lowers as it did, whatever attributes the type has.</summary>

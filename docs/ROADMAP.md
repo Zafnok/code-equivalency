@@ -768,6 +768,10 @@ Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
   explicit layout holds none of the layout, because the bound tree does not name the backing
   field. The lowering already makes it an opaque nothing shares. The first step is the repro.
   Needs P2-150.
+  Done: reproduced as equal fingerprints. A reference to such a property or event is now followed
+  by the type's declaration, which also holds each field-like event and the attributes of its
+  backing field, and the lowered opaque is shared by that fingerprint (ADR 0024, clarification of
+  2026-10-09 (P2-153)).
 - P2-154 (M) Soundness: a lowered call that hands a generic member of the solution a type
   (`Size<S>()`) is one function for both sides beside two declarations of `S`. P2-151 put the
   declaration in the text and P2-150's rule for calls does not reach such a callee. The first step

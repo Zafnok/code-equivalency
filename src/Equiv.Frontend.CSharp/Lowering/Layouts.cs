@@ -23,6 +23,8 @@ internal static class Layouts
 
     private const string FieldOffset = "System.Runtime.InteropServices.FieldOffsetAttribute";
 
+    private const string StructLayout = "System.Runtime.InteropServices.StructLayoutAttribute";
+
     private const string InlineArray = "System.Runtime.CompilerServices.InlineArrayAttribute";
 
     /// <summary>
@@ -32,9 +34,11 @@ internal static class Layouts
     private static readonly ImmutableArray<string> InteropServices = ["System.Runtime.InteropServices", "System.Runtime.CompilerServices"];
 
     /// <summary>
-    /// The types whose declaration fixes what <paramref name="operation"/> itself does: the type of a field that has a
-    /// <c>[FieldOffset]</c>, the operand of a <c>sizeof</c>, every type under a call that is handed one to read as
-    /// memory, and the type of an operation that is a pointer, a function pointer or an inline array.
+    /// The types whose declaration fixes what <paramref name="operation"/> itself does: the type of a field, an
+    /// auto-property or a field-like event that is storage of an explicit layout (<see cref="IsOverlaid"/>; ticket
+    /// P2-153 for the last two, whose backing field the bound tree does not name), the operand of a <c>sizeof</c>,
+    /// every type under a call that is handed one to read as memory, and the type of an operation that is a pointer, a
+    /// function pointer or an inline array.
     /// </summary>
     public static ImmutableArray<ITypeSymbol> Reached(IOperation operation)
     {
@@ -42,7 +46,7 @@ internal static class Layouts
         IEnumerable<ITypeSymbol?> reached = operation switch
         {
             ISizeOfOperation o => [o.TypeOperand],
-            IFieldReferenceOperation o when Has(o.Field, FieldOffset) => [o.Field.ContainingType],
+            IMemberReferenceOperation o when IsOverlaid(o.Member) => [o.Member.ContainingType],
             _ when Handed(operation) is { } callee =>
                 [callee.ContainingType, .. callee.TypeArguments, .. operation.DescendantsAndSelf().SelectMany(static o => (ITypeSymbol?[])[o.Type, (o as ITypeOfOperation)?.TypeOperand])],
             _ when IsPointer(operation.Type) || (operation.Type is INamedTypeSymbol named && Has(named, InlineArray)) => [operation.Type],
@@ -87,8 +91,8 @@ internal static class Layouts
     /// <summary>
     /// Whether <paramref name="member"/> is storage of an explicit layout, which another member of its type may share: a
     /// field that has a <c>[FieldOffset]</c>, an auto-property whose backing field has one, or a field-like instance
-    /// event of a type that has such a field. Every instance field of an explicit layout has the attribute, and no
-    /// other field may.
+    /// event of a type whose <c>[StructLayout]</c> is explicit. Every instance field of an explicit layout has the
+    /// attribute, and no other field may; an event's backing field is no symbol of its type, so the type is asked.
     /// </summary>
     public static bool IsOverlaid(ISymbol member)
     {
@@ -97,10 +101,19 @@ internal static class Layouts
         {
             IFieldSymbol field => Has(field, FieldOffset),
             IPropertySymbol property => HeapLowerer.BackingField(property) is { } backing && Has(backing, FieldOffset),
-            IEventSymbol { IsStatic: false } raised =>
-                raised.AddMethod!.IsImplicitlyDeclared && raised.ContainingType.GetMembers().OfType<IFieldSymbol>().Any(static f => Has(f, FieldOffset)),
+            IEventSymbol raised => IsStored(raised) && IsExplicit(raised.ContainingType),
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// Whether <paramref name="raised"/> is a field-like instance event: the compiler writes its accessors and stores its
+    /// delegate in a backing field of each object, which no symbol of the type is.
+    /// </summary>
+    public static bool IsStored(IEventSymbol raised)
+    {
+        ArgumentNullException.ThrowIfNull(raised);
+        return !raised.IsStatic && !raised.IsAbstract && raised.AddMethod!.IsImplicitlyDeclared;
     }
 
     /// <summary>
@@ -116,6 +129,11 @@ internal static class Layouts
         INamedTypeSymbol named => !named.DeclaringSyntaxReferences.IsEmpty || named.TypeArguments.Any(IsDeclared),
         _ => false,
     };
+
+    /// <summary>Whether <paramref name="type"/> has a <c>[StructLayout(LayoutKind.Explicit)]</c>, as the compiler reads one before it allows a <c>[FieldOffset]</c>.</summary>
+    private static bool IsExplicit(INamedTypeSymbol type) => type.GetAttributes().Any(static a =>
+        string.Equals(a.AttributeClass!.ToDisplayString(), StructLayout, StringComparison.Ordinal)
+        && a.ConstructorArguments.Any(static kind => kind.Value is (int)System.Runtime.InteropServices.LayoutKind.Explicit));
 
     public static bool IsPointer(ITypeSymbol? type) => type is IPointerTypeSymbol or IFunctionPointerTypeSymbol;
 

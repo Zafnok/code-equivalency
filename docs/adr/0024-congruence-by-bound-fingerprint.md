@@ -341,6 +341,35 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     operation lowering, and so does its pair, with the reason `il-layout` in the debug log.
     Without this the pairs this clarification makes Unknown would be the ones the IL pass reads
     next, with a field map and a shared call again.
+- 2026-10-09 (P2-153). **An auto-property and a field-like event of an explicit layout have the
+  type's declaration in the text too, and their opaque is shared by it.** The clarification above
+  left them without one. It was reproduced as one fingerprint beside two declarations that differ
+  in an offset, for a read, a write and an increment of an auto-property and for `+=` and `-=` on
+  an event (the ticket's tests): the bound tree names the property or the event, not its backing
+  field, and the accessors have no body whose own pair would catch the change (ADR 0019).
+  - **The rule.** A reference to an auto-property whose backing field has a `[FieldOffset]`, or to
+    a field-like instance event of a type whose `[StructLayout]` is `LayoutKind.Explicit`, is
+    followed by the declaration of the type that declares it, as a reference to a field that has a
+    `[FieldOffset]` is. The lowering reads the same rule (`Layouts.IsOverlaid`), so the opaque of
+    such a reference now has a fingerprint that holds the declaration and is shared by it, on the
+    terms the clarification above gives a field.
+  - **An event is asked through its type, and its backing field is read from its declaration.**
+    A field-like event's backing field is no symbol of its type, so the event's symbol cannot say
+    whether the field has a `[FieldOffset]`. The compiler allows the attribute only under an
+    explicit `[StructLayout]` and then requires it on every instance field, so the type's
+    attribute decides. For the same reason a type's declaration did not hold its events at all.
+    It now has one line per field-like instance event, in declaration order, with the event's
+    type, followed by the attributes its declaration gives the backing field
+    (`[field: FieldOffset(8)]`), each as its constructor, its named arguments and its constants,
+    bound in the compilation that declares the event.
+  - **Which texts change.** A text that already held the declaration of a type with a field-like
+    instance event has that event's lines, and reaches the event's delegate type. A text that
+    references such a property or event has the declaration. A property with accessors of its own,
+    a static member, and an auto-property or an event of a type with no explicit layout add
+    nothing (`ABodyThatUsesNoStoredMemberOfAnExplicitLayoutKeepsItsText`).
+  - **What the text still does not hold.** The place of an event among the fields of a sequential
+    layout: fields are numbered among fields and events among events. No operation of the
+    clarifications above reads it today, since a type with a delegate field has no `sizeof`.
 - 2026-10-09 (P2-151). **A type handed to a generic member of the solution has its declaration in
   the text of the body that hands it over.** The clarification above left this case out. A generic
   member's text is the same for every type argument: `sizeof(T)` names a type parameter, which has

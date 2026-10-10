@@ -30,12 +30,16 @@ public sealed class LayoutsTests
     [InlineData("D", "A", false)]
     [InlineData("D", "P", false)]
     [InlineData("D", "E", false)]
+    [InlineData("H", "E", false)]
+    [InlineData("Q", "E", false)]
     public void AMemberOfAnExplicitLayoutThatTheCompilerStoresIsOverlaid(string type, string member, bool expected)
     {
         Compilation compilation = Compile(
             "[StructLayout(LayoutKind.Explicit)] class C { [FieldOffset(0)] public int A; public static int Z; [field: FieldOffset(8)] public int P { get; set; } public int Q => A; "
             + "[field: FieldOffset(16)] public event Action E; public static event Action F; public event Action G { add { } remove { } } public void M() { } } "
-            + "class D { public int A; public int P { get; set; } public event Action E; }");
+            + "class D { public int A; public int P { get; set; } public event Action E; } "
+            + "[StructLayout(LayoutKind.Explicit)] abstract class H { [FieldOffset(0)] public int A; public abstract event Action E; } "
+            + "[Serializable, StructLayout(LayoutKind.Sequential)] class Q { public event Action E; }");
 
         Assert.Equal(expected, Layouts.IsOverlaid(compilation.GetTypeByMetadataName(type)!.GetMembers(member).Single()));
     }
@@ -101,6 +105,7 @@ public sealed class LayoutsTests
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.Reads(null!, compilation.Assembly));
         Assert.Throws<ArgumentNullException>("assembly", () => Layouts.Reads(operation, null!));
         Assert.Throws<ArgumentNullException>("member", () => Layouts.IsOverlaid(null!));
+        Assert.Throws<ArgumentNullException>("raised", () => Layouts.IsStored(null!));
         Assert.Throws<ArgumentNullException>("method", () => IrLowerer.DependsOnLayout(null!, compilation));
         Assert.Throws<ArgumentNullException>("compilation", () => IrLowerer.DependsOnLayout(method, null!));
     }
