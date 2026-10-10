@@ -1,5 +1,5 @@
 # P2-075 A runtime-change row matches only the overloads and members its change affects
-Status: todo
+Status: done (PR #457)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-047
