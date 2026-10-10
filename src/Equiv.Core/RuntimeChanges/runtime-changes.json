@@ -15,7 +15,9 @@
 // row applies whenever the runtimes differ. "coveredFrom" is the oldest .NET version whose changes this
 // table lists. Backfilled once by tools/runtime-changes-backfill (P2-054); the measured rows were placed by running
 // tools/runtime-diff between adjacent runtimes (P2-113). A member whose behaviour changed at more than one runtime
-// has one row per change point.
+// has one row per change point. An optional "requires" (P2-114) names a fact about the method that makes the call, without
+// which the row does not fire: "asyncStreamOperation" is a call to ReadAsync, WriteAsync, BeginRead, BeginWrite,
+// CopyToAsync or FlushAsync on a Stream in that same method.
 //
 // One row is for a call the compiler makes and the source does not write (ADR 0024 as clarified by ticket P2-144):
 // the SwitchExpressionException constructor a switch expression calls when no arm matches. Where the reference
@@ -655,6 +657,7 @@
       "member": "System.IO.FileStream::get_Position(",
       "source": "documented",
       "changedIn": "net6.0",
+      "requires": "asyncStreamOperation",
       "reason": "Position moves when an async read or write is issued rather than when it completes, so a read of Position during the operation differs.",
       "url": "https://learn.microsoft.com/en-us/dotnet/core/compatibility/core-libraries/6.0/filestream-position-updates-after-readasync-writeasync-completion"
     },

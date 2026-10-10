@@ -516,6 +516,43 @@ public sealed partial class SamplesEndToEndTests
         }
     }
 
+    /// <summary>
+    /// Ticket P2-114 criterion 1: .NET 5 against .NET 6 crosses the <c>FileStream.Position</c> row, but the method reads
+    /// <c>Position</c> after a synchronous <c>Read</c> only, so the row does not fire and the byte-identical pair is
+    /// Equivalent by congruence.
+    /// </summary>
+    [Fact]
+    public void RuntimeRowSyncPosition_ASynchronousReadDoesNotFireThePositionRow()
+    {
+        Result result = Assert.Single(RunSample("runtime-row-sync-position").Log.Runs[0].Results);
+
+        Assert.Equal("EQ001", result.RuleId);
+        Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+    }
+
+    /// <summary>Ticket P2-114 criterion 2: the same method with <c>ReadAsync</c> in place of <c>Read</c> stays EQ006.</summary>
+    [Fact]
+    public void RuntimeRowSyncPosition_AnAsyncReadKeepsTheRow()
+    {
+        string variantDir = Path.Combine(SamplesRoot, "runtime-row-sync-position", "async-variant");
+        string legacy = Directory.GetFiles(Path.Combine(variantDir, "legacy"), "*.sln").Single();
+        string modern = Directory.GetFiles(Path.Combine(variantDir, "modern"), "*.slnx").Single();
+        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P2-114-{Guid.NewGuid():N}.sarif");
+        try
+        {
+            int exitCode = RunProgramSilently(() => Program.Main(["compare", "--legacy", legacy, "--modern", modern, "--out", outPath, .. Pinned]));
+
+            Assert.Equal(ExitCodes.Divergent, exitCode);
+            Result result = Assert.Single(SarifLog.Load(outPath).Runs[0].Results);
+            Assert.Equal("EQ006", result.RuleId);
+            Assert.Contains("between net5.0 and net6.0 (", result.Message.Text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(outPath);
+        }
+    }
+
     [Fact]
     public void AddedRemoved_HasAnEQ004AndAnEQ005()
     {
