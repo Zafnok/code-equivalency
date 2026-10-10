@@ -53,13 +53,22 @@ public sealed class RuntimeChangeTable
         TryMatch(identity, interval, [], out match);
 
     /// <summary>As the three-argument overload, but a row whose <see cref="RuntimeChange.Member"/> is in <paramref name="suppressed"/> never matches.</summary>
-    public bool TryMatch(CallIdentity identity, RuntimeInterval interval, ImmutableArray<string> suppressed, out RuntimeChange match)
+    public bool TryMatch(CallIdentity identity, RuntimeInterval interval, ImmutableArray<string> suppressed, out RuntimeChange match) =>
+        TryMatch(identity, interval, suppressed, ordinalComparison: false, out match);
+
+    /// <summary>
+    /// As the four-argument overload, but when <paramref name="ordinalComparison"/> is true, the call passes
+    /// <c>StringComparison.Ordinal</c> or <c>OrdinalIgnoreCase</c> as a constant, which a row marked
+    /// <see cref="RuntimeChange.OrdinalUnaffected"/> does not match (ticket P2-075).
+    /// </summary>
+    public bool TryMatch(CallIdentity identity, RuntimeInterval interval, ImmutableArray<string> suppressed, bool ordinalComparison, out RuntimeChange match)
     {
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentNullException.ThrowIfNull(interval);
 
         match = Rows.FirstOrDefault(row =>
             AppliesWithin(row, interval)
+            && !(ordinalComparison && row.OrdinalUnaffected)
             && identity.Value.StartsWith(row.Member, StringComparison.Ordinal)
             && !suppressed.Contains(row.Member, StringComparer.Ordinal))!;
         return match is not null;
@@ -114,6 +123,7 @@ public sealed class RuntimeChangeTable
             {
                 Witness = ParseWitness(element),
                 ChangedIn = ParseChangedIn(member, element),
+                OrdinalUnaffected = element.TryGetProperty("ordinalUnaffected", out JsonElement ordinal) && ordinal.GetBoolean(),
             });
         }
 
