@@ -50,10 +50,14 @@ public sealed class IlLoweringParityTests
         [$"business-layer/modern {SkusOver}"] = Lambda,
         [$"business-layer/legacy {CappedLineCount}"] = Lambda,
         [$"business-layer/modern {CappedLineCount}"] = Lambda,
+        [$"cleanup-modern-syntax/legacy {LengthOf}"] = NullableValue,
+        [$"cleanup-modern-syntax/modern {LengthOf}"] = NullableValue,
         [$"cleanup-modern-syntax/legacy {Positives}"] = NullTestOfAConversion,
         [$"cleanup-modern-syntax/modern {Positives}"] = Lambda,
         [$"cleanup-modern-syntax/modern {Join}"] = InterpolatedString,
         [$"effect-free-bcl-call/modern {Basket}"] = ListFamily,
+        [$"il-fallback/legacy {Nullables}Add(int?,int)"] = NullableValue,
+        [$"il-fallback/legacy {Nullables}Wrap(int)"] = NullableValue,
         [$"lone-surrogate-constant/legacy {Find}"] = LiteralReceiver,
         [$"lone-surrogate-constant/modern {Find}"] = LiteralReceiver,
         [$"params-span-overloads/modern {Texts}Describe(System.IFormatProvider,string,object,object,object,object)"] = ParamsSpan,
@@ -93,6 +97,10 @@ public sealed class IlLoweringParityTests
 
     private const string Join = "Equiv.Samples.CleanupModernSyntax.Tidy::Join(string,string)";
 
+    private const string LengthOf = "Equiv.Samples.CleanupModernSyntax.Tidy::LengthOf(string)";
+
+    private const string Nullables = "Equiv.Samples.IlFallback.Nullables::";
+
     private const string Basket = "Equiv.Samples.EffectFreeBclCall.Basket::.ctor()";
 
     private const string Find = "Equiv.Samples.LoneSurrogateConstant.CharSets::Find(string)";
@@ -106,6 +114,13 @@ public sealed class IlLoweringParityTests
     /// the IL lowering leaves opaque; the IOperation lowering calls the exception's constructor (ticket P2-144).
     /// </summary>
     private const string NoMatchHelper = "IOperation calls the no-match exception's constructor; the IL calls a compiler-generated helper, which is opaque";
+
+    /// <summary>
+    /// The IOperation lowering makes a <c>T</c> converted to <c>T?</c>, and <c>new T?(x)</c>, a read of the
+    /// <c>cast.&lt;T&gt;.System.Nullable_1</c> input, and <c>default(T?)</c> the null constant (ticket P2-095); the IL
+    /// calls <c>Nullable&lt;T&gt;</c>'s constructor, which the IL lowering names as it is.
+    /// </summary>
+    private const string NullableValue = "IOperation lowers a value converted to Nullable<T> as a cast map read; the IL calls Nullable<T>'s constructor";
 
     /// <summary>An <c>async</c> method's IL is its state machine's kickoff, whose ILAst is opaque (out of scope; P1-012).</summary>
     private const string StateMachine = "the IL of an async method is its state machine's kickoff, which is opaque";

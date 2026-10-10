@@ -1,0 +1,22 @@
+﻿proc "C::M(string)" (%x "x": sort "System.String", %cast.System.Int32.System.Nullable_1: map<bv32, sort "System.Nullable`1">, %null.System.String: map<sort "System.String", bool>) -> sort "System.Nullable`1" entry B0
+B0:
+  %x.isNull.14 "x": bool = mapread %null.System.String, %x
+  goto B1
+B1:
+  br %x.isNull.14, B3, B2
+B2:
+  br %x.isNull.14, B6, B7
+B3:
+  %$c1.17: sort "System.Nullable`1" = const sort "System.Nullable`1" 0
+  %$c1.isNull.18: bool = const bool true
+  goto B4
+B4:
+  %$c1.19: sort "System.Nullable`1" = phi [B7: %$c1.15, B3: %$c1.17]
+  ret %$c1.19
+B6:
+  throw "System.NullReferenceException"
+B7:
+  %$7: bv32 = pure "get:System.String::get_Length()"(%x)
+  %$c1.15: sort "System.Nullable`1" = mapread %cast.System.Int32.System.Nullable_1, %$7
+  %$c1.isNull.16: bool = const bool false
+  goto B4

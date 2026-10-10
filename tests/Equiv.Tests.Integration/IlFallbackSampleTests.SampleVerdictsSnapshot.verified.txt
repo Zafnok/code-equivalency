@@ -122,9 +122,9 @@
                 },
                 "region": {
                   "startLine": 15,
-                  "startColumn": 28,
+                  "startColumn": 29,
                   "endLine": 15,
-                  "endColumn": 32
+                  "endColumn": 33
                 }
               }
             }
@@ -187,7 +187,11 @@
             "legacy": [
               {
                 "member": "System.Nullable`1::.ctor(int)<int>",
-                "callSites": 2
+                "callSites": 1
+              },
+              {
+                "member": "System.Nullable`1::.ctor(long)<long>",
+                "callSites": 1
               },
               {
                 "member": "System.Nullable`1::GetValueOrDefault()<int>",
@@ -201,7 +205,11 @@
             "modern": [
               {
                 "member": "System.Nullable`1::.ctor(int)<int>",
-                "callSites": 2
+                "callSites": 1
+              },
+              {
+                "member": "System.Nullable`1::.ctor(long)<long>",
+                "callSites": 1
               },
               {
                 "member": "System.Nullable`1::GetValueOrDefault()<int>",

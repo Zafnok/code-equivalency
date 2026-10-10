@@ -68,10 +68,14 @@ public sealed class IlFallbackTests
         Assert.Equal(IrText.Dump(IlLowerer.Lower(legacy.Symbol, legacy.Compilation, Runtimes.Migration)), IrText.Dump(choice.Old));
         Assert.Equal(IrText.Dump(IlLowerer.Lower(modern.Symbol, modern.Compilation, Runtimes.Migration)), IrText.Dump(choice.New));
         Assert.Equal(0, IlFallback.Unshared(choice.Old, choice.New));
-        // Criterion 7: a model of the IL bodies names the parameters a model of the IOperation bodies does (ADR 0021).
-        Assert.Equal(legacy.Body.Parameters, choice.Old.Parameters);
-        Assert.Equal(modern.Body.Parameters, choice.New.Parameters);
+        // Criterion 7: a model of the IL bodies names the parameters a model of the IOperation bodies does (ADR 0021). The
+        // method's own, that is: the IOperation body reads a `cast` input where the IL calls `Nullable<T>`'s constructor (ticket P2-095).
+        Assert.Equal(legacy.Body.Parameters.Where(IsDeclared), choice.Old.Parameters);
+        Assert.Equal(modern.Body.Parameters.Where(IsDeclared), choice.New.Parameters);
     }
+
+    /// <summary>Whether <paramref name="parameter"/> is one the method declares, and not an input its lowering synthesised.</summary>
+    private static bool IsDeclared(IrParameter parameter) => parameter.Var.SourceName is { Length: > 0 };
 
     /// <summary>Each side is read from IL with the runtime facts its IOperation lowering was given (tickets M4-002, P2-055).</summary>
     [Fact]

@@ -4,6 +4,6 @@ namespace Equiv.Samples.IlFallback
     {
         public static int? Add(int? a, int b) => a + b;
 
-        public static int? Wrap(int x) => x;
+        public static long? Wrap(int x) => x;
     }
 }
