@@ -1,5 +1,5 @@
 # P2-150 Soundness: the lowered body of an operation that reads a type's layout holds none of it
-Status: in-progress
+Status: done (PR #452)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-149
@@ -122,7 +122,7 @@ the opaque and file the model.
 
 ### Criterion 4: the corpus
 - `powershell-19687` (net8.0 on both sides), compare mode quick, `--jobs 4`, one run per column on
-  2026-10-09, exit 1 both. Before is `main` at `6a12ae27`; after is this branch's first commit.
+  2026-10-09, exit 1 both. Before is `main` at `6a12ae27`; after is this branch at `327ecd7f`.
   199 s and 175 s of wall-clock time.
 
   | | before | after |
