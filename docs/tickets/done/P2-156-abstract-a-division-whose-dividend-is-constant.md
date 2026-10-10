@@ -1,5 +1,5 @@
 # P2-156 Rung 1's arithmetic abstraction leaves `c / x` and `c % x` exact, and a procedure runs out of budget against itself
-Status: in-progress
+Status: done (PR #460)
 Effort: S
 Model: Sonnet, medium effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-031
