@@ -20,17 +20,29 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// flagged; the flag is the backend's only input about it (ticket M3-001). A legacy call an
 /// API-equivalence entry rewrites (ticket M3-009) is checked against the table as the modern member it becomes.
 /// Given the operation that makes the call, a row with a precondition flags it only when the call's constant
-/// arguments can reach the row's change (ticket P2-073; <see cref="CallArguments"/>).
+/// arguments can reach the row's change (ticket P2-073; <see cref="CallArguments"/>), and a path-validation row does not
+/// flag a call whose path the method shows to be valid (ticket P2-074; <see cref="ValidPaths"/>).
 /// </summary>
 internal static class CallIdentityFactory
 {
     /// <summary>
     /// The identity of a call to <paramref name="method"/>. Given the <paramref name="site"/> that makes the call, a row
     /// reads the call's constant arguments (<see cref="CallArguments"/>; ticket P2-073) and whether one is an ordinal
-    /// comparison (<see cref="OrdinalComparison"/>; ticket P2-075).
+    /// comparison (<see cref="OrdinalComparison"/>; ticket P2-075). A call a row still flags is matched once more with the
+    /// operands that are valid paths marked (<see cref="ValidPaths"/>; ticket P2-074), which reads the method around the
+    /// site as <paramref name="compilation"/> binds it and so is left to the few calls that get that far.
     /// </summary>
-    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null) =>
-        Of(Name(method, renames), suppressedRuntimeChanges, interval, CallArguments.IsOrdinalComparison(site, method), CallArguments.Of(site, method));
+    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation site, Compilation compilation)
+    {
+        string name = Name(method, renames);
+        bool ordinal = CallArguments.IsOrdinalComparison(site, method);
+        CallIdentity identity = Of(name, suppressedRuntimeChanges, interval, ordinal, CallArguments.Of(site, method));
+        return identity.RuntimeChanged ? Of(name, suppressedRuntimeChanges, interval, ordinal, ValidPaths.Of(site, method, compilation)) : identity;
+    }
+
+    /// <summary>The identity of a call to <paramref name="method"/> that no site describes: a row with a precondition flags it as a row without one does.</summary>
+    public static CallIdentity Of(IMethodSymbol method, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval) =>
+        Of(Name(method, renames), suppressedRuntimeChanges, interval);
 
     /// <summary>
     /// The identity of a call to a method of <paramref name="compilation"/>, which also sets <see cref="CallIdentity.External"/> (ticket M3-033) when
@@ -42,7 +54,10 @@ internal static class CallIdentityFactory
     public static CallIdentity Of(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, RuntimeInterval interval, IOperation? site = null)
     {
         ArgumentNullException.ThrowIfNull(compilation);
-        return Of(method, renames, suppressedRuntimeChanges, interval, site) with { External = IsExternal(method.ContainingAssembly, compilation) };
+        CallIdentity identity = site is null
+            ? Of(method, renames, suppressedRuntimeChanges, interval)
+            : Of(method, renames, suppressedRuntimeChanges, interval, site, compilation);
+        return identity with { External = IsExternal(method.ContainingAssembly, compilation) };
     }
 
     /// <summary>The identity <paramref name="value"/>, flagged runtime-changed as a callee with that identity would be inside <paramref name="interval"/>.</summary>

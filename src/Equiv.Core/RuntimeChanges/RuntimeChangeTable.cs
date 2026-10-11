@@ -22,12 +22,15 @@ public sealed class RuntimeChangeTable
     /// <summary>The oldest runtime a compared project can target (ADR 0040): .NET Framework 4.0, older than every change point.</summary>
     private static readonly TargetRuntime Oldest = new(TargetRuntime.RuntimeFamily.NetFramework, new Version(4, 0));
 
-    private RuntimeChangeTable(TargetRuntime coveredFrom, ImmutableArray<RuntimeChange> rows)
+    private RuntimeChangeTable(TargetRuntime coveredFrom, ImmutableArray<RuntimeChange> rows, ValidPaths validPaths)
     {
         CoveredFrom = coveredFrom;
         Rows = rows;
+        this.validPaths = validPaths;
         Coverage = new RuntimeInterval(Oldest, rows.Select(static row => row.ChangedIn).OfType<TargetRuntime>().Append(coveredFrom).Max()!);
     }
+
+    private readonly ValidPaths validPaths;
 
     /// <summary>The oldest .NET version whose changes the table lists; see <see cref="RuntimeInterval.UncoveredRange(TargetRuntime)"/>.</summary>
     public TargetRuntime CoveredFrom { get; }
@@ -44,6 +47,28 @@ public sealed class RuntimeChangeTable
     /// <summary>The <see cref="RuntimeChange.Member"/> of every row that <see cref="RuntimeChange.Requires"/> <paramref name="precondition"/>.</summary>
     public ImmutableArray<string> MembersRequiring(RowPrecondition precondition) =>
         [.. Rows.Where(row => row.Requires == precondition).Select(static row => row.Member).Distinct(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// Whether the result of a call to <paramref name="member"/> with <paramref name="arguments"/> is a path .NET Framework's
+    /// validation accepts (ticket P2-074): the member is one of the table's valid-path sources, or it is one of its
+    /// transforms and the call's arguments cannot reach <see cref="RuntimeChangePrecondition.InvalidPath"/>.
+    /// </summary>
+    public bool YieldsValidPath(CallIdentity member, ImmutableArray<CallArgument> arguments)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        return Lists(validPaths.Sources, member)
+            || (Lists(validPaths.Transforms, member) && !RuntimeChangeReach.CanReach(RuntimeChangePrecondition.InvalidPath, arguments));
+    }
+
+    /// <summary>Whether <paramref name="member"/> is one of the table's validating guards: it returns true only for a path .NET Framework's validation accepts (ticket P2-074).</summary>
+    public bool ValidatesPath(CallIdentity member)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        return Lists(validPaths.Guards, member);
+    }
+
+    private static bool Lists(ImmutableArray<string> members, CallIdentity member) =>
+        members.Any(listed => member.Value.StartsWith(listed, StringComparison.Ordinal));
 
     /// <summary>Reads and parses the embedded resource on first use; later calls return the same instance.</summary>
     public static RuntimeChangeTable Load() => Cached.Value;
@@ -115,7 +140,9 @@ public sealed class RuntimeChangeTable
     }
 
     /// <summary>
-    /// Parses a table in the embedded resource's format: an object with <c>coveredFrom</c> and <c>rows</c>. A row whose
+    /// Parses a table in the embedded resource's format: an object with <c>coveredFrom</c>, <c>rows</c> and, optionally,
+    /// <c>validPaths</c> (its <c>sources</c>, <c>transforms</c> and <c>guards</c>, each a list of member prefixes; ticket
+    /// P2-074). A row whose
     /// <c>source</c> is missing, or is not <c>curated</c>, <c>documented</c> or <c>measured</c> (ADR 0035), or whose
     /// <c>changedIn</c> is missing or is neither null nor a .NET Framework or .NET target framework moniker (ADR 0040),
     /// is rejected with <see cref="InvalidDataException"/>, as is a malformed <c>coveredFrom</c>, a <c>precondition</c>
@@ -151,8 +178,16 @@ public sealed class RuntimeChangeTable
             });
         }
 
-        return new RuntimeChangeTable(coveredFromRuntime, builder.ToImmutable());
+        return new RuntimeChangeTable(coveredFromRuntime, builder.ToImmutable(), ParseValidPaths(root));
     }
+
+    private static ValidPaths ParseValidPaths(JsonElement root) =>
+        root.TryGetProperty("validPaths", out JsonElement lists)
+            ? new ValidPaths(Members(lists, "sources"), Members(lists, "transforms"), Members(lists, "guards"))
+            : new ValidPaths([], [], []);
+
+    private static ImmutableArray<string> Members(JsonElement lists, string name) =>
+        [.. lists.GetProperty(name).EnumerateArray().Select(static member => member.GetString()!)];
 
     private static TargetRuntime? ParseChangedIn(string member, JsonElement element) =>
         !element.TryGetProperty("changedIn", out JsonElement value)
@@ -207,4 +242,7 @@ public sealed class RuntimeChangeTable
             _ => throw new InvalidDataException($"runtime-changes row '{member}' has unknown source '{source}'"),
         };
     }
+
+    /// <summary>The members <c>validPaths</c> lists (ticket P2-074), each a prefix matched as a row's <see cref="RuntimeChange.Member"/> is.</summary>
+    private sealed record ValidPaths(ImmutableArray<string> Sources, ImmutableArray<string> Transforms, ImmutableArray<string> Guards);
 }

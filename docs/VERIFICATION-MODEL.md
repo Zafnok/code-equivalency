@@ -551,6 +551,15 @@ Migration-specific normalisations (applied to both sides before matching):
   body and in the bound fingerprint alike. A call with an operand the precondition reads that is not
   a constant, or with no such operand (an instance `Regex` method, `DateTime.Parse`), is flagged as
   a row without a precondition flags it. The IL lowering reads no constants and always flags.
+  An operand that is not a constant still does not meet `invalidPath` when the method that makes the
+  call shows it to be a valid path (ticket P2-074). The table's `validPaths` lists say how: the
+  operand is the result of one of its `sources` (`Assembly.Location`, `AppContext.BaseDirectory`,
+  `Application.UserAppDataPath`, a test framework's test directory), or of one of its `transforms`
+  (`Path.Combine`, `Path.GetDirectoryName`) called with valid paths and plain constants; it is a
+  local variable that is only ever given such results; or it is a parameter or local variable that
+  nothing assigns after its declaration, used where one of the `guards` (`File.Exists`,
+  `Directory.Exists`) has returned true for it. The header of `runtime-changes.json` has the exact
+  shapes. A path that came from a caller or a field is not followed, and the row flags it.
 - The throw of a `switch` expression that matches no arm (ADR 0024 as clarified by ticket P2-144).
   The compiler adds it, constructing `System.Runtime.CompilerServices.SwitchExpressionException`
   where the reference assemblies have the type (.NET Core 3.0 and later) and

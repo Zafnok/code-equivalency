@@ -8,7 +8,8 @@ namespace Equiv.Core.RuntimeChanges;
 /// Whether a call can reach the change a row with a <see cref="RuntimeChangePrecondition"/> documents (ticket P2-073).
 /// A precondition reads some of the call's operands. The call cannot reach the change only when it has at least one of
 /// them, every one is a compile-time constant, and no constant meets the precondition; a call with none of them, or
-/// with one that is not a constant, can.
+/// with one that is not a constant, can. An operand that is a <see cref="CallArgument.ValidPath"/> never meets
+/// <see cref="RuntimeChangePrecondition.InvalidPath"/>, constant or not (ticket P2-074).
 /// </summary>
 internal static partial class RuntimeChangeReach
 {
@@ -24,8 +25,11 @@ internal static partial class RuntimeChangeReach
     public static bool CanReach(RuntimeChangePrecondition precondition, ImmutableArray<CallArgument> arguments)
     {
         ImmutableArray<CallArgument> read = [.. arguments.Where(a => Reads(precondition, a))];
-        return read.IsEmpty || read.Any(a => !a.IsConstant || Meets(precondition, a.Value));
+        return read.IsEmpty || read.Any(a => !IsKnownValid(precondition, a) && (!a.IsConstant || Meets(precondition, a.Value)));
     }
+
+    private static bool IsKnownValid(RuntimeChangePrecondition precondition, CallArgument argument) =>
+        precondition == RuntimeChangePrecondition.InvalidPath && argument.ValidPath;
 
     private static bool Reads(RuntimeChangePrecondition precondition, CallArgument argument) => precondition switch
     {

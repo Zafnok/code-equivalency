@@ -129,7 +129,7 @@ public sealed class RuntimeChangeReachTests
             StringComparer.Ordinal);
         Assert.Equal(8, members[RuntimeChangePrecondition.CultureSensitiveText].Count());
         Assert.All(members[RuntimeChangePrecondition.CultureSensitiveText], static member => Assert.StartsWith("System.String::", member, StringComparison.Ordinal));
-        Assert.Equal(30, members[RuntimeChangePrecondition.InvalidPath].Count());
+        Assert.Equal(31, members[RuntimeChangePrecondition.InvalidPath].Count());
         Assert.Contains("System.IO.Path::Combine(string,string)", members[RuntimeChangePrecondition.InvalidPath], StringComparer.Ordinal);
     }
 

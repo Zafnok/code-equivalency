@@ -2341,6 +2341,7 @@ public sealed class IrLowererTests
     [InlineData("static void M() => Box<S>.Field++;")]
     [InlineData("static void M(Action a) => Box<S>.Raised += a;")]
     [InlineData("static Box<S> M() => new Box<S>();")]
+    [InlineData("static Derived M() => new Derived();")]
     [InlineData("static int M(Box<S> b) => b.Instance;")]
     [InlineData("static int M(Derived d) => d.Instance;")]
     [InlineData("static int M() => Box<S>.Nested.Size();")]

@@ -117,6 +117,10 @@ stop after the measurement and write it up before choosing.
 - Not run: compare mode thorough. The scoreboard is not touched: no file under `docs/runs/` is added.
 
 ### Criterion 3: what changed
+- Merged with P2-152 on 2026-10-11: its rule for a constructor (the type arguments of the base
+  types and interfaces of the constructor's type) moved into `Layouts.TypeArguments` with the rest,
+  so `new D()` for a `class D : Box<S>` is the same opaque. The measurement above was taken before
+  that merge and is not repeated; P2-152 measured no change of its own on the same pair.
 - `ACallThatHandsAGenericMemberNoDeclaredTypeIsStillACall` asserts the callee identities for type
   arguments from a reference, type parameters, a non-generic member, and a class, an interface
   array and a tuple of a class of the solution.
