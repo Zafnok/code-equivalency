@@ -204,9 +204,11 @@ and a constant map of `default(T)` into `array.<Sort>` at that reference, and st
 values at indices 0, 1, ... in order; its shadow is false. `new.<Sort>` is shared by name, so both
 sides' k-th creations of a sort are one reference; nothing keeps it apart from the arrays the inputs
 reach, which only adds inputs, never removes a real run. A cast map is an uninterpreted function with no
-trace event: the same operand always converts to the same value. The converted value's nullness is
-read from `null.<To>` like any value's, not tied to the operand's, which over-approximates (a real
-upcast of a non-null value is never null). A type test of a reference `x` against a reference type `T` (`x is T`,
+trace event: the same operand always converts to the same value. A reference conversion's result is null exactly when
+its operand is, so its null test is the operand's (P2-103): that is what makes `T t = x as T; if (t != null)` the
+test `x is T t` is, since `t != null` on a class with no `==` of its own converts `t` to `object`. A boxing's
+nullness is still read from `null.<To>` like any value's, not tied to the operand's, which over-approximates (a
+boxed value is never null). A type test of a reference `x` against a reference type `T` (`x is T`,
 a type or declaration pattern, `x as T`, a downcast `(T)x`) is `!isNull(x) && istype.<From>.<T>[x]`: `istype` is a
 free predicate per pair of types, shared by both sides by name, and nothing ties it to the type hierarchy. `x is T t`
 binds `t` to `cast.<From>.<T>[x]`, never null; `x as T` is that cast when the test passes and `null` otherwise, and

@@ -55,6 +55,17 @@ namespace Equiv.Samples.CleanupModernSyntax
             return 0;
         }
 
+        public int RadiusOf(object o)
+        {
+            Circle c = o as Circle;
+            if (c != null)
+            {
+                return c.Radius;
+            }
+
+            return 0;
+        }
+
         public List<int> Positives(List<int> values)
         {
             if (values == null)

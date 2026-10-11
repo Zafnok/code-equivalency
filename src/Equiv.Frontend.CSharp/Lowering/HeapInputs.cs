@@ -13,8 +13,8 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// sort whose nullness is read, one <c>field.&lt;Type&gt;.&lt;Field&gt;</c> map per field touched, and
 /// <c>array.&lt;Sort&gt;</c> plus <c>length.&lt;Sort&gt;</c> per array sort indexed, each keyed by the array reference like
 /// <c>null.&lt;Sort&gt;</c>, so two variables holding one array read one slice (ticket P1-006), and one <c>cast.&lt;From&gt;.&lt;To&gt;</c> map per implicit
-/// reference or boxing conversion (ticket M3-010), whose result's nullness is over-approximated: it is read from
-/// <c>null.&lt;To&gt;</c>, not tied to the operand's, one <c>istype.&lt;From&gt;.&lt;To&gt;</c> predicate per type test (ticket M4-005), and one <c>typeof.&lt;T&gt;</c> input per closed type read by
+/// reference or boxing conversion (ticket M3-010), where a reference conversion's result is null exactly when its operand is (ticket P2-103) and a boxing's
+/// nullness is over-approximated: it is read from <c>null.&lt;To&gt;</c>, not tied to the operand's, one <c>istype.&lt;From&gt;.&lt;To&gt;</c> predicate per type test (ticket M4-005), and one <c>typeof.&lt;T&gt;</c> input per closed type read by
 /// <c>typeof(T)</c> (ticket P2-002), which is never null and adds no trace event, and one <c>new.&lt;Sort&gt;</c> per array sort
 /// created, from an allocation count to the array it allocates (ticket P2-001), and per sort of a catalogued collection created (ADR 0043), and <c>caller.file</c> and <c>caller.line</c>, the path and line
 /// the compiler supplies for a caller-information parameter (ADR 0046). Each is created once, on first use, and they become parameters ordered by name, so both
@@ -64,8 +64,9 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// <summary>
     /// An implicit reference or boxing conversion from <paramref name="from"/> to <paramref name="to"/>, or a downcast whose
     /// type test passed (ticket M4-005), as an uninterpreted function (ticket M3-010): no trace event, the same operand always yields the same result. The
-    /// result's nullness is read from <c>null.&lt;To&gt;</c> like any value's, not tied to the operand's; that
-    /// over-approximates, since a real upcast or box of a non-null value is never null.
+    /// lowerer reads a reference conversion's nullness from its operand (ticket P2-103). A boxing's is read from
+    /// <c>null.&lt;To&gt;</c> like any value's, not tied to the operand's; that over-approximates, since a boxed value is
+    /// never null.
     /// </summary>
     public IrVar Cast(ITypeSymbol from, ITypeSymbol to) =>
         Input(

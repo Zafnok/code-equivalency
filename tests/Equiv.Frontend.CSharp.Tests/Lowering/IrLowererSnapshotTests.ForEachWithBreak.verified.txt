@@ -1,4 +1,4 @@
-﻿proc "C::M(System.Collections.Generic.IEnumerable<int>)" (%xs "xs": sort "System.Collections.Generic.IEnumerable`1", %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable: map<sort "System.Collections.Generic.IEnumerator`1", sort "System.IDisposable">, %null.System.Collections.Generic.IEnumerable_1: map<sort "System.Collections.Generic.IEnumerable`1", bool>, %null.System.Collections.Generic.IEnumerator_1: map<sort "System.Collections.Generic.IEnumerator`1", bool>, %null.System.IDisposable: map<sort "System.IDisposable", bool>) -> bv32 entry B0
+﻿proc "C::M(System.Collections.Generic.IEnumerable<int>)" (%xs "xs": sort "System.Collections.Generic.IEnumerable`1", %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable: map<sort "System.Collections.Generic.IEnumerator`1", sort "System.IDisposable">, %null.System.Collections.Generic.IEnumerable_1: map<sort "System.Collections.Generic.IEnumerable`1", bool>, %null.System.Collections.Generic.IEnumerator_1: map<sort "System.Collections.Generic.IEnumerator`1", bool>) -> bv32 entry B0
 B0:
   %xs.isNull.41 "xs": bool = mapread %null.System.Collections.Generic.IEnumerable_1, %xs
   goto B1
@@ -31,8 +31,7 @@ B12:
   br %$c0.isNull.44, B14, B13
 B13:
   %$12: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.43
-  %$13: bool = mapread %null.System.IDisposable, %$12
-  br %$13, B8, B15
+  br %$c0.isNull.44, B8, B15
 B14:
   goto B8
 B15:
@@ -47,8 +46,7 @@ B18:
   br %$c0.isNull.44, B20, B19
 B19:
   %$20: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.43
-  %$21: bool = mapread %null.System.IDisposable, %$20
-  br %$21, B8, B21
+  br %$c0.isNull.44, B8, B21
 B20:
   goto B10
 B21:
@@ -62,8 +60,7 @@ B24:
   br %$c0.isNull.44, B26, B25
 B25:
   %$26: sort "System.IDisposable" = mapread %cast.System.Collections.Generic.IEnumerator_1.System.IDisposable, %$c0.43
-  %$27: bool = mapread %null.System.IDisposable, %$26
-  br %$27, B8, B27
+  br %$c0.isNull.44, B8, B27
 B26:
   goto B6
 B27:

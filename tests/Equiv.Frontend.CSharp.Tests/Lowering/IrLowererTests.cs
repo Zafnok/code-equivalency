@@ -655,6 +655,50 @@ public sealed class IrLowererTests
     }
 
     /// <summary>
+    /// Ticket P2-103: <c>e != null</c> on a class with no <c>==</c> of its own converts <c>e</c> to <c>object</c>, and that
+    /// conversion is null exactly when <c>e</c> is. So the null test of an <c>as</c> is its type test, whatever
+    /// <c>null.System.Object</c> says of the converted value: here it says the opposite of what C# answers.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    public void AnAsCastIsNullExactlyWhenTheTypeTestFails(bool isType, bool operandIsNull, bool expected)
+    {
+        IrProcedure procedure = Method("static bool M(object o) { Exception e = o as Exception; return e != null; }");
+
+        Assert.Equal(
+            ["o", "cast.System.Exception.System.Object", "cast.System.Object.System.Exception", "istype.System.Object.System.Exception", "null.System.Object"],
+            procedure.Parameters.Select(static p => p.Var.Name),
+            StringComparer.Ordinal);
+        IrSort from = new("System.Object");
+        IrSort to = new("System.Exception");
+        ImmutableDictionary<IrValue, IrValue> none = [];
+        IrOutcome outcome = Run(
+            procedure,
+            Reference(1, from.Name),
+            new IrMapValue(new IrMap(to, from), Reference(5, from.Name), none),
+            new IrMapValue(new IrMap(from, to), Reference(9, to.Name), none),
+            new IrMapValue(new IrMap(from, new IrBool()), new IrBoolValue(isType), none),
+            new IrMapValue(new IrMap(from, new IrBool()), new IrBoolValue(expected), none.Add(Reference(1, from.Name), new IrBoolValue(operandIsNull))));
+
+        Assert.Equal(new IrReturned(new IrBoolValue(expected)), outcome);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>
+    /// Ticket P2-103: an implicit reference conversion's null test reads its operand's nullness, a parameter's shadow or
+    /// <c>null.&lt;From&gt;</c> of a value that has none; a boxing's is still read from <c>null.&lt;To&gt;</c> (M3-010).
+    /// </summary>
+    [Theory]
+    [InlineData("static bool M(Exception e) => (object)e == null;", "null.System.Exception")]
+    [InlineData("Exception f; bool M() => (object)f == null;", "null.System.Exception")]
+    [InlineData("static bool M(Exception e) { object o = e; return o == null; }", "null.System.Exception")]
+    [InlineData("static bool M(int a) { object o = a; return o == null; }", "null.System.Object")]
+    public void AnUpcastIsNullExactlyWhenItsOperandIs(string members, string nulls) =>
+        Assert.Equal(nulls, Assert.Single(Method(members).Parameters, static p => p.Var.Name.StartsWith("null.", StringComparison.Ordinal)).Var.Name);
+
+    /// <summary>
     /// Ticket P2-083: a nullable value compared with <c>null</c> in a branch condition (found by the P2-065 runs on
     /// `eshop-manual`, `openra-17989` and `duplicati-3124`). The <c>null</c> literal has no type and the operator is not
     /// reported as lifted, so it lowered to a bare NullReferenceException; now it is opaque as a lifted operator is.
@@ -2141,7 +2185,7 @@ public sealed class IrLowererTests
         Assert.Equal(new IrReturned(new IrSortValue("System.Object", 9)), Run(procedure, Bits(32, 7), map));
     }
 
-    /// <summary>A cast is a trace-free function, and its result's nullness comes from the target sort's map, not the operand's shadow.</summary>
+    /// <summary>A cast is a trace-free function, and a reference conversion's result is null exactly when its operand is (ticket P2-103): the operand's shadow, not the target sort's map.</summary>
     [Fact]
     public void CastMapAddsNoTraceEvent()
     {
@@ -2149,7 +2193,7 @@ public sealed class IrLowererTests
 
         Assert.Empty(Calls(procedure));
         Assert.Empty(Opaques(procedure));
-        Assert.Contains(procedure.Parameters, static p => p.Var.Name is "null.System.Object");
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name is "null.System.Object");
     }
 
     /// <summary>Ticket P2-030 acceptance criterion 2: Roslyn folds <c>sizeof(int)</c> to the constant 4, which lowers like any other constant.</summary>
