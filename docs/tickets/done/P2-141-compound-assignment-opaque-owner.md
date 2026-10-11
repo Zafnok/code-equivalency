@@ -102,7 +102,7 @@ Lifted binary operators themselves (P2-087). `??=`, which is another operation k
   `jellyfin-13023` was not re-run: what is left there is `enum |= enum`, in 2 changed pairs.
 - What is left is under 1% of changed pairs on `gitextensions-8522`, and 2 pairs on `jellyfin-13023`.
 - Both runs of `gitextensions-8522` exit 5: two matched pairs fail to lower with an `ArgumentNullException` for a
-  parameter named `method`, with and without this ticket's change. Filed as P2-158.
+  parameter named `method`, with and without this ticket's change. That is P2-158, which P2-140 filed for the same two pairs.
 - The corpus was read from another worktree's `.corpus/` (the commits `tools/corpus/pairs.csv` pins); the runs' files are
   outside the repository. No summary under `docs/runs/` was written: the runs are censuses for this ticket's own
   criteria, so the README's scoreboard is untouched.

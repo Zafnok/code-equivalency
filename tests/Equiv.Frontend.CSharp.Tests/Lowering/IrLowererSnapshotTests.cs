@@ -191,6 +191,10 @@ public sealed class IrLowererSnapshotTests
         }
         """);
 
+    /// <summary>Ticket P2-104: the shape IDE0019 leaves behind; the declared local is written before the negated test branches.</summary>
+    [Fact]
+    public Task NegatedDeclarationPattern() => Dump("static int M(object o) { if (o is not string s) { return -1; } return s.Length; }");
+
     [Fact]
     public Task OutArgumentOfAnOpaqueCall() => Dump("static int M(string s, int fallback) => int.TryParse(s, out var n) ? n : fallback;");
 

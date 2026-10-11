@@ -776,10 +776,6 @@ Found by P2-152 (2026-10-10, by reading its own rule; not reproduced):
   (`struct K : J<S>`) can be made with no constructor (`default(K)`, an array's element), so no
   text holds `S`. The first step is the repro. Needs P2-152.
 
-Found by P2-141 (2026-10-11, in both of its census runs):
-- P2-158 (S) Two matched pairs of gitextensions-8522 fail to lower with an `ArgumentNullException`
-  for a null `method`, so a `--lower-only` run exits 5. The first step is the repro.
-
 Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
 - P2-153 (S) Soundness: the text of a body that uses an auto-property or a field-like event of an
   explicit layout holds none of the layout, because the bound tree does not name the backing
@@ -804,6 +800,11 @@ Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
   when Z3 answers the query inside its minute and gives up on the printed text: unsat against
   unknown (timeout), never sat against unsat, so not a soundness matter. Both seeds reproduce; the
   texts are unsat in 149 and 203 seconds. Test code only.
+
+Found by P2-140's census of gitextensions-8522 (2026-10-11):
+- P2-158 (S) Two constructors of `ICSharpCode.TextEditor.Document.HighlightColor` fail to lower on
+  both sides with `ArgumentNullException` (parameter `method`), so the census exits 5. The run goes
+  on (ADR 0023). Introduced after `feee17e1`. The first step is the repro.
 
 Found by a CI failure (PR #457, `gates`, seed `4ubFDL-wLcDa`):
 - P2-156 (S) `SoundnessPropertyTests.WithArithmeticAbstracted_AProcedureIsEquivalentToItself` ends
@@ -995,6 +996,11 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
     unless it is null; on gitextensions-9860 the reason is in 71 changed pairs (was 87 of 605).
   - P2-140 (M) `CaughtException`: 51 pairs (2.3%). Counts what bodies do with the exception they
     catch and lowers the largest use.
+    Done 2026-10-11: a `catch` that only reads `e.Message` names a value, the `thrown.System.Exception`
+    cell as the call that threw left it or the object a `throw` in the same `try` made (ADR 0018,
+    clarification of 2026-10-11); on gitextensions-8522 the reason is in 38 changed pairs (was 40 of
+    936), because 15 of the 17 pairs with only that use also hold a null dereference in the `try`,
+    whose exception is not a value. No remaining use reaches 5% alone.
   - P2-141 (M) `CompoundAssignment`: 35 pairs (1.6%). Counts the forms and lowers the largest.
     Done 2026-10-11: `string += string` lowers to the `Concat` call `+` is; on gitextensions-8522 the
     reason is in 5 changed pairs (was 18 of 936). Found on the way: P2-158, two pairs that fail to lower.

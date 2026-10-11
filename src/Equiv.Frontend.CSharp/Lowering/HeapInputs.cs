@@ -17,10 +17,10 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// nullness is over-approximated: it is read from <c>null.&lt;To&gt;</c>, not tied to the operand's, one <c>istype.&lt;From&gt;.&lt;To&gt;</c> predicate per type test (ticket M4-005), and one <c>typeof.&lt;T&gt;</c> input per closed type read by
 /// <c>typeof(T)</c> (ticket P2-002), which is never null and adds no trace event, and one <c>new.&lt;Sort&gt;</c> per array sort
 /// created, from an allocation count to the array it allocates (ticket P2-001), and per sort of a catalogued collection created (ADR 0043), and <c>caller.file</c> and <c>caller.line</c>, the path and line
-/// the compiler supplies for a caller-information parameter (ADR 0046). Each is created once, on first use, and they become parameters ordered by name, so both
+/// the compiler supplies for a caller-information parameter (ADR 0046), and <c>thrown.System.Exception</c>, the exception the last call threw (ticket P2-140). Each is created once, on first use, and they become parameters ordered by name, so both
 /// sides of a pair share them by name, while the C# parameters, which a caller binds by position, are shared by position (ADR 0021). IR variable names take
 /// only letters, digits, <c>_</c>, <c>.</c> and <c>$</c>, so every part of a name is spelled with dots.
-/// <c>field.*</c> and <c>array.*</c> are <see cref="IrParameterKind.Ref"/>: the body writes them and the final heap is an
+/// <c>field.*</c>, <c>array.*</c> and <c>thrown.*</c> are <see cref="IrParameterKind.Ref"/>: the body or its calls write them and the final heap is an
 /// observable (ADR 0018, ticket M3-007), so every exit names their final version in its outs. <c>this</c>, <c>null.*</c>,
 /// <c>cast.*</c>, <c>istype.*</c>, <c>length.*</c>, <c>typeof.*</c>, <c>new.*</c> and <c>caller.*</c> are <see cref="IrParameterKind.In"/>, because nothing the body does changes them,
 /// except that a <c>length.*</c> the body writes, which only an array creation does, is <see cref="IrParameterKind.Ref"/> (ticket P2-001).
@@ -125,6 +125,17 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// </summary>
     public IrVar Fresh(IrSort array) => Input($"new.{Part(array.Name)}", new IrMap(new IrBitVec(32), array));
 
+    /// <summary>
+    /// The exception the last call threw (ticket P2-140): one cell of <paramref name="exception"/>'s sort
+    /// (<c>System.Exception</c>), read at that sort's token. Like a <c>field.*</c> map it is <see cref="IrParameterKind.Ref"/>
+    /// and every call reads and writes it, so the exception a call throws is a function of what its result is (ADR 0018).
+    /// </summary>
+    public IrVar Thrown(ITypeSymbol exception)
+    {
+        IrSort sort = new(TypeMapper.MetadataName(exception, sorts));
+        return Input($"thrown.{Part(sort.Name)}", new IrMap(sort, sort));
+    }
+
     /// <summary>Marks <paramref name="input"/> as written by the body, which makes it <see cref="IrParameterKind.Ref"/>.</summary>
     public void Write(IrVar input) => written.Add(input.Name);
 
@@ -134,8 +145,9 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// <summary>A field map's key type. A field of a value type is keyed by the value, which is what value semantics mean.</summary>
     private IrSort Receiver(ISymbol member) => new(TypeMapper.MetadataName(member.ContainingType, sorts));
 
-    /// <summary>Whether <paramref name="name"/> is a <c>field.*</c> or <c>array.*</c> map, which is always <see cref="IrParameterKind.Ref"/>.</summary>
-    public static bool IsWritable(string name) => name.StartsWith("field.", StringComparison.Ordinal) || name.StartsWith("array.", StringComparison.Ordinal);
+    /// <summary>Whether <paramref name="name"/> is a <c>field.*</c>, <c>array.*</c> or <c>thrown.*</c> map, which is always <see cref="IrParameterKind.Ref"/>.</summary>
+    public static bool IsWritable(string name) =>
+        name.StartsWith("field.", StringComparison.Ordinal) || name.StartsWith("array.", StringComparison.Ordinal) || name.StartsWith("thrown.", StringComparison.Ordinal);
 
     private static string Part(string name) =>
         string.Concat(name.Select(static c => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' ? c : '_'));

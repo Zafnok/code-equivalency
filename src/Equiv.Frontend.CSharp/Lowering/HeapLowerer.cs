@@ -48,7 +48,8 @@ internal sealed class HeapLowerer(
         Inputs.Parameters.Where(static p => p.Kind == IrParameterKind.Ref).Select(p => (slices[p.Var.Name], p.Var));
 
     /// <summary>
-    /// The heap slices every call reads and writes (ticket P1-005): each <c>field.*</c> and <c>array.*</c> map the body touches.
+    /// The heap slices every call reads and writes (ticket P1-005): each <c>field.*</c> and <c>array.*</c> map the body touches,
+    /// and the <c>thrown.*</c> cell when a clause reads it (ticket P2-140).
     /// A <c>length.*</c> map the body writes is not one: only an array creation writes it, and a call cannot change the
     /// length of an array.
     /// </summary>
@@ -239,6 +240,17 @@ internal sealed class HeapLowerer(
             ? MapWrite(map, array, MapWrite(MapRead(map, array, context), access.Key, value, context), context)
             : MapWrite(map, access.Key, value, context);
         ssa.Store(context.Current, access.Map, updated);
+    }
+
+    /// <summary>
+    /// The exception the call just made threw (ticket P2-140): the <c>thrown.*</c> cell's current version, which is the one
+    /// that call left, read at the token of <paramref name="exception"/>'s sort.
+    /// </summary>
+    public IrVar Thrown(ITypeSymbol exception, LoweringContext context)
+    {
+        IrVar input = Inputs.Thrown(exception);
+        IrSort sort = (IrSort)((IrMap)input.Type).Key;
+        return MapRead(ssa.Load(context.Current, Versioned(input)), Const(new IrSortValue(sort.Name, 0), context), context);
     }
 
     public IrVar MapRead(IrVar map, IrVar key, LoweringContext context)
