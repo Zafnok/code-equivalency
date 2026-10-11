@@ -11,15 +11,15 @@ status=0
 ids() { find . -maxdepth 2 -name '*.md' -printf '%f\n' | grep -oE '^[A-Z][0-9]+-[0-9]+' || true; }
 
 for id in $(ids | sort | uniq -d); do
-  echo "::error::ticket id $id is used by more than one file:" $(find . -maxdepth 2 -name "$id-*.md")
+  echo "::error::ticket id $id is used by more than one file:" $(find . -maxdepth 2 -name "$id-*.md") >&2
   status=1
 done
 
 for f in [A-Z]*-[0-9]*.md; do
   for dep in $(grep -m1 -E '^Depends on:' "$f" | grep -oE '\b[A-Z][0-9]+-[0-9]+\b' || true); do
     n=$(find . -maxdepth 2 -name "$dep-*.md" | wc -l)
-    if [ "$n" -ne 1 ]; then
-      echo "::error file=docs/tickets/$f::depends on $dep, which matches $n ticket files"
+    if [[ "$n" -ne 1 ]]; then
+      echo "::error file=docs/tickets/$f::depends on $dep, which matches $n ticket files" >&2
       status=1
     fi
   done
