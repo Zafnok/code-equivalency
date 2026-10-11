@@ -1,5 +1,5 @@
 # P2-081 A Divergent that rests on a BCL call's answer the real member cannot give is not EQ002
-Status: done (PR #475)
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-060
@@ -65,4 +65,19 @@ anything but closed calls.
   meaning for that, which no ticket covers yet.
 - The fixture `call-closed-divergent.ir` (`Abs(a)` against `Abs(a) + Abs(a)`) is now Unknown(Abstraction): it
   differs only for the answers the solver chose for `Abs`.
+- Stopped here (2026-10-11), before the samples were touched. ADR 0056's cost is larger than the ADR says.
+  `SamplesEndToEndTests` on this branch: 8 results in 6 samples go from EQ002 to EQ003 (abstraction), and each is
+  a real divergence a reader would call one. By the closed callee the candidate names:
+  `added-null-guard` `Greet` (`String.ToUpper()`, `String.Concat(string,string)`); `repeated-edit` `Quantity`,
+  `Total`, `IsBulk` (`Int32.Parse(string)`); `cleanup-modern-syntax` `Join` (`String.Concat(string,string)`);
+  `forwarder-to-bcl` `Trimmed` (`String.IsNullOrWhiteSpace(string)`); `bcl-rebound-overloads` `TrimTailOther`
+  (`String.TrimEnd(char)`); `runtime-row-unaffected-overload` `HasCulture`
+  (`String.IndexOf(string,StringComparison)`). `cleanup-modern-syntax` then exits 0 where its README says 1.
+  Two shapes. One side fails before a call and the other goes on through one (`Greet`): a no-throw list (P2-158)
+  gives that back. Both sides use the call's result (`Parse(s) * 2` against `Parse(s) * 3`): nothing sound gives
+  that back, because it is a divergence only if `Parse` returns non-zero for some string, and a string in a model
+  is an element with no text. Criterion 3 (rule 2 strict for closed calls) needs the taint, and the taint costs
+  these. The snapshots, READMEs and named sample tests are not updated; the gates are red on this branch.
+  The other 51 failures of that class in the local run are `FileNotFoundException` on the SARIF file: samples
+  that do not load in this worktree, not this change.
 - `Release: minor`: some pairs that were EQ002 are now EQ003.
