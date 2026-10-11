@@ -36,6 +36,8 @@ internal sealed class IrLowerer
 {
     private const string OverflowException = "System.OverflowException";
 
+    private const string SystemException = "System.Exception";
+
     /// <summary>The sort of a <c>ReadOnlySpan&lt;T&gt;</c>, whatever its element type: its metadata name (ticket P2-143).</summary>
     private const string ReadOnlySpan = "System.ReadOnlySpan`1";
 
@@ -58,6 +60,12 @@ internal sealed class IrLowerer
     private HashSet<CaptureId> assignedCaptures = [];
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
     private readonly Dictionary<IOperation, IrVar> tryCastNulls = [];
+
+    /// <summary>
+    /// The exception of each clause that names a value (<see cref="CaughtExceptions"/>; ticket P2-140): a variable that
+    /// every raise the clause may take stores before it goes there, and the operation that reads it.
+    /// </summary>
+    private readonly Dictionary<ControlFlowRegion, (SsaBuilder.Variable Variable, ICaughtExceptionOperation Read)> caught = [];
 
     /// <summary>The operand of each implicit reference conversion lowered as a cast-map read, which is null exactly when the result is (ticket P2-103).</summary>
     private readonly Dictionary<IOperation, IrVar> upcastOperands = [];
@@ -423,6 +431,11 @@ internal sealed class IrLowerer
         spilled = SpilledCollections.Find(cfg, collection => Built(collection) is { Add: not null });
         unreached = SwitchExpressions.Unreached(cfg, compilation);
         exceptions = new ExceptionLowerer(ssa, compilation, cfg, chains, loops, bodySpan, Fill);
+        foreach ((ControlFlowRegion clause, ICaughtExceptionOperation read) in CaughtExceptions.Named(cfg))
+        {
+            caught[clause] = (new SsaBuilder.Variable(new IrVar($"$caught.{caught.Count.ToString(CultureInfo.InvariantCulture)}", Map(read.Type!))), read);
+        }
+
         captures.Clear();
         captureTargets.Clear();
         propertyTargets.Clear();
@@ -660,8 +673,8 @@ internal sealed class IrLowerer
             return;
         }
 
-        Lower(creation, context); // may move `context.Current` past the constructor's own threw branch
-        ssa.Terminate(context.Current, new IrGoto(exceptions.Raise(TypeMapper.MetadataName(creation.Type!), creation.Type, context)));
+        IrVar raised = Value(creation, context); // may move `context.Current` past the constructor's own threw branch
+        ssa.Terminate(context.Current, new IrGoto(Raise(TypeMapper.MetadataName(creation.Type!), creation.Type, new Raised(raised, creation.Type!), context)));
     }
 
     /// <summary>
@@ -974,12 +987,16 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// <c>default(T?)</c> for a <c>bool</c> or integral <c>T</c> is the null constant <c>(T?)null</c> is (ticket P2-095), so the
-    /// two spellings of no value are one value; any other operation <see cref="Operation"/> does not name is opaque with its kind.
+    /// two spellings of no value are one value; the exception of a clause that names a value is what the raise that came
+    /// there stored (ticket P2-140); any other operation <see cref="Operation"/> does not name is opaque with its kind.
     /// </summary>
-    private IrVar? DefaultOrOpaque(IOperation operation, LoweringContext context) =>
-        operation is IDefaultValueOperation && TypeMapper.NullableValue(operation.Type) is not null
-            ? Constant(operation.Type!, value: null, context)
-            : Opaque(operation, operation.Kind.ToString(), context);
+    private IrVar? DefaultOrOpaque(IOperation operation, LoweringContext context) => operation switch
+    {
+        IDefaultValueOperation when TypeMapper.NullableValue(operation.Type) is not null => Constant(operation.Type!, value: null, context),
+        ICaughtExceptionOperation when caught.TryGetValue(CaughtExceptions.Clause(context.Source), out (SsaBuilder.Variable Variable, ICaughtExceptionOperation Read) named) =>
+            ssa.Load(context.Current, named.Variable),
+        _ => Opaque(operation, operation.Kind.ToString(), context),
+    };
 
     /// <summary>
     /// A conversion, unless it is the one around a collection expression, which is the collection expression. The span the
@@ -1244,7 +1261,7 @@ internal sealed class IrLowerer
         {
             _ when tryCastNulls.TryGetValue(unwrapped, out IrVar? failed) => failed,
             IDefaultValueOperation or IObjectCreationOperation { Arguments.IsEmpty: true } when TypeMapper.IsNullable(unwrapped.Type) => Const(new IrBoolValue(Value: true), context),
-            IObjectCreationOperation or IArrayCreationOperation or IDelegateCreationOperation or IInstanceReferenceOperation or ITypeOfOperation => null,
+            IObjectCreationOperation or IArrayCreationOperation or IDelegateCreationOperation or IInstanceReferenceOperation or ITypeOfOperation or ICaughtExceptionOperation => null,
             ICollectionExpressionOperation collection when Built(collection) is { NeverNull: true } => null,
             _ when ShadowOf(unwrapped) is { } shadow => ssa.Load(context.Current, shadow),
             { ConstantValue.HasValue: true, ConstantValue.Value: null } => Const(new IrBoolValue(Value: true), context),
@@ -1361,7 +1378,7 @@ internal sealed class IrLowerer
         {
             IrVar threw = ssa.Temp(Bool);
             ssa.EmitFragment(context.Current, new IrOpaque(target, reason, span) { Fingerprint = fragment.Fingerprint, Reads = Loaded(fragment.Reads, context), Threw = threw }, fragment.Captured);
-            ThrowIf(threw, "System.Exception", context, known: false);
+            ThrowIf(threw, SystemException, context, known: false, byCall: true);
             return target;
         }
 
@@ -1527,12 +1544,57 @@ internal sealed class IrLowerer
     /// throw block, behind any <c>finally</c> it leaves. A null <paramref name="type"/> means the type is
     /// not known, which is the case for an opaque call's <c>threw</c> flag.
     /// </summary>
-    private void ThrowIf(IrVar condition, string exceptionType, LoweringContext context, bool known = true)
+    private void ThrowIf(IrVar condition, string exceptionType, LoweringContext context, bool known = true, bool byCall = false)
     {
-        IrBlockId thrown = exceptions.Raise(exceptionType, known ? compilation.GetTypeByMetadataName(exceptionType) : null, context);
+        IrBlockId thrown = Raise(exceptionType, known ? compilation.GetTypeByMetadataName(exceptionType) : null, byCall ? Raised.ByCall : null, context);
         IrBlockId next = ssa.NewBlock();
         ssa.Terminate(context.Current, new IrBranch(condition, thrown, next));
         context.Current = next;
+    }
+
+    /// <summary>
+    /// <see cref="ExceptionLowerer.Raise(string, ITypeSymbol?, LoweringContext)"/>, behind a block that gives each clause
+    /// on the route that names its exception (<see cref="CaughtExceptions"/>) the exception first (ticket P2-140):
+    /// the object a <c>throw new T(...)</c> made; for a call that threw, the <c>thrown.*</c> cell as the call left it,
+    /// read here, before any <c>finally</c> on the way makes a call of its own; and for anything else, whose
+    /// exception is not a value, an opaque with reason <c>CaughtException</c>, on this path only. A clause whose
+    /// variable has another type takes the value through the <c>cast</c> map between the two.
+    /// </summary>
+    private IrBlockId Raise(string exceptionType, ITypeSymbol? type, Raised? raised, LoweringContext context)
+    {
+        IrBlockId target = exceptions.Raise(exceptionType, type, context);
+        ImmutableArray<ControlFlowRegion> naming = [.. exceptions.Candidates(type, context).Where(caught.ContainsKey)];
+        if (naming.IsEmpty)
+        {
+            return target;
+        }
+
+        IrBlockId raising = context.Current;
+        IrBlockId edge = ssa.NewBlock();
+        context.Current = edge;
+        foreach ((SsaBuilder.Variable variable, ICaughtExceptionOperation read) in naming.Select(clause => caught[clause]))
+        {
+            ssa.Store(edge, variable, Caught(raised, read, context));
+        }
+
+        ssa.Terminate(edge, new IrGoto(target));
+        context.Current = raising;
+        return edge;
+    }
+
+    /// <summary>The exception <paramref name="raised"/> hands the clause that reads it with <paramref name="read"/>, or an opaque when it hands none.</summary>
+    private IrVar Caught(Raised? raised, ICaughtExceptionOperation read, LoweringContext context)
+    {
+        if (raised is null)
+        {
+            IrVar unknown = ssa.Temp(Map(read.Type!));
+            ssa.Emit(context.Current, new IrOpaque(unknown, nameof(OperationKind.CaughtException), Span(read.Syntax)));
+            return unknown;
+        }
+
+        ITypeSymbol from = raised.Type ?? compilation.GetTypeByMetadataName(SystemException)!;
+        IrVar value = raised.Value ?? heap.Thrown(from, context);
+        return value.Type == Map(read.Type!) ? value : heap.MapRead(heap.Inputs.Cast(from, read.Type!), value, context);
     }
 
     private void ThrowIfOverflows(IrOverflowOp op, IrVar left, IrVar right, LoweringContext context)
@@ -2961,7 +3023,8 @@ internal sealed class IrLowerer
 
         if (threw is not null)
         {
-            ThrowIf(threw, "System.Exception", context, known: false);
+            // A closed call has no heap pairs (ADR 0041), so it leaves no `thrown.*` cell to read.
+            ThrowIf(threw, SystemException, context, known: false, byCall: !callee.Closed);
         }
 
         return target;
@@ -2990,6 +3053,15 @@ internal sealed class IrLowerer
 
     /// <summary>What a call's <c>ref</c> or <c>out</c> output is stored to, null for a discard, and its type (ticket M4-003).</summary>
     private sealed record RefOut(SsaBuilder.Variable? Variable, IrType Type);
+
+    /// <summary>
+    /// An exception that is a value (ticket P2-140): the object a <c>throw new T(...)</c> made and its static type, or,
+    /// with neither, what the call just made threw (<see cref="ByCall"/>).
+    /// </summary>
+    private sealed record Raised(IrVar? Value, ITypeSymbol? Type)
+    {
+        public static readonly Raised ByCall = new(Value: null, Type: null);
+    }
 
     /// <summary>A type test (ticket M4-005): the types, the operand's value, whether it is null (null when provably not) and its <c>istype</c> read.</summary>
     private sealed record TypeTest(ITypeSymbol From, ITypeSymbol To, IrVar Value, IrVar? OperandIsNull, IrVar IsType);
