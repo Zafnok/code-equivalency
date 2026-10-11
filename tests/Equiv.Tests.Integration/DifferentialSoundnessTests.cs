@@ -3,6 +3,7 @@ using System.Globalization;
 
 using CsCheck;
 
+using Equiv.Core;
 using Equiv.Core.Ir;
 using Equiv.Core.Verdicts;
 using Equiv.Corpus.Seeder;
@@ -287,6 +288,59 @@ public sealed class DifferentialSoundnessTests
             """;
     }
 
+    /// <summary>
+    /// Ticket P2-081 (ADR 0056): rule 2 at CsCheck seed <c>9v8KtBVEhjFh</c>, the nightly budget's failure once the exemption
+    /// covered open calls only. The modern side drops the null check, so the writes of <c>F</c> the legacy side makes for a
+    /// null <c>s</c> are gone. From IL the lifted <c>&amp;</c> is calls to members of <c>Nullable&lt;int&gt;</c>, and the model
+    /// had <c>GetValueOrDefault()</c> throw before the statements that read <c>F</c>, which no run does. Those calls are
+    /// closed, so the replay taints them: the verdict is Unknown, Equivalent, or a Divergent whose model diverges in C#.
+    /// </summary>
+    [Fact]
+    public void AClosedCallsAnswerIsOneTheMemberCanGive()
+    {
+        Case c = new(AcrossALiftedAnd(nullCheck: true), AcrossALiftedAnd(nullCheck: false), MutationOperator.DropNullCheck, []);
+
+        Assert.Null(Decoding(c, PairRuntime.Lowering.Il)?.Describe(c));
+        Assert.Null(Decoding(c, PairRuntime.Lowering.Operation)?.Describe(c));
+    }
+
+    /// <summary>The pair of <see cref="AClosedCallsAnswerIsOneTheMemberCanGive"/>: its legacy side with <paramref name="nullCheck"/>, its modern side without.</summary>
+    private static string AcrossALiftedAnd(bool nullCheck)
+    {
+        const string check = """
+                    if ((s == null))
+                    {
+                        F = unchecked((int)unchecked((long)u[0]));
+                        F = u[1];
+                    }
+                    else
+                    {
+                    }
+
+            """;
+        return $$"""
+            public static class Oracle
+            {
+                public static int F;
+
+                public static int M(int a, int b, long c, long d, bool e, string s, int[] u)
+                {
+                    int x = a;
+                    long y = c;
+                    bool z = e;
+            {{(nullCheck ? check : string.Empty)}}        x = unchecked(((!z) ? (int?)(z ? x : u[1]) : null) & (33)).GetValueOrDefault();
+                    u[2] = unchecked(-checked(F >> x));
+                    for (int i0 = 0; i0 < 2; i0++)
+                    {
+                        F = unchecked(-unchecked((int)y));
+                    }
+                    return unchecked(((e || e) ? unchecked(-b) : checked(F + (32))) >> (0));
+                }
+            }
+
+            """;
+    }
+
     /// <summary>CsCheck reports a counter-example by throwing; surfacing it as a value gives each test its assertion.</summary>
     private static Exception? Failed(ImmutableArray<PairRuntime.Lowering> lowerings, ImmutableArray<Rule> rules, string seed) =>
         Record.Exception(() => Sample(Generated, lowerings, rules, seed, Pairs));
@@ -330,12 +384,12 @@ public sealed class DifferentialSoundnessTests
     }
 
     /// <summary>
-    /// Rule 2. A model whose run makes an ordinary call also chose that call's result, <c>threw</c> flag and heap writes,
+    /// Rule 2. A model whose run makes an open call also chose that call's result, <c>threw</c> flag and heap writes,
     /// which ADR 0026 leaves untainted (its 2026-09-30 clarifications) and which no C# argument can impose, so a replay of
-    /// such a model that does not diverge is not a decoding failure. A closed call (ADR 0041) writes no heap, but the
-    /// model still chooses its result and <c>threw</c> flag, so this holds for it too (ticket P2-060). A changing pair
-    /// makes a call only through the IL fallback's constructs (<see cref="PairGen.IlPair"/>), and this applies to either
-    /// lowering alike.
+    /// such a model that does not diverge is not a decoding failure. A closed call (ADR 0041) gets no such exemption: the
+    /// replay taints it (ADR 0056; ticket P2-081), so a Divergent does not rest on its answer and its model must diverge in
+    /// C#. A changing pair makes a call only through the IL fallback's constructs (<see cref="PairGen.IlPair"/>), and this
+    /// applies to either lowering alike.
     /// </summary>
     private static Failure? Decoding(Case c, PairRuntime.Lowering lowering)
     {
@@ -352,8 +406,15 @@ public sealed class DifferentialSoundnessTests
 
         using PairRuntime.Loaded loaded = new(analysis);
         (string legacy, string modern) = loaded.Observe(model);
-        bool throughCall = counterexample.Old.Trace.Length > 0 || counterexample.New.Trace.Length > 0;
-        return string.Equals(legacy, modern, StringComparison.Ordinal) && !throughCall ? new Failure(model.ToString(), legacy, modern) : null;
+        bool throughOpenCall = ThroughOpenCall(analysis.Old, counterexample.Old) || ThroughOpenCall(analysis.New, counterexample.New);
+        return string.Equals(legacy, modern, StringComparison.Ordinal) && !throughOpenCall ? new Failure(model.ToString(), legacy, modern) : null;
+    }
+
+    /// <summary>Whether <paramref name="run"/> of <paramref name="procedure"/> records a call to a callee some call site leaves open (ADR 0041).</summary>
+    private static bool ThroughOpenCall(IrProcedure procedure, IrRun run)
+    {
+        HashSet<CallIdentity> open = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Where(static c => !c.Closed).Select(static c => c.Callee)];
+        return run.Trace.Any(r => open.Contains(r.Callee));
     }
 
     private static Failure? Precision(Case c, PairRuntime.Lowering lowering)

@@ -22,6 +22,8 @@ public sealed class TaintReplayTests
 
     private static readonly CallIdentity Add = new("opaque:add");
 
+    private static readonly CallIdentity Parse = new("System.Int32::Parse(string)");
+
     [Fact]
     public void TaintOnlyDivergenceIsUnknownAbstraction()
     {
@@ -109,6 +111,80 @@ public sealed class TaintReplayTests
         Unknown unknown = Assert.IsType<Unknown>(verdict);
         Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
         Assert.True(Assert.IsType<Counterexample>(unknown.Candidate).New.Taint.Outcome);
+    }
+
+    /// <summary>
+    /// ADR 0056 (ticket P2-081): the sides differ only when <c>Parse</c> answers 0, which the solver chose and the real
+    /// member may never give for that argument, so the model is a candidate and not a witness.
+    /// </summary>
+    [Fact]
+    public void ADivergenceOnAClosedCallsAnswerIsUnknownAbstraction()
+    {
+        Verdict verdict = Verify(BranchesOnParse("call closed", 1), BranchesOnParse("call closed", 3));
+
+        Unknown unknown = Assert.IsType<Unknown>(verdict);
+        Assert.Equal(UnknownReason.Abstraction, unknown.Reason);
+        Assert.Equal([new Abstraction(Codebase.Legacy, Parse, Span: null), new Abstraction(Codebase.Modern, Parse, Span: null)], unknown.Abstractions);
+        Counterexample candidate = Assert.IsType<Counterexample>(unknown.Candidate);
+        Assert.True(candidate.Old.Taint.Outcome);
+        Assert.Equal([0], candidate.Old.Taint.Trace);
+    }
+
+    /// <summary>An open call's answer stays the modular assumption (ADR 0026): the same pair without <c>closed</c> is Divergent.</summary>
+    [Fact]
+    public void ADivergenceOnAnOpenCallsAnswerIsStillDivergent() =>
+        Assert.IsType<Divergent>(Verify(BranchesOnParse("call", 1), BranchesOnParse("call", 3)));
+
+    /// <summary>An identity one side calls open is encoded open on both (ADR 0041), so the replay taints neither call.</summary>
+    [Fact]
+    public void AClosedCallThatSharesItsIdentityWithAnOpenOneIsNotTainted()
+    {
+        Divergent divergent = Assert.IsType<Divergent>(Verify(BranchesOnParse("call closed", 1), BranchesOnParse("call", 3)));
+
+        Assert.Empty(divergent.Counterexample.Old.Taint.Sources);
+    }
+
+    /// <summary>A difference that does not use the closed call's answer is real whatever the member does.</summary>
+    [Fact]
+    public void ADivergenceThatIgnoresAClosedCallsAnswerIsDivergent()
+    {
+        const string old = """
+            proc "T::M(int)" (%a: bv32) -> bv32 entry B0
+            B0:
+              %t: bv32 = call closed "System.Int32::Parse(string)"(%a)
+              ret %a
+            """;
+        const string @new = """
+            proc "T::M(int)" (%a: bv32) -> bv32 entry B0
+            B0:
+              %t: bv32 = call closed "System.Int32::Parse(string)"(%a)
+              %one: bv32 = const bv32 1
+              %r: bv32 = add %a, %one
+              ret %r
+            """;
+
+        Divergent divergent = Assert.IsType<Divergent>(Verify(old, @new));
+
+        Assert.Equal([Parse], divergent.Counterexample.New.Taint.Sources);
+    }
+
+    /// <summary>One more closed call on one side shows in a real run only through its answer, so its event is tainted (ADR 0056).</summary>
+    [Fact]
+    public void AnExtraClosedCallIsUnknownAbstraction()
+    {
+        const string old = """
+            proc "T::M(int)" (%a: bv32) -> bv32 entry B0
+            B0:
+              ret %a
+            """;
+        const string @new = """
+            proc "T::M(int)" (%a: bv32) -> bv32 entry B0
+            B0:
+              %t: bv32 = call closed "System.Int32::Parse(string)"(%a)
+              ret %a
+            """;
+
+        Assert.Equal(UnknownReason.Abstraction, Assert.IsType<Unknown>(Verify(old, @new)).Reason);
     }
 
     [Fact]
@@ -269,6 +345,23 @@ public sealed class TaintReplayTests
         Assert.False(ModelDecoder.IsAbstraction(new CallIdentity("T::opaque:x")));
         Assert.False(ModelDecoder.IsAbstraction(new CallIdentity("Opaque:x")));
     }
+
+    /// <summary>A procedure that calls <c>Parse</c> by <paramref name="call"/> and returns <paramref name="onZero"/> when it answers 0, else 2.</summary>
+    private static string BranchesOnParse(string call, int onZero) =>
+        $"""
+        proc "T::M(int)" (%a: bv32) -> bv32 entry B0
+        B0:
+          %t: bv32 = {call} "System.Int32::Parse(string)"(%a)
+          %zero: bv32 = const bv32 0
+          %z: bool = eq %t, %zero
+          br %z, B1, B2
+        B1:
+          %r: bv32 = const bv32 {onZero.ToString(System.Globalization.CultureInfo.InvariantCulture)}
+          ret %r
+        B2:
+          %two: bv32 = const bv32 2
+          ret %two
+        """;
 
     private static Verdict Verify(string old, string @new) => new Z3Backend().Verify(IrText.Parse(old), IrText.Parse(@new), Options);
 

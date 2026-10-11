@@ -22,7 +22,7 @@ namespace Equiv.Verify.Z3;
 /// position the interpreter passes, and pure functions from the model's pure functions, and the replay must diverge on the
 /// observables the encoder compares. The oracle threads each heap map a call does not pair as the encoder does, and each
 /// call event is completed with the whole heap the call read (ticket P1-005). The replay taints every call whose identity
-/// starts with <see cref="OpaquePrefix"/> and every pure function (ADR 0026; tickets M3-016 and M4-002): only a difference
+/// starts with <see cref="OpaquePrefix"/>, every call the encoding closed (ADR 0056; ticket P2-081) and every pure function (ADR 0026; tickets M3-016 and M4-002): only a difference
 /// in an observable that is untainted on both sides is real. A model of a refined query (ADR 0053; ticket P1-030) gives
 /// <c>float</c> and <c>double</c> values as numbers, each decoded to the element whose id is its bits, and the replay
 /// computes the functions the query interpreted instead of asking the model, and does not taint them.
@@ -107,7 +107,7 @@ internal sealed class ModelDecoder
         return (new Counterexample(inputs, oldRun, newRun), oldOracle, newOracle);
     }
 
-    /// <summary>Whether <paramref name="callee"/> is an abstraction the replay taints.</summary>
+    /// <summary>Whether <paramref name="callee"/> is a shared fragment's call, an abstraction the replay taints on either side.</summary>
     public static bool IsAbstraction(CallIdentity callee) => callee.Value.StartsWith(OpaquePrefix, StringComparison.Ordinal);
 
     /// <summary>
@@ -231,7 +231,7 @@ internal sealed class ModelDecoder
     /// interpreted are computed, not asked (ADR 0053).
     /// </summary>
     private static IrRun Interpret(IrProcedure procedure, IrInputs inputs, ModelOracle oracle, int stepBudget) =>
-        oracle.Complete(IrInterpreter.Run(procedure, inputs, oracle, stepBudget, IsAbstraction, oracle, oracle.Interpreted));
+        oracle.Complete(IrInterpreter.Run(procedure, inputs, oracle, stepBudget, oracle.IsAbstraction, oracle, oracle.Interpreted));
 
     /// <summary><paramref name="lengths"/> with every negative length replaced by 0.</summary>
     private static IrMapValue NonNegative(IrMapValue lengths) =>
@@ -394,6 +394,13 @@ internal sealed class ModelDecoder
 
         /// <summary>The pure functions the replay computes itself: those the encoding interpreted (ADR 0053).</summary>
         public IReadOnlySet<string> Interpreted => decoder.encoding.Pures.Interpreted;
+
+        /// <summary>
+        /// Whether <paramref name="callee"/> is an abstraction the replay of this side taints: a shared fragment's call, or a
+        /// call the encoding closed (ADR 0056; ticket P2-081). The model chose a closed call's result, <c>threw</c> flag and
+        /// outputs, and the real member may give none of them, so a divergence that needs them is a candidate, not a witness.
+        /// </summary>
+        public bool IsAbstraction(CallIdentity callee) => ModelDecoder.IsAbstraction(callee) || decoder.encoding.Calls.IsClosed(side, callee);
 
         public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments)
         {
