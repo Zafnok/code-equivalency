@@ -42,5 +42,5 @@ anything but closed calls.
   taints a closed call as it taints an `opaque:` call: result, `threw` flag, `ref`/`out` outputs and trace
   event. A model that differs only there is Unknown(Abstraction) with its candidate input. The per-member
   summary was rejected as the whole answer: it leaves wrong values (`Concat(s, "t") == s`) and members
-  that throw for some arguments. Its no-throw half is filed as P2-158, to win back divergences that
+  that throw for some arguments. Its no-throw half is filed as P2-159, to win back divergences that
   show after a member that never throws.

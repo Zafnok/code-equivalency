@@ -1,4 +1,4 @@
-# P2-158 The closed callees an Unknown(Abstraction) names on the corpus are counted, and the ones that never throw join the list
+# P2-159 The closed callees an Unknown(Abstraction) names on the corpus are counted, and the ones that never throw join the list
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
