@@ -66,6 +66,22 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
         Unwind(branch.FinallyRegions, context.BlockIds.TryGetValue(branch.Destination!.Ordinal, out IrBlockId? lowered) ? lowered : NeverReached(), context);
 
     /// <summary>
+    /// The clauses <see cref="Raise(string, ITypeSymbol?, LoweringContext)"/> tries for an exception of <paramref name="type"/>
+    /// raised in the block being lowered, in the order it tries them (ticket P2-140). None inside a filter, where every
+    /// exception goes to the false exit, and none when the route is not known.
+    /// </summary>
+    public ImmutableArray<ControlFlowRegion> Candidates(ITypeSymbol? type, LoweringContext context)
+    {
+        if (context.Declined is not null)
+        {
+            return [];
+        }
+
+        ExceptionRegions.ExceptionRoute route = ExceptionRegions.Route(compilation, context.Source, type);
+        return route.Ambiguous ? [] : [.. route.Candidates.Select(static c => c.Clause)];
+    }
+
+    /// <summary>
     /// Where an exception of <paramref name="type"/> raised in the block being lowered goes: the first clause that takes
     /// it, or the shared throw block for <paramref name="exceptionType"/>, behind the <c>finally</c> regions it leaves on the
     /// way. A <c>when</c> filter is tried where the exception is raised, before any of those finallys, as .NET's first pass
@@ -89,22 +105,6 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
                 uncaught,
                 (region, continuation) => Copy(region, continuation, context),
                 (clause, taken, next) => Filter(ExceptionRegions.Filter(clause), ExceptionRegions.Handler(clause), taken, next, context));
-    }
-
-    /// <summary>
-    /// The clauses <see cref="Raise(string, ITypeSymbol?, LoweringContext)"/> tries for an exception of <paramref name="type"/>
-    /// raised in the block being lowered, in the order it tries them (ticket P2-140). None inside a filter, where every
-    /// exception goes to the false exit, and none when the route is not known.
-    /// </summary>
-    public ImmutableArray<ControlFlowRegion> Candidates(ITypeSymbol? type, LoweringContext context)
-    {
-        if (context.Declined is not null)
-        {
-            return [];
-        }
-
-        ExceptionRegions.ExceptionRoute route = ExceptionRegions.Route(compilation, context.Source, type);
-        return route.Ambiguous ? [] : [.. route.Candidates.Select(static c => c.Clause)];
     }
 
     /// <summary>
