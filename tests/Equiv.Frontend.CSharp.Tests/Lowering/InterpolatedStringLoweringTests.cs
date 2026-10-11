@@ -25,6 +25,9 @@ public sealed class InterpolatedStringLoweringTests
 {
     private const string Concat = "System.String::Concat(string,string)";
 
+    /// <summary>A sealed class that overrides <c>ToString()</c> and is not <c>IFormattable</c> (ticket P2-139).</summary>
+    private const string Sealed = "sealed class K { public override string ToString() => \"k\"; }\n";
+
     /// <summary>Criterion 3: one text under the <c>string.Format</c> binding (C# 9) and the handler binding (C# 10) is one body.</summary>
     [Fact]
     public Task BothBindingsLowerToTheSameBody()
@@ -87,6 +90,142 @@ public sealed class InterpolatedStringLoweringTests
         Assert.Equal([$"{type}::ToString()", Concat], Calls(procedure).Select(static c => c.Callee.Value), StringComparer.Ordinal);
         Assert.All(Calls(procedure), static c => Assert.True(c.Closed));
         Assert.Equal(new IrSort("System.String"), Calls(procedure)[0].Target!.Type);
+    }
+
+    /// <summary>
+    /// Ticket P2-139: a hole of a sealed class that is not <c>IFormattable</c> is one body under the <c>string.Format</c>
+    /// binding (C# 9) and the handler binding (C# 10): null is appended as nothing, and anything else is its own <c>ToString()</c>.
+    /// </summary>
+    [Fact]
+    public Task ASealedClassHoleLowersToTheSameBodyUnderBothBindings()
+    {
+        const string Members = Sealed + "static string M(string s, K k, int i) => $\"a{s}b{k}c{i}\";";
+        (IrProcedure formatted, BodyFingerprint formatPrint) = Bound(Members, LanguageVersion.CSharp9, legacy: true);
+        (IrProcedure handled, BodyFingerprint handlerPrint) = Bound(Members, LanguageVersion.CSharp10, legacy: false);
+
+        Assert.NotEqual(formatPrint, handlerPrint);
+        Assert.Empty(Opaques(formatted));
+        Assert.Equal(IrText.Dump(formatted), IrText.Dump(handled));
+        return Verify(IrText.Dump(handled));
+    }
+
+    /// <summary>
+    /// A null hole calls nothing: the call is on the branch where the hole is not null, it is the class's own
+    /// <c>ToString()</c>, which is not closed, and the other branch joins it with the null constant.
+    /// </summary>
+    [Fact]
+    public void ASealedClassHoleIsFormattedOnlyWhenItIsNotNull()
+    {
+        IrProcedure procedure = Method(Sealed + "static string M(K k) => $\"a{k}\";");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(["C.K::ToString()", Concat], Calls(procedure).Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        Assert.False(Calls(procedure)[0].Closed);
+        IrBranch test = Assert.Single(procedure.Blocks.Select(static b => b.Terminator).OfType<IrBranch>(), t => Block(t.Then).Instructions is [IrConst]);
+        Assert.Equal("C.K::ToString()", Assert.IsType<IrCall>(Block(test.Else).Instructions[0]).Callee.Value);
+        Assert.IsType<IrGoto>(Block(test.Then).Terminator);
+
+        IrBlock Block(IrBlockId id) => procedure.Blocks.Single(b => b.Id == id);
+    }
+
+    /// <summary>A hole that is never null is formatted with no test, as a written <c>new K().ToString()</c> is called.</summary>
+    [Fact]
+    public void ASealedClassHoleThatIsNeverNullLowersAsItsToStringCallDoes()
+    {
+        IrProcedure procedure = Method(Sealed + "static string M() => $\"a{new K()}\";");
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(IrText.Dump(Method(Sealed + "static string M() => \"a\" + new K().ToString();")), IrText.Dump(procedure));
+    }
+
+    /// <summary>
+    /// The <c>ToString()</c> is the one in <c>object</c>'s slot: the class's own override, a base class's, a record's
+    /// synthesized one, or <c>object</c>'s. After the first such hole a constant and a local or parameter passed by value
+    /// are still covered, whatever comes before it.
+    /// </summary>
+    [Theory]
+    [InlineData("sealed class K { public override string ToString() => \"k\"; } static string M(K k) => $\"{k}\";", "C.K::ToString()")]
+    [InlineData("class B { public override string ToString() => \"b\"; } sealed class K : B { } static string M(K k) => $\"{k}\";", "C.B::ToString()")]
+    [InlineData("sealed class K { } static string M(K k) => $\"{k}\";", "System.Object::ToString()")]
+    [InlineData("sealed record K(int N); static string M(K k) => $\"{k}\";", "C.K::ToString()")]
+    [InlineData("sealed class K { public string ToString(int n) => \"\"; public override string ToString() => \"k\"; } static string M(K k) => $\"{k}\";", "C.K::ToString()")]
+    [InlineData("sealed class K { } static string M(K k, string s) => $\"{k}{s}\";", "System.Object::ToString()")]
+    [InlineData("sealed class K { } static string M(K k, string s) { string l = s; return $\"{k}{l}{\"x\"}\"; }", "System.Object::ToString()")]
+    [InlineData("sealed class K { } string f; static K F() => null; string M() => $\"{f}{F()}\";", "C::F()", "System.Object::ToString()")]
+    [InlineData("sealed class K { } static string M(K k, K j) => $\"{k}{j}\";", "System.Object::ToString()", "System.Object::ToString()")]
+    [InlineData("sealed class K { } static string M(int i, K k) => $\"{i}{k}\";", "System.Int32::ToString()", "System.Object::ToString()")]
+    [InlineData("sealed class K { } static string M(K k, int i) => $\"{k}{i}\";", "System.Object::ToString()", "System.Int32::ToString()")]
+    public void ASealedClassHoleCallsTheToStringInObjectsSlot(string members, params string[] callees)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(callees, Calls(procedure).Select(static c => c.Callee.Value).Where(static c => !string.Equals(c, Concat, StringComparison.Ordinal)), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-139: a class that is not sealed, or is <c>IFormattable</c>, or hides <c>object</c>'s <c>ToString()</c>, and
+    /// any type that is no class, is formatted through a member only its run-time type decides or the two bindings do not
+    /// share. And a hole after the first sealed class hole that reads what its <c>ToString()</c> may write, a field, a
+    /// variable passed by reference or a primary constructor's parameter, or that runs code, is read before that call under
+    /// <c>string.Format</c> and after it under the handler. Each keeps the string opaque.
+    /// </summary>
+    [Theory]
+    [InlineData("class N { } static string M(N n) => $\"{n}\";")]
+    [InlineData("abstract class N { } static string M(N n) => $\"{n}\";")]
+    [InlineData("interface I { } static string M(I i) => $\"{i}\";")]
+    [InlineData("struct S { } static string M(S s) => $\"{s}\";")]
+    [InlineData("static string M(int[] a) => $\"{a}\";")]
+    [InlineData("static string M(Action a) => $\"{a}\";")]
+    [InlineData("static string M<T>(T t) where T : class => $\"{t}\";")]
+    [InlineData("sealed class K : IFormattable { public string ToString(string f, IFormatProvider p) => \"\"; } static string M(K k) => $\"{k}\";")]
+    [InlineData("static string M(Version v) => $\"{v}\";")]
+    [InlineData("sealed class K { public new string ToString() => \"\"; } static string M(K k) => $\"{k}\";")]
+    [InlineData("class B { public new virtual string ToString() => \"\"; } sealed class K : B { public override string ToString() => \"k\"; } static string M(K k) => $\"{k}\";")]
+    [InlineData("sealed class K { } static string M(K k) => $\"{k:x}\";")]
+    [InlineData("sealed class K { } static string M(K k) => $\"{k,5}\";")]
+    [InlineData("sealed class K { } string f; string M(K k) => $\"{k}{f}\";")]
+    [InlineData("sealed class K { } int f; string M(K k) => $\"{k}{f}\";")]
+    [InlineData("sealed class K { } static string F() => \"\"; static string M(K k) => $\"{k}{F()}\";")]
+    [InlineData("sealed class K { } static string M(K k, ref string s) => $\"{k}{s}\";")]
+    [InlineData("sealed class K { } static string M(K k, in string s) => $\"{k}{s}\";")]
+    [InlineData("sealed class K { } static string M(K k, string[] a) { ref string l = ref a[0]; return $\"{k}{l}\"; }")]
+    [InlineData("sealed class K { } static string M(K k, string s, K j, string[] a) => $\"{s}{k}{j}{a[0]}\";")]
+    public void AnyOtherClassHoleStaysOpaque(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Single(Opaques(procedure), static o => string.Equals(o.Reason, "InterpolatedString", StringComparison.Ordinal));
+        Assert.DoesNotContain(Calls(procedure), static c => c.Callee.Value.EndsWith("::ToString()", StringComparison.Ordinal) || string.Equals(c.Callee.Value, Concat, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A local or parameter that a lambda, a local function or a query in the body names may be written by the hole's
+    /// <c>ToString()</c> running it, so it is not a value no call writes. One that none of them names still is.
+    /// </summary>
+    [Theory]
+    [InlineData("static string M(K k) { string n = \"\"; Action a = () => n = \"x\"; return $\"{k}{n}\"; }", true)]
+    [InlineData("static string M(K k, string s) { Action a = delegate { s = \"x\"; }; return $\"{k}{s}\"; }", true)]
+    [InlineData("static string M(K k, string s) { void L() { s = \"x\"; } return $\"{k}{s}\"; }", true)]
+    [InlineData("static string M(K k, string s, string[] xs) { var q = from x in xs select x + s; return $\"{k}{s}\"; }", true)]
+    [InlineData("static string M(K k, string s) { Func<string, string> f = static t => t; return $\"{k}{s}\"; }", false)]
+    [InlineData("static string M(K k, string s, string[] xs) { var q = from x in xs select x; return $\"{k}{s}\"; }", false)]
+    public void AVariableTheBodyCapturesAfterASealedClassHoleStaysOpaque(string members, bool opaque)
+    {
+        IrProcedure procedure = Lowered.Source($"using System;\nusing System.Linq;\nclass C\n{{\n{Sealed}{members}\n}}\n");
+
+        Assert.Equal(opaque, Opaques(procedure).Any(static o => string.Equals(o.Reason, "InterpolatedString", StringComparison.Ordinal)));
+        Assert.Equal(!opaque, Calls(procedure).Any(static c => string.Equals(c.Callee.Value, "C.K::ToString()", StringComparison.Ordinal)));
+    }
+
+    /// <summary>A primary constructor's parameter read after a sealed class hole is the type's state, not a value no call writes.</summary>
+    [Fact]
+    public void APrimaryConstructorParameterAfterASealedClassHoleStaysOpaque()
+    {
+        const string Source = "sealed class K { }\nclass C(string p)\n{\n    string M(K k) => $\"{k}{p}\";\n    string N(K k, string s) => $\"{k}{s}\";\n}\n";
+
+        Assert.Contains(Opaques(Lowered.Source(Source)), static o => string.Equals(o.Reason, "InterpolatedString", StringComparison.Ordinal));
+        Assert.Empty(Opaques(Lowered.Source(Source, "N")));
     }
 
     /// <summary>

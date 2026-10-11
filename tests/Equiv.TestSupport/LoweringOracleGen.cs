@@ -112,6 +112,7 @@ public static class LoweringOracleGen
     /// <summary>The declaration of <see cref="CellType"/>, then of <see cref="MarkType"/>, to compile next to the generated methods.</summary>
     public const string CellSource =
         $"public sealed class {CellType}\n{{\n    public int {CellField};\n    public void {Bump}(int k) {{ {CellField} = unchecked({CellField} + k); }}\n"
+        + $"    public override string ToString() {{ {CellField} = unchecked({CellField} + 1); return \"c\"; }}\n"
         + $"    public bool {TryParse}(int k, out int n) {{ n = unchecked(k * 3); return (k & 1) == 0; }}\n"
         + $"    public void {Nudge}(int k, {MarkType} m = default) {{ {CellField} = unchecked({CellField} + k + m.N); }}\n}}\n"
         + $"public struct {MarkType}\n{{\n    public int N;\n}}\n";
@@ -124,6 +125,14 @@ public static class LoweringOracleGen
     /// no code and it is never null, so <c>z</c> is true.
     /// </summary>
     public const string Lambda = "(((System.Func<int, int>)(t => unchecked((int)(double)t + a))) != null)";
+
+    /// <summary>
+    /// The right-hand side of <c>z = (interpolated string) != null;</c> (ticket P2-139): a <c>string</c> hole, a hole of the
+    /// sealed class <see cref="CellType"/>, whose <c>ToString()</c> adds 1 to <see cref="CellField"/>, and an <c>int</c> hole
+    /// that reads a local. The string is never null, so <c>z</c> is true, and what a run shows of it is that
+    /// <c>o.ToString()</c> ran once.
+    /// </summary>
+    public const string Interpolated = $"($\"p{{s}}q{{{Cell}}}r{{x}}\" != null)";
 
     /// <summary>The value every <see cref="Nullables"/> expression wraps, which is what <c>GetValueOrDefault()</c> then reads of it.</summary>
     public const int NullableValue = 7;
@@ -183,6 +192,8 @@ public static class LoweringOracleGen
                 (1, Gen.OneOfConst([.. Nullables]).Select(static value => (IStmt)new Assign("x", new Name(value)))),
                 // Ticket P2-138: a call that leaves out an optional parameter of a struct type.
                 (1, FieldValue.Select(static value => (IStmt)new Call($"{Cell}.{Nudge}", value))),
+                // Ticket P2-139: an interpolated string with a hole of a sealed class.
+                (1, Gen.Const<IStmt>(new Assign("z", new Name(Interpolated)))),
             ]
             : [];
         Gen<IStmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>

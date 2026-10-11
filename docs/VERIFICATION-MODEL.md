@@ -308,10 +308,19 @@ and a closed call's result already depends on its position, so no assumption abo
 is joined to `""`, since `$"{s}"` is never null. The two bindings differ in one thing this lowering cannot hide:
 `string.Format` formats after every hole is evaluated, the handler formats each hole before the next one is
 evaluated. So every hole after the first integer hole must only read a local, a parameter, a constant or a field of
-`this`; with no call and no throw there, the two orders are one. Any other interpolated string (a clause, a hole of
-another type, whose formatting goes through `IFormattable` or `ISpanFormattable` members the bindings do not share,
-or a call after the first integer hole) stays an `IrOpaque` with reason `InterpolatedString`, fingerprinted per
-binding.
+`this`; with no call and no throw there, the two orders are one. A hole of a sealed class that does not implement
+`IFormattable` is covered too (P2-139). Its value is exactly that class or null, so neither binding finds an
+`IFormattable` or `ISpanFormattable` to format it through: both append nothing for null, and otherwise what the
+class's own parameterless `ToString()`, the one in `object`'s slot, returns, a null result as nothing, and neither
+hands it a culture. It lowers as a branch on the hole's nullness: `null`, which `Concat` appends as nothing, or the
+call a written `o.ToString()` makes once its receiver is not null, an ordinary call that reads and writes the heap.
+Because that call runs the class's code, every hole after the first such hole must be a constant, or a local or
+parameter passed by value that no lambda, local function or query in the body names, which no call writes: a field,
+a variable passed by reference, a captured variable or a primary constructor's parameter read there comes before the
+call under `string.Format` and after it under the handler. Any other interpolated string (a clause, a hole of
+another type, whose formatting goes through `IFormattable` or `ISpanFormattable` members the bindings do not share or
+that only its run-time type decides, as for a class that is not sealed, or a call after the first integer hole) stays
+an `IrOpaque` with reason `InterpolatedString`, fingerprinted per binding.
 
 Effect-free BCL members (ADR 0043; P2-071). One frontend catalogue lists, by name, the BCL members that
 run no observable code. A use of one is no `IrCall`: no trace event, no `threw` edge, no heap pair, no position.

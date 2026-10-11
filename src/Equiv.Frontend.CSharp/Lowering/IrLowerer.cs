@@ -980,8 +980,9 @@ internal sealed class IrLowerer
     /// An interpolated string that is the concatenation of its parts under both bindings (ticket P2-086;
     /// <see cref="InterpolatedStrings"/>), lowered as the <c>+</c> chain of those parts is, so the same text is the same body
     /// on .NET Framework and on .NET 10: each part in order joined to the ones before it by <see cref="Concat"/>, a text
-    /// part its constant, a <c>string</c> hole its value, and an integer hole its type's closed <c>ToString()</c> call. A
-    /// lone hole is joined to the empty string, since <c>$"{s}"</c> is never null.
+    /// part its constant, a <c>string</c> hole its value, an integer hole its type's closed <c>ToString()</c> call, and a
+    /// hole of a sealed class its own <c>ToString()</c> unless it is null (ticket P2-139). A lone hole is joined to the
+    /// empty string, since <c>$"{s}"</c> is never null.
     /// </summary>
     private IrVar Interpolate(IInterpolatedStringOperation interpolated, LoweringContext context)
     {
@@ -997,7 +998,8 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// One part of an interpolated string as a value of <paramref name="type"/>, which is <c>string</c>: its text, or its
-    /// hole's value, an integer's through the <c>ToString()</c> call a written <c>i.ToString()</c> lowers to.
+    /// hole's value, an integer's through the <c>ToString()</c> call a written <c>i.ToString()</c> lowers to, and a sealed
+    /// class's as <see cref="Formatted"/> gives it.
     /// </summary>
     private IrVar Part(IInterpolatedStringContentOperation part, ITypeSymbol type, LoweringContext context)
     {
@@ -1008,6 +1010,11 @@ internal sealed class IrLowerer
 
         IOperation hole = ((IInterpolationOperation)part).Expression;
         IrVar value = Value(hole, context);
+        if (InterpolatedStrings.Formatter(hole) is { } formatter)
+        {
+            return Formatted(part, hole, value, formatter, type, context);
+        }
+
         if (!InterpolatedStrings.IsInteger(hole))
         {
             return value;
@@ -1015,6 +1022,34 @@ internal sealed class IrLowerer
 
         IMethodSymbol toString = hole.Type!.GetMembers(nameof(ToString)).OfType<IMethodSymbol>().Single(static m => m.Parameters.IsEmpty);
         return Call(Called(toString, part), [value], Map(type), [], context)!;
+    }
+
+    /// <summary>
+    /// A hole of a sealed class as both bindings format it (ticket P2-139): <c>null</c>, which <see cref="Concat"/> appends
+    /// as nothing, when <paramref name="value"/> is null, and otherwise the call of <paramref name="formatter"/>, its own
+    /// <c>ToString()</c>, on it, as a written <c>o.ToString()</c> lowers once its receiver is known not to be null.
+    /// </summary>
+    private IrVar Formatted(IOperation part, IOperation hole, IrVar value, IMethodSymbol formatter, ITypeSymbol type, LoweringContext context)
+    {
+        if (Nullness(hole, value, context) is not { } isNull)
+        {
+            return Call(Bound(formatter, part), [value], Map(type), [], context)!;
+        }
+
+        SsaBuilder.Variable text = new(new IrVar($"$select{selects++.ToString(CultureInfo.InvariantCulture)}", Map(type)));
+        IrBlockId none = ssa.NewBlock();
+        IrBlockId some = ssa.NewBlock();
+        IrBlockId join = ssa.NewBlock();
+        ssa.Terminate(context.Current, new IrBranch(isNull, none, some));
+        context.Current = none;
+        ssa.Store(none, text, Constant(type, value: null, context));
+        ssa.Terminate(none, new IrGoto(join));
+        context.Current = some;
+        IrVar called = Call(Bound(formatter, part), [value], Map(type), [], context)!;
+        ssa.Store(context.Current, text, called);
+        ssa.Terminate(context.Current, new IrGoto(join));
+        context.Current = join;
+        return ssa.Load(join, text);
     }
 
     /// <summary>

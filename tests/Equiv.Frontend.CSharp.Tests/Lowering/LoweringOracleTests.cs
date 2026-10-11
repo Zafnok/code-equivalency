@@ -66,10 +66,15 @@ public sealed class LoweringOracleTests
 
     private const string CellNulls = $"null.{LoweringOracleGen.CellType}";
 
+    private const string StringNulls = "null.System.String";
+
     /// <summary>The one <c>Cell</c> the parameter <c>o</c> is bound to.</summary>
     private static readonly IrSortValue CellReference = new(LoweringOracleGen.CellType, 1);
 
     private static readonly IrSortValue Reference = new("System.String", 1);
+
+    /// <summary>The string every <c>ToString()</c> and <c>Concat</c> of an interpolated string returns (ticket P2-139): one that is not null.</summary>
+    private static readonly IrSortValue Built = new("System.String", 2);
 
     private static readonly IrSortValue ListReference = new("System.Collections.Generic.List`1", 1);
 
@@ -91,21 +96,27 @@ public sealed class LoweringOracleTests
     /// <summary>The key a static field's map is read at: element 0 of its declaring type's sort.</summary>
     private static readonly IrSortValue Token = new("Oracle", 0);
 
-    [Fact]
-    public void LoweredIrAgreesWithCompiledCSharp() =>
+    /// <summary>
+    /// Under C# 9 an interpolated string binds <c>string.Format</c> and under the default version
+    /// <c>DefaultInterpolatedStringHandler</c> (ticket P2-139): the lowered IR agrees with what each compiles to.
+    /// </summary>
+    [Theory]
+    [InlineData(LanguageVersion.CSharp9)]
+    [InlineData(LanguageVersion.Default)]
+    public void LoweredIrAgreesWithCompiledCSharp(LanguageVersion version) =>
         Gen.Select(LoweringOracleGen.MethodWithLambda, LoweringOracleGen.Input.Array[InputsPerCase]).Array[Cases]
-            .Sample(static cases => Check(cases), seed: Seed, iter: 1, print: static cases => $"{cases.Length} cases");
+            .Sample(cases => Check(cases, version), seed: Seed, iter: 1, print: static cases => $"{cases.Length} cases");
 
-    private static void Check((OracleMethod Method, OracleInput[] Inputs)[] cases)
+    private static void Check((OracleMethod Method, OracleInput[] Inputs)[] cases, LanguageVersion version)
     {
         string source = Source(cases.Select(static c => c.Method));
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Nudge}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda, .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
+        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Nudge}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda, LoweringOracleGen.Interpolated, .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
 
-        (CSharpCompilation compilation, MemoryStream image) = Emit(source);
+        (CSharpCompilation compilation, MemoryStream image) = Emit(source, version);
         using MemoryStream disposed = image;
         AssemblyLoadContext context = new("lowering-oracle", isCollectible: true);
         try
@@ -217,11 +228,11 @@ public sealed class LoweringOracleTests
     private static string Source(IEnumerable<OracleMethod> methods) =>
         $"public static class Oracle\n{{\n{LoweringOracleGen.ClassMembers}{string.Concat(methods.Select(static (m, i) => m.Render($"M{i.ToString(CultureInfo.InvariantCulture)}")))}}}\n{LoweringOracleGen.CellSource}";
 
-    private static (CSharpCompilation Compilation, MemoryStream Image) Emit(string source)
+    private static (CSharpCompilation Compilation, MemoryStream Image) Emit(string source, LanguageVersion version = LanguageVersion.Default)
     {
         CSharpCompilation compilation = CSharpCompilation.Create(
             "Oracle",
-            [CSharpSyntaxTree.ParseText(source, path: "Oracle.cs", cancellationToken: TestContext.Current.CancellationToken)],
+            [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(version), path: "Oracle.cs", cancellationToken: TestContext.Current.CancellationToken)],
             RoslynTestCompilations.References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         MemoryStream image = new();
@@ -267,6 +278,7 @@ public sealed class LoweringOracleTests
         Assert.Contains(CompiledRunOracle.MoveNext, callees);
         Assert.Contains(CompiledRunOracle.GetValueOrDefault, callees);
         Assert.Contains(CompiledRunOracle.Nudge, callees);
+        Assert.Contains(CompiledRunOracle.CellToString, callees);
         Assert.Superset(new HashSet<string>(["conv.i32.dec", "conv.dec.i32", "dec.mul", "dec.div", "dec.lt"], StringComparer.Ordinal), pures);
     }
 
@@ -311,6 +323,7 @@ public sealed class LoweringOracleTests
         ElementMap => InitialArrays(input),
         LengthMap => new IrMapValue((IrMap)parameter.Type, IrBitVecValue.FromSigned(32, 2), []),
         ArrayNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), ImmutableDictionary<IrValue, IrValue>.Empty.Add(Null, new IrBoolValue(Value: true))),
+        StringNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(input.SIsNull), ImmutableDictionary<IrValue, IrValue>.Empty.Add(Built, new IrBoolValue(Value: false))),
         _ => new IrMapValue(
             (IrMap)parameter.Type,
             new IrBoolValue(input.SIsNull),
@@ -496,6 +509,12 @@ public sealed class LoweringOracleTests
 
         public static readonly Equiv.Core.CallIdentity Nudge = new($"{LoweringOracleGen.CellType}::{LoweringOracleGen.Nudge}(int,{LoweringOracleGen.MarkType})");
 
+        public static readonly Equiv.Core.CallIdentity CellToString = new($"{LoweringOracleGen.CellType}::ToString()");
+
+        private static readonly Equiv.Core.CallIdentity IntToString = new("System.Int32::ToString()");
+
+        private static readonly Equiv.Core.CallIdentity Concat = new("System.String::Concat(string,string)");
+
         private static readonly Equiv.Core.CallIdentity TryParse = new($"{LoweringOracleGen.CellType}::{LoweringOracleGen.TryParse}(int,out int)");
 
         /// <summary>Boxed, so each call advances the one enumerator and not a copy of the struct.</summary>
@@ -514,6 +533,11 @@ public sealed class LoweringOracleTests
                 Assert.Equal(callee == Nudge ? [DefaultMark] : [], arguments[2..]);
                 Cells = Bumped((IrMapValue?)heap.FirstOrDefault(static h => h.Map is CellMap)?.Value ?? Cells, arguments[1]);
                 return new IrCallResult(Value: null, Threw: false) { Heap = [.. heap.Select(h => h.Map is CellMap ? Cells : h.Value)] };
+            }
+
+            if (callee == CellToString || callee == IntToString || callee == Concat)
+            {
+                return Text(callee, arguments, heap);
             }
 
             if (callee == TryParse)
@@ -562,6 +586,22 @@ public sealed class LoweringOracleTests
 
             Assert.Equal(Getter, callee);
             return new IrCallResult(value, Threw: false);
+        }
+
+        /// <summary>
+        /// A part of an interpolated string (ticket P2-139): <see cref="Built"/>. The <c>Cell</c> hole's own <c>ToString()</c>,
+        /// which the compiled method runs once under either binding, adds 1 to <c>o</c>'s <c>G</c> as <c>o.Bump(1)</c> does.
+        /// </summary>
+        private IrCallResult Text(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, ImmutableArray<IrHeapSlice> heap)
+        {
+            if (callee != CellToString)
+            {
+                return new IrCallResult(Built, Threw: false);
+            }
+
+            Assert.Equal([CellReference], arguments);
+            Cells = Bumped((IrMapValue?)heap.FirstOrDefault(static h => h.Map is CellMap)?.Value ?? Cells, IrBitVecValue.FromSigned(32, 1));
+            return new IrCallResult(Built, Threw: false) { Heap = [.. heap.Select(h => h.Map is CellMap ? Cells : h.Value)] };
         }
 
         private static IrMapValue Bumped(IrMapValue cells, IrValue k) =>
