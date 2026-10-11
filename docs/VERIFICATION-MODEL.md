@@ -1236,6 +1236,39 @@ exit code nor the fingerprint depends on `failureRefinement`. The census reports
 and the time their queries took, in `loweringCensus.failureRefinement` (`pairs`, `milliseconds`), when
 there was at least one.
 
+An EQ002 the solver found carries `properties.failureRefinement` too, with a third answer, and
+`properties.divergenceKind` (ADR 0037's clarification of 2026-10-11; ticket P1-020). The counterexample
+is one input; these say what kind of difference the pair has on all of them. `newFailures` and
+`removedFailures` are the two queries above, with the same rules. `resultChanges`, `{ outcome, model? }`,
+asks for an input on which both sides return, or both throw the same exception type, and another
+compared observable differs: the returned value, a final by-ref value or the call trace. It is `found`
+when such an input reaches no unshared opaque node and no bound, and its replay has an untainted
+outcome on both sides and differs in an observable untainted on both. It is `none-proved` when the
+query is unsatisfiable with a side past an unshared opaque node, or past the bound, free to end any
+way with any result, so a pair some input takes to either is never `none-proved`. Anything else is
+`unknown`. All three are asked on rung 1's exact product, whichever rung or round found the
+counterexample, in quick and in thorough mode, and a pair rung 1 could not encode has three `unknown`
+answers. `divergenceKind` is read from the three outcomes and nothing else:
+
+| `divergenceKind` | `newFailures` | `removedFailures` | `resultChanges` |
+|---|---|---|---|
+| `removed-failures-only` | `none-proved` | `found` | `none-proved` |
+| `new-failures-only` | `found` | `none-proved` | `none-proved` |
+| `failures-only` | `found` | `found` | `none-proved` |
+| `result-changed` | any | any | `found` |
+| `undetermined` | anything else | | |
+
+The message of a `removed-failures-only` result ends with `The modern side differs only where the
+legacy side throws.`: the modern side returns wherever the legacy side did and agrees with it there.
+A pair whose sides throw different exception types on the same input and differ nowhere else has
+three `none-proved` answers and is `undetermined` (`samples/removed-null-check`); none of the three
+queries asks about the type alone. An EQ006 carries neither property, since its side-specific
+functions are free in the model, and neither does an observed Divergent, which has no model. The
+verdict, the rule id, the level, the exit code, the fingerprint, `baselineState`, the review group
+and the rank do not depend on either property. The census reports the Divergent pairs queried and the
+time their queries took, in `loweringCensus.divergentRefinement` (`pairs`, `milliseconds`), when there
+was at least one.
+
 An EQ002 the solver found, and an Unknown with reason `abstraction`, carries `properties.agreesWhen`
 when the search of section 5 admitted a candidate (ADR 0048; ticket P1-022):
 `{ smt, text, proposedBy, proofMethod }`. It is a predicate over the pair's shared inputs under
@@ -1283,7 +1316,8 @@ without `IrOpaque`, whole-body opaque pairs, congruent pairs, and `IrOpaque` cou
 per side (ADR 0027). With `--il-fallback` it also counts the pairs the fallback was tried on and
 the pairs it replaced (`pairsIlFallbackTried`, `pairsLoweredFromIl`), and every result on a matched
 pair carries `properties.lowering` (`operation` or `il`; ADR 0039). It also records skipped projects per side, and, when the run produced
-verdicts, Unknown counts by scope (ADR 0029) and the failure-refinement time (ADR 0037).
+verdicts, Unknown counts by scope (ADR 0029) and the failure-refinement time of the Unknown and of the
+Divergent pairs (ADR 0037).
 
 Only the projects a solution builds are part of the product. For a `.sln`, those are the projects
 with a `Build.0` entry for its default configuration (`Debug|Any CPU`, else the first one it
