@@ -42,17 +42,12 @@ public sealed class IlLoweringParityTests
         [$"bcl-rebound-overloads/legacy {TrimTailOther}"] = EmptyParamsArray,
         [$"business-layer/legacy {ConfirmAsync}"] = StateMachine,
         [$"business-layer/modern {ConfirmAsync}"] = StateMachine,
-        [$"business-layer/legacy {Export}"] = UsingResource,
-        [$"business-layer/modern {Export}"] = UsingResource,
-        [$"business-layer/legacy {Reserve}"] = NullTestOfAConversion,
-        [$"business-layer/modern {Reserve}"] = NullTestOfAConversion,
         [$"business-layer/legacy {SkusOver}"] = Lambda,
         [$"business-layer/modern {SkusOver}"] = Lambda,
         [$"business-layer/legacy {CappedLineCount}"] = Lambda,
         [$"business-layer/modern {CappedLineCount}"] = Lambda,
         [$"cleanup-modern-syntax/legacy {LengthOf}"] = NullableValue,
         [$"cleanup-modern-syntax/modern {LengthOf}"] = NullableValue,
-        [$"cleanup-modern-syntax/legacy {Positives}"] = NullTestOfAConversion,
         [$"cleanup-modern-syntax/modern {Positives}"] = Lambda,
         [$"cleanup-modern-syntax/modern {Join}"] = InterpolatedString,
         [$"effect-free-bcl-call/modern {Basket}"] = ListFamily,
@@ -86,10 +81,6 @@ public sealed class IlLoweringParityTests
     private const string TrimTailOther = "Equiv.Samples.BclReboundOverloads.Calls::TrimTailOther(string)";
 
     private const string ConfirmAsync = "Equiv.Samples.BusinessLayer.OrderService::ConfirmAsync(System.Threading.Tasks.Task<global::Equiv.Samples.BusinessLayer.Order>)";
-
-    private const string Export = "Equiv.Samples.BusinessLayer.OrderService::Export(Equiv.Samples.BusinessLayer.Order)";
-
-    private const string Reserve = "Equiv.Samples.BusinessLayer.OrderService::Reserve(Equiv.Samples.BusinessLayer.Order,int)";
 
     private const string SkusOver = "Equiv.Samples.BusinessLayer.OrderService::SkusOver(Equiv.Samples.BusinessLayer.Order,int)";
 
@@ -128,20 +119,6 @@ public sealed class IlLoweringParityTests
 
     /// <summary>An <c>async</c> method's IL is its state machine's kickoff, whose ILAst is opaque (out of scope; P1-012).</summary>
     private const string StateMachine = "the IL of an async method is its state machine's kickoff, which is opaque";
-
-    /// <summary>
-    /// The IOperation lowering null-checks a <c>using</c> resource's call of <c>Dispose</c> on its conversion to
-    /// <c>IDisposable</c>, whose nullness it reads from <c>null.System.IDisposable</c>, not tied to the resource's (M3-010);
-    /// the IL lowering reads the resource's own null shadow, which the <c>finally</c> has just tested.
-    /// </summary>
-    private const string UsingResource = "IOperation null-checks the using resource's IDisposable conversion through null.System.IDisposable";
-
-    /// <summary>
-    /// The IOperation lowering reads <c>order != null</c> (and <c>values == null</c>) as the nullness of the reference
-    /// converted to <c>object</c>, from <c>null.System.Object</c> (M3-010); the IL, which compares the reference itself,
-    /// reads the reference's own null shadow.
-    /// </summary>
-    private const string NullTestOfAConversion = "IOperation reads a null test of a reference through null.System.Object of the conversion to object";
 
     /// <summary>
     /// The IOperation lowering makes a lambda the pure function <c>delegate:&lt;fingerprint&gt;</c> of its bound body

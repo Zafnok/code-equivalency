@@ -43,6 +43,16 @@ public class Tidy
         return 0;
     }
 
+    public int RadiusOf(object o)
+    {
+        if (o is Circle c)
+        {
+            return c.Radius;
+        }
+
+        return 0;
+    }
+
     public List<int> Positives(List<int> values)
     {
         if (values == null)

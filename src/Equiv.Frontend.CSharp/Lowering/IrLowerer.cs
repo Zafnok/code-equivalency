@@ -58,6 +58,9 @@ internal sealed class IrLowerer
     private HashSet<CaptureId> assignedCaptures = [];
     private readonly Dictionary<SsaBuilder.Variable, SsaBuilder.Variable> shadows = [];
     private readonly Dictionary<IOperation, IrVar> tryCastNulls = [];
+
+    /// <summary>The operand of each implicit reference conversion lowered as a cast-map read, which is null exactly when the result is (ticket P2-103).</summary>
+    private readonly Dictionary<IOperation, IrVar> upcastOperands = [];
     private readonly Dictionary<CaptureId, SsaBuilder.Variable> indices = [];
     private readonly Dictionary<ICollectionExpressionOperation, SsaBuilder.Variable> collections = [];
     private readonly Dictionary<string, List<SyntaxNode>> lambdaSites = new(StringComparer.Ordinal);
@@ -1168,11 +1171,22 @@ internal sealed class IrLowerer
     /// </summary>
     private IrVar? Nullness(IOperation source, IrVar value, LoweringContext context)
     {
-        // A cast-map conversion's result is a value of its own, whose nullness is not tied to the operand's; an `as`'s is its failed test.
+        // An implicit reference conversion is null exactly when its operand is (ticket P2-103); a boxing's result is a value
+        // of its own, whose nullness is not tied to the operand's; an `as`'s is its failed test.
         IOperation unwrapped = source;
-        while (unwrapped is IConversionOperation conversion && !IsCast(conversion) && !conversion.IsTryCast)
+        IrVar tested = value;
+        while (unwrapped is IConversionOperation conversion && !conversion.IsTryCast)
         {
-            if (HasAValue(conversion))
+            if (IsCast(conversion))
+            {
+                if (!upcastOperands.TryGetValue(conversion, out IrVar? operand))
+                {
+                    break;
+                }
+
+                tested = operand;
+            }
+            else if (HasAValue(conversion))
             {
                 return null;
             }
@@ -1188,7 +1202,7 @@ internal sealed class IrLowerer
             ICollectionExpressionOperation collection when Built(collection) is { NeverNull: true } => null,
             _ when ShadowOf(unwrapped) is { } shadow => ssa.Load(context.Current, shadow),
             { ConstantValue.HasValue: true, ConstantValue.Value: null } => Const(new IrBoolValue(Value: true), context),
-            _ => heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context),
+            _ => heap.MapRead(heap.Inputs.Nulls((IrSort)tested.Type), tested, context),
         };
     }
 
@@ -1702,10 +1716,21 @@ internal sealed class IrLowerer
     /// An implicit reference or boxing conversion that changes the IR type: a read of its <c>cast</c> map, or, for a new
     /// <c>Collection&lt;T&gt;</c> converted to an interface at once, <see cref="NewList"/> (ADR 0043).
     /// </summary>
-    private IrVar Cast(IConversionOperation conversion, LoweringContext context) =>
-        conversion.Operand is IObjectCreationOperation creation && EffectFreeMembers.IsNewList(creation.Constructor!, conversion.Type!)
-            ? NewList(conversion.Type!, context)
-            : heap.MapRead(heap.Inputs.Cast(conversion.Operand.Type!, conversion.Type!), Value(conversion.Operand, context), context);
+    private IrVar Cast(IConversionOperation conversion, LoweringContext context)
+    {
+        if (conversion.Operand is IObjectCreationOperation creation && EffectFreeMembers.IsNewList(creation.Constructor!, conversion.Type!))
+        {
+            return NewList(conversion.Type!, context);
+        }
+
+        IrVar operand = Value(conversion.Operand, context);
+        if (conversion.GetConversion().IsReference)
+        {
+            upcastOperands[conversion] = operand;
+        }
+
+        return heap.MapRead(heap.Inputs.Cast(conversion.Operand.Type!, conversion.Type!), operand, context);
+    }
 
     /// <summary>
     /// A new <c>Collection&lt;T&gt;</c> converted to the interface <paramref name="to"/> at once (ADR 0043): the next new

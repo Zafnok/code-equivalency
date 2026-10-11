@@ -9,6 +9,8 @@ side is C# 14. Each method carries one rewrite, and behaves the same on every in
 - `Tidy.LengthOf`: `x == null ? (int?)null : x.Length` becomes `x?.Length`.
 - `Tidy.OrDefault`: `if (x == null) x = d;` becomes `x ??= d;`.
 - `Tidy.Measure`: `if (o is Circle) { var c = (Circle)o; ... }` becomes `if (o is Circle c) { ... }`.
+- `Tidy.RadiusOf`: `Circle c = o as Circle; if (c != null) { ... }` becomes `if (o is Circle c) { ... }`, the rewrite
+  IDE0019 makes (ticket P2-103).
 - `Circle.Diameter`: a block-bodied getter becomes expression-bodied.
 - `Tidy.Positives`: a `foreach` with `if` and `Add` becomes `.Where(...).ToList()`. Both sides keep the
   same guard for a null list, since the loop would throw `NullReferenceException` where `Where` throws
@@ -27,6 +29,7 @@ behaviour-preserving, so every row that is not Equivalent is a gap, and names th
 | `Tidy.LengthOf(string)` | Equivalent, `proofMethod: bounded` | | |
 | `Tidy.OrDefault(string, string)` | Equivalent, `proofMethod: bounded` | | |
 | `Tidy.Measure(object)` | Equivalent, `proofMethod: bounded` | | |
+| `Tidy.RadiusOf(object)` | Equivalent, `proofMethod: bounded` | | |
 | `Tidy.Positives(List<int>)` | Unknown (`abstraction`, method scope) | the loop's enumerator and `Add` calls against the uninterpreted `Enumerable::Where` and `ToList`, whose result depends on the lambda | P2-096 |
 
 Exit code: 1 (one Divergent result).

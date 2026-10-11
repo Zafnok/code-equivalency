@@ -1,5 +1,5 @@
 # P2-103 `x as T` followed by a null check equals `x is T t`
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-058
@@ -40,3 +40,36 @@ Value-type and nullable-value `as`. Pattern forms other than the declaration and
 (P2-104 owns `is not`).
 
 ## Notes
+- Observation: the Goal names the wrong half. M4-005 already records `x as T`'s null flag as the negation of its type
+  test, and a pair whose null check is on a `string` was already Equivalent. The five false EQ002 came from the null
+  check: `t != null` on a class with no `==` of its own compares as `object`, so Roslyn wraps `t` in an implicit
+  reference conversion, and M3-010 read that conversion's nullness from `null.System.Object` at the converted value,
+  not from `t`. One side tested a free flag, the other the type test.
+- Decision: an implicit reference conversion's result is null exactly when its operand is. `Cast` records the operand
+  it lowered, and `Nullness` goes through such a conversion to the operand's own nullness (a variable's shadow, an
+  `as`'s failed test, else `null.<From>` at the operand). That is exact for every reference conversion, so it is not
+  narrowed to the `as` case. Boxing keeps M3-010's reading (`null.<To>`), and so does a new `Collection<T>` converted
+  to an interface (ADR 0043), whose operand is never lowered. No new IR instruction and `istype` is modelled as before,
+  so the size guard does not trip.
+- Decision: the sample is a new method, `Tidy.RadiusOf`, in `samples/cleanup-modern-syntax` (P2-049), not a new sample
+  directory: Equivalent, `proofMethod: bounded`.
+- Observation: five IR snapshots change the same way (`UsingDeclaration`, `ForEachOverIEnumerableOfInt`,
+  `ForEachWithBreak`, `QueryExpression`, `AsyncControllerAction`): the `finally`'s null test of the resource or
+  enumerator converted to `IDisposable` now reads the resource's own shadow, and `null.System.IDisposable` is no
+  longer an input. `IlLoweringParityTests` loses five known differences for the same reason (`business-layer`
+  `Export` and `Reserve` on both sides, `cleanup-modern-syntax` legacy `Positives`): the IL lowering always read the
+  reference's own shadow, and the two lowerings now agree there.
+- Criterion 4: `powershell-19687` rerun at feee17e1 plus this change, compare mode quick (the rule in
+  `equiv-corpus-run` section 1: a run that checks whether named pairs' results changed), 24 threads, 190 s, exit 0,
+  no project skipped. Whole run: EQ001 34155, EQ002 0, EQ003 28. Of the 5 EQ002 edited pairs, all 5 are now Equivalent
+  (`proofMethod: bounded`): `IsClassNameQuerySet`, `NewSubscriptionResultHandler`, `CimIndicationHandler`,
+  `ErrorRecordFromAnyException`, `WriteObject(object,XOperationContextBase)`. Of the 7 Unknown edited pairs, 1 is now
+  Equivalent (`CimMethodResultObserver::OnNext`, `lockstep-induction`, was `timeout`) and 6 stay Unknown:
+  `GetBaseObject` (`recursion`), `GetReferenceOrReferenceArrayObject` (`opaque`, method scope; was `abstraction`),
+  `CreateQuery` and `CreateCimInstance(string,string,...)` (`unaligned-loop`), `GetCimInstance` (`opaque`, line scope),
+  `BuildSessionOptions` (`timeout`). None is EQ002. Other tickets landed between the 2026-10-02 run and this one, so
+  the Unknown changes are not all this ticket's: the last earlier run on this pair (2026-10-08, quick) had 6 EQ002,
+  these five and `CreateQuery`, and `OnNext` still at `timeout`.
+- Observation: the run used the pair as another worktree had already fetched and prepared it (`tools/corpus/README.md`'s
+  three steps for this pair); nothing was fetched or edited. No `docs/runs/` file was added, so the README's
+  scoreboard is untouched.
