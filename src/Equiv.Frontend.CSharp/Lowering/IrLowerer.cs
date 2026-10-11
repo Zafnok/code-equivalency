@@ -2031,12 +2031,20 @@ internal sealed class IrLowerer
     /// operator type from the promoted target; every other operator from the right operand, which Roslyn has
     /// already converted to it. On <c>float</c>, <c>double</c> and <c>decimal</c> the operation is the binary
     /// operator's catalogued function, and a static user-defined operator its <c>op:</c> function (ticket P2-022).
+    /// <c>+=</c> on two strings is the <c>Concat</c> call <c>+</c> is (ticket P2-141).
     /// </summary>
     private IrVar? Compound(ICompoundAssignmentOperation compound, LoweringContext context)
     {
         UpdateSite site = new(compound, compound.Target, compound.IsChecked, IsPostfix: false);
+        ITypeSymbol target = compound.Target.Type!;
         ITypeSymbol right = compound.Value.Type!;
-        if (PureCatalogue.IsCatalogued(compound.Target.Type!) && PureCatalogue.Binary(compound.OperatorKind, compound.Target.Type!, right) is { } entry)
+        if (target.SpecialType == SpecialType.System_String && right.SpecialType == SpecialType.System_String)
+        {
+            // `+` is the only compound operator two strings take.
+            return Update(site, old => Concat(old, Value(compound.Value, context), compound, context), context);
+        }
+
+        if (PureCatalogue.IsCatalogued(target) && PureCatalogue.Binary(compound.OperatorKind, target, right) is { } entry)
         {
             return Update(site, old => Apply(entry, compound.IsChecked, [old, Value(compound.Value, context)], old.Type, context), context);
         }
@@ -2050,7 +2058,7 @@ internal sealed class IrLowerer
 
         (IrBitVec Type, bool Signed)? mappedRight = TypeMapper.Map(right) is IrBitVec bits ? (bits, TypeMapper.IsSigned(right)) : null;
         (IrBitVec Type, bool Signed)? operands = OperatorMapper.IsShiftKind(compound.OperatorKind)
-            ? TypeMapper.Promote(compound.Target.Type!)
+            ? TypeMapper.Promote(target)
             : mappedRight;
         return operands is { } promoted
             ? Update(site, compound.OperatorKind, () => Value(compound.Value, context), promoted, context)
@@ -2142,7 +2150,8 @@ internal sealed class IrLowerer
     {
         if (Target(lvalue) is { } target)
         {
-            return (() => ssa.Load(context.Current, target), value => ssa.Store(context.Current, target, value));
+            // A reference-typed result is one nothing is known about, so the variable's shadow asks the map again (ticket P2-141).
+            return (() => ssa.Load(context.Current, target), value => StoreUnknown(target, value, context));
         }
 
         HeapLowerer.Access? heapSlot = lvalue switch

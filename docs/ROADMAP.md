@@ -1002,6 +1002,8 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
     936), because 15 of the 17 pairs with only that use also hold a null dereference in the `try`,
     whose exception is not a value. No remaining use reaches 5% alone.
   - P2-141 (M) `CompoundAssignment`: 35 pairs (1.6%). Counts the forms and lowers the largest.
+    Done 2026-10-11: `string += string` lowers to the `Concat` call `+` is; on gitextensions-8522 the
+    reason is in 5 changed pairs (was 18 of 936). Found on the way: P2-158, two pairs that fail to lower.
 - P1-029 (M) `await using` and `await foreach` lower through their awaited calls instead of making
   the body opaque: 83 bodies per side and 13 changed pairs alone on jellyfin-13023. Needs M4-006,
   M4-001.
