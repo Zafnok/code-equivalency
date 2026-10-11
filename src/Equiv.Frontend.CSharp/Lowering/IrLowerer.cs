@@ -687,29 +687,36 @@ internal sealed class IrLowerer
     /// pattern and a declaration pattern (not <c>var</c>) are a type test (ticket M4-005), the latter binding its variable
     /// through the cast map, a relational pattern whose constant has the scrutinee's own bitvector type is the comparison
     /// <c>Binary</c> lowers for that operator and type, with no exception edge (ticket P2-093), and every other pattern is
-    /// opaque, which is how a pattern switch beyond these stops here.
+    /// opaque, which is how a pattern switch beyond these stops here. A negated pattern is <c>boolnot</c> of its inner
+    /// pattern when that one lowers, and opaque with it otherwise (ticket P2-104).
     /// </summary>
-    private IrVar? Match(IIsPatternOperation pattern, LoweringContext context) => pattern.Pattern switch
+    private IrVar? Match(IIsPatternOperation pattern, LoweringContext context) =>
+        Test(pattern.Value, pattern.Pattern, context) ?? Opaque(pattern, "switch-pattern", context);
+
+    /// <summary>Whether <paramref name="scrutinee"/> matches <paramref name="pattern"/>, or null, with nothing emitted, for a pattern that is not lowered.</summary>
+    private IrVar? Test(IOperation scrutinee, IPatternOperation pattern, LoweringContext context) => pattern switch
     {
         IDiscardPatternOperation =>
             Const(new IrBoolValue(Value: true), context),
-        IConstantPatternOperation constant when IsNull(constant.Value) && pattern.Value.Type!.IsReferenceType =>
-            NullFlag(pattern.Value, Value(pattern.Value, context), context),
+        IConstantPatternOperation constant when IsNull(constant.Value) && scrutinee.Type!.IsReferenceType =>
+            NullFlag(scrutinee, Value(scrutinee, context), context),
         IConstantPatternOperation { Value: { Type: { } type, ConstantValue: { HasValue: true, Value: { } constant } } }
-            when TypeMapper.Map(type) is IrBitVec or IrBool && TypeMapper.Map(pattern.Value.Type!) == TypeMapper.Map(type) =>
-            Emit(IrBinaryOp.Eq, Value(pattern.Value, context), Constant(type, constant, context), Bool, context),
-        ITypePatternOperation typed when TestType(pattern.Value, typed.MatchedType, context) is { } test =>
+            when TypeMapper.Map(type) is IrBitVec or IrBool && TypeMapper.Map(scrutinee.Type!) == TypeMapper.Map(type) =>
+            Emit(IrBinaryOp.Eq, Value(scrutinee, context), Constant(type, constant, context), Bool, context),
+        ITypePatternOperation typed when TestType(scrutinee, typed.MatchedType, context) is { } test =>
             Passes(test, context),
-        IDeclarationPatternOperation { MatchesNull: false } declaration when TestType(pattern.Value, declaration.MatchedType!, context) is { } test =>
+        IDeclarationPatternOperation { MatchesNull: false } declaration when TestType(scrutinee, declaration.MatchedType!, context) is { } test =>
             Bind(declaration, test, context),
-        IRelationalPatternOperation relational when TypeMapper.Map(pattern.Value.Type!) is IrBitVec bits && TypeMapper.Map(relational.Value.Type!) == bits =>
+        IRelationalPatternOperation relational when TypeMapper.Map(scrutinee.Type!) is IrBitVec bits && TypeMapper.Map(relational.Value.Type!) == bits =>
             Emit(
-                OperatorMapper.Binary(relational.OperatorKind, TypeMapper.IsSigned(pattern.Value.Type!), bits, bits)!.Value,
-                Value(pattern.Value, context),
+                OperatorMapper.Binary(relational.OperatorKind, TypeMapper.IsSigned(scrutinee.Type!), bits, bits)!.Value,
+                Value(scrutinee, context),
                 Value(relational.Value, context),
                 Bool,
                 context),
-        _ => Opaque(pattern, "switch-pattern", context),
+        INegatedPatternOperation negated when Test(scrutinee, negated.Pattern, context) is { } inner =>
+            EmitUnary(IrUnaryOp.BoolNot, inner, context),
+        _ => null,
     };
 
     /// <summary>
