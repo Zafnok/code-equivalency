@@ -182,18 +182,7 @@ internal sealed class ModelDecoder
             tainted.Add(oldRun.EventTainted(first) || newRun.EventTainted(first));
         }
 
-        ImmutableArray<int> oldOpen = Open(oldRun, Side.Old, calls);
-        ImmutableArray<int> newOpen = Open(newRun, Side.New, calls);
-        int both = Math.Min(oldOpen.Length, newOpen.Length);
-        int open = Enumerable.Range(0, both).Where(i => oldTrace[oldOpen[i]] != newTrace[newOpen[i]]).DefaultIfEmpty(both).First();
-        if (open < both || oldOpen.Length != newOpen.Length)
-        {
-            tainted.Add(
-                (OpenEventTainted(oldRun, oldOpen, open) || OpenEventTainted(newRun, newOpen, open))
-                && !Unmatched(oldRun, oldOpen, oldTrace, open, @new, Side.New, calls)
-                && !Unmatched(newRun, newOpen, newTrace, open, old, Side.Old, calls));
-        }
-
+        tainted.AddRange(OpenCalls(old, oldTrace, @new, newTrace, calls));
         tainted.AddRange(shared
             .Select((s, i) => (Shared: s, Input: inputs.Arguments[i]))
             .Where(s => s.Shared.ByRef && old.Final(s.Shared.Old, s.Shared.Var, s.Input) != @new.Final(s.Shared.New, s.Shared.Var, s.Input))
@@ -215,6 +204,27 @@ internal sealed class ModelDecoder
     /// EQ006 reports.
     /// </summary>
     public static bool IsClosedAbstraction(TraceEncoder calls, Side side, CallIdentity callee) => !callee.RuntimeChanged && calls.IsClosed(side, callee);
+
+    /// <summary>
+    /// The taint of the first difference between the two sides' open calls, their closed events left out (ADR 0056), or
+    /// nothing when their open calls agree. <paramref name="oldTrace"/> and <paramref name="newTrace"/> are the runs' traces
+    /// under the identities both sides use.
+    /// </summary>
+    private static IEnumerable<bool> OpenCalls(Replayed old, ImmutableArray<IrCallRecord> oldTrace, Replayed @new, ImmutableArray<IrCallRecord> newTrace, TraceEncoder calls)
+    {
+        ImmutableArray<int> oldOpen = Open(old.Run, Side.Old, calls);
+        ImmutableArray<int> newOpen = Open(@new.Run, Side.New, calls);
+        int both = Math.Min(oldOpen.Length, newOpen.Length);
+        int open = Enumerable.Range(0, both).Where(i => oldTrace[oldOpen[i]] != newTrace[newOpen[i]]).DefaultIfEmpty(both).First();
+        return open == both && oldOpen.Length == newOpen.Length
+            ? []
+            :
+            [
+                (OpenEventTainted(old.Run, oldOpen, open) || OpenEventTainted(@new.Run, newOpen, open))
+                    && !Unmatched(old.Run, oldOpen, oldTrace, open, @new, Side.New, calls)
+                    && !Unmatched(@new.Run, newOpen, newTrace, open, old, Side.Old, calls),
+            ];
+    }
 
     /// <summary>The indices of <paramref name="run"/>'s events that are open calls, in order.</summary>
     private static ImmutableArray<int> Open(IrRun run, Side side, TraceEncoder calls) =>
@@ -283,7 +293,7 @@ internal sealed class ModelDecoder
     /// interpreted are computed, not asked (ADR 0053).
     /// </summary>
     private static IrRun Interpret(IrProcedure procedure, IrInputs inputs, ModelOracle oracle, int stepBudget) =>
-        oracle.Complete(IrInterpreter.Run(procedure, inputs, oracle, stepBudget, oracle.IsAbstraction, oracle, oracle.Interpreted));
+        oracle.Complete(IrInterpreter.Run(procedure, inputs, oracle, stepBudget, oracle.Taints, oracle, oracle.Interpreted));
 
     /// <summary><paramref name="lengths"/> with every negative length replaced by 0.</summary>
     private static IrMapValue NonNegative(IrMapValue lengths) =>
@@ -451,7 +461,7 @@ internal sealed class ModelDecoder
         /// Whether <paramref name="callee"/> is an abstraction the replay of this side taints: a shared fragment's call, or a
         /// closed call (<see cref="IsClosedAbstraction"/>).
         /// </summary>
-        public bool IsAbstraction(CallIdentity callee) => ModelDecoder.IsAbstraction(callee) || IsClosedAbstraction(decoder.encoding.Calls, side, callee);
+        public bool Taints(CallIdentity callee) => IsAbstraction(callee) || IsClosedAbstraction(decoder.encoding.Calls, side, callee);
 
         public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments)
         {
