@@ -1,5 +1,5 @@
 # P2-154 Soundness: a lowered call that hands a generic member of the solution a type is one function beside two declarations of the type
-Status: in-progress
+Status: done (PR #468)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-150, P2-151
