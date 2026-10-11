@@ -103,11 +103,11 @@ replay that does not diverge only when the model's run records an open call.
   over two properties, and Git Extensions' `SetSsh` across runtimes (both sides reach
   `Environment.SetEnvironmentVariable` only when `string.IsNullOrEmpty` answers false). All three do
   differ on real inputs; that is a fact about the member which the replay does not have. Giving the
-  commonest such members their meaning is the way back, and P2-158 finds which they are. On the samples
+  commonest such members their meaning is the way back, and P2-159 finds which they are. On the samples
   this shows as `failureRefinement` answers and `divergenceKind`s that were `found` on a model in
   which a BCL member threw and are now `none-proved` or `unknown`: 8 snapshots change, in those
   properties and in one model. The cost on the corpus is not measured here; the next corpus run
-  shows it as Unknown(Abstraction) results naming a closed callee, which ticket P2-158 counts.
+  shows it as Unknown(Abstraction) results naming a closed callee, which ticket P2-159 counts.
 - `IrCall.Threw` was already optional; a listed member's call now has none. `IrInterpreter`, the
   encoder and the IR text format are unchanged.
 - `properties.abstractions[].identity` can now be a closed call's identity. The field's shape does not

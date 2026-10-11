@@ -87,7 +87,7 @@ anything but closed calls.
   `SetSsh_LowersToOneBodyOnceTheWrapperIsResolved` across runtimes, where both sides reach
   `SetEnvironmentVariable` only when `string.IsNullOrEmpty` answers false. `removed-null-check.execute.sarif`
   changes its model: the legacy side throws `ArgumentNullException` where the old model had a call throw
-  `System.Exception`. P2-158 counts these on the corpus.
+  `System.Exception`. P2-159 counts these on the corpus.
 - Measured (criterion 3), with the final change: the whole integration project passes at the PR budget, and the
   gate passes the nightly budget at seed `9v8KtBVEhjFh` under both lowerings. At that seed
   `FloatingPointPairsAreDecidedAfterRefinement` finds 9 Divergent of 40 where it wants 10, with and without this
