@@ -789,6 +789,11 @@ Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
   (`Size<S>()`) is one function for both sides beside two declarations of `S`. P2-151 put the
   declaration in the text and P2-150's rule for calls does not reach such a callee. The first step
   is the repro. Needs P2-150 and P2-151.
+  Done: reproduced as an Equivalent from the solver. A call, an object creation and a read or a
+  write of a property, a field or an event that hands a generic member of the solution a value type
+  of the solution, or a class of it that has a `[StructLayout]`, is an opaque with reason `Layout`,
+  shared by the fingerprint that holds the declaration (ADR 0024, clarification of 2026-10-10
+  (P2-154)); one that hands over any other type is what it was.
 
 Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
 - P2-148 (S) `SecondSolverPrintTests.Z3AnswersTheRewrittenTextAsItAnswersTheOriginal` fails at random

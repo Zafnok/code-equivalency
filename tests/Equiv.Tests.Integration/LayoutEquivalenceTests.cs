@@ -24,6 +24,8 @@ public sealed class LayoutEquivalenceTests
 {
     private const string Usings = "using System.Runtime.CompilerServices;\nusing System.Runtime.InteropServices;\n";
 
+    private const string Generic = "static int Size<T>() => Unsafe.SizeOf<T>(); sealed class Box<T> { public static int Size() => Unsafe.SizeOf<T>(); public static int Width => Unsafe.SizeOf<T>(); public int Count => Unsafe.SizeOf<T>(); }";
+
     private const string Overlaid = "[StructLayout(LayoutKind.Explicit)] class U { [FieldOffset(0)] public int A; [FieldOffset(0)] public int B; } ";
 
     private static readonly ImmutableArray<MetadataReference> References =
@@ -100,6 +102,34 @@ public sealed class LayoutEquivalenceTests
 
         Assert.IsType<Equivalent>(Verify(Declared(members) + Legacy, Declared(members) + Modern));
         Assert.IsNotType<Equivalent>(Verify(Declared(members) + Legacy, Declared(moved) + Modern));
+    }
+
+    /// <summary>
+    /// Ticket P2-154: a generic member of the solution reads the layout of the type it is handed, and its own text is
+    /// the same for every type argument. <c>Size&lt;S&gt;()</c> is 8 beside the first declaration and 5 beside the
+    /// second, in bodies that differ elsewhere, and the call's identity names <c>S</c> and nothing of its declaration.
+    /// </summary>
+    [Theory]
+    [InlineData("Size<S>()")]
+    [InlineData("Box<S>.Size()")]
+    [InlineData("Box<S>.Width")]
+    [InlineData("new Box<S>().Count")]
+    public void ACallThatHandsAGenericMemberATypeIsNotOneFunctionBesideTwoDeclarations(string call) =>
+        Assert.IsNotType<Equivalent>(Verify(
+            $"struct S {{ public byte A; public int B; }} class C {{ {Generic} static int M(int x) => {call} + x; }}",
+            $"[StructLayout(LayoutKind.Sequential, Pack = 1)] struct S {{ public byte A; public int B; }} class C {{ {Generic} static int M(int x) => x + {call}; }}"));
+
+    /// <summary>Beside one declaration the call is the same on both sides, as it was.</summary>
+    [Theory]
+    [InlineData("Size<S>()")]
+    [InlineData("Box<S>.Size()")]
+    public void ACallThatHandsAGenericMemberATypeIsStillSharedBesideOneDeclaration(string call)
+    {
+        const string Declared = "struct S { public byte A; public int B; } ";
+
+        Assert.IsType<Equivalent>(Verify(
+            Declared + $"class C {{ {Generic} static int M(int x) => {call} + x; }}",
+            Declared + $"class C {{ {Generic} static int M(int x) => x + {call}; }}"));
     }
 
     private static Verdict Verify(string legacy, string modern) =>

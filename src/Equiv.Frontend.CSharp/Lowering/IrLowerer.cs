@@ -85,9 +85,10 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// Whether <paramref name="method"/>'s bound code, with the initializers a constructor runs, has an operation that a
-    /// type's layout fixes (<see cref="Layouts.Reads"/>). Its IL names the same types and holds no more of their
-    /// declarations, and a fragment of IL has no fingerprint that does, so such a method is never lowered from IL
-    /// (ticket P2-150).
+    /// type's layout fixes (<see cref="Layouts.Reads"/>), or one that hands a generic member of the solution a type
+    /// (<see cref="Layouts.HandsOver"/>; ticket P2-154), be it the member the operation names or the one a forwarder
+    /// passes the call on to. Its IL names the same types and holds no more of their declarations, and a fragment of IL
+    /// has no fingerprint that does, so such a method is never lowered from IL (ticket P2-150).
     /// </summary>
     internal static bool DependsOnLayout(IMethodSymbol method, Compilation compilation)
     {
@@ -96,7 +97,10 @@ internal sealed class IrLowerer
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         IOperation? body = compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax);
         IEnumerable<IOperation?> initializers = body is IConstructorBodyOperation ? Initializers(method, syntax, compilation).Select(static i => i.Operation) : [];
-        return initializers.Prepend(body).OfType<IOperation>().SelectMany(static root => root.DescendantsAndSelf()).Any(o => Layouts.Reads(o, method.ContainingAssembly));
+        return initializers.Prepend(body).OfType<IOperation>().SelectMany(static root => root.DescendantsAndSelf()).Any(o =>
+            Layouts.Reads(o, method.ContainingAssembly)
+            || Layouts.HandsOver(o, static callee => callee)
+            || Layouts.HandsOver(o, callee => Forwarders.Resolve(callee, compilation)?.Target ?? callee));
     }
 
     /// <summary>
@@ -1236,11 +1240,20 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// Whether what <paramref name="operation"/> does is fixed by a type's layout, which the IR does not hold (ADR 0024
-    /// as clarified by ticket P2-150): it reads or writes storage of an explicit layout, or it is a call or an object
-    /// creation that is handed a type to read as memory (<see cref="Layouts"/>).
+    /// as clarified by tickets P2-150 and P2-154): it reads or writes storage of an explicit layout, it is a call or an
+    /// object creation that is handed a type to read as memory, or it references a generic member of the solution and
+    /// hands it a type that has a layout to read (<see cref="Layouts"/>).
     /// </summary>
     private bool ReadsLayout(IOperation operation) =>
-        !Overlaid(operation).IsEmpty || (operation is IInvocationOperation or IObjectCreationOperation && Layouts.IsHanded(operation, compilation.Assembly));
+        !Overlaid(operation).IsEmpty
+        || (operation is IInvocationOperation or IObjectCreationOperation && (Layouts.IsHanded(operation, compilation.Assembly) || Layouts.HandsOver(operation, Forwarded)));
+
+    /// <summary>
+    /// The method a call to <paramref name="callee"/> calls, as the fingerprint spells it: a forwarder's target, unless
+    /// the pair keeps the forwarder (ADR 0047).
+    /// </summary>
+    private IMethodSymbol Forwarded(IMethodSymbol callee) =>
+        catalogue.Sites.KeptForwarders.Contains(CallIdentityFactory.Name(callee, renames)) ? callee : Forwarders.Resolve(callee, compilation)?.Target ?? callee;
 
     /// <summary>
     /// The opaque, with reason <see cref="Layouts.Reason"/>, of an <paramref name="operation"/> that
@@ -1249,13 +1262,17 @@ internal sealed class IrLowerer
     /// holds the declaration of the type that has the storage, be it a field, an auto-property or a field-like event
     /// (tickets P2-149 and P2-153), and of every type under such a call, so the fragment is shared as any other is:
     /// beside one declaration it is one call on both sides, whose place in the trace orders it against every other read
-    /// and write of that storage, and beside two it is unshared.
+    /// and write of that storage, and beside two it is unshared. A reference that hands a generic member of the solution
+    /// a type is the same (ticket P2-154): the member's code reads the type's declaration, the fingerprint holds it
+    /// (ticket P2-151), and the callee's identity, or the field's map, names the type alone.
     /// </summary>
     private IrVar? Layout(IOperation operation, LoweringContext context) => Opaque(operation, Layouts.Reason, context);
 
     /// <summary>
-    /// The references to storage of an explicit layout (<see cref="Layouts.IsOverlaid"/>) that <paramref name="operation"/>
-    /// itself reads or writes: the reference it is, or the targets it assigns, steps or subscribes to.
+    /// The references to storage of an explicit layout (<see cref="Layouts.IsOverlaid"/>), and to a member of the
+    /// solution that is handed a type with a layout (<see cref="Layouts.HandsOver"/>), that
+    /// <paramref name="operation"/> itself reads or writes: the reference it is, or the targets it assigns, steps or
+    /// subscribes to.
     /// </summary>
     private static ImmutableArray<IMemberReferenceOperation> Overlaid(IOperation operation)
     {
@@ -1267,7 +1284,7 @@ internal sealed class IrLowerer
             IEventAssignmentOperation subscription => [subscription.EventReference],
             _ => [],
         };
-        return [.. storage.OfType<IMemberReferenceOperation>().Where(static reference => Layouts.IsOverlaid(reference.Member))];
+        return [.. storage.OfType<IMemberReferenceOperation>().Where(static reference => Layouts.IsOverlaid(reference.Member) || Layouts.HandsOver(reference, static callee => callee))];
     }
 
     /// <summary>

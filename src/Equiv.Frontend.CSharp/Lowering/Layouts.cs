@@ -12,7 +12,9 @@ namespace Equiv.Frontend.CSharp.Lowering;
 /// changes another, and what a callee that is handed a type reads of it. The bound tree names the type and holds
 /// nothing of its declaration, and neither does the IR. The fingerprint writes the declaration after such an
 /// operation's line, and the lowering makes one it would otherwise model an opaque with reason <see cref="Reason"/>,
-/// so that sharing it is decided by that fingerprint. Both read the rule here, so the two cannot differ.
+/// so that sharing it is decided by that fingerprint. Both read the rule here, so the two cannot differ. The same holds
+/// for a reference that hands a generic member of the solution a type (tickets P2-151 and P2-154): the member's code may
+/// do any of these operations on its type parameter, and its own text is the same for every type argument.
 /// </summary>
 internal static class Layouts
 {
@@ -54,6 +56,73 @@ internal static class Layouts
         };
         return [.. reached.OfType<ITypeSymbol>()];
     }
+
+    /// <summary>
+    /// The type arguments <paramref name="operation"/> hands code of the solution (ADR 0024 as clarified by ticket
+    /// P2-151): for a call, an object creation or a reference to a member that a type of the solution declares, a
+    /// method's own, and those of the type that declares the member and of the types that one is nested in. A generic
+    /// member's text is the same for every type argument, so what it reads of one's layout is in the text of the body
+    /// that names the argument. A member of a type from a reference hands the solution nothing. A constructor also hands
+    /// over what its type's base list does (ticket P2-152): creating the type runs the code it inherits, and no body
+    /// names the type arguments of its base types and interfaces. A call is asked through <paramref name="called"/>, the
+    /// method it calls: a forwarder's target where the caller reads one (ADR 0047).
+    /// </summary>
+    public static ImmutableArray<ITypeSymbol> TypeArguments(IOperation operation, Func<IMethodSymbol, IMethodSymbol> called)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        ArgumentNullException.ThrowIfNull(called);
+        ISymbol? member = operation switch
+        {
+            IInvocationOperation o => called(o.TargetMethod),
+            IMemberReferenceOperation o => o.Member,
+            IObjectCreationOperation o => o.Constructor,
+            _ => null,
+        };
+        List<ITypeSymbol> handed = [];
+        if (member?.ContainingType is { DeclaringSyntaxReferences.IsEmpty: false } declaring)
+        {
+            handed.AddRange((member as IMethodSymbol)?.TypeArguments ?? []);
+            IEnumerable<INamedTypeSymbol> inherited = member is IMethodSymbol { MethodKind: MethodKind.Constructor } ? [.. BaseTypes(declaring), .. declaring.AllInterfaces] : [];
+            foreach (INamedTypeSymbol outer in inherited.Where(static t => !t.DeclaringSyntaxReferences.IsEmpty).Prepend(declaring))
+            {
+                for (INamedTypeSymbol? type = outer; type is not null; type = type.ContainingType)
+                {
+                    handed.AddRange(type.TypeArguments);
+                }
+            }
+        }
+
+        return [.. handed];
+    }
+
+    private static IEnumerable<INamedTypeSymbol> BaseTypes(INamedTypeSymbol type)
+    {
+        for (INamedTypeSymbol? inherited = type.BaseType; inherited is not null; inherited = inherited.BaseType)
+        {
+            yield return inherited;
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="operation"/> hands a generic member of the solution (<see cref="TypeArguments"/>) a type
+    /// whose layout the member's code can read through its type parameter. Such a call is not one function for both
+    /// sides of a pair, and such a field is not one map (ticket P2-154). The fingerprint follows the operation with the
+    /// declaration of every type of the solution it hands over; this asks for one that has a layout to read
+    /// (<see cref="IsLaidOut"/>), so it holds only where the fingerprint has the declaration.
+    /// </summary>
+    public static bool HandsOver(IOperation operation, Func<IMethodSymbol, IMethodSymbol> called) => TypeArguments(operation, called).Any(IsLaidOut);
+
+    /// <summary>
+    /// Whether code that has <paramref name="type"/> as a type argument can read a layout the solution declares: the
+    /// type is, or is made of, a value type of the solution or a class of the solution that has a
+    /// <c>[StructLayout]</c>. A size, an element's stride and a marshalled size are read through a type parameter
+    /// (<c>sizeof(T)</c>, <c>Unsafe.SizeOf&lt;T&gt;()</c>, a <c>T[]</c>, <c>Marshal.SizeOf&lt;T&gt;()</c>). Of any other
+    /// class they are the size of a reference, or are refused by the marshaller, whatever the class declares, and so
+    /// for an interface, a delegate, an anonymous type and a type parameter.
+    /// A tuple is a type from a reference, laid out as its elements are, whose syntax Roslyn gives as its declaration.
+    /// </summary>
+    public static bool IsLaidOut(ITypeSymbol type) =>
+        IsMadeOf(type, static named => !named.IsTupleType && !named.DeclaringSyntaxReferences.IsEmpty && (named.IsValueType || Has(named, StructLayout)));
 
     /// <summary>
     /// Whether <paramref name="operation"/> is a call the runtime may marshal: one through a function pointer, or one
@@ -121,12 +190,15 @@ internal static class Layouts
     /// in the solution, through an array, a pointer, a function pointer's signature or a type argument. A type from a
     /// reference is its name alone.
     /// </summary>
-    public static bool IsDeclared(ITypeSymbol type) => type switch
+    public static bool IsDeclared(ITypeSymbol type) => IsMadeOf(type, static named => !named.DeclaringSyntaxReferences.IsEmpty);
+
+    /// <summary>Whether <paramref name="type"/> is, or is made of, a named type that <paramref name="holds"/>.</summary>
+    private static bool IsMadeOf(ITypeSymbol type, Func<INamedTypeSymbol, bool> holds) => type switch
     {
-        IArrayTypeSymbol array => IsDeclared(array.ElementType),
-        IPointerTypeSymbol pointer => IsDeclared(pointer.PointedAtType),
-        IFunctionPointerTypeSymbol function => IsDeclared(function.Signature.ReturnType) || function.Signature.Parameters.Any(static p => IsDeclared(p.Type)),
-        INamedTypeSymbol named => !named.DeclaringSyntaxReferences.IsEmpty || named.TypeArguments.Any(IsDeclared),
+        IArrayTypeSymbol array => IsMadeOf(array.ElementType, holds),
+        IPointerTypeSymbol pointer => IsMadeOf(pointer.PointedAtType, holds),
+        IFunctionPointerTypeSymbol function => IsMadeOf(function.Signature.ReturnType, holds) || function.Signature.Parameters.Any(p => IsMadeOf(p.Type, holds)),
+        INamedTypeSymbol named => holds(named) || named.TypeArguments.Any(argument => IsMadeOf(argument, holds)),
         _ => false,
     };
 
