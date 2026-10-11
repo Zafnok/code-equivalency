@@ -766,6 +766,15 @@ Found by P2-149 (2026-10-09, by reading the coverage table and its own rule; not
 Found by P2-151 (2026-10-09, by reading its own rule; not reproduced):
 - P2-152 (S) Soundness: a type argument named in a base list (`class D : Box<S>`) is in no body's
   text, and the code `D` inherits reads `S`. The first step is the repro. Needs P2-151.
+  Done: reproduced as equal fingerprints for a body that creates such a type. A reference to a
+  constructor is now also followed by the declarations of the type arguments of the type's base
+  types and interfaces (ADR 0024, clarification of 2026-10-10 (P2-152)); no result on
+  `gitextensions-8522` changed.
+
+Found by P2-152 (2026-10-10, by reading its own rule; not reproduced):
+- P2-157 (S) Soundness: a struct that names a type argument only in its interface list
+  (`struct K : J<S>`) can be made with no constructor (`default(K)`, an array's element), so no
+  text holds `S`. The first step is the repro. Needs P2-152.
 
 Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
 - P2-153 (S) Soundness: the text of a body that uses an auto-property or a field-like event of an

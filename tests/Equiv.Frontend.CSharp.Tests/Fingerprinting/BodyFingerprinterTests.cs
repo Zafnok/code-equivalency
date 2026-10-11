@@ -931,6 +931,82 @@ public sealed class BodyFingerprinterTests
         Assert.DoesNotContain("Marshalled", OneRuntimeText(laid), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-152: a type argument can be named where there is no body, in a base list. Creating the type runs the
+    /// code it inherits, which reads the argument, so the argument's declaration is in the text of a body that
+    /// references a constructor of a type whose base types or interfaces are handed it: directly, through a base type
+    /// of a base type, through a type the base type is nested in, or through an interface.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M() => new D().Run();")]
+    [InlineData("public int M() { I i = new D(); return i.Size(); }")]
+    [InlineData("public int M() => new E().Run();")]
+    [InlineData("public object M() => new F();")]
+    [InlineData("public int M() => ((W)new K()).Width();")]
+    [InlineData("public System.Func<D> M() => () => new D();")]
+    public void ATypeArgumentInABaseListIsInTheTextOfABodyThatUsesTheType(string member)
+    {
+        AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; }", member + Inheriting);
+        AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "public struct S { public byte A; public int B; public int C; }", member + Inheriting);
+    }
+
+    /// <summary>
+    /// Ticket P2-152 criterion 3: a reference to a member of a type with no generic base type of the solution keeps the
+    /// text it has, whatever layout the types beside it have: the type has no base list, its base type is a generic type
+    /// of a reference, or its base type is handed a type from a reference or a type parameter. So does a reference to a
+    /// member that is no constructor, of a type whose base type is handed a type of the solution.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M() => new Plain().Run() + new Plain().A;")]
+    [InlineData("public int M(S s) => new Listed { s }.Count;")]
+    [InlineData("public int M() => new G().Run();")]
+    [InlineData("public int M<U>() where U : unmanaged => new H<U>().Run();")]
+    [InlineData("public int M(D d) => d.Run() + d.Own;")]
+    public void AMemberOfATypeWithNoGenericBaseKeepsItsText(string member)
+    {
+        const string Others = " public class Plain { public int A; public int Run() => A; }"
+            + " public class Listed : System.Collections.Generic.List<S> { }"
+            + " public class G : Box<int>, System.IEquatable<S> { public bool Equals(S other) => true; public int Run() => 1; }"
+            + " public class H<U> : Box<U> where U : unmanaged { public int Run() => 1; }";
+        Compilation plain = Interop("public struct S { public byte A; public int B; } " + member + Inheriting + Others);
+        Compilation laid = Interop("[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; } " + member + Inheriting + Others);
+
+        Assert.Empty(laid.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Equal(OneRuntimeText(plain), OneRuntimeText(laid));
+        Assert.Equal(Text(plain), Text(laid));
+        Assert.DoesNotContain("Marshalled", OneRuntimeText(laid), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-152: a constructor that calls its base constructor references a constructor too, so its text holds what
+    /// the base type's base list hands over, whether the source writes the call or the compiler adds it.
+    /// </summary>
+    [Theory]
+    [InlineData("public Q() : base() { }")]
+    [InlineData("public Q() { }")]
+    public void ATypeArgumentInABaseListIsInTheTextOfAConstructorThatCallsTheBaseConstructor(string constructor)
+    {
+        BodyFingerprint? On(string types)
+        {
+            Compilation compilation = Interop(types + Inheriting + " public class Q : D { " + constructor + " }");
+            Assert.Empty(compilation.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+            return BodyFingerprinter.Compute(compilation.GetTypeByMetadataName("N.C+Q")!.InstanceConstructors[0], compilation, EquivConfig.Default, legacy: false, OneRuntime);
+        }
+
+        Assert.NotNull(On("public struct S { public byte A; public int B; }"));
+        Assert.NotEqual(On("public struct S { public byte A; public int B; }"), On("public struct S { public byte A; public int B; public int C; }"));
+    }
+
+    /// <summary>Ticket P2-152: types that name <c>S</c> in a base list only, under generic types of the solution that read its layout.</summary>
+    private const string Inheriting = " public interface I { int Size(); } public interface W { int Width(); }"
+        + " public unsafe class Box<T> : I where T : unmanaged { public int Instance = sizeof(T); public virtual int Size() => sizeof(T); }"
+        + " public unsafe class Outer<T> where T : unmanaged { public class Inner { public int Instance = sizeof(T); } }"
+        + " public unsafe interface J<T> : W where T : unmanaged { int W.Width() => sizeof(T); }"
+        + " public class D : Box<S> { public int Own; public int Run() => 1; }"
+        + " public class E : D { }"
+        + " public class F : Outer<S>.Inner { }"
+        + " public class K : J<S> { }";
+
     /// <summary>ADR 0054 decision 4: across runtimes it is the runtime that marshals the call, so an <c>extern</c> method has no fingerprint.</summary>
     [Theory]
     [InlineData("net48", "net10.0")]

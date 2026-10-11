@@ -412,6 +412,49 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     `class D : Box<S>`, `new D()` and a call to a member `D` declares or to an interface member
     name nothing of `Box<S>`, and the code `D` inherits reads `S` (P2-152). A generic type of the
     solution handed to a member of a reference that runs the type's code by reflection.
+- 2026-10-10 (P2-152). **A reference to a constructor hands over what the type's base list does.**
+  The clarification above left out a type argument named where there is no body. In
+  `class D : Box<S>`, `new D()` references `D`'s constructor, whose type has no type argument, and
+  creating a `D` runs the constructor and the field initialisers of `Box<S>` and gives the caller
+  an object whose inherited members read `S`. It was reproduced as one fingerprint beside two
+  declarations of `S` (the ticket's tests): for a body that creates a `D` and calls a member `D`
+  declares, one that creates a `D` and calls a member it inherits through an interface, a type
+  whose base type's base type is `Box<S>`, a type whose base type is nested in a generic type that
+  is handed `S`, a type that implements `J<S>` where `J<T>` has a default implementation, and a
+  creation inside a lambda. So a reference to an instance constructor of a type declared in the
+  solution (an object creation, and the call a constructor initialiser makes) is also followed by
+  the declaration of every type argument of the type's base types and of its interfaces, all of
+  them and not only those it lists itself, where the solution declares that base type or
+  interface, and of the types each of those is nested in. They are written as the clarification
+  above writes one.
+  - **The constructor, and not every member of the type.** The ticket asked. A member `D` declares
+    that runs inherited code has a body, and that body references the member of `Box<S>` it uses,
+    so its own text holds `S` by the clarification above and its callers assume its pair
+    (ADR 0019). A member `D` inherits is a member of `Box<S>`, and a reference to it already hands
+    `S` over. The constructor is the one member that runs inherited code with no body to name it:
+    an implicit constructor has no body and no pair. An explicit one calls its base constructor,
+    written or added by the compiler, which is a reference to a constructor in its own text. A
+    reference to any member of `D` would add `S` to the text of every body that uses a `D`, for
+    nothing the constructor rule misses.
+  - **A body that is handed the object is equal for equal objects.** `int M(D d) => ((I)d).Size()`
+    names `I` and `D` and no constructor, and its text is still the same beside two declarations
+    of `S`. That is the position `int M(Box<S> b) => ((I)b).Size()` already had under the
+    clarification above: the body that made the object holds the declaration, and every caller
+    between that body and this one assumes its callee's pair (ADR 0019).
+  - **Which texts change.** A text that references a constructor of a type with a base type or an
+    interface that the solution declares and that is handed a type the solution declares, or one
+    made of such a type. A type with no base list, one whose base type is a generic type of a
+    reference (`class L : List<S>`), and one whose base type is handed a type from a reference or
+    a type parameter add nothing, and neither does a reference to any other member of such a type
+    (`AMemberOfATypeWithNoGenericBaseKeepsItsText`).
+  - **What it costs.** Nothing on `gitextensions-8522` in compare mode quick (the ticket's
+    Notes): all 13818 results are the same by procedure identity, rule and proof method on both
+    sides of the change, and 12635 pairs are congruent on both. The pull request edits no type
+    that a base list of the solution hands a generic type of the solution.
+  - **What the text still does not hold.** A value of a struct that names `S` only in its
+    interface list and is made with no constructor: `default(K)`, an array's element, a field
+    never assigned (P2-157). A generic type of the solution handed to a member of a reference that
+    runs the type's code by reflection.
 - 2026-10-08 (P2-144). **The throw a `switch` expression ends in is part of its bound code, and
   across .NET Core 3.0 it is a runtime rule.** A `switch` expression that matches no arm throws.
   The source does not write the throw and the `IOperation` tree does not hold it: the compiler

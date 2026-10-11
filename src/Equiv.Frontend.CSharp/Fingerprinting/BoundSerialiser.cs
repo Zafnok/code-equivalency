@@ -448,6 +448,8 @@ internal sealed class BoundSerialiser : OperationWalker
     /// ticket P2-151): a method's own, and those of the type that declares the member and of the types that one is
     /// nested in. A generic member's text is the same for every type argument, so what it reads of one's layout is in
     /// the text of the body that names the argument. A member of a type from a reference hands the solution nothing.
+    /// A constructor also hands over what its type's base list does (ticket P2-152): creating the type runs the code it
+    /// inherits, and no body names the type arguments of its base types and interfaces.
     /// </summary>
     private static List<ITypeSymbol> Handed(ISymbol? member)
     {
@@ -455,13 +457,25 @@ internal sealed class BoundSerialiser : OperationWalker
         if (member?.ContainingType is { DeclaringSyntaxReferences.IsEmpty: false } declaring)
         {
             handed.AddRange((member as IMethodSymbol)?.TypeArguments ?? []);
-            for (INamedTypeSymbol? type = declaring; type is not null; type = type.ContainingType)
+            IEnumerable<INamedTypeSymbol> inherited = member is IMethodSymbol { MethodKind: MethodKind.Constructor } ? [.. BaseTypes(declaring), .. declaring.AllInterfaces] : [];
+            foreach (INamedTypeSymbol outer in inherited.Where(static t => !t.DeclaringSyntaxReferences.IsEmpty).Prepend(declaring))
             {
-                handed.AddRange(type.TypeArguments);
+                for (INamedTypeSymbol? type = outer; type is not null; type = type.ContainingType)
+                {
+                    handed.AddRange(type.TypeArguments);
+                }
             }
         }
 
         return handed;
+    }
+
+    private static IEnumerable<INamedTypeSymbol> BaseTypes(INamedTypeSymbol type)
+    {
+        for (INamedTypeSymbol? inherited = type.BaseType; inherited is not null; inherited = inherited.BaseType)
+        {
+            yield return inherited;
+        }
     }
 
     private static bool Is(AttributeData attribute, string name) => string.Equals(attribute.AttributeClass!.ToDisplayString(), name, StringComparison.Ordinal);
