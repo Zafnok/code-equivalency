@@ -187,6 +187,31 @@ public sealed class VerdictTests
         Assert.NotEqual(unknown, unknown with { FailureRefinement = null });
     }
 
+    /// <summary>
+    /// Ticket P1-020: a Divergent compares its failure refinement too, the third answer included, and still not the time. The
+    /// kind is read from the three answers; without the third there is none.
+    /// </summary>
+    [Fact]
+    public void ADivergentComparesItsThreeAnswers()
+    {
+        Counterexample model = new(new IrInputs([]), SampleRun, SampleRun);
+        FailureRefinement refinement = new(RefinementResult.NoneProved, new RefinementResult(RefinementOutcome.Found, model)) { ResultChanges = RefinementResult.NoneProved };
+        Divergent divergent = new(model) { FailureRefinement = refinement };
+
+        Assert.Equal(divergent, divergent with { FailureRefinement = refinement with { Elapsed = TimeSpan.FromSeconds(3) } });
+        Assert.NotEqual(divergent, divergent with { FailureRefinement = null });
+        Assert.NotEqual(refinement, refinement with { ResultChanges = RefinementResult.Unknown });
+        Assert.NotEqual(refinement, refinement with { ResultChanges = null });
+        Assert.NotEqual(refinement.GetHashCode(), (refinement with { ResultChanges = RefinementResult.Unknown }).GetHashCode());
+        Assert.Equal(DivergenceKind.RemovedFailuresOnly, refinement.Kind);
+        Assert.Equal(DivergenceKind.NewFailuresOnly, new FailureRefinement(refinement.RemovedFailures, RefinementResult.NoneProved) { ResultChanges = RefinementResult.NoneProved }.Kind);
+        Assert.Equal(DivergenceKind.FailuresOnly, (refinement with { NewFailures = refinement.RemovedFailures }).Kind);
+        Assert.Equal(DivergenceKind.ResultChanged, (refinement with { ResultChanges = refinement.RemovedFailures }).Kind);
+        Assert.Equal(DivergenceKind.Undetermined, (refinement with { NewFailures = RefinementResult.Unknown }).Kind);
+        Assert.Equal(DivergenceKind.Undetermined, (refinement with { RemovedFailures = RefinementResult.NoneProved }).Kind);
+        Assert.Null((refinement with { ResultChanges = null }).Kind);
+    }
+
     [Fact]
     public void DependingOnNamesEachIdentityOnceAndPointsAtEverySpannedAbstraction()
     {

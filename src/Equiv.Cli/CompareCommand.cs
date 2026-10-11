@@ -298,7 +298,7 @@ internal static class CompareCommand
         QueryEndings? endings = options.LowerOnly ? null : QueryEndings.Of(results);
         if (endings is not null)
         {
-            census = census with { UnknownByScope = ScopeCounts.Of(results), FailureRefinement = RefinementTime.Of(results), AgreesWhen = ConditionTime.Of(results) };
+            census = census with { UnknownByScope = ScopeCounts.Of(results), FailureRefinement = RefinementTime.Of(results), DivergentRefinement = RefinementTime.OfDivergent(results), AgreesWhen = ConditionTime.Of(results) };
         }
 
         results.AddRange(matchResult.Added.Select(static identity => new VerificationResult(identity, new Added())));

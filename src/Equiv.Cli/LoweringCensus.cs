@@ -41,6 +41,9 @@ internal sealed record LoweringCensus(
     /// <summary>The Unknown pairs ADR 0037's queries ran on and their total time (ticket P1-013); written only when some pair ran them.</summary>
     public RefinementTime? FailureRefinement { get; init; }
 
+    /// <summary>The Divergent pairs that ran the three queries of ticket P1-020, and the time those took.</summary>
+    public RefinementTime? DivergentRefinement { get; init; }
+
     /// <summary>
     /// The pairs ADR 0048's search for an input condition ran on, those with a condition and the searches' total time
     /// (ticket P1-022); written only when some pair ran it.
@@ -66,7 +69,7 @@ internal sealed record LoweringCensus(
 
     /// <summary>
     /// The census as the SARIF run property: camel-cased keys, <c>opaqueByReason</c> sorted by reason, and the IL fallback's
-    /// counts, <c>unknownByScope</c>, <c>failureRefinement</c> and then <c>agreesWhen</c> last, when set.
+    /// counts, <c>unknownByScope</c>, <c>failureRefinement</c>, <c>divergentRefinement</c> and then <c>agreesWhen</c> last, when set.
     /// </summary>
     public Dictionary<string, object> ToProperty()
     {
@@ -86,13 +89,16 @@ internal sealed record LoweringCensus(
             };
         }
 
-        if (FailureRefinement is { Pairs: > 0 } refinement)
+        foreach ((string name, RefinementTime? time) in new[] { ("failureRefinement", FailureRefinement), ("divergentRefinement", DivergentRefinement) })
         {
-            property["failureRefinement"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            if (time is { Pairs: > 0 } refinement)
             {
-                ["pairs"] = refinement.Pairs,
-                ["milliseconds"] = refinement.Milliseconds,
-            };
+                property[name] = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["pairs"] = refinement.Pairs,
+                    ["milliseconds"] = refinement.Milliseconds,
+                };
+            }
         }
 
         if (AgreesWhen is { Pairs: > 0 } conditions)

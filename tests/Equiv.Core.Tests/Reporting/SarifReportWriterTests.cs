@@ -250,6 +250,68 @@ public sealed class SarifReportWriterTests
         Assert.Equal(plain.PartialFingerprints, result.PartialFingerprints);
     }
 
+    /// <summary>
+    /// Ticket P1-020 criteria 2 to 5: a Divergent's three answers are <c>properties.failureRefinement</c>, the kind they give
+    /// is <c>properties.divergenceKind</c>, and only <c>removed-failures-only</c> adds a sentence to the message. Neither
+    /// the rule id, the level, the fingerprint nor the review group reads any of it.
+    /// </summary>
+    [Theory]
+    [InlineData(RefinementOutcome.NoneProved, RefinementOutcome.Found, RefinementOutcome.NoneProved, "removed-failures-only")]
+    [InlineData(RefinementOutcome.Found, RefinementOutcome.NoneProved, RefinementOutcome.NoneProved, "new-failures-only")]
+    [InlineData(RefinementOutcome.Found, RefinementOutcome.Found, RefinementOutcome.NoneProved, "failures-only")]
+    [InlineData(RefinementOutcome.NoneProved, RefinementOutcome.NoneProved, RefinementOutcome.Found, "result-changed")]
+    [InlineData(RefinementOutcome.NoneProved, RefinementOutcome.Found, RefinementOutcome.Unknown, "undetermined")]
+    public void ADivergentSaysWhatKindOfDifferenceItIs(RefinementOutcome newFailures, RefinementOutcome removedFailures, RefinementOutcome resultChanges, string kind)
+    {
+        Counterexample model = Fixtures.Counterexample();
+        Divergent divergent = new(model);
+        FailureRefinement refinement = new(Answer(newFailures), Answer(removedFailures)) { ResultChanges = Answer(resultChanges), Elapsed = TimeSpan.FromSeconds(1) };
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(divergent with { FailureRefinement = refinement })]).Runs[0].Results[0];
+        Result plain = SarifReportWriter.Write([Fixtures.Result(divergent)]).Runs[0].Results[0];
+
+        Dictionary<string, Dictionary<string, string>> property = result.GetProperty<Dictionary<string, Dictionary<string, string>>>("failureRefinement");
+        Assert.Equal(["newFailures", "removedFailures", "resultChanges"], property.Keys.Order(StringComparer.Ordinal), StringComparer.Ordinal);
+        Assert.Equal(SarifReportWriter.Name(newFailures), property["newFailures"]["outcome"]);
+        Assert.Equal(SarifReportWriter.Name(removedFailures), property["removedFailures"]["outcome"]);
+        Assert.Equal(SarifReportWriter.Name(resultChanges), property["resultChanges"]["outcome"]);
+        Assert.Equal(newFailures == RefinementOutcome.Found, property["newFailures"].ContainsKey("model"));
+        Assert.Equal(kind, result.GetProperty<string>("divergenceKind"));
+        Assert.Equal(
+            string.Equals(kind, "removed-failures-only", StringComparison.Ordinal) ? plain.Message.Text + " The modern side differs only where the legacy side throws." : plain.Message.Text,
+            result.Message.Text);
+        Assert.False(plain.TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+        Assert.False(plain.TryGetProperty("divergenceKind", out string? _));
+        Assert.Equal("EQ002", result.RuleId);
+        Assert.Equal((plain.RuleId, plain.Level, plain.Kind), (result.RuleId, result.Level, result.Kind));
+        Assert.Equal(plain.PartialFingerprints, result.PartialFingerprints);
+        Assert.Equal(plain.GetProperty<string>("reviewGroup"), result.GetProperty<string>("reviewGroup"));
+
+        RefinementResult Answer(RefinementOutcome outcome) => outcome == RefinementOutcome.Found ? new RefinementResult(outcome, model) : new RefinementResult(outcome);
+    }
+
+    /// <summary>
+    /// Ticket P1-020, out of scope: an EQ006 carries neither property and no sentence, whatever the backend answered, since
+    /// its side-specific functions are free in the model. Nor does an Unknown gain a kind or a third answer.
+    /// </summary>
+    [Fact]
+    public void AnEQ006AndAnUnknownHaveNoDivergenceKind()
+    {
+        FailureRefinement removedOnly = new(RefinementResult.NoneProved, new RefinementResult(RefinementOutcome.Found, Fixtures.Counterexample())) { ResultChanges = RefinementResult.NoneProved };
+        Divergent runtimeChanged = new(RuntimeChangedCounterexample());
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(runtimeChanged with { FailureRefinement = removedOnly })]).Runs[0].Results[0];
+        Result plain = SarifReportWriter.Write([Fixtures.Result(runtimeChanged)]).Runs[0].Results[0];
+        Result unknown = SarifReportWriter.Write([Fixtures.Result(OpaqueAtLine(7) with { FailureRefinement = new(RefinementResult.NoneProved, RefinementResult.NoneProved) })]).Runs[0].Results[0];
+
+        Assert.Equal("EQ006", result.RuleId);
+        Assert.False(result.TryGetProperty("failureRefinement", out Dictionary<string, object>? _));
+        Assert.False(result.TryGetProperty("divergenceKind", out string? _));
+        Assert.Equal(plain.Message.Text, result.Message.Text);
+        Assert.Equal(["newFailures", "removedFailures"], unknown.GetProperty<Dictionary<string, Dictionary<string, string>>>("failureRefinement").Keys.Order(StringComparer.Ordinal), StringComparer.Ordinal);
+        Assert.False(unknown.TryGetProperty("divergenceKind", out string? _));
+    }
+
     /// <summary>Ticket M3-025 criterion 5: scope is not part of the fingerprint, so narrowing an Unknown to a line keeps it <c>unchanged</c>.</summary>
     [Fact]
     public void ScopeChangeKeepsTheBaselineUnchanged()

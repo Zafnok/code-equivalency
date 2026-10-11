@@ -22,6 +22,13 @@ public sealed record Divergent(Counterexample Counterexample) : Verdict
     /// </summary>
     public ConditionSearch? Conditions { get; init; }
 
+    /// <summary>
+    /// Whether the modern side only removed failures, added one, or changed a result (ADR 0037's clarification of
+    /// 2026-10-11; ticket P1-020): the two failure queries and <see cref="FailureRefinement.ResultChanges"/>. Null for a
+    /// Divergent the backend did not query, such as an observed one. Not part of the fingerprint.
+    /// </summary>
+    public FailureRefinement? FailureRefinement { get; init; }
+
     /// <summary>The divergence <paramref name="observed"/> showed on the real runtimes.</summary>
     public static Divergent Observation(ObservedDivergence observed) => new(Unmodelled) { Observed = observed };
 }
