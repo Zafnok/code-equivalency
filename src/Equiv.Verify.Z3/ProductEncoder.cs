@@ -363,6 +363,9 @@ internal static class ProductEncoder
         public required BoolExpr Returned { get; init; }
 
         public required BoolExpr Threw { get; init; }
+
+        /// <summary>The id of the exception type the side throws, 0 when it throws none; the ids are the product's (ticket P1-020).</summary>
+        public required IntExpr ExceptionType { get; init; }
     }
 
     /// <summary>

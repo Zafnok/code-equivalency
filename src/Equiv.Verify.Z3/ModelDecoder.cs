@@ -84,6 +84,17 @@ internal sealed class ModelDecoder
     public static Counterexample Runs(Context context, SolverModel model, ProductEncoding encoding, IrProcedure old, IrProcedure @new) =>
         ReplayBoth(context, model, encoding, old, @new).Counterexample;
 
+    /// <summary>
+    /// <see cref="Runs"/>, and how the two runs differ on the observables the encoder compares (<see cref="Compare"/>), for a
+    /// query that asks for a difference of one kind and reads from the replay whether it is that kind (ticket P1-020).
+    /// </summary>
+    public static (Counterexample Runs, Difference Difference) Compared(Context context, SolverModel model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
+    {
+        (Counterexample counterexample, ModelOracle oldOracle, ModelOracle newOracle) = ReplayBoth(context, model, encoding, old, @new);
+        ImmutableArray<SharedParameter> shared = [.. encoding.Inputs.Select(static i => i.Shared)];
+        return (counterexample, Compare(new(old, counterexample.Old, oldOracle.Threaded), new(@new, counterexample.New, newOracle.Threaded), shared, counterexample.Inputs, encoding.Calls));
+    }
+
     private static (Counterexample Counterexample, ModelOracle Old, ModelOracle New) ReplayBoth(Context context, SolverModel model, ProductEncoding encoding, IrProcedure old, IrProcedure @new)
     {
         ModelDecoder decoder = new(context, model, encoding);

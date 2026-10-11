@@ -46,11 +46,17 @@ public sealed class BackendProgressTests
     /// <summary>
     /// Ticket P2-076 criterion 1: encoding, <c>Inline</c>, each solver query with its result and each step after the ladder,
     /// in the order the pair did them. A stage is its name, a query <c>check:&lt;query&gt;=&lt;result&gt;</c>, and a rung or a
-    /// step is prefixed with its kind.
+    /// step is prefixed with its kind. A Divergent's three queries are one step after its ladder (ticket P1-020), on rung 1's
+    /// product whichever rung found the divergence.
     /// </summary>
     [Theory]
     [InlineData("equivalent-refactor", RungOne + "check:divergence=unsat assert inline check:opaque=unsat dispose rung:bounded=unsat")]
-    [InlineData("loops/loop-bound-change", RungOne + "check:divergence=sat replay dispose rung:bounded=sat")]
+    [InlineData(
+        "loops/loop-bound-change",
+        RungOne + "check:divergence=sat replay dispose rung:bounded=sat "
+        + "unroll encode assert inline check:failure-modelled=unsat assert inline check:failure-resolved=sat "
+        + "assert inline check:failure-modelled=unsat assert inline check:failure-resolved=sat "
+        + "assert inline check:result-modelled=sat replay dispose step:failure-refinement")]
     [InlineData(
         "opaque-void-effect",
         RungOne + "check:divergence=unsat assert inline check:opaque=sat step:reachable-opaques dispose rung:bounded=unknown "
@@ -66,7 +72,10 @@ public sealed class BackendProgressTests
         RungOne + "check:divergence=unsat assert inline check:opaque=unsat assert inline check:bound=sat dispose rung:bounded=unknown "
         + "couple " + Proved + Failed + "rung:lockstep-induction=unknown "
         + Proved + Failed + "rung:k-induction=unknown "
-        + "encode-chc check:spacer=sat dispose rung:chc=sat")]
+        + "encode-chc check:spacer=sat dispose rung:chc=sat "
+        + "unroll encode assert inline check:failure-modelled=unsat assert inline check:failure-resolved=sat "
+        + "assert inline check:failure-modelled=unsat assert inline check:failure-resolved=sat "
+        + "assert inline check:result-modelled=unsat assert inline check:result-resolved=sat dispose step:failure-refinement")]
     public void Each_Stage_Is_One_Detail_In_Order(string name, string expected)
     {
         ArgumentNullException.ThrowIfNull(expected);
@@ -161,7 +170,7 @@ public sealed class BackendProgressTests
         new Z3Backend().Verify(old, @new, Options with { Log = log });
 
         string[] details = Details(log);
-        int rung = Array.IndexOf(details, "rung:bounded=sat");
+        int rung = Array.IndexOf(details, "step:failure-refinement");
         Assert.Equal(
             [
                 "encode",
