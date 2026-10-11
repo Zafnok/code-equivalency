@@ -85,9 +85,8 @@ internal sealed class FailureRefinementQuery(Func<Context> createContext, Verifi
         {
             case Status.SATISFIABLE:
                 (Counterexample runs, ModelDecoder.Difference difference) = Stages.Timed(options, Stages.Replay, () => ModelDecoder.Compared(context, modelled.Model, encoding, old, @new));
-                return difference == ModelDecoder.Difference.Real & !runs.Old.Taint.Outcome & !runs.New.Taint.Outcome
-                    ? new RefinementResult(RefinementOutcome.Found, runs)
-                    : RefinementResult.Unknown;
+                bool[] rests = [difference != ModelDecoder.Difference.Real, runs.Old.Taint.Outcome, runs.New.Taint.Outcome];
+                return rests.Contains(true) ? RefinementResult.Unknown : new RefinementResult(RefinementOutcome.Found, runs);
             case Status.UNKNOWN:
                 return RefinementResult.Unknown;
         }
