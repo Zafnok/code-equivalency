@@ -1,5 +1,5 @@
 # P1-020 A Divergent says whether the modern side only removed failures, added one, or changed a result
-Status: in-progress
+Status: done (PR #471)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-013
