@@ -116,7 +116,7 @@
               },
               "removedFailures": {
                 "outcome": "found",
-                "model": "inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [sort \"System.String\" 522790624 -> bool true] default bool false, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) old(threw \"System.NullReferenceException\" outs() trace()) new(returned sort \"System.String\" 522790623 outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) trace(\"System.String::ToUpper()\"(sort \"System.String\" 522790625), \"System.String::Concat(string,string)\"(sort \"System.String\" 522790623, sort \"System.String\" 522790626)))"
+                "model": "inputs(sort \"System.String\" 522790624, map<sort \"System.String\", bool> [sort \"System.String\" 522790624 -> bool true] default bool false, map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) old(threw \"System.NullReferenceException\" outs() trace()) new(returned sort \"System.String\" 522790623 outs(map<sort \"System.String\", sort \"System.String\"> [] default sort \"System.String\" 522790625) trace(\"System.String::ToUpper()\"(sort \"System.String\" 522790625), \"System.String::Concat(string,string)\"(sort \"System.String\" 522790623, sort \"System.String\" 522790623)))"
               },
               "resultChanges": {
                 "outcome": "none-proved"

@@ -155,7 +155,11 @@ internal sealed class ModelDecoder
     /// input. A difference is real when some differing observable is untainted on both sides (ADR 0026). Two returned values
     /// compare by the values' taint, any other outcome difference by the path's. A threaded version is tainted once the run
     /// reached an abstraction. The trace compares its first differing event only,
-    /// since control taint can shift every later position.
+    /// since control taint can shift every later position. The open calls of the two traces are compared the same way
+    /// on their own (ADR 0056): a closed call's event is tainted, but an open call one side makes and the other does not
+    /// is an observable whatever the closed calls between them answer. An untainted open event is also a real difference
+    /// when the other side's procedure makes no open call to its callee: whichever path that side takes, its event there
+    /// is another one or none.
     /// </summary>
     public static Difference Compare(Replayed old, Replayed @new, ImmutableArray<SharedParameter> shared, IrInputs inputs, TraceEncoder calls)
     {
@@ -178,6 +182,18 @@ internal sealed class ModelDecoder
             tainted.Add(oldRun.EventTainted(first) || newRun.EventTainted(first));
         }
 
+        ImmutableArray<int> oldOpen = Open(oldRun, Side.Old, calls);
+        ImmutableArray<int> newOpen = Open(newRun, Side.New, calls);
+        int both = Math.Min(oldOpen.Length, newOpen.Length);
+        int open = Enumerable.Range(0, both).Where(i => oldTrace[oldOpen[i]] != newTrace[newOpen[i]]).DefaultIfEmpty(both).First();
+        if (open < both || oldOpen.Length != newOpen.Length)
+        {
+            tainted.Add(
+                (OpenEventTainted(oldRun, oldOpen, open) || OpenEventTainted(newRun, newOpen, open))
+                && !Unmatched(oldRun, oldOpen, oldTrace, open, @new, Side.New, calls)
+                && !Unmatched(newRun, newOpen, newTrace, open, old, Side.Old, calls));
+        }
+
         tainted.AddRange(shared
             .Select((s, i) => (Shared: s, Input: inputs.Arguments[i]))
             .Where(s => s.Shared.ByRef && old.Final(s.Shared.Old, s.Shared.Var, s.Input) != @new.Final(s.Shared.New, s.Shared.Var, s.Input))
@@ -190,6 +206,42 @@ internal sealed class ModelDecoder
             _ => Difference.Abstract,
         };
     }
+
+    /// <summary>
+    /// Whether <paramref name="callee"/> is a closed call the replay of <paramref name="side"/> taints (ADR 0056; ticket
+    /// P2-081): the model chose its result, <c>threw</c> flag and outputs, and the real member may give none of them, so a
+    /// divergence that needs them is a candidate, not a witness. A <see cref="CallIdentity.RuntimeChanged"/> member is
+    /// not tainted: that its two runtimes answer differently is a row of the runtime-changes table, which is what an
+    /// EQ006 reports.
+    /// </summary>
+    public static bool IsClosedAbstraction(TraceEncoder calls, Side side, CallIdentity callee) => !callee.RuntimeChanged && calls.IsClosed(side, callee);
+
+    /// <summary>The indices of <paramref name="run"/>'s events that are open calls, in order.</summary>
+    private static ImmutableArray<int> Open(IrRun run, Side side, TraceEncoder calls) =>
+        [.. Enumerable.Range(0, run.Trace.Length).Where(i => !IsClosedAbstraction(calls, side, run.Trace[i].Callee))];
+
+    /// <summary>
+    /// Whether the <paramref name="position"/>-th open event of <paramref name="run"/> is tainted. Past the last one it is
+    /// whether the run having none there is, which follows the path.
+    /// </summary>
+    private static bool OpenEventTainted(IrRun run, ImmutableArray<int> open, int position) =>
+        position < open.Length ? run.EventTainted(open[position]) : run.Taint.Outcome;
+
+    /// <summary>
+    /// Whether <paramref name="run"/> has an untainted open event at <paramref name="position"/> that no open call of
+    /// <paramref name="other"/>, the other side, can equal: none of its procedure's calls its callee. A shared fragment's
+    /// call (<see cref="IsAbstraction"/>) stands for calls the replay does not see, so a procedure that has one can. This
+    /// only undoes what tainting closed calls costs: when <paramref name="other"/>'s run reached any other abstraction, a
+    /// pure function or a shared fragment, the difference stays as that taint leaves it.
+    /// <paramref name="trace"/> is the run's trace under the identities both sides use.
+    /// </summary>
+    private static bool Unmatched(IrRun run, ImmutableArray<int> open, ImmutableArray<IrCallRecord> trace, int position, Replayed other, Side otherSide, TraceEncoder calls) =>
+        position < open.Length
+        && !run.EventTainted(open[position])
+        && other.Run.Taint.Sources.All(s => IsClosedAbstraction(calls, otherSide, s))
+        && !other.Procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>().Any(c =>
+            IsAbstraction(c.Callee)
+            || (!IsClosedAbstraction(calls, otherSide, c.Callee) && string.Equals(calls.Canonical(otherSide, c.Callee), trace[open[position]].Callee.Value, StringComparison.Ordinal)));
 
     /// <summary>
     /// The shared inputs, in <see cref="ProductEncoding.Inputs"/> order. A <c>length.&lt;Sort&gt;</c> input gives 0 wherever
@@ -397,10 +449,9 @@ internal sealed class ModelDecoder
 
         /// <summary>
         /// Whether <paramref name="callee"/> is an abstraction the replay of this side taints: a shared fragment's call, or a
-        /// call the encoding closed (ADR 0056; ticket P2-081). The model chose a closed call's result, <c>threw</c> flag and
-        /// outputs, and the real member may give none of them, so a divergence that needs them is a candidate, not a witness.
+        /// closed call (<see cref="IsClosedAbstraction"/>).
         /// </summary>
-        public bool IsAbstraction(CallIdentity callee) => ModelDecoder.IsAbstraction(callee) || decoder.encoding.Calls.IsClosed(side, callee);
+        public bool IsAbstraction(CallIdentity callee) => ModelDecoder.IsAbstraction(callee) || IsClosedAbstraction(decoder.encoding.Calls, side, callee);
 
         public IrPureResult Answer(IrPure pure, ImmutableArray<IrValue> arguments)
         {

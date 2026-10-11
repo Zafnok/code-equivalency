@@ -66,9 +66,11 @@ public sealed class SetSshDivergenceTests
 
     /// <summary>
     /// Ticket P2-068: the wrapper forwards to <c>string.IsNullOrEmpty</c>, so both sides lower to the same body. On one
-    /// runtime the pair is Equivalent. Across .NET Framework 4.8 and .NET 10 it still diverges, and only through
+    /// runtime the pair is Equivalent. Across .NET Framework 4.8 and .NET 10 the two sides can differ only through
     /// <c>Environment.SetEnvironmentVariable</c>, which the runtime-changes table names: the first events of the two traces,
-    /// the test of the argument, are now equal.
+    /// the test of the argument, are now equal. Both sides reach that call only when <c>string.IsNullOrEmpty</c> answers
+    /// false, and the solver chose that answer (ADR 0056; ticket P2-081), so the pair is Unknown(Abstraction) with the model
+    /// as its candidate, naming the member.
     /// </summary>
     [Fact]
     public void SetSsh_LowersToOneBodyOnceTheWrapperIsResolved()
@@ -77,10 +79,13 @@ public sealed class SetSshDivergenceTests
         Assert.IsType<Equivalent>(new Z3Backend().Verify(
             Lower(Legacy, isLegacy: true, new CallSites(), Runtimes.SameRuntime), Lower(Modern, isLegacy: false, new CallSites(), Runtimes.SameRuntime), Options));
 
-        Divergent migration = Assert.IsType<Divergent>(new Z3Backend().Verify(Lower(Legacy, isLegacy: true, new CallSites()), Lower(Modern, isLegacy: false, new CallSites()), Options));
+        Unknown migration = Assert.IsType<Unknown>(new Z3Backend().Verify(Lower(Legacy, isLegacy: true, new CallSites()), Lower(Modern, isLegacy: false, new CallSites()), Options));
 
-        Assert.Equal("System.String::IsNullOrEmpty(string)", migration.Counterexample.Old.Trace[0].Callee.Value);
-        Assert.Equal(migration.Counterexample.Old.Trace[0], migration.Counterexample.New.Trace[0]);
+        Assert.Equal(UnknownReason.Abstraction, migration.Reason);
+        Assert.All(migration.Abstractions, static a => Assert.Equal("System.String::IsNullOrEmpty(string)", a.Identity.Value));
+        Counterexample candidate = Assert.IsType<Counterexample>(migration.Candidate);
+        Assert.Equal("System.String::IsNullOrEmpty(string)", candidate.Old.Trace[0].Callee.Value);
+        Assert.Equal(candidate.Old.Trace[0], candidate.New.Trace[0]);
     }
 
     [Fact]

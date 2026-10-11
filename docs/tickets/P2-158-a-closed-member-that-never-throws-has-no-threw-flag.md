@@ -1,42 +1,38 @@
-# P2-158 A closed member that never throws has no `threw` flag, so a divergence after it is still Divergent
+# P2-158 The closed callees an Unknown(Abstraction) names on the corpus are counted, and the ones that never throw join the list
 Status: todo
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-081
 
 ## Goal
-ADR 0056 taints a closed call in the replay. Each side branches on the call's tainted `threw` flag,
-so everything a side does after a closed call is tainted, and a real divergence that shows only
-after one is Unknown(Abstraction). For a member that never throws the branch is not needed:
-`Nullable<T>.GetValueOrDefault()`, `Nullable<T>.HasValue`, `String.Concat(string, string)`. When
-this is done, a call to a closed member on a short reviewed list has no `threw` flag in either
-lowering. Its result and event stay tainted (ADR 0056), so a pair that differs after such a call,
-in an observable that does not use the call's result, is Divergent again.
+ADR 0056 taints a closed call in the replay. A real divergence that shows only past a closed call
+that can throw, or that both sides reach only through a closed call's answer, is now
+Unknown(Abstraction) naming the callee. P2-081 measured the cost on the samples (no rule id
+changed) but not on the corpus. ADR 0056's decision 3 gives a call to a listed member no `threw`
+flag, and its list was chosen from the samples and the differential gate. When this is done the
+corpus says which closed callees cost the most, the list holds every one of them that never throws,
+and each of the rest has a ticket or a stated reason to stay Unknown.
 
 ## Spec references
-ADR 0056 (Consequences, and the summary it rejects as the whole answer), ADR 0041, ADR 0043 (the
-precedent for a reviewed list of members), ADR 0026, VERIFICATION-MODEL sections 1, 2 (the `IrCall`
-row) and 6.
+ADR 0056 (decision 3 and Consequences), ADR 0041, ADR 0043 (the precedent for a reviewed list of
+members), ADR 0026, VERIFICATION-MODEL sections 1 and 6, `.claude/skills/equiv-corpus-run`.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
-1. The `equiv-adr` outcome (a clarification on ADR 0056 or ADR 0043, or a new ADR) is merged before
-   any code change. It names the members and says why each never throws on a non-null receiver.
-2. `## Notes` gives the count of results that are Unknown(Abstraction) naming a closed callee in the
-   latest corpus run under `docs/runs/`, or says that no run after P2-081 exists yet, and lists the
-   closed callees named most often. The list of members comes from that count where it exists.
-3. A call to a listed member has no `threw` flag from IOperation and from IL.
-4. A pair whose sides differ after such a call, in an observable that does not use its result, is
-   Divergent. A pair whose divergence uses the result is still Unknown(Abstraction).
-5. The differential gate's rules 1 to 3 hold on the PR and nightly budgets under both lowerings,
+1. `## Notes` gives, from a corpus run made after P2-081 merged, the count of results that are
+   Unknown(Abstraction) naming a closed callee, and the count per callee.
+2. Every callee among the ten most named is in one of three places: the list (with one line in a
+   dated clarification on ADR 0056 saying why it never throws), a filed ticket (a member whose real
+   meaning or whose result's range would decide the pair, such as `Nullable<T>`'s members under the IL
+   lowering), or Notes with the reason it stays Unknown (it throws for some argument).
+3. A call to each member added has no `threw` flag from IOperation and from IL.
+4. The differential gate's rules 1 to 3 hold on the PR and nightly budgets under both lowerings,
    with rule 2's exemption unchanged (open calls only).
 
 ## Tests
-- `DifferentialSoundnessTests.ADivergenceAfterAClosedMemberThatNeverThrowsIsDivergent`
-- one unit test per listed member, in `Equiv.Frontend.CSharp.Tests`
+- one row per member added, in `ClosedCallsTests.ACallHasAThrewFlagUnlessItsMemberNeverThrows`
 
 ## Out of scope
-A member's result (non-null, or its real value). Open calls. Any member that throws for some
-argument (`int.Parse`, `String.Substring`).
+Open calls. A member's result. Changing the taint rule.
 
 ## Notes
 - Filed 2026-10-11 by P2-081, whose ADR names it.

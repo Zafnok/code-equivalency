@@ -187,6 +187,126 @@ public sealed class TaintReplayTests
         Assert.Equal(UnknownReason.Abstraction, Assert.IsType<Unknown>(Verify(old, @new)).Reason);
     }
 
+    /// <summary>
+    /// A closed member the runtime-changes table lists answers differently on the two runtimes by the table's own row, so
+    /// its call is not tainted and the pair is still Divergent, which the report shows as EQ006.
+    /// </summary>
+    [Fact]
+    public void AClosedCallToARuntimeChangedMemberIsNotTainted()
+    {
+        const string body = """
+            proc "T::M(int)" (%a: bv32) -> bv32 entry B0
+            B0:
+              %t: bv32 = call closed "System.String::IndexOf(string)"!(%a)
+              ret %t
+            """;
+
+        Divergent divergent = Assert.IsType<Divergent>(Verify(body, body));
+
+        Assert.Empty(divergent.Counterexample.Old.Taint.Sources);
+    }
+
+    /// <summary>
+    /// ADR 0056: an open call one side makes is an observable whatever a closed call answers. The modern side makes no open
+    /// call on any path, so its lacking the legacy side's is real although its path past <c>Parse</c> is tainted.
+    /// </summary>
+    [Fact]
+    public void AnOpenCallAgainstAClosedOneIsDivergent()
+    {
+        const string old = """
+            proc "T::M(int)" (%a: bv32) -> bv32 entry B0
+            B0:
+              %t: bv32 = call "System.Convert::ToInt32(string)"(%a)
+              ret %t
+            """;
+
+        Divergent divergent = Assert.IsType<Divergent>(Verify(old, BranchesOnParse("call closed", 1)));
+
+        Assert.True(divergent.Counterexample.New.Taint.Outcome);
+    }
+
+    /// <summary>
+    /// The modern side can make the legacy side's open call past its tainted branch, so whether it lacks that call rests
+    /// on what the closed call answers. Were the legacy call one the modern side never makes, the pair would be Divergent.
+    /// </summary>
+    [Theory]
+    [InlineData("T::G(int)", false)]
+    [InlineData("T::F(int)", true)]
+    public void AnOpenCallAgainstASideThatMayMakeItAfterAClosedCallIsUnknownAbstraction(string legacyCallee, bool divergent)
+    {
+        string old = $"""
+            proc "T::M(int)" (%a: bv32) entry B0
+            B0:
+              call "{legacyCallee}"(%a)
+              ret
+            """;
+        const string @new = """
+            proc "T::M(int)" (%a: bv32) entry B0
+            B0:
+              %t: bool = call closed "System.Boolean::Parse(string)"(%a)
+              br %t, B1, B2
+            B1:
+              call "T::G(int)"(%a)
+              ret
+            B2:
+              ret
+            """;
+
+        Verdict verdict = Verify(old, @new);
+
+        Assert.Equal(divergent, verdict is Divergent);
+        Assert.Equal(!divergent, verdict is Unknown { Reason: UnknownReason.Abstraction });
+    }
+
+    /// <summary>A shared fragment stands for calls the replay does not see, so a side that has one may make any open call.</summary>
+    [Fact]
+    public void AnOpenCallAgainstASideWithASharedFragmentIsUnknownAbstraction()
+    {
+        const string old = """
+            proc "T::M(int)" (%a: bv32) entry B0
+            B0:
+              call "T::F(int)"(%a)
+              ret
+            """;
+        const string @new = """
+            proc "T::M(int)" (%a: bv32) entry B0
+            B0:
+              %t: bool = call closed "System.Boolean::Parse(string)"(%a)
+              br %t, B1, B2
+            B1:
+              call "opaque:1f2e"(%a)
+              ret
+            B2:
+              ret
+            """;
+
+        Assert.Equal(UnknownReason.Abstraction, Assert.IsType<Unknown>(Verify(old, @new)).Reason);
+    }
+
+    /// <summary>
+    /// The open-call comparison only undoes the taint of closed calls: a side whose run reached a pure function keeps the
+    /// verdict that taint gives, as before ADR 0056.
+    /// </summary>
+    [Fact]
+    public void AnOpenCallAgainstASideTaintedByAPureFunctionIsUnknownAbstraction()
+    {
+        const string old = """
+            proc "T::M(int)" (%a: bv32) entry B0
+            B0:
+              call "T::F(int)"(%a)
+              ret
+            """;
+        const string @new = """
+            proc "T::M(int)" (%a: bv32) entry B0
+            B0:
+              %p: bv32 = pure "op:T::Mix(int)"(%a)
+              call "T::G(int)"(%p)
+              ret
+            """;
+
+        Assert.Equal(UnknownReason.Abstraction, Assert.IsType<Unknown>(Verify(old, @new)).Reason);
+    }
+
     [Fact]
     public void UntaintedAgreementIsStillAnEncoderBug()
     {
@@ -370,6 +490,11 @@ public sealed class TaintReplayTests
         IrProcedure procedure = IrText.Parse("""
             proc "T::M(int)" (%a: bv32) entry B0
             B0:
+              call "a"(%a)
+              call "b"(%a)
+              call "c"(%a)
+              call "x"(%a)
+              call "y"(%a)
               ret
             """);
         return ModelDecoder.Compare(new(procedure, old), new(procedure, @new), ProductEncoder.Pair(procedure, procedure), new IrInputs([Bv(1)]), Calls(context));

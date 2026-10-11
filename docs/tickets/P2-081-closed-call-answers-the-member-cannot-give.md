@@ -38,46 +38,58 @@ anything but closed calls.
 
 ## Notes
 - Decision (criterion 1, through `equiv-adr`): a new ADR, 0056. It amends ADR 0026's "ordinary `IrCall`
-  results stay untainted" and changes when a result is EQ002, so it is not a clarification. The replay
-  taints a closed call as it taints an `opaque:` call: result, `threw` flag, `ref`/`out` outputs and trace
-  event. A model that differs only there is Unknown(Abstraction) with its candidate input. The per-member
-  summary was rejected as the whole answer: it leaves wrong values (`Concat(s, "t") == s`) and members
-  that throw for some arguments. Its no-throw half is filed as P2-158, to win back divergences that
-  show after a member that never throws.
-- Decision: the replay's taint predicate is per side (`ModelOracle.IsAbstraction`): an `opaque:` identity, or one
-  `TraceEncoder.IsClosed` says the encoding closed. `IrInterpreter` is unchanged. An identity that one call site
-  leaves open is encoded open (ADR 0041), so it stays untainted and the gate still excuses it.
+  results stay untainted" and changes when a result is EQ002, so it is not a clarification. Three parts.
+  (1) The replay taints a closed call as it taints an `opaque:` call: result, `threw` flag, `ref`/`out` outputs
+  and trace event. A model that differs only there is Unknown(Abstraction) with its candidate input.
+  (2) The open calls of the two traces are also compared on their own, closed events left out.
+  (3) A call to a member on a short list that never throws has no `threw` flag.
+  The per-member summary alone was rejected: it leaves wrong values (`Concat(s, "t") == s`) and members that
+  throw for some arguments, so rule 2 could not be strict.
+- Why three parts and not one: part 1 alone was built first and measured on the samples. 8 results in 6
+  samples went from EQ002 to EQ003 and `cleanup-modern-syntax` exited 0. Two shapes. One side fails before a
+  call and the other goes on through one (`added-null-guard` `Greet`): the side past the call branched on a
+  tainted `threw` flag, and part 3 removes that branch for `ToUpper` and `Concat`. An open call against a
+  closed one (`repeated-edit`: `Convert.ToInt32(string)` against `int.Parse(string)`): the closed event at the
+  first trace difference hid the open call, and part 2 compares the open calls apart. With all three, no
+  result of the 45 samples changes its rule id.
+- Decision: the list is read from the call identity (`ClosedCalls.NeverThrows(CallIdentity)`), not the symbol.
+  An API-equivalence entry names its modern member only by identity; read from the symbol, the rewritten
+  legacy `TrimEnd()` kept its flag while the modern call lost it, and `bcl-rebound-overloads` `TrimTail` went
+  from Equivalent to Divergent.
+- Decision: a closed call to a `RuntimeChanged` member is not tainted. Its two runtimes differing is the
+  runtime-changes table's row, and tainting it turned `runtime-row-unaffected-overload` `HasCulture` from
+  EQ006 to EQ003.
+- Decision: the replay's taint predicate is per side (`ModelOracle.IsAbstraction`): an `opaque:` identity, or
+  `ModelDecoder.IsClosedAbstraction`. `IrInterpreter` is unchanged. An identity that one call site leaves open
+  is encoded open (ADR 0041), so it stays untainted and the gate still excuses it.
 - Decision (criterion 3): the gate reads "open" from the lowered IR: a model is excused when its run records a
   callee that some `IrCall` of that side does not mark closed.
-- Measured (criterion 3). With the exemption narrowed and no other change, the 200-pair budget at seed
-  `9v8KtBVEhjFh` fails rule 2 under IL (FlipComparison; both sides throw `OverflowException` in C#; the only calls
-  are members of `Nullable<T>`). With ADR 0056 it passes, and so does the nightly budget at that seed: 5,000
-  generated pairs and 1,250 closure pairs, both lowerings, 11 minutes locally.
-- Criterion 2: `AClosedCallsAnswerIsOneTheMemberCanGive` pins the first pair the seed draws (DropNullCheck over a
-  lifted `&` and `GetValueOrDefault()`). On `main` at 1f9bb699 that pair is already a Divergent that replays under
-  both lowerings: Z3 now picks a model in which the legacy side throws `IndexOutOfRangeException` at `u[0]`. So the
-  test passes with and without the change, and the tests that fail without it are the five new ones in
-  `TaintReplayTests`. With the change the pair is Unknown(Abstraction) from IL, naming `Nullable<int>`'s `.ctor`,
-  `get_HasValue` and `GetValueOrDefault`, and still Divergent from IOperation.
-- Surprise: that IL verdict is the cost ADR 0056 names, on a real divergence. The modern side reaches the closed
-  calls before it can differ, so its outcome is tainted. P2-158's no-throw list would not win it back: a lifted
-  operator branches on `get_HasValue`'s result, which stays tainted. `Nullable<T>`'s members need their real
-  meaning for that, which no ticket covers yet.
+- `SsaBuilder` assumed every `IrCall` it renames has a `threw` flag; a flagless call crashed the lowering
+  (`Value cannot be null. (Parameter 'key')`). Fixed there.
+- Sample snapshots: 8 `expected.sarif.json` change, none in a rule id or an exit code. `il-fallback` `Add`:
+  `removedFailures` is `none-proved`, was `unknown`. `bcl-overload-rebinding` `StripOther`,
+  `bcl-rebound-overloads` `TrimTailOther` and `cleanup-modern-syntax` `Join`: a `newFailures: found` whose model
+  had a BCL member throw is `none-proved`. `repeated-edit` (three results) and `forwarder-to-bcl` `Trimmed`:
+  `divergenceKind` is `undetermined`, was `result-changed`, since the three queries' models are tainted.
+  `added-null-guard` and `removed-null-check` `Greet`: another model of the same verdict.
+- Three IR snapshots in `Equiv.Frontend.CSharp.Tests` lose the `threw` flag and branch of `Concat` and
+  `Int32.ToString()`.
 - The fixture `call-closed-divergent.ir` (`Abs(a)` against `Abs(a) + Abs(a)`) is now Unknown(Abstraction): it
   differs only for the answers the solver chose for `Abs`.
-- Stopped here (2026-10-11), before the samples were touched. ADR 0056's cost is larger than the ADR says.
-  `SamplesEndToEndTests` on this branch: 8 results in 6 samples go from EQ002 to EQ003 (abstraction), and each is
-  a real divergence a reader would call one. By the closed callee the candidate names:
-  `added-null-guard` `Greet` (`String.ToUpper()`, `String.Concat(string,string)`); `repeated-edit` `Quantity`,
-  `Total`, `IsBulk` (`Int32.Parse(string)`); `cleanup-modern-syntax` `Join` (`String.Concat(string,string)`);
-  `forwarder-to-bcl` `Trimmed` (`String.IsNullOrWhiteSpace(string)`); `bcl-rebound-overloads` `TrimTailOther`
-  (`String.TrimEnd(char)`); `runtime-row-unaffected-overload` `HasCulture`
-  (`String.IndexOf(string,StringComparison)`). `cleanup-modern-syntax` then exits 0 where its README says 1.
-  Two shapes. One side fails before a call and the other goes on through one (`Greet`): a no-throw list (P2-158)
-  gives that back. Both sides use the call's result (`Parse(s) * 2` against `Parse(s) * 3`): nothing sound gives
-  that back, because it is a divergence only if `Parse` returns non-zero for some string, and a string in a model
-  is an element with no text. Criterion 3 (rule 2 strict for closed calls) needs the taint, and the taint costs
-  these. The snapshots, READMEs and named sample tests are not updated; the gates are red on this branch.
-  The other 51 failures of that class in the local run are `FileNotFoundException` on the SARIF file: samples
-  that do not load in this worktree, not this change.
+- Criterion 2: `AClosedCallsAnswerIsOneTheMemberCanGive` pins the first pair the seed draws (DropNullCheck over a
+  lifted `&` and `GetValueOrDefault()`). On `main` at 1f9bb699 that pair is already a Divergent that replays under
+  both lowerings: Z3 now picks a model in which the legacy side throws `IndexOutOfRangeException` at `u[0]`. So
+  that test passes with and without the change, and the tests that fail without it are in `TaintReplayTests`
+  and `ClosedCallsTests`.
+- Still lost, by design: a divergence both sides reach only through a closed call's answer, and one that shows
+  only past a closed call that can throw. Three tests pinned such a Divergent and now pin Unknown(Abstraction):
+  `PreservingSeedDivergenceTests`' two string concatenations (renamed `...IsNeverEquivalent`), and
+  `SetSsh_LowersToOneBodyOnceTheWrapperIsResolved` across runtimes, where both sides reach
+  `SetEnvironmentVariable` only when `string.IsNullOrEmpty` answers false. `removed-null-check.execute.sarif`
+  changes its model: the legacy side throws `ArgumentNullException` where the old model had a call throw
+  `System.Exception`. P2-158 counts these on the corpus.
+- Measured (criterion 3), with the final change: the whole integration project passes at the PR budget, and the
+  gate passes the nightly budget at seed `9v8KtBVEhjFh` under both lowerings. At that seed
+  `FloatingPointPairsAreDecidedAfterRefinement` finds 9 Divergent of 40 where it wants 10, with and without this
+  change: its batch depends on the seed, and it passes at the default one.
 - `Release: minor`: some pairs that were EQ002 are now EQ003.
