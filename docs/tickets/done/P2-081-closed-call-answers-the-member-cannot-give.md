@@ -1,5 +1,5 @@
 # P2-081 A Divergent that rests on a BCL call's answer the real member cannot give is not EQ002
-Status: in-progress
+Status: done (PR #475)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-060
