@@ -50,6 +50,13 @@ the current culture whose getters write the program's fields). The constructor o
 closed too, whatever its property types are: the compiler writes it, and it only stores its arguments
 (ADR 0041, clarified 2026-10-02).
 
+A call to a member that throws for no argument, a non-null receiver given, has no `threw` flag (ADR 0056;
+ticket P2-081). The members are one list, read by call identity in both lowerings: `String.Concat` of two
+to four strings, `String.IsNullOrEmpty`, `String.IsNullOrWhiteSpace`, `String.ToUpper()`, `ToLower()`,
+`ToUpperInvariant()`, `ToLowerInvariant()`, `Trim`, `TrimStart` and `TrimEnd` with no argument or one
+`char`, the parameterless `ToString` of `bool`, `char` and the integers, and `Nullable<T>`'s constructor,
+`HasValue` and `GetValueOrDefault`.
+
 A use of a member in the effect-free catalogue (section 3; ADR 0043) is not a call: it is no trace
 event and it cannot throw. An empty `List<T>` and an empty `Collection<T>`, each created and
 converted to an interface at once, are one object. This assumes that no code asks such an object for
@@ -978,7 +985,11 @@ A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results o
 and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the
 fragment's calls. A closed call (section 1) is tainted the same way, outputs and event (ADR 0056; ticket P2-081): the
 solver chooses its answer, the real member has one behaviour the replay does not know, and its event shows in a real
-run only through that answer. Taint follows data, and a branch on a tainted value taints the rest of that side. The result is Divergent only when a compared observable differs and is
+run only through that answer. A closed member the runtime-changes table lists is not tainted, since its two runtimes
+differing is the table's row (EQ006). The open calls of the two traces are also compared with the closed events left
+out: the first open event that differs is a real difference when untainted on both sides, or when it is untainted on
+one side, the other side's procedure makes no open call to its callee and holds no shared fragment, and closed calls
+are the only abstractions the other side's run reached. Taint follows data, and a branch on a tainted value taints the rest of that side. The result is Divergent only when a compared observable differs and is
 untainted on both sides. Otherwise it is Unknown with reason `Abstraction`, carrying the model
 as `properties.candidateCounterexample` and the abstractions it depends on as
 `properties.abstractions`. Each entry has an `identity` (an `IrPure` function name, such as `f64.add` or
