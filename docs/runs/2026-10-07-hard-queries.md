@@ -23,7 +23,8 @@ Unknown until an encoding change has its own evidence.
 - equiv: `main` at `c59fa0fc`, win-x64, loaded through the production frontend with the default
   config: bound 3, `resourceLimit` 2,000,000, `timeoutMs` 60,000, no second solver. The default
   resource limit was 5,000,000 when P2-050 chose it and is 2,000,000 since ADR 0049.
-- Tool: `tools/spikes/hard-queries/` (throwaway, not in `Equiv.slnx`). It asks what the ladder asks,
+- Tool: `tools/spikes/hard-queries/` (throwaway, not in `Equiv.slnx`; deleted since, as no ticket
+  came of it, and last in the tree at `2c9b12fe`). It asks what the ladder asks,
   in the ladder's order, with the production solver and limits; writes out the first query of each
   rung Z3 gives up on; counts what the query is made of; and asks the written query again of
   solvers built other ways. It also runs `Z3Backend.Verify` on each pair, without the failure
