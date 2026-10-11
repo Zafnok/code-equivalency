@@ -85,3 +85,6 @@ untainted observables agree while the solver said they differ remains an encoder
   Unknown(Abstraction) either, since nothing in it is abstract: the model is spurious, and the values
   it got wrong become facts of the next round. The taint rules for `IrPure` and `opaque:` calls are
   unchanged, and apply to these replays as to any other.
+- 2026-10-11 (P2-081). The two 2026-09-30 clarifications no longer cover a closed call. ADR 0056 taints
+  it in the replay, as an `opaque:` call is, so a Divergent cannot rest on its answer and rule 2 excuses
+  only a model whose run records an open call. An open call's result stays untainted.

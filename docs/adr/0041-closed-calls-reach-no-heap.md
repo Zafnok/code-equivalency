@@ -91,3 +91,6 @@ model's run records a call, closed or open.
   an argument of a call. A read of a property is a getter call on the value and stays open. The IL
   lowering does not mark the constructor closed: it sees an ordinary `newobj`, so the two lowerings
   differ here, as they do for every construct only one of them lowers.
+- 2026-10-11 (P2-081). The Decision's last sentence, and the Consequence that a Divergent resting on
+  a closed call's answer is still EQ002, held until ADR 0056. The replay now taints a closed call, and
+  rule 2 excuses only a model whose run records an open call.

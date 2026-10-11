@@ -32,7 +32,7 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0023 | A pair whose verification crashes is reported and skipped, and the run exits 5 |
 | 0024 | Identical bound code is Equivalent by congruence; an unlowerable fragment on both sides is shared |
 | 0025 | Floating-point, decimal and user-defined operators are shared pure functions |
-| 0026 | A Divergent must not depend on an abstraction; otherwise it is Unknown(Abstraction) |
+| 0026 | A Divergent must not depend on an abstraction; otherwise it is Unknown(Abstraction) (amended by 0056) |
 | 0027 | The Unknown rate is measured before it is optimised, and every Unknown points at lines |
 | 0028 | Success is measured on a pinned public corpus, against criteria fixed before the first run |
 | 0029 | A failure's blast radius is the smallest unit it touches (project, method, line), and every Unknown says which |
@@ -62,3 +62,4 @@ the `equiv-adr` skill. Template and procedure: `.claude/skills/equiv-adr/SKILL.m
 | 0053 | An interpretable pure function a candidate counterexample depends on (`IntPtr` equality, `float` and `double` arithmetic as IEEE 754) is given its real meaning and rung 1 is asked again; never from the start, never on x87 or a runtime-sensitive function (narrows 0025's rejection of IEEE floating point) |
 | 0054 | An `extern` method is a procedure: matched, Equivalent by congruence only when both sides import the same thing with the same attributes on one runtime, otherwise Unknown (`no-body`), never Divergent, never run by `--execute` (reverses the exclusion of `extern` members in ARCHITECTURE.md's frontend step 2; extends 0024 decision 1) |
 | 0055 | A `[GeneratedRegex]` member is compared by its declaration (signature and bound attribute) on every runtime pair, Equivalent by congruence when equal and otherwise Unknown (`no-body`); the matcher the regex generator emits is no procedure and is counted in `run.properties.generatedProcedures` (narrows ARCHITECTURE.md's frontend step 2; extends 0024 decision 1) |
+| 0056 | In the replay a closed call is an abstraction: its outputs and event are tainted, so a Divergent never rests on an answer the solver chose for a BCL member, and the gate's rule 2 excuses only open calls (amends 0026 for closed calls) |

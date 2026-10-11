@@ -1,5 +1,5 @@
 # P2-081 A Divergent that rests on a BCL call's answer the real member cannot give is not EQ002
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-060
@@ -37,3 +37,10 @@ Open calls (they may still write the heap, ADR 0026's first clarification). Call
 anything but closed calls.
 
 ## Notes
+- Decision (criterion 1, through `equiv-adr`): a new ADR, 0056. It amends ADR 0026's "ordinary `IrCall`
+  results stay untainted" and changes when a result is EQ002, so it is not a clarification. The replay
+  taints a closed call as it taints an `opaque:` call: result, `threw` flag, `ref`/`out` outputs and trace
+  event. A model that differs only there is Unknown(Abstraction) with its candidate input. The per-member
+  summary was rejected as the whole answer: it leaves wrong values (`Concat(s, "t") == s`) and members
+  that throw for some arguments. Its no-throw half is filed as P2-158, to win back divergences that
+  show after a member that never throws.
