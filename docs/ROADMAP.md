@@ -987,6 +987,8 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
     element 0 of its sort; on gitextensions-9860 the reason is in 3 changed pairs (was 54 of 605).
   - P2-139 (M) `InterpolatedString`, what P2-086 left opaque: 59 pairs (2.6%), 47 of them on
     gitextensions-9860. Counts the forms and lowers the largest one P2-102 does not own.
+    Done 2026-10-11: a hole of a sealed class that is not `IFormattable` lowers to its own `ToString()`
+    unless it is null; on gitextensions-9860 the reason is in 71 changed pairs (was 87 of 605).
   - P2-140 (M) `CaughtException`: 51 pairs (2.3%). Counts what bodies do with the exception they
     catch and lowers the largest use.
   - P2-141 (M) `CompoundAssignment`: 35 pairs (1.6%). Counts the forms and lowers the largest.
