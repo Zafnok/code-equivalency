@@ -18,10 +18,15 @@ internal static class CallArguments
     /// The operands of the call <paramref name="site"/> makes to <paramref name="method"/>; none when the site is no
     /// invocation or object creation, or calls another method, as a call resolved to a forwarder's target does.
     /// </summary>
-    public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method) => site switch
+    public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method) => Of(site, method, static _ => false);
+
+    /// <summary>As the two-argument overload, with each operand <paramref name="isValidPath"/> holds of marked a <see cref="CallArgument.ValidPath"/> (ticket P2-074).</summary>
+    public static ImmutableArray<CallArgument> Of(IOperation? site, IMethodSymbol method, Func<IOperation, bool> isValidPath) => site switch
     {
-        IInvocationOperation call when Calls(call.TargetMethod, method) => [.. Receiver(call.Instance), .. call.Arguments.Select(Of)],
-        IObjectCreationOperation creation when Calls(creation.Constructor, method) => [.. creation.Arguments.Select(Of)],
+        IInvocationOperation call when Calls(call.TargetMethod, method) =>
+            [.. Receiver(call.Instance, isValidPath), .. call.Arguments.Select(a => Of(a.Parameter!.Name, a.Parameter.Type, a.Value, isValidPath))],
+        IObjectCreationOperation creation when Calls(creation.Constructor, method) =>
+            [.. creation.Arguments.Select(a => Of(a.Parameter!.Name, a.Parameter.Type, a.Value, isValidPath))],
         _ => [],
     };
 
@@ -35,11 +40,9 @@ internal static class CallArguments
 
     private static bool Calls(IMethodSymbol? called, IMethodSymbol method) => SymbolEqualityComparer.Default.Equals(called, method);
 
-    private static IEnumerable<CallArgument> Receiver(IOperation? instance) =>
-        instance is null ? [] : [Of(CallArgument.Receiver, instance.Type!, instance)];
+    private static IEnumerable<CallArgument> Receiver(IOperation? instance, Func<IOperation, bool> isValidPath) =>
+        instance is null ? [] : [Of(CallArgument.Receiver, instance.Type!, instance, isValidPath)];
 
-    private static CallArgument Of(IArgumentOperation argument) => Of(argument.Parameter!.Name, argument.Parameter.Type, argument.Value);
-
-    private static CallArgument Of(string parameter, ITypeSymbol type, IOperation value) =>
-        new(parameter, type.SpecialType == SpecialType.System_String, value.ConstantValue.HasValue, value.ConstantValue.Value);
+    private static CallArgument Of(string parameter, ITypeSymbol type, IOperation value, Func<IOperation, bool> isValidPath) =>
+        new(parameter, type.SpecialType == SpecialType.System_String, value.ConstantValue.HasValue, value.ConstantValue.Value) { ValidPath = isValidPath(value) };
 }

@@ -185,6 +185,19 @@ public sealed class BodyFingerprinterTests
     public void ACallWhoseConstantsCannotReachARowsChangeIsNotRuntimeSensitive(string member, bool sensitive) =>
         Assert.Equal(sensitive, Fingerprint(member).RuntimeSensitive);
 
+    /// <summary>
+    /// Ticket P2-074: the fingerprint reads a valid path as the lowering does, so a body whose only table calls take a
+    /// path from a valid-path source, or one a guard passed on, is not runtime-sensitive.
+    /// </summary>
+    [Theory]
+    [InlineData("""string M() => System.IO.Path.GetDirectoryName(typeof(C).Assembly.Location);""", false)]
+    [InlineData("""string M(string p) => System.IO.File.Exists(p) ? new System.IO.StreamReader(p).ReadToEnd() : null;""", false)]
+    [InlineData("""string M(string p) { if (!System.IO.File.Exists(p)) { return null; } return new System.IO.StreamReader(p).ReadToEnd(); }""", false)]
+    [InlineData("""string M(string p) => System.IO.Path.GetDirectoryName(p);""", true)]
+    [InlineData("""string M(string p) => new System.IO.StreamReader(p).ReadToEnd();""", true)]
+    public void ACallWhosePathIsValidIsNotRuntimeSensitive(string member, bool sensitive) =>
+        Assert.Equal(sensitive, Fingerprint(member).RuntimeSensitive);
+
     [Fact]
     public void ASuppressedRuntimeChangeIsNotRuntimeSensitive()
     {
