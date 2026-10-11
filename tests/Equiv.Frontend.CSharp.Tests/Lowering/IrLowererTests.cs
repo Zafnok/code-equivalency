@@ -619,6 +619,48 @@ public sealed class IrLowererTests
     public void ANullPatternOnANullableValueStaysOpaque(string members) =>
         Assert.Contains(Opaques(Method(members)), static o => o.Reason is "switch-pattern");
 
+    /// <summary>Ticket P2-104: <c>x is not T</c> is true exactly when <c>x is T</c> is false, and lowers as <c>!(x is T)</c> does.</summary>
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    public void ANegatedTypePatternIsTheNegationOfTheTypeTest(bool isType, bool isNull, bool expected)
+    {
+        IrProcedure procedure = Method("static bool M(object o) => o is not string;");
+        IrMapValue types = new(new IrMap(new IrSort("System.Object"), new IrBool()), new IrBoolValue(isType), []);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+        Assert.Equal(new IrReturned(new IrBoolValue(expected)), Run(procedure, Reference(1, "System.Object"), types, Nulls("System.Object", 1, isNull)));
+        Assert.Equal(
+            Method("static bool M(object o) => !(o is string);").Blocks.SelectMany(static b => b.Instructions).Select(static i => i.GetType()),
+            procedure.Blocks.SelectMany(static b => b.Instructions).Select(static i => i.GetType()));
+    }
+
+    /// <summary>Ticket P2-104: <c>x is not null</c> on a reference is the negation of the null test, and a negation of a negation is the test.</summary>
+    [Theory]
+    [InlineData("static bool M(string s) => s is not null;", true, false)]
+    [InlineData("static bool M(string s) => s is not null;", false, true)]
+    [InlineData("static bool M(string s) => s is not not null;", true, true)]
+    public void ANegatedNullPatternIsTheNegationOfTheNullTest(string members, bool isNull, bool expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+        Assert.Equal(new IrReturned(new IrBoolValue(expected)), Run(procedure, Reference(0), Nulls("System.String", 0, isNull)));
+    }
+
+    /// <summary>Ticket P2-104: negating a pattern that is itself opaque lowers nothing of it, and the whole test is the one opaque.</summary>
+    [Theory]
+    [InlineData("static bool M(int? n) => n is not null;")]
+    [InlineData("static bool M(object o) => o is not int;")]
+    [InlineData("static bool M(object o) => o is not int n;")]
+    [InlineData("static bool M(string s) => s is not \"a\";")]
+    [InlineData("static bool M(int n) => n is not (1 or 2);")]
+    public void ANegatedPatternOverAnOpaquePatternStaysOpaque(string members) =>
+        Assert.Equal(["switch-pattern"], Opaques(Method(members)).Select(static o => o.Reason).Distinct(StringComparer.Ordinal), StringComparer.Ordinal);
+
     /// <summary>A guard is an ordinary branch after the constant test, so the arm still lowers.</summary>
     [Fact]
     public void AGuardedConstantPatternLowersAsABranch()
