@@ -1,0 +1,311 @@
+{
+  "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Equiv",
+          "rules": [
+            {
+              "id": "EQ001",
+              "name": "Equivalent",
+              "shortDescription": {
+                "text": "The two procedures are observably equivalent."
+              },
+              "defaultConfiguration": {
+                "level": "none"
+              }
+            },
+            {
+              "id": "EQ002",
+              "name": "Divergent",
+              "shortDescription": {
+                "text": "The two procedures disagree on some observable."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "EQ003",
+              "name": "Unknown",
+              "shortDescription": {
+                "text": "Equivalence could not be decided for this procedure pair."
+              }
+            },
+            {
+              "id": "EQ004",
+              "name": "Added",
+              "shortDescription": {
+                "text": "The procedure is present on the modern side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ005",
+              "name": "Removed",
+              "shortDescription": {
+                "text": "The procedure is present on the legacy side only."
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "EQ006",
+              "name": "RuntimeChangedDivergence",
+              "shortDescription": {
+                "text": "The two procedures disagree because a call uses a BCL member whose behaviour differs between the two sides' runtimes."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "EQ003",
+          "kind": "open",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.GeneratedRegexEdited.Words::WhiteSpace() is unknown (Opaque): old: no-body; new: no-body"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Words.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 5,
+                  "endLine": 8,
+                  "endColumn": 47
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.GeneratedRegexEdited.Words::WhiteSpace()",
+            "resultFingerprint/v1": "8c0148326b95623a2275209d2af00168ec289c2b490487ae864be2a7c883fdcc"
+          },
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Words.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 5,
+                  "endLine": 8,
+                  "endColumn": 47
+                }
+              },
+              "message": {
+                "text": "no-body"
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///modern/Words.cs"
+                },
+                "region": {
+                  "startLine": 7,
+                  "startColumn": 5,
+                  "endLine": 8,
+                  "endColumn": 47
+                }
+              },
+              "message": {
+                "text": "no-body"
+              }
+            }
+          ],
+          "baselineState": "new",
+          "rank": 0.002,
+          "properties": {
+            "unknownReason": "opaque",
+            "scope": "method",
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              }
+            },
+            "ladderTrace": [
+              {
+                "rung": "bounded",
+                "outcome": "inconclusive",
+                "detail": "an input reaches an opaque node: old: no-body; new: no-body"
+              }
+            ],
+            "reviewGroup": "opaque:no-body"
+          }
+        },
+        {
+          "ruleId": "EQ001",
+          "kind": "pass",
+          "level": "none",
+          "message": {
+            "text": "Equiv.Samples.GeneratedRegexEdited.Words::Collapse(string) is equivalent. Assumes callees equivalent; not proved for: Equiv.Samples.GeneratedRegexEdited.Words::WhiteSpace()."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "file:///legacy/Words.cs"
+                },
+                "region": {
+                  "startLine": 10,
+                  "startColumn": 26,
+                  "endLine": 10,
+                  "endColumn": 34
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "procedureIdentity/v1": "Equiv.Samples.GeneratedRegexEdited.Words::Collapse(string)",
+            "resultFingerprint/v1": "de12fe83650f2dad4320a7d511d39d95c7658cc7d5a6a3e9bc1ed7837299c6ce"
+          },
+          "baselineState": "new",
+          "properties": {
+            "proofMethod": "congruence",
+            "assumedCallees": [
+              "Equiv.Samples.GeneratedRegexEdited.Words::WhiteSpace()"
+            ],
+            "unprovenAssumptions": [
+              "Equiv.Samples.GeneratedRegexEdited.Words::WhiteSpace()"
+            ]
+          }
+        }
+      ],
+      "columnKind": "utf16CodeUnits",
+      "properties": {
+        "loweringCensus": {
+          "procedures": {
+            "legacy": 2,
+            "modern": 2
+          },
+          "matchedPairs": 2,
+          "pairsWithoutOpaque": 1,
+          "pairsWholeBodyOpaque": 1,
+          "pairsCongruent": 1,
+          "projectsSkipped": {
+            "legacy": 0,
+            "modern": 0
+          },
+          "opaqueByReason": {
+            "no-body": {
+              "legacy": 1,
+              "modern": 1
+            }
+          },
+          "changedPairs": 1,
+          "changedPairsWithoutOpaque": 0,
+          "changedPairsWholeBodyOpaque": 1,
+          "changedReasonSets": {
+            "no-body": 1
+          },
+          "runtimeChangeCalls": {
+            "callSites": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "distinctMembers": {
+              "legacy": 0,
+              "modern": 0
+            },
+            "pairsWithAny": {
+              "legacy": 0,
+              "modern": 0
+            }
+          },
+          "externalCallees": {
+            "legacy": [
+              {
+                "member": "System.Text.RegularExpressions.Regex::Replace(string,string)",
+                "callSites": 1
+              }
+            ],
+            "modern": [
+              {
+                "member": "System.Text.RegularExpressions.Regex::Replace(string,string)",
+                "callSites": 1
+              }
+            ]
+          },
+          "unknownByScope": {
+            "line": 0,
+            "method": 1
+          },
+          "failureRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
+          }
+        },
+        "analysedLinesOfCode": {
+          "legacy": 140,
+          "modern": 117
+        },
+        "projectsNotBuilt": {
+          "legacy": [],
+          "modern": []
+        },
+        "runtimes": {
+          "legacy": [
+            {
+              "project": "Equiv.Samples.GeneratedRegexEdited",
+              "runtime": "net8.0",
+              "source": "attribute"
+            }
+          ],
+          "modern": [
+            {
+              "project": "Equiv.Samples.GeneratedRegexEdited",
+              "runtime": "net9.0",
+              "source": "attribute"
+            }
+          ]
+        },
+        "generatedProcedures": {
+          "legacy": 6,
+          "modern": 5
+        },
+        "mode": {
+          "name": "quick",
+          "bound": 3,
+          "resourceLimit": 5000000,
+          "timeoutMs": 60000,
+          "explicit": [
+            "resourceLimit"
+          ]
+        },
+        "queryEndings": {
+          "resourceLimit": 0,
+          "wallClock": 0
+        },
+        "reviewList": [
+          {
+            "group": "opaque:no-body",
+            "ruleId": "EQ003",
+            "rank": 0.002,
+            "count": 1,
+            "identities": [
+              "Equiv.Samples.GeneratedRegexEdited.Words::WhiteSpace()"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

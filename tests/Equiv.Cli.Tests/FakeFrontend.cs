@@ -11,6 +11,7 @@ namespace Equiv.Cli.Tests;
 /// Without a canned <see cref="MatchResult"/> it matches nothing; without canned <see cref="AnalysedLines"/> it counts 0 on both sides.
 /// <paramref name="replay"/> is the analysis's replay factory (ticket M4-009); without one it cannot replay.
 /// <paramref name="legacyRuntimes"/> and <paramref name="modernRuntimes"/> are each side's project runtimes (ticket P2-053).
+/// <paramref name="generatedProcedures"/> is each side's count of procedures a source generator emitted (ticket P2-118).
 /// </summary>
 internal sealed class FakeFrontend(
     string language,
@@ -21,7 +22,8 @@ internal sealed class FakeFrontend(
     string[]? legacyNotBuilt = null,
     IReplayDriverFactory? replay = null,
     (string Project, string Runtime, string Source)[]? legacyRuntimes = null,
-    (string Project, string Runtime, string Source)[]? modernRuntimes = null) : ILanguageFrontend
+    (string Project, string Runtime, string Source)[]? modernRuntimes = null,
+    (int Legacy, int Modern) generatedProcedures = default) : ILanguageFrontend
 {
     public int AnalyzeCallCount { get; private set; }
 
@@ -43,6 +45,7 @@ internal sealed class FakeFrontend(
                 LegacyNotBuilt = [.. legacyNotBuilt ?? []],
                 LegacyRuntimes = [.. legacyRuntimes ?? []],
                 ModernRuntimes = [.. modernRuntimes ?? []],
+                GeneratedProcedures = generatedProcedures,
                 Replay = replay,
             };
     }

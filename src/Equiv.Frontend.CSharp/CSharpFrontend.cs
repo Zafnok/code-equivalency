@@ -129,6 +129,7 @@ public sealed class CSharpFrontend : ILanguageFrontend
             ModernNotBuilt = modern.NotBuilt,
             LegacyRuntimes = Reported(legacy.Runtimes),
             ModernRuntimes = Reported(modern.Runtimes),
+            GeneratedProcedures = (GeneratedProcedures(legacy.Compilations), GeneratedProcedures(modern.Compilations)),
             Replay = new ReplayDriverFactory(Targets(legacyByIdentity, legacy.Runtimes), Targets(modernByIdentity, modern.Runtimes), DriverReferences.Installed().Host),
         };
     }
@@ -513,6 +514,14 @@ public sealed class CSharpFrontend : ILanguageFrontend
 
         return (procedures.ToImmutable(), forcedAmbiguous.ToImmutable());
     }
+
+    /// <summary>
+    /// How many procedures of a side a source generator emitted for a declaration that is compared in their place (ADR 0055
+    /// decision 4; ticket P2-118), each target-framework flavour of a project counted once, by its last flavour as
+    /// <see cref="LastFlavour"/> keeps it.
+    /// </summary>
+    private static int GeneratedProcedures(ImmutableArray<Compilation> compilations) =>
+        compilations.GroupBy(static compilation => compilation.AssemblyName, StringComparer.Ordinal).Sum(static flavours => ProcedureEnumerator.CountEmitted(flavours.Last()));
 
     /// <summary>Every endpoint a side declares, each target-framework flavour of a project counted once (<see cref="LastFlavour"/>).</summary>
     private static ImmutableArray<Endpoint> Endpoints(ImmutableArray<Compilation> compilations) =>

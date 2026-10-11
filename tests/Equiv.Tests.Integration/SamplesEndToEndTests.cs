@@ -474,6 +474,47 @@ public sealed partial class SamplesEndToEndTests
         Assert.Equal([Changed], caller.GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-118 criterion 2 (ADR 0055): .NET 8 against .NET 9 with one <c>[GeneratedRegex]</c> method nobody edited.
+    /// The method is congruent by its declaration, its caller is congruent, and no result names the matcher the two
+    /// generators emit differently: it is no procedure, and the run counts what each side left out.
+    /// </summary>
+    [Fact]
+    public void GeneratedRegex_AnUneditedDeclarationIsCongruentAndTheMatcherIsNoPair()
+    {
+        Run run = RunSample("generated-regex-unedited").Log.Runs[0];
+
+        Assert.Equal(
+            ["Equiv.Samples.GeneratedRegexUnedited.Words::Collapse(string)", "Equiv.Samples.GeneratedRegexUnedited.Words::WhiteSpace()"],
+            run.Results.Select(static r => r.PartialFingerprints["procedureIdentity/v1"]).Order(StringComparer.Ordinal),
+            StringComparer.Ordinal);
+        Assert.All(run.Results, static r => Assert.Equal("EQ001", r.RuleId));
+        Assert.All(run.Results, static r => Assert.Equal("congruence", r.GetProperty<string>("proofMethod")));
+        Dictionary<string, long> generated = run.GetProperty<Dictionary<string, long>>("generatedProcedures");
+        Assert.True(generated["legacy"] > 0);
+        Assert.True(generated["modern"] > 0);
+    }
+
+    /// <summary>
+    /// Ticket P2-118 criterion 3 (ADR 0055 decision 2): the same sample with the pattern edited on the modern side. The
+    /// method is Unknown, never Equivalent and never Divergent, and its unedited caller names it as an assumption not proved.
+    /// </summary>
+    [Fact]
+    public void GeneratedRegexEdited_AnEditedPatternIsUnknownOnTheDeclaration()
+    {
+        const string Edited = "Equiv.Samples.GeneratedRegexEdited.Words::WhiteSpace()";
+        Run run = RunSample("generated-regex-edited").Log.Runs[0];
+        Result declaration = run.Results.Single(static r => string.Equals(r.PartialFingerprints["procedureIdentity/v1"], Edited, StringComparison.Ordinal));
+        Result caller = run.Results.Single(r => r != declaration);
+
+        Assert.Equal("EQ003", declaration.RuleId);
+        Assert.Equal("opaque", declaration.GetProperty<string>("unknownReason"));
+        Assert.Contains("no-body", declaration.Message.Text, StringComparison.Ordinal);
+        Assert.Equal("EQ001", caller.RuleId);
+        Assert.Equal("congruence", caller.GetProperty<string>("proofMethod"));
+        Assert.Equal([Edited], caller.GetProperty<List<string>>("unprovenAssumptions"), StringComparer.Ordinal);
+    }
+
     [Fact]
     public void SameRuntimeCleanup_NoRuntimeRuleApplies()
     {
