@@ -151,6 +151,19 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool true) old(returned bool false outs() trace(\"System.String::Contains(char)\"(sort \"System.String\" 0, bv16 120))) new(threw \"System.NullReferenceException\" outs() trace())"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              },
+              "resultChanges": {
+                "outcome": "none-proved"
+              }
+            },
+            "divergenceKind": "new-failures-only",
             "equivalencesApplied": [
               "bcl.string-contains-char"
             ],
@@ -210,6 +223,10 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
           },
           "agreesWhen": {
             "pairs": 1,

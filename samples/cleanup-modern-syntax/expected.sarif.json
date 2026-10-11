@@ -180,6 +180,21 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 671913018, sort \"System.String\" 671913019, map<sort \"System.String\", sort \"System.Object\"> [sort \"System.String\" 671913019 -> sort \"System.Object\" 1] default sort \"System.Object\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 671913017 outs() trace(\"System.String::Format(string,object,object)\"(sort \"System.String\" 157356947, sort \"System.Object\" 0, sort \"System.Object\" 1))) new(threw \"System.Exception\" outs() trace(\"System.String::Concat(string,string)\"(sort \"System.String\" 671913018, sort \"System.String\" 671913017)))"
+              },
+              "removedFailures": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 671913018, sort \"System.String\" 671913019, map<sort \"System.String\", sort \"System.Object\"> [sort \"System.String\" 671913019 -> sort \"System.Object\" 1] default sort \"System.Object\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.String::Format(string,object,object)\"(sort \"System.String\" 157356947, sort \"System.Object\" 0, sort \"System.Object\" 1))) new(returned sort \"System.String\" 671913020 outs() trace(\"System.String::Concat(string,string)\"(sort \"System.String\" 671913018, sort \"System.String\" 671913017), \"System.String::Concat(string,string)\"(sort \"System.String\" 671913020, sort \"System.String\" 671913019)))"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 671913018, sort \"System.String\" 671913017, map<sort \"System.String\", sort \"System.Object\"> [sort \"System.String\" 671913017 -> sort \"System.Object\" 1] default sort \"System.Object\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.String::Format(string,object,object)\"(sort \"System.String\" 157356947, sort \"System.Object\" 0, sort \"System.Object\" 1))) new(threw \"System.Exception\" outs() trace(\"System.String::Concat(string,string)\"(sort \"System.String\" 671913018, sort \"System.String\" 671913017)))"
+              }
+            },
+            "divergenceKind": "result-changed",
             "reviewGroup": "calls:System.String::Concat(string,string)|System.String::Format(string,object,object)"
           }
         },
@@ -433,6 +448,10 @@
             "method": 1
           },
           "failureRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
+          },
+          "divergentRefinement": {
             "pairs": 1,
             "milliseconds": 0
           },

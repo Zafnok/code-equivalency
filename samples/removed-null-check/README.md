@@ -10,6 +10,6 @@ sides throw.
 
 | Procedure | Verdict |
 |---|---|
-| `Greeter.Greet(string)` | Divergent — counterexample `name = null` (legacy throws `ArgumentNullException`, modern throws `NullReferenceException`); `agreesWhen.text` is `name != null` (ADR 0048): the pair is proved equivalent for every other argument |
+| `Greeter.Greet(string)` | Divergent — counterexample `name = null` (legacy throws `ArgumentNullException`, modern throws `NullReferenceException`); `agreesWhen.text` is `name != null` (ADR 0048): the pair is proved equivalent for every other argument. `divergenceKind` is `undetermined` (ADR 0037, ticket P1-020): both sides throw on `null`, so there is no new failure, no removed one and no changed result, and the three answers are all `none-proved` |
 
 Exit code: 1 (a new Divergent result).

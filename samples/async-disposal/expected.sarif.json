@@ -142,6 +142,19 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "none-proved"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.IAsyncDisposable\" 0, bv32 2147483646, map<sort \"System.IAsyncDisposable\", bool> [] default bool false) old(returned bv32 2147483647 outs() trace(\"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.IAsyncDisposable\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0))) new(returned bv32 2147483648 outs() trace(\"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.IAsyncDisposable\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0)))"
+              }
+            },
+            "divergenceKind": "result-changed",
             "reviewGroup": "proofMethod:none"
           }
         },
@@ -230,6 +243,19 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "none-proved"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, map<sort \"System.Collections.Generic.IAsyncEnumerable`1\", bool> [] default bool false, map<sort \"System.Collections.Generic.IAsyncEnumerator`1\", bool> [] default bool false) old(returned bv32 3221225473 outs() trace(\"System.Collections.Generic.IAsyncEnumerable`1::GetAsyncEnumerator(System.Threading.CancellationToken)<int>\"(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, sort \"System.Threading.CancellationToken\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::MoveNextAsync()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter`1<bool>\"(sort \"System.Threading.Tasks.ValueTask`1\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::get_Current()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0))) new(returned bv32 3221225471 outs() trace(\"System.Collections.Generic.IAsyncEnumerable`1::GetAsyncEnumerator(System.Threading.CancellationToken)<int>\"(sort \"System.Collections.Generic.IAsyncEnumerable`1\" 0, sort \"System.Threading.CancellationToken\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::MoveNextAsync()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter`1<bool>\"(sort \"System.Threading.Tasks.ValueTask`1\" 0), \"System.Collections.Generic.IAsyncEnumerator`1::get_Current()<int>\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"System.IAsyncDisposable::DisposeAsync()\"(sort \"System.Collections.Generic.IAsyncEnumerator`1\" 0), \"await:System.Runtime.CompilerServices.ValueTaskAwaiter\"(sort \"System.Threading.Tasks.ValueTask\" 0)))"
+              }
+            },
+            "divergenceKind": "result-changed",
             "reviewGroup": "proofMethod:none"
           }
         }
@@ -311,6 +337,10 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 2,
+            "milliseconds": 0
           },
           "agreesWhen": {
             "pairs": 2,
