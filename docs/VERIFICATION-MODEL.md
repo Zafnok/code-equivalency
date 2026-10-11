@@ -50,6 +50,13 @@ the current culture whose getters write the program's fields). The constructor o
 closed too, whatever its property types are: the compiler writes it, and it only stores its arguments
 (ADR 0041, clarified 2026-10-02).
 
+A call to a member that throws for no argument, a non-null receiver given, has no `threw` flag (ADR 0056;
+ticket P2-081). The members are one list, read by call identity in both lowerings: `String.Concat` of two
+to four strings, `String.IsNullOrEmpty`, `String.IsNullOrWhiteSpace`, `String.ToUpper()`, `ToLower()`,
+`ToUpperInvariant()`, `ToLowerInvariant()`, `Trim`, `TrimStart` and `TrimEnd` with no argument or one
+`char`, the parameterless `ToString` of `bool`, `char` and the integers, and `Nullable<T>`'s constructor,
+`HasValue` and `GetValueOrDefault`.
+
 A use of a member in the effect-free catalogue (section 3; ADR 0043) is not a call: it is no trace
 event and it cannot throw. An empty `List<T>` and an empty `Collection<T>`, each created and
 converted to an interface at once, are one object. This assumes that no code asks such an object for
@@ -996,11 +1003,17 @@ It is not part of the fingerprint.
 
 A counterexample is replayed in `IrInterpreter` with taint (ADR 0026): results of `IrPure`
 and of `opaque:` calls are tainted, and so is an `opaque:` call's own trace event, since it stands for the
-fragment's calls. Taint follows data, and a branch on a tainted value taints the rest of that side. The result is Divergent only when a compared observable differs and is
+fragment's calls. A closed call (section 1) is tainted the same way, outputs and event (ADR 0056; ticket P2-081): the
+solver chooses its answer, the real member has one behaviour the replay does not know, and its event shows in a real
+run only through that answer. A closed member the runtime-changes table lists is not tainted, since its two runtimes
+differing is the table's row (EQ006). The open calls of the two traces are also compared with the closed events left
+out: the first open event that differs is a real difference when untainted on both sides, or when it is untainted on
+one side, the other side's procedure makes no open call to its callee and holds no shared fragment, and closed calls
+are the only abstractions the other side's run reached. Taint follows data, and a branch on a tainted value taints the rest of that side. The result is Divergent only when a compared observable differs and is
 untainted on both sides. Otherwise it is Unknown with reason `Abstraction`, carrying the model
 as `properties.candidateCounterexample` and the abstractions it depends on as
 `properties.abstractions`. Each entry has an `identity` (an `IrPure` function name, such as `f64.add` or
-`delegate:<fingerprint>#0`, or `opaque:<fingerprint>`), a `side` and, when known, a `span`; an `opaque:` entry also has `reason`, the
+`delegate:<fingerprint>#0`, or `opaque:<fingerprint>`, or a closed call's identity), a `side` and, when known, a `span`; an `opaque:` entry also has `reason`, the
 fragment's `IrOpaque` reason, for example `DelegateCreation` (ticket P2-062). In the replay of a refined query's
 model (section 5; ADR 0053) the result of an interpreted function is no abstraction: the interpreter computes it,
 so it is tainted only if an argument is, and a divergence that depends on it is real. A floating-point to integer
@@ -1551,10 +1564,11 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
   changing operator can produce an equivalent mutant, so no rule assumes a mutant differs.
   200 pairs per PR, 5,000 nightly. Each pair is verified twice: once lowered from IOperation,
   and once with both sides forced through the IL lowering (ADR 0039; P1-017). Both verdicts
-  are held to all three rules. A model whose run records an ordinary call also fixes that
+  are held to all three rules. A model whose run records an open call also fixes that
   call's outputs, which no C# argument can (ADR 0026, clarifications of 2026-09-30). So rule 2
-  does not count a replay of such a model that fails to diverge. That includes a closed call
-  (ADR 0041): it writes no heap, but its result and `threw` flag are still the model's choice.
+  does not count a replay of such a model that fails to diverge. A closed call (ADR 0041) gets no
+  such exemption: the replay taints it (ADR 0056), so no Divergent rests on what the model chose
+  for it, and a model that records only closed calls must diverge in C#.
   A fourth family, `PairGen.FloatPair` (ticket P1-030; ADR 0053), is drawn apart from those: methods that also
   take `float g, double h` and differ in one expression, by an identity of IEEE arithmetic (the preserving
   family: commuted `+`, `*` and comparisons, `e * 2` for `e + e`, `e / 2` for `e * 0.5`, `e - f` for `e + -f`) or
@@ -1573,7 +1587,8 @@ a badge is not guaranteed; the gate for Unknown is `--fail-on unknown`. See ADR 
 - Snapshot tests (Verify): IR dump and SARIF for every sample in `samples/`.
 - Congruence (property test, ADR 0024): whenever congruence reports Equivalent on a
   generated or sample pair, the solver on the same pair never reports Divergent.
-- Taint (ADR 0026): no Divergent result's differing observable is tainted.
+- Taint (ADR 0026): no Divergent result's differing observable is tainted. A closed call's outputs and event are
+  (ADR 0056).
 - Containment (ADR 0029): a solution with one unloadable project reports every other project's
   results, and an unbound method is Unknown(Unbound), never congruent. No pair is Equivalent when
   either body holds an error, one test per error kind (`UnboundNeverEquivalentTests`, ticket P2-085). Residual claim (property
