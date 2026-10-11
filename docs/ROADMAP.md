@@ -978,6 +978,8 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
       so the 39 were right, stay congruent, and no longer name the two constructors.
   - P2-138 (M) `DefaultValue`: 73 pairs (3.3%). Counts the types and lowers the largest one P2-095
     does not own.
+    Done 2026-10-10: the `default` passed for an optional struct parameter a call leaves out is
+    element 0 of its sort; on gitextensions-9860 the reason is in 3 changed pairs (was 54 of 605).
   - P2-139 (M) `InterpolatedString`, what P2-086 left opaque: 59 pairs (2.6%), 47 of them on
     gitextensions-9860. Counts the forms and lowers the largest one P2-102 does not own.
   - P2-140 (M) `CaughtException`: 51 pairs (2.3%). Counts what bodies do with the exception they

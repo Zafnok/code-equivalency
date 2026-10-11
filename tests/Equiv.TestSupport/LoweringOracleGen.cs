@@ -23,7 +23,8 @@ namespace Equiv.TestSupport;
 /// <c>o.Bump(k)</c>, which adds <c>k</c> to it (ticket P1-005), and <c>z = o.TryParse(k, out x)</c>, whose <c>out</c> argument is
 /// the call's output (ticket M4-003), and deconstructions of tuple literals into <c>(x, y, z)</c> and into <c>(F, x)</c>
 /// (ticket P2-025); and, only from <see cref="MethodWithLambda"/>, a lambda whose body a runtime rule applies to,
-/// converted to a delegate and tested against <c>null</c> (ticket P2-136), and <see cref="Nullables"/> (ticket P2-095); built as a small AST and
+/// converted to a delegate and tested against <c>null</c> (ticket P2-136), <see cref="Nullables"/> (ticket P2-095), and
+/// <c>o.Nudge(k)</c>, a call that leaves out an optional parameter of the struct type <see cref="MarkType"/> (ticket P2-138); built as a small AST and
 /// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
@@ -98,10 +99,22 @@ public static class LoweringOracleGen
     /// <summary>The method of <see cref="CellType"/> with an <c>out</c> parameter: it sets <c>n</c> to <c>k * 3</c>, wrapping, and returns whether <c>k</c> is even.</summary>
     public const string TryParse = "TryParse";
 
-    /// <summary>The declaration of <see cref="CellType"/>, to compile next to the generated methods.</summary>
+    /// <summary>
+    /// The method of <see cref="CellType"/> with an optional parameter of the struct type <see cref="MarkType"/> (ticket
+    /// P2-138): it adds <c>k</c> and the mark's <c>N</c> to <see cref="CellField"/>, so a call that leaves the mark out
+    /// adds what <see cref="Bump"/> does only when the value passed for it is the type's default.
+    /// </summary>
+    public const string Nudge = "Nudge";
+
+    /// <summary>The struct type of <see cref="Nudge"/>'s optional parameter: one <c>int</c> field <c>N</c>.</summary>
+    public const string MarkType = "Mark";
+
+    /// <summary>The declaration of <see cref="CellType"/>, then of <see cref="MarkType"/>, to compile next to the generated methods.</summary>
     public const string CellSource =
         $"public sealed class {CellType}\n{{\n    public int {CellField};\n    public void {Bump}(int k) {{ {CellField} = unchecked({CellField} + k); }}\n"
-        + $"    public bool {TryParse}(int k, out int n) {{ n = unchecked(k * 3); return (k & 1) == 0; }}\n}}\n";
+        + $"    public bool {TryParse}(int k, out int n) {{ n = unchecked(k * 3); return (k & 1) == 0; }}\n"
+        + $"    public void {Nudge}(int k, {MarkType} m = default) {{ {CellField} = unchecked({CellField} + k + m.N); }}\n}}\n"
+        + $"public struct {MarkType}\n{{\n    public int N;\n}}\n";
 
     private const string CellAccess = $"{Cell}.{CellField}";
 
@@ -165,7 +178,12 @@ public static class LoweringOracleGen
     {
         // Ticket P2-136: last, and only when asked for, so that without it every other choice is drawn as before.
         (int, Gen<IStmt>)[] lambda = lambdas
-            ? [(1, Gen.Const<IStmt>(new Assign("z", new Name(Lambda)))), (1, Gen.OneOfConst([.. Nullables]).Select(static value => (IStmt)new Assign("x", new Name(value))))]
+            ? [
+                (1, Gen.Const<IStmt>(new Assign("z", new Name(Lambda)))),
+                (1, Gen.OneOfConst([.. Nullables]).Select(static value => (IStmt)new Assign("x", new Name(value)))),
+                // Ticket P2-138: a call that leaves out an optional parameter of a struct type.
+                (1, FieldValue.Select(static value => (IStmt)new Call($"{Cell}.{Nudge}", value))),
+            ]
             : [];
         Gen<IStmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>
             ExprGen(type, Depth).Select(value => (IStmt)new Assign(LocalName(type), value)));
