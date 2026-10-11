@@ -231,7 +231,9 @@ negative length, so the encoder assumes every read of a `length.*` input is non-
 reached (the CLR never reads a null reference's length, so this drops no input a caller can pass), and the model
 decoder gives 0 wherever a model's length map is negative, which can only be at a reference nothing reads (P2-019). `field.*` and `array.*` are
 `Ref` (ADR 0018, ticket M3-007), so every exit names their final version in `outs` and the
-final heap is an observable like any `ref` parameter. When only one side of a pair has a given
+final heap is an observable like any `ref` parameter. So is `thrown.System.Exception`, the one cell that holds the
+exception the last call threw (P2-140; section 3): a map of the exception's sort, read at that sort's token, that a
+body has only when one of its `catch` clauses names an exception a call may have thrown. When only one side of a pair has a given
 `Ref` map, the other side never touches that slice, and the encoder compares the first side's
 final value against the shared input. IR variable names take only letters, digits, `_`, `.`
 and `$`, which is why these names are spelled with dots.
@@ -239,7 +241,7 @@ and `$`, which is why these names are spelled with dots.
 Two gaps the M2-004 heap model left open (ADR 0015), both closed before M3-003 as ADR 0018
 schedules. The first, a call that neither read nor wrote the heap, so that a pair differing only in
 where it reads a field around a call was not distinguished, is closed by P1-005: every `IrCall`
-reads and writes each `field.*` and `array.*` map its procedure touches. The second gap, array maps keyed per array *variable*
+reads and writes each `field.*` and `array.*` map its procedure touches, and its `thrown.*` cell (P2-140). The second gap, array maps keyed per array *variable*
 so that two variables holding one array were two independent slices, is closed by P1-006: the
 element and length maps are keyed by the array reference.
 
@@ -407,6 +409,24 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   records the constructor call and then lowers to `IrThrow("T")` on T's static type (M2-004).
   Throwing any other expression is `IrOpaque` with reason `Throw`, because the thrown object's
   dynamic type is not known statically, and `throw;` is `IrOpaque` with reason `rethrow`.
+- The exception a `catch` reads into its variable is a value when the body only ever reads that variable
+  as `e.Message`, in the handler and outside a `when` filter, a lambda and a local function (P2-140;
+  ADR 0018, clarification of 2026-10-11); a variable nothing reads counts. Each raise the clause may
+  take then goes there through a block of its own that gives the clause its exception: the object a
+  `throw new T(...)` in the `try` made; for a call or a shared fragment whose `threw` flag is set, the
+  `thrown.System.Exception` cell as that call left it, read on that edge, before any `finally` on the
+  way runs (a `finally` may call, and its call writes the cell); for any other raise (a null
+  dereference, a division, a failed cast, a pure function's flag, a closed call, which has no heap
+  pairs) an `IrOpaque` with reason `CaughtException`, on that edge only. A clause whose variable has
+  another type than the value takes it through the `cast` map between the two, and the variable is
+  never null. Every call reads and writes the cell as it does a `field.*` map, so the exception a call
+  throws is a function of callee, arguments, the heap at the call and the call's position: two sides
+  that catch after the same calls hold the same exception, and an exception caught after another call
+  is another value. `e.Message` is then the call to `get_Message` that any property read is. Any
+  other use of the variable (an argument, an inner exception, `ToString`, a filter) leaves the read
+  `IrOpaque` with reason `CaughtException`: what is handed the object can read its stack trace, which
+  depends on where it was thrown. A raise whose route is unknown (`call-throw-in-try`) hands nothing
+  over.
 
 An `async` method (ticket M4-006) is lowered as the synchronous body its CFG already is, over the original
 operations, never over the compiler's state machine. `await e` is `IrCall(await:<awaiter type>, [e])`: its result is

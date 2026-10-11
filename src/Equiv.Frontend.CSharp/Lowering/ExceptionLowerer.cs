@@ -92,6 +92,22 @@ internal sealed class ExceptionLowerer(SsaBuilder ssa, CSharpCompilation compila
     }
 
     /// <summary>
+    /// The clauses <see cref="Raise(string, ITypeSymbol?, LoweringContext)"/> tries for an exception of <paramref name="type"/>
+    /// raised in the block being lowered, in the order it tries them (ticket P2-140). None inside a filter, where every
+    /// exception goes to the false exit, and none when the route is not known.
+    /// </summary>
+    public ImmutableArray<ControlFlowRegion> Candidates(ITypeSymbol? type, LoweringContext context)
+    {
+        if (context.Declined is not null)
+        {
+            return [];
+        }
+
+        ExceptionRegions.ExceptionRoute route = ExceptionRegions.Route(compilation, context.Source, type);
+        return route.Ambiguous ? [] : [.. route.Candidates.Select(static c => c.Clause)];
+    }
+
+    /// <summary>
     /// Where an exception whose route is known goes: the throw block of <paramref name="exceptionType"/> behind the
     /// <paramref name="uncaught"/> finallys, or nothing when an unfiltered clause always takes it (null); and, tried before
     /// that, each clause of <paramref name="candidates"/> from the last to the first: its handler behind its own finallys,

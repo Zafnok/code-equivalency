@@ -24,7 +24,8 @@ namespace Equiv.TestSupport;
 /// the call's output (ticket M4-003), and deconstructions of tuple literals into <c>(x, y, z)</c> and into <c>(F, x)</c>
 /// (ticket P2-025); and, only from <see cref="MethodWithLambda"/>, a lambda whose body a runtime rule applies to,
 /// converted to a delegate and tested against <c>null</c> (ticket P2-136), <see cref="Nullables"/> (ticket P2-095), and
-/// <c>o.Nudge(k)</c>, a call that leaves out an optional parameter of the struct type <see cref="MarkType"/> (ticket P2-138); built as a small AST and
+/// <c>o.Nudge(k)</c>, a call that leaves out an optional parameter of the struct type <see cref="MarkType"/> (ticket P2-138), and
+/// <see cref="Guard"/>, a <c>catch</c> that reads the message of the exception <c>o.Check(x)</c> threw (ticket P2-140); built as a small AST and
 /// rendered to C#. Every expression reads a
 /// variable, so none is a compile-time constant (a constant <c>checked</c> overflow or division by zero
 /// would be a compile error); literals appear only as right operands, and never as a zero divisor. Every
@@ -106,6 +107,9 @@ public static class LoweringOracleGen
     /// </summary>
     public const string Nudge = "Nudge";
 
+    /// <summary>The method of <see cref="CellType"/> that throws <c>InvalidOperationException</c> when its argument is odd (ticket P2-140).</summary>
+    public const string Check = "Check";
+
     /// <summary>The struct type of <see cref="Nudge"/>'s optional parameter: one <c>int</c> field <c>N</c>.</summary>
     public const string MarkType = "Mark";
 
@@ -114,7 +118,8 @@ public static class LoweringOracleGen
         $"public sealed class {CellType}\n{{\n    public int {CellField};\n    public void {Bump}(int k) {{ {CellField} = unchecked({CellField} + k); }}\n"
         + $"    public override string ToString() {{ {CellField} = unchecked({CellField} + 1); return \"c\"; }}\n"
         + $"    public bool {TryParse}(int k, out int n) {{ n = unchecked(k * 3); return (k & 1) == 0; }}\n"
-        + $"    public void {Nudge}(int k, {MarkType} m = default) {{ {CellField} = unchecked({CellField} + k + m.N); }}\n}}\n"
+        + $"    public void {Nudge}(int k, {MarkType} m = default) {{ {CellField} = unchecked({CellField} + k + m.N); }}\n"
+        + $"    public void {Check}(int k) {{ if ((k & 1) != 0) throw new System.InvalidOperationException(); }}\n}}\n"
         + $"public struct {MarkType}\n{{\n    public int N;\n}}\n";
 
     private const string CellAccess = $"{Cell}.{CellField}";
@@ -194,6 +199,8 @@ public static class LoweringOracleGen
                 (1, FieldValue.Select(static value => (IStmt)new Call($"{Cell}.{Nudge}", value))),
                 // Ticket P2-139: an interpolated string with a hole of a sealed class.
                 (1, Gen.Const<IStmt>(new Assign("z", new Name(Interpolated)))),
+                // Ticket P2-140: the message of the exception a call threw.
+                (1, Gen.Const<IStmt>(new Guard())),
             ]
             : [];
         Gen<IStmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>
@@ -362,6 +369,9 @@ public static class LoweringOracleGen
                 case Parse parse:
                     text.Append(pad).Append($"z = {Cell}.{TryParse}(").Append(parse.Argument.Render()).Append(", out x);\n");
                     break;
+                case Guard:
+                    text.Append(pad).Append($"try {{ {Cell}.{Check}(x); }} catch (System.Exception t) {{ z = t.Message != null; }}\n");
+                    break;
                 case Deconstruction deconstruct:
                     text.Append(pad).Append('(').AppendJoin(", ", deconstruct.Targets).Append(") = (")
                         .AppendJoin(", ", deconstruct.Values.Select(static v => v.Render())).Append(");\n");
@@ -462,6 +472,13 @@ public static class LoweringOracleGen
 
     /// <summary><c>z = o.TryParse(Argument, out x);</c> (ticket M4-003).</summary>
     internal sealed record Parse(IExpr Argument) : IStmt;
+
+    /// <summary>
+    /// <c>try { o.Check(x); } catch (System.Exception t) { z = t.Message != null; }</c> (ticket P2-140): the argument is a
+    /// local, so the call is the only thing in the <c>try</c> that throws, and a message is never null, so <c>z</c> is
+    /// true when <c>x</c> is odd and is left as it was otherwise.
+    /// </summary>
+    internal sealed record Guard : IStmt;
 
     internal sealed record While(IExpr Condition, ImmutableArray<IStmt> Body, int Bound) : IStmt;
 
