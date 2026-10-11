@@ -1,5 +1,5 @@
 # P2-140 The uses of a caught exception are counted, and the largest one lowers
-Status: in-progress
+Status: done (PR #476)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
