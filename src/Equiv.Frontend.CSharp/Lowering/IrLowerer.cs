@@ -1967,14 +1967,15 @@ internal sealed class IrLowerer
     private IrVar? Compound(ICompoundAssignmentOperation compound, LoweringContext context)
     {
         UpdateSite site = new(compound, compound.Target, compound.IsChecked, IsPostfix: false);
+        ITypeSymbol target = compound.Target.Type!;
         ITypeSymbol right = compound.Value.Type!;
-        if (compound.Target.Type!.SpecialType == SpecialType.System_String && right.SpecialType == SpecialType.System_String)
+        if (target.SpecialType == SpecialType.System_String && right.SpecialType == SpecialType.System_String)
         {
             // `+` is the only compound operator two strings take.
             return Update(site, old => Concat(old, Value(compound.Value, context), compound, context), context);
         }
 
-        if (PureCatalogue.IsCatalogued(compound.Target.Type!) && PureCatalogue.Binary(compound.OperatorKind, compound.Target.Type!, right) is { } entry)
+        if (PureCatalogue.IsCatalogued(target) && PureCatalogue.Binary(compound.OperatorKind, target, right) is { } entry)
         {
             return Update(site, old => Apply(entry, compound.IsChecked, [old, Value(compound.Value, context)], old.Type, context), context);
         }
@@ -1988,7 +1989,7 @@ internal sealed class IrLowerer
 
         (IrBitVec Type, bool Signed)? mappedRight = TypeMapper.Map(right) is IrBitVec bits ? (bits, TypeMapper.IsSigned(right)) : null;
         (IrBitVec Type, bool Signed)? operands = OperatorMapper.IsShiftKind(compound.OperatorKind)
-            ? TypeMapper.Promote(compound.Target.Type!)
+            ? TypeMapper.Promote(target)
             : mappedRight;
         return operands is { } promoted
             ? Update(site, compound.OperatorKind, () => Value(compound.Value, context), promoted, context)
