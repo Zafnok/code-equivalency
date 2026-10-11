@@ -1737,6 +1737,67 @@ public sealed class IrLowererTests
         Assert.Empty(Opaques(procedure));
     }
 
+    /// <summary>
+    /// Ticket P2-141: <c>s += t</c> on two strings is the <c>Concat</c> call <c>s = s + t</c> makes, of the target read once
+    /// and then the right operand, written back; a property target is got, concatenated and set.
+    /// </summary>
+    [Theory]
+    [InlineData("static string M(string s, string t) { s += t; return s; }", "static string M(string s, string t) { s = s + t; return s; }")]
+    [InlineData("static string M(string t) { string s = t; s += \"x\"; return s; }", "static string M(string t) { string s = t; s = s + \"x\"; return s; }")]
+    [InlineData("string F; void M(string t) { F += t; }", "string F; void M(string t) { F = F + t; }")]
+    [InlineData("string P { get; set; } void M(string t) { P += t; }", "string P { get; set; } void M(string t) { P = P + t; }")]
+    [InlineData("public virtual string P { get; set; } void M(C c, string t) { c.P += t; }", "public virtual string P { get; set; } void M(C c, string t) { c.P = c.P + t; }")]
+    [InlineData("static string N() => null; static string M(string s) { s += N(); return s; }", "static string N() => null; static string M(string s) { s = s + N(); return s; }")]
+    public void StringCompoundAssignmentIsItsConcatenation(string compound, string expanded)
+    {
+        IrProcedure procedure = Method(compound);
+
+        Assert.Empty(Opaques(procedure));
+        ImmutableArray<IrCall> calls = Calls(procedure);
+        Assert.Equal(Calls(Method(expanded)).Select(static c => c.Callee.Value), calls.Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        IrCall concat = Assert.Single(calls, static c => string.Equals(c.Callee.Value, "System.String::Concat(string,string)", StringComparison.Ordinal));
+        Assert.Equal(2, concat.Args.Length);
+    }
+
+    /// <summary>Ticket P2-141: the value of <c>s += t</c> is the string written.</summary>
+    [Fact]
+    public void StringCompoundAssignmentYieldsTheConcatenation()
+    {
+        IrProcedure procedure = Method("static string M(string s, string t) { return s += t; }");
+
+        IrCall concat = Assert.Single(Calls(procedure));
+        Assert.Equal<IrVar>([procedure.Parameters[0].Var, procedure.Parameters[1].Var], concat.Args);
+        Assert.Contains(procedure.Blocks, b => b.Terminator is IrReturn { Value: { } value } && value == concat.Target);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>
+    /// Ticket P2-141: a reference-typed variable a compound assignment writes is null when the value written is, not when
+    /// the value it held was. The same holds of a user-defined operator on a class (ticket P2-022).
+    /// </summary>
+    [Theory]
+    [InlineData("static bool M(string s, string t) { s += t; return s == null; }", "System.String::Concat(string,string)")]
+    [InlineData("public static C operator +(C a, C b) => b; static bool M(C s, C t) { s += t; return s == null; }", null)]
+    [InlineData("public static C operator ++(C a) => null; static bool M(C s) { s++; return s == null; }", null)]
+    public void AReferenceACompoundAssignmentWritesIsNullWhenTheValueWrittenIs(string member, string? callee)
+    {
+        IrProcedure procedure = Method(member);
+
+        ImmutableArray<IrInstruction> instructions = [.. procedure.Blocks.SelectMany(static b => b.Instructions)];
+        IrVar written = callee is null ? Assert.Single(instructions.OfType<IrPure>()).Target : Assert.Single(Calls(procedure)).Target!;
+        IrMapRead read = Assert.Single(instructions.OfType<IrMapRead>(), r => r.Key == written && r.Map.Name.StartsWith("null.", StringComparison.Ordinal));
+        Assert.Contains(procedure.Blocks, b => b.Terminator is IrReturn { Value: { } value } && value == read.Target);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket P2-141: a compound assignment that <c>Binary</c> leaves opaque as an operator stays opaque.</summary>
+    [Theory]
+    [InlineData("static string M(string s, object o) { s += o; return s; }")]
+    [InlineData("static bool M(bool a, bool b) { a |= b; return a; }")]
+    [InlineData("static DayOfWeek M(DayOfWeek a, DayOfWeek b) { a |= b; return a; }")]
+    public void ACompoundAssignmentOfAnotherTypeStaysOpaque(string member) =>
+        Assert.Contains(Opaques(Method(member)), static o => string.Equals(o.Reason, "CompoundAssignment", StringComparison.Ordinal));
+
     /// <summary>Ticket M2-004 acceptance criterion 8: the shape of the `removed-null-check` sample lowers opaque-free.</summary>
     [Fact]
     public void TheRemovedNullCheckSampleShapeLowersWithoutOpaqueNodes()

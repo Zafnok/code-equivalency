@@ -134,6 +134,13 @@ public static class LoweringOracleGen
     /// </summary>
     public const string Interpolated = $"($\"p{{s}}q{{{Cell}}}r{{x}}\" != null)";
 
+    /// <summary>
+    /// The right operand of <c>s += ...;</c> (ticket P2-141): the <c>ToString()</c> of the sealed class <see cref="CellType"/>,
+    /// which adds 1 to <see cref="CellField"/>. What a run shows of the statement is that <c>o.ToString()</c> ran once and
+    /// that <c>s</c> is not null after it.
+    /// </summary>
+    public const string Appended = $"{Cell}.ToString()";
+
     /// <summary>The value every <see cref="Nullables"/> expression wraps, which is what <c>GetValueOrDefault()</c> then reads of it.</summary>
     public const int NullableValue = 7;
 
@@ -194,6 +201,8 @@ public static class LoweringOracleGen
                 (1, FieldValue.Select(static value => (IStmt)new Call($"{Cell}.{Nudge}", value))),
                 // Ticket P2-139: an interpolated string with a hole of a sealed class.
                 (1, Gen.Const<IStmt>(new Assign("z", new Name(Interpolated)))),
+                // Ticket P2-141: a compound assignment to the string parameter.
+                (1, Gen.Const<IStmt>(new Compound("s", "+", new Name(Appended), IsChecked: false))),
             ]
             : [];
         Gen<IStmt> assign = Gen.OneOfConst(Types).SelectMany(static type =>

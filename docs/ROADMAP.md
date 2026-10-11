@@ -776,6 +776,10 @@ Found by P2-152 (2026-10-10, by reading its own rule; not reproduced):
   (`struct K : J<S>`) can be made with no constructor (`default(K)`, an array's element), so no
   text holds `S`. The first step is the repro. Needs P2-152.
 
+Found by P2-141 (2026-10-11, in both of its census runs):
+- P2-158 (S) Two matched pairs of gitextensions-8522 fail to lower with an `ArgumentNullException`
+  for a null `method`, so a `--lower-only` run exits 5. The first step is the repro.
+
 Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
 - P2-153 (S) Soundness: the text of a body that uses an auto-property or a field-like event of an
   explicit layout holds none of the layout, because the bound tree does not name the backing
@@ -992,6 +996,8 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   - P2-140 (M) `CaughtException`: 51 pairs (2.3%). Counts what bodies do with the exception they
     catch and lowers the largest use.
   - P2-141 (M) `CompoundAssignment`: 35 pairs (1.6%). Counts the forms and lowers the largest.
+    Done 2026-10-11: `string += string` lowers to the `Concat` call `+` is; on gitextensions-8522 the
+    reason is in 5 changed pairs (was 18 of 936). Found on the way: P2-158, two pairs that fail to lower.
 - P1-029 (M) `await using` and `await foreach` lower through their awaited calls instead of making
   the body opaque: 83 bodies per side and 13 changed pairs alone on jellyfin-13023. Needs M4-006,
   M4-001.
