@@ -151,6 +151,21 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 0 outs() trace(\"System.String::TrimEnd()\"(sort \"System.String\" 0))) new(threw \"System.Exception\" outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46)))"
+              },
+              "removedFailures": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.String::TrimEnd()\"(sort \"System.String\" 0))) new(returned sort \"System.String\" 0 outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46)))"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.String::TrimEnd()\"(sort \"System.String\" 0))) new(threw \"System.Exception\" outs() trace(\"System.String::TrimEnd(char)\"(sort \"System.String\" 0, bv16 46)))"
+              }
+            },
+            "divergenceKind": "result-changed",
             "equivalencesApplied": [
               "bcl.string-trim-end-no-chars"
             ],
@@ -308,6 +323,10 @@
             "method": 0
           },
           "failureRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
+          },
+          "divergentRefinement": {
             "pairs": 1,
             "milliseconds": 0
           },

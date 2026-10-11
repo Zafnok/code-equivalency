@@ -104,6 +104,20 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "found",
+                "model": "inputs(bv32 787992083, bv32 2484049611, sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0) old(returned bv32 2153548561 outs() trace()) new(threw \"System.Exception\" outs() trace(\"Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)\"(sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0, bv32 2153548561)))"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(bv32 787992083, bv32 2484049611, sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0) old(returned bv32 2153548561 outs() trace()) new(returned bv32 2153548561 outs() trace(\"Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)\"(sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0, bv32 2153548561)))"
+              }
+            },
+            "divergenceKind": "result-changed",
             "reviewGroup": "calls:Equiv.Samples.CleanupExtractMethod.Invoice::Discount(int)"
           }
         },
@@ -143,6 +157,20 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "none-proved"
+              },
+              "removedFailures": {
+                "outcome": "found",
+                "model": "inputs(bv32 0, sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0) old(threw \"System.Exception\" outs() trace(\"Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)\"(sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0, bv32 0))) new(returned bv32 5 outs() trace())"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(bv32 0, sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0) old(returned bv32 5 outs() trace(\"Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)\"(sort \"Equiv.Samples.CleanupExtractMethod.Invoice\" 0, bv32 0))) new(returned bv32 5 outs() trace())"
+              }
+            },
+            "divergenceKind": "result-changed",
             "reviewGroup": "calls:Equiv.Samples.CleanupExtractMethod.Invoice::Billable(int)"
           }
         },
@@ -246,6 +274,10 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 2,
+            "milliseconds": 0
           },
           "agreesWhen": {
             "pairs": 2,

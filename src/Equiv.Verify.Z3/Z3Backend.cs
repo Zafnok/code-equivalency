@@ -30,7 +30,8 @@ namespace Equiv.Verify.Z3;
 /// rung 1 query that gave up is first asked again with the pair's hard arithmetic abstracted
 /// (<see cref="ArithmeticRefinement"/>; ticket P1-031). Every
 /// Unknown carries <see cref="FailureRefinementQuery"/>'s two answers (ADR 0037; ticket P1-035), a timeout included unless
-/// <see cref="VerificationOptions.RefineTimeouts"/> is off, as it is in quick mode (ADR 0049; ticket P1-032). A
+/// <see cref="VerificationOptions.RefineTimeouts"/> is off, as it is in quick mode (ADR 0049; ticket P1-032). A Divergent
+/// carries the same two and a third, whether a result changes (ticket P1-020). A
 /// Divergent, and an Unknown whose divergence rests on an abstraction, carries <see cref="ConditionQuery"/>'s input
 /// condition when its pair has no loop (ADR 0048).
 /// </summary>
@@ -91,11 +92,17 @@ public sealed class Z3Backend : IVerificationBackend
             : verdict;
 
         // ADR 0048 (ticket P1-022): a divergence the solver found, real or resting on an abstraction, says under which
-        // inputs the pair is proved Equivalent. The verdict stays as it is.
+        // inputs the pair is proved Equivalent. ADR 0037's clarification of 2026-10-11 (ticket P1-020): a Divergent also
+        // says whether the modern side only removed failures, added one, or changed a result, in either mode. The verdict
+        // stays as it is.
         ConditionQuery conditions = new(createContext, options);
         return refined switch
         {
-            Divergent divergent => divergent with { Conditions = conditions.Run(oldBody, newBody, divergent.Counterexample) },
+            Divergent divergent => divergent with
+            {
+                FailureRefinement = new FailureRefinementQuery(createContext, options).Run(oldBody, newBody, divergent.Ladder[0].Outcome != RungOutcome.NotApplicable, resultChanges: true),
+                Conditions = conditions.Run(oldBody, newBody, divergent.Counterexample),
+            },
             Unknown { Reason: UnknownReason.Abstraction } abstraction => abstraction with { Conditions = conditions.Run(oldBody, newBody, abstraction.Candidate) },
             _ => refined,
         };

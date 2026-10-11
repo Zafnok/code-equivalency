@@ -110,6 +110,18 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "none-proved"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              },
+              "resultChanges": {
+                "outcome": "none-proved"
+              }
+            },
+            "divergenceKind": "undetermined",
             "reviewGroup": "calls:System.ArgumentNullException::.ctor(string)"
           }
         }
@@ -171,6 +183,10 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
           },
           "agreesWhen": {
             "pairs": 1,

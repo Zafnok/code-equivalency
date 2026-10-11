@@ -1712,6 +1712,11 @@ public sealed partial class CompareCommandTests
             Census(new Unknown(UnknownReason.Abstraction, "opaque:f") { FailureRefinement = refinement with { Elapsed = TimeSpan.FromMilliseconds(100) } }),
             StringComparison.Ordinal);
         Assert.Contains("\"failureRefinement\":{\"pairs\":1,", Census(new Unknown(UnknownReason.Timeout, "gave up")), StringComparison.Ordinal);
+        Assert.DoesNotContain("divergentRefinement", Census(new Divergent(Divergent.Unmodelled)), StringComparison.Ordinal);
+
+        // Ticket P1-020 criterion 8: the Divergent pairs queried, and the time their three queries took, beside it.
+        string divergent = Census(new Divergent(Divergent.Unmodelled) { FailureRefinement = refinement with { ResultChanges = RefinementResult.NoneProved, Elapsed = TimeSpan.FromMilliseconds(75) } });
+        Assert.EndsWith("\"failureRefinement\":{\"pairs\":1,\"milliseconds\":250},\"divergentRefinement\":{\"pairs\":1,\"milliseconds\":75}}", divergent, StringComparison.Ordinal);
     }
 
     /// <summary>

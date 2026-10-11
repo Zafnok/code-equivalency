@@ -978,6 +978,79 @@ public sealed partial class SamplesEndToEndTests
     }
 
     /// <summary>
+    /// Ticket P1-020 criterion 7: <c>added-null-guard</c>'s <c>Greet</c> gained <c>?? string.Empty</c>, a removed failure and
+    /// nothing else, and says so in its message; its <c>Shout</c> lost the branch that returned for <c>null</c>, a new failure
+    /// and nothing else. The census counts both pairs. <c>removed-null-check</c> throws on the same input on both sides and
+    /// differs only in the exception type, which none of the three queries asks about: undetermined.
+    /// </summary>
+    [Fact]
+    public async Task AddedNullGuard_SaysWhichSideGainedTheFailure()
+    {
+        SampleRun run = RunSample("added-null-guard");
+        Result greet = Single("added-null-guard", "::Greet(");
+        Result shout = Single("added-null-guard", "::Shout(");
+        Result typeOnly = Single("removed-null-check", "::Greet(");
+
+        Assert.Equal(await Snapshot("added-null-guard"), run.NormalizedSarif);
+        Assert.Equal(["EQ002", "EQ002"], [greet.RuleId, shout.RuleId]);
+        Assert.Equal("removed-failures-only", greet.GetProperty<string>("divergenceKind"));
+        Assert.Equal(["none-proved", "found", "none-proved"], Outcomes(greet));
+        Assert.EndsWith(" The modern side differs only where the legacy side throws.", greet.Message.Text, StringComparison.Ordinal);
+        Assert.Equal("new-failures-only", shout.GetProperty<string>("divergenceKind"));
+        Assert.Equal(["found", "none-proved", "none-proved"], Outcomes(shout));
+        Assert.DoesNotContain("differs only where", shout.Message.Text, StringComparison.Ordinal);
+        Assert.Equal(2L, (long)run.Log.Runs[0].GetProperty<Newtonsoft.Json.Linq.JObject>("loweringCensus")["divergentRefinement"]!["pairs"]!);
+        Assert.Equal("undetermined", typeOnly.GetProperty<string>("divergenceKind"));
+        Assert.Equal(["none-proved", "none-proved", "none-proved"], Outcomes(typeOnly));
+
+        static string[] Outcomes(Result result)
+        {
+            Dictionary<string, Dictionary<string, string>> refinement = result.GetProperty<Dictionary<string, Dictionary<string, string>>>("failureRefinement");
+            return [refinement["newFailures"]["outcome"], refinement["removedFailures"]["outcome"], refinement["resultChanges"]["outcome"]];
+        }
+    }
+
+    /// <summary>
+    /// Ticket P1-020 criterion 5, pinned on <c>added-null-guard</c>: a run whose backend drops the three answers exits with
+    /// the same code, and each result has the same rule id, level, kind, fingerprints, review group and rank. Only the two
+    /// properties and the one sentence differ.
+    /// </summary>
+    [Fact]
+    public void DivergenceKind_ChangesNoFingerprintOrExitCode()
+    {
+        SampleRun refined = RunSample("added-null-guard");
+        (string legacy, string modern) = Solutions("added-null-guard");
+        string outPath = Path.Combine(Path.GetTempPath(), $"equiv-P1-020-{Guid.NewGuid():N}.sarif");
+        try
+        {
+            int exitCode = RunProgramSilently(() => CompareCommand.Run(
+                new Equiv.Cli.CompareOptions(legacy, modern, outPath, BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false) { ResourceLimit = 5_000_000 },
+                [new CSharpFrontend()],
+                new WithoutRefinement(new Z3Backend()),
+                new FileReportSink(outPath),
+                NullRunLog.Instance));
+            SarifLog plain = SarifLog.Load(outPath);
+
+            Assert.Equal(ExitCodes.Divergent, refined.ExitCode);
+            Assert.Equal(refined.ExitCode, exitCode);
+            Assert.Equal(Facts(refined.Log), Facts(plain));
+            Assert.All(refined.Log.Runs[0].Results, static r => Assert.True(r.TryGetProperty("divergenceKind", out string? _)));
+            Assert.All(plain.Runs[0].Results, static r => Assert.False(r.TryGetProperty("divergenceKind", out string? _)));
+        }
+        finally
+        {
+            File.Delete(outPath);
+        }
+
+        static string[] Facts(SarifLog log) =>
+        [
+            .. log.Runs[0].Results
+                .Select(static r => string.Join(' ', r.RuleId, r.Level, r.Kind, r.Rank.ToString(CultureInfo.InvariantCulture), r.GetProperty<string>("reviewGroup"), r.PartialFingerprints["procedureIdentity/v1"], r.PartialFingerprints["resultFingerprint/v1"]))
+                .Order(StringComparer.Ordinal),
+        ];
+    }
+
+    /// <summary>
     /// Ticket P2-050 criterion 5: with a tiny <c>--resource-limit</c> and a ten-minute <c>timeoutMs</c>, the pair of
     /// <c>added-branch</c> that needs the solver is Unknown(timeout) on the resource limit, long before the wall-clock
     /// backstop, and a second run writes the same bytes: nothing in the result depends on how fast the machine was. The one
@@ -1108,13 +1181,18 @@ public sealed partial class SamplesEndToEndTests
 
     private sealed record SampleRun(int ExitCode, string Json, string NormalizedSarif, SarifLog Log);
 
-    /// <summary><paramref name="backend"/> with every Unknown's failure refinement dropped, as the backend was before ticket P1-013.</summary>
+    /// <summary><paramref name="backend"/> with every Unknown's and Divergent's failure refinement dropped, as the backend was before tickets P1-013 and P1-020.</summary>
     private sealed class WithoutRefinement(IVerificationBackend backend) : IVerificationBackend
     {
         public Verdict Verify(IrProcedure oldBody, IrProcedure newBody, VerificationOptions options)
         {
             Verdict verdict = backend.Verify(oldBody, newBody, options);
-            return verdict is Unknown unknown ? unknown with { FailureRefinement = null } : verdict;
+            return verdict switch
+            {
+                Unknown unknown => unknown with { FailureRefinement = null },
+                Divergent divergent => divergent with { FailureRefinement = null },
+                _ => verdict,
+            };
         }
 
         public Equivalent? VerifyUnderContracts(IrProcedure oldBody, IrProcedure newBody, ImmutableArray<CalleePair> callees, VerificationOptions options) =>

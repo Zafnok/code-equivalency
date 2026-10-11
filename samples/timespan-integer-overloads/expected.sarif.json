@@ -350,6 +350,21 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "found",
+                "model": "inputs() old(returned sort \"System.TimeSpan\" 0 outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 1))) new(threw \"System.Exception\" outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 2)))"
+              },
+              "removedFailures": {
+                "outcome": "found",
+                "model": "inputs() old(threw \"System.Exception\" outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 1))) new(returned sort \"System.TimeSpan\" 0 outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 2)))"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs() old(returned sort \"System.TimeSpan\" 0 outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 1))) new(returned sort \"System.TimeSpan\" 0 outs() trace(\"System.TimeSpan::FromMinutes(long)\"(bv64 2)))"
+              }
+            },
+            "divergenceKind": "result-changed",
             "equivalencesApplied": [
               "bcl.timespan-from-minutes-integer"
             ],
@@ -700,6 +715,10 @@
           },
           "failureRefinement": {
             "pairs": 3,
+            "milliseconds": 0
+          },
+          "divergentRefinement": {
+            "pairs": 1,
             "milliseconds": 0
           },
           "agreesWhen": {

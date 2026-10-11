@@ -1008,6 +1008,21 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.Decimal\" 0) old(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int)\"(sort \"System.Decimal\" 0, bv32 2))) new(threw \"System.Exception\" outs() trace(\"System.Math::Round(decimal,int,System.MidpointRounding)\"(sort \"System.Decimal\" 0, bv32 2, sort \"System.MidpointRounding\" 873244445)))"
+              },
+              "removedFailures": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.Decimal\" 0) old(threw \"System.Exception\" outs() trace(\"System.Math::Round(decimal,int)\"(sort \"System.Decimal\" 0, bv32 2))) new(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int,System.MidpointRounding)\"(sort \"System.Decimal\" 0, bv32 2, sort \"System.MidpointRounding\" 873244445)))"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.Decimal\" 0) old(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int)\"(sort \"System.Decimal\" 0, bv32 2))) new(returned sort \"System.Decimal\" 0 outs() trace(\"System.Math::Round(decimal,int,System.MidpointRounding)\"(sort \"System.Decimal\" 0, bv32 2, sort \"System.MidpointRounding\" 873244445)))"
+              }
+            },
+            "divergenceKind": "result-changed",
             "reviewGroup": "calls:System.Math::Round(decimal,int)|System.Math::Round(decimal,int,System.MidpointRounding)"
           }
         },
@@ -1269,6 +1284,10 @@
             "method": 0
           },
           "failureRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
+          },
+          "divergentRefinement": {
             "pairs": 1,
             "milliseconds": 0
           },

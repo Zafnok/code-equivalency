@@ -141,6 +141,21 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 765964251, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 765964251 outs() trace(\"Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)\"(sort \"System.String\" 765964251))) new(threw \"System.Exception\" outs() trace(\"System.String::IsNullOrWhiteSpace(string)\"(sort \"System.String\" 765964251)))"
+              },
+              "removedFailures": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 765964251, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)\"(sort \"System.String\" 765964251))) new(returned sort \"System.String\" 765964251 outs() trace(\"System.String::IsNullOrWhiteSpace(string)\"(sort \"System.String\" 765964251)))"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 765964251, map<sort \"System.String\", bool> [] default bool false) old(returned sort \"System.String\" 765964251 outs() trace(\"Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)\"(sort \"System.String\" 765964251))) new(returned sort \"System.String\" 765964251 outs() trace(\"System.String::IsNullOrWhiteSpace(string)\"(sort \"System.String\" 765964251)))"
+              }
+            },
+            "divergenceKind": "result-changed",
             "reviewGroup": "calls:Equiv.Samples.ForwarderToBcl.Text::BlankTrimmed(string)|System.String::IsNullOrWhiteSpace(string)"
           }
         },
@@ -254,6 +269,10 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
           },
           "agreesWhen": {
             "pairs": 1,

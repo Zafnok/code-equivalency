@@ -1004,7 +1004,8 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   the rewritten loops (`proofMethod: aligned-induction`). Works on loops that make calls, which rung 4
   does not. Needs P1-023, P1-009.
 - P1-020 (M) A Divergent says whether the modern side only removed failures, added one, or changed a
-  result (`properties.divergenceKind`), from ADR 0037's two queries and a third. Needs P1-013.
+  result (`properties.divergenceKind`), from ADR 0037's two queries and a third. Needs P1-013. Done
+  2026-10-11.
 - P1-021 (M) Measurement: what failure refinement answers today, and what it would answer on the 400
   `timeout` Unknowns that ADR 0037 does not query. Needs P1-013, P2-050. Done 2026-10-04: today 11
   of the 1,072 queried Unknowns (1.0%) have a `none-proved` `newFailures` and 30 a `found` one. Asked

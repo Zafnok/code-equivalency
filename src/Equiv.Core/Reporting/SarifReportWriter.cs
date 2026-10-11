@@ -31,6 +31,9 @@ public static class SarifReportWriter
     /// <summary>What an Equivalent's <c>proofMethod</c> ends with when its proof used a callee contract (ADR 0036 decision 2; ticket P1-010).</summary>
     private const string ContractSuffix = "+contract";
 
+    /// <summary>What the message of a <c>removed-failures-only</c> Divergent ends with (ticket P1-020 criterion 4).</summary>
+    internal const string RemovedFailuresOnlySentence = "The modern side differs only where the legacy side throws.";
+
     /// <summary>What a <c>proofMethod</c> ends with when the result was decided after abstraction refinement (ADR 0053 decision 8; ticket P1-030).</summary>
     private const string RefinedSuffix = "+refined";
 
@@ -172,6 +175,11 @@ public static class SarifReportWriter
         };
 
         SetVerdictProperties(sarifResult, result.Verdict);
+        if (Refinement(result.Verdict, runtimeChange) is { Kind: { } divergenceKind } divergentRefinement)
+        {
+            sarifResult.SetProperty("failureRefinement", RefinementProperties(divergentRefinement));
+            sarifResult.SetProperty("divergenceKind", Name(divergenceKind));
+        }
 
         // Sarif.Sdk's Result has no per-result help-link property (only ReportingDescriptor.HelpUri,
         // one fixed value per rule); EQ006's url is specific to the matched member, so it travels as
@@ -425,11 +433,7 @@ public static class SarifReportWriter
         SetAbstractionProperties(sarifResult, unknown);
         if (unknown.FailureRefinement is { } refinement)
         {
-            sarifResult.SetProperty("failureRefinement", new Dictionary<string, object>(StringComparer.Ordinal)
-            {
-                ["newFailures"] = RefinementProperty(refinement.NewFailures),
-                ["removedFailures"] = RefinementProperty(refinement.RemovedFailures),
-            });
+            sarifResult.SetProperty("failureRefinement", RefinementProperties(refinement));
         }
 
         SetAgreesWhenProperty(sarifResult, unknown);
@@ -451,6 +455,32 @@ public static class SarifReportWriter
         {
             sarifResult.SetProperty("abstractions", unknown.Abstractions.Select(static a => Describe(a)).ToList());
         }
+    }
+
+    /// <summary>
+    /// The refinement an EQ002 reports (ticket P1-020): a Divergent's, unless it is EQ006, whose side-specific functions are
+    /// free in the model. An Unknown's is written with its other properties.
+    /// </summary>
+    private static FailureRefinement? Refinement(Verdict verdict, RuntimeChange? runtimeChange) =>
+        runtimeChange is null ? (verdict as Divergent)?.FailureRefinement : null;
+
+    /// <summary>
+    /// <c>failureRefinement</c>: <c>newFailures</c> and <c>removedFailures</c>, and on a Divergent <c>resultChanges</c>
+    /// (ticket P1-020).
+    /// </summary>
+    private static Dictionary<string, object> RefinementProperties(FailureRefinement refinement)
+    {
+        Dictionary<string, object> described = new(StringComparer.Ordinal)
+        {
+            ["newFailures"] = RefinementProperty(refinement.NewFailures),
+            ["removedFailures"] = RefinementProperty(refinement.RemovedFailures),
+        };
+        if (refinement.ResultChanges is { } resultChanges)
+        {
+            described["resultChanges"] = RefinementProperty(resultChanges);
+        }
+
+        return described;
     }
 
     /// <summary>
@@ -622,6 +652,16 @@ public static class SarifReportWriter
         _ => "unknown",
     };
 
+    /// <summary>The spelling VERIFICATION-MODEL.md section 6 uses for a Divergent's kind (ticket P1-020).</summary>
+    internal static string Name(DivergenceKind kind) => kind switch
+    {
+        DivergenceKind.RemovedFailuresOnly => "removed-failures-only",
+        DivergenceKind.NewFailuresOnly => "new-failures-only",
+        DivergenceKind.FailuresOnly => "failures-only",
+        DivergenceKind.ResultChanged => "result-changed",
+        _ => "undetermined",
+    };
+
     /// <summary>The spelling VERIFICATION-MODEL.md section 6 uses for a scope: <c>line</c>, <c>method</c>.</summary>
     internal static string Name(UnknownScope scope) => scope == UnknownScope.Line ? "line" : "method";
 
@@ -672,7 +712,8 @@ public static class SarifReportWriter
     private static string MessageText(VerificationResult result, RuntimeChange? runtimeChange, RuntimeInterval runtimes)
     {
         string text = WithAgreesWhenSentence(VerdictText(result, runtimeChange, runtimes), ConditionSearch.Of(result.Verdict)?.AgreesWhen);
-        return result.Testing is { NotConstructible: null } testing ? WithTestedSentence(text, testing) : text;
+        string kinded = Refinement(result.Verdict, runtimeChange)?.Kind == DivergenceKind.RemovedFailuresOnly ? $"{text} {RemovedFailuresOnlySentence}" : text;
+        return result.Testing is { NotConstructible: null } testing ? WithTestedSentence(kinded, testing) : kinded;
     }
 
     /// <summary>

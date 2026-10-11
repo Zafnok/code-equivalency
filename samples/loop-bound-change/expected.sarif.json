@@ -104,6 +104,19 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "unknown"
+              },
+              "removedFailures": {
+                "outcome": "unknown"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(bv32 1) old(returned bv32 0 outs() trace()) new(returned bv32 1 outs() trace())"
+              }
+            },
+            "divergenceKind": "result-changed",
             "reviewGroup": "proofMethod:none"
           }
         }
@@ -151,6 +164,10 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
           }
         },
         "analysedLinesOfCode": {

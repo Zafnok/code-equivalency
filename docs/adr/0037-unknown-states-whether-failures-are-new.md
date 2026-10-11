@@ -70,3 +70,31 @@ check, and only an untainted one is reported with its model.
   EQ003, `unknownReason` stays `timeout` whatever the queries answer, the rule id, the exit code and
   the fingerprint do not change, and a `found` carries the ADR 0026 taint check and is not EQ002.
   Which mode asks is ADR 0049's decision 2, implemented by P1-032; until that lands every run asks.
+- 2026-10-11 (P1-020). The two queries are also asked of a Divergent the solver found, with a third,
+  and the three answers are reported. The Decision covered an Unknown only; nothing in it changes.
+  Bar test: this applies the two queries, their opaque rule and their taint rule to a verdict the
+  Decision did not spell out, and adds properties to a result without changing its verdict, rule id,
+  level, exit code, fingerprint, review group or rank, so it is a clarification and not a new ADR.
+  - The queries run on rung 1's exact product (the pair with its shared fragments as calls, unrolled
+    `k` times), whichever rung or round found the counterexample. A pair rung 1 could not encode has
+    three `unknown` answers. A Divergent is asked in quick and in thorough mode: it is about 1% of
+    matched pairs. An observed Divergent (`proofMethod: observed`) has no model and is not asked.
+  - `properties.failureRefinement` on such an EQ002 holds `newFailures` and `removedFailures` as
+    decided above, and `resultChanges`, `{ outcome, model? }`: `found` when some input on which
+    neither side reaches an unshared opaque node or the bound makes both sides return, or both throw
+    the same exception type, with another compared observable differing, and the replay of that
+    model has an untainted outcome on both sides and differs in an observable untainted on both (ADR
+    0026); `none-proved` when the query is unsatisfiable with a side past an unshared opaque node or
+    the bound free to end any way with any result, which means no input reaches one; `unknown`
+    otherwise.
+  - `properties.divergenceKind` is read from the three outcomes and nothing else:
+    `removed-failures-only` (`removedFailures` found, the other two none-proved),
+    `new-failures-only` (`newFailures` found, the other two none-proved), `failures-only` (both
+    failure answers found, `resultChanges` none-proved), `result-changed` (`resultChanges` found),
+    and `undetermined` for anything else. The message of a `removed-failures-only` result ends with
+    `The modern side differs only where the legacy side throws.`, which Alive2 calls a refinement.
+  - A pair whose sides throw different exception types on the same input, and differ nowhere else,
+    is none of the four: each answer is `none-proved` and the kind is `undetermined`
+    (`samples/removed-null-check`). A kind for it would be a fourth query and a new decision.
+  - An EQ006 carries neither property: its side-specific functions are free in the model. The census
+    reports the Divergent pairs queried and the time, in `loweringCensus.divergentRefinement`.

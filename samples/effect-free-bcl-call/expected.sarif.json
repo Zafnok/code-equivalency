@@ -217,6 +217,20 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool true, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 0 outs() trace()) new(threw \"System.NullReferenceException\" outs() trace())"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              },
+              "resultChanges": {
+                "outcome": "found",
+                "model": "inputs(sort \"System.String\" 0, sort \"System.Collections.Generic.List`1\" 0, map<sort \"System.Collections.Generic.List`1\", bool> [] default bool false, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 4 outs() trace()) new(returned bv32 4 outs() trace(\"System.Collections.Generic.List`1::Clear()<int>\"(sort \"System.Collections.Generic.List`1\" 0)))"
+              }
+            },
+            "divergenceKind": "result-changed",
             "reviewGroup": "proofMethod:none"
           }
         }
@@ -278,6 +292,10 @@
           "unknownByScope": {
             "line": 0,
             "method": 0
+          },
+          "divergentRefinement": {
+            "pairs": 1,
+            "milliseconds": 0
           },
           "agreesWhen": {
             "pairs": 1,

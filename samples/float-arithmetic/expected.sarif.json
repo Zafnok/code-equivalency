@@ -161,6 +161,18 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "none-proved"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              },
+              "resultChanges": {
+                "outcome": "unknown"
+              }
+            },
+            "divergenceKind": "undetermined",
             "reviewGroup": "proofMethod:none"
           }
         },
@@ -209,6 +221,18 @@
                 "detail": "a divergence within 3 iterations"
               }
             ],
+            "failureRefinement": {
+              "newFailures": {
+                "outcome": "none-proved"
+              },
+              "removedFailures": {
+                "outcome": "none-proved"
+              },
+              "resultChanges": {
+                "outcome": "unknown"
+              }
+            },
+            "divergenceKind": "undetermined",
             "reviewGroup": "proofMethod:none"
           }
         },
@@ -452,6 +476,10 @@
           },
           "failureRefinement": {
             "pairs": 1,
+            "milliseconds": 0
+          },
+          "divergentRefinement": {
+            "pairs": 2,
             "milliseconds": 0
           },
           "agreesWhen": {

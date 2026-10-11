@@ -374,6 +374,14 @@ is equivalent unless one of the listed `relatedLocations` is reached, and `metho
 modern side throws where the legacy side returns (`newFailures`), and the reverse
 (`removedFailures`), each as `found`, `none-proved` or `unknown`.
 
+A `Divergent` (EQ002) carries the same two answers and a third, `resultChanges`: whether some input
+makes both sides return, or both throw the same exception, with a different result. From the three,
+`properties.divergenceKind` says what kind of difference the pair has: `removed-failures-only`,
+`new-failures-only`, `failures-only`, `result-changed`, or `undetermined` when an answer is missing.
+A pair whose modern side only added `?? string.Empty` is `removed-failures-only`, and its message
+ends with `The modern side differs only where the legacy side throws.`
+(`samples/added-null-guard`). The verdict is still Divergent and the exit code is still 1.
+
 A result that is not Equivalent can also say where the pair does agree. A `Divergent` (EQ002), or
 an `Unknown` whose divergence rests on an abstraction, carries `properties.agreesWhen` when the
 solver proved the pair equivalent under a condition on its inputs, and its message ends with
