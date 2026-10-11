@@ -1,5 +1,5 @@
 # P2-152 Soundness: a type's base list hands a generic type of the solution a type argument, and no text holds it
-Status: in-progress
+Status: done (PR #467)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-151
