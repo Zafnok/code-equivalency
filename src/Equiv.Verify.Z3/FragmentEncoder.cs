@@ -116,7 +116,6 @@ internal sealed class FragmentEncoder
         {
             Returned = Returned,
             Threw = Threw,
-            ExceptionType = ExceptionType,
         };
     }
 

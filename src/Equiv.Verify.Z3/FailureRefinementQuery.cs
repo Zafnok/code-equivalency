@@ -74,11 +74,16 @@ internal sealed class FailureRefinementQuery(Func<Context> createContext, Verifi
     {
         (Context context, ProductEncoding encoding, IrProcedure old, IrProcedure @new, bool looping) = pair;
         BoolExpr[] withinBound = [context.MkNot(encoding.Old.Unreachable), context.MkNot(encoding.New.Unreachable)];
-        BoolExpr changed = context.MkAnd(
-            context.MkOr(
-                context.MkAnd(encoding.Old.Returned, encoding.New.Returned),
-                context.MkAnd(encoding.Old.Threw, encoding.New.Threw, context.MkEq(encoding.Old.ExceptionType, encoding.New.ExceptionType))),
-            encoding.Differs);
+
+        // Both sides end the same way: both return, or each reaches a throw of the same exception type.
+        BoolExpr[] sameEnd =
+        [
+            context.MkAnd(encoding.Old.Returned, encoding.New.Returned),
+            .. Throws(old).SelectMany(o => Throws(@new)
+                .Where(n => string.Equals(o.ExceptionType, n.ExceptionType, StringComparison.Ordinal))
+                .Select(n => context.MkAnd(encoding.Old.Reach[o.Block], encoding.New.Reach[n.Block]))),
+        ];
+        BoolExpr changed = context.MkAnd(context.MkOr(sameEnd), encoding.Differs);
         using SolverQuery modelled = Z3Backend.Query(
             context, encoding, options, [changed, context.MkNot(encoding.OpaqueOld), context.MkNot(encoding.OpaqueNew), .. withinBound]);
         switch (modelled.Check(options, "result-modelled"))
@@ -98,6 +103,10 @@ internal sealed class FailureRefinementQuery(Func<Context> createContext, Verifi
             [context.MkOr(changed, encoding.OpaqueOld, encoding.OpaqueNew, encoding.Old.Unreachable, encoding.New.Unreachable), .. looping ? [] : withinBound]);
         return resolved.Check(options, "result-resolved") == Status.UNSATISFIABLE ? RefinementResult.NoneProved : RefinementResult.Unknown;
     }
+
+    /// <summary>Each block of <paramref name="procedure"/> that ends in a throw, with the exception type it throws.</summary>
+    private static IEnumerable<(IrBlockId Block, string ExceptionType)> Throws(IrProcedure procedure) =>
+        procedure.Blocks.Where(static b => b.Terminator is IrThrow).Select(static b => (b.Id, ((IrThrow)b.Terminator).ExceptionType));
 
     /// <summary>Whether some input makes <paramref name="returns"/> return and <paramref name="fails"/> throw.</summary>
     private RefinementResult Fails(Pair pair, (SideTerms Terms, BoolExpr Opaque) returns, (SideTerms Terms, BoolExpr Opaque) fails)
