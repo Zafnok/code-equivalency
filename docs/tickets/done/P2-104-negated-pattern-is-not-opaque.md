@@ -1,5 +1,5 @@
 # P2-104 `x is not T t` lowers as the negation of its inner pattern
-Status: in-progress
+Status: done (PR #472)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-058
