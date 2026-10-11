@@ -421,47 +421,19 @@ internal sealed class BoundSerialiser : OperationWalker
     /// function pointer and a call into the interop services also take the assembly's
     /// <c>[DisableRuntimeMarshalling]</c>. <see cref="Layouts"/> holds that rule, which the lowering reads too (ticket
     /// P2-150). A reference to a member also reaches the types it hands the member as type arguments
-    /// (<see cref="Handed"/>).
+    /// (<see cref="Layouts.TypeArguments"/>, which the lowering reads too; ticket P2-154).
     /// </summary>
     private void Layout(IOperation operation)
     {
-        ISymbol? member = operation switch
-        {
-            IInvocationOperation o => Called(o.TargetMethod),
-            IMemberReferenceOperation o => o.Member,
-            IObjectCreationOperation o => o.Constructor,
-            _ => null,
-        };
         if (Layouts.Marshals(operation) && laidOut.Add(method.ContainingAssembly))
         {
             AttributeLines([("layout assembly", method.ContainingAssembly.GetAttributes().Where(static a => Is(a, DisableRuntimeMarshalling)))]);
         }
 
-        foreach (ITypeSymbol type in Layouts.Reached(operation).Concat(Handed(member)))
+        foreach (ITypeSymbol type in Layouts.Reached(operation).Concat(Layouts.TypeArguments(operation, Called)))
         {
             Marshalled("layout", type, laidOut);
         }
-    }
-
-    /// <summary>
-    /// The type arguments a reference to <paramref name="member"/> hands code of the solution (ADR 0024 as clarified by
-    /// ticket P2-151): a method's own, and those of the type that declares the member and of the types that one is
-    /// nested in. A generic member's text is the same for every type argument, so what it reads of one's layout is in
-    /// the text of the body that names the argument. A member of a type from a reference hands the solution nothing.
-    /// </summary>
-    private static List<ITypeSymbol> Handed(ISymbol? member)
-    {
-        List<ITypeSymbol> handed = [];
-        if (member?.ContainingType is { DeclaringSyntaxReferences.IsEmpty: false } declaring)
-        {
-            handed.AddRange((member as IMethodSymbol)?.TypeArguments ?? []);
-            for (INamedTypeSymbol? type = declaring; type is not null; type = type.ContainingType)
-            {
-                handed.AddRange(type.TypeArguments);
-            }
-        }
-
-        return handed;
     }
 
     private static bool Is(AttributeData attribute, string name) => string.Equals(attribute.AttributeClass!.ToDisplayString(), name, StringComparison.Ordinal);

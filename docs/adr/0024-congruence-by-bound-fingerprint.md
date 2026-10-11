@@ -412,6 +412,41 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     `class D : Box<S>`, `new D()` and a call to a member `D` declares or to an interface member
     name nothing of `Box<S>`, and the code `D` inherits reads `S` (P2-152). A generic type of the
     solution handed to a member of a reference that runs the type's code by reflection.
+- 2026-10-10 (P2-154). **A lowered reference that hands a generic member of the solution a type
+  with a layout is an opaque, shared by the text that holds the declaration.** The clarification
+  of 2026-10-09 (P2-151) put the declaration in the text, and the one of 2026-10-09 (P2-150) left
+  the call a call. So a pair the text no longer calls congruent went to the solver with one
+  function `Size<N.S>` on both sides. It was reproduced as an Equivalent from the solver beside
+  two declarations of `S`, for `Size<S>()`, `Box<S>.Size()`, a property of `Box<S>` and a member of
+  `new Box<S>()` (`LayoutEquivalenceTests`).
+  - **The rule.** An operation the clarification of P2-151 follows with a declaration (a call, an
+    object creation, and a reference to a property, a field or an event of a member the solution
+    declares, a forwarder's call being its target's) is an `IrOpaque` with reason `Layout`, on the
+    terms the clarification of P2-150 gives one, where a type it hands over has a layout to read:
+    the type is, or is made of (an array's element, a pointer's target, a type argument, a tuple's
+    element), a value type the solution declares or a class the solution declares that has a
+    `[StructLayout]`. A read or a write of a field or an auto-property of such a generic type is
+    that opaque too, and no map. `Layouts` holds both halves, the type arguments an operation hands
+    over, which the text reads, and which of them has a layout, which the lowering reads, so the
+    lowering makes an opaque only where the text has the declaration. A method with such an
+    operation is not lowered from IL, as the clarification of P2-150 says of the others.
+  - **Why not every type the text declares.** Through a type parameter, code reads a size
+    (`sizeof(T)`, `Unsafe.SizeOf<T>()`), an element's stride (`T[]`, `Span<T>`) and a marshalled
+    size (`Marshal.SizeOf<T>()`). Of a class with no `[StructLayout]` the first two are the size of
+    a reference and the marshaller refuses the third, whatever the class declares; so for an
+    interface, a delegate and an anonymous type. What the class's members do is their own pairs'
+    (ADR 0019). Measured on `gitextensions-8522` in compare mode quick, one run each on 2026-10-10
+    (the ticket's Notes): with an opaque for every declared type handed over, 94 of 13818 results
+    change and 87 Equivalent become Unknown, each a body that hands a generic helper a class the
+    pull request edits (`Validates.NotNull<T>`, a form to a generic launcher). With the rule above
+    one result changes, a Divergent that becomes Unknown because the divergence depends on such an
+    opaque, and no Equivalent is lost.
+  - **A conversion of such a method group to a delegate was already sound.** It is the pure
+    function of the conversion's fingerprint (P2-067), and that fingerprint holds the declaration.
+  - **What the lowering still does not hold.** A generic member that reads the fields of an object
+    of a class with no `[StructLayout]` through `Unsafe` on its raw bytes: where the runtime puts
+    those fields is the runtime's choice and not the declaration's. A type argument named in a
+    base list (P2-152).
 - 2026-10-08 (P2-144). **The throw a `switch` expression ends in is part of its bound code, and
   across .NET Core 3.0 it is a runtime rule.** A `switch` expression that matches no arm throws.
   The source does not write the throw and the `IOperation` tree does not hold it: the compiler

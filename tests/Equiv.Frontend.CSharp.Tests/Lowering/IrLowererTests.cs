@@ -2322,6 +2322,82 @@ public sealed class IrLowererTests
         Assert.Empty(Fingerprints(procedure).Intersect(Fingerprints(Sized("[StructLayout(LayoutKind.Sequential, Pack = 1)] ", member, length: 8)), StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// Ticket P2-154: a reference to a generic member of the solution hands it a type, whose declaration the member's
+    /// code may read and the reference's identity does not hold. Where the fingerprint follows the reference with the
+    /// declaration (ticket P2-151) it is an opaque with reason <c>Layout</c>, not a call or a field's map, and its
+    /// fingerprint is another beside another declaration.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M() => Size<S>();")]
+    [InlineData("static int M(S s) => SizeOf(s);")]
+    [InlineData("static int M() => Size<S[]>();")]
+    [InlineData("static int M() => Size<(S, int)>();")]
+    [InlineData("static int M() => SizeOfS();")]
+    [InlineData("static int M() => Box<S>.Size();")]
+    [InlineData("static int M() => Box<S>.Property;")]
+    [InlineData("static int M() => Box<S>.Field;")]
+    [InlineData("static void M() => Box<S>.Field = 1;")]
+    [InlineData("static void M() => Box<S>.Field++;")]
+    [InlineData("static void M(Action a) => Box<S>.Raised += a;")]
+    [InlineData("static Box<S> M() => new Box<S>();")]
+    [InlineData("static int M(Box<S> b) => b.Instance;")]
+    [InlineData("static int M(Derived d) => d.Instance;")]
+    [InlineData("static int M() => Box<S>.Nested.Size();")]
+    public void ACallThatHandsAGenericMemberATypeIsAnOpaqueWhoseFingerprintHoldsTheDeclaration(string member)
+    {
+        IrProcedure procedure = Sized(string.Empty, member + Generic);
+
+        IrOpaque layout = Assert.Single(Opaques(procedure));
+        Assert.Equal("Layout", layout.Reason);
+        Assert.NotNull(layout.Fingerprint);
+        Assert.Empty(Calls(procedure));
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("field.", StringComparison.Ordinal));
+        Assert.Empty(Fingerprints(procedure).Intersect(Fingerprints(Sized("[StructLayout(LayoutKind.Sequential, Pack = 1)] ", member + Generic)), StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Ticket P2-154: an enum of the solution has a size its declaration fixes, and so has a class that has a
+    /// <c>[StructLayout]</c>, to the marshaller. A call that hands a generic member either is the same opaque.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M() => Size<E>();")]
+    [InlineData("static int M() => Size<L>();")]
+    [InlineData("static int M() => Box<E[]>.Size();")]
+    public void ACallThatHandsAGenericMemberAnEnumOrALaidOutClassIsAnOpaque(string member)
+    {
+        IrProcedure procedure = Sized(string.Empty, member + Generic);
+
+        Assert.NotNull(Assert.Single(Opaques(procedure), static o => o.Reason is "Layout").Fingerprint);
+        Assert.Empty(Calls(procedure));
+    }
+
+    /// <summary>
+    /// Ticket P2-154 criterion 3: a call that hands a generic member of the solution only types from a reference or
+    /// type parameters is the call it was, and so is a call to a member that is not generic. So is one that hands over a
+    /// class with no <c>[StructLayout]</c>, an interface or an anonymous type: through a type parameter each is the size
+    /// of a reference, whatever it declares.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M() => Size<int>() + Size<Guid>() + Box<long>.Size();", "C::Size`1()<int>", "C::Size`1()<System.Guid>", "C.Box`1::Size()<long>")]
+    [InlineData("static int M<U>() => Size<U>() + Box<U>.Size();", "C::Size`1()<U>", "C.Box`1::Size()<U>")]
+    [InlineData("static int M(S s) => Plain(s) + Box<int>.Property;", "C::Plain(S)", "C.Box`1::get_Property()<int>")]
+    [InlineData("static int M() => Size<K>() + Size<I[]>() + Box<(K, int)>.Size();", "C::Size`1()<C.K>", "C::Size`1()<C.I[]>", "C.Box`1::Size()<System.ValueTuple<C.K, int>>")]
+    public void ACallThatHandsAGenericMemberNoDeclaredTypeIsStillACall(string member, params string[] callees)
+    {
+        IrProcedure procedure = Sized(string.Empty, member + Generic);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(callees, Calls(procedure).Select(static c => c.Callee.Value), StringComparer.Ordinal);
+    }
+
+    /// <summary>The generic members the P2-154 tests hand a type: each reads the size of its type parameter.</summary>
+    private const string Generic = " static int Size<T>() => Unsafe.SizeOf<T>(); static int SizeOf<T>(T value) => Unsafe.SizeOf<T>(); static int SizeOfS() => Size<S>(); static int Plain(S s) => s.A;"
+        + " enum E : byte { None } class K { public int A; } interface I { } [StructLayout(LayoutKind.Sequential)] class L { public int A; }"
+        + " class Derived : Box<S> { }"
+        + " class Box<T> { public static int Field = Unsafe.SizeOf<T>(); public int Instance = Unsafe.SizeOf<T>(); public static event Action Raised { add { } remove { } }"
+        + " public static int Property => Unsafe.SizeOf<T>(); public static int Size() => Unsafe.SizeOf<T>(); public static class Nested { public static int Size() => Unsafe.SizeOf<T>(); } }";
+
     private const string Interop = "using System;\nusing System.Runtime.CompilerServices;\nusing System.Runtime.InteropServices;\n";
 
     /// <summary>What names the callees that <see cref="ACallThatIsHandedATypeIsAnOpaqueWhoseFingerprintHoldsTheDeclaration"/> hands a type.</summary>

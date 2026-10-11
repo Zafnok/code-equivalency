@@ -71,7 +71,9 @@ public sealed class LayoutsTests
     /// <summary>
     /// A method reads a layout when its bound code, or an initializer its constructor runs, has an operation a
     /// declaration fixes: storage of an explicit layout, an operation the fingerprint writes a declaration after, or a
-    /// call the runtime may marshal in an assembly that turns marshalling off.
+    /// call the runtime may marshal in an assembly that turns marshalling off. So does one that hands a generic member of
+    /// the solution a type the solution declares, by the member it names or by the one a forwarder passes the call on to
+    /// (ticket P2-154).
     /// </summary>
     [Theory]
     [InlineData("", "int M(U u) => u.P;", "M", true)]
@@ -84,12 +86,46 @@ public sealed class LayoutsTests
     [InlineData("[assembly: DisableRuntimeMarshalling]\n", "int M() => Marshal.SizeOf<int>();", "M", true)]
     [InlineData("[assembly: DisableRuntimeMarshalling]\n", "int M(S s) => s.X;", "M", false)]
     [InlineData("", "[DllImport(\"a.dll\")] static extern int M();", "M", false)]
+    [InlineData("", "int M() => Size<S>();", "M", true)]
+    [InlineData("", "int M() => SizeOfS();", "M", true)]
+    [InlineData("", "int M() => G<S>.Forward();", "M", true)]
+    [InlineData("", "int M(G<S> g) => g.F;", "M", true)]
+    [InlineData("", "G<S> M() => new G<S>();", "M", true)]
+    [InlineData("", "int M<V>(G<V> g, G<C> c) => Size<int>() + Size<V>() + Size<C>() + g.F + c.F + Plain();", "M", false)]
     public void AMethodWithAnOperationADeclarationFixesReadsALayout(string assembly, string member, string name, bool expected)
     {
         Compilation compilation = Compile(
-            assembly + "struct S { public int X; } [StructLayout(LayoutKind.Explicit)] class U { [field: FieldOffset(0)] public int P { get; set; } } class C { " + member + " }");
+            assembly + "struct S { public int X; } [StructLayout(LayoutKind.Explicit)] class U { [field: FieldOffset(0)] public int P { get; set; } } "
+            + "class G<T> { public int F; public static int Forward() => C.Plain(); } "
+            + "class C { static int Size<T>() => 0; static int SizeOfS() => Size<S>(); public static int Plain() => 0; " + member + " }");
 
         Assert.Equal(expected, IrLowerer.DependsOnLayout(compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation));
+    }
+
+    /// <summary>
+    /// Ticket P2-154: code that has a type as a type argument reads the layout of a value type of the solution and of a
+    /// class that has a <c>[StructLayout]</c>, reached as a declaration is. Of any other type it reads none.
+    /// </summary>
+    [Theory]
+    [InlineData("S", true)]
+    [InlineData("E", true)]
+    [InlineData("L", true)]
+    [InlineData("S[]", true)]
+    [InlineData("S*[]", true)]
+    [InlineData("delegate*<S, int>[]", true)]
+    [InlineData("List<(K, S)>", true)]
+    [InlineData("K", false)]
+    [InlineData("I", false)]
+    [InlineData("K[]", false)]
+    [InlineData("List<(K, int)>", false)]
+    [InlineData("Guid", false)]
+    [InlineData("T", false)]
+    public void ATypeMadeOfAValueTypeTheSolutionDeclaresIsLaidOut(string type, bool expected)
+    {
+        Compilation compilation = Compile(
+            "struct S { public int X; } enum E { None } class K { } interface I { } [StructLayout(LayoutKind.Sequential)] class L { } unsafe class C<T> { " + type + " f; }");
+
+        Assert.Equal(expected, Layouts.IsLaidOut(((IFieldSymbol)compilation.GetTypeByMetadataName("C`1")!.GetMembers("f").Single()).Type));
     }
 
     [Fact]
@@ -100,6 +136,8 @@ public sealed class LayoutsTests
         IOperation operation = compilation.GetSemanticModel(compilation.SyntaxTrees.Single()).GetOperation(method.DeclaringSyntaxReferences[0].GetSyntax(TestContext.Current.CancellationToken), TestContext.Current.CancellationToken)!;
 
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.Reached(null!));
+        Assert.Throws<ArgumentNullException>("operation", () => Layouts.TypeArguments(null!, static callee => callee));
+        Assert.Throws<ArgumentNullException>("called", () => Layouts.TypeArguments(operation, null!));
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.IsHanded(null!, compilation.Assembly));
         Assert.Throws<ArgumentNullException>("assembly", () => Layouts.IsHanded(operation, null!));
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.Reads(null!, compilation.Assembly));
