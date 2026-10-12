@@ -40,7 +40,9 @@ namespace Equiv.Frontend.CSharp.Tests.Lowering;
 /// <see cref="CompiledRunOracle"/> answers <c>GetValueOrDefault()</c> with that value, and what is compared is which side of <c>??</c> ran.
 /// <c>o.Nudge(k)</c> leaves out an optional parameter of a struct type (ticket P2-138): the IR passes element 0 of the
 /// struct's sort, <see cref="CompiledRunOracle"/> answers the call as the compiled method does for the default mark, and
-/// what is compared is the final <c>G</c>.
+/// what is compared is the final <c>G</c>. <c>o.Check(x)</c> throws when <c>x</c> is odd (ticket P2-140):
+/// <see cref="CompiledRunOracle"/> then leaves <see cref="Caught"/> in the <c>thrown.System.Exception</c> cell, the
+/// <c>catch</c>'s <c>get_Message</c> must be handed exactly that, and what is compared is whether the handler ran.
 /// </summary>
 public sealed class LoweringOracleTests
 {
@@ -67,6 +69,14 @@ public sealed class LoweringOracleTests
     private const string CellNulls = $"null.{LoweringOracleGen.CellType}";
 
     private const string StringNulls = "null.System.String";
+
+    private const string ThrownMap = "thrown.System.Exception";
+
+    /// <summary>The key the <c>thrown.System.Exception</c> cell is read at: element 0 of the exception's sort.</summary>
+    private static readonly IrSortValue ExceptionToken = new("System.Exception", 0);
+
+    /// <summary>The exception <c>o.Check(x)</c> throws (ticket P2-140).</summary>
+    private static readonly IrSortValue Caught = new("System.Exception", 1);
 
     /// <summary>The one <c>Cell</c> the parameter <c>o</c> is bound to.</summary>
     private static readonly IrSortValue CellReference = new(LoweringOracleGen.CellType, 1);
@@ -111,7 +121,7 @@ public sealed class LoweringOracleTests
     {
         string source = Source(cases.Select(static c => c.Method));
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Nudge}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda, LoweringOracleGen.Interpolated, .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
+        foreach (string construct in (string[])["catch (System.Exception t)", "while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Nudge}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda, LoweringOracleGen.Interpolated, $"s += {LoweringOracleGen.Appended};", .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
@@ -279,6 +289,8 @@ public sealed class LoweringOracleTests
         Assert.Contains(CompiledRunOracle.GetValueOrDefault, callees);
         Assert.Contains(CompiledRunOracle.Nudge, callees);
         Assert.Contains(CompiledRunOracle.CellToString, callees);
+        Assert.Contains(CompiledRunOracle.Check, callees);
+        Assert.Contains(CompiledRunOracle.Message, callees);
         Assert.Superset(new HashSet<string>(["conv.i32.dec", "conv.dec.i32", "dec.mul", "dec.div", "dec.lt"], StringComparer.Ordinal), pures);
     }
 
@@ -324,6 +336,7 @@ public sealed class LoweringOracleTests
         LengthMap => new IrMapValue((IrMap)parameter.Type, IrBitVecValue.FromSigned(32, 2), []),
         ArrayNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(Value: false), ImmutableDictionary<IrValue, IrValue>.Empty.Add(Null, new IrBoolValue(Value: true))),
         StringNulls => new IrMapValue((IrMap)parameter.Type, new IrBoolValue(input.SIsNull), ImmutableDictionary<IrValue, IrValue>.Empty.Add(Built, new IrBoolValue(Value: false))),
+        ThrownMap => new IrMapValue((IrMap)parameter.Type, ExceptionToken, []),
         _ => new IrMapValue(
             (IrMap)parameter.Type,
             new IrBoolValue(input.SIsNull),
@@ -487,7 +500,9 @@ public sealed class LoweringOracleTests
     /// (VERIFICATION-MODEL.md section 5). <c>o.TryParse(k, out n)</c> (ticket M4-003) answers as the compiled method does, its
     /// <c>n</c> as the call's one ref output. <c>GetValueOrDefault()</c> on an <c>int?</c> (ticket P2-095) is
     /// <see cref="LoweringOracleGen.NullableValue"/>, the one value the generator wraps. <c>o.Nudge(k)</c> (ticket P2-138) is
-    /// handed the default <c>Mark</c>, element 0 of its sort, whose <c>N</c> is 0, so it adds what <c>o.Bump(k)</c> does. No other call is generated.
+    /// handed the default <c>Mark</c>, element 0 of its sort, whose <c>N</c> is 0, so it adds what <c>o.Bump(k)</c> does.
+    /// <c>o.Check(k)</c> (ticket P2-140) throws when <c>k</c> is odd and then leaves <see cref="Caught"/> in the
+    /// <c>thrown.System.Exception</c> cell, and <c>get_Message</c> answers only for that exception. No other call is generated.
     /// </summary>
     private sealed class CompiledRunOracle(int initial, List<int> list, IrMapValue cells) : Equiv.Core.ICallOracle
     {
@@ -517,6 +532,10 @@ public sealed class LoweringOracleTests
 
         private static readonly Equiv.Core.CallIdentity TryParse = new($"{LoweringOracleGen.CellType}::{LoweringOracleGen.TryParse}(int,out int)");
 
+        public static readonly Equiv.Core.CallIdentity Check = new($"{LoweringOracleGen.CellType}::{LoweringOracleGen.Check}(int)");
+
+        public static readonly Equiv.Core.CallIdentity Message = new("System.Exception::get_Message()");
+
         /// <summary>Boxed, so each call advances the one enumerator and not a copy of the struct.</summary>
         private readonly List<IEnumerator<int>> enumerators = [];
 
@@ -535,9 +554,9 @@ public sealed class LoweringOracleTests
                 return new IrCallResult(Value: null, Threw: false) { Heap = [.. heap.Select(h => h.Map is CellMap ? Cells : h.Value)] };
             }
 
-            if (callee == CellToString || callee == IntToString || callee == Concat)
+            if (callee == CellToString || callee == IntToString || callee == Concat || callee == Check || callee == Message)
             {
-                return Text(callee, arguments, heap);
+                return callee == Check || callee == Message ? Guarded(callee, arguments, heap) : Text(callee, arguments, heap);
             }
 
             if (callee == TryParse)
@@ -602,6 +621,23 @@ public sealed class LoweringOracleTests
             Assert.Equal([CellReference], arguments);
             Cells = Bumped((IrMapValue?)heap.FirstOrDefault(static h => h.Map is CellMap)?.Value ?? Cells, IrBitVecValue.FromSigned(32, 1));
             return new IrCallResult(Built, Threw: false) { Heap = [.. heap.Select(h => h.Map is CellMap ? Cells : h.Value)] };
+        }
+
+        /// <summary>
+        /// A call of the guarded statement (ticket P2-140): <c>o.Check(k)</c> throws when <c>k</c> is odd, and the exception
+        /// is what it leaves in the cell; <c>get_Message</c> is handed that exception and answers <see cref="Built"/>.
+        /// </summary>
+        private static IrCallResult Guarded(Equiv.Core.CallIdentity callee, ImmutableArray<IrValue> arguments, ImmutableArray<IrHeapSlice> heap)
+        {
+            if (callee == Message)
+            {
+                Assert.Equal([Caught], arguments);
+                return new IrCallResult(Built, Threw: false);
+            }
+
+            Assert.Equal(CellReference, arguments[0]);
+            bool threw = (((IrBitVecValue)arguments[1]).TwosComplement & 1) != 0;
+            return new IrCallResult(Value: null, threw) { Heap = [.. heap.Select(h => threw && h.Map is ThrownMap ? ((IrMapValue)h.Value).Write(ExceptionToken, Caught) : h.Value)] };
         }
 
         private static IrMapValue Bumped(IrMapValue cells, IrValue k) =>

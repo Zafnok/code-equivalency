@@ -77,6 +77,18 @@ silent false Equivalent.
 - Once P1-005, P1-006 and M3-007 have landed, ADR 0015's two gaps are closed.
 
 ## Clarifications
+- 2026-10-11 (P2-140). The exception a call throws is part of what the call leaves, so it is a
+  function of what the Decision names: callee, arguments, the heap at the call and the call's
+  position. The frontend holds it in one more by-ref map, `thrown.System.Exception` (a cell of the
+  exception's sort, read at that sort's token), which every call and shared fragment reads and writes
+  through the heap pairs it already has; a `catch` that names its exception reads the cell on the
+  call's `threw` edge. No IR node, sort or `threw` edge changes. As for any map, a side that never
+  names the cell has it threaded through its calls by the encoder, so two sides that make the same
+  calls end with the same cell whether or not either reads it, and a pair where one side catches after
+  another call than the other reads another value. A closed call has no heap pairs (ADR 0041) and so
+  leaves no cell: its exception is not a value. The cell is written by calls only; the object a
+  `throw new T(...)` made reaches its clause as an SSA value, never through the cell, so a side that
+  throws and catches writes no heap the other side lacks.
 - 2026-09-25 (P2-001). "`length.*` stays `In`, because no instruction changes length" stopped being
   true once an array creation lowers: a new array's length is written into `length.<Sort>` at its
   fresh reference. The rule is the Decision's own: a heap map the body writes is `Ref`. So a body

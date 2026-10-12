@@ -619,6 +619,48 @@ public sealed class IrLowererTests
     public void ANullPatternOnANullableValueStaysOpaque(string members) =>
         Assert.Contains(Opaques(Method(members)), static o => o.Reason is "switch-pattern");
 
+    /// <summary>Ticket P2-104: <c>x is not T</c> is true exactly when <c>x is T</c> is false, and lowers as <c>!(x is T)</c> does.</summary>
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    public void ANegatedTypePatternIsTheNegationOfTheTypeTest(bool isType, bool isNull, bool expected)
+    {
+        IrProcedure procedure = Method("static bool M(object o) => o is not string;");
+        IrMapValue types = new(new IrMap(new IrSort("System.Object"), new IrBool()), new IrBoolValue(isType), []);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+        Assert.Equal(new IrReturned(new IrBoolValue(expected)), Run(procedure, Reference(1, "System.Object"), types, Nulls("System.Object", 1, isNull)));
+        Assert.Equal(
+            Method("static bool M(object o) => !(o is string);").Blocks.SelectMany(static b => b.Instructions).Select(static i => i.GetType()),
+            procedure.Blocks.SelectMany(static b => b.Instructions).Select(static i => i.GetType()));
+    }
+
+    /// <summary>Ticket P2-104: <c>x is not null</c> on a reference is the negation of the null test, and a negation of a negation is the test.</summary>
+    [Theory]
+    [InlineData("static bool M(string s) => s is not null;", true, false)]
+    [InlineData("static bool M(string s) => s is not null;", false, true)]
+    [InlineData("static bool M(string s) => s is not not null;", true, true)]
+    public void ANegatedNullPatternIsTheNegationOfTheNullTest(string members, bool isNull, bool expected)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Empty(Calls(procedure));
+        Assert.Equal(new IrReturned(new IrBoolValue(expected)), Run(procedure, Reference(0), Nulls("System.String", 0, isNull)));
+    }
+
+    /// <summary>Ticket P2-104: negating a pattern that is itself opaque lowers nothing of it, and the whole test is the one opaque.</summary>
+    [Theory]
+    [InlineData("static bool M(int? n) => n is not null;")]
+    [InlineData("static bool M(object o) => o is not int;")]
+    [InlineData("static bool M(object o) => o is not int n;")]
+    [InlineData("static bool M(string s) => s is not \"a\";")]
+    [InlineData("static bool M(int n) => n is not (1 or 2);")]
+    public void ANegatedPatternOverAnOpaquePatternStaysOpaque(string members) =>
+        Assert.Equal(["switch-pattern"], Opaques(Method(members)).Select(static o => o.Reason).Distinct(StringComparer.Ordinal), StringComparer.Ordinal);
+
     /// <summary>A guard is an ordinary branch after the constant test, so the arm still lowers.</summary>
     [Fact]
     public void AGuardedConstantPatternLowersAsABranch()
@@ -1736,6 +1778,67 @@ public sealed class IrLowererTests
         Assert.Equal("System.String::Concat(string,string)", Assert.Single(Calls(procedure)).Callee.Value);
         Assert.Empty(Opaques(procedure));
     }
+
+    /// <summary>
+    /// Ticket P2-141: <c>s += t</c> on two strings is the <c>Concat</c> call <c>s = s + t</c> makes, of the target read once
+    /// and then the right operand, written back; a property target is got, concatenated and set.
+    /// </summary>
+    [Theory]
+    [InlineData("static string M(string s, string t) { s += t; return s; }", "static string M(string s, string t) { s = s + t; return s; }")]
+    [InlineData("static string M(string t) { string s = t; s += \"x\"; return s; }", "static string M(string t) { string s = t; s = s + \"x\"; return s; }")]
+    [InlineData("string F; void M(string t) { F += t; }", "string F; void M(string t) { F = F + t; }")]
+    [InlineData("string P { get; set; } void M(string t) { P += t; }", "string P { get; set; } void M(string t) { P = P + t; }")]
+    [InlineData("public virtual string P { get; set; } void M(C c, string t) { c.P += t; }", "public virtual string P { get; set; } void M(C c, string t) { c.P = c.P + t; }")]
+    [InlineData("static string N() => null; static string M(string s) { s += N(); return s; }", "static string N() => null; static string M(string s) { s = s + N(); return s; }")]
+    public void StringCompoundAssignmentIsItsConcatenation(string compound, string expanded)
+    {
+        IrProcedure procedure = Method(compound);
+
+        Assert.Empty(Opaques(procedure));
+        ImmutableArray<IrCall> calls = Calls(procedure);
+        Assert.Equal(Calls(Method(expanded)).Select(static c => c.Callee.Value), calls.Select(static c => c.Callee.Value), StringComparer.Ordinal);
+        IrCall concat = Assert.Single(calls, static c => string.Equals(c.Callee.Value, "System.String::Concat(string,string)", StringComparison.Ordinal));
+        Assert.Equal(2, concat.Args.Length);
+    }
+
+    /// <summary>Ticket P2-141: the value of <c>s += t</c> is the string written.</summary>
+    [Fact]
+    public void StringCompoundAssignmentYieldsTheConcatenation()
+    {
+        IrProcedure procedure = Method("static string M(string s, string t) { return s += t; }");
+
+        IrCall concat = Assert.Single(Calls(procedure));
+        Assert.Equal<IrVar>([procedure.Parameters[0].Var, procedure.Parameters[1].Var], concat.Args);
+        Assert.Contains(procedure.Blocks, b => b.Terminator is IrReturn { Value: { } value } && value == concat.Target);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>
+    /// Ticket P2-141: a reference-typed variable a compound assignment writes is null when the value written is, not when
+    /// the value it held was. The same holds of a user-defined operator on a class (ticket P2-022).
+    /// </summary>
+    [Theory]
+    [InlineData("static bool M(string s, string t) { s += t; return s == null; }", "System.String::Concat(string,string)")]
+    [InlineData("public static C operator +(C a, C b) => b; static bool M(C s, C t) { s += t; return s == null; }", null)]
+    [InlineData("public static C operator ++(C a) => null; static bool M(C s) { s++; return s == null; }", null)]
+    public void AReferenceACompoundAssignmentWritesIsNullWhenTheValueWrittenIs(string member, string? callee)
+    {
+        IrProcedure procedure = Method(member);
+
+        ImmutableArray<IrInstruction> instructions = [.. procedure.Blocks.SelectMany(static b => b.Instructions)];
+        IrVar written = callee is null ? Assert.Single(instructions.OfType<IrPure>()).Target : Assert.Single(Calls(procedure)).Target!;
+        IrMapRead read = Assert.Single(instructions.OfType<IrMapRead>(), r => r.Key == written && r.Map.Name.StartsWith("null.", StringComparison.Ordinal));
+        Assert.Contains(procedure.Blocks, b => b.Terminator is IrReturn { Value: { } value } && value == read.Target);
+        Assert.Empty(Opaques(procedure));
+    }
+
+    /// <summary>Ticket P2-141: a compound assignment that <c>Binary</c> leaves opaque as an operator stays opaque.</summary>
+    [Theory]
+    [InlineData("static string M(string s, object o) { s += o; return s; }")]
+    [InlineData("static bool M(bool a, bool b) { a |= b; return a; }")]
+    [InlineData("static DayOfWeek M(DayOfWeek a, DayOfWeek b) { a |= b; return a; }")]
+    public void ACompoundAssignmentOfAnotherTypeStaysOpaque(string member) =>
+        Assert.Contains(Opaques(Method(member)), static o => string.Equals(o.Reason, "CompoundAssignment", StringComparison.Ordinal));
 
     /// <summary>Ticket M2-004 acceptance criterion 8: the shape of the `removed-null-check` sample lowers opaque-free.</summary>
     [Fact]

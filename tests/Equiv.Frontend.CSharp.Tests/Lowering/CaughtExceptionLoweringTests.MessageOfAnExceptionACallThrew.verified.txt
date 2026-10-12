@@ -1,0 +1,25 @@
+﻿proc "C::M()" (ref %thrown.System.Exception: map<sort "System.Exception", sort "System.Exception">) -> sort "System.String" entry B0
+B0:
+  goto B1
+B1:
+  call "C::N()"() threw %$0: bool heap("thrown.System.Exception" %thrown.System.Exception -> %thrown.System.Exception.12: map<sort "System.Exception", sort "System.Exception">)
+  br %$0, B4, B5
+B2:
+  %e.isNull.14 "e": bool = const bool false
+  br %e.isNull.14, B6, B7
+B4:
+  %$2: sort "System.Exception" = const sort "System.Exception" 0
+  %$caught.0.13: sort "System.Exception" = mapread %thrown.System.Exception.12, %$2
+  goto B2
+B5:
+  %$4: sort "System.String" = const sort "System.String" 18652613
+  ret %$4 outs(%thrown.System.Exception = %thrown.System.Exception.12)
+B6:
+  throw "System.NullReferenceException" outs(%thrown.System.Exception = %thrown.System.Exception.12)
+B7:
+  %$9: sort "System.String" = call "System.Exception::get_Message()"(%$caught.0.13) threw %$10: bool heap("thrown.System.Exception" %thrown.System.Exception.12 -> %thrown.System.Exception.15: map<sort "System.Exception", sort "System.Exception">)
+  br %$10, B8, B9
+B8:
+  throw "System.Exception" outs(%thrown.System.Exception = %thrown.System.Exception.15)
+B9:
+  ret %$9 outs(%thrown.System.Exception = %thrown.System.Exception.15)

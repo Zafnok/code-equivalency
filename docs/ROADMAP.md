@@ -803,6 +803,11 @@ Found by two CI failures (the PR of P2-127, and PR #438, `sonar`):
   unknown (timeout), never sat against unsat, so not a soundness matter. Both seeds reproduce; the
   texts are unsat in 149 and 203 seconds. Test code only.
 
+Found by P2-140's census of gitextensions-8522 (2026-10-11):
+- P2-158 (S) Two constructors of `ICSharpCode.TextEditor.Document.HighlightColor` fail to lower on
+  both sides with `ArgumentNullException` (parameter `method`), so the census exits 5. The run goes
+  on (ADR 0023). Introduced after `feee17e1`. The first step is the repro.
+
 Found by a CI failure (PR #457, `gates`, seed `4ubFDL-wLcDa`):
 - P2-156 (S) `SoundnessPropertyTests.WithArithmeticAbstracted_AProcedureIsEquivalentToItself` ends
   Unknown(timeout) on a procedure against itself: `urem 5, a` and `srem 2^31, v` have a constant
@@ -829,6 +834,11 @@ Found by CI run times (PR #414, `stryker (Equiv.Verify.Z3, Equiv.Verify.Z3.Tests
 - P2-133 (M) Mutation testing runs as parallel shards: `mutation.yml` splits a project's files over up
   to 4 runners on a PR (8 on the nightly sweep), and a final job per project adds the shards up under
   the unchanged required check name. Workflow and scripts only. Needs M0-011.
+
+Found by CI run times (PR #475, `stryker-shard (Equiv.Verify.Z3, 1/1)`, over two hours for one file):
+- P2-160 (S) Stryker shards split a file: the plan cuts a file larger than one shard's share into
+  pieces by character span, and sizes a project's shard count from its bytes (up to 8 on a PR, 32 on
+  the nightly sweep). Workflow and scripts only. Needs P2-133.
 
 Documentation:
 - P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list
@@ -993,7 +1003,14 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
     unless it is null; on gitextensions-9860 the reason is in 71 changed pairs (was 87 of 605).
   - P2-140 (M) `CaughtException`: 51 pairs (2.3%). Counts what bodies do with the exception they
     catch and lowers the largest use.
+    Done 2026-10-11: a `catch` that only reads `e.Message` names a value, the `thrown.System.Exception`
+    cell as the call that threw left it or the object a `throw` in the same `try` made (ADR 0018,
+    clarification of 2026-10-11); on gitextensions-8522 the reason is in 38 changed pairs (was 40 of
+    936), because 15 of the 17 pairs with only that use also hold a null dereference in the `try`,
+    whose exception is not a value. No remaining use reaches 5% alone.
   - P2-141 (M) `CompoundAssignment`: 35 pairs (1.6%). Counts the forms and lowers the largest.
+    Done 2026-10-11: `string += string` lowers to the `Concat` call `+` is; on gitextensions-8522 the
+    reason is in 5 changed pairs (was 18 of 936). Found on the way: P2-158, two pairs that fail to lower.
 - P1-029 (M) `await using` and `await foreach` lower through their awaited calls instead of making
   the body opaque: 83 bodies per side and 13 changed pairs alone on jellyfin-13023. Needs M4-006,
   M4-001.
