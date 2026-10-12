@@ -60,7 +60,7 @@ anything but closed calls.
   runtime-changes table's row, and tainting it turned `runtime-row-unaffected-overload` `HasCulture` from
   EQ006 to EQ003.
 - Decision: the replay's taint predicate is per side (`ModelOracle.IsAbstraction`): an `opaque:` identity, or
-  `ModelDecoder.IsClosedAbstraction`. `IrInterpreter` is unchanged. An identity that one call site leaves open
+  `ClosedCallTaint.Taints`. `IrInterpreter` is unchanged. An identity that one call site leaves open
   is encoded open (ADR 0041), so it stays untainted and the gate still excuses it.
 - Decision (criterion 3): the gate reads "open" from the lowered IR: a model is excused when its run records a
   callee that some `IrCall` of that side does not mark closed.
@@ -93,3 +93,7 @@ anything but closed calls.
   `FloatingPointPairsAreDecidedAfterRefinement` finds 9 Divergent of 40 where it wants 10, with and without this
   change: its batch depends on the seed, and it passes at the default one.
 - `Release: minor`: some pairs that were EQ002 are now EQ003.
+- The mutation gate: with all of the replay's new code in `ModelDecoder.cs`, its 166 mutants ran in one shard
+  (the plan shards by file), nearly every test covers them, and the shard hit its 180-minute limit three
+  times. The new code is now two files of its own, `ClosedCallTaint.cs` and `OpenCallComparison.cs`, so it
+  runs in three shards.
