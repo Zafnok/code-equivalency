@@ -1,5 +1,5 @@
 # P2-158 Two constructors of gitextensions-8522 fail to lower with a null method
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none

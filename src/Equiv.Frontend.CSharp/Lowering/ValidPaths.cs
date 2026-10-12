@@ -31,7 +31,8 @@ internal static class ValidPaths
     /// <summary>Whether <paramref name="value"/> is a valid path; <paramref name="seen"/> are the locals whose assignments are being followed.</summary>
     private static bool IsValid(IOperation value, ImmutableHashSet<ISymbol> seen) => value switch
     {
-        IPropertyReferenceOperation property => RuntimeChangeTable.Load().YieldsValidPath(Identity(property.Property.GetMethod!), []),
+        // A property that overrides only the setter has no getter of its own to be a source (ticket P2-158).
+        IPropertyReferenceOperation property => property.Property.GetMethod is { } getter && RuntimeChangeTable.Load().YieldsValidPath(Identity(getter), []),
         IInvocationOperation call => RuntimeChangeTable.Load().YieldsValidPath(
             Identity(call.TargetMethod), CallArguments.Of(call, call.TargetMethod, operand => IsValid(operand, seen))),
         ILocalReferenceOperation local => IsGuarded(local.Local, value) || HoldsOnlyValidPaths(local.Local, Root(value), seen),
