@@ -1093,6 +1093,68 @@ public sealed class BodyFingerprinterTests
         + " public class F : Outer<S>.Inner { }"
         + " public class K : J<S> { }";
 
+    /// <summary>
+    /// Ticket P2-157: a struct is made with no constructor, by a <c>default</c>, as an array's element, in a field
+    /// never assigned, in a local never assigned, and by a generic member that is handed it. Its interface list names a
+    /// type argument where there is no body, and the code it inherits from the interface reads the argument. So the
+    /// argument's declaration is in the text of a body that names the struct: in the type of an operation, be it the
+    /// struct, an array of it or a type that is handed it, or among the type arguments it hands a member of the solution.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M() => ((W)default(K)).Width();")]
+    [InlineData("public int M() => ((W)(new K[1])[0]).Width();")]
+    [InlineData("public int M() => ((W)Unset).Width();")]
+    [InlineData("public int M() { K k; return ((W)k).Width(); }")]
+    [InlineData("public int M(K k) => ((W)k).Width();")]
+    [InlineData("public int M() => Make<K>().Width();")]
+    [InlineData("public int M() => System.Linq.Enumerable.First(System.Linq.Enumerable.Cast<W>(new K[1])).Width();")]
+    [InlineData("public int M() => System.Linq.Enumerable.First(System.Linq.Enumerable.Cast<W>(new System.Collections.Generic.List<K>(1))).Width();")]
+    [InlineData("public int M() => ((W)default(Inner)).Width();")]
+    public void ATypeArgumentInAStructsInterfaceListIsInTheTextOfABodyThatMakesOne(string member)
+    {
+        AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; }", member + Implementing);
+        AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "public struct S { public byte A; public int B; public int C; }", member + Implementing);
+    }
+
+    /// <summary>
+    /// Ticket P2-157 criterion 3: a <c>default</c> of a struct with no generic interface of the solution keeps the text
+    /// it has, whatever layout the types beside it have: the struct has no interface list, its interface is not generic,
+    /// is a generic interface of a reference, or is handed a type from a reference or a type parameter. So does a body
+    /// that is handed a class whose interface list names the type, which a constructor made (ticket P2-152).
+    /// </summary>
+    [Theory]
+    [InlineData("public int M(S s) => default(Plain).A + s.B;")]
+    [InlineData("public int M() => ((W)default(Own)).Width();")]
+    [InlineData("public bool M(S s) => default(Compared).Equals(s);")]
+    [InlineData("public int M() => ((W)default(G)).Width();")]
+    [InlineData("public int M<U>() where U : unmanaged => ((W)default(H<U>)).Width();")]
+    [InlineData("public int M(Made made) => ((W)made).Width();")]
+    public void ADefaultOfAStructWithNoGenericInterfaceKeepsItsText(string member)
+    {
+        const string Others = " public struct Plain { public int A; }"
+            + " public struct Own : W { public int Width() => 1; }"
+            + " public struct Compared : System.IEquatable<S> { public bool Equals(S other) => true; }"
+            + " public struct G : J<int> { }"
+            + " public struct H<U> : J<U> where U : unmanaged { }"
+            + " public class Made : J<S> { }";
+        Compilation plain = Interop("public struct S { public byte A; public int B; } " + member + Implementing + Others);
+        Compilation laid = Interop("[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; } " + member + Implementing + Others);
+
+        Assert.Empty(laid.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Equal(OneRuntimeText(plain), OneRuntimeText(laid));
+        Assert.Equal(Text(plain), Text(laid));
+        Assert.DoesNotContain("Marshalled", OneRuntimeText(laid), StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket P2-157: structs that name <c>S</c> in an interface list only, under a generic interface of the solution that reads its layout.</summary>
+    private const string Implementing = " public interface W { int Width(); }"
+        + " public unsafe interface J<T> : W where T : unmanaged { int W.Width() => sizeof(T); }"
+        + " public unsafe class Outer<T> where T : unmanaged { public interface IInner : W { int W.Width() => sizeof(T); } }"
+        + " public struct K : J<S> { }"
+        + " public struct Inner : Outer<S>.IInner { }"
+        + " public K Unset;"
+        + " static W Make<T>() where T : struct, W => default(T);";
+
     /// <summary>ADR 0054 decision 4: across runtimes it is the runtime that marshals the call, so an <c>extern</c> method has no fingerprint.</summary>
     [Theory]
     [InlineData("net48", "net10.0")]

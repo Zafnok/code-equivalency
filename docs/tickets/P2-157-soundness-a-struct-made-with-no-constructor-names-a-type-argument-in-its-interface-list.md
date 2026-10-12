@@ -1,5 +1,5 @@
 # P2-157 Soundness: a struct made with no constructor names a type argument in its interface list, and no text holds it
-Status: todo
+Status: in-progress
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-152

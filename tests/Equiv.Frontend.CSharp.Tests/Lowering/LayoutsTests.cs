@@ -138,6 +138,7 @@ public sealed class LayoutsTests
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.Reached(null!));
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.TypeArguments(null!, static callee => callee));
         Assert.Throws<ArgumentNullException>("called", () => Layouts.TypeArguments(operation, null!));
+        Assert.Throws<ArgumentNullException>("types", () => Layouts.Implemented(null!));
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.IsHanded(null!, compilation.Assembly));
         Assert.Throws<ArgumentNullException>("assembly", () => Layouts.IsHanded(operation, null!));
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.Reads(null!, compilation.Assembly));
