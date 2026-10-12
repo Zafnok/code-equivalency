@@ -491,6 +491,54 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     of a class with no `[StructLayout]` through `Unsafe` on its raw bytes: where the runtime puts
     those fields is the runtime's choice and not the declaration's. A value of a struct that names
     the type only in its interface list and is made with no constructor (P2-157).
+- 2026-10-12 (P2-157). **An operation that names a struct hands over what the struct's interface
+  list does.** The clarification of 2026-10-10 (P2-152) put what a type's base list hands over
+  after a reference to its constructor, and left out a struct, which is made with no constructor.
+  In `struct K : J<S>`, where `J<T>` has a default implementation that reads `T`,
+  `((W)default(K)).Width()` runs that code and references no constructor. It was reproduced as one
+  fingerprint beside two declarations of `S` (the ticket's tests): for a `default`, an array's
+  element, a field never assigned, a local never assigned, a parameter, a generic member of the
+  solution that is handed `K` and makes one, an array and a list of `K` handed to a member of a
+  reference that converts the elements, and an interface nested in a generic type that is handed
+  `S`. So an operation whose type is a struct, or is made of one (an array's element, a type
+  argument), and an operation that hands a struct to a member of the solution as a type argument
+  (the clarification of 2026-10-09 (P2-151)), is also followed by the declaration of every type
+  argument of the struct's interfaces, all of them and not only those it lists itself, where the
+  solution declares the interface, and of the types each of those is nested in. They are written
+  as the clarification of P2-151 writes one.
+  - **Every operation that names the struct, and not the ones that make it.** The ticket asked
+    which of two texts holds the declaration: a `default` of the struct, or a conversion of one to
+    an interface. Neither is enough. A struct is made in more places than can be listed: a
+    `default`, an array creation, a `stackalloc`, a field of an object or of a static class that no
+    body assigns, a local of a struct with no fields, a `default(T)` in a generic member. A static
+    field is made by no body at all. And the inherited code runs with no conversion in the body: a
+    member of a reference that is handed a `K[]` boxes the elements itself
+    (`Enumerable.Cast<W>`), and a generic member calls through its type parameter. What all of
+    them share is that the body has an operation whose type is made of `K`, or hands `K` over as a
+    type argument. So the rule asks for that, and a body that is handed a `K` holds the
+    declaration too, where one that is handed an object of a class does not (the clarification of
+    P2-152): no body it could assume made the value.
+  - **A class is as it was.** An object of a class is made by a constructor only, and the
+    clarification of P2-152 holds what its base list hands over there. An operation whose type is
+    a class adds nothing (`ADefaultOfAStructWithNoGenericInterfaceKeepsItsText`).
+  - **Which texts change.** A text with an operation that names a struct whose interfaces include
+    one the solution declares that is handed, or is nested in a type that is handed, a type the
+    solution declares or one made of such a type. A struct with no interface list, one whose
+    interfaces are not generic or are a reference's (`IEquatable<S>`), and one whose interface is
+    handed a type from a reference or a type parameter add nothing.
+  - **What it costs.** Nothing on `gitextensions-8522` in compare mode quick (the ticket's
+    Notes): all 13816 results are the same by location, rule, proof method and Unknown reason on
+    both sides of the change, and 12654 pairs are congruent on both. The pull request edits no
+    type that a struct's interface list hands a generic interface of the solution.
+  - **What the text still does not hold.** A class that is created through a type parameter
+    (`Make<K>()` where `Make<T>` runs `new T()`) and names `S` only in its interface list: the
+    declaration the clarification of P2-151 writes for `K` holds its base type and not its
+    interfaces (P2-162). A struct named only as a type argument of a member of a reference, in no
+    operation's type. A generic type of the solution handed to a member of a reference that runs
+    the type's code by reflection.
+  - **What the lowering still does not hold.** The rule above is the text's only: a lowered body
+    that names such a struct is the same beside two declarations of `S`, so a pair this text no
+    longer calls congruent can still come back Equivalent from the solver (P2-161).
 - 2026-10-08 (P2-144). **The throw a `switch` expression ends in is part of its bound code, and
   across .NET Core 3.0 it is a runtime rule.** A `switch` expression that matches no arm throws.
   The source does not write the throw and the `IOperation` tree does not hold it: the compiler

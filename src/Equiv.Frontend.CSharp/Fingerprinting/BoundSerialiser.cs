@@ -35,7 +35,8 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// its type, and the declarations of the types in its signature (ticket P2-146). An operation whose result a type's
 /// declaration fixes is followed by that declaration: a field at a <c>[FieldOffset]</c>, a <c>sizeof</c>, a pointer, an
 /// inline array, a call into the interop services (ticket P2-149). A reference to a generic member of the solution is
-/// followed by the declarations of the types it hands the member (ticket P2-151). A
+/// followed by the declarations of the types it hands the member (ticket P2-151), and an operation
+/// that names a struct by those of the types its interface list hands a generic interface of the solution (ticket P2-157). A
 /// <c>switch</c> expression that may match no arm carries the constructor of the exception the compiler throws then, which
 /// depends on the reference assemblies (ADR 0024 as clarified by ticket P2-144). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
@@ -439,7 +440,9 @@ internal sealed class BoundSerialiser : OperationWalker
     /// function pointer and a call into the interop services also take the assembly's
     /// <c>[DisableRuntimeMarshalling]</c>. <see cref="Layouts"/> holds that rule, which the lowering reads too (ticket
     /// P2-150). A reference to a member also reaches the types it hands the member as type arguments
-    /// (<see cref="Layouts.TypeArguments"/>, which the lowering reads too; ticket P2-154).
+    /// (<see cref="Layouts.TypeArguments"/>, which the lowering reads too; ticket P2-154). An operation whose type is, or
+    /// is made of, a struct, and one that hands a struct over, also reaches what the struct's interface list hands a
+    /// generic interface of the solution (<see cref="Layouts.Implemented"/>; ticket P2-157).
     /// </summary>
     private void Layout(IOperation operation)
     {
@@ -448,7 +451,8 @@ internal sealed class BoundSerialiser : OperationWalker
             AttributeLines([("layout assembly", method.ContainingAssembly.GetAttributes().Where(static a => Is(a, DisableRuntimeMarshalling)))]);
         }
 
-        foreach (ITypeSymbol type in Layouts.Reached(operation).Concat(Layouts.TypeArguments(operation, Called)))
+        ImmutableArray<ITypeSymbol> handed = Layouts.TypeArguments(operation, Called);
+        foreach (ITypeSymbol type in Layouts.Reached(operation).Concat(handed).Concat(Layouts.Implemented([operation.Type, .. handed])))
         {
             Marshalled("layout", type, laidOut);
         }

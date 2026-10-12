@@ -83,16 +83,48 @@ internal static class Layouts
         {
             handed.AddRange((member as IMethodSymbol)?.TypeArguments ?? []);
             IEnumerable<INamedTypeSymbol> inherited = member is IMethodSymbol { MethodKind: MethodKind.Constructor } ? [.. BaseTypes(declaring), .. declaring.AllInterfaces] : [];
-            foreach (INamedTypeSymbol outer in inherited.Where(static t => !t.DeclaringSyntaxReferences.IsEmpty).Prepend(declaring))
-            {
-                for (INamedTypeSymbol? type = outer; type is not null; type = type.ContainingType)
-                {
-                    handed.AddRange(type.TypeArguments);
-                }
-            }
+            handed.AddRange(Nesting(declaring).Concat(Arguments(inherited)));
         }
 
         return [.. handed];
+    }
+
+    /// <summary>
+    /// The type arguments that the interface lists of the value types <paramref name="types"/> are, or are made of (an
+    /// array's element, a type argument), hand generic interfaces of the solution, and the types those are nested in
+    /// (ADR 0024 as clarified by ticket P2-157). A struct is made with no constructor, by a <c>default</c>, as an
+    /// array's element or in a field never assigned, so no reference to a constructor holds what its interface list
+    /// hands over (ticket P2-152), and the code it inherits from an interface runs on a value wherever there is one.
+    /// A class is made by a constructor only, and hands nothing over here.
+    /// </summary>
+    public static ImmutableArray<ITypeSymbol> Implemented(IEnumerable<ITypeSymbol?> types)
+    {
+        ArgumentNullException.ThrowIfNull(types);
+        return [.. Arguments(types.SelectMany(Named).Where(static type => type.IsValueType).SelectMany(static type => type.AllInterfaces))];
+    }
+
+    /// <summary>The named types <paramref name="type"/> is, or is made of: an array's element, and a type argument.</summary>
+    private static IEnumerable<INamedTypeSymbol> Named(ITypeSymbol? type) => type switch
+    {
+        IArrayTypeSymbol array => Named(array.ElementType),
+        INamedTypeSymbol named => named.TypeArguments.SelectMany(Named).Prepend(named),
+        _ => [],
+    };
+
+    /// <summary>The type arguments of each of <paramref name="types"/> that the solution declares, and of the types it is nested in.</summary>
+    private static IEnumerable<ITypeSymbol> Arguments(IEnumerable<INamedTypeSymbol> types) =>
+        types.Where(static type => !type.DeclaringSyntaxReferences.IsEmpty).SelectMany(Nesting);
+
+    /// <summary>The type arguments of <paramref name="type"/> and of the types it is nested in.</summary>
+    private static IEnumerable<ITypeSymbol> Nesting(INamedTypeSymbol type)
+    {
+        for (INamedTypeSymbol? outer = type; outer is not null; outer = outer.ContainingType)
+        {
+            foreach (ITypeSymbol argument in outer.TypeArguments)
+            {
+                yield return argument;
+            }
+        }
     }
 
     private static IEnumerable<INamedTypeSymbol> BaseTypes(INamedTypeSymbol type)
