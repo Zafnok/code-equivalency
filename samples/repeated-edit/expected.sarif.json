@@ -106,19 +106,16 @@
             ],
             "failureRefinement": {
               "newFailures": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 0 outs() trace(\"System.Convert::ToInt32(string)\"(sort \"System.String\" 0))) new(threw \"System.Exception\" outs() trace(\"System.Int32::Parse(string)\"(sort \"System.String\" 0)))"
+                "outcome": "unknown"
               },
               "removedFailures": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.Convert::ToInt32(string)\"(sort \"System.String\" 0))) new(returned bv32 0 outs() trace(\"System.Int32::Parse(string)\"(sort \"System.String\" 0)))"
+                "outcome": "unknown"
               },
               "resultChanges": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 0 outs() trace(\"System.Convert::ToInt32(string)\"(sort \"System.String\" 0))) new(returned bv32 0 outs() trace(\"System.Int32::Parse(string)\"(sort \"System.String\" 0)))"
+                "outcome": "unknown"
               }
             },
-            "divergenceKind": "result-changed",
+            "divergenceKind": "undetermined",
             "reviewGroup": "calls:System.Convert::ToInt32(string)|System.Int32::Parse(string)"
           }
         },
@@ -160,19 +157,16 @@
             ],
             "failureRefinement": {
               "newFailures": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, bv32 0, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 0 outs() trace(\"System.Convert::ToInt32(string)\"(sort \"System.String\" 0))) new(threw \"System.Exception\" outs() trace(\"System.Int32::Parse(string)\"(sort \"System.String\" 0)))"
+                "outcome": "unknown"
               },
               "removedFailures": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, bv32 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.Convert::ToInt32(string)\"(sort \"System.String\" 0))) new(returned bv32 0 outs() trace(\"System.Int32::Parse(string)\"(sort \"System.String\" 0)))"
+                "outcome": "unknown"
               },
               "resultChanges": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, bv32 0, map<sort \"System.String\", bool> [] default bool false) old(returned bv32 0 outs() trace(\"System.Convert::ToInt32(string)\"(sort \"System.String\" 0))) new(returned bv32 0 outs() trace(\"System.Int32::Parse(string)\"(sort \"System.String\" 0)))"
+                "outcome": "unknown"
               }
             },
-            "divergenceKind": "result-changed",
+            "divergenceKind": "undetermined",
             "reviewGroup": "calls:System.Convert::ToInt32(string)|System.Int32::Parse(string)"
           }
         },
@@ -214,19 +208,16 @@
             ],
             "failureRefinement": {
               "newFailures": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned bool false outs() trace(\"System.Convert::ToInt32(string)\"(sort \"System.String\" 0))) new(threw \"System.Exception\" outs() trace(\"System.Int32::Parse(string)\"(sort \"System.String\" 0)))"
+                "outcome": "unknown"
               },
               "removedFailures": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(threw \"System.Exception\" outs() trace(\"System.Convert::ToInt32(string)\"(sort \"System.String\" 0))) new(returned bool false outs() trace(\"System.Int32::Parse(string)\"(sort \"System.String\" 0)))"
+                "outcome": "unknown"
               },
               "resultChanges": {
-                "outcome": "found",
-                "model": "inputs(sort \"System.String\" 0, map<sort \"System.String\", bool> [] default bool false) old(returned bool false outs() trace(\"System.Convert::ToInt32(string)\"(sort \"System.String\" 0))) new(returned bool false outs() trace(\"System.Int32::Parse(string)\"(sort \"System.String\" 0)))"
+                "outcome": "unknown"
               }
             },
-            "divergenceKind": "result-changed",
+            "divergenceKind": "undetermined",
             "reviewGroup": "calls:System.Convert::ToInt32(string)|System.Int32::Parse(string)"
           }
         },

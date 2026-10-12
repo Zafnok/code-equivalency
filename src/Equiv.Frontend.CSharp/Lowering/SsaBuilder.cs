@@ -359,7 +359,7 @@ internal sealed class SsaBuilder
         IrCall c => c with
         {
             Target = c.Target is null ? null : Resolve(c.Target),
-            Threw = Resolve(c.Threw!),
+            Threw = c.Threw is null ? null : Resolve(c.Threw),
             Args = [.. c.Args.Select(Resolve)],
             RefOuts = [.. c.RefOuts.Select(Resolve)],
             Heap = [.. c.Heap.Select(h => h with { Before = Resolve(h.Before) })],

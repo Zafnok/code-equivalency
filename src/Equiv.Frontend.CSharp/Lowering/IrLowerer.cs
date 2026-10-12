@@ -3000,15 +3000,17 @@ internal sealed class IrLowerer
     /// can throw. A closed call reaches no heap map (ADR 0041), so it gets no heap pairs. The call is recorded as a call
     /// site. When the other side binds that site to another callee, the call is rebound (ADR 0042; ticket P2-069): its
     /// result and each output are an opaque with reason <see cref="ReboundCall.OpaqueReason"/> at the site, which no fragment
-    /// shares, and it has no <c>threw</c> edge, since an input that reaches it has an unknown outcome.
+    /// shares, and it has no <c>threw</c> edge, since an input that reaches it has an unknown outcome. A call to a member
+    /// that never throws (<see cref="ClosedCalls.NeverThrows"/>; ADR 0056) has no <c>threw</c> flag either.
     /// </summary>
     private IrVar? Call(Callee callee, ImmutableArray<IrVar> args, IrType? returns, ImmutableArray<RefOut> written, LoweringContext context)
     {
         catalogue.Sites.Add(callee.Site.Syntax, callee.Member, callee.Identity);
         IrVar? target = returns is null ? null : ssa.Temp(returns);
-        IrVar? threw = catalogue.Sites.IsRebound(callee.Identity) ? null : ssa.Temp(Bool);
+        bool rebound = catalogue.Sites.IsRebound(callee.Identity);
+        IrVar? threw = rebound || ClosedCalls.NeverThrows(callee.Identity) ? null : ssa.Temp(Bool);
         ImmutableArray<IrVar> outputs = [.. written.Select(w => ssa.Temp(w.Type))];
-        if (threw is null)
+        if (rebound)
         {
             SourceSpan span = Span(callee.Site.Syntax);
             ssa.Emit(context.Current, new IrOpaque(target, ReboundCall.OpaqueReason, span));

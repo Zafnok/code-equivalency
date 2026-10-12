@@ -56,4 +56,69 @@ public sealed class ClosedCallsTests
             Assert.Equal(closed, call.Heap.IsEmpty);
         }
     }
+
+    public static TheoryData<string, bool> Throwing => new()
+    {
+        { "static string M(string s) => string.Concat(s, \"t\");", false },
+        { "static string M(string s, string t) => string.Concat(s, t, s);", false },
+        { "static string M(string s, string t) => string.Concat(s, t, s, t);", false },
+        { "static string M(string s) => s + \"t\";", false },
+        { "static bool M(string s) => string.IsNullOrEmpty(s);", false },
+        { "static bool M(string s) => string.IsNullOrWhiteSpace(s);", false },
+        { "static string M(string s) => s.ToUpper();", false },
+        { "static string M(string s) => s.ToLower();", false },
+        { "static string M(string s) => s.ToUpperInvariant();", false },
+        { "static string M(string s) => s.ToLowerInvariant();", false },
+        { "static string M(string s) => s.Trim();", false },
+        { "static string M(string s) => s.TrimStart();", false },
+        { "static string M(string s) => s.TrimEnd();", false },
+        { "static string M(string s) => s.Trim('.');", false },
+        { "static string M(string s) => s.TrimStart('.');", false },
+        { "static string M(string s) => s.TrimEnd('.');", false },
+        { "static string M(int i) => i.ToString();", false },
+        { "static string M(ulong i) => i.ToString();", false },
+        { "static string M(bool b) => b.ToString();", false },
+        { "static int M(int? x) => x.GetValueOrDefault();", false },
+        { "static int M(int? x) => x.GetValueOrDefault(3);", false },
+        { "static bool M(DateTime? t) => t.HasValue;", false },
+        { "static int M(int? x) => x.Value;", true },
+        { "static int M(string s) => int.Parse(s);", true },
+        { "static string M(string s) => s.Substring(1);", true },
+        { "static string M(string s, System.Globalization.CultureInfo c) => s.ToUpper(c);", true },
+        { "static string M(int i) => i.ToString(\"x\");", true },
+        { "static string M(double d) => d.ToString();", true },
+        { "static void M(string s) => Console.WriteLine(s);", true },
+    };
+
+    /// <summary>
+    /// ADR 0056 (ticket P2-081): a call to a listed member that throws for no argument has no <c>threw</c> flag, in both
+    /// lowerings, so a side does not branch on a flag the replay taints; every other call keeps its flag.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Throwing))]
+    public void ACallHasAThrewFlagUnlessItsMemberNeverThrows(string method, bool flag)
+    {
+        Compilation compilation = RoslynTestCompilations.Compile($"using System;\nclass C\n{{\n{method}\n}}\n");
+        IMethodSymbol symbol = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+
+        foreach (IrProcedure procedure in new[] { IrLowerer.Lower(symbol, compilation, RenameMap.Empty, [], Runtimes.Migration), IlLowerer.Lower(symbol, compilation, Runtimes.Migration) })
+        {
+            Assert.Empty(IrValidator.Validate(procedure));
+            IrCall call = Assert.Single(procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>());
+            Assert.Equal(flag, call.Threw is not null);
+        }
+    }
+
+    /// <summary>From IL a conversion to <c>int?</c> is a call to <c>Nullable&lt;int&gt;</c>'s constructor, which never throws.</summary>
+    [Fact]
+    public void ANullableConstructorFromIlHasNoThrewFlag()
+    {
+        Compilation compilation = RoslynTestCompilations.Compile("class C { static int? M(int x) => x; }");
+        IMethodSymbol symbol = compilation.GetTypeByMetadataName("C")!.GetMembers("M").OfType<IMethodSymbol>().Single();
+
+        IrCall call = Assert.Single(IlLowerer.Lower(symbol, compilation, Runtimes.Migration).Blocks.SelectMany(static b => b.Instructions).OfType<IrCall>());
+
+        Assert.StartsWith("System.Nullable`1::.ctor(", call.Callee.Value, StringComparison.Ordinal);
+        Assert.Null(call.Threw);
+    }
 }

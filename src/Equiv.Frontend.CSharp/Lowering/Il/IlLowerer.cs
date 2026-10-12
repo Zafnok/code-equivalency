@@ -1042,12 +1042,13 @@ internal sealed partial class IlLowerer
     /// <summary>
     /// The <see cref="IrCall"/> itself: its result, if any, of <paramref name="result"/>, each <c>ref</c> or <c>out</c>
     /// variable in <paramref name="written"/> stored from its output, and then its <c>threw</c> branch. A
-    /// <paramref name="closed"/> call reaches no heap map (ADR 0041), so it gets no heap pairs.
+    /// <paramref name="closed"/> call reaches no heap map (ADR 0041), so it gets no heap pairs. A call to a member that
+    /// never throws (<see cref="ClosedCalls.NeverThrows"/>; ADR 0056) has no flag and no branch.
     /// </summary>
     private Val? Invoke(CallIdentity identity, ImmutableArray<IrVar> operands, ImmutableArray<Place> written, ITypeSymbol? result, bool closed)
     {
         IrVar? value = result is null ? null : ssa.Temp(Map(result));
-        IrVar threw = ssa.Temp(Bool);
+        IrVar? threw = ClosedCalls.NeverThrows(identity) ? null : ssa.Temp(Bool);
         ImmutableArray<IrVar> outputs = [.. written.Select(p => ssa.Temp(Map(p.Type)))];
         ssa.Emit(context.Current, new IrCall(value, threw, identity, operands) { RefOuts = outputs, Closed = closed });
         foreach ((Place place, IrVar output) in written.Zip(outputs))
@@ -1055,7 +1056,11 @@ internal sealed partial class IlLowerer
             WriteUnknown((VariablePlace)place, output);
         }
 
-        ThrowIf(threw, PureCatalogue.AnyException);
+        if (threw is not null)
+        {
+            ThrowIf(threw, PureCatalogue.AnyException);
+        }
+
         return value is null ? null : new(value, result!);
     }
 

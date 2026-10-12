@@ -18,8 +18,10 @@ namespace Equiv.Tests.Integration;
 /// Ticket P2-061: P2-046's three Preserving seeds on Git Extensions that turned Equivalent into Divergent, standalone.
 /// <c>Commute</c> swapped a <c>string</c> concatenation (S177, S186), which is not commutative, and <c>InlineTemporary</c>
 /// moved a field read of an assignment's receiver across a property getter call (S150), which an external getter can
-/// change. Each seeded shape really differs, so Divergent is right and the operators no longer offer those sites; the
-/// sites they still offer verify.
+/// change. Each seeded shape really differs, so it is never Equivalent and the operators no longer offer those sites; the
+/// sites they still offer verify. The two concatenations differ only in what <c>String.Concat</c> returns, which the
+/// solver chose, so since ADR 0056 (ticket P2-081) they are Unknown(Abstraction) with the model as a candidate, not
+/// Divergent: that <c>"a" + "b"</c> is not <c>"b" + "a"</c> is a fact about <c>Concat</c> the replay does not have.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class PreservingSeedDivergenceTests
@@ -38,12 +40,12 @@ public sealed class PreservingSeedDivergenceTests
         """, []).ToMetadataReference();
 
     [Fact]
-    public void CommutingAStringConcatenationOfPropertiesIsDivergent() =>
-        Assert.IsType<Divergent>(Verify("string M(Node n) { return n.Name + n.Branch; }", "string M(Node n) { return n.Branch + n.Name; }"));
+    public void CommutingAStringConcatenationOfPropertiesIsNeverEquivalent() =>
+        Assert.Equal(UnknownReason.Abstraction, Assert.IsType<Unknown>(Verify("string M(Node n) { return n.Name + n.Branch; }", "string M(Node n) { return n.Branch + n.Name; }")).Reason);
 
     [Fact]
-    public void CommutingAStringConcatenationOfParametersIsDivergent() =>
-        Assert.IsType<Divergent>(Verify("string M(string c, string a) { return c + \" \" + a; }", "string M(string c, string a) { return a + c + \" \"; }"));
+    public void CommutingAStringConcatenationOfParametersIsNeverEquivalent() =>
+        Assert.Equal(UnknownReason.Abstraction, Assert.IsType<Unknown>(Verify("string M(string c, string a) { return c + \" \" + a; }", "string M(string c, string a) { return a + c + \" \"; }")).Reason);
 
     [Fact]
     public void ATemporaryBeforeAReceiverFieldReadIsDivergent() =>
