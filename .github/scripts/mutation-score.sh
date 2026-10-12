@@ -7,7 +7,10 @@
 # <reports-dir> holds one mutation-report.json per shard, anywhere below it (the downloaded
 # artifacts). A report is a mutation-testing-elements document: files.<path>.mutants[].status.
 # Every shard of a project lists every mutant of the project, and marks the ones outside its
-# own files Ignored, so each mutant counts once in the sum.
+# own patterns Ignored. A mutant that crosses a cut inside a file is tested by the shards on
+# both sides of it (P2-160; see mutation-plan.sh), so the sum is over distinct mutants: one
+# per file, location, mutator and replacement. Where two shards disagree about one, which
+# only a flaky test can cause, the undetected status counts.
 #
 # The score is Stryker's own (ProjectComponent.GetMutationScore): detected / (detected +
 # undetected), where detected is Killed + Timeout and undetected is Survived + NoCoverage.
@@ -28,7 +31,18 @@ if [[ "${#reports[@]}" -ne "$expected" ]]; then
   exit 1
 fi
 
-counts=$(jq -cs '[.[].files[].mutants[].status] | group_by(.) | map({ (.[0]): length }) | add // {}' "${reports[@]}")
+# One report at a time, and only the mutants a shard tested: a report is tens of megabytes
+# (it lists every test that covers every mutant), and a sweep has dozens.
+tested=$(mktemp)
+mutants=$(mktemp)
+for report in "${reports[@]}"; do
+  jq -c '.files | to_entries[] | .key as $file | .value.mutants[] | select(.status != "Ignored")
+         | { file: $file, location, mutatorName, replacement, status }' "$report"
+done > "$tested"
+jq -cs 'def rank: . as $status | { Survived: 0, NoCoverage: 1, Killed: 2, Timeout: 3 } | .[$status] // 4;
+        group_by([.file, .location, .mutatorName, .replacement]) | map(min_by(.status | rank))' "$tested" > "$mutants"
+
+counts=$(jq -c 'map(.status) | group_by(.) | map({ (.[0]): length }) | add // {}' "$mutants")
 count() {
   local status=$1
   jq --arg s "$status" '.[$s] // 0' <<< "$counts"
@@ -64,10 +78,9 @@ score=$(jq -n --argjson d "$detected" --argjson v "$valid" '$d * 10000 / $v | fl
     echo "Not detected (the first 200):"
     echo
     echo '```'
-    jq -rs '[.[].files | to_entries[] | .key as $file | .value.mutants[]
-             | select(.status == "Survived" or .status == "NoCoverage")
-             | "\($file):\(.location.start.line) \(.status) \(.mutatorName)"]
-            | sort | .[:200][]' "${reports[@]}"
+    jq -r '[.[] | select(.status == "Survived" or .status == "NoCoverage")
+            | "\(.file):\(.location.start.line) \(.status) \(.mutatorName)"]
+           | sort | .[:200][]' "$mutants"
     echo '```'
   fi
 } >> "$summary"
