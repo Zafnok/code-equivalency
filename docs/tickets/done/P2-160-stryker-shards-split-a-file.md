@@ -1,5 +1,5 @@
 # P2-160 Stryker shards split a file, so a PR that changes one large file is not one shard
-Status: in-progress
+Status: done (PR #480)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-133
@@ -95,3 +95,31 @@ that time out (both in Notes).
   for the nightly `Equiv.Verify.Z3` file list (32 shards, 28 exclusions) and PR #475's `Equiv.Frontend.CSharp`
   files (6 shards), 320,610 and 27,497 spans, among them the zero-width spans on every cut and every span within three
   characters of a cut, are each tested by at least one shard.
+- Measured 2026-10-12, run 38191684234: a dispatch on branch `P2-160-proof-pr475` (this workflow plus PR #475's
+  five files, merged onto `main` at `624718ae`). Wall-clock was 63 min, the slowest shard. PR #475's own run on
+  the old plan (38183078133) had the one `Equiv.Verify.Z3` shard cancelled at the 180-minute limit with no
+  result, and 66 min for the slowest of four `Equiv.Frontend.CSharp` shards.
+
+  | Shard | Patterns | Mutants tested | Job start to first mutant | Whole job |
+  |---|---|---|---|---|
+  | Z3 1/6 | `ModelDecoder.cs`, piece 1 | 7 | 19 min | 27 min |
+  | Z3 2/6 | piece 2 | 21 | 20 min | 44 min |
+  | Z3 3/6 | piece 3 | 49 | 10 min | 31 min |
+  | Z3 4/6 | piece 4 | 15 | 20 min | 38 min |
+  | Z3 5/6 | piece 5 | 37 | 20 min | 57 min |
+  | Z3 6/6 | piece 6 | 38 | 20 min | 63 min |
+  | Frontend 1/6 | `IrLowerer.cs`, piece 1 | 207 | 8 min | 30 min |
+  | Frontend 2/6 | piece 2 | 153 | 8 min | 27 min |
+  | Frontend 3/6 | piece 3 | 191 | 6 min | 17 min |
+  | Frontend 4/6 | piece 4 | 188 | 7 min | 14 min |
+  | Frontend 5/6 | `IlLowerer.cs` piece 1, `SsaBuilder.cs` | 255 | 6 min | 39 min |
+  | Frontend 6/6 | `IlLowerer.cs` piece 2, `ClosedCalls.cs` | 260 | 7 min | 46 min |
+
+  Stryker took the exclusions as written, and no shard needed its second attempt. The shards' own counts add up
+  to 167 and 1,254 mutants; the `stryker` jobs counted 166 (killed 147, timeout 19, score 100%) and 1,244
+  (killed 1,029, timeout 188, survived 27, score 97.82%), so 1 and 10 mutants crossed a cut, were tested on both
+  sides and counted once. The counts were not compared with an unsharded run of the same commit: there is none,
+  the old run of these files having been cut off.
+- What is left of a shard's time is not the split's to fix. Five of the six `Equiv.Verify.Z3` shards spent 19 to
+  20 minutes before their first mutant, 13 of them in the coverage capture, and shard 6 lost 10 of its 38 mutants
+  to timeouts. Equal bytes are not equal mutants either: the six pieces of one file hold 7 to 49.
