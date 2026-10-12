@@ -73,3 +73,6 @@ Rungs 2 to 5. Shipping Lean. Looking for counterexamples in Lean.
 ## Notes
 - Written 2026-10-04 by P1-037, whose criterion 7 asks for it whenever a query closes with the
   model. Its own evidence does not ask for the build: see the gate.
+- `tools/spikes/lean-vc/` was removed from the tree on 2026-10-11 (GH-463), since nothing was
+  built on it. The gate step restores it first:
+  `git restore --source=b6851268 -- tools/spikes/lean-vc`.
