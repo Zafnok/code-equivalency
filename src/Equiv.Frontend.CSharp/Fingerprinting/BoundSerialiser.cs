@@ -36,7 +36,7 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// declaration fixes is followed by that declaration: a field at a <c>[FieldOffset]</c>, a <c>sizeof</c>, a pointer, an
 /// inline array, a call into the interop services (ticket P2-149). A reference to a generic member of the solution is
 /// followed by the declarations of the types it hands the member (ticket P2-151), and an operation
-    /// that names a struct by those of the types its interface list hands a generic interface of the solution (ticket P2-157). A
+/// that names a struct by those of the types its interface list hands a generic interface of the solution (ticket P2-157). A
 /// <c>switch</c> expression that may match no arm carries the constructor of the exception the compiler throws then, which
 /// depends on the reference assemblies (ADR 0024 as clarified by ticket P2-144). The walk also decides whether the body is
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket

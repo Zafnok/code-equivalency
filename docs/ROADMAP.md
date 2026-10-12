@@ -777,6 +777,20 @@ Found by P2-152 (2026-10-10, by reading its own rule; not reproduced):
 - P2-157 (S) Soundness: a struct that names a type argument only in its interface list
   (`struct K : J<S>`) can be made with no constructor (`default(K)`, an array's element), so no
   text holds `S`. The first step is the repro. Needs P2-152.
+  Done: reproduced as equal fingerprints for a body that makes such a struct by a `default`, as an
+  array's element, in a field or a local never assigned, and through a generic member. An operation
+  that names a struct, in its type or among the type arguments it hands a member of the solution,
+  is now also followed by the declarations of the type arguments the struct's interface list hands
+  generic interfaces of the solution (ADR 0024, clarification of 2026-10-12 (P2-157)); no result on
+  `gitextensions-8522` changed.
+
+Found by P2-157 (2026-10-12, by reading its own rule; not reproduced):
+- P2-161 (M) Soundness: a lowered body that names such a struct is the same beside two declarations
+  of the type its interface list hands over, so the pair P2-157 no longer calls congruent can come
+  back Equivalent from the solver. The first step is the repro. Needs P2-154 and P2-157.
+- P2-162 (S) Soundness: a class created through a type parameter (`Make<K>()`, `new T()`) names a
+  type argument only in its interface list, and the declaration P2-151 writes for `K` holds its
+  base type and not its interfaces. The first step is the repro. Needs P2-157.
 
 Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
 - P2-153 (S) Soundness: the text of a body that uses an auto-property or a field-like event of an
