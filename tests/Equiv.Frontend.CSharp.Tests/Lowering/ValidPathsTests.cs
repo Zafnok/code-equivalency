@@ -113,6 +113,16 @@ public sealed class ValidPathsTests
         Assert.Contains(Calls(Source(Unknown, ".ctor")), static call => call.Callee.RuntimeChanged);
     }
 
+    /// <summary>
+    /// Ticket P2-158: a property that overrides only the setter has no getter of its own, so a read of it names no
+    /// source and is not a valid path, as the operand itself or as what a local holds.
+    /// </summary>
+    [Theory]
+    [InlineData("static object M(Leaf leaf) => new StreamReader(leaf.Text);")]
+    [InlineData("static object M(Leaf leaf) { var p = leaf.Text; return new StreamReader(p); }")]
+    public void AReadOfAPropertyThatOverridesOnlyTheSetterIsNotAValidPath(string member) => Assert.True(Flags(
+        "abstract class Node { public virtual string Text { get => null; set { } } }\nsealed class Leaf : Node { public override string Text { set { } } }\n" + member));
+
     private static bool Flags(string member) =>
         Calls(Source($"using System;\nusing System.IO;\nclass C\n{{\n{member}\n}}\n")).Any(static call => call.Callee.RuntimeChanged);
 }

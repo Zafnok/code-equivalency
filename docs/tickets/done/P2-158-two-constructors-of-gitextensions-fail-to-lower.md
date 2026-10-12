@@ -1,5 +1,5 @@
 # P2-158 Two constructors of gitextensions-8522 fail to lower with a null method
-Status: todo
+Status: done (PR #481)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
@@ -50,3 +50,16 @@ The IL fallback. Any change to what the two bodies' other constructs lower to.
 - Found by P2-140's census of 2026-10-11. Both bodies read attributes of an XML element inside
   `try` blocks, parse them with `bool.Parse`, and make a reflection call that is handed
   `binder: null` and a new empty `object[]`; which of those reaches the guard is criterion 3.
+- Cause (criterion 3): `4685d823` (P2-074, #464) introduced it, not one of the four commits the Goal suspects.
+  `ValidPaths.IsValid` took `property.Property.GetMethod!` of every `IPropertyReferenceOperation` it followed, and a
+  property that overrides only the setter (`XmlAttribute.InnerText`) has no getter of its own. Both bodies assign such
+  a read to a local and call `string.StartsWith` on it; that call has a runtime-change row, the receiver is no
+  constant so the row flags it, the flagged call is matched once more through `ValidPaths`, which follows the local to
+  its initializer and hands `CallIdentityFactory.Name` the null getter. The `bool.Parse` calls and the reflection
+  call have no row and never get there.
+- Decision: such a read is not a valid path (the row stays flagged), which is what any read that names no listed
+  source already is. The overridden property's getter is not looked up: `IrLowerer` leaves the read itself opaque
+  with reason `PropertyReference`, and this ticket's Out of scope keeps that as it is. No coverage-table row changes.
+- Census (criterion 4): `corpus.ps1 -Compare gitextensions-8522 -LowerOnly` at `1fe6b57f` exits 0 in 129 s, with no
+  `Value cannot be null` in the console or the progress log. No `docs/runs/` summary: the run checks one thing.
+- Not looked into: why P2-139's census of `gitextensions-9860` at `feee17e1`, which already had `4685d823`, exited 0.
