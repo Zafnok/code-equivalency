@@ -20,7 +20,9 @@ jobs:
   # `stryker-shard` mutates one group per runner, and `stryker` adds the shards' reports up and
   # applies the break threshold. Wall-clock is the slowest shard, not the sum: one runner took
   # over five hours on a PR that changed five central files of Equiv.Verify.Z3, where nearly
-  # every test covers every mutant.
+  # every test covers every mutant. P2-160: a large file is itself cut into pieces that go to
+  # different shards, because a PR that changed one file of that project still had one shard,
+  # and it ran for over two hours.
   plan:
     runs-on: ubuntu-latest
     permissions:
@@ -60,9 +62,12 @@ jobs:
       # run and coverage. A dispatched run has no merge ref: it checks out the branch head, so
       # its base is where the branch left main.
       #
-      # At most 4 shards per project on a PR or a dispatched run, 8 on the nightly sweep,
-      # which mutates every file. The projects are the `stryker` job's matrix; keep the two
-      # lists the same.
+      # At most 8 shards per project on a PR or a dispatched run, 32 on the nightly sweep,
+      # which mutates every file. How many of those a project gets is its files' bytes over
+      # the bytes one shard should hold: 48000 unless the project's argument ends in its own
+      # figure. Equiv.Verify.Z3's is an eighth of that because its mutants cost that much more
+      # (nearly every test covers each one, and each test asks the solver), Equiv.Core's half.
+      # The projects are the `stryker` job's matrix; keep the two lists the same.
       - name: Plan the shards
         id: plan
         shell: bash
@@ -72,11 +77,11 @@ jobs:
         run: >
           bash .github/scripts/mutation-plan.sh
           "${{ github.event_name }}"
-          ${{ github.event_name == 'schedule' && 8 || 4 }}
-          Equiv.Core=Equiv.Core.Tests
+          ${{ github.event_name == 'schedule' && 32 || 8 }}
+          Equiv.Core=Equiv.Core.Tests:24000
           Equiv.Cli=Equiv.Cli.Tests
           Equiv.Frontend.CSharp=Equiv.Frontend.CSharp.Tests
-          Equiv.Verify.Z3=Equiv.Verify.Z3.Tests
+          Equiv.Verify.Z3=Equiv.Verify.Z3.Tests:6000
           Equiv.Execute=Equiv.Execute.Tests
           Equiv.Verify.Cvc5=Equiv.Verify.Cvc5.Tests
 
@@ -111,9 +116,11 @@ jobs:
       - run: dotnet restore --locked-mode
       - run: dotnet tool restore
 
-      # --mutate holds the shard to its own files; every other mutant of the project is
-      # Ignored in its report. Stryker applies it before --since (the order of its MutantFilter
-      # enum), so on a PR a shard tests the changed files it was given and nothing else.
+      # --mutate holds the shard to its own files, and to its own pieces of a file the plan cut
+      # (the patterns that start with `!`; see mutation-plan.sh); every other mutant of the
+      # project is Ignored in its report. Stryker applies it before --since (the order of its
+      # MutantFilter enum), so on a PR a shard tests the changed files it was given and nothing
+      # else.
       # PRs mutate only the src files they changed (diff target and ignored test paths: see the
       # plan job and .github/stryker-pr-config.json); the nightly run is a full sweep.
       # --break-at 0: a shard never judges the score; the `stryker` job does, over all shards.
@@ -126,7 +133,7 @@ jobs:
         shell: bash
         env:
           CsCheck_Threads: 1
-          FILES: ${{ matrix.files }}
+          MUTATE: ${{ matrix.mutate }}
           SINCE: ${{ github.event_name != 'schedule' && format('--config-file {0}/.github/stryker-pr-config.json --since:{1}', github.workspace, needs.plan.outputs.base) || '' }}
         # Every shard repeats the initial test run, so a project with four shards meets a test
         # host that dies in it four times as often as one runner did (P2-133's first sharded
@@ -134,7 +141,13 @@ jobs:
         # scored nothing, so it is started once more; a second failure fails the shard.
         run: |
           mutate=()
-          for file in $FILES; do mutate+=(--mutate "**/${{ matrix.src }}/$file"); done
+          for pattern in $MUTATE; do
+            if [[ "$pattern" = '!'* ]]; then
+              mutate+=(--mutate "!**/${{ matrix.src }}/${pattern#!}")
+            else
+              mutate+=(--mutate "**/${{ matrix.src }}/$pattern")
+            fi
+          done
           output="$GITHUB_WORKSPACE/StrykerOutput/${{ matrix.src }}"
           for attempt in 1 2; do
             if dotnet stryker \

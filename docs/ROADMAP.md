@@ -835,6 +835,11 @@ Found by CI run times (PR #414, `stryker (Equiv.Verify.Z3, Equiv.Verify.Z3.Tests
   to 4 runners on a PR (8 on the nightly sweep), and a final job per project adds the shards up under
   the unchanged required check name. Workflow and scripts only. Needs M0-011.
 
+Found by CI run times (PR #475, `stryker-shard (Equiv.Verify.Z3, 1/1)`, over two hours for one file):
+- P2-160 (S) Stryker shards split a file: the plan cuts a file larger than one shard's share into
+  pieces by character span, and sizes a project's shard count from its bytes (up to 8 on a PR, 32 on
+  the nightly sweep). Workflow and scripts only. Needs P2-133.
+
 Documentation:
 - P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list
   `--bound` and `--timeout-ms`, which the command never had (`bound` and `timeoutMs` come from the
