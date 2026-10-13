@@ -22,11 +22,15 @@ namespace Equiv.Tests.Integration;
 [Trait("Category", "Integration")]
 public sealed class LayoutEquivalenceTests
 {
-    private const string Usings = "using System.Runtime.CompilerServices;\nusing System.Runtime.InteropServices;\n";
+    private const string Usings = "using System.Collections.Generic;\nusing System.Linq;\nusing System.Runtime.CompilerServices;\nusing System.Runtime.InteropServices;\n";
 
     private const string Generic = "static int Size<T>() => Unsafe.SizeOf<T>(); sealed class Box<T> { public static int Size() => Unsafe.SizeOf<T>(); public static int Width => Unsafe.SizeOf<T>(); public int Count => Unsafe.SizeOf<T>(); }";
 
     private const string Overlaid = "[StructLayout(LayoutKind.Explicit)] class U { [FieldOffset(0)] public int A; [FieldOffset(0)] public int B; } ";
+
+    private const string Implementing = "interface W { int Width(); } interface J<T> : W { int W.Width() => Unsafe.SizeOf<T>(); } struct K : J<S> { }";
+
+    private const string Making = "static W Make<T>() where T : struct, W => default(T);";
 
     private static readonly ImmutableArray<MetadataReference> References =
         [.. ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
@@ -130,6 +134,59 @@ public sealed class LayoutEquivalenceTests
         Assert.IsType<Equivalent>(Verify(
             Declared + $"class C {{ {Generic} static int M(int x) => {call} + x; }}",
             Declared + $"class C {{ {Generic} static int M(int x) => x + {call}; }}"));
+    }
+
+    /// <summary>
+    /// Ticket P2-161: a struct's interface list hands a generic interface of the solution a type, and the code the
+    /// struct inherits from it reads the type's layout. <c>Width()</c> is 8 beside the first declaration of <c>S</c> and
+    /// 5 beside the second, in bodies that differ elsewhere, and no operation of the body names <c>S</c>. A body that
+    /// makes the struct was not Equivalent before the ticket either: the <c>default</c>, the array creation and the call
+    /// that is handed <c>K</c> were opaques already, whose fingerprints hold the declaration (ticket P2-157).
+    /// </summary>
+    [Theory]
+    [InlineData("((W)default(K)).Width()")]
+    [InlineData("Make<K>().Width()")]
+    [InlineData("((W)(new K[1])[0]).Width()")]
+    public void ABodyThatNamesAStructIsNotTheSameBesideTwoDeclarationsOfWhatItsInterfaceListHandsOver(string call) =>
+        Assert.IsNotType<Equivalent>(Verify(
+            $"struct S {{ public byte A; public int B; }} {Implementing} class C {{ {Making} static int M(int x) => {call} + x; }}",
+            $"[StructLayout(LayoutKind.Sequential, Pack = 1)] struct S {{ public byte A; public int B; }} {Implementing} class C {{ {Making} static int M(int x) => x + {call}; }}"));
+
+    /// <summary>Beside one declaration the body is the same on both sides, as it was.</summary>
+    [Theory]
+    [InlineData("((W)default(K)).Width()")]
+    [InlineData("Make<K>().Width()")]
+    public void ABodyThatNamesAStructIsStillSharedBesideOneDeclaration(string call)
+    {
+        const string Declared = "struct S { public byte A; public int B; } " + Implementing;
+
+        Assert.IsType<Equivalent>(Verify(
+            Declared + $" class C {{ {Making} static int M(int x) => {call} + x; }}",
+            Declared + $" class C {{ {Making} static int M(int x) => x + {call}; }}"));
+    }
+
+    /// <summary>
+    /// Ticket P2-161: the same where no operation of the body makes the struct: it is a parameter, a field no body
+    /// assigns, an array's element, a list handed to a member of a reference, a value handed on to a member of the
+    /// solution, an <c>out</c> argument or a loop's variable. Beside one declaration each is the same on both sides.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(K k, int x) => ((W)k).Width() + x;", "static int M(K k, int x) => x + ((W)k).Width();")]
+    [InlineData("static K Unset; static int M(int x) => ((W)Unset).Width() + x;", "static K Unset; static int M(int x) => x + ((W)Unset).Width();")]
+    [InlineData("static int M(K[] k, int x) => ((W)k[0]).Width() + x;", "static int M(K[] k, int x) => x + ((W)k[0]).Width();")]
+    [InlineData("static int M(int x) => Enumerable.First(Enumerable.Cast<W>(new List<K>(1))).Width() + x;", "static int M(int x) => x + Enumerable.First(Enumerable.Cast<W>(new List<K>(1))).Width();")]
+    [InlineData("static int M(K k, int x) => Take(k) + x;", "static int M(K k, int x) => x + Take(k);")]
+    [InlineData("static int M(K k, K j, int x) => Take(x > 0 ? k : j) + x;", "static int M(K k, K j, int x) => x + Take(x > 0 ? k : j);")]
+    [InlineData("static int M(int x) { Out(out K l); return Take(l) + x; }", "static int M(int x) { Out(out K l); return x + Take(l); }")]
+    [InlineData("static int M(K[] ks, int x) { int n = 0; foreach (K k in ks) { n += Take(k); } return n + x; }", "static int M(K[] ks, int x) { int n = 0; foreach (K k in ks) { n += Take(k); } return x + n; }")]
+    public void ABodyThatIsHandedAStructIsTheSameBesideOneDeclarationOnlyOfWhatItsInterfaceListHandsOver(string legacy, string modern)
+    {
+        const string Declared = "struct S { public byte A; public int B; } ";
+        const string Packed = "[StructLayout(LayoutKind.Sequential, Pack = 1)] " + Declared;
+        const string Taking = " static int Take(W w) => w.Width(); static int Out(out K k) { k = default; return 1; } ";
+
+        Assert.IsType<Equivalent>(Verify($"{Declared}{Implementing} class C {{ {Taking}{legacy} }}", $"{Declared}{Implementing} class C {{ {Taking}{modern} }}"));
+        Assert.IsNotType<Equivalent>(Verify($"{Declared}{Implementing} class C {{ {Taking}{legacy} }}", $"{Packed}{Implementing} class C {{ {Taking}{modern} }}"));
     }
 
     private static Verdict Verify(string legacy, string modern) =>

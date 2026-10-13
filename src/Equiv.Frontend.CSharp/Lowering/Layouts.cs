@@ -103,6 +103,21 @@ internal static class Layouts
         return [.. Arguments(types.SelectMany(Named).Where(static type => type.IsValueType).SelectMany(static type => type.AllInterfaces))];
     }
 
+    /// <summary>
+    /// Whether <paramref name="operation"/>'s type is, or is made of, a struct whose interface list hands a generic
+    /// interface of the solution (<see cref="Implemented"/>) a type whose layout the interface's code can read through
+    /// its type parameter (<see cref="IsLaidOut"/>). The value such an operation yields runs that code wherever it is
+    /// boxed or handed on, and its sort names the struct alone, so it is not one value for both sides of a pair (ticket
+    /// P2-161). The fingerprint follows the operation with the declaration of every type of the solution the interface
+    /// list hands over, so this holds only where the fingerprint has the declaration. A struct handed over as a type
+    /// argument is itself a type with a layout, which <see cref="HandsOver"/> already says.
+    /// </summary>
+    public static bool Inherits(IOperation operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        return Implemented([operation.Type]).Any(IsLaidOut);
+    }
+
     /// <summary>The named types <paramref name="type"/> is, or is made of: an array's element, and a type argument.</summary>
     private static IEnumerable<INamedTypeSymbol> Named(ITypeSymbol? type) => type switch
     {
