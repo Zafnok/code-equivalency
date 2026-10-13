@@ -1391,16 +1391,13 @@ internal sealed class IrLowerer
     /// <summary><see cref="Opaque(IOperation, string, LoweringContext)"/> of an operation whose <paramref name="shared"/> fragment is already known.</summary>
     private IrVar? Opaque(IOperation operation, string reason, FragmentOf? shared, LoweringContext context)
     {
-        IrVar? target = operation.Type is { SpecialType: not SpecialType.System_Void } type ? ssa.Temp(Map(type)) : null;
-        SourceSpan span = Span(operation.Syntax);
         if (shared is { } fragment)
         {
-            IrVar threw = ssa.Temp(Bool);
-            ssa.EmitFragment(context.Current, new IrOpaque(target, reason, span) { Fingerprint = fragment.Fingerprint, Reads = Loaded(fragment.Reads, context), Threw = threw }, fragment.Captured);
-            ThrowIf(threw, SystemException, context, known: false, byCall: true);
-            return target;
+            return Shared(operation, reason, fragment, [], context);
         }
 
+        IrVar? target = Result(operation);
+        SourceSpan span = Span(operation.Syntax);
         ssa.Emit(context.Current, new IrOpaque(target, reason, span));
         foreach (SsaBuilder.Variable written in Written(operation))
         {
@@ -1409,6 +1406,24 @@ internal sealed class IrLowerer
             StoreUnknown(written, value, context);
         }
 
+        return target;
+    }
+
+    /// <summary>A temporary for <paramref name="operation"/>'s value, or null when it has none.</summary>
+    private IrVar? Result(IOperation operation) => operation.Type is { SpecialType: not SpecialType.System_Void } type ? ssa.Temp(Map(type)) : null;
+
+    /// <summary>
+    /// A fingerprinted opaque for <paramref name="operation"/> (ADR 0024 decision 2): it reads <paramref name="operands"/>,
+    /// values already computed, and then what <paramref name="fragment"/> reads at this point, and has a <c>threw</c> edge
+    /// to <c>System.Exception</c>, as a call has.
+    /// </summary>
+    private IrVar? Shared(IOperation operation, string reason, FragmentOf fragment, ImmutableArray<IrVar> operands, LoweringContext context)
+    {
+        IrVar? target = Result(operation);
+        IrVar threw = ssa.Temp(Bool);
+        IrOpaque opaque = new(target, reason, Span(operation.Syntax)) { Fingerprint = fragment.Fingerprint, Reads = [.. operands, .. Loaded(fragment.Reads, context)], Threw = threw };
+        ssa.EmitFragment(context.Current, opaque, fragment.Captured);
+        ThrowIf(threw, SystemException, context, known: false, byCall: true);
         return target;
     }
 
@@ -1498,9 +1513,17 @@ internal sealed class IrLowerer
     /// <paramref name="operation"/>'s fingerprint, the variables it reads and those a lambda in it captures, when it writes no
     /// variable and every variable it reads or captures is one the lowering tracks; otherwise null.
     /// </summary>
-    private FragmentOf? Fragment(IOperation operation, bool runtimeSensitive = false)
+    private FragmentOf? Fragment(IOperation operation, bool runtimeSensitive = false) =>
+        Written(operation).Any() ? null : Tracked(fragments.Of(operation, cfg), runtimeSensitive);
+
+    /// <summary>
+    /// <paramref name="found"/> over the lowering's variables, when it is a fragment, is not runtime-sensitive unless
+    /// <paramref name="runtimeSensitive"/> allows it, and every variable it reads or captures is one the lowering tracks;
+    /// otherwise null.
+    /// </summary>
+    private FragmentOf? Tracked(FragmentFingerprinter.Fragment? found, bool runtimeSensitive)
     {
-        if (Written(operation).Any() || fragments.Of(operation, cfg) is not { } fragment || (fragment.RuntimeSensitive && !runtimeSensitive))
+        if (found is not { } fragment || (fragment.RuntimeSensitive && !runtimeSensitive))
         {
             return null;
         }
@@ -2579,16 +2602,13 @@ internal sealed class IrLowerer
     /// <c>out</c> argument, is a call to the entry's modern member instead, and the entry is recorded as applied (ADR 0020;
     /// ticket M3-009). A call to a forwarder is the same call to its target (ADR 0047; ticket P2-068), which is then the
     /// callee everything here reads: the catalogue, the runtime-changes table and whether the call is closed. A call of a
-    /// local function is no call at all but an opaque with reason <c>LocalFunction</c> (ticket P2-127): a local function
-    /// is not a matched procedure, so no pair of its own reads its body, and it reads and writes the locals it captures,
-    /// which a call does not. <see cref="FragmentFingerprinter"/> gives a fragment that calls a local function declared
-    /// outside it no fingerprint, so the opaque is never shared.
+    /// local function is no call of a name (<see cref="InvokeLocal"/>).
     /// </summary>
     private IrVar? Invoke(IInvocationOperation invocation, LoweringContext context)
     {
         if (invocation.TargetMethod.MethodKind == MethodKind.LocalFunction)
         {
-            return Opaque(invocation, nameof(MethodKind.LocalFunction), context);
+            return InvokeLocal(invocation, context);
         }
 
         if (RefOuts(invocation.Arguments) is not { } written)
@@ -2601,6 +2621,24 @@ internal sealed class IrLowerer
         return Addressed(invocation, called.Identity) is { } rewrite
             ? AsLegacy(rewrite, invocation, returns, context)
             : Dispatch(invocation.Instance, called, Operands(invocation.Instance, invocation.Arguments, context), returns, written, context);
+    }
+
+    /// <summary>
+    /// A call of a local function: an opaque with reason <c>LocalFunction</c>, never a call of the function's name (ticket
+    /// P2-127). A local function is not a matched procedure, so no pair of its own reads its body, and it reads the locals
+    /// it captures, which a call of a name does not carry. Where the function's bound code has a fingerprint
+    /// (<see cref="FragmentFingerprinter.OfLocalFunctionCall"/>; ADR 0024 as clarified by ticket P2-171) the opaque
+    /// carries it and reads the arguments, evaluated as any call's and passed in parameter order, and then the variables
+    /// that code captures, so the same function called on both sides is one call of what it is given, and two functions
+    /// that differ are two opaques no side shares. A call with a <c>ref</c> or <c>out</c> argument, and one whose
+    /// function has no fingerprint or is runtime-sensitive, is the bare opaque, its arguments unevaluated.
+    /// </summary>
+    private IrVar? InvokeLocal(IInvocationOperation invocation, LoweringContext context)
+    {
+        const string Reason = nameof(MethodKind.LocalFunction);
+        return invocation.Arguments.Any(static a => IsWritten(a.Parameter!)) || Tracked(fragments.OfLocalFunctionCall(invocation, cfg), runtimeSensitive: false) is not { } called
+            ? Opaque(invocation, Reason, shared: null, context)
+            : Shared(invocation, Reason, called, Arguments([], invocation.Arguments, context), context);
     }
 
     /// <summary>

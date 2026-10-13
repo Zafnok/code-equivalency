@@ -34,6 +34,10 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// answer and the same fingerprint (ADR 0040; ticket P2-055).
 /// Its reads are the locals and parameters declared outside it that it references, a lambda's captures included, in order of
 /// first occurrence. Its text is <see cref="BoundSerialiser.SerialiseFragment"/>'s.
+/// <para>
+/// A call of a local function in the method's own body is a fragment of another kind (<see cref="OfLocalFunctionCall"/>;
+/// ADR 0024 as clarified by ticket P2-171): its text is the called function's bound code, not the call's.
+/// </para>
 /// </summary>
 internal sealed class FragmentFingerprinter(
     IMethodSymbol method,
@@ -48,6 +52,7 @@ internal sealed class FragmentFingerprinter(
         new[] { OperationKind.FlowCapture, OperationKind.FlowCaptureReference, OperationKind.IsNull, OperationKind.CaughtException }.ToFrozenSet();
 
     private readonly Dictionary<ControlFlowGraph, ImmutableHashSet<ISymbol>> writtenByFunctions = [];
+    private readonly Dictionary<ControlFlowGraph, Dictionary<ISymbol, ILocalFunctionOperation>> localFunctions = [];
 
     /// <summary>The forwarders a fragment's text names as themselves, as the body's lowering calls them (ADR 0047).</summary>
     public ImmutableHashSet<string> KeptForwarders { get; init; } = [];
@@ -83,6 +88,68 @@ internal sealed class FragmentFingerprinter(
         (string text, bool runtimeSensitive) = BoundSerialiser.SerialiseFragment(
             method, compilation, operation, Lambda, new(renames, suppressedRuntimeChanges, equivalences, runtime) { KeptForwarders = KeptForwarders });
         return new Fragment(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), reads, captured, runtimeSensitive);
+    }
+
+    /// <summary>
+    /// The fragment a <paramref name="call"/> of a local function in <paramref name="graph"/> is, without its arguments
+    /// (ADR 0024 as clarified by ticket P2-171), or null when it gets no fingerprint. Its text is the bound code the call
+    /// runs: the called function's declaration and that of every local function it reaches
+    /// (<see cref="BoundSerialiser.SerialiseLocalFunctionCall"/>). Its reads are the locals and parameters declared
+    /// outside those declarations that they reference, in order of first occurrence, and all of them count as captured:
+    /// a local function holds its variables by reference, and a lambda, an iterator or an <c>async</c> function in it
+    /// can still read one after the call returns, so the lowerer shares no call one of whose reads is assigned after it.
+    /// With the call's arguments, the heap and <c>this</c> (the same input on both sides; a struct's local functions
+    /// cannot name it), the reads are everything the code depends on, so two calls with one fingerprint are one function
+    /// of them. A call gets no fingerprint when:
+    /// <list type="bullet">
+    /// <item>a lambda or local function anywhere in the graph, the called one included, writes one of its reads: the call
+    /// then has an output that is not its result, or reads a value the lowering does not track;</item>
+    /// <item>the called function returns by reference, which is no value.</item>
+    /// </list>
+    /// A local function cannot name a <c>ref</c> local, so none of its reads is one.
+    /// </summary>
+    public Fragment? OfLocalFunctionCall(IInvocationOperation call, ControlFlowGraph graph)
+    {
+        ImmutableArray<ILocalFunctionOperation> closure = Closure(call.TargetMethod.OriginalDefinition, graph);
+        bool Outer(ISymbol symbol) => !closure.Any(f => IsInside(symbol, f.Syntax));
+        ImmutableArray<ISymbol> reads = [.. closure.SelectMany(static f => f.DescendantsAndSelf()).Select(Read).OfType<ISymbol>().Where(Outer).Distinct(SymbolEqualityComparer.Default)];
+        if (call.TargetMethod.RefKind != RefKind.None || reads.Any(WrittenByFunctions(graph).Contains))
+        {
+            return null;
+        }
+
+        (string text, bool runtimeSensitive) = BoundSerialiser.SerialiseLocalFunctionCall(
+            method, compilation, call.TargetMethod, closure, new(renames, suppressedRuntimeChanges, equivalences, runtime) { KeptForwarders = KeptForwarders });
+        return new Fragment(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), reads, reads, runtimeSensitive);
+    }
+
+    /// <summary>
+    /// The declaration of <paramref name="called"/>, then that of each local function the ones before it call or convert
+    /// to a delegate and that none of them declares, in order of first reference: the code a call of
+    /// <paramref name="called"/> can run. A recursive function is in it once.
+    /// </summary>
+    private ImmutableArray<ILocalFunctionOperation> Closure(IMethodSymbol called, ControlFlowGraph graph)
+    {
+        if (!localFunctions.TryGetValue(graph, out Dictionary<ISymbol, ILocalFunctionOperation>? declared))
+        {
+            declared = graph.OriginalOperation.DescendantsAndSelf().OfType<ILocalFunctionOperation>()
+                .ToDictionary(static f => (ISymbol)f.Symbol, SymbolEqualityComparer.Default);
+            localFunctions[graph] = declared;
+        }
+
+        List<ILocalFunctionOperation> closure = [declared[called]];
+        for (int i = 0; i < closure.Count; i++)
+        {
+            foreach (IMethodSymbol reached in closure[i].Descendants().Select(LocalFunction).OfType<IMethodSymbol>().Select(static f => f.OriginalDefinition))
+            {
+                if (!closure.Exists(f => IsInside(reached, f.Syntax)))
+                {
+                    closure.Add(declared[reached]);
+                }
+            }
+        }
+
+        return [.. closure];
     }
 
     /// <summary>Every operation of the fragment in pre-order, each lambda of the graph replaced by its bound body.</summary>
