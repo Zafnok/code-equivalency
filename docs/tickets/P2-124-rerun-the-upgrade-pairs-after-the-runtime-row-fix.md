@@ -1,5 +1,5 @@
 # P2-124 Rerun the two version-upgrade pairs once runtime rows have change points, and refresh the upgrade verdict
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-066, P2-105, P2-113, P2-117, P2-118, P2-122, P2-095, P2-127, P2-077, P1-032
@@ -53,3 +53,25 @@ A change under `src/`, `tests/` or `tools/` means the ticket was misread: file w
 ## Notes
 - Found by the 2026-10-03 review of the open tickets: the runtime-row fix is the largest expected gain
   on upgrade pairs and no ticket measures it.
+- Decision: compare mode -> both. The ticket names none; `equiv-corpus-run` asks for thorough for a verdict and
+  `equiv-scoreboard` takes only quick runs, and criterion 6 applies the scoreboard. The verdict's tables are the
+  quick runs and the thorough runs have their own section. Alternatives: quick only (no word on what the later
+  passes add), thorough only (no scoreboard source). Rule: the skill's own ("this rule decides and the ticket's
+  Notes says which was used").
+- Decision: `--jobs 4` -> the value the 2026-10-08 runs of these pairs used, so times compare. Alternative: the
+  default (24 on this box).
+- Results (equiv `1d767f54`, 2026-10-12; `docs/runs/2026-10-12-upgrade-verdict.md`): EQ006 161 -> 4, Divergent
+  173 -> 15, of which 6 confirmed and 9 false positives; `jellyfin-13023` proves 62 of 122 changed pairs, from 0 of
+  573. Of the 353 Jellyfin bodies (350 found again by the text scan) 334 are congruent, 6 proved, 10 Unknown; of
+  the 120 false EQ006, 118 are congruent and 2 proved.
+- `.corpus/` did not exist in this worktree: `-Prepare`, `-Fetch` and restore were done new. Jellyfin's restore
+  still needs `--configfile <this repo>/NuGet.config` (P2-115, open).
+- P2-066's list of the 353 bodies and its analysis script were not kept; its two SARIF files were, in the
+  `version-upgrade-pairs-corpus-1c9943` worktree's `.corpus/`, and criterion 4 was answered from them.
+- `corpus.ps1 -Packages` fails on both pairs ("The property 'Files' cannot be found on this object"), so the
+  summaries have no package-change line. Tooling, not filed as a ticket here (Size guard: nothing under `tools/`).
+- Filed: P2-163, P2-164, P2-165 (criterion 5: `no-body`, 8.8% of `gitextensions-9860`'s changed pairs), P2-166.
+  P2-163, P2-164 and P2-166 are below criterion 5's 5%; they are the causes of every false Divergent the runs
+  have that no open ticket owned, filed as `equiv-corpus-run` asks of a false positive.
+- A real behaviour change that P2-066's run reported EQ002, `Emby.Server.Implementations.ApplicationHost::GetCertificate(string,string)`,
+  is Unknown (`abstraction`) at this commit. Not Equivalent, so not a soundness finding; recorded in the verdict.

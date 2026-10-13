@@ -57,3 +57,7 @@ Turning the IL pass off in thorough (ADR 0049 decides that). The lambda bodies t
 - P1-032's thorough run of `gitextensions-8522` (2026-10-06) has 12 `decidedBy: il-pass` Divergents, 5 EQ002 and 7
   EQ006, and 1 `il-pass` Equivalent. Its SARIF is `.corpus/pairs/gitextensions-8522/runs/20261006-1003-full-thorough-capped/`
   in that ticket's worktree; a fresh thorough run reproduces it.
+- P2-124's thorough run of `gitextensions-9860` (2026-10-12, equiv `1d767f54`) has 14 EQ002 with `decidedBy: il-pass`,
+  all in files the pull request does not edit and all an interpolated string that is `string.Format` on net5.0 and
+  the `DefaultInterpolatedStringHandler` members on net6.0. All 14 are adjudicated false positives
+  (`docs/runs/2026-10-12-upgrade-verdict.md`). The same run's IL pass proves 2 pairs.

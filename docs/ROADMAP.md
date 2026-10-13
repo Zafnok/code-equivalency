@@ -854,6 +854,20 @@ Found by CI run times (PR #475, `stryker-shard (Equiv.Verify.Z3, 1/1)`, over two
   pieces by character span, and sizes a project's shard count from its bytes (up to 8 on a PR, 32 on
   the nightly sweep). Workflow and scripts only. Needs P2-133.
 
+Found by P2-124's rerun of the two upgrade pairs (`docs/runs/2026-10-12-upgrade-verdict.md`):
+- P2-163 (S) The `TreeNodeCollection::get_Item(` row fires on every read of the indexer, where only
+  assigning a null node reaches the change: the 4 EQ006 left on the two upgrades, all false. Needs
+  P2-075.
+- P2-164 (M) `StringBuilder.Append($"...")` binds to `AppendInterpolatedStringHandler` from .NET 6
+  and is Divergent from the pre-.NET 6 binding: 5 false EQ002 on `gitextensions-9860`, in unedited
+  files. Needs P2-086 and P2-139.
+- P2-165 (M) An unedited `extern` method is Unknown (`no-body`) on every pair that crosses a runtime
+  (ADR 0054 decision 4): 53 of `gitextensions-9860`'s 605 changed pairs (8.8%), its largest opaque
+  reason. Changes an accepted ADR, so it goes through `equiv-adr`. Needs P2-145 and P2-146.
+- P2-166 (M) Thorough's budget pass reports EQ002 on a body whose text is unchanged and whose field
+  was retyped (`jellyfin-13023`, one result, thorough mode only). The first step is the repro. Needs
+  P1-032.
+
 Documentation:
 - P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list
   `--bound` and `--timeout-ms`, which the command never had (`bound` and `timeoutMs` come from the
