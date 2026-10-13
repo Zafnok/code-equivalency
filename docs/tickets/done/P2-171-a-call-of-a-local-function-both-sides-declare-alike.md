@@ -1,5 +1,5 @@
 # P2-171 A call of a local function is not an opaque when both sides declare the same local function
-Status: in-progress
+Status: done (PR #491)
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-127
