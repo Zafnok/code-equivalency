@@ -532,6 +532,17 @@ of how much of the cleanup result each explains:
 - P2-169 (M) Thorough mode's IL pass reports EQ002 on a collection expression with a spread against
   the `foreach` and `Add` it replaces: 3 false Divergent on gitextensions-11372, thorough mode only.
   Found by P2-110's thorough run. Needs P1-032.
+- P2-170 (M) A deconstruction of a tuple-typed value lowers as its stores. `DeconstructionAssignment`
+  is in the reason set of 46 of gitextensions-11284's 178 changed pairs (25.8%), its largest opaque
+  reason; P2-025 lowers a tuple literal only. Found by P2-110. Needs P2-025.
+- P2-171 (L) A call of a local function is not an opaque when both sides declare the same local
+  function: `LocalFunction` is in 43 of gitextensions-11372's 319 changed pairs (13.5%) and 18 of
+  gitextensions-11284's 178. The cost P2-127's soundness fix named. Found by P2-110. Needs P2-127.
+- P2-172 (M) Seventeen bodies of powershell-19687 are `unbound` on both sides of a human commit, in
+  files the pull request did not touch: what P2-106 left of 82. Found by P2-110. Needs P2-106.
+- P2-173 (M) A result says which fingerprint component keeps a body out of congruence. 11 bodies in
+  byte-identical files of the three cleanup pairs are not congruent and nothing says why. Found by
+  P2-110. Needs P2-107.
 - P2-106 (M) A body whose only diagnostics are warnings promoted to errors is not `unbound`. 82
   pairs on powershell-19687. Starts with `equiv-adr`. Needs P2-085.
 - P2-107 (M) On a same-runtime pair, a whole-body opaque pair with identical source is not

@@ -203,13 +203,13 @@ construction, which is 0% (0 of 3). The README's scoreboard rests on the quick r
 |---|---|
 | No lowering crash on any pair: the five procedures P2-058's runs threw on all have results | P2-105, done |
 | `BugReporter.Program::Main()` is Divergent on both Git Extensions pairs for its commit constant | none: real by construction (ADR 0046) |
-| `DeconstructionAssignment` is in the reason set of 46 of `gitextensions-11284`'s 178 changed pairs (25.8%) and is the first reason of 34 of its Unknowns | none open. P2-025, which gave it the reason name, is done. Not filed here: the ticket's criteria file a ticket for a crash and for a Divergent cause only |
-| `LocalFunction` is in the reason set of 43 of `gitextensions-11372`'s 319 changed pairs (13.5%) | none open. P2-127 made the call opaque on purpose |
+| `DeconstructionAssignment` is in the reason set of 46 of `gitextensions-11284`'s 178 changed pairs (25.8%) and is the first reason of 34 of its Unknowns | P2-170 (M, new). P2-025 lowers a tuple literal only; the pull request's 38 rewritten deconstructions take apart a call's result (26), an array element (9), an awaited value (2) or a new object (1) |
+| `LocalFunction` is in the reason set of 43 of `gitextensions-11372`'s 319 changed pairs (13.5%) | P2-171 (L, new). P2-127 made the call opaque on purpose and left proving it to a later ticket |
 | `CollectionExpression` is left in 11 changed pairs of `gitextensions-11372` | P2-128, open |
 | 44 timeouts over the edited pairs (26, 17 and 1), all on the resource limit. Thorough mode's budget pass, at 15 times the limit, proves 1 of them and finds an opaque node behind 20 | none: the roadmap's "Not on the milestone" paragraph says what is known about the solver-budget Unknowns |
 | Thorough's IL pass reports 3 false EQ002 on a collection expression with a spread; thorough mode only | P2-169 (M, new) |
-| 17 `unbound` pairs on PowerShell, from 82, in files the pull request did not touch | none open (P2-106 is done) |
-| 8 pairs in byte-identical PowerShell files are neither congruent nor `unbound` (3 proved, 3 `opaque`, 2 `timeout`), and 3 on the two Git Extensions pairs that are not `no-body` or the commit constant (2 proved, 1 `abstraction`). The SARIF does not say what keeps an unedited body out of congruence on a same-runtime pair | none: 11 pairs over three runs |
+| 17 `unbound` pairs on PowerShell, from 82, in files the pull request did not touch | P2-172 (M, new) |
+| 8 pairs in byte-identical PowerShell files are neither congruent nor `unbound` (3 proved, 3 `opaque`, 2 `timeout`), and 3 on the two Git Extensions pairs that are not `no-body` or the commit constant (2 proved, 1 `abstraction`). The SARIF does not say what keeps an unedited body out of congruence on a same-runtime pair | P2-173 (M, new) |
 
 ### Scoreboard (criterion 6)
 

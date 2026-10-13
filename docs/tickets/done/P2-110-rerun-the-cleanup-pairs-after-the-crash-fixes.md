@@ -76,6 +76,8 @@ More than the three pairs, or any change under `src/`: stop, that is its own tic
   with a spread, all false positives: P2-169, new.
 - The skill's restore block does not fit these pairs: both Git Extensions sides and both PowerShell
   sides restore with `dotnet restore --force`. `corpus.ps1 -Packages` works again (P2-167).
-- Not filed, because the criteria file a ticket for a crash and for a Divergent cause only:
-  `DeconstructionAssignment` is in the reason set of 46 of `gitextensions-11284`'s 178 changed
-  pairs (25.8%) and no open ticket owns it; 17 `unbound` pairs are left on PowerShell.
+- Deviation: criterion 4 files a ticket for a new Divergent cause only. The runs also found four
+  things no ticket owned, and each is filed, at the user's direction (2026-10-13): P2-170
+  (`DeconstructionAssignment`, 46 of `gitextensions-11284`'s 178 changed pairs), P2-171
+  (`LocalFunction`, 43 of `gitextensions-11372`'s 319), P2-172 (17 `unbound` bodies on PowerShell)
+  and P2-173 (11 bodies in byte-identical files that are not congruent, cause unknown).
