@@ -1,5 +1,5 @@
 # P2-170 A deconstruction of a tuple-typed value lowers as its stores, not as an opaque
-Status: in-progress
+Status: done (PR #488)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-025
