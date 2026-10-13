@@ -1,5 +1,5 @@
 # P2-167 `corpus.ps1 -Packages` fails with "The property 'Files' cannot be found on this object"
-Status: in-progress
+Status: done (PR #484)
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-032
