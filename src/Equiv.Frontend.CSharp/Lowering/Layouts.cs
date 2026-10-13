@@ -108,6 +108,21 @@ internal static class Layouts
         return [.. Arguments(listing.SelectMany(static type => type.AllInterfaces))];
     }
 
+    /// <summary>
+    /// Whether <paramref name="operation"/>'s type is, or is made of, a struct whose interface list hands a generic
+    /// interface of the solution (<see cref="Implemented"/>) a type whose layout the interface's code can read through
+    /// its type parameter (<see cref="IsLaidOut"/>). The value such an operation yields runs that code wherever it is
+    /// boxed or handed on, and its sort names the struct alone, so it is not one value for both sides of a pair (ticket
+    /// P2-161). The fingerprint follows the operation with the declaration of every type of the solution the interface
+    /// list hands over, so this holds only where the fingerprint has the declaration. What the interface list of a type
+    /// handed over as a type argument hands on is <see cref="HandsOver"/>'s to say.
+    /// </summary>
+    public static bool Inherits(IOperation operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        return Implemented([operation.Type], []).Any(IsLaidOut);
+    }
+
     /// <summary>The named types <paramref name="type"/> is, or is made of: an array's element, and a type argument.</summary>
     private static IEnumerable<INamedTypeSymbol> Named(ITypeSymbol? type) => type switch
     {
@@ -145,9 +160,16 @@ internal static class Layouts
     /// whose layout the member's code can read through its type parameter. Such a call is not one function for both
     /// sides of a pair, and such a field is not one map (ticket P2-154). The fingerprint follows the operation with the
     /// declaration of every type of the solution it hands over; this asks for one that has a layout to read
-    /// (<see cref="IsLaidOut"/>), so it holds only where the fingerprint has the declaration.
+    /// (<see cref="IsLaidOut"/>), so it holds only where the fingerprint has the declaration. A type handed over also
+    /// hands on what its interface list hands a generic interface of the solution (<see cref="Implemented"/>; tickets
+    /// P2-162 and P2-161): the member can create the type or run a static member it inherits, and that code reads the
+    /// layout of the interface's type argument, though the type handed over is a class with none of its own.
     /// </summary>
-    public static bool HandsOver(IOperation operation, Func<IMethodSymbol, IMethodSymbol> called) => TypeArguments(operation, called).Any(IsLaidOut);
+    public static bool HandsOver(IOperation operation, Func<IMethodSymbol, IMethodSymbol> called)
+    {
+        ImmutableArray<ITypeSymbol> handed = TypeArguments(operation, called);
+        return handed.Any(IsLaidOut) || Implemented([], handed).Any(IsLaidOut);
+    }
 
     /// <summary>
     /// Whether code that has <paramref name="type"/> as a type argument can read a layout the solution declares: the

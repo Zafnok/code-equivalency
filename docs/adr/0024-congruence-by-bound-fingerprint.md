@@ -597,6 +597,67 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     `K` has no layout to read, so `Make<K>()` is one function on both sides of a pair this text no
     longer calls congruent (P2-161, which decides what the lowering does with what
     `Layouts.Implemented` gives).
+- 2026-10-12 (P2-161). **A lowered operation that brings in a struct whose interface list hands
+  over a type with a layout is an opaque, shared by the text that holds the declaration.** The
+  clarifications of 2026-10-12 (P2-157) and (P2-162) put the declaration in the text and left the
+  lowering as it was. A body that
+  makes the struct was already safe: a `default`, an array creation and a call that is handed `K`
+  are opaques, whose fingerprints hold the declaration since that clarification, so
+  `((W)default(K)).Width()` and `Make<K>().Width()` came back Unknown beside two declarations of
+  `S`. A body that is handed the value was not. It was reproduced as an Equivalent from the solver
+  beside two declarations of `S` (`LayoutEquivalenceTests`): for a parameter of type `K`, a static
+  field no body assigns, an element of a `K[]` parameter, a `List<K>` handed to
+  `Enumerable.Cast<W>`, and a `K` handed on to a member of the solution that takes a `W`. The
+  value's sort, its conversion's map `cast.K.W` and the identity `W::Width()` name `K` and `W`
+  alone.
+  - **The rule.** An operation whose type is, or is made of (an array's element, a type argument),
+    a struct whose interface list hands a generic interface of the solution a type that has a
+    layout to read (the clarification of 2026-10-10 (P2-154) says which types have one) is an
+    `IrOpaque` with reason `Layout`, on the terms the clarification of P2-150 gives one, where it
+    brings the value into the body. `Layouts.Implemented` is the one rule: the text writes the
+    declaration of every type it gives, and the lowering makes an opaque where one of them has a
+    layout, so the lowering makes an opaque only where the text has the declaration. A method with
+    such an operation is not lowered from IL.
+  - **Which operations bring a value in.** Every one of such a type but four. A constant, which
+    is null and no value of the struct. An assignment and an increment or decrement, which yield
+    the value they store: the operation that computed it was lowered first, and an opaque in their
+    place would lose the store. A read of a flow capture that holds a value, which an operation of
+    the body put there; a capture that stands for a field or a property place reads that place,
+    and is an opaque. A read of a local is not left out, though an operation of the body stored
+    it: an `out` argument, a `foreach` and a pattern store a local with no operation that yields
+    the value.
+  - **Why the value and not the call that runs the inherited code.** The ticket asked what a
+    lowered body does with such an operation. The code runs where no call of the body names it,
+    as the clarification above found for the text: a member of a reference boxes the elements of a
+    `K[]` it is handed, and a member of the solution that takes a `W` has a text that names
+    neither `K` nor `S`, so its own pair is congruent. What the two sides cannot share is the
+    value. Once it is each side's own function of the declaration, nothing computed from it is
+    shared either.
+  - **A value the compiler supplies is as it was.** The `default` passed for an optional
+    parameter of a struct type is still element 0 of its sort (P2-138). Only a member that
+    declares a parameter of that type takes it, and that member's body reads the parameter, so
+    its own pair holds the declaration and the caller assumes that pair (ADR 0019).
+  - **A struct with no such interface is as it was** (`AnOperationThatNamesAStructWithNoGenericInterfaceIsLoweredAsItWas`):
+    one with no interface list, one whose interfaces are not generic or are a reference's, one
+    whose interface is handed a type from a reference, a type parameter or a class with no
+    `[StructLayout]`, and a class.
+  - **What it costs.** Nothing on `gitextensions-8522` in compare mode quick (the ticket's
+    Notes): all 13818 results are the same by location, rule, proof method and Unknown reason on
+    both sides of the change, and each side of the pair has 108 opaques with reason `Layout` on
+    both. No body of the pair names such a struct. Where one does, beside one declaration the
+    opaque is one call on both sides and the pair is proved as before, except that the call is
+    ordered against the body's other calls, and that the read `f ??= v` makes of a captured place
+    of such a type has no fingerprint, so that body is Unknown.
+  - **A type that is handed over hands on what its interface list does.** The clarification of
+    P2-162 wrote the declaration after an operation that hands a member of the solution a class
+    `K : J<S>`, and left `Make<K>()` one function `Make<N.K>` on both sides: `K` has no layout of
+    its own, so the rule of P2-154 did not ask. It was reproduced as an Equivalent from the solver
+    beside two declarations of `S` (`LayoutEquivalenceTests`), for `Make<K>()` that runs `new T()`
+    and for a member of `Box<K>`. `Layouts.HandsOver` now also asks `Layouts.Implemented` of the
+    types handed over, so such a reference is the opaque the clarification of P2-154 makes of one
+    that hands over a struct, a read or a write of a field of such a generic type included.
+  - **What the lowering still does not hold.** Nothing the text holds. What the text does not
+    hold is the clarification of P2-162's to say (P2-168).
 - 2026-10-08 (P2-144). **The throw a `switch` expression ends in is part of its bound code, and
   across .NET Core 3.0 it is a runtime rule.** A `switch` expression that matches no arm throws.
   The source does not write the throw and the `IOperation` tree does not hold it: the compiler

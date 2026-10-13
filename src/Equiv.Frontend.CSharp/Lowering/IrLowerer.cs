@@ -98,7 +98,8 @@ internal sealed class IrLowerer
     /// Whether <paramref name="method"/>'s bound code, with the initializers a constructor runs, has an operation that a
     /// type's layout fixes (<see cref="Layouts.Reads"/>), or one that hands a generic member of the solution a type
     /// (<see cref="Layouts.HandsOver"/>; ticket P2-154), be it the member the operation names or the one a forwarder
-    /// passes the call on to. Its IL names the same types and holds no more of their declarations, and a fragment of IL
+    /// passes the call on to, or one that names a struct whose interface list hands one over
+    /// (<see cref="Layouts.Inherits"/>; ticket P2-161). Its IL names the same types and holds no more of their declarations, and a fragment of IL
     /// has no fingerprint that does, so such a method is never lowered from IL (ticket P2-150).
     /// </summary>
     internal static bool DependsOnLayout(IMethodSymbol method, Compilation compilation)
@@ -111,7 +112,8 @@ internal sealed class IrLowerer
         return initializers.Prepend(body).OfType<IOperation>().SelectMany(static root => root.DescendantsAndSelf()).Any(o =>
             Layouts.Reads(o, method.ContainingAssembly)
             || Layouts.HandsOver(o, static callee => callee)
-            || Layouts.HandsOver(o, callee => Forwarders.Resolve(callee, compilation)?.Target ?? callee));
+            || Layouts.HandsOver(o, callee => Forwarders.Resolve(callee, compilation)?.Target ?? callee)
+            || Layouts.Inherits(o));
     }
 
     /// <summary>
@@ -886,13 +888,14 @@ internal sealed class IrLowerer
     /// The operation's value, or null for an operation without one (a statement, a void call). An operation of an array
     /// <c>foreach</c> is its index loop's (ticket P1-004), and a file path or line number the compiler supplied for a
     /// caller-information parameter is the input both sides share (ADR 0046; ticket P2-098). An operation that a type's
-    /// layout fixes is an opaque (ticket P2-150).
+    /// layout fixes is an opaque (ticket P2-150), and so is one that yields a value of a struct whose interface list
+    /// hands a type with a layout over (ticket P2-161).
     /// </summary>
     private IrVar? Lower(IOperation operation, LoweringContext context) => (Supplied(operation, context), loops.Of(operation)) switch
     {
         ({ } supplied, _) => supplied,
         (null, { } site) => ForEach(site, context),
-        _ when ReadsLayout(operation) => Layout(operation, context),
+        _ when ReadsLayout(operation) || Inherits(operation) => Layout(operation, context),
         _ => Operation(operation, context),
     };
 
@@ -1320,6 +1323,22 @@ internal sealed class IrLowerer
     private bool ReadsLayout(IOperation operation) =>
         !Overlaid(operation).IsEmpty
         || (operation is IInvocationOperation or IObjectCreationOperation && (Layouts.IsHanded(operation, compilation.Assembly) || Layouts.HandsOver(operation, Forwarded)));
+
+    /// <summary>
+    /// Whether <paramref name="operation"/> brings into the body a value whose type is, or is made of, a struct whose
+    /// interface list hands a generic interface of the solution a type with a layout (<see cref="Layouts.Inherits"/>;
+    /// ADR 0024 as clarified by ticket P2-161). The code the struct inherits from the interface reads that type's
+    /// declaration wherever the value is boxed or handed on, and the value's sort, its conversion's map and the
+    /// interface member's identity name the struct and the interface alone. A constant of such a type is null, and no
+    /// value of the struct. An assignment and a step yield the value they store, which the operation that computed it
+    /// brought in, and so does a read of a flow capture that holds a value; a capture that stands for a field or a
+    /// property place reads that place.
+    /// </summary>
+    private bool Inherits(IOperation operation) =>
+        operation is not (IAssignmentOperation or IIncrementOrDecrementOperation)
+        && !operation.ConstantValue.HasValue
+        && !(operation is IFlowCaptureReferenceOperation held && !IsCapturedPlace(held.Id))
+        && Layouts.Inherits(operation);
 
     /// <summary>
     /// The method a call to <paramref name="callee"/> calls, as the fingerprint spells it: a forwarder's target, unless

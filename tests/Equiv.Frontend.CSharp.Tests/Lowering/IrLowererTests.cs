@@ -2539,6 +2539,100 @@ public sealed class IrLowererTests
         Assert.Equal(callees, Calls(procedure).Select(static c => c.Callee.Value), StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Ticket P2-161: a struct's interface list hands a generic interface of the solution a type, and the code the
+    /// struct inherits reads that type's declaration wherever a value of the struct is boxed or handed on. An operation
+    /// that brings such a value into the body (a parameter, a field, an array's element, a list of them, a place a
+    /// <c>??=</c> reads) is an opaque with reason <c>Layout</c>, and its fingerprint is another beside another
+    /// declaration of the type.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(K k) => ((W)k).Width();")]
+    [InlineData("static K Unset; static int M() => ((W)Unset).Width();")]
+    [InlineData("static int M(K[] ks) => ((W)ks[0]).Width();")]
+    [InlineData("static int M(System.Collections.Generic.List<K> ks) => ks.Count;")]
+    [InlineData("static int M(Nested n) => ((W)n).Width();")]
+    [InlineData("static K? F; static void M() { F ??= default(K); }")]
+    public void AnOperationThatBringsInAStructWhoseInterfaceListHandsOverATypeIsAnOpaqueWhoseFingerprintHoldsTheDeclaration(string member)
+    {
+        IrProcedure procedure = Implementing(string.Empty, member);
+
+        Assert.Contains(Opaques(procedure), static o => o is { Reason: "Layout", Fingerprint: not null });
+        Assert.Empty(Fingerprints(procedure).Intersect(Fingerprints(Implementing("[StructLayout(LayoutKind.Sequential, Pack = 1)] ", member)), StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Ticket P2-161: an assignment and a step yield the value they store, and a flow capture holds the value an
+    /// operation put there, so each is lowered as it was and only the operations that brought the value in are opaque:
+    /// the reads of <c>k</c>, <c>j</c> and <c>l</c>, one of them the read the graph makes of <c>l</c> where it captures
+    /// the target of an assignment whose value branches. A constant of such a type is null, and is the constant it was.
+    /// </summary>
+    [Theory]
+    [InlineData("static K M(K k, K j, bool b) { K l = k; l = b ? k : j; return l; }", 5)]
+    [InlineData("static K M(K k) { k++; return k; }", 1)]
+    [InlineData("static K[] M() => null;", 0)]
+    public void AnOperationThatStoresOrHoldsSuchAStructIsLoweredAsItWas(string member, int expected)
+    {
+        IrProcedure procedure = Implementing(string.Empty, member);
+
+        Assert.Equal(expected, Opaques(procedure).Count(static o => o.Reason is "Layout"));
+        Assert.All(Opaques(procedure), static o => Assert.NotNull(o.Fingerprint));
+    }
+
+    /// <summary>
+    /// Ticket P2-161 criterion 3: an operation that names a struct with no generic interface of the solution is lowered
+    /// as it was: the struct has no interface list, its interface is not generic, is a generic interface of a reference,
+    /// or is handed a type from a reference, a type parameter or a class with no layout to read. So is one that names a
+    /// class whose interface list names the type, which a constructor made (ticket P2-152).
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(Plain p) => p.GetHashCode();", "System.ValueType::GetHashCode()")]
+    [InlineData("static int M(Own o) => ((W)o).Width();", "W::Width()")]
+    [InlineData("static bool M(Compared c, S s) => c.Equals(s);", "Compared::Equals(S)")]
+    [InlineData("static int M(G g) => ((W)g).Width();", "W::Width()")]
+    [InlineData("static int M<U>(H<U> h) => ((W)h).Width();", "W::Width()")]
+    [InlineData("static int M(Referring r) => ((W)r).Width();", "W::Width()")]
+    [InlineData("static int M(Made made) => ((W)made).Width();", "W::Width()")]
+    public void AnOperationThatNamesAStructWithNoGenericInterfaceIsLoweredAsItWas(string member, string callee)
+    {
+        IrProcedure procedure = Implementing(string.Empty, member);
+
+        Assert.Empty(Opaques(procedure));
+        Assert.Equal(callee, Assert.Single(Calls(procedure)).Callee.Value);
+    }
+
+    /// <summary>
+    /// Tickets P2-162 and P2-161: a reference that hands a generic member of the solution a class whose interface list
+    /// hands a generic interface of the solution a type with a layout is the opaque a reference that hands over a
+    /// struct is (ticket P2-154): the member can create the class, and the code it inherits reads that type's
+    /// declaration. A class whose interface is handed a class with no layout is handed over in a call, as it was.
+    /// </summary>
+    [Theory]
+    [InlineData("static Made M() => Create<Made>();", true)]
+    [InlineData("static Made[] M() => Create<Made[]>();", true)]
+    [InlineData("static int M() => Holder<Made>.Field;", true)]
+    [InlineData("static void M() => Holder<Made>.Field = 1;", true)]
+    [InlineData("static Plainest M() => Create<Plainest>();", false)]
+    public void AReferenceThatHandsAMemberAClassIsAnOpaqueWhereItsInterfaceListHandsOverATypeWithALayout(string member, bool expected)
+    {
+        const string Creating = " static T Create<T>() => default; class Holder<T> { public static int Field; } class Plainest : J<Plainly> { }";
+        IrProcedure procedure = Implementing(string.Empty, member + Creating);
+
+        Assert.Equal(expected, Opaques(procedure).Any(static o => o is { Reason: "Layout", Fingerprint: not null }));
+        Assert.Equal(expected, Calls(procedure).IsEmpty);
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("field.", StringComparison.Ordinal));
+        Assert.Empty(Fingerprints(procedure).Intersect(Fingerprints(Implementing("[StructLayout(LayoutKind.Sequential, Pack = 1)] ", member + Creating)), StringComparer.Ordinal));
+    }
+
+    /// <summary>Lowers <c>M</c> of <c>C</c> beside a struct <c>S</c> with <paramref name="attribute"/> and structs that name <c>S</c> in an interface list only, or not at all.</summary>
+    private static IrProcedure Implementing(string attribute, string member) => Source(
+        Interop + attribute + "struct S { public byte A; public int B; } interface W { int Width(); } interface J<T> : W { int W.Width() => Unsafe.SizeOf<T>(); }"
+        + " class Outer<T> { public interface IInner : W { int W.Width() => Unsafe.SizeOf<T>(); } }"
+        + " struct K : J<S> { public static K operator ++(K k) => k; } struct Nested : Outer<S>.IInner { }"
+        + " struct Plain { public int A; } struct Own : W { public int Width() => 1; } struct Compared : IEquatable<S> { public bool Equals(S other) => true; }"
+        + " struct G : J<int> { } struct H<U> : J<U> { } class Plainly { } struct Referring : J<Plainly> { } class Made : J<S> { }"
+        + " class C { " + member + " }");
+
     /// <summary>The generic members the P2-154 tests hand a type: each reads the size of its type parameter.</summary>
     private const string Generic = " static int Size<T>() => Unsafe.SizeOf<T>(); static int SizeOf<T>(T value) => Unsafe.SizeOf<T>(); static int SizeOfS() => Size<S>(); static int Plain(S s) => s.A;"
         + " enum E : byte { None } class K { public int A; } interface I { } [StructLayout(LayoutKind.Sequential)] class L { public int A; }"

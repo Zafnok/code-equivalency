@@ -73,7 +73,8 @@ public sealed class LayoutsTests
     /// declaration fixes: storage of an explicit layout, an operation the fingerprint writes a declaration after, or a
     /// call the runtime may marshal in an assembly that turns marshalling off. So does one that hands a generic member of
     /// the solution a type the solution declares, by the member it names or by the one a forwarder passes the call on to
-    /// (ticket P2-154).
+    /// (ticket P2-154), and one that names a struct whose interface list hands a generic interface of the solution a
+    /// type with a layout, or hands a member of the solution a class whose interface list does (ticket P2-161).
     /// </summary>
     [Theory]
     [InlineData("", "int M(U u) => u.P;", "M", true)]
@@ -92,11 +93,18 @@ public sealed class LayoutsTests
     [InlineData("", "int M(G<S> g) => g.F;", "M", true)]
     [InlineData("", "G<S> M() => new G<S>();", "M", true)]
     [InlineData("", "int M<V>(G<V> g, G<C> c) => Size<int>() + Size<V>() + Size<C>() + g.F + c.F + Plain();", "M", false)]
+    [InlineData("", "int M(Q q) => q.GetHashCode();", "M", true)]
+    [InlineData("", "int M(Q[] q) => q.Length;", "M", true)]
+    [InlineData("", "int M(R r, P p) => r.GetHashCode() + p.GetHashCode();", "M", false)]
+    [InlineData("", "int M() => Size<QC>();", "M", true)]
+    [InlineData("", "int M(G<QC[]> g) => g.F;", "M", true)]
+    [InlineData("", "int M(QC q, G<PC> g) => Size<PC>() + g.F + q.GetHashCode();", "M", false)]
     public void AMethodWithAnOperationADeclarationFixesReadsALayout(string assembly, string member, string name, bool expected)
     {
         Compilation compilation = Compile(
             assembly + "struct S { public int X; } [StructLayout(LayoutKind.Explicit)] class U { [field: FieldOffset(0)] public int P { get; set; } } "
             + "class G<T> { public int F; public static int Forward() => C.Plain(); } "
+            + "interface J<T> { } struct Q : J<S> { } struct R : J<int> { } struct P : J<C> { } class QC : J<S> { } class PC : J<C> { } "
             + "class C { static int Size<T>() => 0; static int SizeOfS() => Size<S>(); public static int Plain() => 0; " + member + " }");
 
         Assert.Equal(expected, IrLowerer.DependsOnLayout(compilation.GetTypeByMetadataName("C")!.GetMembers(name).OfType<IMethodSymbol>().Single(), compilation));
@@ -140,6 +148,7 @@ public sealed class LayoutsTests
         Assert.Throws<ArgumentNullException>("called", () => Layouts.TypeArguments(operation, null!));
         Assert.Throws<ArgumentNullException>("types", () => Layouts.Implemented(null!, []));
         Assert.Throws<ArgumentNullException>("handed", () => Layouts.Implemented([], null!));
+        Assert.Throws<ArgumentNullException>("operation", () => Layouts.Inherits(null!));
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.IsHanded(null!, compilation.Assembly));
         Assert.Throws<ArgumentNullException>("assembly", () => Layouts.IsHanded(operation, null!));
         Assert.Throws<ArgumentNullException>("operation", () => Layouts.Reads(null!, compilation.Assembly));

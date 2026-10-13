@@ -104,7 +104,7 @@ Every number is measured on public code, and every row says when. The runs are i
 | Divergent | 0.7% of pairs (284), 17.3% of changed pairs | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md) |
 | Divergent precision (a Divergent is a real behaviour change) | Migration 3.8% (2 of 52). Upgrades 40.0% (6 of 15). Cleanups 0% (0 of 51) | [2026-09-30](docs/runs/2026-09-30-divergent-audit.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md), [2026-10-02](docs/runs/2026-10-02-cleanup-verdict.md) |
 | Left for a reviewer (Unknown and Divergent) | 2.9% of pairs (1,230) | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md) |
-| Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. 2 open soundness tickets ([P2-161](docs/tickets/P2-161-soundness-a-lowered-interface-call-on-a-struct-is-one-function-beside-two-declarations-of-its-interface-argument.md), [P2-168](docs/tickets/P2-168-soundness-a-type-made-by-a-member-of-a-reference-names-a-type-argument-in-its-base-list.md)) | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
+| Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. 1 open soundness ticket ([P2-168](docs/tickets/P2-168-soundness-a-type-made-by-a-member-of-a-reference-names-a-type-argument-in-its-base-list.md)) | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
 | Large pairs that run to a result | 5 of 5 | 2026-10-03 ([Duplicati](docs/tickets/done/P2-082-pair-weighting-crash-ends-the-run.md), [OpenRA](docs/tickets/done/P2-125-tuple-array-sort-mismatch-on-element-names.md)) |
 | Run time, one large pair | mean 4 min (3 min to 6 min), four pairs at a time | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md) |
 | Repeatability | 99.94% (13,734 of 13,742 results equal between two runs) | [2026-10-02](docs/runs/2026-10-02-pair-time.md) |
@@ -159,11 +159,10 @@ and before the fix that removed non-solver time from a pair 2h43m, 6h47m and mor
 ([ADR 0028](docs/adr/0028-public-corpus-and-success-criteria.md)) are all met: every project
 loads, more than 40% of pairs are unchanged, and 28 of 28 seeded behaviour changes were caught,
 none reported Equivalent. On the two upgrades, no behaviour change the pull request made was
-reported Equivalent either. An Equivalent can be relied on today, with two open questions, both read off the code
-and not reproduced on a real pair: a type argument that reaches a body only through an interface
-list is in no fingerprint
-([P2-161](docs/tickets/P2-161-soundness-a-lowered-interface-call-on-a-struct-is-one-function-beside-two-declarations-of-its-interface-argument.md),
-[P2-168](docs/tickets/P2-168-soundness-a-type-made-by-a-member-of-a-reference-names-a-type-argument-in-its-base-list.md)).
+reported Equivalent either. An Equivalent can be relied on today, with one open question, read off the code
+and not reproduced on a real pair: a type argument that reaches a body only through the base list of
+a type that a member of a reference creates is in no fingerprint
+([P2-168](docs/tickets/P2-168-soundness-a-type-made-by-a-member-of-a-reference-names-a-type-argument-in-its-base-list.md)).
 The rest cannot yet:
 
 | What is needed | Today |
