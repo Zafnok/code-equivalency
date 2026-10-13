@@ -543,7 +543,7 @@ of how much of the cleanup result each explains:
 - P2-173 (M) A result says which fingerprint component keeps a body out of congruence. 11 bodies in
   byte-identical files of the three cleanup pairs are not congruent and nothing says why. Found by
   P2-110. Needs P2-107.
-- P2-174 (M) Precision: a member API equivalence renames a call in the legacy side's fingerprint
+- P2-177 (M) Precision: a member API equivalence renames a call in the legacy side's fingerprint
   text only, so an unedited body that calls `TrimEnd(char[])` or `TrimStart(char[])` is never
   congruent: 10 of P2-173's 11 bodies, 5 of them Unknown. Found by P2-173. Needs P2-173.
 - P2-106 (M) A body whose only diagnostics are warnings promoted to errors is not `unbound`. 82

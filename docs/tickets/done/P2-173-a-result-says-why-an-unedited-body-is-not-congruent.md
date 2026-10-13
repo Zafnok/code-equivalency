@@ -104,23 +104,23 @@ Pairs that cross a runtime, where a runtime rule is the usual reason and is alre
 
   | Pair | Procedure | Result | `component` | `identity` | Class |
   |---|---|---|---|---|---|
-  | powershell-19687 | `CompletionCompleters::CompleteRequires(...)` | Equivalent, lockstep-induction | callee | `System.String::TrimStart()` | precision bug, P2-174 |
-  | powershell-19687 | `CommandSearcher::setupPathSearcher()` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
-  | powershell-19687 | `ConsoleHostUserInterface::WriteChoiceHelper(...)` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
-  | powershell-19687 | `GetExperimentalFeatureCommand::GetValidModuleFiles(...)` | Unknown, opaque | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
-  | powershell-19687 | `ModuleCmdletBase::GetModuleForNames(...)` | Unknown, opaque | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
-  | powershell-19687 | `SessionStateInternal::NewItem(string[],string,string,object,CmdletProviderContext)` | Unknown, opaque | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
-  | powershell-19687 | `NativeCommandProcessor::Complete()` | Unknown, timeout | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
-  | powershell-19687 | `NewPSDriveCommand::ProcessRecord()` | Unknown, timeout | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
-  | gitextensions-11372 | `GitCommands.PathUtil::GetRepositoryName(string)` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+  | powershell-19687 | `CompletionCompleters::CompleteRequires(...)` | Equivalent, lockstep-induction | callee | `System.String::TrimStart()` | precision bug, P2-177 |
+  | powershell-19687 | `CommandSearcher::setupPathSearcher()` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-177 |
+  | powershell-19687 | `ConsoleHostUserInterface::WriteChoiceHelper(...)` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-177 |
+  | powershell-19687 | `GetExperimentalFeatureCommand::GetValidModuleFiles(...)` | Unknown, opaque | callee | `System.String::TrimEnd(char)` | precision bug, P2-177 |
+  | powershell-19687 | `ModuleCmdletBase::GetModuleForNames(...)` | Unknown, opaque | callee | `System.String::TrimEnd(char)` | precision bug, P2-177 |
+  | powershell-19687 | `SessionStateInternal::NewItem(string[],string,string,object,CmdletProviderContext)` | Unknown, opaque | callee | `System.String::TrimEnd(char)` | precision bug, P2-177 |
+  | powershell-19687 | `NativeCommandProcessor::Complete()` | Unknown, timeout | callee | `System.String::TrimEnd(char)` | precision bug, P2-177 |
+  | powershell-19687 | `NewPSDriveCommand::ProcessRecord()` | Unknown, timeout | callee | `System.String::TrimEnd(char)` | precision bug, P2-177 |
+  | gitextensions-11372 | `GitCommands.PathUtil::GetRepositoryName(string)` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-177 |
   | gitextensions-11372 | `GitExtensions.Program::Main()` | Unknown, abstraction | constant | `ThisAssembly.Git::Sha` | right to be out: the build-generated commit constant differs between any two commits (ADR 0046 keeps it an ordinary constant) |
-  | gitextensions-11284 | `CopyContextMenuItem::AddItem(string,string,System.Drawing.Image,char?)` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+  | gitextensions-11284 | `CopyContextMenuItem::AddItem(string,string,System.Drawing.Image,char?)` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-177 |
 
 - Ten of the 11 are one precision bug. Neither side of any of them calls the member the property
   names: each calls `TrimEnd(params char[])` or `TrimStart(params char[])` with several characters
   or with an array, and the legacy side's text writes that call under the modern name of the
   API-equivalence entry for the one-character (or no-character) call, which the modern side's text
-  does not. The fix decides when the text applies a member entry, which is not a few lines: P2-174.
+  does not. The fix decides when the text applies a member entry, which is not a few lines: P2-177.
   No soundness doubt: the rename cannot make two texts equal, since the argument under the call
   differs.
 - The ticket's guess, that a body calling one of the 17 `unbound` bodies (P2-172) may not be
