@@ -441,8 +441,8 @@ internal sealed class BoundSerialiser : OperationWalker
     /// <c>[DisableRuntimeMarshalling]</c>. <see cref="Layouts"/> holds that rule, which the lowering reads too (ticket
     /// P2-150). A reference to a member also reaches the types it hands the member as type arguments
     /// (<see cref="Layouts.TypeArguments"/>, which the lowering reads too; ticket P2-154). An operation whose type is, or
-    /// is made of, a struct, and one that hands a struct over, also reaches what the struct's interface list hands a
-    /// generic interface of the solution (<see cref="Layouts.Implemented"/>; ticket P2-157).
+    /// is made of, a struct, and one that hands a type over, also reaches what the type's interface list hands a
+    /// generic interface of the solution (<see cref="Layouts.Implemented"/>; tickets P2-157 and P2-162).
     /// </summary>
     private void Layout(IOperation operation)
     {
@@ -452,7 +452,7 @@ internal sealed class BoundSerialiser : OperationWalker
         }
 
         ImmutableArray<ITypeSymbol> handed = Layouts.TypeArguments(operation, Called);
-        foreach (ITypeSymbol type in Layouts.Reached(operation).Concat(handed).Concat(Layouts.Implemented([operation.Type, .. handed])))
+        foreach (ITypeSymbol type in Layouts.Reached(operation).Concat(handed).Concat(Layouts.Implemented([operation.Type], handed)))
         {
             Marshalled("layout", type, laidOut);
         }

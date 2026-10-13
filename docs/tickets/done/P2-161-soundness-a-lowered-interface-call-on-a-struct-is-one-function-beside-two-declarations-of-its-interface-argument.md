@@ -65,6 +65,12 @@ stop after the measurement and write it up before choosing.
 
 ## Notes
 - Filed 2026-10-12 from P2-157.
+- 2026-10-12 (P2-162). `Layouts.Implemented` now also takes the types an operation hands a member
+  of the solution, a class among them, so `Make<K>()` for `class K : J<S>` with
+  `static W Make<T>() where T : W, new() => new T()` has `S`'s declaration in its text and is still
+  one function `Make<N.K>` in the lowered body of both sides. It is this ticket's gap for the rule
+  P2-162 added: add it to criterion 1's cases. The Out of scope line on P2-162 is about the text,
+  which is done.
 
 ### Criterion 1: the repro
 - On `main` (`ee1eba4f`) the two pairs the criterion names are not Equivalent: both are Unknown
@@ -125,6 +131,16 @@ stop after the measurement and write it up before choosing.
 - `IOPERATION-COVERAGE.md`: the rule applies to every row, so it is one paragraph above the table,
   and the rows `ParameterReference`, `LocalReference`, `FieldReference` and
   `ArrayElementReference` say it themselves.
+
+### The class P2-162 added (2026-10-13, on merging `main`)
+- P2-162 merged while this ticket's pull request was open, and its note above adds a case to
+  criterion 1. Reproduced on the merge before the fix: `Make<Q>().Width()` for `class Q : J<S>`
+  and `Box<Q>.Size()` were Equivalent from the solver beside two declarations of `S`
+  (`ACallThatHandsAMemberAClassIsNotOneFunctionBesideTwoDeclarationsOfWhatItsInterfaceListHandsOver`).
+- Decision: where the class case lives -> `Layouts.HandsOver` also asks `Layouts.Implemented` of the types handed over, so the call, the object creation and the field of a generic type are the opaque P2-154 makes. Alternatives: a second question in the lowering beside `Layouts.Inherits`. Rule: 4, one rule for every reader of `HandsOver` (`ReadsLayout`, `Overlaid`, `DependsOnLayout`).
+- The cost was not measured again on `gitextensions-8522`: P2-162 measured that the pull request
+  edits no type the interface list of a type handed to a member of the solution hands on, and an
+  opaque beside one declaration is the one call it was. The table above is the struct rule's.
 
 ### What is surprising
 - `F ??= default(K)` on a field of type `K?` was Equivalent beside one declaration and is now

@@ -24,7 +24,10 @@ they store, and a flow capture that holds a value. The fragment's fingerprint ho
 interface list hands over (P2-157), and `Layouts` is the one rule both read. An operation that names any other struct
 is lowered as its row says (`IrLowererTests.AnOperationThatNamesAStructWithNoGenericInterfaceIsLoweredAsItWas`). The
 rows `ParameterReference`, `LocalReference`, `FieldReference` and `ArrayElementReference` say so themselves, being the
-reads that bring in a value no operation of the body made.
+reads that bring in a value no operation of the body made. A reference that hands a member of the solution a class
+whose interface list hands such a type over is the opaque the rows `Invocation`, `ObjectCreation`, `FieldReference` and
+`PropertyReference` make of one that hands over a type with a layout (P2-154; P2-162;
+`IrLowererTests.AReferenceThatHandsAMemberAClassIsAnOpaqueWhereItsInterfaceListHandsOverATypeWithALayout`).
 
 | OperationKind | Status | Test | Ticket |
 |---|---|---|---|

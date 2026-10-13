@@ -2601,6 +2601,29 @@ public sealed class IrLowererTests
         Assert.Equal(callee, Assert.Single(Calls(procedure)).Callee.Value);
     }
 
+    /// <summary>
+    /// Tickets P2-162 and P2-161: a reference that hands a generic member of the solution a class whose interface list
+    /// hands a generic interface of the solution a type with a layout is the opaque a reference that hands over a
+    /// struct is (ticket P2-154): the member can create the class, and the code it inherits reads that type's
+    /// declaration. A class whose interface is handed a class with no layout is handed over in a call, as it was.
+    /// </summary>
+    [Theory]
+    [InlineData("static Made M() => Create<Made>();", true)]
+    [InlineData("static Made[] M() => Create<Made[]>();", true)]
+    [InlineData("static int M() => Holder<Made>.Field;", true)]
+    [InlineData("static void M() => Holder<Made>.Field = 1;", true)]
+    [InlineData("static Plainest M() => Create<Plainest>();", false)]
+    public void AReferenceThatHandsAMemberAClassIsAnOpaqueWhereItsInterfaceListHandsOverATypeWithALayout(string member, bool expected)
+    {
+        const string Creating = " static T Create<T>() => default; class Holder<T> { public static int Field; } class Plainest : J<Plainly> { }";
+        IrProcedure procedure = Implementing(string.Empty, member + Creating);
+
+        Assert.Equal(expected, Opaques(procedure).Any(static o => o is { Reason: "Layout", Fingerprint: not null }));
+        Assert.Equal(expected, Calls(procedure).IsEmpty);
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("field.", StringComparison.Ordinal));
+        Assert.Empty(Fingerprints(procedure).Intersect(Fingerprints(Implementing("[StructLayout(LayoutKind.Sequential, Pack = 1)] ", member + Creating)), StringComparer.Ordinal));
+    }
+
     /// <summary>Lowers <c>M</c> of <c>C</c> beside a struct <c>S</c> with <paramref name="attribute"/> and structs that name <c>S</c> in an interface list only, or not at all.</summary>
     private static IrProcedure Implementing(string attribute, string member) => Source(
         Interop + attribute + "struct S { public byte A; public int B; } interface W { int Width(); } interface J<T> : W { int W.Width() => Unsafe.SizeOf<T>(); }"

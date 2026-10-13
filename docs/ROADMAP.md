@@ -797,6 +797,17 @@ Found by P2-157 (2026-10-12, by reading its own rule; not reproduced):
 - P2-162 (S) Soundness: a class created through a type parameter (`Make<K>()`, `new T()`) names a
   type argument only in its interface list, and the declaration P2-151 writes for `K` holds its
   base type and not its interfaces. The first step is the repro. Needs P2-157.
+  Done: reproduced as equal fingerprints for a body that hands such a class to a generic method or
+  a member of a generic type of the solution. An operation that hands a type to a member of the
+  solution is now also followed by the declarations of the type arguments the type's interface
+  list hands generic interfaces of the solution (ADR 0024, clarification of 2026-10-12 (P2-162));
+  no result on `gitextensions-8522` changed.
+
+Found by P2-162 (2026-10-12, by reading its own rule; not reproduced):
+- P2-168 (S) Soundness: a type of the solution created by a generic member of a reference
+  (`Activator.CreateInstance<K>()`, `new Lazy<K>().Value`) names a type argument only in its base
+  list, and the body references no constructor and hands the solution nothing. The first step is
+  the repro. Needs P2-162.
 
 Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
 - P2-153 (S) Soundness: the text of a body that uses an auto-property or a field-like event of an
@@ -873,6 +884,9 @@ Found by P2-124's rerun of the two upgrade pairs (`docs/runs/2026-10-12-upgrade-
 - P2-166 (M) Thorough's budget pass reports EQ002 on a body whose text is unchanged and whose field
   was retyped (`jellyfin-13023`, one result, thorough mode only). The first step is the repro. Needs
   P1-032.
+- P2-167 (S) `corpus.ps1 -Packages` fails on every pair with "The property 'Files' cannot be found on
+  this object": its `$modern` is the script's `[string]` `-Modern` parameter. Script and Pester test
+  only. Needs P1-032.
 
 Documentation:
 - P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list

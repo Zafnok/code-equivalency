@@ -189,6 +189,25 @@ public sealed class LayoutEquivalenceTests
         Assert.IsNotType<Equivalent>(Verify($"{Declared}{Implementing} class C {{ {Taking}{legacy} }}", $"{Packed}{Implementing} class C {{ {Taking}{modern} }}"));
     }
 
+    /// <summary>
+    /// Tickets P2-162 and P2-161: a class is handed to a generic member of the solution, which creates it, and the
+    /// code the class inherits from its interface list reads the layout of <c>S</c>. The class has no layout of its
+    /// own, and the call's identity names it alone. Beside one declaration the call is the same on both sides.
+    /// </summary>
+    [Theory]
+    [InlineData("Create<Q>().Width()")]
+    [InlineData("Holder<Q>.Size()")]
+    public void ACallThatHandsAMemberAClassIsNotOneFunctionBesideTwoDeclarationsOfWhatItsInterfaceListHandsOver(string call)
+    {
+        const string Declared = "struct S { public byte A; public int B; } ";
+        const string Packed = "[StructLayout(LayoutKind.Sequential, Pack = 1)] " + Declared;
+        const string Creating = Implementing + " class Q : J<S> { } class Holder<T> where T : W, new() { public static int Size() => new T().Width(); }"
+            + " class C { static W Create<T>() where T : W, new() => new T(); ";
+
+        Assert.IsType<Equivalent>(Verify($"{Declared}{Creating} static int M(int x) => {call} + x; }}", $"{Declared}{Creating} static int M(int x) => x + {call}; }}"));
+        Assert.IsNotType<Equivalent>(Verify($"{Declared}{Creating} static int M(int x) => {call} + x; }}", $"{Packed}{Creating} static int M(int x) => x + {call}; }}"));
+    }
+
     private static Verdict Verify(string legacy, string modern) =>
         new Z3Backend().Verify(Lower(legacy, isLegacy: true), Lower(modern, isLegacy: false), Options);
 
