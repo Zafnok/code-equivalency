@@ -40,6 +40,18 @@ public sealed class SarifReportWriterTests
     public Task RuntimeChangedDivergent() =>
         VerifyJson(Serialize(Fixtures.Result(new Divergent(RuntimeChangedCounterexample())) with { Runtimes = Interval("net48", "net10.0") }));
 
+    /// <summary>
+    /// Ticket P2-173 acceptance criterion 1: a result whose pair is not congruent carries what kept it out, as the
+    /// component's kind and the identity it concerns.
+    /// </summary>
+    [Fact]
+    public Task NotCongruent() =>
+        VerifyJson(Serialize(Fixtures.Result(new Equivalent(ProofMethod.Bounded)) with { NotCongruent = new FingerprintDifference(FingerprintDifference.Callee, "N.F::G(object)") }));
+
+    [Fact]
+    public void AResultWithNoFingerprintDifferenceHasNoNotCongruent() =>
+        Assert.False(SarifReportWriter.Write([Fixtures.Result(new Equivalent(ProofMethod.Congruence))]).Runs[0].Results[0].TryGetProperty("notCongruent", out Dictionary<string, string>? _));
+
     [Fact]
     public void WithoutNotificationsOrUnverifiedTheRunHasNoInvocationOrProperties()
     {

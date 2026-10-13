@@ -27,4 +27,21 @@ Describe 'corpus.ps1 -Metrics' {
         $diff = Compare-Object -ReferenceObject $expected -DifferenceObject $actual -SyncWindow 0
         if ($diff) { throw "output differs:`n$($actual -join "`n")" }
     }
+
+    # Ticket P2-173 criterion 4: the pairs that are not congruent, counted by the component kind their result names.
+    It 'Metrics_Counts_NotCongruent_Results_By_Component' {
+        $out = @(& $script:Corpus -Metrics $script:Sarif 6>&1 | ForEach-Object { [string]$_ })
+        $header = '== not congruent (notCongruent), by component'
+        $at = [Array]::IndexOf($out, $header)
+        if ($at -lt 0) { throw "no '$header' line:`n$($out -join "`n")" }
+        $actual = $out[($at + 1)..($at + 4)]
+        $expected = @(
+            '  callee 2'
+            '  constant 1'
+            '  type-layout 1'
+            '== Unknown (EQ003) by unknownReason, and by scope within it'
+        )
+        $diff = Compare-Object -ReferenceObject $expected -DifferenceObject $actual -SyncWindow 0
+        if ($diff) { throw "output differs:`n$($actual -join "`n")" }
+    }
 }

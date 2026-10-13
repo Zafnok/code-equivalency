@@ -131,10 +131,21 @@ public static class SarifReportWriter
 
     /// <summary>
     /// <c>lowering</c>, which lowering the pair's bodies came from, under <c>--il-fallback</c> and on a result of the IL pass
-    /// (ADR 0039); and <c>decidedBy</c>, which later pass of thorough mode produced the result (ADR 0049 decision 6).
+    /// (ADR 0039); <c>decidedBy</c>, which later pass of thorough mode produced the result (ADR 0049 decision 6); and
+    /// <c>notCongruent</c>, the first fingerprint component that kept the pair out of congruence, as its kind and the
+    /// identity it concerns (ADR 0024 decision 1; ticket P2-173).
     /// </summary>
     private static void SetPassProperties(Result sarifResult, VerificationResult result)
     {
+        if (result.NotCongruent is { } difference)
+        {
+            sarifResult.SetProperty("notCongruent", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["component"] = difference.Component,
+                ["identity"] = difference.Identity,
+            });
+        }
+
         if (result.Lowering is { } lowering)
         {
             sarifResult.SetProperty("lowering", lowering);

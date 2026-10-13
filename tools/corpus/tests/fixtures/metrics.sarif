@@ -4,12 +4,13 @@
     {
       "tool": { "driver": { "name": "equiv" } },
       "results": [
-        { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Gear.Spin(int)" }, "properties": { "unknownReason": "abstraction", "scope": "whole" } },
-        { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Gear.Stop()" }, "properties": { "unknownReason": "abstraction", "scope": "whole" } },
+        { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Gear.Spin(int)" }, "properties": { "unknownReason": "abstraction", "scope": "whole", "notCongruent": { "component": "callee", "identity": "Contoso.Widgets.Gear::Mesh()" } } },
+        { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Gear.Stop()" }, "properties": { "unknownReason": "abstraction", "scope": "whole", "notCongruent": { "component": "type-layout", "identity": "Contoso.Widgets.Tooth" } } },
         { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Sprocket.Turn(int)" }, "properties": { "unknownReason": "abstraction", "scope": "partial" } },
-        { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Sprocket.Rest()" }, "properties": { "unknownReason": "timeout", "scope": "whole" } },
+        { "ruleId": "EQ003", "message": { "text": "Unknown: Contoso.Widgets.Sprocket.Rest()" }, "properties": { "unknownReason": "timeout", "scope": "whole", "notCongruent": { "component": "callee", "identity": "Contoso.Widgets.Gear::Mesh()" } } },
         { "ruleId": "EQ003", "message": { "text": "Timeout: Contoso.Widgets.Cog.Mesh()" } },
-        { "ruleId": "EQ001", "message": { "text": "Equivalent: Contoso.Widgets.Cog.Slip()" }, "properties": { "scope": "whole" } }
+        { "ruleId": "EQ001", "message": { "text": "Equivalent: Contoso.Widgets.Cog.Slip()" }, "properties": { "scope": "whole" } },
+        { "ruleId": "EQ001", "message": { "text": "Equivalent: Contoso.Widgets.Cog.Grip()" }, "properties": { "scope": "whole", "notCongruent": { "component": "constant", "identity": "Contoso.Widgets.Cog::Teeth" } } }
       ]
     }
   ]

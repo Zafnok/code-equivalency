@@ -46,14 +46,58 @@ internal static class BodyFingerprinter
             ? new BodyFingerprint(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text))), runtimeSensitive)
             : null;
 
-    /// <summary>The canonical serialisation the fingerprint hashes, readable for tests and review; a null text when there is no body.</summary>
-    public static (string? Text, bool RuntimeSensitive) Text(
-        IMethodSymbol method, Compilation compilation, EquivConfig config, ImmutableArray<ApiEquivalence> equivalences, SideRuntime runtime, ImmutableHashSet<string>? keptForwarders = null)
+    /// <summary>
+    /// What keeps a pair with the fingerprints <paramref name="old"/> and <paramref name="new"/> out of congruence
+    /// (ADR 0024 decision 1; ticket P2-173); null when they are equal and not runtime-sensitive. A side with no
+    /// fingerprint comes first. Then the first component on which the two texts differ, read from
+    /// <paramref name="oldLines"/> and <paramref name="newLines"/>, which are asked for only when the hashes differ.
+    /// Equal texts are kept out by a runtime rule.
+    /// </summary>
+    public static FingerprintDifference? Difference(
+        BodyFingerprint? old, BodyFingerprint? @new, Func<ImmutableArray<BoundLine>> oldLines, Func<ImmutableArray<BoundLine>> newLines)
     {
-        BoundSerialiser.Settings settings = new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime) { KeptForwarders = keptForwarders ?? [] };
+        ArgumentNullException.ThrowIfNull(oldLines);
+        ArgumentNullException.ThrowIfNull(newLines);
+        if (old is null || @new is null)
+        {
+            return new FingerprintDifference(FingerprintDifference.NoFingerprint, FingerprintDifference.Sides(old is null, @new is null));
+        }
+
+        if (old == @new && !old.RuntimeSensitive)
+        {
+            return null;
+        }
+
+        FingerprintDifference? textual = string.Equals(old.Sha256Hex, @new.Sha256Hex, StringComparison.Ordinal) ? null : BoundLine.First(oldLines(), newLines());
+        return textual ?? new FingerprintDifference(FingerprintDifference.RuntimeRule, FingerprintDifference.Sides(old.RuntimeSensitive, @new.RuntimeSensitive));
+    }
+
+    /// <summary>The text a fingerprint of <paramref name="method"/> hashes, as its lines; empty when there is no body.</summary>
+    public static ImmutableArray<BoundLine> Lines(IMethodSymbol method, Compilation compilation, EquivConfig config, bool legacy, SideRuntime runtime, ImmutableHashSet<string>? keptForwarders = null)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        List<BoundLine> lines = [];
+        _ = Text(method, compilation, config, legacy ? ApiEquivalenceTable.Load().Enabled(config.SuppressApiEquivalences) : [], runtime, keptForwarders, lines);
+        return [.. lines];
+    }
+
+    /// <summary>
+    /// The canonical serialisation the fingerprint hashes, readable for tests and review; a null text when there is no body.
+    /// With <paramref name="lines"/>, the text's lines are added to it as well.
+    /// </summary>
+    public static (string? Text, bool RuntimeSensitive) Text(
+        IMethodSymbol method,
+        Compilation compilation,
+        EquivConfig config,
+        ImmutableArray<ApiEquivalence> equivalences,
+        SideRuntime runtime,
+        ImmutableHashSet<string>? keptForwarders = null,
+        List<BoundLine>? lines = null)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        BoundSerialiser.Settings settings = new(config.Renames, config.SuppressRuntimeChanges, equivalences, runtime) { KeptForwarders = keptForwarders ?? [], Lines = lines };
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(compilation);
-        ArgumentNullException.ThrowIfNull(config);
 
         SyntaxNode syntax = method.DeclaringSyntaxReferences[0].GetSyntax();
         if (compilation.GetSemanticModel(syntax.SyntaxTree).GetOperation(syntax) is not { } body)

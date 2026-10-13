@@ -1,5 +1,5 @@
 # P2-173 On a same-runtime pair, a result says why a body in a byte-identical file is not congruent
-Status: todo
+Status: in-progress
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-107

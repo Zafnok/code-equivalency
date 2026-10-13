@@ -558,6 +558,10 @@ public sealed class CSharpFrontendTests
         Assert.NotNull(same.OldFingerprint);
         Assert.Equal(same.OldFingerprint, same.NewFingerprint);
         Assert.NotEqual(changed.OldFingerprint, changed.NewFingerprint);
+
+        // Ticket P2-173 criterion 1: a pair that is not congruent says which fingerprint component differs first.
+        Assert.Null(same.FingerprintDifference);
+        Assert.Equal(new FingerprintDifference(FingerprintDifference.Constant, "Literal"), changed.FingerprintDifference);
     }
 
     /// <summary>

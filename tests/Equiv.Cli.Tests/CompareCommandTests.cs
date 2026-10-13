@@ -1258,6 +1258,7 @@ public sealed partial class CompareCommandTests
             NewBody = MismatchBody(PairIdentity, new SourceSpan("new.cs", 9, 32, 9, 33)),
             OldFingerprint = fingerprint,
             NewFingerprint = fingerprint,
+            FingerprintDifference = new FingerprintDifference(FingerprintDifference.Signature, "method"),
         };
         FakeBackend backend = new(NoVerdicts);
         InMemoryReportSink sink = new();
@@ -1272,6 +1273,7 @@ public sealed partial class CompareCommandTests
         Assert.Equal("EQ003", result.RuleId);
         Assert.Equal("opaque", result.GetProperty<string>("unknownReason"));
         Assert.Contains("async-mismatch", result.Message.Text, StringComparison.Ordinal);
+        Assert.Equal("signature", result.GetProperty<Dictionary<string, string>>("notCongruent")["component"]);
         Assert.Equal(["old.cs", "new.cs"], result.RelatedLocations.Select(static l => l.PhysicalLocation.ArtifactLocation.Uri.OriginalString), StringComparer.Ordinal);
     }
 
@@ -1521,6 +1523,7 @@ public sealed partial class CompareCommandTests
         Result result = Assert.Single(run.Results);
         Assert.Equal("EQ001", result.RuleId);
         Assert.Equal("congruence", result.GetProperty<string>("proofMethod"));
+        Assert.False(result.TryGetProperty("notCongruent", out Dictionary<string, string>? _));
         Assert.Equal(["webapi.ok"], result.GetProperty<List<string>>("equivalencesApplied"), StringComparer.Ordinal);
         Assert.True(run.TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Contains("\"pairsCongruent\":1", census, StringComparison.Ordinal);
@@ -1609,6 +1612,7 @@ public sealed partial class CompareCommandTests
         {
             OldFingerprint = oldHash is null ? null : new BodyFingerprint(oldHash, oldSensitive),
             NewFingerprint = newHash is null ? null : new BodyFingerprint(newHash, newSensitive),
+            FingerprintDifference = new FingerprintDifference(FingerprintDifference.Callee, "T::Callee()"),
         };
         FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
         InMemoryReportSink sink = new();
@@ -1618,7 +1622,13 @@ public sealed partial class CompareCommandTests
             [new FakeFrontend("csharp", _ => true, new MatchResult([pair], [], [], []))], backend, sink, NullRunLog.Instance);
 
         Assert.Single(backend.Calls);
-        Assert.Equal("bounded", Assert.Single(sink.Log!.Runs[0].Results).GetProperty<string>("proofMethod"));
+        Result result = Assert.Single(sink.Log!.Runs[0].Results);
+        Assert.Equal("bounded", result.GetProperty<string>("proofMethod"));
+
+        // Ticket P2-173 criterion 1: the result says what the frontend found the fingerprints to differ in.
+        Dictionary<string, string> notCongruent = result.GetProperty<Dictionary<string, string>>("notCongruent");
+        Assert.Equal("callee", notCongruent["component"]);
+        Assert.Equal("T::Callee()", notCongruent["identity"]);
     }
 
     /// <summary>Ticket M3-015 acceptance criterion 5 (ADR 0029 decision 2): equal fingerprints do not make unbound code congruent.</summary>
@@ -1631,15 +1641,30 @@ public sealed partial class CompareCommandTests
         ProcedureIdentity other = new("T::Other()");
         ProcedurePair unboundLegacy = Pair(PairIdentity) with { OldBody = UnboundBody(PairIdentity), OldFingerprint = fingerprint, NewFingerprint = fingerprint };
         ProcedurePair unboundModern = Pair(other) with { NewBody = UnboundBody(other), OldFingerprint = fingerprint, NewFingerprint = fingerprint };
+        ProcedureIdentity edited = new("T::Edited()");
+        ProcedurePair unboundAndEdited = Pair(edited) with
+        {
+            NewBody = UnboundBody(edited),
+            OldFingerprint = fingerprint,
+            NewFingerprint = new BodyFingerprint("cd", RuntimeSensitive: false),
+            FingerprintDifference = new FingerprintDifference(FingerprintDifference.Operation, "Return"),
+        };
         FakeBackend backend = new(NoVerdicts);
         InMemoryReportSink sink = new();
 
         CompareCommand.Run(
             new CompareOptions(legacy.Path, modern.Path, "equiv.sarif", BaselinePath: null, ConfigPath: null, FailOn: null, DryRun: false),
-            [new FakeFrontend("csharp", _ => true, new MatchResult([unboundLegacy, unboundModern], [], [], []))], backend, sink, NullRunLog.Instance);
+            [new FakeFrontend("csharp", _ => true, new MatchResult([unboundLegacy, unboundModern, unboundAndEdited], [], [], []))], backend, sink, NullRunLog.Instance);
 
         Assert.Empty(backend.Calls);
         Assert.All(sink.Log!.Runs[0].Results, static r => Assert.Equal("unbound", r.GetProperty<string>("unknownReason")));
+
+        // Ticket P2-173 criterion 1: equal texts that do not bind are kept out by that, on the side that does not bind;
+        // texts that differ are named by their difference.
+        Assert.Equal(
+            ["unbound legacy", "unbound modern", "operation Return"],
+            sink.Log.Runs[0].Results.Select(static r => r.GetProperty<Dictionary<string, string>>("notCongruent")).Select(static d => $"{d["component"]} {d["identity"]}"),
+            StringComparer.Ordinal);
         Assert.True(sink.Log.Runs[0].TryGetSerializedPropertyValue("loweringCensus", out string? census));
         Assert.Contains("\"pairsCongruent\":0", census, StringComparison.Ordinal);
     }
