@@ -90,17 +90,22 @@ internal static class Layouts
     }
 
     /// <summary>
-    /// The type arguments that the interface lists of the value types <paramref name="types"/> are, or are made of (an
-    /// array's element, a type argument), hand generic interfaces of the solution, and the types those are nested in
-    /// (ADR 0024 as clarified by ticket P2-157). A struct is made with no constructor, by a <c>default</c>, as an
-    /// array's element or in a field never assigned, so no reference to a constructor holds what its interface list
-    /// hands over (ticket P2-152), and the code it inherits from an interface runs on a value wherever there is one.
-    /// A class is made by a constructor only, and hands nothing over here.
+    /// The type arguments that interface lists hand generic interfaces of the solution, and the types those are nested
+    /// in: the lists of the value types <paramref name="types"/> are, or are made of (an array's element, a type
+    /// argument), and of every type <paramref name="handed"/> to a member of the solution is, or is made of (ADR 0024 as
+    /// clarified by tickets P2-157 and P2-162). A struct is made with no constructor, by a <c>default</c>, as an array's
+    /// element or in a field never assigned, so no reference to a constructor holds what its interface list hands over
+    /// (ticket P2-152), and the code it inherits from an interface runs on a value wherever there is one. A class is
+    /// made by a constructor only, unless a generic member that is handed it makes one (<c>new T()</c>) or runs a
+    /// static member it inherits with no object at all (<c>T.Count()</c>), and the member's text is the same for every
+    /// type argument. So a class hands its interface list over where it is handed over, and nowhere else.
     /// </summary>
-    public static ImmutableArray<ITypeSymbol> Implemented(IEnumerable<ITypeSymbol?> types)
+    public static ImmutableArray<ITypeSymbol> Implemented(IEnumerable<ITypeSymbol?> types, IEnumerable<ITypeSymbol> handed)
     {
         ArgumentNullException.ThrowIfNull(types);
-        return [.. Arguments(types.SelectMany(Named).Where(static type => type.IsValueType).SelectMany(static type => type.AllInterfaces))];
+        ArgumentNullException.ThrowIfNull(handed);
+        IEnumerable<INamedTypeSymbol> listing = types.SelectMany(Named).Where(static type => type.IsValueType).Concat(handed.SelectMany(Named));
+        return [.. Arguments(listing.SelectMany(static type => type.AllInterfaces))];
     }
 
     /// <summary>The named types <paramref name="type"/> is, or is made of: an array's element, and a type argument.</summary>

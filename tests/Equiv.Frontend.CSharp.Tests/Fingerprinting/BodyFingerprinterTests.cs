@@ -1155,6 +1155,61 @@ public sealed class BodyFingerprinterTests
         + " public K Unset;"
         + " static W Make<T>() where T : struct, W => default(T);";
 
+    /// <summary>
+    /// Ticket P2-162: a class is created with no reference to its constructor by a generic member of the solution that
+    /// is handed it (<c>new T()</c>), and the code it inherits from an interface runs with no object at all through a
+    /// static member called on the type parameter. The declaration written for the class holds its base type and not
+    /// its interfaces. So the declaration of a type argument in the class's interface list is in the text of a body that
+    /// hands the class to a member of the solution: to a generic method, to a member of a generic type, as a class
+    /// derived from the one that lists the interface, and as a type argument of a type that is handed over.
+    /// </summary>
+    [Theory]
+    [InlineData("public int M() => Make<K>().Width();")]
+    [InlineData("public int M() => Maker<K>.Make().Width();")]
+    [InlineData("public int M() => Make<Derived>().Width();")]
+    [InlineData("public int M() => Count<K>();")]
+    [InlineData("public int M() => Made<Maker<K>>();")]
+    public void ATypeArgumentInAClasssInterfaceListIsInTheTextOfABodyThatHandsTheClassOver(string member)
+    {
+        AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; }", member + Created);
+        AssertTheBodyDependsOn("public struct S { public byte A; public int B; }", "public struct S { public byte A; public int B; public int C; }", member + Created);
+    }
+
+    /// <summary>
+    /// Ticket P2-162 criterion 3: a body that is handed an object of a class whose interface list names the type, and
+    /// hands the class to no generic member, keeps the text it has, whatever layout the types beside it have: it
+    /// converts the object, calls a member of it, passes it to a member that is not generic, or hands a generic member
+    /// a class with no generic interface of the solution. A constructor made the object (ticket P2-152).
+    /// </summary>
+    [Theory]
+    [InlineData("public int M(K k) => ((W)k).Width();")]
+    [InlineData("public int M(K k) => k.Own() + Taken(k);")]
+    [InlineData("public int M(K[] ks) => ((W)ks[0]).Width();")]
+    [InlineData("public int M(S s) => Make<Plain>().Width() + s.B;")]
+    [InlineData("public int M(K k) => System.Linq.Enumerable.Count(System.Linq.Enumerable.Repeat(k, 1));")]
+    public void ABodyThatIsHandedAnObjectOfSuchAClassKeepsItsText(string member)
+    {
+        Compilation plain = Interop("public struct S { public byte A; public int B; } " + member + Created);
+        Compilation laid = Interop("[StructLayout(LayoutKind.Sequential, Pack = 1)] public struct S { public byte A; public int B; } " + member + Created);
+
+        Assert.Empty(laid.GetDiagnostics(TestContext.Current.CancellationToken).Where(static d => d.Severity == DiagnosticSeverity.Error));
+        Assert.Equal(OneRuntimeText(plain), OneRuntimeText(laid));
+        Assert.Equal(Text(plain), Text(laid));
+        Assert.DoesNotContain("Marshalled layout N.C.S", OneRuntimeText(laid), StringComparison.Ordinal);
+    }
+
+    /// <summary>Ticket P2-162: classes that name <c>S</c> in an interface list only, and generic members of the solution that create one or run its inherited code.</summary>
+    private const string Created = " public interface W { int Width(); static virtual int Count() => 0; }"
+        + " public unsafe interface J<T> : W where T : unmanaged { int W.Width() => sizeof(T); static int W.Count() => sizeof(T); }"
+        + " public class K : J<S> { public int Own() => 1; }"
+        + " public class Derived : K { }"
+        + " public class Plain : W { public int Width() => 1; }"
+        + " public class Maker<T> where T : W, new() { public static W Make() => new T(); }"
+        + " static W Make<T>() where T : W, new() => new T();"
+        + " static int Count<T>() where T : W => T.Count();"
+        + " static int Made<T>() => 1;"
+        + " static int Taken(K k) => 1;";
+
     /// <summary>ADR 0054 decision 4: across runtimes it is the runtime that marshals the call, so an <c>extern</c> method has no fingerprint.</summary>
     [Theory]
     [InlineData("net48", "net10.0")]
