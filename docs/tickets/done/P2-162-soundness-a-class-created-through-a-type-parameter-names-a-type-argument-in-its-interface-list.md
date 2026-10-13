@@ -1,5 +1,5 @@
 # P2-162 Soundness: a class created through a type parameter names a type argument in its interface list, and no text holds it
-Status: in-progress
+Status: done (PR #485)
 Effort: S
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-157
