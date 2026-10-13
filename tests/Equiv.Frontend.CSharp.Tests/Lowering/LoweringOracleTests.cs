@@ -121,7 +121,7 @@ public sealed class LoweringOracleTests
     {
         string source = Source(cases.Select(static c => c.Method));
         // Acceptance criterion 7: the run must actually reach the constructs M2-004 added (and M3-007's void field writers).
-        foreach (string construct in (string[])["catch (System.Exception t)", "while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Nudge}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", LoweringOracleGen.Lambda, LoweringOracleGen.Interpolated, $"s += {LoweringOracleGen.Appended};", .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
+        foreach (string construct in (string[])["catch (System.Exception t)", "while (", "+=", "++;", "--;", "s == null", "s != null", "s is null", "checked", $"{LoweringOracleGen.Property} = ", $"{LoweringOracleGen.CalledProperty} = ", $"{LoweringOracleGen.Field} = ", "public static void ", "u[", "v[", $" in {LoweringOracleGen.List})", " in u)", "(decimal)", "((int)", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Bump}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.Nudge}(", $"{LoweringOracleGen.Cell}.{LoweringOracleGen.CellField} = ", "(x, y, z) = (", $"({LoweringOracleGen.Field}, x) = (", "(x, y, z) = t;", $"({LoweringOracleGen.Field}, x) = t;", LoweringOracleGen.Lambda, LoweringOracleGen.Interpolated, $"s += {LoweringOracleGen.Appended};", .. LoweringOracleGen.Nullables, .. LoweringOracleGen.Patterns.Select(static op => $" is {op} (")])
         {
             Assert.Contains(construct, source, StringComparison.Ordinal);
         }
@@ -292,6 +292,8 @@ public sealed class LoweringOracleTests
         Assert.Contains(CompiledRunOracle.Check, callees);
         Assert.Contains(CompiledRunOracle.Message, callees);
         Assert.Superset(new HashSet<string>(["conv.i32.dec", "conv.dec.i32", "dec.mul", "dec.div", "dec.lt"], StringComparer.Ordinal), pures);
+        // Ticket P2-170: a deconstruction of a tuple-typed local reads each of its elements.
+        Assert.Superset(new HashSet<string>([IrTuple.New, IrTuple.Item(1), IrTuple.Item(2), IrTuple.Item(3)], StringComparer.Ordinal), pures);
     }
 
     /// <summary>The compiled run's <c>v</c>: <c>{ B, A }</c>, <paramref name="u"/> itself, or null.</summary>
@@ -434,11 +436,14 @@ public sealed class LoweringOracleTests
     /// conversions. An element of <c>System.Decimal</c> stands for one value, bit for bit, so <c>1.0</c> and <c>1.00</c> are
     /// two elements, as they are two values. A function that throws raises the flag of the exception's exact type, and its
     /// value is then any value of its type. The literal <c>1m</c> of <c>m++</c> (ticket P2-022) is the constant element
-    /// <paramref name="one"/>.
+    /// <paramref name="one"/>. A tuple (ticket P2-170) is an element of its sort that stands for the elements
+    /// <c>tuple.new</c> was given, which <c>tuple.item</c> gives back.
     /// </summary>
     private sealed class DecimalOracle(IrSortValue one) : Equiv.Core.IPureOracle
     {
         private readonly List<decimal> values = [];
+
+        private readonly List<ImmutableArray<IrValue>> tuples = [];
 
         public IrSortValue Element(decimal value)
         {
@@ -470,6 +475,8 @@ public sealed class LoweringOracleTests
                 "dec.gt" => () => new IrBoolValue(Value(arguments[0]) > Value(arguments[1])),
                 "dec.ge" => () => new IrBoolValue(Value(arguments[0]) >= Value(arguments[1])),
                 _ when pure.Function.StartsWith(PureCatalogue.DelegatePrefix, StringComparison.Ordinal) => () => new IrSortValue(((IrSort)pure.Target.Type).Name, 1),
+                IrTuple.New => () => Tuple((IrSort)pure.Target.Type, arguments),
+                _ when IrTuple.Position(pure.Function) is { } position => () => tuples[(int)((IrSortValue)arguments[0]).Id - 1][position - 1],
                 _ => throw new InvalidOperationException($"The lowering oracle generates no {pure.Function}."),
             };
             try
@@ -486,6 +493,12 @@ public sealed class LoweringOracleTests
         }
 
         private decimal Value(IrValue element) => element == one ? 1m : values[(int)((IrSortValue)element).Id - 1];
+
+        private IrSortValue Tuple(IrSort sort, ImmutableArray<IrValue> elements)
+        {
+            tuples.Add(elements);
+            return new IrSortValue(sort.Name, tuples.Count);
+        }
     }
 
     /// <summary>

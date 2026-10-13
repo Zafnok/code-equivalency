@@ -385,11 +385,21 @@ class with an element and not exactly one such `Add`, and an array the array cre
 `IrOpaque` with reason `CollectionExpression`. The conversion around a target-typed `new()` whose creation is already
 of the target type is its operand, so `new()` is `new T()`.
 
-The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal into
-locals, parameters, captured lvalues, fields or discards, one level deep, lowers as C# evaluates it:
-each field's receiver, then every element of the literal (each already converted to its target's
-type), then each store, all left to right, so `(a, b) = (b, a)` swaps. Anything else, a `Deconstruct`
-method or a tuple-typed value included, is `IrOpaque` with reason `DeconstructionAssignment`.
+The CFG does not desugar a deconstruction (P2-025). A statement that deconstructs a tuple literal or a
+tuple-typed value (P2-170) into locals, parameters, captured lvalues, fields or discards, one level
+deep, lowers as C# evaluates it: each field's receiver, then every element of the literal (each
+already converted to its target's type) or the value, once, then each store, all left to right, so
+`(a, b) = (b, a)` swaps. An element of a tuple-typed value is read from the value as `t.Item<n>` is:
+`tuple.item<n>` of a tuple of an `IrTuple` sort, and otherwise the element's
+`field.System.ValueTuple_<arity>.Item<n>` map at the value, by position, whatever the tuple's type
+names the element. A reference target's null shadow is the `null.<Sort>` map at the element read. So
+`var (a, b) = F()` and `(T a, U b) = F()` are one IR. The deconstruction a `foreach` makes of its
+element is the same statement. A value is taken apart only when it reaches the targets through an
+identity conversion, has at most seven elements (an eighth is a field of the `Rest` tuple), holds no
+struct whose read is opaque with reason `Layout` (P2-161), and each `Item<n>` map the body already
+holds is of the element's type (a field's map is named without its type's arguments, so two tuple
+types share one). Anything else, a `Deconstruct` method included, is `IrOpaque` with reason
+`DeconstructionAssignment`.
 
 C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 0013):
 
