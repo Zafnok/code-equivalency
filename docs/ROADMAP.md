@@ -788,6 +788,12 @@ Found by P2-157 (2026-10-12, by reading its own rule; not reproduced):
 - P2-161 (M) Soundness: a lowered body that names such a struct is the same beside two declarations
   of the type its interface list hands over, so the pair P2-157 no longer calls congruent can come
   back Equivalent from the solver. The first step is the repro. Needs P2-154 and P2-157.
+  Done: the two pairs the ticket named were already Unknown, since the operation that makes the
+  struct is an opaque whose fingerprint holds the declaration. Reproduced as an Equivalent from the
+  solver for a body that is handed the value: a parameter, a field no body assigns, an array's
+  element, a list handed to a member of a reference. An operation that brings such a value into
+  the body is now an opaque with reason `Layout` (ADR 0024, clarification of 2026-10-12 (P2-161));
+  no result on `gitextensions-8522` changed.
 - P2-162 (S) Soundness: a class created through a type parameter (`Make<K>()`, `new T()`) names a
   type argument only in its interface list, and the declaration P2-151 writes for `K` holds its
   base type and not its interfaces. The first step is the repro. Needs P2-157.
