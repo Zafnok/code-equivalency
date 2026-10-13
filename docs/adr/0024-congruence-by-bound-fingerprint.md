@@ -539,6 +539,64 @@ the tree is **runtime-sensitive**, meaning it contains any of:
   - **What the lowering still does not hold.** The rule above is the text's only: a lowered body
     that names such a struct is the same beside two declarations of `S`, so a pair this text no
     longer calls congruent can still come back Equivalent from the solver (P2-161).
+- 2026-10-12 (P2-162). **A type handed to a member of the solution hands over what its interface
+  list does.** The clarification of 2026-10-12 (P2-157) left a class to the constructor rule of
+  2026-10-10 (P2-152), and wrote down the case that rule misses. In `class K : J<S>`, where `J<T>`
+  has a default implementation that reads `T`, `Make<K>()` with
+  `static W Make<T>() where T : W, new() => new T()` creates a `K` and references no constructor
+  of it: `new T()` names a type parameter. The declaration the clarification of 2026-10-09
+  (P2-151) writes for `K` holds its base type and its fields, and not its interfaces. It was
+  reproduced as one fingerprint beside two declarations of `S` (the ticket's tests): for a generic
+  method that is handed `K` and creates one, a member of a generic type that is handed `K`, a
+  class derived from `K`, a generic method that calls a static member of the interface on its type
+  parameter (`T.Count()`, which runs `J<S>`'s code with no object at all), and a type argument of
+  a type that is handed over. So an operation that hands a type to a member of the solution as a
+  type argument (the clarification of P2-151) is also followed by the declaration of every type
+  argument of the interfaces of that type and of the types it is made of (an array's element, a
+  type argument), all of them and not only those it lists itself, where the solution declares the
+  interface, and of the types each of those is nested in. This is the rule of P2-157 for a struct
+  that is handed over, without the test for a struct. They are written as the clarification of
+  P2-151 writes one.
+  - **The reference that hands the class over, and not every operation that names it.** The ticket
+    asked which text holds the declaration. A class differs from a struct in where one is made: by
+    a constructor, or by a generic member that is handed the class. No `default`, array or field
+    makes one. The constructor has its rule (P2-152). The generic member's text is the same for
+    every type argument, so the body that hands it the class is the one text that can hold the
+    declaration, as it holds the class's own (P2-151). An operation whose type is the class adds
+    nothing still.
+  - **Every type handed over, and not only one the member creates.** The narrower rule reads the
+    member's body for a `new T()`, and the clarification of P2-151 says why that is not done: the
+    member a call names is not always the one that runs, and a type parameter passed on reaches
+    bodies that have their own pairs. A `new()` constraint is not the test either: a static member
+    of an interface called on a type parameter runs the inherited code with no object and no
+    constraint but the interface.
+  - **A body that is handed the object is equal for equal objects.** `int M(K k) => ((W)k).Width()`
+    keeps its text beside two declarations of `S`, as the clarification of P2-152 says: the body
+    that made the object, or handed its class to the member that did, holds the declaration, and
+    every caller between assumes its callee's pair (ADR 0019)
+    (`ABodyThatIsHandedAnObjectOfSuchAClassKeepsItsText`).
+  - **Which texts change.** A text that hands a member of the solution, as a type argument, a type
+    that is no struct and whose interfaces include one the solution declares that is handed, or is
+    nested in a type that is handed, a type the solution declares or one made of such a type. A
+    class with no interface list, one whose interfaces are not generic or are a reference's, and
+    one whose interface is handed a type from a reference or a type parameter add nothing. A
+    struct that is handed over added this already.
+  - **What it costs.** Nothing on `gitextensions-8522` in compare mode quick (the ticket's
+    Notes): all 13818 results are the same by procedure identity, rule, proof method and Unknown
+    reason on both sides of the change, and 12654 pairs are congruent on both. The pull request
+    edits no type that the interface list of a type handed to a member of the solution hands a
+    generic interface of the solution.
+  - **What the text still does not hold.** A type of the solution created by a generic member of a
+    reference that is handed it (`Activator.CreateInstance<K>()`, `new Lazy<K>().Value`): the
+    body references no constructor of the type, and a member of a reference is handed nothing, so
+    neither the type's base type nor its interface list reaches `S` (P2-168). A struct named only
+    as a type argument of a member of a reference, in no operation's type. A type of the solution
+    created by reflection from a `System.Type` or a name.
+  - **What the lowering still does not hold.** The rule above is the text's only, as the one of
+    P2-157 is: `Layouts.HandsOver` asks `Layouts.TypeArguments` and not `Layouts.Implemented`, and
+    `K` has no layout to read, so `Make<K>()` is one function on both sides of a pair this text no
+    longer calls congruent (P2-161, which decides what the lowering does with what
+    `Layouts.Implemented` gives).
 - 2026-10-08 (P2-144). **The throw a `switch` expression ends in is part of its bound code, and
   across .NET Core 3.0 it is a runtime rule.** A `switch` expression that matches no arm throws.
   The source does not write the throw and the `IOperation` tree does not hold it: the compiler
