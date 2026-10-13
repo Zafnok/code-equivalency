@@ -139,8 +139,19 @@ internal sealed class HeapInputs(Func<string, string> sorts)
     /// <summary>Marks <paramref name="input"/> as written by the body, which makes it <see cref="IrParameterKind.Ref"/>.</summary>
     public void Write(IrVar input) => written.Add(input.Name);
 
+    /// <summary>
+    /// Whether the slice of <paramref name="field"/> holds values of the field's own type (ticket P2-170). A slice is named
+    /// for its field's type without that type's arguments, so the <c>Item1</c> of a <c>(string, int)</c> and of an
+    /// <c>(int, string)</c> are one slice, of the type of whichever the body named first. Nothing is added: a slice the
+    /// body has not named yet will hold this field's type.
+    /// </summary>
+    public bool Holds(IFieldSymbol field) =>
+        !inputs.TryGetValue(FieldName(field, field.Name), out IrVar? input) || ((IrMap)input.Type).Value == TypeMapper.Map(field.Type, sorts);
+
     private IrVar Field(ISymbol member, string name, ITypeSymbol type) =>
-        Input($"field.{Part(TypeMapper.MetadataName(member.ContainingType, sorts))}.{Part(name)}", new IrMap(Receiver(member), TypeMapper.Map(type, sorts)));
+        Input(FieldName(member, name), new IrMap(Receiver(member), TypeMapper.Map(type, sorts)));
+
+    private string FieldName(ISymbol member, string name) => $"field.{Part(TypeMapper.MetadataName(member.ContainingType, sorts))}.{Part(name)}";
 
     /// <summary>A field map's key type. A field of a value type is keyed by the value, which is what value semantics mean.</summary>
     private IrSort Receiver(ISymbol member) => new(TypeMapper.MetadataName(member.ContainingType, sorts));

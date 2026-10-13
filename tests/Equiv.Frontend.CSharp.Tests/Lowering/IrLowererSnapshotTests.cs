@@ -353,6 +353,19 @@ public sealed class IrLowererSnapshotTests
     public Task DeconstructionThroughADeconstructMethod() =>
         Dump("struct P { public int X, Y; public void Deconstruct(out int x, out int y) { x = X; y = Y; } } static int M(P p) { int x, y; (x, y) = p; return x + y; }");
 
+    /// <summary>Ticket P2-170: a call's tuple is evaluated once, then each element's map is read at it and stored, a string's null shadow with it.</summary>
+    [Fact]
+    public Task DeconstructionOfATupleTypedValue() =>
+        Dump("static (string, int) G(int a) => default; static int M(int a) { var (s, n) = G(a); return s == null ? n : 0; }");
+
+    /// <summary>Ticket P2-170: a tuple of an <c>IrTuple</c> sort is taken apart by <c>tuple.item</c>, into a field, a discard and a declared local.</summary>
+    [Fact]
+    public Task DeconstructionOfAValueOfATupleSort() => Dump("int f; int M((int, bool, long) p) { (f, _, long z) = p; return f + (int)z; }");
+
+    /// <summary>Ticket P2-170: a tuple-typed value whose element is converted on the way to its target stays opaque, its targets written with unknown values.</summary>
+    [Fact]
+    public Task DeconstructionOfATupleTypedValueThatConvertsAnElement() => Dump("static long M((int, int) p) { (long x, int y) = p; return x + y; }");
+
     /// <summary>Ticket P2-024 acceptance criterion 2: an anonymous object creation stays opaque with reason <c>AnonymousObjectCreation</c>.</summary>
     [Fact]
     public Task AnonymousObjectCreation() => Dump("static int M(int x, int y) { var p = new { X = x, Y = y }; return p.X + p.Y; }");
