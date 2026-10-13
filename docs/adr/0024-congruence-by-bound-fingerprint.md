@@ -738,7 +738,7 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     changes what a procedure is in `Equiv.Core`'s matching and needs the same capture analysis
     first. Inlining the function's graph at the call proves pairs whose functions differ in text,
     which this rule leaves Unknown, at the price of a second graph in every per-graph analysis of
-    the lowering and a larger query; it is P2-174's subject, and it can replace an unshared call
+    the lowering and a larger query; it is P2-178's subject, and it can replace an unshared call
     without changing a shared one.
   - **Measured on `gitextensions-11372`** (the ticket's Notes): of the 44 changed pairs that call
     a local function, the functions have the same text on both sides in 30.

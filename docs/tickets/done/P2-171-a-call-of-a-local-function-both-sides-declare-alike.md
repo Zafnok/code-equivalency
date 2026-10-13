@@ -103,7 +103,7 @@ compiler already treats as ordinary methods need no special case beyond the rule
   captures. Alternatives: a matched pair of procedures with the captures as parameters; inlining the function's graph at
   the call; a fingerprint of the function's lowered IR. Rule: 4, after 1 (it is exactly the `IrOpaque` fingerprint and
   reads the encoder already shares, so nothing in `Equiv.Core` or `Equiv.Verify.Z3` changes). The count says it reaches
-  the 30 pairs whose functions are untouched. Inlining is what the other 14 need and is P2-174. A fingerprint of the
+  the 30 pairs whose functions are untouched. Inlining is what the other 14 need and is P2-178. A fingerprint of the
   lowered IR was not taken because a local function's body is not lowered at all today, so it needs most of inlining
   first.
 - Why P2-127's path stays closed under it: the proof reads the body through the fingerprint. Two functions that differ
@@ -117,7 +117,7 @@ compiler already treats as ordinary methods need no special case beyond the rule
   narrower rule is sound too; it was left out because its soundness rests on listing every way a frame outlives a call.
 - Decision: a call with a `ref` or `out` argument, and one whose function writes a captured variable -> the bare opaque
   it was. Alternatives: outputs on a shared fragment, as `IrCall.RefOuts`. Rule: 4. `IrOpaque` has no outputs but its
-  result, so this is an IR change (`equiv-extend-ir`) for 4 of the 30 pairs; P2-174 owns it with the rest.
+  result, so this is an IR change (`equiv-extend-ir`) for 4 of the 30 pairs; P2-178 owns it with the rest.
 - Size guard: a recursive local function is not left opaque. Its declaration is in the text once, and the argument
   that two calls with one fingerprint are one function does not depend on the code terminating. A capture the member
   stores after the call does leave the call opaque, as the guard allows.
@@ -150,7 +150,7 @@ compiler already treats as ordinary methods need no special case beyond the rule
   `BugReporter.Program::Main()`, as in every run of this pair.
 - What is left of the 30 with the same text: 17 Equivalent, 6 `timeout`, 7 `opaque`, of which one names
   `LocalFunction` (`GitCommands.GitModule::ParseGitBlame(string,System.Text.Encoding)`, whose function writes a
-  local it captures) and six name another construct. The 12 that differ and that one are P2-174.
+  local it captures) and six name another construct. The 12 that differ and that one are P2-178.
 - `gitextensions-11284` (18 of 178 reason sets) was not rerun; the criterion names one pair.
 - No `docs/runs` summary and no scoreboard change: the criterion asks for these Notes, and the README's cleanup
   numbers stay P2-110's until a run is written up.

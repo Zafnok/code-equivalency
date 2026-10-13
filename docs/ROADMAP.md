@@ -548,8 +548,8 @@ of how much of the cleanup result each explains:
   gitextensions-11284's 178. The cost P2-127's soundness fix named. Found by P2-110. Needs P2-127.
   Done 2026-10-13: the call is a shared fragment named by the fingerprint of the bound code it runs
   (ADR 0024, clarified). On gitextensions-11372 quick the solver proves 234 of 319 changed pairs
-  (73.4%, from 217); 13 results still name the opaque, from 26. What is left is P2-174.
-- P2-174 (L) A call of a local function is decided when the two sides' local functions differ in
+  (73.4%, from 217); 13 results still name the opaque, from 26. What is left is P2-178.
+- P2-178 (L) A call of a local function is decided when the two sides' local functions differ in
   text, or write what they capture: 13 of gitextensions-11372's 319 changed pairs still name a
   `LocalFunction` opaque after P2-171, 12 of them because the pull request rewrote an expression
   inside the function. Found by P2-171's rerun. Needs P2-171.
