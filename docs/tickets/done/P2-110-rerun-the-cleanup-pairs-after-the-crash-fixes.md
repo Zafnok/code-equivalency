@@ -1,5 +1,5 @@
 # P2-110 Rerun the three cleanup pairs once the lowering crashes are fixed, and refresh the cleanup verdict
-Status: in-progress
+Status: done (PR #487)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-105, P2-103, P2-104, P2-093, P2-127, P2-077, P1-032
