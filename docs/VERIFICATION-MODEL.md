@@ -974,7 +974,35 @@ catalogue entry fired (ADR 0020), and `properties.reboundCalls` when a call site
 0042): one `{ legacy, modern }` per rebound pair of callee identities, sorted by legacy and then
 modern identity. It is not part of the fingerprint. `properties.forwardersResolved` lists the forwarders a body's calls were
 resolved through (ADR 0047): one `{ forwarder, target }` per forwarder, sorted by forwarder and then target; it is not part
-of the fingerprint either. A result whose ladder reached rung 4 carries `properties.chcMode`, and an
+of the fingerprint either.
+
+A result of a matched pair with bodies that is not Equivalent by congruence carries `properties.notCongruent` (ADR 0024
+decision 1; ticket P2-173): `{ component, identity }`, the first component of the bound fingerprint on which the two
+sides differ, as its kind and the identity it concerns. It never holds source text or a constant's value, and it is not
+part of the result's fingerprint. A side with no fingerprint is named first; otherwise the two serialisations are read
+line by line and the first part that differs is named; equal serialisations are kept out by a runtime rule or by a
+body that does not bind. It says where the two texts first part, which is one cause and not always the only one.
+
+| `component` | What differs | `identity` |
+|---|---|---|
+| `no-fingerprint` | a side's declaration holds no code to compare | `legacy`, `modern` or `legacy, modern` |
+| `signature` | the method's kind, staticness, asyncness, return type or parameter types | `method` |
+| `body-kind` | one side is an auto-accessor or a partial method's implementing part, the other is not | `AutoAccessor` or `ImplementingPart` |
+| `operation` | an operation's kind, syntax kind, implicitness or depth: the bound trees have different shapes | the operation's kind |
+| `type` | the type of an operation that is otherwise the same | the type, the legacy side's where it has one |
+| `constant` | a constant, or a caller location the compiler supplies | the member the operation references (a `const` field), else the operation's kind |
+| `callee` | the method a call or an object creation binds to | the callee, the legacy side's where it has one |
+| `symbol` | any other symbol an operation references: a field, a property, a local's type, an operator, a type operand | the symbol, the legacy side's where it has one |
+| `context` | a `checked` context, how an interpolated string is bound, the exception an unmatched `switch` expression throws | the operation's kind |
+| `import` | what an `extern` function imports | `method`, or the local function's number in the text |
+| `attribute` | an attribute the text holds: of the method, its return value, a parameter or a local function, or a marshalling attribute of the assembly or the declaring type | what carries it (`method return`, `method assembly`) |
+| `type-layout` | the declaration of a type the body reads the layout of or hands over (ADR 0024's clarifications) | the type |
+| `runtime-rule` | nothing in the text: a runtime rule applies between the pair's runtimes | the side or sides it applies to |
+| `unbound` | nothing in the text: a body does not bind (ADR 0029 decision 2) | the side or sides |
+
+Where one side has a line of a type's declaration, an attribute or an import and the other has an operation or nothing
+there, the declaration is named: a type that gained a field has one more line, and the operation the other side has in
+that place is not what changed. A result whose ladder reached rung 4 carries `properties.chcMode`, and an
 Equivalent by `chc` carries Spacer's coupling invariant in `properties.invariant` (section 5.1). An Equivalent by
 `llm-invariant` or `trace-invariant` carries the admitted invariant there too, and what proposed it in
 `properties.proposedBy`: the model id, or `trace` (ADR 0036). An Equivalent whose proof used callee
