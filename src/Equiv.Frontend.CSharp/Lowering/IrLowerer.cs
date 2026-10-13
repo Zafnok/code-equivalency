@@ -863,6 +863,14 @@ internal sealed class IrLowerer
             return;
         }
 
+        if (operation is IDeconstructionAssignmentOperation variables)
+        {
+            // A `foreach` that deconstructs its element: the graph makes the deconstruction a statement of its own, whose
+            // value nothing uses (ticket P2-170).
+            Deconstruct(variables, context);
+            return;
+        }
+
         Lower(operation, context);
     }
 
@@ -1691,12 +1699,13 @@ internal sealed class IrLowerer
     private static string Reason(IOperation lvalue) => lvalue is IFieldReferenceOperation ? "Tuple" : lvalue.Kind.ToString();
 
     /// <summary>
-    /// A statement that deconstructs a tuple literal into locals, parameters, captured lvalues, fields and discards, one level
-    /// deep (ticket P2-025), as C# evaluates it: each field's receiver, then each element of the literal, then each store, all
-    /// left to right, so <c>(a, b) = (b, a)</c> swaps. A <c>Deconstruct</c> method, a tuple-typed value, a nested tuple, and a
-    /// property, array element or lowered tuple element (ticket P2-027) target stay opaque with reason
-    /// <c>DeconstructionAssignment</c>, their targets written with unknown values, as does a deconstruction whose value is
-    /// used, which is not a statement's.
+    /// A statement that deconstructs a tuple literal (ticket P2-025) or a tuple-typed value (ticket P2-170) into locals,
+    /// parameters, captured lvalues, fields and discards, one level deep, as C# evaluates it: each field's receiver, then
+    /// each element of the literal or the value, once, then each store, all left to right, so <c>(a, b) = (b, a)</c> swaps.
+    /// An element of a value is read from it as <c>t.Item&lt;n&gt;</c> is (<see cref="Element"/>). A <c>Deconstruct</c>
+    /// method, a nested tuple, a value whose element is converted on the way to its target, and a property, array element
+    /// or lowered tuple element (ticket P2-027) target stay opaque with reason <c>DeconstructionAssignment</c>, their
+    /// targets written with unknown values, as does a deconstruction whose value is used, which is not a statement's.
     /// </summary>
     private IrVar? Deconstruct(IDeconstructionAssignmentOperation deconstruction, LoweringContext context)
     {
@@ -1706,8 +1715,9 @@ internal sealed class IrLowerer
         }
 
         ImmutableArray<IOperation> lvalues = [.. ((ITupleOperation)Declared(deconstruction.Target)).Elements.Select(Declared)];
-        if (TupleLiteral(deconstruction.Value) is not { } literal
-            || !lvalues.All(l => l is IDiscardOperation || (l is IFieldReferenceOperation field && TypeMapper.TupleElement(field.Field) is null) || Target(l) is not null))
+        ITupleOperation? literal = TupleLiteral(deconstruction.Value);
+        if (!lvalues.All(l => l is IDiscardOperation || (l is IFieldReferenceOperation field && TypeMapper.TupleElement(field.Field) is null) || Target(l) is not null)
+            || (literal is null && !IsTakenApart(deconstruction)))
         {
             return Opaque(deconstruction, nameof(OperationKind.DeconstructionAssignment), context);
         }
@@ -1719,16 +1729,24 @@ internal sealed class IrLowerer
         }
 
         List<IrVar> values = [];
-        foreach (IOperation element in literal.Elements)
+        if (literal is null)
         {
-            values.Add(Value(element, context));
+            IrVar tuple = Value(deconstruction.Value, context);
+            values.AddRange(((INamedTypeSymbol)deconstruction.Value.Type!).TupleElements.Select(e => Element(tuple, e, context)));
+        }
+        else
+        {
+            foreach (IOperation element in literal.Elements)
+            {
+                values.Add(Value(element, context));
+            }
         }
 
         // Each null shadow is read before any store, so a swap of references swaps their nullness too.
         List<IrVar?> nulls = [];
         for (int i = 0; i < lvalues.Length; i++)
         {
-            nulls.Add(Target(lvalues[i]) is { } target && Shadow(target) is not null ? NullFlag(literal.Elements[i], values[i], context) : null);
+            nulls.Add(Target(lvalues[i]) is { } target && Shadow(target) is not null ? ElementNullFlag(literal?.Elements[i], values[i], context) : null);
         }
 
         for (int i = 0; i < lvalues.Length; i++)
@@ -1738,6 +1756,37 @@ internal sealed class IrLowerer
 
         return null;
     }
+
+    /// <summary>
+    /// Whether <paramref name="deconstruction"/>, whose value is no tuple literal, is one read per element (ticket P2-170):
+    /// the value is a tuple of at most seven elements (an eighth is a field of the <c>Rest</c> tuple), it reaches the
+    /// targets through an identity conversion, so each element is the value stored, each element's <c>Item&lt;n&gt;</c>
+    /// map holds that element's type (<see cref="HeapInputs.Holds"/>), and no element brings in a struct whose reads are
+    /// opaque (<see cref="Layouts.Inherits"/>; ticket P2-161).
+    /// </summary>
+    private bool IsTakenApart(IDeconstructionAssignmentOperation deconstruction) =>
+        deconstruction.Value.Type is INamedTypeSymbol { IsTupleType: true, TupleElements: { Length: <= 7 } elements } tuple
+        && compilation.ClassifyConversion(tuple, deconstruction.Target.Type!).IsIdentity
+        && !Layouts.Inherits(deconstruction.Value)
+        && (TypeMapper.Tuple(tuple) is not null || elements.All(e => heap.Inputs.Holds(e.CorrespondingTupleField!)));
+
+    /// <summary>
+    /// Element <paramref name="element"/> of the tuple <paramref name="tuple"/>, as a read of <c>t.Item&lt;n&gt;</c> is
+    /// (<see cref="FieldOrTuple"/>): the <c>tuple.item</c> function of a tuple of an <see cref="IrTuple"/> sort, and
+    /// otherwise the element's <c>Item&lt;n&gt;</c> field map read at the tuple, whatever name the tuple's type gives it.
+    /// </summary>
+    private IrVar Element(IrVar tuple, IFieldSymbol element, LoweringContext context) =>
+        TypeMapper.TupleElement(element) is { } position
+            ? Pure(IrTuple.Item(position), [], runtimeSensitive: false, [tuple], Map(element.Type), context)
+            : heap.ReadSlice(heap.Backing(element.CorrespondingTupleField!, tuple, context), context);
+
+    /// <summary>
+    /// Whether the element a deconstruction stores is null: <see cref="NullFlag"/> of a literal's element
+    /// <paramref name="source"/>, and for an element read from a tuple-typed value, which has no source, what the
+    /// <c>null.&lt;Sort&gt;</c> map says of <paramref name="value"/>.
+    /// </summary>
+    private IrVar ElementNullFlag(IOperation? source, IrVar value, LoweringContext context) =>
+        source is null ? heap.MapRead(heap.Inputs.Nulls((IrSort)value.Type), value, context) : NullFlag(source, value, context);
 
     /// <summary>One store of a deconstruction: to a field's slice, or to a variable and its null shadow; a discard stores nothing.</summary>
     private void StoreDeconstructed(IOperation lvalue, HeapLowerer.Access? slice, IrVar value, IrVar? isNull, LoweringContext context)

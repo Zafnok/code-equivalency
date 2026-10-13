@@ -131,12 +131,92 @@ public sealed class IrLowererTests
     }
 
     /// <summary>
-    /// Ticket P2-025: a deconstruction the lowering does not take apart, of a value that is not a tuple literal, into a nested
-    /// tuple, a property or an array element, or whose own value is used, is one opaque with reason <c>DeconstructionAssignment</c>.
+    /// Ticket P2-170: a deconstruction of a value of an <see cref="IrTuple"/> sort is one <c>tuple.item</c> of the value per
+    /// element, in order, whichever way its targets are spelled, and a discard's element is read and dropped.
     /// </summary>
     [Theory]
-    [InlineData("static int M((int, int) p) { (int x, int y) = p; return x + y; }")]
-    [InlineData("static int M((int, int) p) { int x, y; (x, y) = ((int, int))p; return x + y; }")]
+    [InlineData("static int M((int, int) p) { var (x, y) = p; return x - y; }")]
+    [InlineData("static int M((int, int) p) { (int x, int y) = p; return x - y; }")]
+    [InlineData("static int M((int A, int B) p) { int x, y; (x, y) = ((int, int))p; return x - y; }")]
+    [InlineData("static int M((int, int) p, int x) { (x, _) = p; return x; }")]
+    public void DeconstructionOfAValueOfATupleSortIsOneItemPerElement(string members)
+    {
+        IrProcedure procedure = Method(members);
+
+        Assert.Empty(Opaques(procedure));
+        ImmutableArray<IrPure> items = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrPure>()];
+        Assert.Equal([IrTuple.Item(1), IrTuple.Item(2)], items.Select(static i => i.Function), StringComparer.Ordinal);
+        Assert.All(items, i => Assert.Equal<IrVar>([procedure.Parameters[0].Var], i.Args));
+    }
+
+    /// <summary>
+    /// Ticket P2-170: a deconstruction of a tuple-typed value that is of no <see cref="IrTuple"/> sort evaluates the value
+    /// once and reads each element's <c>Item&lt;n&gt;</c> map at it, in order, whatever the tuple's type names the element,
+    /// and a reference's null shadow is what the <c>null.*</c> map says of the element read. The two spellings of the
+    /// targets, <c>var (s, n)</c> and <c>(string s, int n)</c>, are one IR.
+    /// </summary>
+    [Theory]
+    [InlineData("var (s, n) = G(a);")]
+    [InlineData("(string s, int n) = G(a);")]
+    [InlineData("string s; int n; (s, n) = G(a);")]
+    public void DeconstructionOfATupleTypedValueEvaluatesItOnceAndReadsEachElement(string statement)
+    {
+        static IrProcedure Taking(string statement) =>
+            Method("static (string Name, int Count) G(int a) => default; static int M(int a) { " + statement + " return s == null ? n : 0; }");
+        IrProcedure procedure = Taking(statement);
+
+        Assert.Empty(Opaques(procedure));
+        IrVar value = Assert.Single(Calls(procedure)).Target!;
+        ImmutableArray<IrMapRead> reads = [.. procedure.Blocks.SelectMany(static b => b.Instructions).OfType<IrMapRead>()];
+        Assert.Equal(
+            ["field.System.ValueTuple_2.Item1", "field.System.ValueTuple_2.Item2"],
+            reads.Where(r => r.Key == value).Select(static r => r.Map.Name[..r.Map.Name.LastIndexOf('.')]),
+            StringComparer.Ordinal);
+        Assert.Contains(reads, r => r.Map.Name is "null.System.String" && r.Key == reads.First(e => e.Key == value).Target);
+        Assert.Equal(IrText.Dump(Taking("var (s, n) = G(a);")), IrText.Dump(procedure));
+    }
+
+    /// <summary>
+    /// Ticket P2-170: a <c>foreach</c> that deconstructs its element is the same reads of the element, one into a field
+    /// writes the field's map with the element read, two tuples of one type share their <c>Item&lt;n&gt;</c> maps, and a
+    /// tuple of seven elements is the largest whose elements are all its own fields.
+    /// </summary>
+    [Theory]
+    [InlineData("static int M(System.Collections.Generic.List<(string, int)> ps) { int t = 0; foreach (var (s, n) in ps) t += n; return t; }")]
+    [InlineData("static int M(System.Collections.Generic.List<(string, int)> ps) { int t = 0; foreach ((string s, int n) in ps) t += n; return t; }")]
+    [InlineData("string f; int M((string, int) p, int n) { (f, n) = p; return n; }")]
+    [InlineData("static int M((string, int) p, (string, int) q) { var (s, n) = p; var (t, m) = q; return n + m; }")]
+    [InlineData("static int M((int, int, int, int, int, int, int) p) { var (a, b, c, d, e, f, g) = p; return a + g; }")]
+    public void DeconstructionOfATupleTypedValueIntoAForeachVariableOrAFieldIsLowered(string members) =>
+        Assert.Empty(Opaques(Method(members)));
+
+    /// <summary>
+    /// Ticket P2-170: a tuple made of a struct whose interface list hands a type with a layout over (ticket P2-161) is not
+    /// taken apart, since a read of such a struct is opaque: the deconstruction stays the opaque it was, and reads no map.
+    /// </summary>
+    [Fact]
+    public void DeconstructionOfATupleThatHoldsAStructWhoseInterfaceListHandsOverATypeIsOpaque()
+    {
+        IrProcedure procedure = Implementing(string.Empty, "static int M((K, int) p) { var (k, n) = p; return n; }");
+
+        Assert.All(Opaques(procedure), static o => Assert.Equal("DeconstructionAssignment", o.Reason));
+        Assert.Equal(3, Opaques(procedure).Length);
+        Assert.DoesNotContain(procedure.Parameters, static p => p.Var.Name.StartsWith("field.", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Ticket P2-025: a deconstruction the lowering does not take apart, through a <c>Deconstruct</c> method, into a nested
+    /// tuple, a property or an array element, or whose own value is used, is one opaque with reason
+    /// <c>DeconstructionAssignment</c>. Ticket P2-170: so is one of a tuple-typed value that converts an element on the
+    /// way to its target, that has an eighth element, which is a field of the <c>Rest</c> tuple, or whose <c>Item&lt;n&gt;</c>
+    /// map the body already holds at another tuple's element type.
+    /// </summary>
+    [Theory]
+    [InlineData("static long M((int, int) p) { (long x, int y) = p; return x + y; }")]
+    [InlineData("static int M((int, int, int, int, int, int, int, int) p) { var (a, b, c, d, e, f, g, h) = p; return a + h; }")]
+    [InlineData("static int M((string, int) p, (int, string) q) { int n = p.Item2; var (m, t) = q; return n + m; }")]
+    [InlineData("int P { get; set; } void M((int, string) p) { (P, _) = p; }")]
+    [InlineData("interface I { void Deconstruct(out int a, out int b); } static int M<T>(T t) where T : I { var (x, y) = t; return x + y; }")]
     [InlineData("struct S { public static implicit operator S((int, int) t) => default; public void Deconstruct(out int a, out int b) { a = 1; b = 2; } } static int M(int a) { int x, y; (x, y) = (S)(a, a); return x + y; }")]
     [InlineData("static int M(int a) { int x, y, z; (x, (y, z)) = (a, (a, a)); return x + y + z; }")]
     [InlineData("int P { get; set; } void M(int a) { (P, _) = (a, a); }")]
@@ -1880,7 +1960,8 @@ public sealed class IrLowererTests
         AssertDefined(Method(members), "ref-argument", opaques);
 
     [Theory]
-    [InlineData("static int M((int, int) t) { var (a, b) = t; return a + b; }", "DeconstructionAssignment", 3)]
+    [InlineData("static long M((int, int) t) { (long a, int b) = t; return a + b; }", "DeconstructionAssignment", 3)]
+    [InlineData("static int M(System.Collections.Generic.Dictionary<string, int> d) { int t = 0; foreach (var (k, v) in d) t += v; return t; }", "DeconstructionAssignment", 3)]
     [InlineData("static int M((int, (int, int)) t, int[] xs) { int a; (a, (xs[0], _)) = t; return a; }", "DeconstructionAssignment", 2)]
     [InlineData("static int M(object o) => o is int x ? x : 0;", "switch-pattern", 2)]
     [InlineData("static int M(object o) => o is int _ ? 1 : 0;", "switch-pattern", 1)]
