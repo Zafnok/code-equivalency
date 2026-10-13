@@ -124,7 +124,8 @@ internal sealed class IrLowerer
     /// body reads or writes its backing field's map. A call is flagged runtime-changed only by a row that applies inside
     /// <paramref name="runtime"/>'s interval (ADR 0040 decision 2; ticket P2-055), and never for a member listed in
     /// <paramref name="suppressedRuntimeChanges"/>. A method whose bound code is erroneous is one whole-body <see cref="IrOpaque"/> per
-    /// cause, with reason <see cref="Unknown.UnboundOpaqueReason"/> (ADR 0029 decision 2), and is not lowered further.
+    /// cause, with reason <see cref="Unknown.UnboundOpaqueReason"/> (ADR 0029 decision 2) and the id of the cause's compiler
+    /// diagnostic when it has one (ticket P2-172), and is not lowered further.
     /// </summary>
     public static IrProcedure Lower(IMethodSymbol method, Compilation compilation, RenameMap renames, ImmutableArray<string> suppressedRuntimeChanges, SideRuntime runtime) =>
         Lower(method, compilation, renames, suppressedRuntimeChanges, [], runtime).Body;
@@ -148,11 +149,11 @@ internal sealed class IrLowerer
         IOperation? operation = model.GetOperation(syntax);
         ImmutableArray<Initializer> initializers = operation is IConstructorBodyOperation ? Initializers(method, syntax, compilation) : [];
         ImmutableArray<string> suppressed = RowPreconditions.Suppress(suppressedRuntimeChanges, initializers.Select(static i => i.Operation).Prepend(operation));
-        ImmutableArray<SourceSpan> unbound =
+        ImmutableArray<UnboundCause> unbound =
             [.. UnboundCauses(syntax, model, operation), .. initializers.SelectMany(static i => UnboundCauses(i.Syntax, i.Model, i.Operation))];
         if (unbound.IsEmpty && LeavesAnErrorTypeOut(method))
         {
-            unbound = [Span(syntax)];
+            unbound = [new UnboundCause(Span(syntax), Diagnostic: null)];
         }
 
         IrProcedure procedure = (unbound.IsEmpty, operation) switch
@@ -166,7 +167,7 @@ internal sealed class IrLowerer
                 AutoAccessor(method, field, model, Span(syntax), renames, suppressed, entries),
             // No operation to lower: an `extern` method, or a record's primary constructor, whose writes of its positional
             // properties no operation holds.
-            _ => Opaque(method, renames, entries, "no-body", [Span(syntax)]),
+            _ => Opaque(method, renames, entries, "no-body", [new UnboundCause(Span(syntax), Diagnostic: null)]),
         };
         return (procedure, [.. entries.Applied]);
     }
@@ -202,7 +203,7 @@ internal sealed class IrLowerer
         // A whole-body opaque points at the first offending construct, not the body (ADR 0029 decision 3).
         if (method.IsIterator)
         {
-            return Opaque(method, renames, catalogue, "iterator", [Span(body.Descendants().First(static o => o.Kind is OperationKind.YieldReturn or OperationKind.YieldBreak).Syntax)]);
+            return Opaque(method, renames, catalogue, "iterator", [new UnboundCause(Span(body.Descendants().First(static o => o.Kind is OperationKind.YieldReturn or OperationKind.YieldBreak).Syntax), Diagnostic: null)]);
         }
 
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
@@ -286,35 +287,36 @@ internal sealed class IrLowerer
         });
 
     /// <summary>
-    /// Where <paramref name="syntax"/>'s bound code is erroneous (ADR 0029 decision 2): the span of every compiler error
-    /// in it, in source order, or, when there is none, of every <see cref="IInvalidOperation"/> and every operation of an
-    /// error type in <paramref name="operation"/>, such as a reference to a field whose type did not resolve. Empty when it
+    /// Where <paramref name="syntax"/>'s bound code is erroneous (ADR 0029 decision 2): the span and id of every compiler
+    /// error in it, in source order, or, when there is none, the span of every <see cref="IInvalidOperation"/> and every
+    /// operation of an error type in <paramref name="operation"/>, such as a reference to a field whose type did not resolve.
+    /// Two errors at one span with different ids are two causes (ticket P2-172). Empty when it
     /// binds. A syntax error anywhere in its file comes first and is the only cause: where each declaration of that file
     /// begins and ends is the parser's recovery, so no method in it is taken as bound (ticket P2-085). An error is one the
     /// compiler itself calls an error (<see cref="CompilationDiagnosticClassifier.IsError"/>): a warning the project
     /// promotes to an error sits on code that binds, and that code is lowered (ticket P2-106). The fingerprint of a partial
     /// method's implementing part, which is never lowered, asks the same of that part (ADR 0024 as clarified by ticket P2-107).
     /// </summary>
-    internal static ImmutableArray<SourceSpan> UnboundCauses(SyntaxNode syntax, SemanticModel model, IOperation? operation)
+    internal static ImmutableArray<UnboundCause> UnboundCauses(SyntaxNode syntax, SemanticModel model, IOperation? operation)
     {
         if (syntax.SyntaxTree.GetDiagnostics().Where(CompilationDiagnosticClassifier.IsError).MinBy(static d => d.Location.SourceSpan.Start) is { } syntaxError)
         {
-            return [CSharpFrontend.ToSourceSpan(syntaxError.Location)];
+            return [new UnboundCause(CSharpFrontend.ToSourceSpan(syntaxError.Location), syntaxError.Id)];
         }
 
-        ImmutableArray<SourceSpan> errors =
+        ImmutableArray<UnboundCause> errors =
         [
             .. model.GetDiagnostics(syntax.Span)
                 .Where(CompilationDiagnosticClassifier.IsError)
                 .OrderBy(static d => d.Location.SourceSpan.Start)
-                .Select(static d => CSharpFrontend.ToSourceSpan(d.Location))
+                .Select(static d => new UnboundCause(CSharpFrontend.ToSourceSpan(d.Location), d.Id))
                 .Distinct(),
         ];
-        ImmutableArray<SourceSpan> operations =
+        ImmutableArray<UnboundCause> operations =
         [
             .. (operation?.DescendantsAndSelf() ?? [])
                 .Where(static o => o is IInvalidOperation || o.Type is { TypeKind: TypeKind.Error })
-                .Select(static o => Span(o.Syntax))
+                .Select(static o => new UnboundCause(Span(o.Syntax), Diagnostic: null))
                 .Distinct(),
         ];
         return errors.IsEmpty ? operations : errors;
@@ -341,13 +343,13 @@ internal sealed class IrLowerer
 
     /// <summary>
     /// One block: an opaque value (reason <paramref name="reason"/>) returned, by-ref parameters unchanged. There is one
-    /// <see cref="IrOpaque"/> per span in <paramref name="spans"/>, the last one defining the value, each flagged
-    /// <see cref="IrOpaque.WholeBody"/>.
+    /// <see cref="IrOpaque"/> per cause in <paramref name="causes"/>, the last one defining the value, each flagged
+    /// <see cref="IrOpaque.WholeBody"/> and carrying its cause's diagnostic id.
     /// </summary>
-    private static IrProcedure Opaque(IMethodSymbol method, RenameMap renames, Catalogue catalogue, string reason, ImmutableArray<SourceSpan> spans)
+    private static IrProcedure Opaque(IMethodSymbol method, RenameMap renames, Catalogue catalogue, string reason, ImmutableArray<UnboundCause> causes)
     {
         (ImmutableArray<IrParameter> parameters, IrType? returnType) = Signature(method, catalogue.Sorts);
-        return Opaque(RoslynIdentity.Of(method, renames), parameters, returnType, reason, spans);
+        return Opaque(RoslynIdentity.Of(method, renames), parameters, returnType, reason, causes);
     }
 
     /// <summary>
@@ -361,12 +363,18 @@ internal sealed class IrLowerer
         return Opaque(lowered.Identity, lowered.Parameters, lowered.ReturnType, reason, [span]);
     }
 
-    internal static IrProcedure Opaque(ProcedureIdentity identity, ImmutableArray<IrParameter> parameters, IrType? returnType, string reason, ImmutableArray<SourceSpan> spans)
+    internal static IrProcedure Opaque(ProcedureIdentity identity, ImmutableArray<IrParameter> parameters, IrType? returnType, string reason, ImmutableArray<SourceSpan> spans) =>
+        Opaque(identity, parameters, returnType, reason, [.. spans.Select(static span => new UnboundCause(span, Diagnostic: null))]);
+
+    private static IrProcedure Opaque(ProcedureIdentity identity, ImmutableArray<IrParameter> parameters, IrType? returnType, string reason, ImmutableArray<UnboundCause> causes)
     {
         IrVar? value = returnType is null ? null : new IrVar("$0", returnType);
         IrBlock block = new(
             new IrBlockId(0),
-            [.. spans[..^1].Select(span => new IrOpaque(Target: null, reason, span) { WholeBody = true }), new IrOpaque(value, reason, spans[^1]) { WholeBody = true }],
+            [
+                .. causes[..^1].Select(cause => new IrOpaque(Target: null, reason, cause.Span) { WholeBody = true, Diagnostic = cause.Diagnostic }),
+                new IrOpaque(value, reason, causes[^1].Span) { WholeBody = true, Diagnostic = causes[^1].Diagnostic },
+            ],
             new IrReturn(value, [.. parameters.Where(static p => p.Kind != IrParameterKind.In).Select(static p => new IrOut(p.Var, p.Var))]));
         return new IrProcedure(identity, parameters, returnType, [block], block.Id);
     }

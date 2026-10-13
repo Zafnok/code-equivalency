@@ -68,6 +68,7 @@ public sealed class IrRecordEqualityTests
     [InlineData(5)]
     [InlineData(6)]
     [InlineData(7)]
+    [InlineData(8)]
     public void Opaque(int field) =>
         AssertStructural(
             () => new IrOpaque(A, "Lambda", new SourceSpan("a.cs", 1, 2, 3, 4)) { Fingerprint = "f", Reads = [A, B], Threw = new IrVar("t", new IrBool()), Heap = [new IrHeapPair("m", A, B)] },
@@ -80,7 +81,8 @@ public sealed class IrRecordEqualityTests
                 4 => o with { Fingerprint = null },
                 5 => o with { Reads = [B, A] },
                 6 => o with { Threw = null },
-                _ => o with { Heap = [] },
+                7 => o with { Heap = [] },
+                _ => o with { Diagnostic = "CS0103" },
             });
 
     [Fact]

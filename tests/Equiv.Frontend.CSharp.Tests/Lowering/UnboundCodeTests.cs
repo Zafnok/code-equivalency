@@ -49,7 +49,34 @@ public sealed class UnboundCodeTests
 
         Assert.NotEmpty(opaques);
         Assert.All(opaques, static o => Assert.Equal(("unbound", true), (o.Reason, o.WholeBody)));
+
+        // Ticket P2-172: each opaque names the error it stands for.
+        Assert.Contains(opaques, o => string.Equals(o.Diagnostic, id, StringComparison.Ordinal));
+        Assert.All(opaques, static o => Assert.NotNull(o.Diagnostic));
     }
+
+    /// <summary>Ticket P2-172: a body with one error diagnostic is one opaque that names it, at the error.</summary>
+    [Fact]
+    public void ABodyWithOneErrorNamesItsDiagnostic()
+    {
+        IrOpaque opaque = Assert.Single(Opaques(Method("static void M() { Undefined(); }", allowErrors: true)));
+
+        Assert.Equal(("unbound", "CS0103", 4), (opaque.Reason, opaque.Diagnostic, opaque.Span.StartLine));
+    }
+
+    /// <summary>Ticket P2-172: errors of different ids are each named, in source order.</summary>
+    [Fact]
+    public void EachCauseNamesItsOwnDiagnostic()
+    {
+        IrProcedure procedure = Method("static void M(string s) { Undefined(); s.Missing(); }", allowErrors: true);
+
+        Assert.Equal(["CS0103", "CS1061"], Opaques(procedure).Select(static o => o.Diagnostic), StringComparer.Ordinal);
+    }
+
+    /// <summary>Ticket P2-172: an opaque that is not a compiler error names no diagnostic.</summary>
+    [Fact]
+    public void AnOpaqueThatIsNotAnErrorNamesNoDiagnostic() =>
+        Assert.All(Opaques(Method("static System.Collections.Generic.IEnumerable<int> M() { yield return 1; }")), static o => Assert.Null(o.Diagnostic));
 
     /// <summary>
     /// CS0012: the method uses a type whose base is defined in an assembly the project does not reference. The reference
@@ -86,6 +113,7 @@ public sealed class UnboundCodeTests
         Assert.Equal("unbound", opaque.Reason);
         Assert.True(opaque.WholeBody);
         Assert.Equal((line, column), (opaque.Span.StartLine, opaque.Span.StartColumn));
+        Assert.StartsWith("CS", opaque.Diagnostic, StringComparison.Ordinal);
     }
 
     /// <summary>Only the first syntax error is a cause: the later ones are often the parser recovering from the first.</summary>
@@ -147,6 +175,9 @@ public sealed class UnboundCodeTests
         Assert.Equal("unbound", opaque.Reason);
         Assert.True(opaque.WholeBody);
         Assert.Equal(4, opaque.Span.StartLine);
+
+        // Ticket P2-172: the diagnostic is on the property, outside the accessor, so the cause names none.
+        Assert.Null(opaque.Diagnostic);
     }
 
     /// <summary>The other accessors of a type with an unresolved member are lowered as they are bound.</summary>

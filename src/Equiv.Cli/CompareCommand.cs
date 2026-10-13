@@ -1133,7 +1133,7 @@ internal static class CompareCommand
             .SelectMany(static b => b.Instructions)
             .OfType<IrOpaque>()
             .Where(o => string.Equals(o.Reason, reason, StringComparison.Ordinal))
-            .Select(o => new UnknownCause(side, o.Reason, o.Span));
+            .Select(o => new UnknownCause(side, o.Reason, o.Span) { Diagnostic = o.Diagnostic });
 
     private static int DecideExitCode(List<VerificationResult> results, SarifLog log, string? failOn)
     {
