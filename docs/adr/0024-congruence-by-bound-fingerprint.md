@@ -700,3 +700,45 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     congruent results P2-137 found naming the two constructors as a rebound call were right to be
     Equivalent: no input reaches a throw the compiler never emits. They stay congruent and no
     longer name the pair.
+- 2026-10-13 (P2-171). **A call of a local function is a fragment whose text is the function.**
+  P2-127 made the call an opaque no side shares, because the lowering called a local function by a
+  name that is the same on both sides and no pair reads its body. The clarification of 2026-10-01
+  lists "an outer local function" among the cases with no fingerprint, for a fragment that refers
+  to one. That stays true of such a fragment: its text is its own tree, which does not hold the
+  function. The call itself is the case decision 2 did not spell out, and decision 2 applies to it
+  as written once the text is the code the call runs.
+  - **The rule.** A call of a local function in a member's own body carries the fingerprint of: the
+    type arguments the call gives the function, the function's declaration, body and all, and the
+    declaration of every local function those declarations call or convert to a delegate, in order
+    of first reference, each once. It is serialised as a body is, with the method's parameters
+    numbered by first occurrence as a fragment's are. Its arguments are not in the text: they are
+    lowered as any call's and are the first things it reads. After them it reads every local and
+    parameter declared outside those declarations that they reference, in order of first
+    occurrence. The encoder shares it by decision 2: one fingerprint on both sides is one call
+    `opaque:<fingerprint>` with the heap at that point and its trace position.
+  - **Why two calls with one fingerprint are one function.** What the call does is fixed by the
+    code it runs, by the arguments, by the variables that code captures, by `this` (the same input
+    on both sides; a struct's local function cannot name it), by the heap, and by what its callees
+    do. The fingerprint is the first, bound in that side's own compilation; the reads are the
+    second and third; the heap pairs and the shared-callee assumption are the rest, as for any
+    call. P2-127's path stays closed: two functions that differ in any bound operation have two
+    fingerprints, and an unshared fragment keeps ADR 0014's meaning, so the pair is Unknown and
+    not a proof that never read the body. Two functions with one body that capture different
+    values are one call of different operands, which the solver sees.
+  - **What gets no fingerprint.** Decision 2's two exclusions, applied to a function that holds
+    its variables by reference. "Writes a local other than its result": a `ref` or `out`
+    argument, and any captured variable that a lambda or local function of the body writes, the
+    called one included (a write by another function is one the lowering does not see, so the
+    value read would not be the variable's). "A lambda capturing a local assigned after": every
+    captured variable counts, since a lambda, an iterator or an `async` function inside the called
+    one can read it after the call returns, so a call one of whose captures is stored at a point
+    reachable after it is not shared. Also a function that returns by reference, a capture the
+    lowering does not track, and runtime-sensitive code, which decision 2 already excludes.
+  - **Not chosen.** A matched pair of procedures per local function, its captures as parameters,
+    changes what a procedure is in `Equiv.Core`'s matching and needs the same capture analysis
+    first. Inlining the function's graph at the call proves pairs whose functions differ in text,
+    which this rule leaves Unknown, at the price of a second graph in every per-graph analysis of
+    the lowering and a larger query; it is P2-174's subject, and it can replace an unshared call
+    without changing a shared one.
+  - **Measured on `gitextensions-11372`** (the ticket's Notes): of the 44 changed pairs that call
+    a local function, the functions have the same text on both sides in 30.

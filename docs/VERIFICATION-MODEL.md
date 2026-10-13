@@ -412,6 +412,17 @@ C# integer semantics the lowering makes explicit (M2-003; `char` is bv16, ADR 00
   variable that is stored after it in the IR or that any lambda or local function writes; or is
   runtime-sensitive inside the pair's runtime interval, which both sides are given alike, so a
   fragment both hold gets the same answer on each (ADR 0040; P2-055). A whole-body opaque has none.
+- A call of a local function in the body is an opaque with reason `LocalFunction`, never a call of
+  the function's name (P2-127). Its fingerprint is not the call expression's but that of the bound
+  code the call runs: the called function's declaration and that of every local function it
+  reaches, with the call's type arguments (ADR 0024, clarified 2026-10-13; P2-171). It reads the
+  call's arguments, lowered as any call's and in parameter order, and then the locals and
+  parameters declared outside those declarations that they reference, a reference's null shadow
+  after it, in order of first occurrence. It gets no fingerprint when it has a `ref` or `out`
+  argument, when any lambda or local function of the body writes one of those variables, when the
+  lowering does not track one, when the function returns by reference, or when its code is
+  runtime-sensitive; and it loses it when one of those variables is stored after it in the IR, as
+  a fragment with a lambda's capture does.
 - An opaque call's `threw` flag branches to `IrThrow("System.Exception")`. `throw new T(...)`
   records the constructor call and then lowers to `IrThrow("T")` on T's static type (M2-004).
   Throwing any other expression is `IrOpaque` with reason `Throw`, because the thrown object's
