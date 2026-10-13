@@ -58,3 +58,9 @@ stop after the measurement and write it up before choosing.
 
 ## Notes
 - Filed 2026-10-12 from P2-157.
+- 2026-10-12 (P2-162). `Layouts.Implemented` now also takes the types an operation hands a member
+  of the solution, a class among them, so `Make<K>()` for `class K : J<S>` with
+  `static W Make<T>() where T : W, new() => new T()` has `S`'s declaration in its text and is still
+  one function `Make<N.K>` in the lowered body of both sides. It is this ticket's gap for the rule
+  P2-162 added: add it to criterion 1's cases. The Out of scope line on P2-162 is about the text,
+  which is done.
