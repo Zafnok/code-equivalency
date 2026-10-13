@@ -129,7 +129,7 @@ Changing what `unbound` means (P2-106 settled it); the other pairs.
   congruent.
 - `samples/partly-compiling-modern/expected.sarif.json` gains the property on its one `unbound` result (`modern`:
   CS0103). Nothing else in it changed.
-- Surprising: nothing in a run said a generator had not run. Filed as P2-174.
+- Surprising: nothing in a run said a generator had not run. Filed as P2-176.
 - Not established: a local run of `Equiv.Tests.Integration`'s `SamplesEndToEndTests`, made to regenerate that
   snapshot while a corpus run was loading on the same box, failed 54 of 258 tests, the ones read showing exit 4 where
   the sample expects 1. It was not rerun alone. CI is the gate.

@@ -1,4 +1,4 @@
-# P2-174 A project whose source generator is missing or throws loads without a word
+# P2-176 A project whose source generator is missing or throws loads without a word
 Status: todo
 Effort: S
 Model: Sonnet, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
