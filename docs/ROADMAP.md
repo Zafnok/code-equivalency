@@ -538,6 +538,13 @@ of how much of the cleanup result each explains:
 - P2-171 (L) A call of a local function is not an opaque when both sides declare the same local
   function: `LocalFunction` is in 43 of gitextensions-11372's 319 changed pairs (13.5%) and 18 of
   gitextensions-11284's 178. The cost P2-127's soundness fix named. Found by P2-110. Needs P2-127.
+  Done 2026-10-13: the call is a shared fragment named by the fingerprint of the bound code it runs
+  (ADR 0024, clarified). On gitextensions-11372 quick the solver proves 234 of 319 changed pairs
+  (73.4%, from 217); 13 results still name the opaque, from 26. What is left is P2-174.
+- P2-174 (L) A call of a local function is decided when the two sides' local functions differ in
+  text, or write what they capture: 13 of gitextensions-11372's 319 changed pairs still name a
+  `LocalFunction` opaque after P2-171, 12 of them because the pull request rewrote an expression
+  inside the function. Found by P2-171's rerun. Needs P2-171.
 - P2-172 (M) Seventeen bodies of powershell-19687 are `unbound` on both sides of a human commit, in
   files the pull request did not touch: what P2-106 left of 82. Found by P2-110. Needs P2-106.
 - P2-173 (M) A result says which fingerprint component keeps a body out of congruence. 11 bodies in
