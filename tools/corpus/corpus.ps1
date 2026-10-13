@@ -375,6 +375,15 @@ function Get-ResolvedPackages([string]$Dir) {
     return [pscustomobject]@{ Files = $files.Count; Versions = $versions }
 }
 
+# One row of -Packages' table: how package $Id's resolved versions differ between the sides (Get-ResolvedPackages'
+# Versions), or nothing when they are the same.
+function Get-PackageChange([string]$Id, [hashtable]$Legacy, [hashtable]$Modern) {
+    $old = if ($Legacy.ContainsKey($Id)) { @($Legacy[$Id]) -join ', ' } else { '' }
+    $new = if ($Modern.ContainsKey($Id)) { @($Modern[$Id]) -join ', ' } else { '' }
+    $change = if (-not $old) { 'modern only' } elseif (-not $new) { 'legacy only' } elseif ($old -ne $new) { 'version changed' } else { $null }
+    if ($change) { [pscustomobject]@{ Package = $Id; Change = $change; Legacy = $old; Modern = $new } }
+}
+
 # -Packages' report: ADR 0034's packageVersionChanges between two restored checkouts. A function with its own
 # scope, not statements of the -Packages branch: there a variable named $modern is the script's [string] -Modern
 # parameter (names are case-insensitive), which turned the modern side's Get-ResolvedPackages result into text
@@ -385,13 +394,7 @@ function Show-PackageChanges([string]$LegacyDir, [string]$ModernDir) {
     Show-Step ("restore outputs read: legacy {0}, modern {1} (project.assets.json + packages.config)" -f $before.Files, $after.Files)
     if ($before.Files -eq 0 -or $after.Files -eq 0) { Show-Step "warning: a side has no restore output; restore both sides first (-Env, then dotnet restore)" }
     $ids = @($before.Versions.Keys + $after.Versions.Keys | Sort-Object -Unique)
-    $rows = foreach ($id in $ids) {
-        $old = if ($before.Versions.ContainsKey($id)) { @($before.Versions[$id]) -join ', ' } else { '' }
-        $new = if ($after.Versions.ContainsKey($id)) { @($after.Versions[$id]) -join ', ' } else { '' }
-        $change = if (-not $old) { 'modern only' } elseif (-not $new) { 'legacy only' } elseif ($old -ne $new) { 'version changed' } else { $null }
-        if ($change) { [pscustomobject]@{ Package = $id; Change = $change; Legacy = $old; Modern = $new } }
-    }
-    $rows = @($rows)
+    $rows = @($ids | ForEach-Object { Get-PackageChange $_ $before.Versions $after.Versions })
     Show-Step ("== package version changes: {0} changed, {1} legacy only, {2} modern only" -f
         @($rows | Where-Object Change -eq 'version changed').Count,
         @($rows | Where-Object Change -eq 'legacy only').Count,
