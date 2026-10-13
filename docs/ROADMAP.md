@@ -867,6 +867,9 @@ Found by P2-124's rerun of the two upgrade pairs (`docs/runs/2026-10-12-upgrade-
 - P2-166 (M) Thorough's budget pass reports EQ002 on a body whose text is unchanged and whose field
   was retyped (`jellyfin-13023`, one result, thorough mode only). The first step is the repro. Needs
   P1-032.
+- P2-167 (S) `corpus.ps1 -Packages` fails on every pair with "The property 'Files' cannot be found on
+  this object": its `$modern` is the script's `[string]` `-Modern` parameter. Script and Pester test
+  only. Needs P1-032.
 
 Documentation:
 - P2-089 (S) ARCHITECTURE.md's `equiv compare` synopsis and `EquivConfig`'s doc comment no longer list

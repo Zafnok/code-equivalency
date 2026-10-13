@@ -355,19 +355,52 @@ function Get-ResolvedPackages([string]$Dir) {
         Where-Object { $_.Name -in 'project.assets.json', 'packages.config' -and $_.FullName -notmatch '[\\/]\.git[\\/]' })
     foreach ($file in $files) {
         if ($file.Name -eq 'packages.config') {
-            ([xml](Get-Content -LiteralPath $file.FullName -Raw)).packages.package | Where-Object { $_ } |
-                ForEach-Object { & $add $_.id $_.version }
+            # SelectNodes, not .packages.package: under strict mode a file that lists no package has no such property.
+            ([xml](Get-Content -LiteralPath $file.FullName -Raw)).SelectNodes('/packages/package') |
+                ForEach-Object { & $add $_.GetAttribute('id') $_.GetAttribute('version') }
         }
         else {
-            $libraries = (Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json).libraries
-            if ($null -eq $libraries) { continue }
-            $libraries.PSObject.Properties | Where-Object { $_.Value.type -eq 'package' } | ForEach-Object {
-                $parts = $_.Name -split '/', 2
-                & $add $parts[0] $parts[1]
-            }
+            # PSObject.Properties[...], not a dotted read: a file with no "libraries", or a library with no "type",
+            # holds no package, and under strict mode the dotted read of an absent property throws (ticket P2-167).
+            $libraries = (Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json).PSObject.Properties['libraries']
+            if ($null -eq $libraries -or $null -eq $libraries.Value) { continue }
+            $libraries.Value.PSObject.Properties |
+                Where-Object { $type = $_.Value.PSObject.Properties['type']; $null -ne $type -and $type.Value -eq 'package' } |
+                ForEach-Object {
+                    $parts = $_.Name -split '/', 2
+                    & $add $parts[0] $parts[1]
+                }
         }
     }
     return [pscustomobject]@{ Files = $files.Count; Versions = $versions }
+}
+
+# One row of -Packages' table: how package $Id's resolved versions differ between the sides (Get-ResolvedPackages'
+# Versions), or nothing when they are the same.
+function Get-PackageChange([string]$Id, [hashtable]$Legacy, [hashtable]$Modern) {
+    $old = if ($Legacy.ContainsKey($Id)) { @($Legacy[$Id]) -join ', ' } else { '' }
+    $new = if ($Modern.ContainsKey($Id)) { @($Modern[$Id]) -join ', ' } else { '' }
+    $change = if (-not $old) { 'modern only' } elseif (-not $new) { 'legacy only' } elseif ($old -ne $new) { 'version changed' } else { $null }
+    if ($change) { [pscustomobject]@{ Package = $Id; Change = $change; Legacy = $old; Modern = $new } }
+}
+
+# -Packages' report: ADR 0034's packageVersionChanges between two restored checkouts. A function with its own
+# scope, not statements of the -Packages branch: there a variable named $modern is the script's [string] -Modern
+# parameter (names are case-insensitive), which turned the modern side's Get-ResolvedPackages result into text
+# and failed the read of its Files (ticket P2-167).
+function Show-PackageChanges([string]$LegacyDir, [string]$ModernDir) {
+    $before = Get-ResolvedPackages $LegacyDir
+    $after = Get-ResolvedPackages $ModernDir
+    Show-Step ("restore outputs read: legacy {0}, modern {1} (project.assets.json + packages.config)" -f $before.Files, $after.Files)
+    if ($before.Files -eq 0 -or $after.Files -eq 0) { Show-Step "warning: a side has no restore output; restore both sides first (-Env, then dotnet restore)" }
+    $ids = @($before.Versions.Keys + $after.Versions.Keys | Sort-Object -Unique)
+    $rows = @($ids | ForEach-Object { Get-PackageChange $_ $before.Versions $after.Versions })
+    Show-Step ("== package version changes: {0} changed, {1} legacy only, {2} modern only" -f
+        @($rows | Where-Object Change -eq 'version changed').Count,
+        @($rows | Where-Object Change -eq 'legacy only').Count,
+        @($rows | Where-Object Change -eq 'modern only').Count)
+    # Out-String, not Out-Host: a table sent to Out-Host is dropped when stdout is redirected to a log.
+    if ($rows.Count -gt 0) { Show-Step ($rows | Sort-Object Change, Package | Format-Table -AutoSize | Out-String -Width 400).TrimEnd() }
 }
 
 function Select-PmbRoot([string]$Roots) {
@@ -682,24 +715,7 @@ switch ($PSCmdlet.ParameterSetName) {
         $slug = Resolve-Slug $Packages
         $pair = Read-PairJson $slug
         if (-not $pair.modernSolution) { throw "'$Packages' has no modern side yet." }
-        $legacy = Get-ResolvedPackages (Split-Path -Parent $pair.legacySolution)
-        $modern = Get-ResolvedPackages (Split-Path -Parent $pair.modernSolution)
-        Show-Step ("restore outputs read: legacy {0}, modern {1} (project.assets.json + packages.config)" -f $legacy.Files, $modern.Files)
-        if ($legacy.Files -eq 0 -or $modern.Files -eq 0) { Show-Step "warning: a side has no restore output; restore both sides first (-Env, then dotnet restore)" }
-        $ids = @($legacy.Versions.Keys + $modern.Versions.Keys | Sort-Object -Unique)
-        $rows = foreach ($id in $ids) {
-            $old = if ($legacy.Versions.ContainsKey($id)) { @($legacy.Versions[$id]) -join ', ' } else { '' }
-            $new = if ($modern.Versions.ContainsKey($id)) { @($modern.Versions[$id]) -join ', ' } else { '' }
-            $change = if (-not $old) { 'modern only' } elseif (-not $new) { 'legacy only' } elseif ($old -ne $new) { 'version changed' } else { $null }
-            if ($change) { [pscustomobject]@{ Package = $id; Change = $change; Legacy = $old; Modern = $new } }
-        }
-        $rows = @($rows)
-        Show-Step ("== package version changes: {0} changed, {1} legacy only, {2} modern only" -f
-            @($rows | Where-Object Change -eq 'version changed').Count,
-            @($rows | Where-Object Change -eq 'legacy only').Count,
-            @($rows | Where-Object Change -eq 'modern only').Count)
-        # Out-String, not Out-Host: a table sent to Out-Host is dropped when stdout is redirected to a log.
-        if ($rows.Count -gt 0) { Show-Step ($rows | Sort-Object Change, Package | Format-Table -AutoSize | Out-String -Width 400).TrimEnd() }
+        Show-PackageChanges (Split-Path -Parent $pair.legacySolution) (Split-Path -Parent $pair.modernSolution)
     }
 
     'Progress' {
