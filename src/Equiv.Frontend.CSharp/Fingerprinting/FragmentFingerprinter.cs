@@ -140,12 +140,11 @@ internal sealed class FragmentFingerprinter(
         List<ILocalFunctionOperation> closure = [declared[called]];
         for (int i = 0; i < closure.Count; i++)
         {
-            foreach (IMethodSymbol reached in closure[i].Descendants().Select(LocalFunction).OfType<IMethodSymbol>().Select(static f => f.OriginalDefinition))
+            // The filter runs as each function is reached, after the ones before it were added, so one reached twice is added once.
+            IEnumerable<IMethodSymbol> reached = closure[i].Descendants().Select(LocalFunction).OfType<IMethodSymbol>().Select(static f => f.OriginalDefinition);
+            foreach (IMethodSymbol added in reached.Where(f => !closure.Exists(c => IsInside(f, c.Syntax))))
             {
-                if (!closure.Exists(f => IsInside(reached, f.Syntax)))
-                {
-                    closure.Add(declared[reached]);
-                }
+                closure.Add(declared[added]);
             }
         }
 
