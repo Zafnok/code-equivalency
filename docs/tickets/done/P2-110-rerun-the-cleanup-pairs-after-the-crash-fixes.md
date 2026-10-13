@@ -1,5 +1,5 @@
 # P2-110 Rerun the three cleanup pairs once the lowering crashes are fixed, and refresh the cleanup verdict
-Status: todo
+Status: done (PR #487)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-105, P2-103, P2-104, P2-093, P2-127, P2-077, P1-032
@@ -53,3 +53,31 @@ More than the three pairs, or any change under `src/`: stop, that is its own tic
 - `gitextensions-11372` took 31 minutes on 2026-10-03 on a shared box, not the 4h43m of 2026-10-02.
 - 2026-10-04: P2-103, P2-104, P2-093, P2-127 and P2-077 were added to `Depends on`. They are the
   cleanup-relevant part of the scoreboard milestone P2-130 sets, so the rerun measures them too.
+- 2026-10-13, the runs. equiv `78853202`, six runs one after the other from one build, on a box that
+  ran nothing else, with `.corpus/` made new: the three pairs in compare mode quick (259 s, 229 s,
+  183 s; exits 1, 1, 0), then in thorough (3846 s, 3357 s, 470 s; exits 1, 1, 0). No run has a
+  lowering notification, a `run.properties.unverified` entry or exit 5.
+- Decision: the ticket names no compare mode. `equiv-corpus-run` asks for thorough for a verdict and
+  `equiv-scoreboard` takes only quick runs as a source, so both were run, as P2-124 did. The
+  verdict's tables are the quick runs; the thorough runs have their own section.
+- Decision: no `--jobs` (24 pairs at a time). No earlier run of these pairs is in a compare mode, so
+  there is no time to compare with, and every timeout of the quick runs ends on the resource limit,
+  not the wall clock.
+- Decision: PowerShell's row and the totals count its 12 edited pairs, as P2-058's verdict did, so
+  "before" and "now" are the same count (509 against 575). The verdict also gives the totals over
+  all 37 of its changed pairs.
+- Decision: `BugReporter.Program::Main()` keeps P2-058's classification, "real by construction, not
+  the cleanup". It is Divergent on both Git Extensions pairs for its generated commit constant, which
+  ADR 0046 keeps an ordinary constant on purpose. No ticket.
+- Result, quick: of 509 changed pairs the solver proves 297 (58.3%; 57 of 575 before), 210 are
+  Unknown and 2 Divergent (52 before). No confirmed behaviour change, so nothing was reported to the
+  user under criterion 4.
+- Thorough adds 3 EQ002 on `gitextensions-11372`, all from the IL pass on a collection expression
+  with a spread, all false positives: P2-169, new.
+- The skill's restore block does not fit these pairs: both Git Extensions sides and both PowerShell
+  sides restore with `dotnet restore --force`. `corpus.ps1 -Packages` works again (P2-167).
+- Deviation: criterion 4 files a ticket for a new Divergent cause only. The runs also found four
+  things no ticket owned, and each is filed, at the user's direction (2026-10-13): P2-170
+  (`DeconstructionAssignment`, 46 of `gitextensions-11284`'s 178 changed pairs), P2-171
+  (`LocalFunction`, 43 of `gitextensions-11372`'s 319), P2-172 (17 `unbound` bodies on PowerShell)
+  and P2-173 (11 bodies in byte-identical files that are not congruent, cause unknown).
