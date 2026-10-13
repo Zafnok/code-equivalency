@@ -1,5 +1,5 @@
 # P2-124 Rerun the two version-upgrade pairs once runtime rows have change points, and refresh the upgrade verdict
-Status: in-progress
+Status: done (PR #483)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P2-066, P2-105, P2-113, P2-117, P2-118, P2-122, P2-095, P2-127, P2-077, P1-032
