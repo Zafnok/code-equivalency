@@ -73,3 +73,59 @@ Pairs that cross a runtime, where a runtime rule is the usual reason and is alre
 - The same question came up on the upgrades (`docs/runs/2026-10-12-upgrade-verdict.md`, "Why
   unedited code is not congruent"), where it was answered by a text scan of the bodies. The
   property of criterion 1 replaces the scan.
+- Decision: the property is `properties.notCongruent`, `{ component, identity }`, with fourteen
+  component kinds (`docs/VERIFICATION-MODEL.md` section 6 has the table). The serialiser's text is
+  unchanged: it can also be written as lines of fields, each tagged with its component, and the two
+  sides' lines are compared only for a pair whose hashes differ, so a congruent pair costs nothing.
+- Decision: "first" is the first line of the two texts that differs, and within an operation's
+  line the first of kind, type, constant, symbols, context. Where one side has a declaration's line
+  (a type's layout, an attribute, an import) and the other an operation's or none, the declaration
+  is named: a type that gained a field has one more line, and the operation the other side has
+  there did not change.
+- Decision: a constant is named by the member the operation references (a `const` field) or by the
+  operation's kind, never by its value; a caller location is part of the same field. Nothing in the
+  serialiser can make a caller location the first difference by itself, so it has no kind of its own.
+- Decision: equal texts kept out by a body that does not bind are `unbound`, set by the CLI, which
+  is where that is decided (ADR 0029 decision 2); texts that differ are named by their difference
+  first. Equal texts that are runtime-sensitive are `runtime-rule` with the side, and no more: the
+  ticket leaves pairs that cross a runtime out.
+- Decision: no ADR. The property reports what ADR 0024's text already holds and changes no verdict
+  (`equiv-adr` bar test: a SARIF property beside `reboundCalls` and `forwardersResolved`).
+- The runs (criterion 2), 2026-10-13, equiv `269c7d60`, compare mode quick, no `--jobs` (24
+  processors), one after the other, `.corpus/` made new: `gitextensions-11372` 303 s exit 1,
+  `gitextensions-11284` 267 s exit 1, `powershell-19687` 177 s exit 0. A first PowerShell run
+  exited 4 in 16 s because the restore had not been given `UseRidGraph` (`tools/corpus/README.md`
+  has the three steps); it is void and was run again.
+- Results that carry the property, by component (`corpus.ps1 -Metrics`, criterion 4):
+  `gitextensions-11372` operation 309, no-fingerprint 6, constant 2, callee 2;
+  `gitextensions-11284` operation 169, no-fingerprint 5, constant 2, callee 2;
+  `powershell-19687` unbound 17, operation 12, callee 8.
+- The 11 (criteria 2 and 3):
+
+  | Pair | Procedure | Result | `component` | `identity` | Class |
+  |---|---|---|---|---|---|
+  | powershell-19687 | `CompletionCompleters::CompleteRequires(...)` | Equivalent, lockstep-induction | callee | `System.String::TrimStart()` | precision bug, P2-174 |
+  | powershell-19687 | `CommandSearcher::setupPathSearcher()` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+  | powershell-19687 | `ConsoleHostUserInterface::WriteChoiceHelper(...)` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+  | powershell-19687 | `GetExperimentalFeatureCommand::GetValidModuleFiles(...)` | Unknown, opaque | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+  | powershell-19687 | `ModuleCmdletBase::GetModuleForNames(...)` | Unknown, opaque | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+  | powershell-19687 | `SessionStateInternal::NewItem(string[],string,string,object,CmdletProviderContext)` | Unknown, opaque | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+  | powershell-19687 | `NativeCommandProcessor::Complete()` | Unknown, timeout | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+  | powershell-19687 | `NewPSDriveCommand::ProcessRecord()` | Unknown, timeout | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+  | gitextensions-11372 | `GitCommands.PathUtil::GetRepositoryName(string)` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+  | gitextensions-11372 | `GitExtensions.Program::Main()` | Unknown, abstraction | constant | `ThisAssembly.Git::Sha` | right to be out: the build-generated commit constant differs between any two commits (ADR 0046 keeps it an ordinary constant) |
+  | gitextensions-11284 | `CopyContextMenuItem::AddItem(string,string,System.Drawing.Image,char?)` | Equivalent, bounded | callee | `System.String::TrimEnd(char)` | precision bug, P2-174 |
+
+- Ten of the 11 are one precision bug. Neither side of any of them calls the member the property
+  names: each calls `TrimEnd(params char[])` or `TrimStart(params char[])` with several characters
+  or with an array, and the legacy side's text writes that call under the modern name of the
+  API-equivalence entry for the one-character (or no-character) call, which the modern side's text
+  does not. The fix decides when the text applies a member entry, which is not a few lines: P2-174.
+  No soundness doubt: the rename cannot make two texts equal, since the argument under the call
+  differs.
+- The ticket's guess, that a body calling one of the 17 `unbound` bodies (P2-172) may not be
+  congruent, is wrong for all 11. `GitExtensions.Program::Main()` is the same case as
+  `BugReporter.Program::Main()`, the commit constant P2-110 set aside; the two results with
+  component `constant` on each Git Extensions pair are those two procedures.
+- Toolchain: this box's Git Bash fails to parse a heredoc whose body has an odd number of
+  apostrophes; scripts were written to files.
