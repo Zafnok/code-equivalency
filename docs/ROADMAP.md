@@ -562,10 +562,14 @@ of how much of the cleanup result each explains:
   used: `SecondSolver.Print` declines the queries of 76 of gitextensions-9860's 302 solver
   Equivalents, so neither the second solver nor a certificate reaches them. Found by P1-026. Needs
   P1-033.
-- P2-195 (S) A timeout that interrupts a model's evaluation throws `canceled` out of `Verify` instead
+- P2-198 (S) A timeout that interrupts a model's evaluation throws `canceled` out of `Verify` instead
   of giving Unknown(Timeout): the arithmetic refinement reads a model between checks, and nothing
   catches the interrupt there. Three `Z3BackendTests` failed on a loaded Windows runner. Found by
   P2-168's CI. Needs P2-112.
+- P2-196 (M) In the budget pass cvc5 runs a query to the clock, 3,600 s on 24 threads, without
+  reaching its resource limit: `ImpactControl::UpdatePathsAndLabels()` on gitextensions-8522, in
+  every run, and its split another 3,600 s. An answer the clock ends can differ between runs. Found
+  by P1-039. Needs P1-033, P1-039.
 - P2-176 (S) A project whose source generator is missing or throws loads without a word: the bodies
   that read what it declares are `unbound` and nothing says a generator did not run. Found by
   P2-172. Needs P2-172.
@@ -1224,7 +1228,15 @@ P1-025 → P1-026 and P1-027 come last; each reports its yield, which orders wha
   (`docs/runs/2026-10-04-cvc5-partitioning.md`). P1-039.
 - P1-039 (M) In thorough mode, with `solvers.cvc5.partitions` set, cvc5 splits a rung 1 query it
   has given up on and the partitions are solved a process each; never in quick (ADR 0049 decision
-  7). Needs P1-033, P1-032. Blocked by P2-100: the answers must repeat first.
+  7). Needs P1-033, P1-032. Blocked by P2-100: the answers must repeat first. Done 2026-10-14: the
+  split repeats (0 of P1-036's 34 queries differ between two runs at 8 or at 24 partitions; the
+  resource limit ends all but 2 of 178 partitions at 8), it decides 7 of the 34 at 8 and 9 at 24,
+  all satisfiable, and in a thorough run of gitextensions-8522 it changes no result (22 `timeout`
+  Unknowns with and without it) and adds about 3,500 s; the count is 8
+  (`docs/runs/2026-10-14-cvc5-partitions.md`). P1-043, P2-196.
+- P1-043 (L) A `sat` from cvc5 whose values Z3 cannot complete is read back from cvc5's own model,
+  checked against the query and replayed: 7 of gitextensions-8522's 22 `timeout` Unknowns, and the
+  one answer partitions give there, are lost to that today. Found by P1-039. Needs P1-033.
 - P1-037 (L) Spike: a rung 1 query Z3 gives up on becomes a Lean theorem over `BitVec`, a scaffold
   splits it, a model fills the holes and Lean's kernel checks the proof (after Trivet, arXiv
   2609.19583). Translates the query, not the IR. An ADR against ADR 0005 only if a proof needs the
@@ -1304,7 +1316,7 @@ They come before any other open ticket, in this order:
    (`ArrayElementReference`, 5.9% of OpenRA's), P2-180 (`CaughtException`, 5.2% of Duplicati's), P2-165
    (`no-body`, 5.4% of `gitextensions-8522`'s).
 6. The other false-positive causes, one or two results each: P2-185, P2-186, P2-187, P2-191, P2-097.
-   From P2-181's count: P2-194 (S, 69 OpenRA bodies under the .NET 9 float rule because its mods count
+   From P2-181's count: P2-197 (S, 69 OpenRA bodies under the .NET 9 float rule because its mods count
    as unhosted) and P2-195 (M, the 347 `abstraction` Unknowns that name a shared function, not the
    runtime-changed call).
 7. A rerun of the five large pairs that applies `equiv-scoreboard`, adjudicates the same samples again,

@@ -198,6 +198,9 @@ internal sealed class Recording(Cvc5Solver solver) : ISmtSolver
 
     public string Version => solver.Version;
 
+    // P1-039: the budget spike never sets VerificationOptions.Partitions, so no query is split.
+    public SmtAnswer AskInPartitions(string script, int partitions, TimeSpan limit) => solver.AskInPartitions(script, partitions, limit);
+
     public SmtAnswer Ask(string script, TimeSpan limit)
     {
         Stopwatch clock = Stopwatch.StartNew();

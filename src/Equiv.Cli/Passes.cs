@@ -12,6 +12,9 @@ namespace Equiv.Cli;
 /// mode, and in thorough mode when the first pass's values already meet the escalation's. The first pass leaves rung 5's
 /// local proposer and failure refinement on a <c>timeout</c> Unknown to the budget pass, which every pair they apply to
 /// reaches; a thorough run with no budget pass asks them in its first pass, whose budgets are then the budget pass's.
+/// Splitting a rung 1 query cvc5 gave up on into <c>solvers.cvc5.partitions</c> partitions
+/// (<see cref="VerificationOptions.Partitions"/>; ADR 0049 decision 7, ticket P1-039) goes with them: thorough mode only,
+/// in the pass that asks them. Quick mode splits nothing.
 /// </summary>
 internal sealed record Passes(CompareMode Mode, VerificationOptions Whole, VerificationOptions First, VerificationOptions? Budget)
 {
@@ -41,13 +44,18 @@ internal sealed record Passes(CompareMode Mode, VerificationOptions Whole, Verif
     public static Passes Of(EquivConfig config, VerificationOptions options)
     {
         bool thorough = config.Mode == CompareMode.Thorough;
+        VerificationOptions whole = thorough ? options with { Partitions = config.Cvc5Partitions } : options;
         Escalation first = new(options.Bound, options.ResourceLimit, options.TimeoutMs);
         Escalation escalation = config.Escalation.AtLeast(first.Bound, first.ResourceLimit, first.TimeoutMs);
         VerificationOptions? budget = thorough && escalation != first
-            ? options with { Bound = escalation.Bound, ResourceLimit = escalation.ResourceLimit, TimeoutMs = escalation.TimeoutMs }
+            ? whole with { Bound = escalation.Bound, ResourceLimit = escalation.ResourceLimit, TimeoutMs = escalation.TimeoutMs }
             : null;
         bool asksEverything = thorough && budget is null;
-        return new Passes(config.Mode, options, options with { LocalProposer = asksEverything, RefineTimeouts = asksEverything }, budget);
+        return new Passes(
+            config.Mode,
+            whole,
+            whole with { LocalProposer = asksEverything, RefineTimeouts = asksEverything, Partitions = asksEverything ? whole.Partitions : null },
+            budget);
     }
 
     /// <summary>

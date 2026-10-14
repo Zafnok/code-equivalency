@@ -33,7 +33,7 @@ public static class EquivConfigDiagnosticIds
     /// <summary>"resourceLimit" is present but not a positive integer.</summary>
     public const string InvalidResourceLimit = "CFG010";
 
-    /// <summary>"solvers" is present but not an object whose only key, "cvc5", is an object whose only key, "path", is a non-empty string.</summary>
+    /// <summary>"solvers" is present but not an object whose only key, "cvc5", is an object whose only keys are "path", a non-empty string, and "partitions".</summary>
     public const string InvalidSolvers = "CFG011";
 
     /// <summary>"jobs" is present but not a positive integer.</summary>
@@ -44,4 +44,7 @@ public static class EquivConfigDiagnosticIds
 
     /// <summary>"escalation" is present but not an object whose only keys, "bound", "resourceLimit" and "timeoutMs", are positive integers.</summary>
     public const string InvalidEscalation = "CFG014";
+
+    /// <summary>"solvers.cvc5.partitions" is present but not an integer from 2 to 64 (ticket P1-039). Nothing is split.</summary>
+    public const string InvalidCvc5Partitions = "CFG015";
 }

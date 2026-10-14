@@ -1,5 +1,5 @@
 # P1-039 In thorough mode, cvc5 splits a rung 1 query it gives up on into partitions solved a process each
-Status: todo
+Status: done (PR #493)
 Effort: M
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: P1-033, P1-032, P2-100
@@ -101,3 +101,46 @@ Notes). Running Z3 and cvc5 at once.
 - From P1-036. The yield is 3 of 34 moved to Unknown(abstraction) and no verdict; it is scheduled
   because ADR 0049 decision 7 says a low yield places a technique and does not veto it.
 - The six answers that could not be read back are P1-033's read-back limit, not this ticket's.
+- Decision: the second entry point is `ISmtSolver.AskInPartitions(script, partitions, limit)`, and the count a pass asks
+  for is `VerificationOptions.Partitions` (null splits nothing). `SecondSolver` calls it only when the plain answer was
+  unknown, as the stage `<query>:cvc5-partitions`; `Passes.Of` sets it from `solvers.cvc5.partitions` in thorough mode
+  only.
+- Decision: in thorough mode the split goes with rung 5's local proposer and ADR 0037's queries: in the budget pass (and
+  the IL pass, which takes its options), or in the first pass when there is no budget pass. A query that times out in
+  the first pass hits a budget, so the budget pass reaches it; splitting it twice would cost cores for nothing.
+- Decision: the splitting run gets the plain script's `--rlimit` as well as its own `--tlimit`, so whether partitions
+  are written in its limits is decided by cvc5's step count, not by the clock (criterion 5).
+- Decision: the first satisfiable partition in the order written gives the values. A satisfiable partition stops the
+  partitions written after it (a running one is killed, one not started never starts) and every partition before it
+  runs to its end, so which values come back does not depend on which process ended first. The first version waited
+  for every partition: on query 5 of the 34 a satisfiable partition answered in a second and a later one held the
+  query for the whole wall-clock limit, so the process runner gained a stop token.
+- Decision: the processes of split queries share one count, the run's `jobs` (`Cvc5Solver.Processes`, a slot held only
+  while a process runs). A pair whose query is split waits on its thread while its partitions run, so the pair's
+  partitions take places from the same number as the pairs; a pair's own Z3 work is not counted against it.
+- Decision: a `partitions` value outside 2 to 64 is a new diagnostic, CFG015, not CFG011: it is a value out of range,
+  not a malformed `solvers` object. The path beside it still configures cvc5.
+- Decision: the criterion 5 harness is `tools/spikes/cvc5-partitions/` (not in `Equiv.slnx`), which runs the product's
+  `Cvc5Solver` and takes the test project's assembly name to read how each partition ended (`Cvc5Solver.Split`). It
+  asks each query as the product does: plain first, split only if plain gave up.
+- Decision: the 34 queries are the indices P1-036's own `partitioned.tsv` lists for the set `timeouts`. P1-025 left
+  four output folders; P1-036 read `20261004-p1025-final3` (34 timeouts, 59 answered). The `results.tsv` of
+  `20261004-p1025-final` lists 33 timeouts: there cvc5 could not read 69, 97 and 100 ("Cannot handle assertion"), and
+  73 and 87 timed out. The 34 files are byte-identical in both folders, so the measurement asks exactly P1-036's queries.
+- `tools/spikes/cvc5-budget/` implements `ISmtSolver`; it gains a pass-through `AskInPartitions` so it still builds.
+- Decision: the harness gives each process 600 s, the budget pass's `timeoutMs`, where the product splits. On these 34
+  queries cvc5's `--rlimit` 2,000,000 takes minutes: the first plain query ran its whole 600 s. So the harness does
+  not ask the plain query again (P1-036 measured that cvc5 gives up on each), and runs queries side by side within
+  24 processes.
+- Criterion 5 (`docs/runs/2026-10-14-cvc5-partitions.md`): 0 of 34 queries differ between two runs, at 8 and at 24
+  partitions, in answer and in every partition's ending. The clock ends 2 of 178 partitions at 8 and 3 of 530 at 24,
+  the same ones in both runs. 7 sat at 8, 9 at 24, no unsat.
+- Criterion 6: in thorough mode on `gitextensions-8522` the key changes no result at 8 or 24: 22 `timeout` Unknowns in
+  each, every result equal. Runs: 6,026 s without, 9,503 s at 8, 9,562 s at 24, the difference all in the budget pass.
+  Decision: the count is 8, the same yield there for a third of the partitions.
+- The box shut down mid-way through the first thorough run at 24 and the harness's second run at 24. That run was
+  discarded and run again; the harness's two rows written as its processes were killed were dropped and asked again.
+- Finding, ticketed: plain cvc5 runs `ImpactControl::UpdatePathsAndLabels()`'s query to the clock (3,600 s on 24
+  threads) in every run, never to its resource limit, and its split takes another 3,600 s: P2-196.
+- Finding, ticketed: 7 of the 22 `timeout` Unknowns have a rung 1 query plain cvc5 answers `sat` whose model Z3 cannot
+  complete, and the one `sat` from partitions is lost the same way: P1-043.

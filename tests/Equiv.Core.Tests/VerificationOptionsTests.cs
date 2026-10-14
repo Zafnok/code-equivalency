@@ -106,7 +106,22 @@ public sealed class VerificationOptionsTests
         Assert.Equal((a with { Solver = cvc5 }).GetHashCode(), new VerificationOptions(3, 5000, []) { Solver = new NamedSolver("cvc5") }.GetHashCode());
         Assert.NotEqual((a with { Solver = cvc5 }).GetHashCode(), a.GetHashCode());
         Assert.IsType<SmtUnknown>(cvc5.Ask("(check-sat)", TimeSpan.Zero));
+        Assert.IsType<SmtUnknown>(cvc5.AskInPartitions("(check-sat)", 2, TimeSpan.Zero));
         Assert.Equal("1", cvc5.Version);
+    }
+
+    /// <summary>Ticket P1-039: no query is split unless a pass asks for partitions, and two options differing in how many are unequal.</summary>
+    [Fact]
+    public void PartitionsAreNoneByDefaultAndPartOfEquality()
+    {
+        VerificationOptions a = new(3, 5000, []);
+
+        Assert.Null(a.Partitions);
+        Assert.NotEqual(a, a with { Partitions = 8 });
+        Assert.NotEqual(a with { Partitions = 8 }, a with { Partitions = 24 });
+        Assert.Equal(a with { Partitions = 8 }, new VerificationOptions(3, 5000, []) { Partitions = 8 });
+        Assert.Equal((a with { Partitions = 8 }).GetHashCode(), new VerificationOptions(3, 5000, []) { Partitions = 8 }.GetHashCode());
+        Assert.NotEqual((a with { Partitions = 8 }).GetHashCode(), a.GetHashCode());
     }
 
     [Fact]
@@ -121,5 +136,7 @@ public sealed class VerificationOptionsTests
         public string Version => "1";
 
         public SmtAnswer Ask(string script, TimeSpan limit) => new SmtUnknown(Name);
+
+        public SmtAnswer AskInPartitions(string script, int partitions, TimeSpan limit) => new SmtUnknown(Name);
     }
 }

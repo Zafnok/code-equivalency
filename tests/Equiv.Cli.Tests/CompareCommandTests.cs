@@ -918,7 +918,7 @@ public sealed partial class CompareCommandTests
         using TempFile modern = new();
         using TempFile config = new();
         using TempFile outFile = new();
-        File.WriteAllText(config.Path, """{ "solvers": { "cvc5": { "path": "tools/cvc5/cvc5.exe" } } }""");
+        File.WriteAllText(config.Path, """{ "jobs": 3, "solvers": { "cvc5": { "path": "tools/cvc5/cvc5.exe" } } }""");
         FakeFrontend frontend = new("csharp", _ => true, new MatchResult([Pair(PairIdentity)], [], [], []));
         FakeBackend backend = new(new Dictionary<string, Verdict>(StringComparer.Ordinal) { [PairIdentity.Value] = new Equivalent(ProofMethod.Bounded) });
         Command command = CompareCommand.Create([frontend], backend);
@@ -933,6 +933,9 @@ public sealed partial class CompareCommandTests
         Equiv.Verify.Cvc5.Cvc5Solver solver = Assert.IsType<Equiv.Verify.Cvc5.Cvc5Solver>(backend.Calls[1].Solver);
         Assert.Equal("cvc5", solver.Name);
         Assert.Equal(Equiv.Verify.Cvc5.Cvc5Solver.DefaultResourceLimit, solver.ResourceLimit);
+
+        // Ticket P1-039: a query cvc5 splits runs its partitions within the run's jobs.
+        Assert.Equal(3, solver.Processes);
     }
 
     /// <summary>

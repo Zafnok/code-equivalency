@@ -20,12 +20,20 @@ namespace Equiv.Verify.Z3;
 /// and bit-vector constants are asserted beside the query and Z3 is asked again under the same limits, which completes
 /// the functions; only a model Z3 then gives stands in for the one it did not find, and it is replayed as any other.
 /// Anything else (an <c>unknown</c>, a script that cannot be printed exactly, values that are missing or are not
-/// values, a solver that throws, a read-back Z3 does not satisfy) leaves the query the timeout it was.
+/// values, a solver that throws, a read-back Z3 does not satisfy) leaves the query the timeout it was. When
+/// <see cref="VerificationOptions.Partitions"/> is set, which only thorough mode does (ADR 0049 decision 7; ticket
+/// P1-039), a query the solver answered <c>unknown</c> is asked once more, split into that many partitions
+/// (<see cref="ISmtSolver.AskInPartitions"/>), and that answer is read as the first one would have been.
 /// </summary>
 internal sealed partial class SecondSolver(Context context, ProductEncoding encoding, VerificationOptions options, long? interruptAfterMs)
 {
+    private static readonly SmtUnknown NotSent = new("not sent: a constant array cannot be rewritten exactly");
+
     /// <summary>Whether the second solver answered one of the queries asked so far.</summary>
     public bool Answered { get; private set; }
+
+    /// <summary>Whether one of those answers came from the query split into partitions (ticket P1-039).</summary>
+    public bool AnsweredInPartitions { get; private set; }
 
     /// <summary>Asks the query <paramref name="name"/>: Z3 first, the second solver if Z3 gives up.</summary>
     public Asked Check(string name, params BoolExpr[] query)
@@ -39,44 +47,76 @@ internal sealed partial class SecondSolver(Context context, ProductEncoding enco
         long started = Stages.Start();
         Printed? printed = Print(context, encoding.Assertions, query);
         SmtAnswer answer = Ask(second, printed, options.TimeoutMs);
-        Stages.Checked(options, $"{name}:{second.Name}", started, answer switch { SmtUnsat => Status.UNSATISFIABLE, SmtSat => Status.SATISFIABLE, _ => Status.UNKNOWN });
+        Stages.Checked(options, $"{name}:{second.Name}", started, StatusOf(answer));
+        bool split = false;
+        if (answer is SmtUnknown && options.Partitions is { } partitions)
+        {
+            started = Stages.Start();
+            answer = AskInPartitions(second, printed, partitions, options.TimeoutMs);
+            Stages.Checked(options, $"{name}:{second.Name}-partitions", started, StatusOf(answer));
+            split = true;
+        }
+
         if (answer is SmtUnsat)
         {
             Answered = true;
+            AnsweredInPartitions |= split;
             asked.Refuted();
         }
-        else if (answer is SmtSat sat && printed?.Pins(sat.Values) is { } pins)
+        else if (answer is SmtSat sat && printed?.Pins(sat.Values) is { } pins && asked.ReadBack(name + "-read-back", context.ParseSMTLIB2String(pins), interruptAfterMs))
         {
-            Answered |= asked.ReadBack(name + "-read-back", context.ParseSMTLIB2String(pins), interruptAfterMs);
+            Answered = true;
+            AnsweredInPartitions |= split;
         }
 
         return asked;
     }
 
-    /// <summary><paramref name="rung"/>, its step naming the second solver and its version when that solver answered one of its queries.</summary>
-    public LoopLadder.Rung Tagged(LoopLadder.Rung rung) =>
-        Answered ? rung with { Step = rung.Step with { Solver = new SolverUse(options.Solver!.Name, options.Solver.Version) } } : rung;
+    /// <summary>
+    /// <paramref name="rung"/>, its step naming the second solver and its version when that solver answered one of its
+    /// queries, and how many partitions it was asked for when partitions gave one of those answers.
+    /// </summary>
+    public LoopLadder.Rung Tagged(LoopLadder.Rung rung)
+    {
+        if (!Answered)
+        {
+            return rung;
+        }
+
+        int? partitions = AnsweredInPartitions ? options.Partitions : null;
+        return rung with { Step = rung.Step with { Solver = new SolverUse(options.Solver!.Name, options.Solver.Version) { Partitions = partitions } } };
+    }
 
     /// <summary>
     /// The solver's answer to <paramref name="printed"/>. A query that could not be printed is not sent and is unknown, and
     /// so is one the solver threw on: a solver that fails must not fail the pair.
     /// </summary>
-    internal static SmtAnswer Ask(ISmtSolver solver, Printed? printed, int timeoutMs)
-    {
-        if (printed is null)
-        {
-            return new SmtUnknown("not sent: a constant array cannot be rewritten exactly");
-        }
+    internal static SmtAnswer Ask(ISmtSolver solver, Printed? printed, int timeoutMs) =>
+        printed is null ? NotSent : Safely(() => solver.Ask(printed.Script, TimeSpan.FromMilliseconds(timeoutMs)));
 
+    /// <summary>The solver's answer to <paramref name="printed"/> split into <paramref name="partitions"/> partitions, read as <see cref="Ask"/>'s is.</summary>
+    internal static SmtAnswer AskInPartitions(ISmtSolver solver, Printed? printed, int partitions, int timeoutMs) =>
+        printed is null ? NotSent : Safely(() => solver.AskInPartitions(printed.Script, partitions, TimeSpan.FromMilliseconds(timeoutMs)));
+
+    /// <summary>What <paramref name="ask"/> answered, or unknown when it threw.</summary>
+    private static SmtAnswer Safely(Func<SmtAnswer> ask)
+    {
         try
         {
-            return solver.Ask(printed.Script, TimeSpan.FromMilliseconds(timeoutMs));
+            return ask();
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             return new SmtUnknown(exception.Message);
         }
     }
+
+    private static Status StatusOf(SmtAnswer answer) => answer switch
+    {
+        SmtUnsat => Status.UNSATISFIABLE,
+        SmtSat => Status.SATISFIABLE,
+        _ => Status.UNKNOWN,
+    };
 
     /// <summary>
     /// The query as an SMT-LIB 2 script: the assertions and the query's terms as Z3 prints them from a plain solver (the

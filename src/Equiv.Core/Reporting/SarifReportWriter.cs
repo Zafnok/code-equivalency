@@ -388,6 +388,7 @@ public static class SarifReportWriter
 
     /// <summary>
     /// One <c>ladderTrace</c> entry; its <c>solver</c> is the second solver that answered a query of the rung, with its version,
+    /// its <c>partitions</c> how many partitions that solver was asked for when a partition gave the answer (ticket P1-039),
     /// and its <c>factsAdded</c> the facts an abstracted round of rung 1 added (ticket P1-031).
     /// </summary>
     private static Dictionary<string, string> LadderProperty(LadderStep step)
@@ -401,6 +402,11 @@ public static class SarifReportWriter
         if (step.Solver is { } solver)
         {
             entry["solver"] = $"{solver.Name} {solver.Version}";
+        }
+
+        if (step.Solver?.Partitions is { } partitions)
+        {
+            entry["partitions"] = partitions.ToString(CultureInfo.InvariantCulture);
         }
 
         if (step.FactsAdded is { } facts)

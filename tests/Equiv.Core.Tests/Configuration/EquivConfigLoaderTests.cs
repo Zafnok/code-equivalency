@@ -361,10 +361,52 @@ public sealed class EquivConfigLoaderTests
 
         Assert.Equal(
             [new EquivConfigDiagnostic("CFG011", "/solvers/bitwuzla", "unknown solver \"bitwuzla\" (expected \"cvc5\")"),
-             new EquivConfigDiagnostic("CFG011", "/solvers/cvc5/rlimit", "unknown property \"rlimit\" (expected \"path\")")],
+             new EquivConfigDiagnostic("CFG011", "/solvers/cvc5/rlimit", "unknown property \"rlimit\" (expected \"path\" or \"partitions\")")],
             invalid.Diagnostics);
         Assert.Equal("cvc5", invalid.Config.Cvc5Path);
         Assert.Equal("CFG011", EquivConfigDiagnosticIds.InvalidSolvers);
+    }
+
+    /// <summary>
+    /// Ticket P1-039 criterion 1: <c>solvers.cvc5.partitions</c> is read, from 2 to 64; absent, nothing is split, and the
+    /// config is the one it was without the key.
+    /// </summary>
+    [Theory]
+    [InlineData("2", 2)]
+    [InlineData("8", 8)]
+    [InlineData("64", 64)]
+    public void Cvc5Partitions_IsRead(string value, int partitions)
+    {
+        EquivConfigResult set = EquivConfigLoader.Load($$"""{ "solvers": { "cvc5": { "path": "cvc5", "partitions": {{value}} } } }""");
+
+        Assert.True(set.IsValid);
+        Assert.Equal(partitions, set.Config.Cvc5Partitions);
+        Assert.Equal(EquivConfig.Default with { Cvc5Path = "cvc5", Cvc5Partitions = partitions }, set.Config);
+        Assert.Equal((EquivConfig.Default with { Cvc5Path = "cvc5", Cvc5Partitions = partitions }).GetHashCode(), set.Config.GetHashCode());
+        Assert.Null(EquivConfig.Default.Cvc5Partitions);
+        Assert.Equal(EquivConfig.Default with { Cvc5Path = "cvc5" }, EquivConfigLoader.Load("""{ "solvers": { "cvc5": { "path": "cvc5" } } }""").Config);
+        Assert.Equal((2, 64), (EquivConfig.MinCvc5Partitions, EquivConfig.MaxCvc5Partitions));
+    }
+
+    /// <summary>Ticket P1-039 criterion 1: a <c>partitions</c> that is not an integer from 2 to 64 is CFG015 and splits nothing; the path beside it stands.</summary>
+    [Theory]
+    [InlineData("1")]
+    [InlineData("65")]
+    [InlineData("0")]
+    [InlineData("-8")]
+    [InlineData("8.5")]
+    [InlineData("4294967296")]
+    [InlineData("\"8\"")]
+    [InlineData("true")]
+    [InlineData("null")]
+    public void Cvc5Partitions_IsValidated(string value)
+    {
+        EquivConfigResult invalid = EquivConfigLoader.Load($$"""{ "solvers": { "cvc5": { "partitions": {{value}}, "path": "cvc5" } } }""");
+
+        Assert.Equal(new EquivConfigDiagnostic("CFG015", "/solvers/cvc5/partitions", "value must be an integer from 2 to 64"), Assert.Single(invalid.Diagnostics));
+        Assert.Null(invalid.Config.Cvc5Partitions);
+        Assert.Equal("cvc5", invalid.Config.Cvc5Path);
+        Assert.Equal("CFG015", EquivConfigDiagnosticIds.InvalidCvc5Partitions);
     }
 
     /// <summary>Every diagnostic's exact id, JSON-pointer path and message, so a report names the offending entry.</summary>

@@ -14,6 +14,9 @@ namespace Equiv.Core;
 /// (<c>--resource-limit</c>, ticket P2-050) is Z3's deterministic <c>rlimit</c> for each query, which is what bounds a
 /// query on any machine; <see cref="TimeoutMs"/> is the wall-clock backstop behind it. <see cref="Solver"/> is the second
 /// solver the backend asks a rung 1 query its own gave up on (ADR 0050; ticket P1-033), none when null, the default.
+/// <see cref="Partitions"/> is how many partitions that solver splits a query it also gave up on into
+/// (<see cref="ISmtSolver.AskInPartitions"/>; ADR 0049 decision 7, ticket P1-039); null, the default, splits nothing,
+/// and only a pass of thorough mode sets it.
 /// <see cref="LocalProposer"/> says whether rung 5's local proposer runs after a rung 4 timeout, and
 /// <see cref="RefineTimeouts"/> whether a <c>timeout</c> Unknown is asked ADR 0037's two queries; both are on unless a
 /// pass of <c>equiv compare</c> turns them off, which the first pass does when a budget pass follows and quick mode does
@@ -31,6 +34,8 @@ public sealed record VerificationOptions(int Bound, int TimeoutMs, ImmutableDict
 
     public ISmtSolver? Solver { get; init; }
 
+    public int? Partitions { get; init; }
+
     public bool LocalProposer { get; init; } = true;
 
     public bool RefineTimeouts { get; init; } = true;
@@ -47,8 +52,9 @@ public sealed record VerificationOptions(int Bound, int TimeoutMs, ImmutableDict
             & string.Equals(InvariantModel, other.InvariantModel, StringComparison.Ordinal) // NOSONAR
             & (ResourceLimit == other.ResourceLimit) // NOSONAR
             & Equals(Solver, other.Solver) // NOSONAR
+            & (Partitions == other.Partitions) // NOSONAR
             & (LocalProposer == other.LocalProposer) // NOSONAR
             & (RefineTimeouts == other.RefineTimeouts); // NOSONAR
 
-    public override int GetHashCode() => HashCode.Combine(Bound, TimeoutMs, ConfigEquality.Hash(CallIdentityMap), ChcIntMode, InvariantModel, ResourceLimit, Solver, HashCode.Combine(LocalProposer, RefineTimeouts));
+    public override int GetHashCode() => HashCode.Combine(Bound, TimeoutMs, ConfigEquality.Hash(CallIdentityMap), ChcIntMode, InvariantModel, ResourceLimit, Solver, HashCode.Combine(LocalProposer, RefineTimeouts, Partitions));
 }

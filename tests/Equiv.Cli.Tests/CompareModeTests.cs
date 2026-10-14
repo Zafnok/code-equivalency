@@ -146,6 +146,29 @@ public sealed class CompareModeTests
     }
 
     /// <summary>
+    /// Ticket P1-039 criterion 3 (ADR 0049 decision 7): with <c>solvers.cvc5.partitions</c> set, thorough's budget pass and
+    /// IL pass ask for that many partitions and its first pass, which leaves a timeout to the budget pass, asks for none; a
+    /// thorough run with no budget pass asks for them in its first pass. Quick asks for none in any pass, and without the
+    /// key no pass does.
+    /// </summary>
+    [Theory]
+    [InlineData("thorough", """{ "solvers": { "cvc5": { "path": "cvc5", "partitions": 8 } } }""", null, 8, 4)]
+    [InlineData("thorough", """{ "escalation": { "resourceLimit": 2000000, "timeoutMs": 60000 }, "solvers": { "cvc5": { "path": "cvc5", "partitions": 24 } } }""", 24, 24, 3)]
+    [InlineData("quick", """{ "solvers": { "cvc5": { "path": "cvc5", "partitions": 8 } } }""", null, null, 2)]
+    [InlineData("thorough", """{ "solvers": { "cvc5": { "path": "cvc5" } } }""", null, null, 4)]
+    public void Partitions_AreAskedForOnlyInThorough(string mode, string config, int? first, int? later, int calls)
+    {
+        PassBackend backend = new(Script(("T::A()", First, TimedOut()), ("T::A()", Budget, TimedOut("30000000")), ("T::G()", First, Opaque), ("T::G()", Il, Opaque)));
+
+        Ran ran = Run(Match(Plain("T::A()"), WithIl("T::G()")), backend, mode, config);
+
+        Assert.Equal(ExitCodes.Success, ran.ExitCode);
+        Assert.All(backend.Calls, c => Assert.Equal(string.Equals(c.Pass, First, StringComparison.Ordinal) ? first : later, c.Options.Partitions));
+        Assert.IsType<Equiv.Verify.Cvc5.Cvc5Solver>(backend.Calls[0].Options.Solver);
+        Assert.Equal(calls, backend.Calls.Count);
+    }
+
+    /// <summary>
     /// ADR 0049's table, the contracts pass row: quick leaves an Equivalent its unproven assumptions and never asks the
     /// backend for a contract; thorough asks, at the first pass's budgets with every query on, and the callee leaves the list.
     /// </summary>

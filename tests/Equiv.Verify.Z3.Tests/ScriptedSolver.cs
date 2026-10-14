@@ -9,9 +9,11 @@ namespace Equiv.Verify.Z3.Tests;
 
 /// <summary>
 /// A second solver for tests (ticket P1-033): it records each script it is asked and answers with
-/// <paramref name="answer"/>. <see cref="Solve"/> is an answer that is right, from a Z3 with no resource limit.
+/// <paramref name="answer"/>. <see cref="Solve"/> is an answer that is right, from a Z3 with no resource limit. Asked to
+/// split a script (ticket P1-039), it records the script and the partitions asked for and answers with
+/// <paramref name="split"/>, unknown when there is none.
 /// </summary>
-internal sealed partial class ScriptedSolver(Func<string, SmtAnswer> answer) : ISmtSolver
+internal sealed partial class ScriptedSolver(Func<string, SmtAnswer> answer, Func<string, SmtAnswer>? split = null) : ISmtSolver
 {
     public const string SolverName = "cvc5";
 
@@ -30,6 +32,14 @@ internal sealed partial class ScriptedSolver(Func<string, SmtAnswer> answer) : I
         Scripts.Add(script);
         Limits.Add(limit);
         return answer(script);
+    }
+
+    public List<(string Script, int Partitions, TimeSpan Limit)> Splits { get; } = [];
+
+    public SmtAnswer AskInPartitions(string script, int partitions, TimeSpan limit)
+    {
+        Splits.Add((script, partitions, limit));
+        return split is null ? new SmtUnknown("not split") : split(script);
     }
 
     /// <summary>The script's answer from a Z3 with no resource limit, with the value of every constant its <c>get-value</c> names.</summary>

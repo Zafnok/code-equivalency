@@ -300,7 +300,9 @@ a process. An `unsat` from it is taken; a `sat` only gives values, from which Z3
 that is replayed like any other. Results it helped decide say `proofMethod: bounded+cvc5`. `equiv`
 ships no cvc5: its release binary links LGPL libraries, so you install it yourself
 (`tools/cvc5/fetch.ps1` fetches the release this repo tests against). Without the setting nothing
-changes.
+changes. In `--mode thorough`, `"partitions": <n>` beside `path` (2 to 64) has cvc5 split a query it
+also gave up on into `n` partitions, each solved by a process of its own, at most `jobs` at once
+(ADR 0049 decision 7); 8 is the count measured. Quick mode never splits.
 
 A rung 1 query that still hits its budget is asked once more with every multiplication, division and
 remainder of two unknowns as a function both sides share (ADR 0025). Arithmetic that did not change
