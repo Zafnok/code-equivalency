@@ -125,6 +125,49 @@ public sealed class RuntimeChangeReachTests
         Assert.True(Reaches(RuntimeChangePrecondition.TrimEntries, Variable(CallArgument.Receiver)));
     }
 
+    /// <summary>
+    /// Ticket P2-189: <c>System</c> and the folders .NET falls back to a Windows environment variable for are on every
+    /// install, so they cannot reach the row for a folder that does not exist; any other constant folder can.
+    /// </summary>
+    [Theory]
+    [InlineData(37, false)]
+    [InlineData(26, false)]
+    [InlineData(35, false)]
+    [InlineData(28, false)]
+    [InlineData(38, false)]
+    [InlineData(42, false)]
+    [InlineData(43, false)]
+    [InlineData(44, false)]
+    [InlineData(40, false)]
+    [InlineData(36, false)]
+    [InlineData(0, true)]
+    [InlineData(5, true)]
+    [InlineData(27, true)]
+    [InlineData(41, true)]
+    public void AFolderReachesTheMissingFolderRowUnlessEveryInstallHasIt(int folder, bool reaches) =>
+        Assert.Equal(reaches, Reaches(RuntimeChangePrecondition.AbsentFolder, Folder(folder)));
+
+    [Fact]
+    public void AGetFolderPathWithoutAConstantFolderReachesTheMissingFolderRow()
+    {
+        Assert.True(Reaches(RuntimeChangePrecondition.AbsentFolder, new CallArgument("folder", IsString: false, IsConstant: false, Value: null)));
+        Assert.True(Reaches(RuntimeChangePrecondition.AbsentFolder));
+    }
+
+    /// <summary>Ticket P2-189: only a null, empty or white-space format reaches the <c>GetFormat</c> row; a name, or a format that is no constant, does not and does.</summary>
+    [Theory]
+    [InlineData("UnicodeText", false)]
+    [InlineData("HTML Format", false)]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData(" 	", true)]
+    public void AFormatReachesTheGetFormatRowOnlyWhenItIsBlank(string? format, bool reaches) =>
+        Assert.Equal(reaches, Reaches(RuntimeChangePrecondition.BlankFormat, Constant("format", format)));
+
+    [Fact]
+    public void AGetFormatWithoutAConstantFormatReachesItsRow() =>
+        Assert.True(Reaches(RuntimeChangePrecondition.BlankFormat, Variable("format")));
+
     [Theory]
     [InlineData(@"C:\data", false)]
     [InlineData("Images/cache_1.png", false)]
@@ -153,7 +196,7 @@ public sealed class RuntimeChangeReachTests
 
     /// <summary>
     /// P2-073 criterion 1: the four families of rows that ticket names carry a precondition, and so do the two
-    /// <c>Split</c> rows P2-181 gave one; no other row does.
+    /// <c>Split</c> rows P2-181 gave one and the <c>GetFolderPath</c> and <c>GetFormat</c> rows P2-189 did; no other row does.
     /// </summary>
     [Fact]
     public void TheShippedTableGivesTheFourRowFamiliesAPrecondition()
@@ -175,11 +218,13 @@ public sealed class RuntimeChangeReachTests
             ["System.String::Split(char[],System.StringSplitOptions)", "System.String::Split(string[],System.StringSplitOptions)"],
             members[RuntimeChangePrecondition.TrimEntries],
             StringComparer.Ordinal);
+        Assert.Equal(["System.Environment::GetFolderPath(System.Environment.SpecialFolder)"], members[RuntimeChangePrecondition.AbsentFolder], StringComparer.Ordinal);
+        Assert.Equal(["System.Windows.Forms.DataFormats::GetFormat(string"], members[RuntimeChangePrecondition.BlankFormat], StringComparer.Ordinal);
     }
 
     /// <summary>
     /// A measured row's witness is an input that shows the change, so as constants its strings and its integers (an
-    /// enum's value, as options) must meet the row's precondition.
+    /// enum's value, as options or as a folder) must meet the row's precondition.
     /// </summary>
     [Fact]
     public void EveryMeasuredWitnessMeetsItsRowsPrecondition()
@@ -193,6 +238,7 @@ public sealed class RuntimeChangeReachTests
             [
                 .. row.Witness!.Input.Select(Text).OfType<string>().Select(static text => Constant("path", text)),
                 .. row.Witness.Input.Select(Integer).OfType<int>().Select(Options),
+                .. row.Witness.Input.Select(Integer).OfType<int>().Select(Folder),
             ];
             Assert.True(Reaches(row.Precondition!.Value, arguments), row.Member);
         });
@@ -213,6 +259,8 @@ public sealed class RuntimeChangeReachTests
     }
 
     private static CallArgument Options(int options) => new("options", IsString: false, IsConstant: true, options);
+
+    private static CallArgument Folder(int folder) => new("folder", IsString: false, IsConstant: true, folder);
 
     private static bool Reaches(RuntimeChangePrecondition precondition, params CallArgument[] arguments) =>
         RuntimeChangeReach.CanReach(precondition, [.. arguments]);

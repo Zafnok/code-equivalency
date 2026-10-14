@@ -107,6 +107,46 @@ public sealed class CallIdentityFactoryTests
         Assert.Equal(flagged, Assert.Single(Calls(Regexes(member))).Callee.RuntimeChanged);
 
     /// <summary>
+    /// Ticket P2-189: a folder every Windows install has cannot reach the <c>GetFolderPath</c> row's missing folder; any
+    /// other constant folder, or a folder that is no constant, can.
+    /// </summary>
+    [Theory]
+    [InlineData("""static string M() => Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);""", false)]
+    [InlineData("""static string M() => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);""", false)]
+    [InlineData("""static string M() => Environment.GetFolderPath(Environment.SpecialFolder.PrinterShortcuts);""", true)]
+    [InlineData("""static string M(Environment.SpecialFolder f) => Environment.GetFolderPath(f);""", true)]
+    public void AFolderEveryInstallHasDoesNotReachTheGetFolderPathRow(string member, bool flagged) =>
+        Assert.Equal(flagged, Assert.Single(Calls(Regexes(member))).Callee.RuntimeChanged);
+
+    /// <summary>
+    /// Ticket P2-189: a <c>DataFormats</c> field the table's <c>fieldValues</c> lists is read as its documented name, so
+    /// it cannot reach the <c>GetFormat</c> row's blank format; a field it does not list, a blank constant and a format
+    /// that is no constant can.
+    /// </summary>
+    [Theory]
+    [InlineData("System.Windows.Forms.DataFormats.UnicodeText", false)]
+    [InlineData("\"Csv\"", false)]
+    [InlineData("\" \"", true)]
+    [InlineData("System.Windows.Forms.DataFormats.Serializable", true)]
+    [InlineData("f", true)]
+    public void ADataFormatsNameDoesNotReachTheGetFormatRow(string format, bool flagged) =>
+        Assert.Equal(flagged, Assert.Single(Calls(Source($$"""
+            namespace System.Windows.Forms
+            {
+                public static class DataFormats
+                {
+                    public static readonly string UnicodeText = "UnicodeText";
+                    public static readonly string Serializable = "WindowsForms10PersistentObject";
+                    public static object GetFormat(string format) => format;
+                }
+            }
+            class C
+            {
+                static object M(string f) => System.Windows.Forms.DataFormats.GetFormat({{format}});
+            }
+            """))).Callee.RuntimeChanged);
+
+    /// <summary>
     /// Ticket P2-073: the arguments a precondition reads are those of the call to the callee itself. An element of a
     /// collection expression is passed to <c>Add</c>, whose call the element's own arguments do not describe.
     /// </summary>

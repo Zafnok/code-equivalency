@@ -611,8 +611,12 @@ Migration-specific normalisations (applied to both sides before matching):
   `cultureSensitiveText` on the `String` comparison and search rows, `invalidPath` on the
   path-validation rows, and `trimEntries` on the two `String.Split` rows with a `StringSplitOptions`
   (ticket P2-181), met by any option but `None` and `RemoveEmptyEntries`, the only two .NET Framework
-  accepts. The header of `runtime-changes.json` defines each. A precondition reads the
-  operands it names, and only compile-time constants: a call whose constants cannot reach the row's
+  accepts; `absentFolder` on `Environment.GetFolderPath`, met by any folder but `System` and the nine
+  .NET falls back to a Windows environment variable for, which every install has, and `blankFormat` on
+  `DataFormats.GetFormat(string)`, met by a null or blank format (ticket P2-189).
+  The header of `runtime-changes.json` defines each. A precondition reads the
+  operands it names, and only compile-time constants, or a framework `static readonly` field the
+  table's `fieldValues` lists, read as its documented value (`DataFormats.UnicodeText`; ticket P2-189): a call whose constants cannot reach the row's
   change (the pattern `\s+`, the format `yyyy-MM-dd`, `"abc"` compared with `"abd"`, the path
   literal `"C:\\data"`) is not a call to a runtime-changed member under that row, in the lowered
   body and in the bound fingerprint alike. A call with an operand the precondition reads that is not

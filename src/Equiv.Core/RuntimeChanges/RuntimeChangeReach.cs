@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -24,6 +25,25 @@ internal static partial class RuntimeChangeReach
 
     /// <summary><c>StringSplitOptions.RemoveEmptyEntries</c>.</summary>
     private const int RemoveEmptyEntries = 1;
+
+    /// <summary>
+    /// The <c>Environment.SpecialFolder</c> values every Windows install has (ticket P2-189): <c>System</c>, which .NET
+    /// assumes always exists, and the folders it falls back to a Windows environment variable for when the shell cannot
+    /// give their path (dotnet/runtime <c>Environment.Windows.cs</c>, <c>GetFolderPathCore</c>).
+    /// </summary>
+    private static readonly FrozenSet<int> PresentFolders = new[]
+    {
+        26, // ApplicationData, %APPDATA%
+        28, // LocalApplicationData, %LOCALAPPDATA%
+        35, // CommonApplicationData, %ProgramData%
+        36, // Windows, %windir%
+        37, // System
+        38, // ProgramFiles, %ProgramFiles%
+        40, // UserProfile, %USERPROFILE%
+        42, // ProgramFilesX86, %ProgramFiles(x86)%
+        43, // CommonProgramFiles, %CommonProgramFiles%
+        44, // CommonProgramFilesX86, %CommonProgramFiles(x86)%
+    }.ToFrozenSet();
 
     /// <summary>The longest path .NET Framework accepts for a directory without the long-path switch.</summary>
     private const int LongPath = 248;
@@ -57,6 +77,8 @@ internal static partial class RuntimeChangeReach
         RuntimeChangePrecondition.CaseInsensitivePattern => argument.Parameter is "pattern" or "options",
         RuntimeChangePrecondition.TwoDigitYearFormat => argument.Parameter is "format",
         RuntimeChangePrecondition.TrimEntries => argument.Parameter is "options",
+        RuntimeChangePrecondition.AbsentFolder => argument.Parameter is "folder",
+        RuntimeChangePrecondition.BlankFormat => argument.Parameter is "format",
         _ => argument.IsString,
     };
 
@@ -68,6 +90,8 @@ internal static partial class RuntimeChangeReach
         (RuntimeChangePrecondition.CultureSensitiveText, string text) => !text.All(char.IsAsciiLetterOrDigit),
         (RuntimeChangePrecondition.InvalidPath, string path) => IsSuspectPath(path),
         (RuntimeChangePrecondition.TrimEntries, int options) => options is not (None or RemoveEmptyEntries),
+        (RuntimeChangePrecondition.AbsentFolder, int folder) => !PresentFolders.Contains(folder),
+        (RuntimeChangePrecondition.BlankFormat, string format) => string.IsNullOrWhiteSpace(format),
         _ => true,
     };
 
