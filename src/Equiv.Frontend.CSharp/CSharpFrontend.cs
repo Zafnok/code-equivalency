@@ -195,8 +195,8 @@ public sealed class CSharpFrontend : ILanguageFrontend
                         FingerprintDifference = BodyFingerprinter.Difference(
                             oldFingerprint,
                             newFingerprint,
-                            () => BodyFingerprinter.Lines(legacy.Symbol, legacy.Compilation, config, legacy: true, legacyRuntime, kept),
-                            () => BodyFingerprinter.Lines(modern.Symbol, modern.Compilation, config, legacy: false, modernRuntime, kept)),
+                            () => BodyFingerprinter.Bound(legacy.Symbol, legacy.Compilation, config, legacy: true, legacyRuntime, kept),
+                            () => BodyFingerprinter.Bound(modern.Symbol, modern.Compilation, config, legacy: false, modernRuntime, kept)),
                         EquivalencesApplied = applied,
                         ReboundCalls = rebound,
                         ForwardersResolved = forwarders,
