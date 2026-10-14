@@ -234,9 +234,10 @@ public sealed class IrLowererTests
         Assert.Equal("DynamicInvocation", Assert.Single(Opaques(Method("static object CallIt(dynamic d) => d.DoSomething();", "CallIt"))).Reason);
 
     /// <summary>
-    /// Ticket P2-127: a local function is not a matched procedure, so nothing verifies its body. Its call is an opaque no
-    /// other side shares, not a call of a name both sides have, so two members that differ only inside it are not one IR
-    /// that proves.
+    /// Ticket P2-127: a local function is not a matched procedure, so nothing verifies its body. Its call is not a call of
+    /// a name both sides have, so two members that differ only inside it are not one IR that proves. Ticket P2-171: it is
+    /// an opaque named by the fingerprint of the function's bound code, which two functions that differ do not share and
+    /// one function on both sides does.
     /// </summary>
     [Theory]
     [InlineData("int L(int v) => v + ")]
@@ -246,13 +247,16 @@ public sealed class IrLowererTests
         static IrProcedure Bump(string local) =>
             Source("public sealed class C { private int _x; public void Bump() { " + local + "; _x = L(_x); } }", "Bump");
 
-        Assert.All<IrProcedure>([Bump(local + "1"), Bump(local + "2")], static side =>
+        static string Fingerprint(IrProcedure side)
         {
-            Assert.DoesNotContain(Calls(side), static c => c.Callee.Value.Contains("::L(", StringComparison.Ordinal));
+            Assert.Empty(Calls(side));
             IrOpaque call = Assert.Single(Opaques(side));
             Assert.Equal("LocalFunction", call.Reason);
-            Assert.Null(call.Fingerprint);
-        });
+            return call.Fingerprint!;
+        }
+
+        Assert.NotEqual(Fingerprint(Bump(local + "1")), Fingerprint(Bump(local + "2")), StringComparer.Ordinal);
+        Assert.Equal(Fingerprint(Bump(local + "1")), Fingerprint(Bump(local + "1")), StringComparer.Ordinal);
     }
 
     [Theory]
