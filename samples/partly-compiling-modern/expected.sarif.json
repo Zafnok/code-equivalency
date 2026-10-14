@@ -137,7 +137,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Block"
+            }
           }
         },
         {
@@ -193,6 +197,10 @@
               "modern": [
                 "CS0103"
               ]
+            },
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Invocation"
             },
             "reviewGroup": "unbound"
           }

@@ -27,7 +27,9 @@ namespace Equiv.Core.Reporting;
 /// <see cref="ForwardersResolved"/>, the pair's <see cref="ProcedurePair.ForwardersResolved"/> (ADR 0047; ticket P2-068).
 /// <see cref="DecidedBy"/> names the later pass of thorough mode that produced the result, <see cref="BudgetPass"/> or
 /// <see cref="IlPass"/> (ADR 0049 decision 6; ticket P1-032); null for a result of the first pass. It is not part of the
-/// fingerprint.
+/// fingerprint. <see cref="NotCongruent"/> is what kept the pair out of congruence (ADR 0024 decision 1; ticket P2-173):
+/// the pair's <see cref="ProcedurePair.FingerprintDifference"/>, or an unbound body; null for a congruent result. It is
+/// not part of the fingerprint.
 /// </summary>
 public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verdict)
 {
@@ -56,4 +58,6 @@ public sealed record VerificationResult(ProcedureIdentity Identity, Verdict Verd
     public ImmutableArray<ResolvedForwarder> ForwardersResolved { get; init; } = [];
 
     public string? DecidedBy { get; init; }
+
+    public FingerprintDifference? NotCongruent { get; init; }
 }

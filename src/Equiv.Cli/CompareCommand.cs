@@ -907,6 +907,7 @@ internal static class CompareCommand
                 Runtimes = pair.Runtimes,
                 ReboundCalls = pair.ReboundCalls,
                 ForwardersResolved = pair.ForwardersResolved,
+                NotCongruent = pair.FingerprintDifference,
             });
         }
         catch (Exception exception) when (IsPairFailure(exception))
@@ -946,7 +947,13 @@ internal static class CompareCommand
         {
             string detail = string.Join("; ", unbound.Select(static c => c.Side).Distinct().Select(static side => side == Codebase.Legacy ? "the legacy body does not bind" : "the modern body does not bind"));
             return new Decision(
-                new VerificationResult(pair.New, new Unknown(UnknownReason.Unbound, detail) { Causes = unbound }) { EquivalencesApplied = pair.EquivalencesApplied },
+                new VerificationResult(pair.New, new Unknown(UnknownReason.Unbound, detail) { Causes = unbound })
+                {
+                    EquivalencesApplied = pair.EquivalencesApplied,
+                    NotCongruent = pair.FingerprintDifference ?? new FingerprintDifference(
+                        FingerprintDifference.Unbound,
+                        FingerprintDifference.Sides(unbound.Any(static c => c.Side == Codebase.Legacy), unbound.Any(static c => c.Side == Codebase.Modern))),
+                },
                 "unbound");
         }
 
@@ -955,7 +962,11 @@ internal static class CompareCommand
         if (!mismatch.IsEmpty)
         {
             return new Decision(
-                new VerificationResult(pair.New, new Unknown(UnknownReason.Opaque, Unknown.AsyncMismatchReason) { Causes = mismatch }) { EquivalencesApplied = pair.EquivalencesApplied },
+                new VerificationResult(pair.New, new Unknown(UnknownReason.Opaque, Unknown.AsyncMismatchReason) { Causes = mismatch })
+                {
+                    EquivalencesApplied = pair.EquivalencesApplied,
+                    NotCongruent = pair.FingerprintDifference,
+                },
                 "async-mismatch");
         }
 

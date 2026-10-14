@@ -120,7 +120,11 @@
                 "detail": "Spacer found a coupling invariant over the integers"
               }
             ],
-            "chcMode": "int"
+            "chcMode": "int",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Loop"
+            }
           }
         }
       ],

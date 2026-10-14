@@ -148,6 +148,10 @@
                 "detail": "an input reaches an opaque node: old: no-body; new: no-body"
               }
             ],
+            "notCongruent": {
+              "component": "attribute",
+              "identity": "generated regex"
+            },
             "reviewGroup": "opaque:no-body"
           }
         },

@@ -106,7 +106,11 @@
             ],
             "equivalencesApplied": [
               "bcl.enum-is-defined-generic"
-            ]
+            ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.Enum::IsDefined(System.Type,object)"
+            }
           }
         },
         {
@@ -152,7 +156,11 @@
             ],
             "equivalencesApplied": [
               "bcl.enum-get-values-generic"
-            ]
+            ],
+            "notCongruent": {
+              "component": "type",
+              "identity": "System.Collections.Generic.IEnumerable`1<System.DayOfWeek>"
+            }
           }
         }
       ],

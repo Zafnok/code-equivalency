@@ -8,6 +8,7 @@ using System.Text.Json;
 using Equiv.Core;
 using Equiv.Core.ApiEquivalences;
 using Equiv.Core.Configuration;
+using Equiv.Core.Matching;
 using Equiv.Frontend.CSharp.Lowering;
 
 using Microsoft.CodeAnalysis;
@@ -42,7 +43,8 @@ namespace Equiv.Frontend.CSharp.Fingerprinting;
 /// runtime-sensitive: whether a runtime rule applies to it inside the pair's interval (ADR 0040 decision 2; ticket
 /// P2-055), or it declares an <c>extern</c> local function on a pair that crosses a runtime (ADR 0054 decision 4). Operations whose meaning is not in their kind, type and symbols (<c>dynamic</c> and
 /// <see cref="OperationKind.None"/>) carry their source tokens instead, which costs congruence on a rename there but never
-/// equates two different operations.
+/// equates two different operations. A caller that asks for it also gets the text as <see cref="BoundLine"/>s, which say
+/// what fingerprint component each part of a line belongs to (ticket P2-173); the text is the same with and without.
 /// </summary>
 internal sealed class BoundSerialiser : OperationWalker
 {
@@ -75,8 +77,10 @@ internal sealed class BoundSerialiser : OperationWalker
     private readonly ImmutableHashSet<string> keptForwarders;
     private readonly string interpolation;
     private readonly Func<IFlowAnonymousFunctionOperation, IOperation>? lambdas;
+    private readonly List<BoundLine>? lines;
     private readonly bool calledWithItsReads;
     private int depth;
+    private int lineStart;
 
     private bool RuntimeSensitive { get; set; }
 
@@ -95,6 +99,7 @@ internal sealed class BoundSerialiser : OperationWalker
         suppressedRuntimeChanges = settings.SuppressedRuntimeChanges;
         runtime = settings.Runtime;
         keptForwarders = settings.KeptForwarders;
+        lines = settings.Lines;
         types = settings.Equivalences.Where(static e => e.IsType).ToImmutableDictionary(static e => e.Legacy, static e => e.Modern, StringComparer.Ordinal);
         members = settings.Equivalences.Where(static e => !e.IsType && PassesArgumentsThrough(e))
             .GroupBy(static e => e.Legacy, StringComparer.Ordinal)
@@ -114,6 +119,9 @@ internal sealed class BoundSerialiser : OperationWalker
     {
         /// <summary>The identities of the forwarders the lowering does not resolve (ADR 0047), which are spelled as themselves here too.</summary>
         public ImmutableHashSet<string> KeptForwarders { get; init; } = [];
+
+        /// <summary>Where the text's lines are also written as <see cref="BoundLine"/>s (ticket P2-173); null when nobody reads them.</summary>
+        public List<BoundLine>? Lines { get; init; }
     }
 
     /// <summary>
@@ -133,7 +141,8 @@ internal sealed class BoundSerialiser : OperationWalker
         serialiser.Signature();
         if (operations.IsEmpty)
         {
-            serialiser.text.Append("AutoAccessor init=").Append(method.IsInitOnly).Append('\n');
+            serialiser.text.Append("AutoAccessor init=").Append(method.IsInitOnly);
+            serialiser.End(FingerprintDifference.BodyKind, "AutoAccessor");
         }
 
         foreach (IOperation operation in operations)
@@ -165,7 +174,8 @@ internal sealed class BoundSerialiser : OperationWalker
     {
         BoundSerialiser serialiser = new(implementation, compilation, WithRowPreconditions(settings, [body]));
         serialiser.Signature();
-        serialiser.text.Append("ImplementingPart\n");
+        serialiser.text.Append("ImplementingPart");
+        serialiser.End(FingerprintDifference.BodyKind, "ImplementingPart");
         serialiser.Visit(body);
         serialiser.Attributes("method", implementation);
         return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
@@ -216,7 +226,8 @@ internal sealed class BoundSerialiser : OperationWalker
         Settings settings)
     {
         BoundSerialiser serialiser = new(method, compilation, settings, lambdas);
-        serialiser.text.Append("Fragment").Append('\n');
+        serialiser.text.Append("Fragment");
+        serialiser.End(FingerprintDifference.BodyKind, "Fragment");
         serialiser.Visit(fragment);
         return (serialiser.text.ToString(), serialiser.RuntimeSensitive);
     }
@@ -259,13 +270,21 @@ internal sealed class BoundSerialiser : OperationWalker
         text.Append(' ', depth * 2).Append(operation.Kind)
             .Append(" syntax=").Append((SyntaxKind)operation.Syntax.RawKind)
             .Append(" implicit=").Append(operation.IsImplicit);
-        Append("type", operation.Type is { } type ? Type(type) : null);
+        int afterHead = text.Length;
+        string? type = operation.Type is { } typed ? Type(typed) : null;
+        Append("type", type);
+        int afterType = text.Length;
         CallerLocationKind? caller = CallerLocation.Of(operation);
         Append("const", caller is null && operation.ConstantValue.HasValue ? Constant(operation.ConstantValue.Value) : null);
         Append("caller", caller?.ToString());
-        Append("symbols", string.Join(", ", Symbols(operation).OfType<ISymbol>().Select(symbol => Render(symbol, operation))));
+        int afterConstant = text.Length;
+        string symbols = string.Join(", ", Symbols(operation).OfType<ISymbol>().Select(symbol => Render(symbol, operation)));
+        Append("symbols", symbols);
+        int afterSymbols = text.Length;
         Append("context", Context(operation));
         text.Append('\n');
+        lines?.Add(OperationLine(operation, [lineStart, afterHead, afterType, afterConstant, afterSymbols, text.Length], type ?? string.Empty, symbols));
+        lineStart = text.Length;
         if (operation is ILocalFunctionOperation local)
         {
             Attributes(Number(local.Symbol, "F"), local.Symbol);
@@ -287,11 +306,45 @@ internal sealed class BoundSerialiser : OperationWalker
         depth--;
     }
 
+    /// <summary>
+    /// Ends a line that is no operation's, and says which fingerprint component it is and what it concerns
+    /// (<see cref="FingerprintDifference"/>; ticket P2-173).
+    /// </summary>
+    private void End(string component, string identity)
+    {
+        text.Append('\n');
+        lines?.Add(new BoundLine(Operation: false, [new BoundField(component, identity, text.ToString(lineStart, text.Length - lineStart))]));
+        lineStart = text.Length;
+    }
+
+    /// <summary>
+    /// The line just written for <paramref name="operation"/> as its five fields, which <paramref name="cuts"/> bound in
+    /// the text. A difference in its constant is named by the member it references, where it has one, and never by the
+    /// value.
+    /// </summary>
+    private BoundLine OperationLine(IOperation operation, ImmutableArray<int> cuts, string type, string symbols)
+    {
+        string kind = operation.Kind.ToString();
+        string Cut(int field) => text.ToString(cuts[field], cuts[field + 1] - cuts[field]);
+        return new BoundLine(
+            Operation: true,
+            [
+                new BoundField(FingerprintDifference.Operation, kind, Cut(0)),
+                new BoundField(FingerprintDifference.Type, type, Cut(1)),
+                new BoundField(FingerprintDifference.Constant, symbols.Length > 0 ? symbols : kind, Cut(2)),
+                new BoundField(operation is IInvocationOperation or IObjectCreationOperation ? FingerprintDifference.Callee : FingerprintDifference.Symbol, symbols, Cut(3)),
+                new BoundField(FingerprintDifference.Context, kind, Cut(4)),
+            ]);
+    }
+
     /// <summary>The method's kind, staticness, asyncness, return type and parameter types: the text's first line.</summary>
-    private void Signature() => text
-        .Append(method.MethodKind).Append(" static=").Append(method.IsStatic).Append(" async=").Append(method.IsAsync)
-        .Append(" returns=").Append(method.ReturnsVoid ? "void" : Type(method.ReturnType))
-        .Append(" (").AppendJoin(", ", method.Parameters.Select(p => $"{p.RefKind} {Type(p.Type)}")).Append(")\n");
+    private void Signature()
+    {
+        text.Append(method.MethodKind).Append(" static=").Append(method.IsStatic).Append(" async=").Append(method.IsAsync)
+            .Append(" returns=").Append(method.ReturnsVoid ? "void" : Type(method.ReturnType))
+            .Append(" (").AppendJoin(", ", method.Parameters.Select(p => $"{p.RefKind} {Type(p.Type)}")).Append(')');
+        End(FingerprintDifference.Signature, "method");
+    }
 
     /// <summary>
     /// One line per attribute on <paramref name="owner"/>, on its return value and on each of its parameters: the attribute's
@@ -303,7 +356,8 @@ internal sealed class BoundSerialiser : OperationWalker
     {
         if (owner.IsExtern)
         {
-            text.Append("Extern ").Append(name).Append(": ").Append(Import(owner)).Append('\n');
+            text.Append("Extern ").Append(name).Append(": ").Append(Import(owner));
+            End(FingerprintDifference.Import, name);
         }
 
         AttributeLines(Targets(name, owner));
@@ -321,11 +375,17 @@ internal sealed class BoundSerialiser : OperationWalker
         .. owner.Parameters.Select(p => ($"{name} #{p.Ordinal.ToString(CultureInfo.InvariantCulture)}", (IEnumerable<AttributeData>)p.GetAttributes())),
     ];
 
-    private void AttributeLines(IEnumerable<(string Target, IEnumerable<AttributeData> Attributes)> targets)
+    /// <summary>
+    /// One line per attribute of each of <paramref name="targets"/>. They are attributes of what the target names, or,
+    /// with <paramref name="layout"/>, part of the declaration of that type.
+    /// </summary>
+    private void AttributeLines(IEnumerable<(string Target, IEnumerable<AttributeData> Attributes)> targets, string? layout = null)
     {
         foreach ((string target, AttributeData attribute) in targets.SelectMany(static t => t.Attributes.Select(a => (t.Target, a))))
         {
-            text.Append("Attribute ").Append(target).Append(": ").Append(attribute.AttributeConstructor).Append(" = ").Append(attribute).Append('\n');
+            text.Append("Attribute ").Append(target).Append(": ").Append(attribute.AttributeConstructor).Append(" = ").Append(attribute);
+            (string component, string identity) = layout is null ? (FingerprintDifference.Attribute, target) : (FingerprintDifference.TypeLayout, layout);
+            End(component, identity);
         }
     }
 
@@ -388,36 +448,42 @@ internal sealed class BoundSerialiser : OperationWalker
     /// </summary>
     private ImmutableArray<ITypeSymbol> Declared(string name, INamedTypeSymbol type)
     {
-        string target = $"{name} {Type(type)}";
+        string declared = Type(type);
+        string target = $"{name} {declared}";
         ImmutableArray<ITypeSymbol> inherited = [.. ((ITypeSymbol?[])[type.BaseType, type.EnumUnderlyingType]).OfType<ITypeSymbol>()];
         ImmutableArray<IFieldSymbol> fields = [.. type.GetMembers().OfType<IFieldSymbol>().Where(static f => !f.IsStatic)];
         ImmutableArray<IEventSymbol> events = [.. type.GetMembers().OfType<IEventSymbol>().Where(Layouts.IsStored)];
         ImmutableArray<IMethodSymbol> invoke = [.. ((IMethodSymbol?[])[type.DelegateInvokeMethod]).OfType<IMethodSymbol>()];
 
-        text.Append("Marshalled ").Append(target).Append(": ").Append(type.TypeKind).Append(" : ").AppendJoin(", ", inherited.Select(Type)).Append('\n');
-        AttributeLines([(target, type.GetAttributes())]);
+        text.Append("Marshalled ").Append(target).Append(": ").Append(type.TypeKind).Append(" : ").AppendJoin(", ", inherited.Select(Type));
+        End(FingerprintDifference.TypeLayout, declared);
+        AttributeLines([(target, type.GetAttributes())], declared);
         foreach ((int index, IFieldSymbol field) in fields.Index())
         {
             string position = $"{target} #{index.ToString(CultureInfo.InvariantCulture)}";
-            text.Append("Field ").Append(position).Append(": ").Append(Type(field.Type)).Append(" fixed=").Append(field.FixedSize).Append('\n');
-            AttributeLines([(position, field.GetAttributes())]);
+            text.Append("Field ").Append(position).Append(": ").Append(Type(field.Type)).Append(" fixed=").Append(field.FixedSize);
+            End(FingerprintDifference.TypeLayout, declared);
+            AttributeLines([(position, field.GetAttributes())], declared);
         }
 
         foreach ((int index, IEventSymbol raised) in events.Index())
         {
             string position = $"{target} event #{index.ToString(CultureInfo.InvariantCulture)}";
-            text.Append("Event ").Append(position).Append(": ").Append(Type(raised.Type)).Append('\n');
+            text.Append("Event ").Append(position).Append(": ").Append(Type(raised.Type));
+            End(FingerprintDifference.TypeLayout, declared);
             foreach (string attribute in BackingFieldAttributes(raised))
             {
-                text.Append("Attribute ").Append(position).Append(": ").Append(attribute).Append('\n');
+                text.Append("Attribute ").Append(position).Append(": ").Append(attribute);
+                End(FingerprintDifference.TypeLayout, declared);
             }
         }
 
         foreach (IMethodSymbol signature in invoke)
         {
             text.Append("Invoke ").Append(target).Append(": (").AppendJoin(", ", signature.Parameters.Select(p => $"{p.RefKind} {Type(p.Type)}"))
-                .Append(") -> ").Append(Type(signature.ReturnType)).Append('\n');
-            AttributeLines(Targets(target, signature));
+                .Append(") -> ").Append(Type(signature.ReturnType));
+            End(FingerprintDifference.TypeLayout, declared);
+            AttributeLines(Targets(target, signature), declared);
         }
 
         return [.. inherited, .. fields.Select(static f => f.Type), .. events.Select(static e => e.Type), .. invoke.SelectMany(static signature => SignatureTypes(signature))];

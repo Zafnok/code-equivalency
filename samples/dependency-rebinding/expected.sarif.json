@@ -149,6 +149,10 @@
                 "detail": "an input reaches an opaque node: old: rebound-call; new: rebound-call"
               }
             ],
+            "notCongruent": {
+              "component": "callee",
+              "identity": "Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)"
+            },
             "reboundCalls": [
               {
                 "legacy": "Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)",
@@ -215,6 +219,10 @@
               }
             },
             "divergenceKind": "result-changed",
+            "notCongruent": {
+              "component": "callee",
+              "identity": "Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)"
+            },
             "reviewGroup": "calls:Equiv.Samples.DependencyRebinding.Files.FileBase::Exists(string)|Equiv.Samples.DependencyRebinding.Files.IFile::Delete(string)"
           }
         },

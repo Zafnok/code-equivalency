@@ -809,6 +809,12 @@ switch ($PSCmdlet.ParameterSetName) {
             $pass = Get-Bag (Get-Bag $_ 'properties') 'decidedBy'
             if ($null -ne $pass) { '{0} {1}' -f $pass, $_.ruleId }
         } | Group-Object | Sort-Object Name | ForEach-Object { Show-Step ("  {0} {1}" -f $_.Name, $_.Count) }
+        # P2-173: what kept each pair out of congruence, by the kind of the first fingerprint component that differs.
+        Show-Step "== not congruent (notCongruent), by component"
+        $results | ForEach-Object {
+            $difference = Get-Bag (Get-Bag $_ 'properties') 'notCongruent'
+            if ($null -ne $difference) { [string]$difference.component }
+        } | Group-Object | Sort-Object @{ Expression = 'Count'; Descending = $true }, Name | ForEach-Object { Show-Step ("  {0} {1}" -f $_.Name, $_.Count) }
         Show-Step "== Unknown (EQ003) by unknownReason, and by scope within it"
         $results | Where-Object { $_.ruleId -eq 'EQ003' } | ForEach-Object {
             $row = [ordered]@{}

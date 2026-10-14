@@ -133,6 +133,10 @@
                 "detail": "an input reaches an opaque node: new: InterpolatedString"
               }
             ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Block"
+            },
             "reviewGroup": "opaque:InterpolatedString"
           }
         }

@@ -120,7 +120,11 @@
                 "detail": "Spacer found a coupling invariant over the integers that holds with wrap-around arithmetic too"
               }
             ],
-            "chcMode": "bitvector"
+            "chcMode": "bitvector",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Loop"
+            }
           }
         }
       ],

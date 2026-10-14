@@ -189,8 +189,10 @@ Every `equiv compare` here, in every mode, passes `--verbosity debug --log "$run
 run: it makes the run directory (`<yyyymmdd-hhmm>-full-<compare mode>`), passes `--mode` and the log options, writes
 `console.txt` and `exit.txt`, and prints the directory. It refuses a verifying run with no `-Mode`. `-LowerOnly` is the
 census and takes none; `-Modern <solution>` runs a seeded copy; `-Tag fail-on-unknown -CompareArgs '--fail-on', 'unknown'`
-(or `'--jobs', '4'`) passes anything else through. `-Metrics` prints the compare mode a SARIF log was written in and
-the results each later pass produced.
+(or `'--jobs', '4'`) passes anything else through. `-Metrics` prints the compare mode a SARIF log was written in,
+the results each later pass produced, and the results that are not congruent by the fingerprint component that
+differs first (`properties.notCongruent`, ticket P2-173). To learn why code nobody edited is not congruent, read that
+property; do not scan the bodies' text.
 
 A run with no `--jobs` verifies as many pairs at once as the box has processors, up to 24 (ticket P2-132): on
 `gitextensions-8522` in quick mode that takes 221 s against 864 s on one thread, with the same results

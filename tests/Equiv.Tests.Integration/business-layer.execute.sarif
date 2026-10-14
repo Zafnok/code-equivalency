@@ -746,6 +746,10 @@
             "divergenceKind": "result-changed",
             "replay": "not-constructible",
             "replayReason": "legacy: the model constrains cast.System.Int32.System.Object, cast.System.String.System.Object, field.Equiv.Samples.BusinessLayer.Order.CustomerName, field.Equiv.Samples.BusinessLayer.Order.Id",
+            "notCongruent": {
+              "component": "context",
+              "identity": "InterpolatedString"
+            },
             "lowering": "il",
             "decidedBy": "il-pass",
             "reviewGroup": "calls:System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::.ctor(int,int)|System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::AppendFormatted(string)|System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::AppendFormatted`1(int)<int>|System.Runtime.CompilerServices.DefaultInterpolatedStringHandler::AppendLiteral(string)|System.String::Format(string,object,object)"
@@ -910,7 +914,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Return"
+            }
           }
         },
         {
@@ -948,7 +956,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Binary"
+            }
           }
         },
         {
@@ -1004,6 +1016,10 @@
             "divergenceKind": "result-changed",
             "replay": "not-constructible",
             "replayReason": "the divergence is in the call trace, which replay does not observe",
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.Math::Round(decimal,int)"
+            },
             "reviewGroup": "calls:System.Math::Round(decimal,int)|System.Math::Round(decimal,int,System.MidpointRounding)"
           }
         },
@@ -1042,7 +1058,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "SimpleAssignment"
+            }
           }
         },
         {
@@ -1080,7 +1100,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Binary"
+            }
           }
         }
       ],

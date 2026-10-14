@@ -183,13 +183,20 @@ public sealed class CSharpFrontend : ILanguageFrontend
             {
                 (IrProcedure oldBody, IrProcedure newBody, ImmutableArray<string> applied, ImmutableArray<ReboundCall> rebound, ImmutableArray<ResolvedForwarder> forwarders) =
                     Bodies((legacy, legacyRuntime), (modern, modernRuntime), config, kept);
+                BodyFingerprint? oldFingerprint = BodyFingerprinter.Compute(legacy.Symbol, legacy.Compilation, config, legacy: true, legacyRuntime, kept);
+                BodyFingerprint? newFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false, modernRuntime, kept);
                 lowered.Add(Relowered(
                     pair with
                     {
                         OldBody = oldBody,
                         NewBody = newBody,
-                        OldFingerprint = BodyFingerprinter.Compute(legacy.Symbol, legacy.Compilation, config, legacy: true, legacyRuntime, kept),
-                        NewFingerprint = BodyFingerprinter.Compute(modern.Symbol, modern.Compilation, config, legacy: false, modernRuntime, kept),
+                        OldFingerprint = oldFingerprint,
+                        NewFingerprint = newFingerprint,
+                        FingerprintDifference = BodyFingerprinter.Difference(
+                            oldFingerprint,
+                            newFingerprint,
+                            () => BodyFingerprinter.Lines(legacy.Symbol, legacy.Compilation, config, legacy: true, legacyRuntime, kept),
+                            () => BodyFingerprinter.Lines(modern.Symbol, modern.Compilation, config, legacy: false, modernRuntime, kept)),
                         EquivalencesApplied = applied,
                         ReboundCalls = rebound,
                         ForwardersResolved = forwarders,

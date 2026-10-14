@@ -154,6 +154,10 @@
               }
             },
             "divergenceKind": "result-changed",
+            "notCongruent": {
+              "component": "constant",
+              "identity": "Literal"
+            },
             "reviewGroup": "proofMethod:none"
           }
         }

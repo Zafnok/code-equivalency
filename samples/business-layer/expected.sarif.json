@@ -769,6 +769,10 @@
                 "detail": "an input reaches an opaque node: old: InterpolatedString; new: InterpolatedString"
               }
             ],
+            "notCongruent": {
+              "component": "context",
+              "identity": "InterpolatedString"
+            },
             "reviewGroup": "opaque:InterpolatedString"
           }
         },
@@ -931,7 +935,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Return"
+            }
           }
         },
         {
@@ -969,7 +977,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Binary"
+            }
           }
         },
         {
@@ -1023,6 +1035,10 @@
               }
             },
             "divergenceKind": "result-changed",
+            "notCongruent": {
+              "component": "callee",
+              "identity": "System.Math::Round(decimal,int)"
+            },
             "reviewGroup": "calls:System.Math::Round(decimal,int)|System.Math::Round(decimal,int,System.MidpointRounding)"
           }
         },
@@ -1061,7 +1077,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "SimpleAssignment"
+            }
           }
         },
         {
@@ -1099,7 +1119,11 @@
                 "outcome": "proved",
                 "detail": "no loop or self-call; every input checked"
               }
-            ]
+            ],
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Binary"
+            }
           }
         }
       ],

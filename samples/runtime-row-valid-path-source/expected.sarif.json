@@ -167,6 +167,10 @@
               }
             ],
             "helpUri": "https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine",
+            "notCongruent": {
+              "component": "runtime-rule",
+              "identity": "legacy, modern"
+            },
             "reviewGroup": "runtime-change:System.IO.Path::Combine(string,string)"
           }
         }

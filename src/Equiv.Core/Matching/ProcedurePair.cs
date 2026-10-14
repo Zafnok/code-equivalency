@@ -21,6 +21,8 @@ namespace Equiv.Core.Matching;
 /// forwarders either body calls, each with the callee its calls were lowered as calls to, sorted by forwarder and then
 /// target (ADR 0047; ticket P2-068). <see cref="Il"/> is the pair lowered from IL as well, which the frontend keeps in
 /// thorough mode for a pair that meets ADR 0039's condition, for the IL pass (ADR 0049; ticket P1-032); null otherwise.
+/// <see cref="FingerprintDifference"/> is the first component on which the two fingerprints differ (ticket P2-173); null
+/// when they are equal and not runtime-sensitive, and when no frontend computed it.
 /// </summary>
 public sealed record ProcedurePair(
     ProcedureIdentity Old,
@@ -33,6 +35,8 @@ public sealed record ProcedurePair(
     public BodyFingerprint? OldFingerprint { get; init; }
 
     public BodyFingerprint? NewFingerprint { get; init; }
+
+    public FingerprintDifference? FingerprintDifference { get; init; }
 
     public string? Lowering { get; init; }
 

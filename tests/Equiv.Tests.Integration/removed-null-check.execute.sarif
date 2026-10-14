@@ -123,6 +123,10 @@
             },
             "divergenceKind": "undetermined",
             "replay": "reproduced",
+            "notCongruent": {
+              "component": "operation",
+              "identity": "Conditional"
+            },
             "reviewGroup": "calls:System.ArgumentNullException::.ctor(string)"
           }
         }
