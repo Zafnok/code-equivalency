@@ -9,16 +9,17 @@ internal static class Cvc5Process
     /// <summary>
     /// Runs <paramref name="path"/> with <paramref name="arguments"/> and, when given, <paramref name="script"/> as a
     /// file after them, and returns what it wrote to standard output; null when it was still running after
-    /// <paramref name="killAfter"/> and was killed.
+    /// <paramref name="killAfter"/>, or when <paramref name="stop"/> was signalled first (ticket P1-039), and was killed.
     /// </summary>
-    internal delegate string? Runner(string path, IReadOnlyList<string> arguments, string? script, TimeSpan killAfter);
+    internal delegate string? Runner(string path, IReadOnlyList<string> arguments, string? script, TimeSpan killAfter, CancellationToken stop);
 
     /// <summary>
     /// The script goes in a temporary file, deleted afterwards: a query prints to megabytes, and a file is what cvc5's
-    /// documented command line takes. A process killed at the limit is waited for, with every process it started.
+    /// documented command line takes. A process killed at the limit, or because it was told to stop, is waited for, with
+    /// every process it started.
     /// </summary>
     [ExcludeFromCodeCoverage(Justification = "P1-033: starts the cvc5 process; covered by Cvc5IntegrationTests on CI's Windows leg, where the executable is fetched.")]
-    internal static string? Run(string path, IReadOnlyList<string> arguments, string? script, TimeSpan killAfter)
+    internal static string? Run(string path, IReadOnlyList<string> arguments, string? script, TimeSpan killAfter, CancellationToken stop)
     {
         string? file = script is null ? null : Path.Combine(Path.GetTempPath(), $"equiv-{Guid.NewGuid():N}.smt2");
         try
@@ -39,9 +40,15 @@ internal static class Cvc5Process
             }
 
             process.Start();
-            Task<string> output = process.StandardOutput.ReadToEndAsync();
-            Task<string> error = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(killAfter))
+            Task<string> output = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+            Task<string> error = process.StandardError.ReadToEndAsync(CancellationToken.None);
+            using CancellationTokenSource limit = CancellationTokenSource.CreateLinkedTokenSource(stop);
+            limit.CancelAfter(killAfter);
+            try
+            {
+                process.WaitForExitAsync(limit.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException)
             {
                 process.Kill(entireProcessTree: true);
                 process.WaitForExit();

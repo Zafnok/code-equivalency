@@ -35,6 +35,8 @@ public sealed class Cvc5Solver : ISmtSolver
 
     private static readonly SmtUnknown Killed = new("wall-clock limit: the process was killed");
 
+    private static readonly SmtUnknown Stopped = new("stopped: an earlier partition is satisfiable");
+
     private readonly string path;
     private readonly Cvc5Process.Runner run;
     private readonly Lazy<string> version;
@@ -51,7 +53,7 @@ public sealed class Cvc5Solver : ISmtSolver
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         this.path = path;
         this.run = run;
-        version = new Lazy<string>(() => SmtOutput.Version(run(path, ["--version"], script: null, KillAfter)));
+        version = new Lazy<string>(() => SmtOutput.Version(run(path, ["--version"], script: null, KillAfter, CancellationToken.None)));
     }
 
     public string Name => "cvc5";
@@ -75,7 +77,7 @@ public sealed class Cvc5Solver : ISmtSolver
     public SmtAnswer Ask(string script, TimeSpan limit)
     {
         ArgumentNullException.ThrowIfNull(script);
-        return Plain(script, limit);
+        return Plain(script, limit, CancellationToken.None);
     }
 
     /// <summary>
@@ -90,8 +92,9 @@ public sealed class Cvc5Solver : ISmtSolver
     /// under the limits a plain script gets, is asked to write them at its first check, with <see cref="PartitionStrategy"/>.
     /// Its own answer is never read: once it has written partitions, cvc5 prints <c>unsat</c> whatever the query is. Each
     /// partition is then the script with one more assertion, asked as a plain script in a process of its own, as many at
-    /// once as <see cref="Processes"/> allows, and every one is waited for, so which partition's values come back does
-    /// not depend on which process ended first. When all are unsatisfiable, one more process checks the cover
+    /// once as <see cref="Processes"/> allows (<see cref="Answers"/>). The answer is the first satisfiable partition in the
+    /// order written, so which values come back does not depend on which process ended first. When all are
+    /// unsatisfiable, one more process checks the cover
     /// (<see cref="SmtPartitions.Cover"/>). No partition written leaves the script the unknown it was.
     /// </summary>
     internal Partitioned Split(string script, int partitions, TimeSpan limit)
@@ -116,12 +119,12 @@ public sealed class Cvc5Solver : ISmtSolver
             return new Partitioned(new SmtUnknown(string.Create(CultureInfo.InvariantCulture, $"{undecided} of {written.Length} partitions undecided")), written, answers, Cover: null);
         }
 
-        SmtAnswer cover = Slotted(() => Plain(SmtPartitions.Cover(script, written), limit));
+        SmtAnswer cover = Slotted(() => Plain(SmtPartitions.Cover(script, written), limit, CancellationToken.None));
         return new Partitioned(cover is SmtUnsat ? cover : new SmtUnknown("the partitions do not cover every case"), written, answers, cover);
     }
 
-    private SmtAnswer Plain(string script, TimeSpan limit) =>
-        run(path, Limits(limit), script, limit + KillAfter) is { } output ? SmtOutput.Parse(output) : Killed;
+    private SmtAnswer Plain(string script, TimeSpan limit, CancellationToken stop) =>
+        run(path, Limits(limit), script, limit + KillAfter, stop) is { } output ? SmtOutput.Parse(output) : stop.IsCancellationRequested ? Stopped : Killed;
 
     private string[] Limits(TimeSpan limit) =>
     [
@@ -146,7 +149,7 @@ public sealed class Cvc5Solver : ISmtSolver
                 "--checks-between-partitions=1",
                 "--write-partitions-to=" + file,
             ];
-            _ = Slotted(() => run(path, arguments, script, limit + KillAfter));
+            _ = Slotted(() => run(path, arguments, script, limit + KillAfter, CancellationToken.None));
             return File.Exists(file) ? SmtPartitions.Read(File.ReadAllText(file)) : [];
         }
         finally
@@ -156,33 +159,64 @@ public sealed class Cvc5Solver : ISmtSolver
     }
 
     /// <summary>
-    /// Each partition's answer, in the partitions' order. A partition's script is made once its process has a slot, so no
-    /// more copies of a large script are held than processes run.
+    /// Each partition's answer, in the partitions' order. A satisfiable partition stops every partition written after it:
+    /// one that runs is killed and one that has not started never starts, and each is <see cref="Stopped"/>. Every
+    /// partition before it runs to its end, so the first satisfiable partition in the order written is the same whichever
+    /// process ends first. A partition's script is made once its process has a slot, so no more copies of a large script
+    /// are held than processes run.
     /// </summary>
     private ImmutableArray<SmtAnswer> Answers(string script, ImmutableArray<string> partitions, TimeSpan limit)
     {
-        List<Task<SmtAnswer>> asked = new(partitions.Length);
-        foreach (string partition in partitions)
+        CancellationTokenSource[] stops = [.. partitions.Select(static _ => new CancellationTokenSource())];
+        try
         {
-            slots.Acquire();
-            asked.Add(Task.Factory.StartNew(
-                () =>
+            Task<SmtAnswer>[] asked = new Task<SmtAnswer>[partitions.Length];
+            for (int i = 0; i < partitions.Length; i++)
+            {
+                slots.Acquire();
+                if (stops[i].IsCancellationRequested)
                 {
-                    try
-                    {
-                        return Plain(SmtPartitions.With(script, partition), limit);
-                    }
-                    finally
-                    {
-                        slots.Release();
-                    }
-                },
-                CancellationToken.None,
-                TaskCreationOptions.LongRunning,
-                TaskScheduler.Default));
-        }
+                    slots.Release();
+                    asked[i] = Task.FromResult<SmtAnswer>(Stopped);
+                    continue;
+                }
 
-        return [.. Task.WhenAll(asked).GetAwaiter().GetResult()];
+                int index = i;
+                asked[i] = Task.Factory.StartNew(
+                    () =>
+                    {
+                        try
+                        {
+                            SmtAnswer answer = Plain(SmtPartitions.With(script, partitions[index]), limit, stops[index].Token);
+                            if (answer is SmtSat)
+                            {
+                                foreach (CancellationTokenSource later in stops.AsSpan(index + 1))
+                                {
+                                    later.Cancel();
+                                }
+                            }
+
+                            return answer;
+                        }
+                        finally
+                        {
+                            slots.Release();
+                        }
+                    },
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default);
+            }
+
+            return [.. Task.WhenAll(asked).GetAwaiter().GetResult()];
+        }
+        finally
+        {
+            foreach (CancellationTokenSource stop in stops)
+            {
+                stop.Dispose();
+            }
+        }
     }
 
     private T Slotted<T>(Func<T> work)

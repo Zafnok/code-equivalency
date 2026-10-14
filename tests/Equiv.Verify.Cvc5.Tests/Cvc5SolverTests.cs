@@ -13,7 +13,7 @@ public sealed class Cvc5SolverTests
     public void Ask_RunsTheExecutableWithItsLimitsAndTheScript()
     {
         List<(string Path, string[] Arguments, string? Script, TimeSpan KillAfter)> runs = [];
-        Cvc5Solver solver = new("tools/cvc5.exe", (path, arguments, script, killAfter) =>
+        Cvc5Solver solver = new("tools/cvc5.exe", (path, arguments, script, killAfter, stop) =>
         {
             runs.Add((path, [.. arguments], script, killAfter));
             return "unsat\n";
@@ -37,7 +37,7 @@ public sealed class Cvc5SolverTests
     public void Ask_PassesTheResourceLimitItWasGiven()
     {
         string[] ran = [];
-        Cvc5Solver solver = new("cvc5", (_, arguments, _, _) =>
+        Cvc5Solver solver = new("cvc5", (_, arguments, _, _, _) =>
         {
             ran = [.. arguments];
             return "unknown\n";
@@ -55,7 +55,7 @@ public sealed class Cvc5SolverTests
     [Fact]
     public void Ask_AKilledProcessIsUnknown()
     {
-        Cvc5Solver solver = new("cvc5", static (_, _, _, _) => null);
+        Cvc5Solver solver = new("cvc5", static (_, _, _, _, _) => null);
 
         SmtUnknown unknown = Assert.IsType<SmtUnknown>(solver.Ask(Script, TimeSpan.FromSeconds(1)));
 
@@ -66,7 +66,7 @@ public sealed class Cvc5SolverTests
     public void Version_IsReadOnceFromTheExecutable()
     {
         List<(string[] Arguments, string? Script, TimeSpan KillAfter)> runs = [];
-        Cvc5Solver solver = new("cvc5", (_, arguments, script, killAfter) =>
+        Cvc5Solver solver = new("cvc5", (_, arguments, script, killAfter, _) =>
         {
             runs.Add(([.. arguments], script, killAfter));
             return "cvc5 1.4.1 [git 2b2e844 on branch HEAD]\ncompiled as a unrestricted build with GCC version Clang 22.1.7\n";
@@ -87,7 +87,7 @@ public sealed class Cvc5SolverTests
     [InlineData("cvc5: not a version")]
     public void Version_IsUnknownWhenTheExecutablePrintsNone(string? output)
     {
-        Assert.Equal("unknown", new Cvc5Solver("cvc5", (_, _, _, _) => output).Version);
+        Assert.Equal("unknown", new Cvc5Solver("cvc5", (_, _, _, _, _) => output).Version);
     }
 
     [Fact]

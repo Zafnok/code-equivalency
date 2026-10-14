@@ -52,6 +52,40 @@ public sealed class Cvc5PartitionsTests
         Assert.Null(split.Cover);
     }
 
+    /// <summary>
+    /// A satisfiable partition stops the partitions written after it, running or not, and not those before it: the one
+    /// before it that ends later is still waited for.
+    /// </summary>
+    [Fact]
+    public void ASatisfiablePartition_StopsTheLaterOnes_AndWaitsForTheEarlierOnes()
+    {
+        Fake fake = new("p0\np1\np2\np3\n", static (partition, stop) => partition switch
+        {
+            "p0" => Slowly("unsat\n"),
+            "p1" => "sat\n((x #b1))\n",
+            _ => stop.WaitHandle.WaitOne(TimeSpan.FromSeconds(30)) ? null : "unknown\n",
+        }, cover: "unsat\n", processes: 4);
+
+        Cvc5Solver.Partitioned split = fake.Solver.Split(Script, 4, Limit);
+
+        Assert.Equal("#b1", Assert.IsType<SmtSat>(split.Answer).Values["x"]);
+        Assert.IsType<SmtUnsat>(split.Answers[0]);
+        Assert.All(split.Answers[2..], static a => Assert.Equal("stopped: an earlier partition is satisfiable", Assert.IsType<SmtUnknown>(a).Reason));
+    }
+
+    /// <summary>A partition a satisfiable one stopped before it had a process never starts one.</summary>
+    [Fact]
+    public void APartitionStoppedBeforeItStarts_RunsNoProcess()
+    {
+        Fake fake = new("p0\np1\np2\n", static partition => string.Equals(partition, "p0", StringComparison.Ordinal) ? "sat\n((x #b0))\n" : "unsat\n", cover: "unsat\n", processes: 1);
+
+        Cvc5Solver.Partitioned split = fake.Solver.Split(Script, 3, Limit);
+
+        Assert.Equal("#b0", Assert.IsType<SmtSat>(split.Answer).Values["x"]);
+        Assert.Equal(2, fake.Runs.Count);
+        Assert.All(split.Answers[1..], static a => Assert.IsType<SmtUnknown>(a));
+    }
+
     [Fact]
     public void EveryPartitionUnsat_AndTheCoverUnsat_IsUnsat()
     {
@@ -180,7 +214,7 @@ public sealed class Cvc5PartitionsTests
     [Fact]
     public void AScriptAndAtLeastTwoPartitions_AreRequired()
     {
-        Cvc5Solver solver = new("cvc5", static (_, _, _, _) => throw new InvalidOperationException("not run"));
+        Cvc5Solver solver = new("cvc5", static (_, _, _, _, _) => throw new InvalidOperationException("not run"));
 
         Assert.Throws<ArgumentNullException>(() => solver.AskInPartitions(null!, 2, Limit));
         Assert.Throws<ArgumentOutOfRangeException>(() => solver.AskInPartitions(Script, 1, Limit));
@@ -209,8 +243,14 @@ public sealed class Cvc5PartitionsTests
     private sealed class Fake
     {
         public Fake(string? written, Func<string, string?> partition, string? cover, int processes = 4)
+            : this(written, (p, _) => partition(p), cover, processes)
         {
-            Solver = new Cvc5Solver("cvc5", (path, arguments, script, killAfter) =>
+        }
+
+        /// <summary>A stand-in whose partitions also hear the token that stops them.</summary>
+        public Fake(string? written, Func<string, CancellationToken, string?> partition, string? cover, int processes)
+        {
+            Solver = new Cvc5Solver("cvc5", (path, arguments, script, killAfter, stop) =>
             {
                 Runs.Add((path, [.. arguments], script, killAfter));
                 if (arguments.FirstOrDefault(static a => a.StartsWith(SplitOption, StringComparison.Ordinal)) is { } split)
@@ -229,7 +269,7 @@ public sealed class Cvc5PartitionsTests
                 }
 
                 int at = script.LastIndexOf("(assert ", StringComparison.Ordinal) + "(assert ".Length;
-                return partition(script[at..script.IndexOf(")\n(check-sat)", at, StringComparison.Ordinal)]);
+                return partition(script[at..script.IndexOf(")\n(check-sat)", at, StringComparison.Ordinal)], stop);
             })
             {
                 Processes = processes,
