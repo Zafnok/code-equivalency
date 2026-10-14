@@ -163,9 +163,12 @@ internal static class Layouts
         _ => [],
     };
 
-    /// <summary>The type arguments of each of <paramref name="types"/> that the solution declares, and of the types it is nested in.</summary>
+    /// <summary>
+    /// The type arguments of each of <paramref name="types"/> that the solution declares, and of the types it is nested
+    /// in. A tuple is a type from a reference, whose syntax Roslyn gives as its declaration (ticket P2-168).
+    /// </summary>
     private static IEnumerable<ITypeSymbol> Arguments(IEnumerable<INamedTypeSymbol> types) =>
-        types.Where(static type => !type.DeclaringSyntaxReferences.IsEmpty).SelectMany(Nesting);
+        types.Where(static type => !type.IsTupleType && !type.DeclaringSyntaxReferences.IsEmpty).SelectMany(Nesting);
 
     /// <summary>The type arguments of <paramref name="type"/> and of the types it is nested in.</summary>
     private static IEnumerable<ITypeSymbol> Nesting(INamedTypeSymbol type)

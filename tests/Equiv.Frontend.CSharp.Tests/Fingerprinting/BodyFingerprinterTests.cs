@@ -1239,8 +1239,9 @@ public sealed class BodyFingerprinterTests
     /// Ticket P2-168 criterion 3: a body that hands a member of a reference a type with no generic base type or
     /// interface of the solution keeps the text it has, whatever layout the types beside it have: the type has no base
     /// list, its base type is a generic type of a reference, its base type is handed a type from a reference or a type
-    /// parameter, or it is the struct itself. So does a body that is handed an object of a type whose base list names
-    /// the struct, and hands the type to no member.
+    /// parameter, or it is the struct itself, or a tuple of the struct, which is a type from a reference though Roslyn
+    /// gives it a declaration. So does a body that is handed an object of a type whose base list names the struct, and
+    /// hands the type to no member.
     /// </summary>
     [Theory]
     [InlineData("public int M() => System.Activator.CreateInstance<Plain>().Run() + new System.Lazy<Plain>().Value.A;")]
@@ -1248,6 +1249,7 @@ public sealed class BodyFingerprinterTests
     [InlineData("public int M() => new System.Lazy<G>().Value.Run();")]
     [InlineData("public int M<U>() where U : unmanaged => System.Activator.CreateInstance<H<U>>().Run();")]
     [InlineData("public int M(D d) => ((I)d).Size() + d.Own;")]
+    [InlineData("public int M(S s) => new System.Collections.Generic.List<(S, Plain)> { (s, new Plain()) }.Count;")]
     public void ATypeWithNoGenericBaseHandedToAReferenceKeepsItsText(string member)
     {
         const string Others = " public class Plain { public int A; public int Run() => A; }"
