@@ -9,7 +9,9 @@ P2-075 (done) narrowed two rows to the overloads their change affects. P2-130's 
 (`docs/runs/2026-10-14-migrations-verdict.md`) found 13 false EQ006 on all three migration pairs where
 a row matches a call its change cannot reach:
 - the ICU `System.String::IndexOf(` row matches `IndexOf(char)` (and by prefix the other `char`
-  overloads), which compare ordinally on every runtime (1, `gitextensions-8522`);
+  overloads), which compare ordinally on every runtime (1, `gitextensions-8522`); done by P2-181, whose
+  `cultureSensitiveText` is never met by a call whose every argument but the receiver is a `char` or an
+  `int`;
 - the `Environment.OSVersion` row fires where the value is compared with 6.0 or 6.1, a threshold the
   compatibility shim (which reports 6.2 on Windows 8.1 and later) never crosses (2,
   `gitextensions-8522`), or where only `.Platform` is read (1, `openra-17989`);
@@ -43,3 +45,4 @@ Path rows (P2-188), constant-argument preconditions (P2-189).
 
 ## Notes
 - Filed 2026-10-14 by P2-130 (criterion 4).
+- 2026-10-14: P2-181 excluded the `char` searches from the ICU rows (the first case above).

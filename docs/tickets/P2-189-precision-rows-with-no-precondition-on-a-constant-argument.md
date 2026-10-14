@@ -25,7 +25,8 @@ When done, each of these rows has a precondition its constant arguments can make
 `RowPrecondition`, ADR 0040.
 
 ## Acceptance criteria (all must hold; nothing beyond them)
-1. The two `Split` rows require an options argument that may have bit 2 set.
+1. Done by P2-181: the two `Split` rows have the precondition `trimEntries`, met by any options but
+   `None` and `RemoveEmptyEntries`.
 2. The `GetFolderPath` row does not fire on a constant folder from a documented always-present list,
    recorded with its source.
 3. The `GetFormat` row does not fire on a `DataFormats` field that holds a valid format name, decided
@@ -44,3 +45,6 @@ Path rows (P2-188).
 
 ## Notes
 - Filed 2026-10-14 by P2-130 (criterion 4).
+- 2026-10-14: P2-181 gave the two `Split` rows their precondition (criterion 1), since its count of the
+  unedited bodies a runtime rule keeps out of congruence found them in 75 of the 1,004. Criterion 4's
+  rerun still gives the 7 `Split` procedures' results.
