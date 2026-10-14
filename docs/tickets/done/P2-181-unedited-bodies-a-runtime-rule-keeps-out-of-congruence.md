@@ -1,5 +1,5 @@
 # P2-181 An unedited body that a runtime rule keeps out of congruence is proved where the rule's change cannot be reached
-Status: in-progress
+Status: done (PR #496)
 Effort: L
 Model: Opus, high effort. If you are a weaker model family than named, or the named family at a lower effort, stop before doing anything else and tell the user to switch.
 Depends on: none
