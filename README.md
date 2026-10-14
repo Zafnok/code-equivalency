@@ -95,42 +95,42 @@ Every number is measured on public code, and every row says when. The runs are i
 [docs/runs/](docs/runs/). A row changes only when a new run measures a different value.
 
 <!-- scoreboard:begin (edit only through .claude/skills/equiv-scoreboard) -->
-| Over 3 large real pairs, 42,063 matched procedure pairs | Today | Measured |
+| Over 5 large real pairs, 58,477 matched procedure pairs | Today | Measured |
 |---|---|---|
-| Proved Equivalent | 97.1% (40,833 of 42,063) | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md) |
-| Equivalent by congruence (no solver) | 96.1% (40,426 of 42,063) | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md) |
-| Changed pairs the solver proves | 24.9% (407 of 1,637) | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md) |
-| Unknown | 2.2% of pairs (946), 57.8% of changed pairs. Opaque construct 503, abstraction 253, solver budget 168, unaligned loop 20, recursion 2 | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md) |
-| Divergent | 0.7% of pairs (284), 17.3% of changed pairs | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md) |
-| Divergent precision (a Divergent is a real behaviour change) | Migration 3.8% (2 of 52). Upgrades 40.0% (6 of 15). Cleanups: none left to decide (2 Divergent, both one build-generated commit constant that differs between any two commits) | [2026-09-30](docs/runs/2026-09-30-divergent-audit.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md), [2026-10-13](docs/runs/2026-10-13-cleanup-verdict.md) |
-| Left for a reviewer (Unknown and Divergent) | 2.9% of pairs (1,230) | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md) |
+| Proved Equivalent | 96.6% (56,479 of 58,477) | [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md), [2026-10-14](docs/runs/2026-10-14-migrations-verdict.md) |
+| Equivalent by congruence (no solver) | 95.4% (55,784 of 58,477) | [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md), [2026-10-14](docs/runs/2026-10-14-migrations-verdict.md) |
+| Changed pairs the solver proves | 25.8% (695 of 2,693) | [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md), [2026-10-14](docs/runs/2026-10-14-migrations-verdict.md) |
+| Unknown | 2.7% of pairs (1,572), 58.4% of changed pairs. Opaque construct 647, abstraction 478, solver budget 401, unaligned loop 39, recursion 7 | [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md), [2026-10-14](docs/runs/2026-10-14-migrations-verdict.md) |
+| Divergent | 0.7% of pairs (426), 15.8% of changed pairs | [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md), [2026-10-14](docs/runs/2026-10-14-migrations-verdict.md) |
+| Divergent precision (a Divergent is a real behaviour change) | Migrations 1.4% (1 of 69). Upgrades 40.0% (6 of 15). Cleanups: none left to decide (2 Divergent, both one build-generated commit constant that differs between any two commits) | [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md), [2026-10-13](docs/runs/2026-10-13-cleanup-verdict.md), [2026-10-14](docs/runs/2026-10-14-migrations-verdict.md) |
+| Left for a reviewer (Unknown and Divergent) | 3.4% of pairs (1,998) | [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md), [2026-10-14](docs/runs/2026-10-14-migrations-verdict.md) |
 | Soundness | 0 of 28 seeded behaviour changes reported Equivalent. No false Equivalent found on a real pair. 1 open soundness ticket ([P2-168](docs/tickets/P2-168-soundness-a-type-made-by-a-member-of-a-reference-names-a-type-argument-in-its-base-list.md)) | [2026-09-30](docs/runs/2026-09-30-full-verdict.md) |
 | Large pairs that run to a result | 5 of 5 | 2026-10-03 ([Duplicati](docs/tickets/done/P2-082-pair-weighting-crash-ends-the-run.md), [OpenRA](docs/tickets/done/P2-125-tuple-array-sort-mismatch-on-element-names.md)) |
-| Run time, one large pair | mean 4 min (3 min to 6 min), four pairs at a time | [2026-10-08](docs/runs/2026-10-08-scoreboard-rerun.md), [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md) |
+| Run time, one large pair | mean 6 min (3 min to 9 min), four pairs at a time | [2026-10-12](docs/runs/2026-10-12-upgrade-verdict.md), [2026-10-14](docs/runs/2026-10-14-migrations-verdict.md) |
 | Repeatability | 99.94% (13,734 of 13,742 results equal between two runs) | [2026-10-02](docs/runs/2026-10-02-pair-time.md) |
 <!-- scoreboard:end -->
 
-**The three large runs behind those rows**, each a real pull request:
+**The five large runs behind those rows**, each a real pull request:
 
-| | Git Extensions, .NET Framework 4.8 to .NET 5 | Git Extensions, .NET 5 to .NET 6 | Jellyfin, .NET 8 to .NET 9 | All three |
-|---|---|---|---|---|
-| Analysed lines per side | 187,000 | 189,000 | 156,000 | |
-| Matched procedure pairs | 13,592 | 14,073 | 14,398 | 42,063 |
-| Equivalent by congruence (both bodies lower to the same IR and no runtime change applies; no solver) | 93.3% | 95.7% | 99.2% | **96.1%** |
-| Equivalent by the solver | 0.3% (45) | 2.1% (300) | 0.4% (62) | **1.0%** |
-| Divergent | 2.0% (269) | 0.1% (14) | under 0.1% (1) | **0.7%** |
-| Unknown | 4.4% (596) | 2.1% (291) | 0.4% (59) | **2.2%** |
-| Wall-clock | 6 min | 4 min | 3 min | **mean 4 min** |
+| | Git Extensions, .NET Framework 4.8 to .NET 5 | Git Extensions, .NET 5 to .NET 6 | Jellyfin, .NET 8 to .NET 9 | Duplicati, .NET Framework 4.7.1 to .NET 5 | OpenRA, .NET Framework 4.7.2 to .NET 5 | All five |
+|---|---|---|---|---|---|---|
+| Analysed lines per side | 187,000 | 189,000 | 156,000 | 69,000 | 131,000 | |
+| Matched procedure pairs | 13,592 | 14,073 | 14,398 | 6,294 | 10,120 | 58,477 |
+| Equivalent by congruence (both bodies lower to the same IR and no runtime change applies; no solver) | 93.1% | 95.7% | 99.2% | 88.8% | 96.8% | **95.4%** |
+| Equivalent by the solver | 1.0% (140) | 2.1% (300) | 0.4% (62) | 3.0% (189) | under 0.1% (4) | **1.2%** |
+| Divergent | 1.4% (195) | 0.1% (14) | under 0.1% (1) | 2.6% (166) | 0.5% (50) | **0.7%** |
+| Unknown | 4.4% (603) | 2.1% (291) | 0.4% (59) | 5.6% (352) | 2.6% (267) | **2.7%** |
+| Wall-clock | 7 min | 4 min | 3 min | 9 min | 5 min | **mean 6 min** |
 
 So a reviewer is spared about 97% of the procedures and is handed the rest, grouped by cause.
 
-**The changed pairs are where the work is left.** Of the 1,637 pairs that are not congruent, the
-solver proves 407 (24.9%) Equivalent: 4.9%, 49.6% and 50.8% on the three runs. 57.8% are Unknown and
-17.3% are Divergent. Most changed pairs on the two upgrades are in files the pull request did not
+**The changed pairs are where the work is left.** Of the 2,693 pairs that are not congruent, the
+solver proves 695 (25.8%) Equivalent: 14.9%, 49.6%, 50.8%, 26.7% and 1.2% on the five runs. 58.4% are
+Unknown and 15.8% are Divergent. Most changed pairs on the two upgrades are in files the pull request did not
 touch: a runtime rule or a rebound call took them out of congruence.
 
-The Unknowns of the three runs by reason: opaque construct 503, abstraction 253, solver budget
-168, unaligned loop 20, recursion 2.
+The Unknowns of the five runs by reason: opaque construct 647, abstraction 478, solver budget
+401, unaligned loop 39, recursion 7.
 
 Other pairs, for range:
 
@@ -139,16 +139,18 @@ Other pairs, for range:
 | Three agent migrations of small repositories (median) | 98.5% | too few changed pairs to say |
 | Three "no functional change" cleanup pull requests (Git Extensions, PowerShell) | 97.8% to 99.9% | 58.3% (297 of 509) |
 | The collection-expression cleanup, one of those three | 97.8% | 68.0% (217 of 319) |
-| Duplicati and OpenRA migrations (69,000 and 131,000 lines) | 85.0% and 95.8% | both now run to a result (3h26m and 1h10m); their rates are not summarised yet |
 
-**Run time.** The three runs above verify four pairs at a time (`--jobs 4`) in the default compare
-mode, and the time follows the number of changed pairs, not the number of lines. Their mean is 4
-minutes. One pair at a time, before the compare modes, the same three took 2h05m, 1h11m and 1h32m,
-and before the fix that removed non-solver time from a pair 2h43m, 6h47m and more than 12 hours.
+**Run time.** The five runs above verify four pairs at a time (`--jobs 4`) in the default compare
+mode, and the time follows the number of changed pairs, not the number of lines. Their mean is 6
+minutes. One pair at a time, before the compare modes, the same five took 2h05m, 1h11m, 1h32m, 3h26m
+and 1h10m, and before the fix that removed non-solver time from a pair the first three took 2h43m,
+6h47m and more than 12 hours.
 
 | Run | Analysed lines per side | Changed pairs | Wall-clock |
 |---|---|---|---|
-| Git Extensions, 4.8 to .NET 5 | 187,000 | 910 | 6 min (verify 245 s, lowering 80 s) |
+| Git Extensions, 4.8 to .NET 5 | 187,000 | 938 | 7 min (verify 286 s, lowering 91 s) |
+| Duplicati, 4.7.1 to .NET 5 | 69,000 | 707 | 9 min (verify 478 s, lowering 39 s) |
+| OpenRA, 4.7.2 to .NET 5 | 131,000 | 321 | 5 min (verify 205 s, lowering 73 s) |
 | Jellyfin, .NET 8 to .NET 9 | 156,000 | 122 | 3 min |
 | Git Extensions, .NET 5 to .NET 6 | 189,000 | 605 | 4 min |
 | Git Extensions cleanup, collection expressions (24 pairs at a time) | 195,000 | 319 | 4 min |
@@ -167,11 +169,11 @@ The rest cannot yet:
 
 | What is needed | Today |
 |---|---|
-| A Divergent is usually a real behaviour change | Of those audited and decided: 2 of 52 on the migration (3.8%), 6 of 15 on the upgrades (40.0%), and none left to decide on cleanups, where the three pull requests now report 2 Divergent, from 52, both one build-generated commit constant. One cause, runtime rules with no version they changed in, was 120 of the upgrades' 126 false positives and is fixed: the two upgrades now report 15 Divergent, from 173, and all 15 are adjudicated. The 9 false ones have two causes, each with a ticket. |
-| The solver decides most changed pairs | 24.9% proved on the three large runs, 58.3% on cleanups |
-| Every large pair completes | Five of five. Duplicati and OpenRA now finish with no crashed pair. The three runs in the table above have no crashed pair either |
+| A Divergent is usually a real behaviour change | Of those audited and decided: 1 of 69 on the three migrations (1.4%), whose 68 false ones have eleven causes, each with a ticket; 6 of 15 on the upgrades (40.0%), and none left to decide on cleanups, where the three pull requests now report 2 Divergent, from 52, both one build-generated commit constant. One cause, runtime rules with no version they changed in, was 120 of the upgrades' 126 false positives and is fixed: the two upgrades now report 15 Divergent, from 173, and all 15 are adjudicated. The 9 false ones have two causes, each with a ticket. |
+| The solver decides most changed pairs | 25.8% proved on the five large runs, 58.3% on cleanups |
+| Every large pair completes | Five of five. The five runs in the table above have no crashed pair |
 | The same run gives the same results | 13,734 of 13,742 results agree between two runs |
-| A run fits in a CI job | 3 to 6 minutes for a large pair, four pairs at a time in the default mode |
+| A run fits in a CI job | 3 to 9 minutes for a large pair, four pairs at a time in the default mode |
 
 In short: the sound half (congruence, no false Equivalent on seeded or real changes) is done, and
 the precise half (few false Divergents, few Unknowns on changed code) is early.
