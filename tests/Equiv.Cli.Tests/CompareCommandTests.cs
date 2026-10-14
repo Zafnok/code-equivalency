@@ -1188,6 +1188,9 @@ public sealed partial class CompareCommandTests
         // Ticket P2-085: the errors are the result's causes, and it points at the first one; the message holds no position.
         Assert.Equal("T::Pair() is unknown (Unbound): the modern body does not bind", result.Message.Text);
         Assert.Equal([(3, 5, "unbound"), (4, 1, "unbound")], result.RelatedLocations.Select(Position));
+
+        // Ticket P2-172: each cause's diagnostic id travels from the frontend's opaque to the result.
+        Assert.Equal(["CS0103", "none"], Assert.Single(result.GetProperty<Dictionary<string, List<string>>>("unboundDiagnostics")).Value, StringComparer.Ordinal);
         Assert.Equal((3, 5), (result.Locations[0].PhysicalLocation.Region.StartLine, result.Locations[0].PhysicalLocation.Region.StartColumn));
     }
 
@@ -2088,8 +2091,8 @@ public sealed partial class CompareCommandTests
                 new IrBlockId(0),
                 [
                     new IrOpaque(Target: null, "Invalid", new SourceSpan(path, 2, 7, 2, 8)),
-                    new IrOpaque(Target: null, Unknown.UnboundOpaqueReason, new SourceSpan(path, 3, 5, 3, 9)),
-                    new IrOpaque(Target: null, "Invalid", new SourceSpan(path, 3, 7, 3, 8)),
+                    new IrOpaque(Target: null, Unknown.UnboundOpaqueReason, new SourceSpan(path, 3, 5, 3, 9)) { Diagnostic = "CS0103" },
+                    new IrOpaque(Target: null, "Invalid", new SourceSpan(path, 3, 7, 3, 8)) { Diagnostic = "CS9999" },
                     new IrOpaque(Target: null, Unknown.UnboundOpaqueReason, new SourceSpan(path, 4, 1, 4, 2)),
                 ],
                 new IrReturn(Value: null, [])),

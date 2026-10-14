@@ -165,7 +165,7 @@ Instructions:
 | `IrCall(var?, threw?, callee identity, args, refouts, heap)` | opaque call; appended to the observable call trace; `threw` is a Bool output. `refouts` are the new versions of the call's `ref` and `out` arguments, in parameter order, each a definition; a `ref` argument's value at the call is also one of `args`, an `out` one's is not (M4-003). `heap` lists, per by-ref map the call reads and writes, the map's name, the version before the call (a use) and the version after it (a definition); the C# frontend lists every `field.*` and `array.*` map the body touches, at every call, since which fields a callee reaches is not known without a call graph (P1-005), except at a `closed` call (section 1), which has no heap pairs (ADR 0041; P2-060). Result, `threw`, each ref output (one function per output index) and each map's new version are functions of callee, arguments, the heap at the call and the call's position in the trace (ADR 0018); a closed call's are functions of callee, arguments and position |
 | `IrMapRead(var, map, key)`, `IrMapWrite(newMap, map, key, value)` | SMT `select`/`store`; fields and arrays are maps in SSA like any other value |
 | `IrPure(var, throws, function, args)` | applies a catalogued pure function (`f64.add`, `dec.mul`, `op:<identity>`, `delegate:<fingerprint>`); no trace event, no heap, no position; each entry of `throws` is a Bool output branching to an `IrThrow` of its exact exception type; shared by both sides except runtime-sensitive functions, which are side-specific (ADR 0025). Uninterpreted, except that a refined query gives an interpretable function its real meaning (section 5; ADR 0053) |
-| `IrOpaque(var?, reason, sourceSpan, fingerprint?, reads, threw?, heap)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024). A fingerprinted fragment has what that call needs: a `threw` flag the frontend branches on and the heap pairs an `IrCall` has; `reads` and each pair's `before` are uses, `threw` and each `after` definitions (M4-004) |
+| `IrOpaque(var?, reason, sourceSpan, diagnostic?, fingerprint?, reads, threw?, heap)` | frontend could not lower; execution past this point is not modelled, so an input that reaches it has an unknown outcome (ADR 0014), unless the same `fingerprint` occurs on the other side, in which case both occurrences are one call `opaque:<fingerprint>` over `reads` (ADR 0024). A fingerprinted fragment has what that call needs: a `threw` flag the frontend branches on and the heap pairs an `IrCall` has; `reads` and each pair's `before` are uses, `threw` and each `after` definitions (M4-004). `diagnostic` is the id of the compiler diagnostic the node stands for, such as `CS0103` on a body that does not bind; it explains the node and no backend reads it (P2-172) |
 
 Terminators: `IrGoto`, `IrBranch(cond, then, else)`, `IrSwitch`, `IrReturn(var?, outs)`,
 `IrThrow(exceptionTypeIdentity, outs)`, `IrUnreachable` (assume false; produced by loop
@@ -1359,7 +1359,8 @@ reports the pairs searched, the pairs with a condition and the time the searches
 searched.
 
 The IR text spells a whole-body opaque `opaque body "reason"` (`IrOpaque.WholeBody`), so scope is
-read from the IR rather than guessed from the span.
+read from the IR rather than guessed from the span. After the span it spells `diagnostic "CS0103"` on
+an opaque that stands for a compiler diagnostic (`IrOpaque.Diagnostic`).
 
 A whole-body opaque's span is the construct that caused it (the `foreach`, the `lock`, the filtered
 `catch`), not the method body. A method whose bound body holds a compiler error, an
@@ -1367,7 +1368,12 @@ A whole-body opaque's span is the construct that caused it (the `foreach`, the `
 causes, and is never Equivalent by congruence. Neither scope nor causes is part of the
 fingerprint. The causes are the errors in source order, so the result's location is the modern
 side's first error, and the message only says which side does not bind: it holds no path, because
-the fingerprint hashes it. Three cases have no diagnostic in the method's own span (ADR 0029 as
+the fingerprint hashes it. `properties.unboundDiagnostics` names what unbound the result (ticket
+P2-172): `{ legacy?, modern? }`, one key per side that does not bind, each a list with the compiler
+diagnostic id of every cause on that side (`CS0103`, `CS0117`, ...), in the order of the side's
+`relatedLocations`, repeated when the id occurs more than once, so the list's length is the side's
+number of causes. Two errors at one position with different ids are two causes. A cause with no
+diagnostic in the method's own span is `none`. The property is not part of the fingerprint. Three cases have no diagnostic in the method's own span (ADR 0029 as
 clarified by ticket P2-085). A syntax error makes every method declared in its file unbound, at the
 file's first syntax error, because where each declaration begins and ends is then the parser's
 recovery. A constructor of a type whose base type did not resolve is unbound, since its bound body

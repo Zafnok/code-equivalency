@@ -566,6 +566,66 @@ public sealed class SarifReportWriterTests
     }
 
     /// <summary>
+    /// Ticket P2-172 criterion 3: an <c>unbound</c> result names the id of the diagnostic that unbound it, under the side
+    /// whose body it is in.
+    /// </summary>
+    [Fact]
+    public void AnUnboundResultNamesTheDiagnosticThatUnboundIt()
+    {
+        Unknown unknown = new(UnknownReason.Unbound, "the modern body does not bind")
+        {
+            Causes = [new UnknownCause(Codebase.Modern, "unbound", new SourceSpan("New.cs", 4, 9, 4, 20)) { Diagnostic = "CS0103" }],
+        };
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(unknown)]).Runs[0].Results[0];
+
+        KeyValuePair<string, List<string>> side = Assert.Single(result.GetProperty<Dictionary<string, List<string>>>("unboundDiagnostics"));
+        Assert.Equal("modern", side.Key);
+        Assert.Equal(["CS0103"], side.Value, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ticket P2-172: each side that does not bind lists one id per cause, in the causes' order and with repeats, and a
+    /// cause with no diagnostic is <c>none</c>.
+    /// </summary>
+    [Fact]
+    public void UnboundDiagnosticsAreListedPerSideOnePerCause()
+    {
+        SourceSpan span = new("a.cs", 1, 1, 1, 2);
+        Unknown unknown = new(UnknownReason.Unbound, "detail")
+        {
+            Causes =
+            [
+                new UnknownCause(Codebase.Legacy, "unbound", span) { Diagnostic = "CS0117" },
+                new UnknownCause(Codebase.Legacy, "unbound", span) { Diagnostic = "CS0103" },
+                new UnknownCause(Codebase.Legacy, "unbound", span) { Diagnostic = "CS0117" },
+                new UnknownCause(Codebase.Modern, "unbound", span),
+            ],
+        };
+
+        Dictionary<string, List<string>> diagnostics =
+            SarifReportWriter.Write([Fixtures.Result(unknown)]).Runs[0].Results[0].GetProperty<Dictionary<string, List<string>>>("unboundDiagnostics");
+
+        Assert.Equal(["legacy", "modern"], diagnostics.Keys, StringComparer.Ordinal);
+        Assert.Equal(["CS0117", "CS0103", "CS0117"], diagnostics["legacy"], StringComparer.Ordinal);
+        Assert.Equal(["none"], diagnostics["modern"], StringComparer.Ordinal);
+    }
+
+    /// <summary>Ticket P2-172: only an <c>unbound</c> result has the property, whatever its causes carry.</summary>
+    [Fact]
+    public void AnUnknownThatIsNotUnboundHasNoUnboundDiagnostics()
+    {
+        Unknown unknown = new(UnknownReason.Opaque, "detail")
+        {
+            Causes = [new UnknownCause(Codebase.Modern, "Lambda", new SourceSpan("a.cs", 1, 1, 1, 2)) { Diagnostic = "CS0103" }],
+        };
+
+        Result result = SarifReportWriter.Write([Fixtures.Result(unknown)]).Runs[0].Results[0];
+
+        Assert.False(result.TryGetProperty("unboundDiagnostics", out string? _));
+    }
+
+    /// <summary>
     /// Ticket M3-016 criterion 4 (ADR 0026): an <see cref="UnknownReason.Abstraction"/> result carries its candidate
     /// counterexample in the <see cref="CounterexampleText"/> rendering, and each abstraction with its identity, side
     /// and, when known, span.

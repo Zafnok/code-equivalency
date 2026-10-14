@@ -490,6 +490,7 @@ internal sealed class IrTextParser
         return new IrOpaque(target, reason, span)
         {
             WholeBody = wholeBody,
+            Diagnostic = AcceptWord("diagnostic") ? ExpectString() : null,
             Fingerprint = AcceptWord("fragment") ? ExpectString() : null,
             Reads = AcceptWord("reads") ? ParseList("(", ")", ParseUse) : [],
             Threw = AcceptWord("threw") ? ParseDefinition() : null,

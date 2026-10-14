@@ -72,7 +72,7 @@ branch and the legacy commit is its first parent, so the pair's diff is exactly 
 | `gitextensions-11284` | <https://github.com/gitextensions/gitextensions/pull/11284>, squash commit `89962d9f88b7` | Applies IDE0008, an explicit type in place of `var`, plus manual touch-ups (type aliases, indentation, casing, a few target-typed `new`). The author states the only check was that it compiles and starts, which is a claim that nothing else changed. 468 files. |
 | `powershell-19687` | <https://github.com/PowerShell/PowerShell/pull/19687>, squash commit `1c55e02df443` | Applies IDE0019 in the `Microsoft.Management` folder: `as` followed by a null check becomes an `is` pattern, and in places the pattern is merged into the enclosing condition. The pull request ticks "Breaking changes: None" and "User-facing changes: Not Applicable". 9 files. |
 
-`powershell-19687` needs three steps that `corpus.ps1` does not do. None edits a tracked file, and
+`powershell-19687` needs six steps that `corpus.ps1` does not do. None edits a tracked file, and
 `git status --porcelain` stays empty on both checkouts:
 1. Set `$env:UseRidGraph = 'true'` after `-Env`, for the restore and for the run. The projects name
    `win7-x86` and `win7-x64`, which SDK 10's runtime-identifier graph no longer has (NETSDK1083).
@@ -82,6 +82,32 @@ branch and the legacy commit is its first parent, so the pair's diff is exactly 
    with `$env:DOTNET_ROLL_FORWARD = 'Major'` because it targets net8.0. It writes the git-ignored
    `gen/` folders. Without them `System.Management.Automation` has about 4,000 unresolved names and
    the legacy side skips it.
+4. Build the repository's source generator once per side: `dotnet build
+   <checkout>/src/System.Management.Automation/SourceGenerators/PSVersionInfoGenerator`. It is the
+   analyzer `System.Management.Automation` references, and it declares `PSVersionInfo`'s
+   `ProductVersion`, `GitCommitId` and `Version_*` constants. MSBuildWorkspace runs a generator only
+   when its assembly is on disk; without it 16 bodies that read those constants are `unbound`
+   (CS0117, and CS0103 inside `PSVersionInfo`; ticket P2-172).
+5. Set `$env:PSCoreBuildVersion = '7.4.0-preview.3'`, `$env:PowerShellVersion = 'v7.4.0-preview.3'`
+   and `$env:ProductVersion = '7.4.0-preview.3'` next to `UseRidGraph`, for the run. The generator
+   reads the three as MSBuild properties. PowerShell's build computes them from `git describe` in a
+   target that runs before a real build and not when a workspace loads the project, and with them
+   empty the generator throws and writes nothing. These are the values of a build from the tag of
+   step 2, without the commit id a build appends to `ProductVersion`: the two sides are different
+   commits, and that id alone would make every body that reads the constant differ.
+6. Generate the type catalog once per side, after the restore, as the repository's `Start-TypeGen`
+   does (`build.psm1`): write its `_GetDependencies` target to
+   `<checkout>/src/Microsoft.PowerShell.SDK/obj/Microsoft.PowerShell.SDK.csproj.TypeCatalog.targets`,
+   run `dotnet msbuild Microsoft.PowerShell.SDK.csproj /t:_GetDependencies
+   "/property:DesignTimeBuild=true;_DependencyFile=<checkout>/src/TypeCatalogGen/powershell.inc"` in
+   `src/Microsoft.PowerShell.SDK`, then `dotnet run ../System.Management.Automation/CoreCLR/CorePsTypeCatalog.cs
+   powershell.inc` in `src/TypeCatalogGen`, with `$env:DOTNET_ROLL_FORWARD = 'Major'` as in step 3.
+   It writes the git-ignored `CorePsTypeCatalog.cs`, which declares `InitializeTypeCatalog()`;
+   without it the constructor of `PowerShellAssemblyLoadContext` is `unbound` (CS0103).
+
+Steps 3, 4 and 6 are the parts of PowerShell's `Start-PSBuild` that write source the compiler reads.
+None of them compiles a product assembly. With all six the pair has no `unbound` result (ticket
+P2-172; 17 with the first three only).
 
 ### Version-upgrade pairs (ticket P2-066)
 
