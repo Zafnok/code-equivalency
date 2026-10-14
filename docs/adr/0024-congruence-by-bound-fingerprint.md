@@ -658,6 +658,69 @@ the tree is **runtime-sensitive**, meaning it contains any of:
     that hands over a struct, a read or a write of a field of such a generic type included.
   - **What the lowering still does not hold.** Nothing the text holds. What the text does not
     hold is the clarification of P2-162's to say (P2-168).
+- 2026-10-14 (P2-168). **A type handed to a member of a reference hands over what the type and
+  its base list are handed.** The clarifications of 2026-10-10 (P2-152) and 2026-10-12 (P2-162)
+  hold what a type's base list hands over in the text of a body that references the type's
+  constructor or hands the type to a member of the solution, and the one of 2026-10-09 (P2-151)
+  says a member of a reference hands the solution nothing. A generic member of a reference that is
+  handed a type can create it, and no text references the constructor: in `class K : J<S>`,
+  `class D : Box<S>`, where `J<T>` and `Box<T>` read `T`'s layout,
+  `((W)Activator.CreateInstance<K>()).Width()`, `((I)new Lazy<D>().Value).Size()` and
+  `Activator.CreateInstance<Box<S>>()` run code that reads `S`, and the body names `K`, `D` or
+  `Box<S>` and nothing of `S`. It was reproduced as one fingerprint beside two declarations of `S`
+  (the ticket's tests): for a type created by `Activator.CreateInstance<T>()` and by `Lazy<T>`,
+  through an interface, a base type, a base type of a base type and a type the base type is
+  nested in, as a type argument of a type that is handed over, for a generic type of the solution
+  created itself, and for `Enumerable.Repeat(k, 1)`, which creates nothing. So an operation that
+  references a member a type from a reference declares (a call, an object creation, and a
+  reference to a method, a property, a field or an event) is also followed by the declaration of
+  every type argument of each type it hands the member (a method's own type arguments, and those
+  of the type that declares the member and of the types it is nested in) and of the types each is
+  made of (an array's element, a type argument), where the solution declares the type, and of
+  every type argument of their base types and interfaces, all of them and not only those a type
+  lists itself, where the solution declares the base type or interface, and of the types each of
+  those is nested in. They are written as the clarification of P2-151 writes one.
+  - **Every member of a reference, and not only those known to create their type argument.** The
+    ticket asked. A list of the members that create one (`Activator.CreateInstance<T>`, `Lazy<T>`,
+    a dependency-injection container, a deserialiser, a `new T()` anywhere in a library) is never
+    complete, and a member left off is a false Equivalent. What a member of a reference does with
+    its type parameter is in no text, and the clarification of P2-151 already refuses to read a
+    member's body to decide. So `Enumerable.Repeat(k, 1)` holds `S` too, and the case of
+    P2-162's `ABodyThatIsHandedAnObjectOfSuchAClassKeepsItsText` that called it now hands
+    `Repeat<object>` the object, which is what that test meant: a body that hands the class to no
+    generic member.
+  - **The type's base list and its own type arguments, and not the type's own declaration.**
+    The ticket asked for the base list. A generic type of the solution created by a member of a
+    reference runs its own code on its type arguments, which no body names either, so they are
+    written too: the clarifications of P2-151 and P2-152 wrote that case down as a limit. The
+    type's own fields are not: its constructor and its members are its own pairs (ADR 0019), and
+    what a member of a reference reads of its layout is the clarification of 2026-10-09 (P2-149)'s
+    to decide. A struct named only as a type argument of a member of a reference, which the
+    clarification of P2-157 wrote down, is held now: its interfaces are in its base list. A tuple
+    is no generic type of the solution, though Roslyn gives it a declaration: creating one runs no
+    code of the solution. What the base lists of its element types hand over is still written.
+  - **A body that is handed the object is equal for equal objects**, as the clarification of
+    P2-152 says (`ATypeWithNoGenericBaseHandedToAReferenceKeepsItsText`).
+  - **The lowering follows.** `Layouts.Inherited` gives these types: the text writes the
+    declaration of each, and `Layouts.HandsOver` asks it too, so such a reference is the opaque
+    with reason `Layout` the clarification of 2026-10-10 (P2-154) makes, where one of them has a
+    layout to read, and only there (`IrLowererTests`).
+  - **Which texts change.** A text that hands a member of a reference a type of the solution, or a
+    type made of one, whose base types or interfaces include one the solution declares that is
+    handed, or is nested in a type that is handed, a type the solution declares or one made of such
+    a type; or that hands it a generic type of the solution that is handed such a type. A type
+    with no base list, one
+    whose base type is a reference's generic type (`class L : List<S>`), one whose base type is
+    handed a type from a reference or a type parameter, and a struct with no such interface, add
+    nothing (`ATypeWithNoGenericBaseHandedToAReferenceKeepsItsText`).
+  - **What it costs.** Nothing on `gitextensions-8522` in compare mode quick (the ticket's
+    Notes): all 13818 results are the same by procedure identity, rule, proof method and Unknown
+    reason on both sides of the change, 12654 pairs are congruent on both, and each side has 108
+    opaques with reason `Layout` on both. Before tuples were left out, 15 test bodies that hand
+    NSubstitute's `Returns` a tuple of a class the pull request edits lost congruence, and all 15
+    were still proved Equivalent.
+  - **What the text still does not hold.** A type of the solution created by reflection from a
+    `System.Type` or a name (`Activator.CreateInstance(typeof(K))`).
 - 2026-10-08 (P2-144). **The throw a `switch` expression ends in is part of its bound code, and
   across .NET Core 3.0 it is a runtime rule.** A `switch` expression that matches no arm throws.
   The source does not write the throw and the `IOperation` tree does not hold it: the compiler

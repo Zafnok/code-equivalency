@@ -562,6 +562,10 @@ of how much of the cleanup result each explains:
   used: `SecondSolver.Print` declines the queries of 76 of gitextensions-9860's 302 solver
   Equivalents, so neither the second solver nor a certificate reaches them. Found by P1-026. Needs
   P1-033.
+- P2-195 (S) A timeout that interrupts a model's evaluation throws `canceled` out of `Verify` instead
+  of giving Unknown(Timeout): the arithmetic refinement reads a model between checks, and nothing
+  catches the interrupt there. Three `Z3BackendTests` failed on a loaded Windows runner. Found by
+  P2-168's CI. Needs P2-112.
 - P2-176 (S) A project whose source generator is missing or throws loads without a word: the bodies
   that read what it declares are `unbound` and nothing says a generator did not run. Found by
   P2-172. Needs P2-172.
@@ -856,6 +860,13 @@ Found by P2-162 (2026-10-12, by reading its own rule; not reproduced):
   (`Activator.CreateInstance<K>()`, `new Lazy<K>().Value`) names a type argument only in its base
   list, and the body references no constructor and hands the solution nothing. The first step is
   the repro. Needs P2-162.
+  Done: reproduced as equal fingerprints for a body that hands such a type to
+  `Activator.CreateInstance<T>()` or `Lazy<T>`, through an interface, a base type or a type the
+  base type is nested in. An operation that hands a type to any member of a reference is now also
+  followed by the declarations of the type arguments the type's base list, and a generic type of
+  the solution itself, hand over, and the lowering makes it the `Layout` opaque where one has a
+  layout (ADR 0024, clarification of 2026-10-14 (P2-168)); no result on `gitextensions-8522`
+  changed.
 
 Found by P2-150 (2026-10-09, by reading its own rule; not reproduced):
 - P2-153 (S) Soundness: the text of a body that uses an auto-property or a field-like event of an

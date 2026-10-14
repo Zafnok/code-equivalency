@@ -575,7 +575,9 @@ internal sealed class BoundSerialiser : OperationWalker
     /// P2-150). A reference to a member also reaches the types it hands the member as type arguments
     /// (<see cref="Layouts.TypeArguments"/>, which the lowering reads too; ticket P2-154). An operation whose type is, or
     /// is made of, a struct, and one that hands a type over, also reaches what the type's interface list hands a
-    /// generic interface of the solution (<see cref="Layouts.Implemented"/>; tickets P2-157 and P2-162).
+    /// generic interface of the solution (<see cref="Layouts.Implemented"/>; tickets P2-157 and P2-162). One that hands a
+    /// type to a member of a reference reaches what the type's base list hands a generic type of the solution
+    /// (<see cref="Layouts.Inherited"/>; ticket P2-168).
     /// </summary>
     private void Layout(IOperation operation)
     {
@@ -585,7 +587,8 @@ internal sealed class BoundSerialiser : OperationWalker
         }
 
         ImmutableArray<ITypeSymbol> handed = Layouts.TypeArguments(operation, Called);
-        foreach (ITypeSymbol type in Layouts.Reached(operation).Concat(handed).Concat(Layouts.Implemented([operation.Type], handed)))
+        IEnumerable<ITypeSymbol> inherited = Layouts.Implemented([operation.Type], handed).Concat(Layouts.Inherited(operation, Called));
+        foreach (ITypeSymbol type in Layouts.Reached(operation).Concat(handed).Concat(inherited))
         {
             Marshalled("layout", type, laidOut);
         }
